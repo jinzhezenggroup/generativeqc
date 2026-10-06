@@ -14,6 +14,10 @@ from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.expr import AlgebraForm, Graph
+from generativeqc_compiler.xc._generated_native_semilocal import (
+    SEMILOCAL_FAMILIES,
+    SEMILOCAL_FAMILY_BY_CODE,
+)
 
 from .ao import jet_indices
 from .feature_policy import emit_feature_policy
@@ -26,6 +30,7 @@ from .xc_contraction_cuda import (
 
 _GRID_SCIENTIFIC_KERNELS = r"""#include "../tensor/cuda_runtime.cuh"
 #include "xc_point.hpp"
+#include "semilocal_family.hpp"
 
 namespace {
 using namespace generativeqc_tensor;
@@ -477,8 +482,8 @@ __device__ inline DevicePointValue response_point(const double* features, const 
   }
   return from_point(
       spins == 1
-          ? point::restricted_response(functional == 1, rho[0], gradient[0], drho[0], dgradient[0])
-          : point::unrestricted_response(functional == 1, rho, gradient, drho, dgradient));
+          ? point::restricted_response(functional == static_cast<I>(SemilocalFamily::Pbe), rho[0], gradient[0], drho[0], dgradient[0])
+          : point::unrestricted_response(functional == static_cast<I>(SemilocalFamily::Pbe), rho, gradient, drho, dgradient));
 }
 
 __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const double rho[2],
@@ -487,9 +492,11 @@ __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const 
                                                             double exchange_scale,
                                                             double correlation_scale) {
   DevicePointValue out;
-  if (functional < 2) {
-    return from_point(
-        point::evaluate(functional == 1, rho, gradient, exchange_scale, correlation_scale));
+  if (functional == static_cast<I>(SemilocalFamily::Lda) ||
+      functional == static_cast<I>(SemilocalFamily::Pbe)) {
+    return from_point(point::evaluate(
+        functional == static_cast<I>(SemilocalFamily::Pbe), rho, gradient,
+        exchange_scale, correlation_scale));
   }
   if (exchange_scale != 1.0 || correlation_scale != 1.0) {
     out.valid = false;
@@ -538,7 +545,7 @@ __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const 
     return out;
   }
 
-  if (functional == 3) {
+  if (functional == static_cast<I>(SemilocalFamily::B3lyp)) {
     const auto raw =
         generated::b3lyp_device(rho[0], rho[1], sigma[0], sigma[1], sigma[2]);
     out.valid = isfinite(raw.energy_density);
@@ -557,7 +564,7 @@ __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const 
     return out;
   }
 
-  if (functional == 4) {
+  if (functional == static_cast<I>(SemilocalFamily::Wb97mv)) {
     if (total < generated::kWb97mvDeviceDensityThreshold) return out;
     double work_rho[2]{
         fmax(generated::kWb97mvDeviceDensityThreshold, rho[0]),
@@ -594,6 +601,10 @@ __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const 
     return out;
   }
 
+  if (functional != static_cast<I>(SemilocalFamily::R2scan)) {
+    out.valid = false;
+    return out;
+  }
   // Match the host r2SCAN smooth-vacuum continuation.
   constexpr double tail_low = 1.0e-56, tail_high = 1.0e-52;
   if (total <= tail_low) return out;
@@ -683,8 +694,14 @@ void launch_points(cudaStream_t stream, const double* features, const double* we
   if (runtime_functional != functional)
     throw std::invalid_argument("static CUDA XC launcher received a different functional");
   constexpr I feature_terms =
-      functional == 0 ? 1 : ((functional == 2 || functional == 4) ? 5 : 4);
-  constexpr I threads = functional == 1 && !response ? 32 : 128;
+      functional == static_cast<I>(SemilocalFamily::Lda)
+          ? 1
+          : ((functional == static_cast<I>(SemilocalFamily::R2scan) ||
+              functional == static_cast<I>(SemilocalFamily::Wb97mv))
+                 ? 5
+                 : 4);
+  constexpr I threads =
+      functional == static_cast<I>(SemilocalFamily::Pbe) && !response ? 32 : 128;
   evaluate_points<feature_terms, response>
       <<<generativeqc_tensor::blocks(count, threads), threads, 0, stream>>>(
           features, weights, count, spins, coefficients, point_totals, error, runtime_functional,
@@ -755,31 +772,38 @@ __global__ void accumulate_totals(const double* point_totals, I count, double* t
 """
 
 
-def emit_native_xc_point_dispatch() -> str:
-    """Resolve finite point entries and their execution capabilities.
+def _curated_cpp_code(code: int) -> str:
+    record = SEMILOCAL_FAMILY_BY_CODE[code]
+    return f"semilocal_family_code(SemilocalFamily::{record['symbol']})"
 
-    Physical LDA/PBE/r²SCAN/B3LYP/omegaB97M-V, generated split global hybrids and
-    signed LDA/PBE response share the existing point ABI. The same emitted table
-    owns capability facts so runtime admission never infers them from functional
-    ordinals. Spin and AO precision remain validated layout data.
-    """
-    consumers = (
-        (0, False, True, True),
-        (1, False, True, True),
-        (2, False, True, True),
-        (3, False, True, False),
-        (4, False, True, False),
-        (0, True, False, False),
-        (1, True, False, False),
+
+def emit_native_xc_point_dispatch() -> str:
+    """Resolve point entries from the generated semilocal capability census."""
+    physical = tuple(
+        (
+            item["code"],
+            False,
+            bool(item["cuda_ks"]),
+            item["cuda_fast_paths"]["mixed_density_precision"] == "qualified",
+        )
+        for item in SEMILOCAL_FAMILIES
+        if item["cuda_ks"]
     )
+    responses = tuple(
+        (item["code"], True, False, False)
+        for item in SEMILOCAL_FAMILIES
+        if item["cuda_fast_paths"]["response"] == "qualified"
+    )
+    consumers = physical + responses
     lines = [
         "CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response) {"
     ]
     for functional, response, _, _ in consumers:
         consumer = "true" if response else "false"
+        code = _curated_cpp_code(functional)
         lines.append(
-            f"  if (functional == {functional}U && response == {consumer}) "
-            f"return &launch_points<{functional}, {consumer}>;"
+            f"  if (functional == {code} && response == {consumer}) "
+            f"return &launch_points<{code}, {consumer}>;"
         )
     lines.extend(
         (
@@ -798,8 +822,9 @@ def emit_native_xc_point_dispatch() -> str:
         consumer = "true" if response else "false"
         local = "true" if local_ao else "false"
         mixed = "true" if mixed_density else "false"
+        code = _curated_cpp_code(functional)
         lines.append(
-            f"  if (functional == {functional}U && response == {consumer}) "
+            f"  if (functional == {code} && response == {consumer}) "
             f"return {{{local}, {mixed}}};"
         )
     lines.extend(

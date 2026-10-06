@@ -19,6 +19,12 @@ class _SemilocalFamilyFields(TypedDict):
     requires_tau: bool
     stationary_kernel: str
     stationary_ecp_gradient: bool
+    cuda_global_hybrid_exact_exchange: str | None
+    native_range_exchange: bool
+    native_nonlocal_correlation: bool
+    cuda_nonlocal_correlation: bool
+    molecular_nonlocal_domain: bool
+    incremental_xc: bool
     components: tuple[tuple[str, str], ...]
     range_omega: str
     coefficient_policy: str
@@ -43,6 +49,12 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "requires_tau": False,
         "stationary_kernel": "lda",
         "stationary_ecp_gradient": True,
+        "cuda_global_hybrid_exact_exchange": None,
+        "native_range_exchange": False,
+        "native_nonlocal_correlation": False,
+        "cuda_nonlocal_correlation": False,
+        "molecular_nonlocal_domain": False,
+        "incremental_xc": False,
         "components": (
             ("LDA_X", "1"),
             ("LDA_C_PW", "1"),
@@ -62,6 +74,12 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "requires_tau": False,
         "stationary_kernel": "pbe",
         "stationary_ecp_gradient": True,
+        "cuda_global_hybrid_exact_exchange": '1/4',
+        "native_range_exchange": True,
+        "native_nonlocal_correlation": True,
+        "cuda_nonlocal_correlation": False,
+        "molecular_nonlocal_domain": False,
+        "incremental_xc": True,
         "components": (
             ("GGA_X_PBE", "1"),
             ("GGA_C_PBE", "1"),
@@ -81,6 +99,12 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "requires_tau": True,
         "stationary_kernel": "r2scan",
         "stationary_ecp_gradient": False,
+        "cuda_global_hybrid_exact_exchange": None,
+        "native_range_exchange": False,
+        "native_nonlocal_correlation": False,
+        "cuda_nonlocal_correlation": False,
+        "molecular_nonlocal_domain": False,
+        "incremental_xc": False,
         "components": (
             ("MGGA_X_R2SCAN", "1"),
             ("MGGA_C_R2SCAN", "1"),
@@ -100,6 +124,12 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "requires_tau": False,
         "stationary_kernel": "composed",
         "stationary_ecp_gradient": True,
+        "cuda_global_hybrid_exact_exchange": '1/5',
+        "native_range_exchange": False,
+        "native_nonlocal_correlation": False,
+        "cuda_nonlocal_correlation": False,
+        "molecular_nonlocal_domain": False,
+        "incremental_xc": False,
         "components": (
             ("LDA_X", "2/25"),
             ("GGA_X_B88", "18/25"),
@@ -121,6 +151,12 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "requires_tau": True,
         "stationary_kernel": "wb97mv",
         "stationary_ecp_gradient": True,
+        "cuda_global_hybrid_exact_exchange": None,
+        "native_range_exchange": True,
+        "native_nonlocal_correlation": True,
+        "cuda_nonlocal_correlation": True,
+        "molecular_nonlocal_domain": True,
+        "incremental_xc": False,
         "components": (
             ("MGGA_X_WB97M_V", "1"),
             ("MGGA_C_WB97M_V", "1"),

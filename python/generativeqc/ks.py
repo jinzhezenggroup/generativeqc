@@ -417,13 +417,12 @@ def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     return None
 
 
-def cuda_wb97mv_force_basis_eligible(basis: typing.Any) -> bool:
-    """Match the complete WB97M-V CUDA geometry owner's through-f basis domain.
+def cuda_nonlocal_force_basis_eligible(basis: typing.Any) -> bool:
+    """Match the resident CUDA nonlocal stationary owner's through-f basis domain.
 
-    Its integral derivatives come from the native stationary owner, not the
-    generic SPD descriptor inventory. ECP, DF and shape/resource restrictions
-    remain with the calculator and prepared force owner. AUTO is an SCF
-    component policy; the stationary derivative owner remains strict FP64.
+    Integral derivatives come from the native stationary owner, not the generic
+    SPD descriptor inventory. Method admission is structural and remains with
+    the resolved execution plan; this helper only checks basis shape.
     """
     if isinstance(basis, str):
         return basis in ("sto-3g", "def2-svp", "def2-tzvp")
@@ -454,6 +453,41 @@ def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
         and plan.exchange[0].omega == 0
         and plan.nonlocal_correlation is None
     )
+
+
+def cpu_stationary_all_electron_force_eligible(
+    method_ir: MethodIR, *, has_dispersion: bool = False
+) -> bool:
+    """Admit compiled CPU stationary force sources from graph capabilities.
+
+    The generated semilocal registry owns stationary-gradient qualification.
+    Full-range hybrids, canonical range+nonlocal graphs and separately composed
+    dispersion corrections reuse that owner without a method-name whitelist.
+    """
+    try:
+        record = _native_semilocal_record(method_ir)
+        plan = compile_ks_execution_plan(method_ir)
+    except (TypeError, ValueError, NotImplementedError):
+        return False
+    full_range = (
+        len(plan.exchange) == 1
+        and plan.exchange[0].operator == "full-range"
+        and plan.exchange[0].coefficient > 0
+        and plan.exchange[0].omega == 0
+    )
+    nonlocal_range = (
+        plan.nonlocal_correlation is not None
+        and {term.operator for term in plan.exchange}
+        == {"short-range", "long-range"}
+    )
+    return bool(record["stationary_ecp_gradient"]) and (
+        has_dispersion or full_range or nonlocal_range
+    )
+
+
+def electronic_method_ir(method_ir: MethodIR) -> MethodIR:
+    """Project a standalone D4 correction away without inspecting its method name."""
+    return _d4_electronic_projection(method_ir) or method_ir
 
 
 def _record_components(record: typing.Mapping[str, typing.Any]) -> dict[str, Fraction]:

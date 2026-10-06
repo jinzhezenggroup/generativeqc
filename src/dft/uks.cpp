@@ -13,6 +13,7 @@
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
+#include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
@@ -38,9 +39,22 @@ struct SpinXcEvaluator {
                                          const Matrix&, const Matrix&, std::size_t, double, double);
   Direct direct{};
   const dft::SemilocalPointProgram* program{};
+  const dft::SemilocalFamilyMetadata* metadata{};
 
   SpinXcEvaluator(Direct value) : direct(value) {}
+  SpinXcEvaluator(Direct value, dft::SemilocalFamily family)
+      : direct(value), metadata(&dft::semilocal_family_metadata(family)) {}
   SpinXcEvaluator(const dft::SemilocalPointProgram& value) : program(&value) {}
+
+  [[nodiscard]] unsigned ao_order() const noexcept {
+    if (program) return program->ingredient_mask == 1U ? 0U : 1U;
+    return metadata && !metadata->requires_gradient ? 0U : 1U;
+  }
+
+  [[nodiscard]] std::uint32_t domain_version() const noexcept {
+    if (program) return program->domain_version;
+    return metadata ? metadata->domain_version : 1U;
+  }
 
   dft::SpinXcIntegral operator()(const dft::AoBasis& basis, const dft::MolecularGrid& grid,
                                  const Matrix& alpha, const Matrix& beta, std::size_t tile,
@@ -260,13 +274,8 @@ ScfResult run_uks_impl(
   diagnostic.occupations = {na, nb};
   diagnostic.grid_points = grid.point_count();
   diagnostic.tile_points = std::min(options.xc_tile_points, grid.point_count());
-  diagnostic.ao_order = evaluate_xc.program ? (evaluate_xc.program->ingredient_mask == 1U ? 0U : 1U)
-                                            : (std::string_view(method_name) == "LDA" ? 0U : 1U);
-  diagnostic.scf_domain_version =
-      evaluate_xc.program ? evaluate_xc.program->domain_version
-                          : (std::string_view(method_name) == "WB97M-V"
-                                 ? 3U
-                                 : (std::string_view(method_name) == "B3LYP" ? 2U : 1U));
+  diagnostic.ao_order = evaluate_xc.ao_order();
+  diagnostic.scf_domain_version = evaluate_xc.domain_version();
   const double residual_gate = std::min(1.0e-9, options.density_tolerance);
   bool stabilize_occupations = false;
 
@@ -460,8 +469,9 @@ ScfResult run_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                   const dft::MolecularGrid& grid, const ScfOptions& options, bool pbe,
                   const std::vector<double>* initial_density) {
   return run_uks_impl(plan, nullptr, basis, grid, options,
-                      pbe ? evaluate_pbe_xc_uks : evaluate_lda_xc_uks, pbe ? "PBE" : "LDA",
-                      initial_density, nullptr);
+                      pbe ? SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe)
+                          : SpinXcEvaluator(evaluate_lda_xc_uks, dft::SemilocalFamily::Lda),
+                      pbe ? "PBE" : "LDA", initial_density, nullptr);
 }
 ScfResult run_semilocal_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                             const dft::MolecularGrid& grid, const ScfOptions& options,
@@ -475,13 +485,15 @@ ScfResult run_semilocal_uks(const PreparedFockPlan& plan, const dft::AoBasis& ba
 ScfResult run_lda_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                       const dft::MolecularGrid& grid, const ScfOptions& options,
                       const std::vector<double>* initial_density) {
-  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_lda_xc_uks, "LDA",
+  return run_uks_impl(plan, nullptr, basis, grid, options,
+                      SpinXcEvaluator(evaluate_lda_xc_uks, dft::SemilocalFamily::Lda), "LDA",
                       initial_density, nullptr);
 }
 ScfResult run_pbe_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                       const dft::MolecularGrid& grid, const ScfOptions& options,
                       const std::vector<double>* initial_density) {
-  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_pbe_xc_uks, "PBE",
+  return run_uks_impl(plan, nullptr, basis, grid, options,
+                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe), "PBE",
                       initial_density, nullptr);
 }
 
@@ -501,8 +513,9 @@ ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
       options.semilocal_correlation_scale != 1.0)
     throw std::invalid_argument(
         "PBE0 COSX UKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
-  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_pbe_xc_uks, "PBE0-COSX",
-                      initial_density, nullptr);
+  return run_uks_impl(plan, nullptr, basis, grid, options,
+                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe),
+                      "PBE0-COSX", initial_density, nullptr);
 }
 
 #endif
@@ -511,7 +524,8 @@ ScfResult run_pbe_uks_nonlocal(const PreparedFockPlan& plan, const dft::AoBasis&
                                const dft::MolecularGrid& grid, const ScfOptions& options,
                                const std::vector<double>* initial_density,
                                dft::nlc::Vv10Plan& nonlocal_correlation) {
-  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_pbe_xc_uks, "PBE",
+  return run_uks_impl(plan, nullptr, basis, grid, options,
+                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe), "PBE",
                       initial_density, &nonlocal_correlation);
 }
 
@@ -520,14 +534,16 @@ ScfResult run_pbe_rsh_uks(const PreparedFockPlan& primary,
                           const dft::MolecularGrid& grid, const ScfOptions& options,
                           const std::vector<double>* initial_density,
                           dft::nlc::Vv10Plan* nonlocal_correlation) {
-  return run_uks_impl(primary, &long_range_correction, basis, grid, options, evaluate_pbe_xc_uks,
+  return run_uks_impl(primary, &long_range_correction, basis, grid, options,
+                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe),
                       "PBE-RSH", initial_density, nonlocal_correlation);
 }
 ScfResult run_r2scan_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                          const dft::MolecularGrid& grid, const ScfOptions& options,
                          const std::vector<double>* initial_density) {
-  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_r2scan_xc_uks, "R2SCAN",
-                      initial_density, nullptr);
+  return run_uks_impl(plan, nullptr, basis, grid, options,
+                      SpinXcEvaluator(evaluate_r2scan_xc_uks, dft::SemilocalFamily::R2scan),
+                      "R2SCAN", initial_density, nullptr);
 }
 ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
@@ -542,8 +558,9 @@ ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                                            options.density_fitting_relative_threshold);
   if (plan.strategy() != expected)
     throw std::invalid_argument("B3LYP plan does not match the generated MethodIR composition");
-  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_b3lyp_xc_uks, "B3LYP",
-                      initial_density, nullptr);
+  return run_uks_impl(plan, nullptr, basis, grid, options,
+                      SpinXcEvaluator(evaluate_b3lyp_xc_uks, dft::SemilocalFamily::B3lyp),
+                      "B3LYP", initial_density, nullptr);
 }
 
 ScfResult run_wb97mv_uks(const PreparedFockPlan& primary, const PreparedFockPlan& correction,
@@ -554,8 +571,10 @@ ScfResult run_wb97mv_uks(const PreparedFockPlan& primary, const PreparedFockPlan
   if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
       nonlocal.resources().point_count != grid.point_count())
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
-  return run_uks_impl(primary, &correction, basis, grid, options, evaluate_wb97mv_xc_uks, "WB97M-V",
-                      initial_density, &nonlocal, dft::nlc::Vv10DensityDomain::MolecularV1);
+  return run_uks_impl(
+      primary, &correction, basis, grid, options,
+      SpinXcEvaluator(evaluate_wb97mv_xc_uks, dft::SemilocalFamily::Wb97mv), "WB97M-V",
+      initial_density, &nonlocal, dft::nlc::Vv10DensityDomain::MolecularV1);
 }
 
 ScfResult run_cam_b3lyp_uks(const PreparedFockPlan& primary,

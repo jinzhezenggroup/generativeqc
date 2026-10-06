@@ -383,13 +383,14 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     }
   }
 
-  const bool complete_wb97mv = execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv &&
-                               execution_plan.range_exchange && execution_plan.nonlocal_correlation;
-  const bool cuda_wb97mv = backend == GENERATIVEQC_BACKEND_CUDA && complete_wb97mv;
+  const auto& semilocal_metadata = dft::semilocal_family_metadata(execution_plan.semilocal_family);
+  const bool complete_cuda_nonlocal =
+      semilocal_metadata.cuda_nonlocal_correlation && execution_plan.range_exchange &&
+      execution_plan.nonlocal_correlation;
+  const bool cuda_nonlocal =
+      backend == GENERATIVEQC_BACKEND_CUDA && complete_cuda_nonlocal;
   const bool scaled_or_hybrid = options.semilocal_exchange_scale != 1.0 ||
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
-  const double pbe0_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.125 : -0.25;
-  const double b3lyp_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.1 : -0.2;
   // AUTO is admitted per component by CudaKsPlan: Direct Coulomb J may use
   // mixed arithmetic while exact exchange K remains strict FP64. Density-fitted
   // global hybrids retain their separate strict-FP64 admission.
@@ -399,14 +400,19 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
        options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
       fock.exchange.present;
-  const bool cuda_pbe0 =
-      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
-      options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
-      fock.exchange.coefficient == pbe0_fock_coefficient;
-  const bool cuda_b3lyp =
-      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::B3lyp &&
-      options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
-      fock.exchange.coefficient == b3lyp_fock_coefficient;
+  const double qualified_exact_exchange =
+      semilocal_metadata.cuda_global_hybrid_exact_exchange;
+  const double expected_semilocal_exchange =
+      semilocal_metadata.component_coefficients_are_native_scales &&
+              qualified_exact_exchange > 0.0
+          ? 1.0 - qualified_exact_exchange
+          : 1.0;
+  const double spin_divisor = fock.spin == scf::FockSpin::Restricted ? 2.0 : 1.0;
+  const bool cuda_curated_global_hybrid =
+      cuda_global_hybrid && qualified_exact_exchange > 0.0 &&
+      options.semilocal_exchange_scale == expected_semilocal_exchange &&
+      options.semilocal_correlation_scale == 1.0 &&
+      fock.exchange.coefficient == -qualified_exact_exchange / spin_divisor;
   bool cuda_split_hybrid = false;
 #if GENERATIVEQC_HAS_CUDA
   if (cuda_global_hybrid && execution_plan.generated_split_hybrid &&
@@ -422,22 +428,19 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   }
 #endif
   if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
-      !cuda_pbe0 && !cuda_b3lyp && !cuda_split_hybrid && !cuda_wb97mv)
+      !cuda_curated_global_hybrid && !cuda_split_hybrid && !cuda_nonlocal)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA scaled/global-hybrid KS composition is not qualified");
-  if (execution_plan.nonlocal_correlation &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
+  if (execution_plan.nonlocal_correlation && !semilocal_metadata.native_nonlocal_correlation)
     throw MethodError(
         GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
         "self-consistent nonlocal correlation has no lowerer for this semilocal graph");
   if (execution_plan.nonlocal_correlation && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
-      !cuda_wb97mv)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "CUDA self-consistent nonlocal correlation is qualified only for WB97M-V");
-  if (execution_plan.range_exchange &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
+      !cuda_nonlocal)
+    throw MethodError(
+        GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+        "CUDA self-consistent nonlocal correlation lacks a qualified family capability");
+  if (execution_plan.range_exchange && !semilocal_metadata.native_range_exchange)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
@@ -452,7 +455,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   options.resolved_fock_build = scf::resolve_fock_build(
       fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
       options.screening_tolerance, options.density_fitting_relative_threshold);
-  if (execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+  if (semilocal_metadata.molecular_nonlocal_domain) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
@@ -763,12 +766,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
-      if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv &&
+      const auto& metadata = dft::semilocal_family_metadata(execution_plan_.semilocal_family);
+      if (execution_plan_.nonlocal_correlation && metadata.cuda_nonlocal_correlation &&
           options_.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused)
-        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                          "public CUDA WB97M-V requires device-fused XC/nonlocal execution");
+        throw MethodError(
+            GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "public CUDA nonlocal KS requires device-fused XC/nonlocal execution");
       const auto* range = range_strategy_ ? &*range_strategy_ : nullptr;
-      const auto domain = execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv
+      const auto domain = metadata.molecular_nonlocal_domain
                               ? dft::nlc::Vv10DensityDomain::MolecularV1
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
       cuda_ = std::make_unique<dft::CudaKsPlan>(
@@ -1466,7 +1471,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     } else if (execution_plan_.generated_split_hybrid)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
-    else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+    else if (dft::semilocal_family_uses_molecular_nonlocal_domain(
+                 execution_plan_.semilocal_family)) {
       if (!range_correction_ || !nonlocal_)
         throw std::runtime_error("WB97M-V requires both range-exchange and nonlocal owners");
       native = unrestricted(execution_plan_)

@@ -1,5 +1,5 @@
 {
-  "schema": "generativeqc.native-semilocal-families.v2",
+  "schema": "generativeqc.native-semilocal-families.v3",
   "families": [
     {
       "symbol": "Lda",
@@ -31,7 +31,13 @@
         "mixed_density_precision": "qualified",
         "response": "qualified",
         "graph_replay": "qualified"
-      }
+      },
+      "cuda_global_hybrid_exact_exchange": null,
+      "native_range_exchange": false,
+      "native_nonlocal_correlation": false,
+      "cuda_nonlocal_correlation": false,
+      "molecular_nonlocal_domain": false,
+      "incremental_xc": false
     },
     {
       "symbol": "Pbe",
@@ -63,7 +69,13 @@
         "mixed_density_precision": "qualified",
         "response": "qualified",
         "graph_replay": "qualified"
-      }
+      },
+      "cuda_global_hybrid_exact_exchange": "1/4",
+      "native_range_exchange": true,
+      "native_nonlocal_correlation": true,
+      "cuda_nonlocal_correlation": false,
+      "molecular_nonlocal_domain": false,
+      "incremental_xc": true
     },
     {
       "symbol": "R2scan",
@@ -95,7 +107,13 @@
         "mixed_density_precision": "qualified",
         "response": "unavailable",
         "graph_replay": "qualification-required"
-      }
+      },
+      "cuda_global_hybrid_exact_exchange": null,
+      "native_range_exchange": false,
+      "native_nonlocal_correlation": false,
+      "cuda_nonlocal_correlation": false,
+      "molecular_nonlocal_domain": false,
+      "incremental_xc": false
     },
     {
       "symbol": "B3lyp",
@@ -135,7 +153,13 @@
         "mixed_density_precision": "qualification-required",
         "response": "unavailable",
         "graph_replay": "qualification-required"
-      }
+      },
+      "cuda_global_hybrid_exact_exchange": "1/5",
+      "native_range_exchange": false,
+      "native_nonlocal_correlation": false,
+      "cuda_nonlocal_correlation": false,
+      "molecular_nonlocal_domain": false,
+      "incremental_xc": false
     },
     {
       "symbol": "Wb97mv",
@@ -168,7 +192,13 @@
         "mixed_density_precision": "qualification-required",
         "response": "unavailable",
         "graph_replay": "qualification-required"
-      }
+      },
+      "cuda_global_hybrid_exact_exchange": null,
+      "native_range_exchange": true,
+      "native_nonlocal_correlation": true,
+      "cuda_nonlocal_correlation": true,
+      "molecular_nonlocal_domain": true,
+      "incremental_xc": false
     }
   ]
 }

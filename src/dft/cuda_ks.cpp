@@ -663,17 +663,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
          *options.precision_mode != GENERATIVEQC_PRECISION_AUTO))
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
     if (nonlocal_correlation) {
-      if (!is_semilocal_family(functional, SemilocalFamily::Pbe) &&
-          !is_semilocal_family(functional, SemilocalFamily::Wb97mv))
-        throw std::invalid_argument("CUDA KS nonlocal composition requires a PBE-family graph");
+      const auto* family = semilocal_family_metadata_from_code(functional);
+      if (!family || !family->native_nonlocal_correlation)
+        throw std::invalid_argument(
+            "CUDA KS nonlocal composition has no native family capability");
       device_nonlocal =
           options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+      const auto expected_domain = family->molecular_nonlocal_domain
+                                       ? nlc::Vv10DensityDomain::MolecularV1
+                                       : nlc::Vv10DensityDomain::StrictPositive;
       if (device_nonlocal &&
-          (!is_semilocal_family(functional, SemilocalFamily::Wb97mv) ||
-           nonlocal_domain != nlc::Vv10DensityDomain::MolecularV1 ||
+          (!family->cuda_nonlocal_correlation || nonlocal_domain != expected_domain ||
            nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 || fitted_coulomb))
         throw std::invalid_argument(
-            "device-resident CUDA nonlocal KS is qualified only for WB97M-V MolecularV1");
+            "device-resident CUDA nonlocal KS lacks a qualified family/domain capability");
       if (!device_nonlocal &&
           options.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::HostUnfused)
         throw std::invalid_argument("unknown CUDA KS nonlocal execution schedule");
@@ -984,18 +987,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // direct all-electron RKS. AUTO must stay on the legacy host-controlled
     // path so its FP32 mixed-J stage and independent FP64 refinement cannot be
     // bypassed by an opt-in two-iteration device chunk. In addition to the
-    // original pure LDA/PBE envelope, admit the audited direct PBE0 composition
-    // so exact K can remain inside the same bounded SolverRegion. Graph replay
+    // original pure semilocal envelope, admit the manifest-qualified direct
+    // global-hybrid composition so exact K can remain inside the same bounded
+    // SolverRegion. Graph replay
     // stays disabled for global hybrids until the exchange provider is
     // independently capture-qualified.
     const bool pure_semilocal_chunk = !has_exchange && !has_range_correction &&
                                       options.semilocal_exchange_scale == 1.0 &&
                                       options.semilocal_correlation_scale == 1.0;
-    const bool pbe0_chunk = has_exchange && !has_range_correction &&
-                            is_semilocal_family(functional, SemilocalFamily::Pbe) &&
-                            options.semilocal_exchange_scale == 0.75 &&
-                            options.semilocal_correlation_scale == 1.0 &&
-                            exchange_coefficient == -0.125;
+    const auto* chunk_family = semilocal_family_metadata_from_code(functional);
+    const double chunk_exact_exchange =
+        chunk_family ? chunk_family->cuda_global_hybrid_exact_exchange : -1.0;
+    const double chunk_semilocal_exchange =
+        chunk_family && chunk_family->component_coefficients_are_native_scales &&
+                chunk_exact_exchange > 0.0
+            ? 1.0 - chunk_exact_exchange
+            : 1.0;
+    const bool curated_global_hybrid_chunk =
+        has_exchange && !has_range_correction && chunk_exact_exchange > 0.0 &&
+        options.semilocal_exchange_scale == chunk_semilocal_exchange &&
+        options.semilocal_correlation_scale == 1.0 &&
+        exchange_coefficient == -chunk_exact_exchange / (spins == 1 ? 2.0 : 1.0);
     // Range-separated exact exchange already stays device-resident on the
     // prepared Direct owner. Admit its ordinary two-call primary/correction
     // composition to the same bounded region; graph replay remains disabled
@@ -1015,7 +1027,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
         !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
         !precision_schedule.any_lower_precision() && spins == 1 &&
-        (pure_semilocal_chunk || pbe0_chunk || rsh_chunk) && provider.system().ecp_terms.empty() &&
+        (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
+        provider.system().ecp_terms.empty() &&
         configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
       const auto binding = device_chunk_binding();
@@ -1387,14 +1400,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
     host_xc_totals.fill(0.0);
     if (spins == 1) {
       XcIntegral value;
-      if (is_semilocal_family(functional, SemilocalFamily::Lda))
-        value = integrate_lda_xc_pw_rks(basis, grid, host_xc_density, xc_layout.tile_points);
-      else if (is_semilocal_family(functional, SemilocalFamily::Pbe))
-        value = integrate_pbe_rks_with_tail(basis, grid, host_xc_density, xc_layout.tile_points);
-      else if (is_semilocal_family(functional, SemilocalFamily::Wb97mv))
-        value = integrate_wb97mv_rks(basis, grid, host_xc_density, xc_layout.tile_points);
-      else
-        value = integrate_r2scan_rks(basis, grid, host_xc_density, xc_layout.tile_points);
+      switch (semilocal_family_from_code(functional)) {
+        case SemilocalFamily::Lda:
+          value = integrate_lda_xc_pw_rks(basis, grid, host_xc_density, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::Pbe:
+          value = integrate_pbe_rks_with_tail(basis, grid, host_xc_density, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::R2scan:
+          value = integrate_r2scan_rks(basis, grid, host_xc_density, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::B3lyp:
+          value = integrate_b3lyp_rks(basis, grid, host_xc_density, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::Wb97mv:
+          value = integrate_wb97mv_rks(basis, grid, host_xc_density, xc_layout.tile_points);
+          break;
+      }
       if (value.potential.size() != matrix)
         throw std::runtime_error("host-unfused RKS XC potential size changed");
       std::copy(value.potential.begin(), value.potential.end(), host_xc_potential.begin());
@@ -1412,17 +1434,28 @@ struct CudaKsPlan::Impl : KsStateStorage {
       std::copy_n(host_xc_density.begin(), matrix, host_xc_alpha.begin());
       std::copy_n(host_xc_density.begin() + matrix, matrix, host_xc_beta.begin());
       SpinXcIntegral value;
-      if (is_semilocal_family(functional, SemilocalFamily::Lda))
-        value = integrate_lda_xc_pw_uks(basis, grid, host_xc_alpha, host_xc_beta,
-                                        xc_layout.tile_points);
-      else if (is_semilocal_family(functional, SemilocalFamily::Pbe))
-        value = integrate_pbe_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
-      else if (is_semilocal_family(functional, SemilocalFamily::Wb97mv))
-        value =
-            integrate_wb97mv_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
-      else
-        value =
-            integrate_r2scan_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
+      switch (semilocal_family_from_code(functional)) {
+        case SemilocalFamily::Lda:
+          value = integrate_lda_xc_pw_uks(basis, grid, host_xc_alpha, host_xc_beta,
+                                          xc_layout.tile_points);
+          break;
+        case SemilocalFamily::Pbe:
+          value =
+              integrate_pbe_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::R2scan:
+          value =
+              integrate_r2scan_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::B3lyp:
+          value =
+              integrate_b3lyp_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
+          break;
+        case SemilocalFamily::Wb97mv:
+          value = integrate_wb97mv_uks(basis, grid, host_xc_alpha, host_xc_beta,
+                                       xc_layout.tile_points);
+          break;
+      }
       if (value.potential[0].size() != matrix || value.potential[1].size() != matrix)
         throw std::runtime_error("host-unfused UKS XC potential size changed");
       std::copy(value.potential[0].begin(), value.potential[0].end(), host_xc_potential.begin());

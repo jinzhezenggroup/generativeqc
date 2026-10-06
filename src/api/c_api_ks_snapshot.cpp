@@ -200,7 +200,7 @@ generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch
   }
 }
 
-generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
+generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count) {
   if (!batch || !snapshot || !values || count != 9) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -214,8 +214,7 @@ generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
     // Both backends retain the full-range short fraction plus the LR
     // correction in this identity. The live owner token, rather than a CPU
     // backend tag, proves the complete model for the stationary consumer.
-    if (!snapshot->all_electron || model.functional != 4 || !model.range_correction ||
-        !model.nonlocal_correlation)
+    if (!snapshot->all_electron || !model.range_correction || !model.nonlocal_correlation)
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const double spin_factor = model.spins == 1 ? -0.5 : -1.0;
     const double short_exchange = primary.spec.exchange.coefficient / spin_factor;
@@ -236,6 +235,12 @@ generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
+}
+
+generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count) {
+  return generativeqc_ks_snapshot_nonlocal_model_v1(batch, snapshot, values, count);
 }
 
 generativeqc_status generativeqc_ks_snapshot_hamiltonian_v1(
@@ -292,8 +297,11 @@ generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* ba
     auto status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     const auto& identity = snapshot->token.identity;
-    if (identity.determinant.model.backend != generativeqc::scf::FockBackend::Cuda ||
-        identity.model.functional > 1U || !snapshot->all_electron)
+    const auto* family =
+        generativeqc::dft::semilocal_family_metadata_from_code(identity.model.functional);
+    if (identity.determinant.model.backend != generativeqc::scf::FockBackend::Cuda || !family ||
+        !generativeqc::dft::cuda_xc_capability_qualified(family->cuda_fast_paths.response) ||
+        !snapshot->all_electron)
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     generativeqc::methods::detail::KsDerivativeSnapshot source;
     std::string detail;
@@ -832,9 +840,12 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
                                                    std::size_t point_count, double* values,
                                                    std::size_t value_count) {
   constexpr std::size_t stride = 11;
+  const auto* family = generativeqc::dft::semilocal_family_metadata_from_code(functional);
+  const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
   if (!std::isfinite(exchange_scale) || !std::isfinite(correlation_scale) || exchange_scale < 0 ||
-      correlation_scale < 0 ||
-      (functional != 1 && (exchange_scale != 1.0 || correlation_scale != 1.0)) || functional > 4 ||
+      correlation_scale < 0 || !family ||
+      (scaled && !generativeqc::dft::cuda_xc_capability_qualified(
+                     family->cuda_fast_paths.component_scaling)) ||
       !rho || !gradient || !tau || !values || point_count == 0 ||
       point_count > std::numeric_limits<std::size_t>::max() / stride ||
       value_count != stride * point_count)
@@ -848,10 +859,7 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
         for (std::size_t axis = 0; axis < 3; ++axis)
           local_gradient[spin][axis] = gradient[(spin * point_count + point) * 3 + axis];
       double* output = values + stride * point;
-      if (functional < 2) {
-        const auto xc = generativeqc::dft::point::evaluate(
-            functional == 1, local_rho, local_gradient, exchange_scale, correlation_scale);
-        if (!xc.valid) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+      const auto publish_gga = [&](const auto& xc) {
         output[0] = xc.energy;
         output[1] = xc.rho[0];
         output[2] = xc.rho[1];
@@ -859,11 +867,8 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
           for (std::size_t axis = 0; axis < 3; ++axis)
             output[3 + spin * 3 + axis] = xc.gradient[spin][axis];
         output[9] = output[10] = 0.0;
-      } else if (functional == 2 || functional == 4) {
-        const auto xc =
-            functional == 4
-                ? generativeqc::dft::evaluate_wb97mv_point(local_rho, local_gradient, local_tau)
-                : generativeqc::dft::evaluate_r2scan_point(local_rho, local_gradient, local_tau);
+      };
+      const auto publish_mgga = [&](const auto& xc) {
         output[0] = xc.energy;
         output[1] = xc.rho[0];
         output[2] = xc.rho[1];
@@ -872,15 +877,33 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
             output[3 + spin * 3 + axis] = xc.gradient[spin][axis];
         output[9] = xc.kinetic[0];
         output[10] = xc.kinetic[1];
-      } else {
-        const auto xc = generativeqc::dft::evaluate_b3lyp_point(local_rho, local_gradient);
-        output[0] = xc.energy;
-        output[1] = xc.rho[0];
-        output[2] = xc.rho[1];
-        for (std::size_t spin = 0; spin < 2; ++spin)
-          for (std::size_t axis = 0; axis < 3; ++axis)
-            output[3 + spin * 3 + axis] = xc.gradient[spin][axis];
-        output[9] = output[10] = 0.0;
+      };
+      switch (family->family) {
+        case generativeqc::dft::SemilocalFamily::Lda: {
+          const auto xc = generativeqc::dft::point::evaluate(
+              false, local_rho, local_gradient, exchange_scale, correlation_scale);
+          if (!xc.valid) throw std::runtime_error("invalid LDA point result");
+          publish_gga(xc);
+          break;
+        }
+        case generativeqc::dft::SemilocalFamily::Pbe: {
+          const auto xc = generativeqc::dft::point::evaluate(
+              true, local_rho, local_gradient, exchange_scale, correlation_scale);
+          if (!xc.valid) throw std::runtime_error("invalid GGA point result");
+          publish_gga(xc);
+          break;
+        }
+        case generativeqc::dft::SemilocalFamily::R2scan:
+          publish_mgga(
+              generativeqc::dft::evaluate_r2scan_point(local_rho, local_gradient, local_tau));
+          break;
+        case generativeqc::dft::SemilocalFamily::B3lyp:
+          publish_gga(generativeqc::dft::evaluate_b3lyp_point(local_rho, local_gradient));
+          break;
+        case generativeqc::dft::SemilocalFamily::Wb97mv:
+          publish_mgga(
+              generativeqc::dft::evaluate_wb97mv_point(local_rho, local_gradient, local_tau));
+          break;
       }
     }
     return GENERATIVEQC_STATUS_SUCCESS;

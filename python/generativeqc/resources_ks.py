@@ -292,16 +292,23 @@ def ks_resource_request(
     """Resolve one complete KS request for the shared global planner."""
     if type(include_forces) is not bool:
         raise TypeError("include_forces must be boolean")
-    if method not in _METHODS or backend not in ("cpu", "cuda"):
+    if backend not in ("cpu", "cuda"):
+        raise NotImplementedError("KS planning requires a native CPU or CUDA backend")
+    try:
+        model = resolve_ks_options(method, ks_options)
+    except (TypeError, ValueError, NotImplementedError) as error:
         raise NotImplementedError(
-            "KS planning supports native CPU LDA/PBE/PBE0 and CUDA LDA/PBE RKS/UKS energies"
+            "KS planning requires a compiler-resolved native KS execution plan"
+        ) from error
+    if "tau" in model.functional.ingredients:
+        raise NotImplementedError(
+            "KS planning does not yet account for tau-dependent native XC workspace"
         )
     precision = str(precision).lower()
     if precision not in ("fp64", "auto"):
         raise ValueError("KS precision must be 'fp64' or 'auto'")
     if precision == "auto" and backend != "cuda":
         raise NotImplementedError("KS automatic precision currently requires CUDA")
-    model = resolve_ks_options(method, ks_options)
     if backend == "cuda" and model.has_nonlocal_correlation:
         raise NotImplementedError(
             "self-consistent nonlocal correlation currently requires CPU"
@@ -332,7 +339,8 @@ def ks_resource_request(
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
     cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
-    pbe, unrestricted = bool(model.ao_order), method.endswith("uks")
+    pbe = bool(model.ao_order)
+    unrestricted = model.method_ir.spin == "polarized"
     items = []
     for atoms, charge, multiplicity in zip(
         systems, charges, multiplicities, strict=True

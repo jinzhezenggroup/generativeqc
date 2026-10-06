@@ -10,6 +10,10 @@ from generativeqc_compiler.common.cuda_resources import KernelResources
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 from generativeqc_compiler.common.gpu_profitability import GpuProfitability
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.native_semilocal import (
+    device_feature_ingredients,
+    legacy_grid_xc_selector,
+)
 
 from .xc_contraction_cuda import DEFAULT_XC_MATRIX_SCHEDULE
 
@@ -21,9 +25,10 @@ GRID_XC_COMPILED_SCOPES = (
     "xc_points",
     "vxc_contraction",
 )
-# ao_cuda.launch_points specializes evaluate_points by feature_terms, not the
-# runtime functional code. LDA consumes rho; PBE consumes rho and its gradient.
-_POINT_FEATURE_TERMS = {"LDA_XC_PW": 1, "PBE": 4}
+def _point_feature_terms(functional: str) -> int:
+    """Derive the legacy compiled grid-XC shape from functional ingredients."""
+    legacy_grid_xc_selector(functional)
+    return 1 if device_feature_ingredients(functional) == ("rho",) else 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +73,12 @@ class GridXcCompiledRegionEvidence:
             raise ValueError("compiled grid/XC evidence requires an sm_* architecture")
         if type(self.source_identity) is not str or not self.source_identity:
             raise ValueError("compiled grid/XC evidence requires a source identity")
-        if self.functional not in _POINT_FEATURE_TERMS:
-            raise ValueError("compiled grid/XC evidence supports only LDA/PBE")
+        try:
+            _point_feature_terms(self.functional)
+        except ValueError as error:
+            raise ValueError(
+                "compiled grid/XC evidence requires a qualified legacy grid-XC family"
+            ) from error
         if not isinstance(self.shape, GridXcCompiledResourceShape):
             raise TypeError("compiled grid/XC evidence requires a typed resource shape")
         if not isinstance(self.profitability, GpuProfitability):
@@ -148,7 +157,7 @@ def _active_scopes(
     functional: str,
     target: CudaTargetInfo,
 ) -> tuple[tuple[str, tuple[KernelResources, ...]], ...]:
-    feature_terms = _POINT_FEATURE_TERMS[functional]
+    feature_terms = _point_feature_terms(functional)
     counts = {min(shape.npoint, shape.tile_points)}
     remainder = shape.npoint % shape.tile_points
     if shape.npoint > shape.tile_points and remainder:
@@ -272,7 +281,7 @@ def _kernel_threads(function: str, functional: str) -> int:
     if name.startswith("accumulate_totals"):
         return 32
     if name.startswith("evaluate_points"):
-        return 32 if functional == "PBE" else 128
+        return 32 if _point_feature_terms(functional) == 4 else 128
     return 128
 
 

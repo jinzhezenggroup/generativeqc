@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
 PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
-SCHEMA = "generativeqc.native-semilocal-families.v2"
+SCHEMA = "generativeqc.native-semilocal-families.v3"
 FAST_PATH_FIELDS = (
     "component_scaling",
     "mixed_ao_precision",
@@ -67,12 +67,25 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
             "requires_gradient",
             "requires_tau",
             "stationary_ecp_gradient",
+            "native_range_exchange",
+            "native_nonlocal_correlation",
+            "cuda_nonlocal_correlation",
+            "molecular_nonlocal_domain",
+            "incremental_xc",
         ):
             if type(item.get(field)) is not bool:
                 raise TypeError(f"native semilocal {field} must be bool")
         if item["requires_tau"] and not item["requires_gradient"]:
             raise ValueError("tau-dependent native semilocal family requires gradients")
         Fraction(item["range_omega"])
+        if item.get("cuda_global_hybrid_exact_exchange") is not None:
+            fraction = Fraction(item["cuda_global_hybrid_exact_exchange"])
+            if not 0 < fraction <= 1:
+                raise ValueError("CUDA global-hybrid exchange fraction must lie in (0,1]")
+        if item["cuda_nonlocal_correlation"] and not item["native_nonlocal_correlation"]:
+            raise ValueError("CUDA nonlocal admission requires native nonlocal support")
+        if item["molecular_nonlocal_domain"] and not item["native_nonlocal_correlation"]:
+            raise ValueError("molecular nonlocal domain requires native nonlocal support")
         for component in components:
             if not isinstance(component, list) or len(component) != 2:
                 raise ValueError(
@@ -121,7 +134,19 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
                     f"     {'true' if item['requires_gradient'] else 'false'},",
                     f"     {'true' if item['requires_tau'] else 'false'},",
                     f"     {'true' if item['stationary_ecp_gradient'] else 'false'},",
-                    f"     {{{cpp_fast_path_capabilities(item)}}},",
+                    "     "
+                    + (
+                        "-1.0"
+                        if item["cuda_global_hybrid_exact_exchange"] is None
+                        else _cpp_number(item["cuda_global_hybrid_exact_exchange"])
+                    )
+                    + ",",
+                    f"     {'true' if item['native_range_exchange'] else 'false'},",
+                    f"     {'true' if item['native_nonlocal_correlation'] else 'false'},",
+                    f"     {'true' if item['cuda_nonlocal_correlation'] else 'false'},",
+                    f"     {'true' if item['molecular_nonlocal_domain'] else 'false'},",
+                    f"     {'true' if item['incremental_xc'] else 'false'},",
+                    f"     {{{cpp_fast_path_capabilities(item)}}},
                     f"     {{{ids_cpp}}},",
                     f"     {{{coeffs_cpp}}},",
                     f"     {len(component_ids)}U,",
@@ -168,6 +193,12 @@ struct SemilocalFamilyMetadata {{
   bool requires_gradient;
   bool requires_tau;
   bool stationary_ecp_gradient;
+  double cuda_global_hybrid_exact_exchange;
+  bool native_range_exchange;
+  bool native_nonlocal_correlation;
+  bool cuda_nonlocal_correlation;
+  bool molecular_nonlocal_domain;
+  bool incremental_xc;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -226,6 +257,33 @@ constexpr bool semilocal_family_has_stationary_ecp_gradient(SemilocalFamily fami
   return semilocal_family_metadata(family).stationary_ecp_gradient;
 }}
 
+constexpr double semilocal_family_cuda_global_hybrid_exact_exchange(
+    SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).cuda_global_hybrid_exact_exchange;
+}}
+
+constexpr bool semilocal_family_supports_range_exchange(SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).native_range_exchange;
+}}
+
+constexpr bool semilocal_family_supports_nonlocal_correlation(SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).native_nonlocal_correlation;
+}}
+
+constexpr bool semilocal_family_supports_cuda_nonlocal_correlation(
+    SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).cuda_nonlocal_correlation;
+}}
+
+constexpr bool semilocal_family_uses_molecular_nonlocal_domain(
+    SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).molecular_nonlocal_domain;
+}}
+
+constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).incremental_xc;
+}}
+
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {{
   if (const auto* metadata = semilocal_family_metadata_from_code(code)) return metadata->family;
   throw std::invalid_argument("unknown native KS semilocal family code");
@@ -262,7 +320,13 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "requires_tau": {bool(item["requires_tau"])!r},',
             f'        "stationary_kernel": {json.dumps(item["stationary_kernel"])},',
             f'        "stationary_ecp_gradient": {bool(item["stationary_ecp_gradient"])!r},',
-            f'        "components": {component_text},',
+            f'        "cuda_global_hybrid_exact_exchange": {item["cuda_global_hybrid_exact_exchange"]!r},',
+            f'        "native_range_exchange": {bool(item["native_range_exchange"])!r},',
+            f'        "native_nonlocal_correlation": {bool(item["native_nonlocal_correlation"])!r},',
+            f'        "cuda_nonlocal_correlation": {bool(item["cuda_nonlocal_correlation"])!r},',
+            f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
+            f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
+            f'        "components": {component_text},
             f'        "range_omega": {json.dumps(item["range_omega"])},',
             f'        "coefficient_policy": {json.dumps(item["coefficient_policy"])},',
             f'        "exchange_policy": {json.dumps(item["exchange_policy"])},',
@@ -304,6 +368,12 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    requires_tau: bool\n"
         "    stationary_kernel: str\n"
         "    stationary_ecp_gradient: bool\n"
+        "    cuda_global_hybrid_exact_exchange: str | None\n"
+        "    native_range_exchange: bool\n"
+        "    native_nonlocal_correlation: bool\n"
+        "    cuda_nonlocal_correlation: bool\n"
+        "    molecular_nonlocal_domain: bool\n"
+        "    incremental_xc: bool\n"
         "    components: tuple[tuple[str, str], ...]\n"
         "    range_omega: str\n"
         "    coefficient_policy: str\n"

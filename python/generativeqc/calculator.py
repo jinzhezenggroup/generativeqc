@@ -859,31 +859,23 @@ class Calculator:
         basis_has_ecp = isinstance(self._basis, BasisSet) and any(
             element.ecp_core_electrons for element in self._basis.elements
         )
-        named_cpu_all_electron_force = (
+        from .ks import cpu_stationary_all_electron_force_eligible
+
+        cpu_composed_all_electron_force = (
             self._device_name == "cpu"
-            and self._method_name
-            in (
-                "pbe0-rks",
-                "pbe0-uks",
-                "b3lyp-rks",
-                "b3lyp-uks",
-                "pbe-d4-rks",
-                "wb97m-v",
-                "wb97m-v-rks",
-                "wb97m-v-uks",
-            )
             and not basis_has_ecp
+            and self._automatic_libxc_name is None
             and self._ks_options is not None
-            and (
-                self._ks_options.coefficients[2] < 0.0
-                or (
-                    self._method_name == "pbe-d4-rks"
-                    and self._ks_options.coefficients == (1.0, 1.0, 0.0)
-                )
+            and cpu_stationary_all_electron_force_eligible(
+                self._ks_options.method_ir,
+                has_dispersion=self._dispersion_method_ir is not None,
             )
         )
-        if self._method_name.startswith("wb97m-v"):
-            named_cpu_all_electron_force = named_cpu_all_electron_force and (
+        if (
+            cpu_composed_all_electron_force
+            and self._ks_options.execution_plan.nonlocal_correlation is not None
+        ):
+            cpu_composed_all_electron_force = (
                 self._basis == "sto-3g"
                 if isinstance(self._basis, str)
                 else all(
@@ -901,7 +893,7 @@ class Calculator:
                 self._device_name == "cuda"
                 and self._ks_options.execution_plan.nonlocal_correlation is not None
             )
-            and not (self._method_name == "pbe-d4-rks" and basis_has_ecp)
+            and not (self._dispersion_method_ir is not None and basis_has_ecp)
             and (
                 self._device_name == "cuda"
                 or (
@@ -913,7 +905,7 @@ class Calculator:
         from .ks import (
             SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
-            cuda_wb97mv_force_basis_eligible,
+            cuda_nonlocal_force_basis_eligible,
         )
 
         cuda_hybrid_force = (
@@ -927,12 +919,13 @@ class Calculator:
                 or self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN
             )
         )
-        cuda_wb97mv_force = (
+        cuda_nonlocal_force = (
             self._device_name == "cuda"
-            and self._method_name.startswith("wb97m-v")
             and not basis_has_ecp
             and self._ks_options is not None
-            and cuda_wb97mv_force_basis_eligible(self._basis)
+            and self._ks_options.execution_plan.nonlocal_correlation is not None
+            and self._ks_options.has_range_exchange
+            and cuda_nonlocal_force_basis_eligible(self._basis)
         )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
@@ -955,9 +948,9 @@ class Calculator:
                     density_fitting_mode == _native.DENSITY_FITTING_NONE
                     and (
                         semilocal_force
-                        or named_cpu_all_electron_force
+                        or cpu_composed_all_electron_force
                         or cuda_hybrid_force
-                        or cuda_wb97mv_force
+                        or cuda_nonlocal_force
                     )
                 )
                 or density_fitted_force
@@ -1002,7 +995,6 @@ class Calculator:
         )
         public_rks_second_order = (
             self._device_name == "cpu"
-            and self._method_name in ("lda-rks", "pbe-rks")
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
             and self._precision_mode == _native.PRECISION_FP64
             and self._representation_name == "cartesian"
@@ -1010,7 +1002,9 @@ class Calculator:
             and self._dispersion_method_ir is None
             and second_order_basis
             and self._ks_options is not None
+            and self._ks_options.functional.ingredients in (("rho",), ("rho", "sigma"))
             and self._ks_options.coefficients == (1.0, 1.0, 0.0)
+            and not self._ks_options.execution_plan.exchange
             and self._ks_options.execution_plan.nonlocal_correlation is None
         )
         if public_rks_second_order:

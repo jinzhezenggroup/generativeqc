@@ -685,9 +685,11 @@ void enqueue_gradient(
     unsigned iterations) {
   cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
   cuda_check(cudaMemsetAsync(output, 0, 9 * l.natom * sizeof(double), stream));
-  if (l.functional > 1U)
-    throw std::invalid_argument("CUDA XC geometry gradient supports only LDA/PBE");
-  const bool pbe = l.functional == 1U;
+  const auto* family = semilocal_family_metadata_from_code(l.functional);
+  if (!family || !cuda_xc_capability_qualified(family->cuda_fast_paths.response))
+    throw std::invalid_argument(
+        "CUDA XC geometry gradient requires a response-qualified semilocal family");
+  const bool pbe = family->requires_gradient;
   const I sjets = pbe ? 4 : 1, ajets = pbe ? 10 : 4;
   for (size_t begin = 0; begin < l.npoint; begin += l.tile_points) {
     const I count = std::min(l.tile_points, l.npoint - begin);
@@ -717,6 +719,7 @@ void enqueue_gradient(
             "#include <cstdint>",
             "#include <stdexcept>",
             '#include "dft/cuda_xc.hpp"',
+            '#include "dft/semilocal_family.hpp"',
             emit_grid_adjoint(),
             '#include "dft/xc_point.hpp"',
             '#include "tensor/cuda_runtime.cuh"',

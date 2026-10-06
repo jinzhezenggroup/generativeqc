@@ -478,9 +478,7 @@ def complete_rks_gradient_diagnostic(
     plan = StationaryGradientPlan(
         method,
         StationaryMeanField(
-            state._source._batch._calculator._ks_options.scf_domain
-            if state.identity.method.startswith("wb97m-v")
-            else SCF_POINT_MODEL,
+            state._source._batch._calculator._ks_options.scf_domain,
             hamiltonian=state._source.hamiltonian,
         ),
     )
