@@ -1257,7 +1257,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
     if (fitted && ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
       detail =
-          "CUDA density-fitted stationary derivatives require the qualified semilocal DF-J domain";
+          "CUDA density-fitted stationary derivatives require a retained fitted response owner";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const bool range_exchange = execution_plan_.range_exchange;
@@ -1326,7 +1326,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // Both Direct and DF sources belong to the already-budgeted SCF owner.
     // Report retained provider bytes without charging them again to the
     // stationary consumer's additional-device allowance.
-    work = {fitted ? fock_.diagnostic().device_bytes : derivative_source.retained_device_bytes,
+    const auto fitted_provider_bytes =
+        fitted ? runtime::add_capacity(
+                     fock_.diagnostic().device_bytes,
+                     range_correction_ ? range_correction_->diagnostic().device_bytes : 0U)
+               : 0U;
+    work = {fitted ? fitted_provider_bytes : derivative_source.retained_device_bytes,
             0,
             0,
             0,
@@ -1376,9 +1381,44 @@ class KsPreparedCalculation final : public PreparedCalculation {
         return GENERATIVEQC_STATUS_INTERNAL_ERROR;
       }
       candidate.insert(candidate.end(), value.begin(), value.end());
-      // Semilocal DF is deliberately J-only. Keep the stationary runtime's
-      // canonical four-source layout without manufacturing exchange work.
+      // The compiler-owned stationary ABI keeps four integral-side source slots
+      // for full-range DF. The primary fitted owner already contracts its
+      // complete admitted J/K energy derivative, so retain the historical
+      // fourth slot as an explicit zero rather than double counting exchange.
       candidate.insert(candidate.end(), nc, 0.0);
+      if (range_exchange) {
+        if (!range_correction_ || !range_strategy_ ||
+            range_correction_->strategy() != *range_strategy_ ||
+            range_strategy_->spec.exchange.approximation !=
+                scf::FockApproximation::DensityFitted) {
+          detail =
+              "CUDA range-separated fitted stationary response lacks its prepared LR owner";
+          return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+        }
+        std::vector<double> range_value;
+        try {
+          range_value =
+              spins == 1
+                  ? range_correction_->retained_energy_derivative(cached_density->at(0))
+                  : range_correction_->retained_energy_derivative(cached_density->at(0),
+                                                                  cached_density->at(1));
+        } catch (const std::bad_alloc&) {
+          detail = "CUDA LR density-fitted stationary response exceeded its retained budget";
+          return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+        } catch (const std::invalid_argument& error) {
+          detail = error.what();
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+        } catch (const std::exception& error) {
+          detail = error.what();
+          return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (range_value.size() != nc) {
+          detail =
+              "CUDA LR density-fitted stationary response returned the wrong coordinate shape";
+          return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+        }
+        candidate.insert(candidate.end(), range_value.begin(), range_value.end());
+      }
     } else {
       status = range_exchange
                    ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
