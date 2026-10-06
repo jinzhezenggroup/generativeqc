@@ -1073,6 +1073,7 @@ def emit_grid_source(
         canonical_hash({"schema": "generativeqc.grid-policy.v1", "source": source}),
         (
             asset_path("src/dft/cuda_grid.cu"),
+            asset_path("src/dft/ao_grid_work.hpp"),
             asset_path("src/tensor/cuda_runtime.cuh"),
             asset_path("src/runtime/bounded_workspace.hpp"),
             asset_path("src/runtime/cuda_resources.cuh"),

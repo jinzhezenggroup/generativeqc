@@ -475,7 +475,7 @@ class PreparedSpatialGrid:
                     values,
                     self.tasks.generation_id,
                     jets if include_jets else None,
-                    layout if self._cuda else replace(layout, derivative_order=order),
+                    replace(layout, derivative_order=order),
                 )
             yield result
 

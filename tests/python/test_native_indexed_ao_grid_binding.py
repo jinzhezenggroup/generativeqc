@@ -169,6 +169,11 @@ def test_native_grid_source_composes_the_binding_before_consumers() -> None:
     )
 
 
+def test_grid_work_header_participates_in_artifact_identity() -> None:
+    """The emitted grid's transitive native work ABI must invalidate its cache."""
+    assert "ao_grid_work.hpp" in {path.name for path in emit_grid_source()[2]}
+
+
 def test_native_density_launcher_tracks_bound_point_span(
     tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
@@ -206,6 +211,77 @@ int main() {
       const int expected = indexed ? 101 * (1 + begin / l.tile_points)
                                    : (begin == 6 ? 505 : 404);
       if (density_launcher != expected) return 1;
+    }
+  }
+}
+"""
+    )
+    native_cxx.build_executable(
+        (source,),
+        executable,
+        compile_args=("-std=c++17", "-Wall", "-Wextra", "-Werror"),
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_native_density_factor_accepts_identity_and_sparse_spans(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
+    """Execute the emitted provider gather with the real CSR binding contract."""
+    from generativeqc_compiler.dft.xc_contraction_cuda import _emit_density_factor
+
+    source, executable = tmp_path / "factor.cpp", tmp_path / "factor"
+    source.write_text(
+        emit_native_ao_grid_binding()
+        + r"""
+#include <cmath>
+#define __global__
+using I = long long;
+struct { I x; } blockIdx{0}, blockDim{1}, threadIdx{0}, gridDim{1};
+double finite(double value, int* error, int code) {
+  if (!std::isfinite(value)) *error = code;
+  return value;
+}
+struct Owner {
+  std::size_t nao{5}, npoint{7}, tile_points{3}, jets{4}, ao_map_entries{7};
+  bool local_ao{true};
+  int map_derivative_order{1};
+};
+"""
+        + _emit_density_factor(indexed=True)
+        + r"""
+int main() {
+  Owner owner;
+  const std::vector<std::size_t> offsets{0, 2, 2, 7};
+  const std::size_t ids[]{1, 4, 0, 1, 2, 3, 4};
+  double density[50];
+  for (I spin = 0; spin < 2; ++spin)
+    for (I row = 0; row < 5; ++row)
+      for (I col = 0; col < 5; ++col)
+        density[(spin * 5 + row) * 5 + col] = 100 * spin + 10 * row + col;
+  for (const I spins : {1, 2}) {
+    for (const std::size_t begin : {0, 3, 6}) {
+      const auto block = generativeqc::dft::bind_native_ao_grid_block(
+          owner, offsets, ids, begin);
+      if (begin == 6 && (block.indexed || block.ao_ids)) return 1;
+      double output[52];
+      std::fill(output, output + 52, -1234.0);
+      int error = 0;
+      gather_density_factor(density, owner.nao, block.nactive, spins,
+                            block.ao_ids, output + 1, &error);
+      if (error) return 2;
+      for (I spin = 0; spin < spins; ++spin)
+        for (std::size_t row = 0; row < block.nactive; ++row)
+          for (std::size_t col = 0; col < block.nactive; ++col) {
+            const auto global_row = ids[offsets[begin / 3] + row];
+            const auto global_col = ids[offsets[begin / 3] + col];
+            const auto expected = 100 * spin + 5.5 * (global_row + global_col);
+            if (output[1 + (spin * block.nactive + row) * block.nactive + col]
+                != expected) return 3;
+          }
+      if (output[0] != -1234.0) return 4;
+      for (std::size_t i = 1 + spins * block.nactive * block.nactive; i < 52; ++i)
+        if (output[i] != -1234.0) return 5;
     }
   }
 }
