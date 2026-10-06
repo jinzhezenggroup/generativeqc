@@ -155,8 +155,12 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const std::size_t page_end = block_domain.prefix
                                      ? min(candidate_count, page_begin + indexed_page_candidates)
                                      : candidate_count;
+    // #1978 qualified a 128-thread full-range force CTA. Admission must
+    // follow the actual force launch width so a smaller CTA does not skip the
+    // second half of a 256-candidate queue page.
+    const unsigned candidate_packet = Force ? blockDim.x : detail::kBoundedDirectQueueCapacity;
     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
-         candidate_begin += detail::kBoundedDirectQueueCapacity) {
+         candidate_begin += candidate_packet) {
       if (threadIdx.x == 0) queue_count = 0;
       __syncthreads();
       const std::size_t candidate = candidate_begin + threadIdx.x;
@@ -307,7 +311,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
 
       if constexpr (FixedAngularOrder < 0 || FixedAngularOrder >= 4) {
         for (std::uint32_t slot = warp; slot < queue_count;
-             slot += kBoundedDirectThreads / detail::kDirectQuartetThreads) {
+             slot += blockDim.x / detail::kDirectQuartetThreads) {
           const ActiveShellQuartetTile base = queue[slot];
           const std::int32_t first_shell = batch.shell_pair_first[base.first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[base.first_pair];
@@ -531,6 +535,13 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   auto launch = [&]<bool Unrestricted, DirectScreeningPurpose Purpose, bool PairDerivatives>() {
+    // Promote #1978's generic full-range force schedule. The materialized
+    // derivative consumer owns six fixed 256-component slots and still needs
+    // all 256 lanes; reducing it would silently omit half of each AO packet.
+    if constexpr (!PairDerivatives) {
+      if (block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U)
+        block.x = kBoundedDirectForceThreads;
+    }
     const auto workspace_bytes =
         PairDerivatives ? std::max(shared_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence))
                         : shared_bytes;
