@@ -4,6 +4,7 @@ import re
 import typing
 from dataclasses import dataclass
 
+from .cuda_launch import CudaLaunchLimits, assess_cuda_launch
 from .cuda_target import CudaTargetInfo
 from .gpu_profitability import GpuProfitability
 
@@ -58,15 +59,22 @@ def compiled_gpu_profitability(
     *,
     object_bytes: int | None = None,
     compile_seconds: float | None = None,
+    dynamic_shared_bytes: int = 0,
+    reserved_shared_bytes: int = 0,
+    opted_in_dynamic_shared_bytes: int | None = None,
+    kernel_max_threads_per_block: int | None = None,
+    grid_blocks: int | None = None,
 ) -> GpuProfitability:
-    """Normalize complete PTXAS resource rows into shared compiled profitability.
+    """Normalize PTXAS rows and optional facts from the same launch contract.
 
-    The helper deliberately consumes only compiler-reported kernel facts. Static
-    graph estimates and endpoint timings belong to their owning scheduler and
-    must be merged separately. Occupancy is a target-derived upper bound from
-    the most constrained reported kernel, not a runtime occupancy measurement.
+    Storage in PTXAS rows is static: callers must supply dynamic launch storage
+    separately. ``opted_in_dynamic_shared_bytes`` means a granted kernel limit,
+    not the device capability. Rows with different launches must be assessed
+    separately. With no grid extent this reports a per-SM upper bound; a supplied
+    grid also requires a runtime-probed SM count and bounds whole-device occupancy.
+    Neither form is measured occupancy, active-lane efficiency or a speed claim.
+    The lower-level assessment retains separate per-SM/grid bounds and reasons.
     """
-
     if not isinstance(target, CudaTargetInfo):
         raise TypeError("compiled GPU profitability requires CudaTargetInfo")
     if (
@@ -87,22 +95,27 @@ def compiled_gpu_profitability(
         or compile_seconds < 0
     ):
         raise ValueError("compile_seconds must be non-negative or None")
+    if grid_blocks is not None and target.sm_count is None:
+        raise ValueError("grid-aware profitability requires a runtime-probed SM count")
 
+    limits = CudaLaunchLimits.from_target(target)
     occupancies: list[float] = []
     for resource in materialized:
-        limits = [
-            target.maximum_blocks_per_sm,
-            target.maximum_threads_per_sm // block_threads,
-        ]
-        if resource.registers:
-            limits.append(
-                target.registers_per_sm // (resource.registers * block_threads)
-            )
-        if resource.shared_bytes:
-            limits.append(target.shared_memory_per_sm // resource.shared_bytes)
-        resident_blocks = max(0, min(limits))
+        assessment = assess_cuda_launch(
+            limits,
+            block_threads=block_threads,
+            registers_per_thread=resource.registers,
+            static_shared_bytes=resource.shared_bytes,
+            dynamic_shared_bytes=dynamic_shared_bytes,
+            reserved_shared_bytes=reserved_shared_bytes,
+            opted_in_dynamic_shared_bytes=opted_in_dynamic_shared_bytes,
+            kernel_max_threads_per_block=kernel_max_threads_per_block,
+            grid_blocks=grid_blocks,
+        )
+        occupancy = assessment.whole_device_warp_occupancy_upper_bound
         occupancies.append(
-            resident_blocks * block_threads / target.maximum_threads_per_sm
+            assessment.per_sm_warp_occupancy_upper_bound
+            if occupancy is None else occupancy
         )
 
     local_values = tuple(resource.local_bytes for resource in materialized)
@@ -118,7 +131,8 @@ def compiled_gpu_profitability(
         spill_store_bytes=max(resource.spill_store_bytes for resource in materialized),
         spill_load_bytes=max(resource.spill_load_bytes for resource in materialized),
         local_bytes=local_bytes,
-        shared_bytes=max(resource.shared_bytes for resource in materialized),
+        shared_bytes=max(resource.shared_bytes for resource in materialized)
+        + dynamic_shared_bytes,
         compiled_occupancy_upper_bound=min(occupancies),
         object_bytes=object_bytes,
         compile_seconds=None if compile_seconds is None else float(compile_seconds),
