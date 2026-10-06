@@ -19,6 +19,7 @@
 #include "scf/cuda/direct_density_bounds.hpp"
 #include "scf/cuda/direct_fock_lowering.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
+#include "scf/cuda/direct_md_coulomb.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -127,6 +128,16 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   charge(1, sizeof(GeneratedShellPairStream));
   if (required > budget || cartesian > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     return {};
+  // Optional pair-space storage is admitted as a complete lease. Capacity
+  // failure leaves the already-qualified generated J owner available.
+  auto md_mask = prepare_direct_coulomb_md_requested()
+                     ? direct_md_coulomb_shell_class_mask() & value_class_mask
+                     : 0ULL;
+  const auto md_elements =
+      md_mask != 0U ? product(primitive_pairs, direct_md_coulomb_hermite_width()) : 0U;
+  const auto md_bytes = product(md_elements, 2U * sizeof(double));
+  if (md_mask != 0U && md_bytes > budget - required) md_mask = 0U;
+  if (md_mask != 0U) required = runtime::size_add(required, md_bytes);
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
   configure_direct_coulomb_recurrence(plan->batch);
@@ -136,6 +147,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   plan->class_mask = present;
   plan->value_class_mask = value_class_mask;
   plan->rys_fock_mask = prepare_direct_fock_rys_mask(false) & value_class_mask;
+  plan->md_coulomb_mask = md_mask;
   plan->value_capability = value_capability;
   // Reuse the target-legal HF worker and recurrence-stack policy; a prepared
   // KS owner must not rely on an earlier HF call having raised the CUDA limit.
@@ -162,6 +174,11 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
       if (values) check(cudaMemcpyAsync(pointer, values, bytes, cudaMemcpyHostToDevice, stream));
       return pointer;
     };
+    if (md_mask != 0U) {
+      plan->md_density = static_cast<double*>(allocate(md_elements, sizeof(double)));
+      plan->md_potential = static_cast<double*>(allocate(md_elements, sizeof(double)));
+      plan->md_primitive_pairs = primitive_pairs;
+    }
 #define UPLOAD(field)                                           \
   plan->batch.field = static_cast<decltype(plan->batch.field)>( \
       allocate(host.field.size(), sizeof(host.field[0]), host.field.data()))
@@ -920,6 +937,13 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
                                                  p.temporary, p.active, p.density);
   auto error = cudaMemsetAsync(p.coulomb, 0, cartesian * sizeof(double), p.stream);
   if (error != cudaSuccess) return error;
+  if (p.md_coulomb_mask != 0U) {
+    runtime::cuda_trace::trace_counter("prepared_md_class_mask", p.md_coulomb_mask);
+    runtime::cuda_trace::trace_counter("md_primitive_pairs", p.md_primitive_pairs);
+    error = prepare_direct_md_coulomb_density(p.stream, b, p.density, p.md_density, p.md_potential,
+                                              p.active);
+    if (error != cudaSuccess) return error;
+  }
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           p.stream);
   if (error != cudaSuccess) return error;
@@ -929,6 +953,13 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
     const auto cls = kernels[i].shell_class;
     if (!(p.value_class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
       continue;
+    if (p.md_coulomb_mask & (std::uint64_t{1} << cls)) {
+      error = enqueue_direct_md_coulomb_class(
+          cls, p.worker_blocks, p.stream, p.topology, b, p.md_density, p.md_potential, p.screening,
+          p.heads + cls, p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr);
+      if (error != cudaSuccess) return error;
+      continue;
+    }
     error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
@@ -941,6 +972,10 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
         false, DirectScreeningPurpose::Fock, false, p.worker_blocks, 32, 0, p.stream, b, p.topology,
         p.screening, p.schwarz, p.density, p.active, p.coulomb, p.heads + kDdddShellClass, nullptr,
         p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
+  }
+  if (p.md_coulomb_mask != 0U) {
+    error = project_direct_md_coulomb(p.stream, b, p.md_potential, p.coulomb, p.active);
+    if (error != cudaSuccess) return error;
   }
   return cudaGetLastError();
 }

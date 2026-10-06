@@ -37,6 +37,12 @@ struct GeneratedCoulombPlan {
   std::uint64_t class_mask{}, value_class_mask{};
   /** Geometry-bound J lowering selection; K retains an independent mask. */
   std::uint64_t rys_fock_mask{};
+  /** Optional pair-space J inventory; unsupported classes remain incumbent.
+   * Both arrays have compiler Hermite stride times primitive-pair count.
+   * Geometry belongs to this prepared owner; density is refreshed per build. */
+  std::uint64_t md_coulomb_mask{};
+  double *md_density{}, *md_potential{};
+  std::size_t md_primitive_pairs{};
   /** True only when generated/native streaming value consumers cover every
    * present shell class without the bounded higher-l fallback. */
   bool value_capability{true};

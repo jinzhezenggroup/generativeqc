@@ -963,6 +963,22 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
     COMMENT "Generating compiler-owned Direct-HF pair/Hermite support")
 
+  set(_direct_md_coulomb_header
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_md_coulomb.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_direct_md_coulomb_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_md_coulomb.py"
+    OUTPUTS "${_direct_md_coulomb_header}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_md_coulomb_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/ir.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/production_cost.py"
+    ARGS --output "${_direct_md_coulomb_header}"
+    COMMENT "Generating compiler-owned pair-precontracted Direct J")
+
   set(GENERATIVEQC_DIRECT_ORDER2_SHELL_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_order2_shell.cuh")
   generativeqc_register_generated_sources(
