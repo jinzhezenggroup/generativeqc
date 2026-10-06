@@ -9,6 +9,7 @@
 #include "api/error.hpp"
 #include "api/handles.hpp"
 #include "api/ks_snapshot.hpp"
+#include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
 #include "dft/xc_point_response.hpp"
