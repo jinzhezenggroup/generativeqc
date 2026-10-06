@@ -248,9 +248,37 @@ def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
             assert "restore-keys:" not in step
         if name.startswith("Run bounded CuMetal QC"):
             assert (
-                "CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}"
+                "CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48"
                 in step
             )
+            assert "CUMETAL_PTX_BACKEND: cumetal-ir" in step
+            assert "CUMETAL_FP64_MODE: fast48" in step
+            command = step.split("        run:", 1)[1].strip()
+            assert (
+                command
+                == ".venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py"
+            )
+
+
+def test_cumetal_runner_preserves_selected_backend_and_precision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CUMETAL_PTX_BACKEND", "cumetal-ir")
+    monkeypatch.setenv("CUMETAL_FP64_MODE", "fast48")
+    code, output, timed_out = _runner()["stream_process"](
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os; print(os.environ['CUMETAL_PTX_BACKEND'], "
+                "os.environ['CUMETAL_FP64_MODE'])"
+            ),
+        ],
+        10,
+    )
+    assert code == 0
+    assert not timed_out
+    assert output.strip() == "cumetal-ir fast48"
 
 
 @pytest.mark.parametrize("failure", (None, "missing-xcode", "xcode", "sdk", "os"))

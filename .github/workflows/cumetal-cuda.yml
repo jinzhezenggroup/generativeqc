@@ -282,7 +282,11 @@ jobs:
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: gate
           CUMETAL_DEBUG_REGISTRATION: "1"
-          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}
+          # Strict typed PTX lowering retains the existing fast48 arithmetic
+          # contract and fails rather than retrying the legacy compiler.
+          CUMETAL_PTX_BACKEND: cumetal-ir
+          CUMETAL_FP64_MODE: fast48
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "90"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
@@ -315,7 +319,9 @@ jobs:
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: full
           CUMETAL_DEBUG_REGISTRATION: "1"
-          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}
+          CUMETAL_PTX_BACKEND: cumetal-ir
+          CUMETAL_FP64_MODE: fast48
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "180"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"
           GENERATIVEQC_DFT_CUDA_TEST: "1"
