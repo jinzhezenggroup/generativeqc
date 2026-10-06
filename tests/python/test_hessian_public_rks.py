@@ -56,6 +56,8 @@ def test_public_rks_second_order_capability_is_context_qualified(method: str) ->
     (
         ("lda-uks", {}),
         ("pbe0-rks", {}),
+        ("b3lyp-rks", {}),
+        ("r2scan-rks", {}),
         ("pbe-rks", {"basis_representation": "spherical"}),
     ),
 )
