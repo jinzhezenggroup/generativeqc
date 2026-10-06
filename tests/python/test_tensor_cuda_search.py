@@ -30,6 +30,7 @@ from generativeqc_compiler.tensor.cuda_plan import (
     TensorSchedule,
     plan_cuda,
 )
+from generativeqc_compiler.tensor.cuda_reduction import ReductionLoweringBinding
 from generativeqc_compiler.tensor.cuda_search import (
     TensorScheduleSpace,
     TensorScreeningPolicy,
@@ -86,12 +87,6 @@ def test_structured_search_is_bounded_reproducible_and_covers_each_axis() -> Non
     assert {s.threads for s in custom.generate()} == {32, 128, 512, 1024}
     streaming = replace(space, stream_reductions=(False, True))
     assert {s.stream_reductions for s in streaming.generate()} == {False, True}
-    cub = replace(
-        space,
-        stream_reductions=(True,),
-        reduction_provider=("generated", "cub"),
-    )
-    assert {s.reduction_provider for s in cub.generate()} == {"generated", "cub"}
 
 
 @pytest.mark.parametrize(
@@ -101,7 +96,6 @@ def test_structured_search_is_bounded_reproducible_and_covers_each_axis() -> Non
         {"tile_m": (0,)},
         {"views": (1,)},
         {"stream_reductions": (1,)},
-        {"reduction_provider": ("invalid",)},
         {"threads": (128, 128)},
         {"tile_n": (False,)},
         {"elements_per_thread": (3,)},
@@ -179,15 +173,10 @@ def test_execution_identity_tracks_only_executable_new_schedule_dimensions() -> 
         TARGET,
         schedule=TensorSchedule(stream_reductions=True),
     )
-    cub_cooperative = plan_cuda(
-        reduction.program,
-        TARGET,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
-    )
-    assert execution_key(cub_cooperative) != execution_key(generated_cooperative)
+    cub_lowering = ReductionLoweringBinding("cub")
+    assert execution_key(
+        generated_cooperative, cub_lowering
+    ) != execution_key(generated_cooperative)
 
     direct = plan_cuda(gemm_program(), TARGET)
     assert execution_key(
@@ -246,18 +235,16 @@ def test_new_schedule_dimensions_change_generated_execution_without_changing_def
     cub = plan_cuda(
         reduction_program(),
         TARGET,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
     )
-    cub_source = emit_cuda(cub)
+    cub_lowering = ReductionLoweringBinding("cub")
+    cub_source = emit_cuda(cub, reduction_lowering=cub_lowering)
     assert "#include <cub/block/block_reduce.cuh>" in cub_source
     assert "cub::BlockReduce<" in cub_source
     assert "cub::BLOCK_REDUCE_WARP_REDUCTIONS" in cub_source
     assert "__dadd_rn" in cub_source
     assert "__shfl_down_sync" not in cub_source
-    cub_estimate = estimate_schedule(cub)
+    cub_estimate = estimate_schedule(cub, cub_lowering)
     assert cub_estimate["estimated_shared_bytes"] == 128 * 8
     cub_contract = ScheduleContract.from_payload(cub_estimate["schedule_contract"])
     assert cub_contract.resources.shared_bytes == 128 * 8
@@ -276,13 +263,11 @@ def test_new_schedule_dimensions_change_generated_execution_without_changing_def
     assert "blocks((tm*tk+tk*tn+1LL)/2LL" in packed_source
 
 
-def test_cub_reduction_pilot_requires_streaming_cooperative_schedule() -> None:
-    with pytest.raises(ValueError, match="requires stream_reductions"):
-        plan_cuda(
-            reduction_program(),
-            TARGET,
-            schedule=TensorSchedule(reduction_provider="cub"),
-        )
+def test_cub_lowering_does_not_change_a_noncooperative_schedule() -> None:
+    plan = plan_cuda(reduction_program(), TARGET)
+    cub_lowering = ReductionLoweringBinding("cub")
+    assert execution_key(plan, cub_lowering) == execution_key(plan)
+    assert emit_cuda(plan, reduction_lowering=cub_lowering) == emit_cuda(plan)
 
 
 def test_default_search_prunes_equivalent_plans_and_preserves_baseline() -> None:
@@ -569,15 +554,27 @@ def fake_cuda(monkeypatch: typing.Any) -> typing.Any:
     )
 
     def compile_plan(
-        plan: typing.Any, compiler: typing.Any, cache: typing.Any
+        plan: typing.Any,
+        compiler: typing.Any,
+        cache: typing.Any,
+        *,
+        reduction_lowering: typing.Any = None,
     ) -> typing.Any:
+        lowering = (
+            ReductionLoweringBinding()
+            if reduction_lowering is None
+            else reduction_lowering
+        )
         calls.compiled.append(plan)
         return SimpleNamespace(
             metadata={
-                "key": canonical_hash({"artifact": plan.identity}),
+                "key": canonical_hash(
+                    {"artifact": plan.identity, "lowering": lowering.to_payload()}
+                ),
                 "identity": {
                     "source": "unit-test-only",
                     "plan": plan.identity,
+                    "reduction_lowering": lowering.to_payload(),
                     "generated": "mock",
                 },
                 "resources": []
@@ -1196,13 +1193,19 @@ def test_cooperative_reduction_is_not_rejected_as_scalar(
 ) -> None:
     program = scalar_reduction_program()
     baseline = plan_cuda(program, TARGET)
-    schedule = TensorSchedule(
-        threads=threads, stream_reductions=True, reduction_provider=provider
-    )
+    schedule = TensorSchedule(threads=threads, stream_reductions=True)
+    lowering = ReductionLoweringBinding(provider)
     candidate_plan = plan_cuda(program, TARGET, schedule=schedule)
-    assert estimate_schedule(candidate_plan)["static_promotion_rejections"] == []
-    (candidate,) = plan_schedule_search(baseline, [schedule])
+    assert estimate_schedule(
+        candidate_plan, lowering
+    )["static_promotion_rejections"] == []
+    (candidate,) = plan_schedule_search(
+        baseline,
+        [schedule],
+        reduction_lowerings=[lowering],
+    )
     assert candidate.status == "ready", candidate.reason
+    assert candidate.reduction_lowering == lowering
 
 
 def test_mixed_accumulation_without_legal_gemm_stays_eligible() -> None:
