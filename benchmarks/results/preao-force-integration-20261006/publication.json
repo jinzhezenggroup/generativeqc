@@ -1,0 +1,62 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Rebuilt repaired-source numerical gates pass; five-round warm eligibility separately verified at 24. 3/48 are numerical/work smoke only.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 4898,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "61f0d33901933828c3a0ac849e77c08ce39d4921ed9f8dd037489bb2b8e65d96"
+    },
+    {
+      "bytes": 86364,
+      "path": "bundle.json.xz",
+      "role": "samples",
+      "sha256": "1472e4a78011398c6cf459e3a48ea673cfefc0350181b76d94ba6c888a1f1e3b"
+    },
+    {
+      "bytes": 4614,
+      "path": "qualification.json.gz",
+      "role": "summary",
+      "sha256": "5d9b95239477e959b0f7fd5022de60a384ce8d85f8d77abd58c0f2de6e602484"
+    },
+    {
+      "bytes": 56360,
+      "path": "support.json.xz",
+      "role": "reproduction",
+      "sha256": "88a30941644398cec66953eee4faf50255d80a4069364d6cf933223321eacea8"
+    },
+    {
+      "bytes": 2670,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "f59df21b2d62149eddfef1a90c4fb29925861cef251118375e0c868db1bd544a"
+    },
+    {
+      "bytes": 3446,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "b01fa69845cd44623d7870715fd07d93912b20d74d6e63b69f0052d574aa5bcd"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "env",
+      "PYTHONPATH=python:.",
+      "python",
+      "benchmarks/results/preao-force-integration-20261006/reproduce.py",
+      "benchmarks/results/preao-force-integration-20261006/bundle.json.xz",
+      "--output",
+      ".artifacts/preao/reproduced-integration.json"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "1886ca21637a244c544927d128bafaa9b28ab295"
+  }
+}

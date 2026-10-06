@@ -130,6 +130,65 @@ now models the added native constructor and producer cache binding, and the
 AST gate requires selected feature leases to go through their bound map owner.
 No real GPU is accessed by these host-only cache tests.
 
+## Post-integration source-scoped revalidation
+
+The initial publication above remains frozen evidence from the first merged
+source; its binary is not relabelled as the later head. After merging master
+`20087a073` in `aa79a3453` and retaining the reviewed indexed identity-map,
+installed-header and detached-jet-layout repairs, the new campaign measures clean
+revision `1886ca21637a244c544927d128bafaa9b28ab295` on n1 Slurm allocation 6244.
+Core SHA-256 is
+`1e56e3afee967f91b3a0188bb283753b442bb36fd6f13d3888707a194aa64044`;
+scientific source identity is
+`f0f179895e00b9a499eb75d2182fbb2cbb5ed9303d023963f57d31386c4bfa1e`.
+
+Five interleaved AB/BA complete E+F campaigns at 24 atoms pass the same guarded
+warm objective. Current-default versus public-auto medians, in seconds:
+
+| Phase | Current-default | Auto | Improvement |
+| --- | --- | --- | --- |
+| Cold | 54.828060 | 54.762690 | 0.1192%, within noise |
+| Warm | 3.999093 | 3.839689 | 3.9860%, above 2% robust-noise floor |
+| Moved | 24.396644 | 24.181707 | 0.8810%, within noise |
+| Moved-warm | 4.000244 | 3.840637 | 3.9899%, above 2% robust-noise floor |
+
+Actual AO visits/jet values again fall 24.6817%, projection FMA pairs 38.5145%,
+with zero native Python AO-label lookups, per-tile label H2D or discovery AO jets.
+The 24-atom independent gates have maximum energy error 5.57066e-12 Eh and force
+error 2.44519e-11 Eh/Bohr. The control remains incumbent-only dispatch on the same
+rebuilt candidate source/binary, not a separately built unmodified master.
+The new 3/48 coverage consists only of single numerical/work smoke pairs, not
+new five-round no-regression timing qualification. The original full five-round
+3/48 results retain their earlier source scope.
+
+The additional [integration publication](../../../../benchmarks/results/preao-force-integration-20261006/README.md)
+preserves all 19 original JSON byte streams, hashes, complete histories/counters,
+independent references and separate intrusive profiles in one cross-record XZ
+bundle. Compact summaries omit only duplicated payloads, not samples or precision.
+Full source checks, scheduler/device, build/host/ccache and GPU gate receipts are
+retained; numerical acceptance and warm eligibility remain distinct from generic
+all-phase performance promotion. There is still no GPU-model/shape whitelist or
+claim of timings on hardware other than the measured n1 RTX 5090.
+
+The first integration attempt, 6240, passed 26 CUDA cases and zero-error
+memcheck/racecheck but stopped at public analytic tests: library-only CMake
+targets left stale stationary AOT manifests. The loader correctly rejected the
+contract mismatch. No endpoints from that attempt are credited. Build the needed
+`generativeqc_stationary_*_manifest` targets after compiler-input changes; they
+also build the corresponding libraries. The rerun verifies all 14 used AOT
+contract/plan/binary identities before dispatch, without rewriting identities or
+bypassing the loader. Its 26 CUDA cases, two memcheck/two racecheck cases and ten
+public analytic-force cases pass. Final-source host validation records 940 passes
+and 305 explicit skips, with 20 additional packaging passes; the 35 focused
+repair tests are a subset, not extra unique passes. The compiler audit checks
+478 modules with zero dependency errors; scoped format checks and the ccache
+build/no-work rebuild pass.
+
+The subsequent `5d11d025` fast-forward changes only host tests and the capacity
+qualification tool. All 16 measured production campaigns' scientific file hashes
+still match; its six changed test files add a separately recorded 441 host passes
+and one NVCC-unavailable skip, not a new GPU or performance campaign.
+
 ## Boundaries and follow-up
 
 P0-A and the force-owner portion of P0-B are implemented. Separate native KS/XC
