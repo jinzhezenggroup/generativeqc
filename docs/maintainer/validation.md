@@ -40,6 +40,33 @@ Commands recorded in historical evidence and examples may still show
 `main/gpu:5090:1`; those identify the cluster allocation used for that
 measurement and are not portable eligibility checks.
 
+### CuMetal QC quarantine
+
+The CuMetal workflow still requires the native production-library build, CUDA
+runtime CTest, and completed Apple-GPU smoke provenance. Its real QC endpoint
+groups are temporarily quarantined for the exact provider/backend/precision
+contract and node list in
+[`manifests/cumetal_qc_quarantine.json`](../../manifests/cumetal_qc_quarantine.json).
+Both routine and scheduled/manual lanes emit explicit skipped-group JUnit records
+and a **QC NOT QUALIFIED** job summary. A green runtime job establishes only the
+build/runtime contracts it actually executed, not QC numerical qualification.
+
+The quarantine is opt-in through `CUMETAL_CUDA_QUARANTINE` in those two workflow
+steps. A provider pin, backend, or precision mismatch fails closed and requires
+review. Newly selected groups outside the exact allowlist execute normally; an
+unexpected pytest skip, empty result, failure, missing per-case GPU provenance,
+or exceeded budget still fails. NVIDIA and other test lanes are unaffected.
+
+To qualify an upstream fix, run `.github/scripts/run_cumetal_cuda_pytests.py` with
+`CUMETAL_CUDA_QUARANTINE` unset in both `CUMETAL_CUDA_TEST_MODE=gate` and `full`,
+using the real Apple GPU and the workflow's remaining environment. Preserve every
+endpoint's unchanged numerical/oracle checks, per-case `device=apple_gpu` and
+`launch_success=true` output, and the existing time budgets. Only complete endpoint
+success with no skips justifies removing the workflow opt-in. Compiler-only
+success or the source-first runtime smoke cannot establish that result. See the
+[compatibility decision](../../.agents/notes/implemented/compatibility/2026-10-06-cumetal-qc-quarantine.md)
+for the shared-owner evidence and restoration criteria.
+
 ## Existing tests and oracle independence
 
 DFT03's first fixed-density slice is documented in [XC integration](../developer/xc_integration.md).
