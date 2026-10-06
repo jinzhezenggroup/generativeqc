@@ -42,6 +42,10 @@ from generativeqc_compiler.tensor.cuda_plan import (
     TensorSchedule,
     plan_cuda,
 )
+from generativeqc_compiler.tensor.cuda_reduction import (
+    DEFAULT_REDUCTION_LOWERING,
+    ReductionLoweringBinding,
+)
 from generativeqc_compiler.tensor.examples import example_cases
 from generativeqc_compiler.tensor.interpreter import execute
 
@@ -227,12 +231,18 @@ def check(
     compiler: typing.Any,
     cache: typing.Any,
     schedule: typing.Any = None,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
     **options: typing.Any,
 ) -> typing.Any:
     schedule = TensorSchedule() if schedule is None else schedule
     expected = execute(program, feeds).outputs
     plan = plan_cuda(program, compiler.target, schedule=schedule, **options)
-    artifact = compile_cuda(plan, compiler, cache)
+    artifact = compile_cuda(
+        plan,
+        compiler,
+        cache,
+        reduction_lowering=reduction_lowering,
+    )
     with PreparedCuda(plan, artifact) as prepared:
         for profile in (False, True, False):
             result = prepared.execute(feeds, profile=profile)
@@ -267,10 +277,8 @@ def test_cub_block_reduce_matches_interpreter(
         feeds,
         compiler,
         cache,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
+        reduction_lowering=ReductionLoweringBinding("cub"),
     )
     assert result.metrics["kernel_ms"] >= 0.0
 
