@@ -50,6 +50,12 @@ def test_native_semilocal_execution_traits_are_manifest_owned() -> None:
     assert by_name["R2SCAN"]["stationary_ecp_gradient"] is False
     assert by_name["B3LYP"]["stationary_kernel"] == "composed"
     assert by_name["WB97M-V"]["stationary_kernel"] == "wb97mv"
+    assert {
+        name for name, record in by_name.items() if record["stationary_second_order"]
+    } == {"LDA", "PBE"}
+    assert by_name["PBE"]["native_range_exchange"] is True
+    assert by_name["PBE"]["cuda_nonlocal_correlation"] is False
+    assert by_name["WB97M-V"]["molecular_nonlocal_domain"] is True
 
 
 CUDA_FAST_PATH_CENSUS = {
