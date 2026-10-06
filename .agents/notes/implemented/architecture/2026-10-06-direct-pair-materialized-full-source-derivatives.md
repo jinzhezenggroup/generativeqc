@@ -65,3 +65,7 @@ test-fixture `auto` type mismatch; numerical gates were unchanged.
 - Issue #1892; value foundations #2000 and #2002.
 - `docs/developer/direct_pair_recurrence.md`.
 - `tests/python/test_cuda_hybrid_snapshot.py` for independent Libcint gates.
+
+The later scalar-prefix schedule supersedes the per-atom Coulomb preparation;
+see `2026-10-06-direct-pair-scalar-spatial-responses.md`. The original decision
+and its measurements above remain the provenance for the first derivative slice.

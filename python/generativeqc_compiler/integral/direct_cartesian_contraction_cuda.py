@@ -108,12 +108,12 @@ __device__ inline Scalar convolved_hermite_contraction(
  * Raw component evaluators and materialized shell-quartet consumers share this
  * exact loop and prefactor order; only the preparation lifetime differs. */
 template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
-          typename SecondCoefficients>
-__device__ inline Scalar consume_cartesian_coulomb(
+          typename SecondCoefficients, typename CoulombStates>
+__device__ inline Scalar consume_cartesian_coulomb_states(
     EvaluationReal<Scalar> p, EvaluationReal<Scalar> q, const Angular& angular_first,
     const Angular& angular_second, const Angular& angular_third, const Angular& angular_fourth,
     const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
-    const CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
+    const CoulombStates& auxiliary) {
   Scalar value = scalar<Scalar>(0.0);
   for (unsigned t = 0; t <= angular_first.x + angular_second.x; ++t) {
     for (unsigned u = 0; u <= angular_first.y + angular_second.y; ++u) {
@@ -140,6 +140,19 @@ __device__ inline Scalar consume_cartesian_coulomb(
   const EvaluationReal<Scalar> prefactor =
       EvaluationReal<Scalar>{2.0 * pow(kPi, 2.5)} / (p * q * qsqrt(p + q));
   return prefactor * value;
+}
+
+/** Typed compatibility entry for the retained scalar and forward-AD simplexes.
+ * Spatial-response views use the same contraction body and prefactor order. */
+template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
+          typename SecondCoefficients>
+__device__ inline Scalar consume_cartesian_coulomb(
+    EvaluationReal<Scalar> p, EvaluationReal<Scalar> q, const Angular& angular_first,
+    const Angular& angular_second, const Angular& angular_third, const Angular& angular_fourth,
+    const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
+    const CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
+  return consume_cartesian_coulomb_states<MaximumAngular, Scalar>(p, q, angular_first,
+      angular_second, angular_third, angular_fourth, first_coefficients, second_coefficients, auxiliary);
 }
 
 template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
