@@ -9,7 +9,7 @@
 
 #include "scf/cuda/direct_bounded_exact_force.hpp"
 #include "scf/cuda/direct_constants.hpp"
-#include "scf/cuda/direct_force_low_order.cuh"
+#include "scf/cuda/direct_force_execution.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_page_screening.cuh"
 #include "scf/cuda/direct_queue_profile.cuh"
@@ -127,15 +127,9 @@ __global__ void contract_bounded_exact_low_order_force_page_kernel(
       // This route bypasses exact compaction, so record each surviving quartet
       // here to preserve the same final-density ledger as the fixed schedule.
       profile_bounded_direct_shell_quartet(batch, task, profile);
-      if (shell_class == kSsssShellClass) {
-        contract_two_electron_force_ssss_task_scaled<Unrestricted>(
-            batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces,
-            coulomb_coefficient, exchange_coefficient);
-      } else {
-        contract_two_electron_force_psss_task_scaled<Unrestricted>(
-            batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces, 0U,
-            coulomb_coefficient, exchange_coefficient);
-      }
+      contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>(
+          batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces,
+          0U, coulomb_coefficient, exchange_coefficient);
     }
     __syncthreads();
   }

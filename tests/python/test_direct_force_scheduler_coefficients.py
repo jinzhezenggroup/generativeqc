@@ -69,12 +69,10 @@ def test_top_level_shell_force_dispatch_forwards_explicit_coefficients() -> None
         assert symbol in source
     assert "double coulomb_coefficient" in header
     assert "double exchange_coefficient" in header
+    assert header.count("DirectForceOutputMode output_mode") == 2
     for symbol in (
-        "contract_two_electron_force_ssss_task_scaled",
-        "contract_two_electron_force_psss_task_scaled",
-        "contract_two_electron_force_psps_task_scaled",
-        "contract_two_electron_force_pair_order2_task_scaled",
-        "contract_two_electron_force_order3_task_scaled",
+        "contract_direct_force_class_task",
+        "contract_direct_force_precontracted_task",
         "contract_two_electron_force_quartet_subtile_scaled",
     ):
         assert symbol in source
@@ -84,6 +82,15 @@ def test_top_level_shell_force_dispatch_forwards_explicit_coefficients() -> None
     assert "contract_two_electron_force_pair_order2_task<" not in source
     assert "contract_two_electron_force_order3_task<" not in source
     assert "contract_two_electron_force_quartet_subtile<" not in source
+    for path in (
+        "src/scf/cuda/direct_angular_force.cu",
+        "src/scf/cuda/direct_bounded_exact_force.cu",
+        "src/scf/cuda/direct_bounded_fallback.cu",
+    ):
+        consumer = _source(path)
+        assert '"scf/cuda/direct_force_execution.cuh"' in consumer
+        assert "contract_direct_force_" in consumer
+        assert "contract_two_electron_force_order3_task_scaled<" not in consumer
 
 
 def test_top_level_hf_shell_dispatch_pins_historical_coefficients() -> None:
