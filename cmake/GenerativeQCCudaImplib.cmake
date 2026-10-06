@@ -14,9 +14,26 @@ function(generativeqc_write_cuda_symbol_file output_path)
   endforeach()
 endfunction()
 
+function(generativeqc_ensure_cuda_wheel_import_interface)
+  if(TARGET generativeqc_cuda_wheel_imports)
+    return()
+  endif()
+
+  add_library(generativeqc_cuda_wheel_imports INTERFACE)
+  target_include_directories(generativeqc_cuda_wheel_imports INTERFACE
+    "${PROJECT_SOURCE_DIR}/src/runtime/nvidia_host_api"
+    ${GENERATIVEQC_CUDA_TOOLKIT_INCLUDE_DIRS})
+  target_link_libraries(generativeqc_cuda_wheel_imports INTERFACE ${CMAKE_DL_LIBS})
+  target_link_options(generativeqc_cuda_wheel_imports INTERFACE "LINKER:-z,defs")
+endfunction()
+
 function(generativeqc_attach_cuda_implib target)
   if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "GenerativeQC provider-free CUDA wheels currently require Linux ELF")
+  endif()
+  if(CMAKE_VERSION VERSION_LESS 4.1)
+    message(FATAL_ERROR
+      "GenerativeQC CUDA wheels require CMake 4.1+ for CUDA_LINKER_LAUNCHER")
   endif()
   if(NOT CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
     message(FATAL_ERROR
@@ -39,35 +56,43 @@ function(generativeqc_attach_cuda_implib target)
   endif()
 
   # Derive imports from the strict final-link diagnostics instead of maintaining
-  # a hand-written CUDA/cuBLAS/cuSOLVER symbol inventory. This observes the
-  # object-level names after CUDA header aliases (for example *_v2) and the
-  # registration symbols emitted by NVCC. The launcher only synthesizes known
-  # provider families; unrelated unresolved symbols remain hard link failures.
-  get_target_property(_generativeqc_existing_link_launcher ${target} RULE_LAUNCH_LINK)
-  if(_generativeqc_existing_link_launcher)
-    message(FATAL_ERROR
-      "cannot compose CUDA wheel auto-implib with an existing RULE_LAUNCH_LINK on ${target}")
-  endif()
-  set(_generativeqc_implib_launcher
-      "${CMAKE_CURRENT_SOURCE_DIR}/tools/link_cuda_implib.py")
-  set(_generativeqc_implib_root
-      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib")
-  set(_generativeqc_implib_output
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/cuda_implib/${target}")
-  string(CONCAT _generativeqc_link_launcher
-      "\"${Python3_EXECUTABLE}\" \"${_generativeqc_implib_launcher}\""
-      " --cc \"${CMAKE_C_COMPILER}\""
-      " --implib-root \"${_generativeqc_implib_root}\""
-      " --work-dir \"${_generativeqc_implib_output}\""
-      " --target \"${implib_target}\" --")
-  set_property(TARGET ${target} PROPERTY RULE_LAUNCH_LINK
-               "${_generativeqc_link_launcher}")
+  # a hand-written CUDA/cuBLAS/cuSOLVER symbol inventory. Use CMake's supported
+  # per-language linker launcher rather than RULE_LAUNCH_LINK, which CMake
+  # reserves for ctest internals. Setting both launchers lets CMake select the
+  # one matching each target's computed linker language.
+  foreach(_generativeqc_link_language IN ITEMS CXX CUDA)
+    get_target_property(
+      _generativeqc_existing_link_launcher
+      ${target}
+      ${_generativeqc_link_language}_LINKER_LAUNCHER)
+    if(_generativeqc_existing_link_launcher)
+      message(FATAL_ERROR
+        "cannot compose CUDA wheel auto-implib with an existing "
+        "${_generativeqc_link_language}_LINKER_LAUNCHER on ${target}")
+    endif()
+  endforeach()
 
-  target_include_directories(${target} BEFORE PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/nvidia_host_api")
-  target_include_directories(${target} PRIVATE ${GENERATIVEQC_CUDA_TOOLKIT_INCLUDE_DIRS})
-  target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
-  target_link_options(${target} PRIVATE "LINKER:-z,defs")
+  set(_generativeqc_implib_launcher
+      "${PROJECT_SOURCE_DIR}/tools/link_cuda_implib.py")
+  set(_generativeqc_implib_root
+      "${PROJECT_SOURCE_DIR}/cmake/3rdparty/implib")
+  set(_generativeqc_implib_output
+      "${PROJECT_BINARY_DIR}/generated/cuda_implib/${target}")
+  set(_generativeqc_link_launcher
+      "${Python3_EXECUTABLE}"
+      "${_generativeqc_implib_launcher}"
+      --cc "${CMAKE_C_COMPILER}"
+      --implib-root "${_generativeqc_implib_root}"
+      --work-dir "${_generativeqc_implib_output}"
+      --target "${implib_target}"
+      --)
+  set_property(TARGET ${target} PROPERTY
+               CXX_LINKER_LAUNCHER "${_generativeqc_link_launcher}")
+  set_property(TARGET ${target} PROPERTY
+               CUDA_LINKER_LAUNCHER "${_generativeqc_link_launcher}")
+
+  generativeqc_ensure_cuda_wheel_import_interface()
+  target_link_libraries(${target} PRIVATE generativeqc_cuda_wheel_imports)
 endfunction()
 
 # Native GFN2 needs two driver metadata queries, but loading a CUDA-enabled
