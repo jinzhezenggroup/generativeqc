@@ -1059,6 +1059,28 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
     ARGS --output "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}")
 
+  set(GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_HEADER
+      "${GENERATIVEQC_LIBXC_SEMILOCAL_CPU_DIRECTORY}/generated_libxc_semilocal_cuda.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_libxc_semilocal_cuda_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
+    OUTPUTS "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_libxc_semilocal_cpu_registry.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/expr.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/automatic_semilocal.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/bulk_runtime.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_capabilities.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_work.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/spec.py"
+    ARGS --cuda-output "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_HEADER}"
+    COMMENT "Generating automatic Libxc CUDA semilocal registry")
+
   set(GENERATIVEQC_GRID_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_grid_policy.cu")
   # The r2SCAN minority-spin derivative is sensitive to contraction of 1-zeta
@@ -1081,6 +1103,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_R2SCAN_CUDA_HEADER}"
       "${GENERATIVEQC_WB97MV_CUDA_HEADER}"
       "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
+      "${GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_HEADER}"
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
     ARGS --output "${GENERATIVEQC_GRID_SOURCE}")
 
