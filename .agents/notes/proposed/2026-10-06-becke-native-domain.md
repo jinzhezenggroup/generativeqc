@@ -98,6 +98,13 @@ explicitly verifies that fact. Actual maximum force differences were not
 recorded, so the publication does not invent a quantitative error record and
 its numerical acceptance decision remains **inconclusive**.
 
+The formatting bot subsequently stripped one trailing space from the published
+Slurm receipt and broke both its manifest and attachment checksum. Restore the
+original frozen bytes rather than recompute those hashes. The trailing-whitespace
+hook now excludes only reconstruction patches and `receipts.txt` under reviewed
+result bundles; evidence/attachment checks continue to enforce their exact bytes.
+No compiler, native or device-test input changes in this correction.
+
 The shared-owner gate uses synthetic AO/XC inputs. It is not an independent
 molecular oracle or a complete endpoint, and does not establish full physical
 RKS/UKS/composite acceptance. No new performance measurement is claimed.
