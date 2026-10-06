@@ -18,6 +18,7 @@
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "runtime/host_component_trace.hpp"
@@ -619,7 +620,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         range_correction(range ? std::optional<scf::ResolvedFockBuild>(*range) : std::nullopt),
         nonlocal_correlation(nonlocal),
         nonlocal_domain(domain) {
-    if (!curated_cuda_ks_functional(functional) && !generated::split_hybrid_registered(functional))
+    if (!curated_cuda_ks_functional(functional) &&
+        !generated::split_hybrid_registered(functional) &&
+        !generated::automatic_libxc_entry(functional))
       throw std::invalid_argument("CUDA KS functional has no qualified device implementation");
     const auto& strategy = provider.strategy();
     scf::validate_resolved_fock_build(strategy);
