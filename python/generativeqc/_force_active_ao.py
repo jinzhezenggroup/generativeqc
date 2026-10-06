@@ -68,7 +68,6 @@ class ForceActiveAoWorkload:
 class QualifiedForceActiveAoProfile:
     profile_id: str
     evidence: tuple[str, ...]
-    architectures: tuple[str, ...]
     compositions: tuple[str, ...]
     derivative_orders: tuple[int, ...]
     spin_blocks: tuple[int, ...]
@@ -84,8 +83,8 @@ class QualifiedForceActiveAoProfile:
     def __post_init__(self) -> None:
         if not self.profile_id or not self.evidence:
             raise ValueError("qualified force active-AO profile needs evidence")
-        if not self.architectures or not self.compositions:
-            raise ValueError("qualified force active-AO profile needs a device/domain")
+        if not self.compositions:
+            raise ValueError("qualified force active-AO profile needs an execution domain")
         if any(
             value not in _SUPPORTED_DERIVATIVE_ORDERS
             for value in self.derivative_orders
@@ -126,8 +125,7 @@ class QualifiedForceActiveAoProfile:
 
     def matches(self, workload: ForceActiveAoWorkload) -> bool:
         return (
-            workload.architecture in self.architectures
-            and workload.composition in self.compositions
+            workload.composition in self.compositions
             and workload.derivative_order in self.derivative_orders
             and workload.spin_blocks in self.spin_blocks
             and (
@@ -157,19 +155,18 @@ class ForceActiveAoDecision:
 
 
 # #1598 / #1853 promotion registry. Admission is capability- and cost-driven,
-# not molecule-size-window driven. The retained 48-atom positive endpoint is the
-# measured crossover anchor: above its dense point×AO² work, map discovery can be
-# amortized by the shared ordinary all-electron Direct force consumer. The only
-# remaining gates are true execution capabilities/resources plus the dense-work
-# crossover; unsupported capability or insufficient work falls back dense.
+# not molecule-, size-, or CUDA-architecture-window driven. The retained 48-atom
+# endpoint supplies only the initial dense point×AO² crossover calibration.
+# Architecture remains diagnostic provenance in the workload record, not a
+# selection predicate. Unsupported execution capability/resource conditions or
+# insufficient work fall back dense.
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
-        profile_id="sm120-ordinary-direct-active-ao-v2",
+        profile_id="ordinary-direct-active-ao-cost-v3",
         evidence=(
             "benchmarks/results/pbe0-public-force-policy-20261005/README.md",
             "benchmarks/results/pbe0-force-followups-20261005/README.md",
         ),
-        architectures=("sm_120",),
         compositions=("ordinary",),
         derivative_orders=(1, 2),
         spin_blocks=(1, 2),
