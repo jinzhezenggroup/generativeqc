@@ -38,24 +38,12 @@ from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 
-_METHODS = (
-    "lda-rks",
-    "pbe-rks",
-    "lda-uks",
-    "pbe-uks",
-    "pbe0-rks",
-    "pbe0-uks",
-    "b3lyp-rks",
-    "b3lyp-uks",
-)
-
-
 def _item_host_inventory(
     item: typing.Any,
     *,
     diis_history: typing.Any,
     max_iterations: typing.Any,
-    pbe: typing.Any,
+    requires_first_ao_derivatives: typing.Any,
     backend: typing.Any,
     model: typing.Any,
 ) -> typing.Any:
@@ -107,7 +95,7 @@ def _item_host_inventory(
     matrix_work += byte_product(16, diis_history + 1, diis_history + 1)
     host_unfused = backend == "cuda" and model.xc_schedule == "host_unfused"
     xc_tile = (
-        byte_product(8, min(points, model.tile_points), n, 4 if pbe else 1)
+        byte_product(8, min(points, model.tile_points), n, 4 if requires_first_ao_derivatives else 1)
         + byte_product(8, spins, n2)
         if backend == "cpu" or host_unfused
         else 0
@@ -118,7 +106,7 @@ def _item_host_inventory(
     ao_grid_cache = 0
     if (
         backend == "cpu"
-        and pbe
+        and requires_first_ao_derivatives
         and spins == 1
         and n > 0
         and points <= _CPU_AO_GRID_CACHE_CAP // 32 // n
@@ -191,7 +179,7 @@ def _cuda_item_inventory(
     item: typing.Any,
     *,
     diis_history: typing.Any,
-    pbe: typing.Any,
+    requires_first_ao_derivatives: typing.Any,
     tile: typing.Any,
 ) -> typing.Any:
     query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
@@ -208,7 +196,7 @@ def _cuda_item_inventory(
         item["grid_points"],
         diis_history,
         item["spins"],
-        int(pbe),
+        int(requires_first_ao_derivatives),
         tile,
     )
     if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
@@ -339,7 +327,7 @@ def ks_resource_request(
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
     cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
-    pbe = bool(model.ao_order)
+    requires_first_ao_derivatives = bool(model.ao_order)
     unrestricted = model.method_ir.spin == "polarized"
     items = []
     for atoms, charge, multiplicity in zip(
@@ -377,7 +365,7 @@ def ks_resource_request(
             atoms,
             backend=backend,
             operator="ao",
-            derivative_order=int(pbe),
+            derivative_order=int(requires_first_ao_derivatives),
             representation=orbital["representation"],
             role="orbital",
         )
@@ -445,7 +433,7 @@ def ks_resource_request(
             item,
             diis_history=diis_history,
             max_iterations=history_iterations,
-            pbe=pbe,
+            requires_first_ao_derivatives=requires_first_ao_derivatives,
             backend=backend,
             model=model,
         )
@@ -551,7 +539,7 @@ def ks_resource_request(
                     library,
                     item,
                     diis_history=diis_history,
-                    pbe=pbe,
+                    requires_first_ao_derivatives=requires_first_ao_derivatives,
                     tile=model.tile_points,
                 )
                 for item in items
