@@ -333,6 +333,11 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             )
             + "        )"
         )
+        alias_text = (
+            "()"
+            if not item["aliases"]
+            else "(" + "".join(f"{json.dumps(alias)}," for alias in item["aliases"]) + ")"
+        )
         fields = [
             f'        "symbol": {json.dumps(item["symbol"])},',
             f'        "code": {item["code"]},',
@@ -357,7 +362,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
-            f'        "aliases": {tuple(item["aliases"])!r},',
+            f'        "aliases": {alias_text},',
             '        "cuda_fast_paths": {',
             *(
                 f'            "{field}": {json.dumps(item["cuda_fast_paths"][field])},'
@@ -439,8 +444,6 @@ from generativeqc_compiler.dft._generated_native_semilocal import (
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_BY_CODE,
     SEMILOCAL_FAMILY_CODES,
-    _SemilocalFamilyFields,
-    _SemilocalFamilyRecord,
 )
 
 __all__ = [
