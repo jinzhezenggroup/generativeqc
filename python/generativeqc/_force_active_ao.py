@@ -68,17 +68,11 @@ class ForceActiveAoWorkload:
 class QualifiedForceActiveAoProfile:
     profile_id: str
     evidence: tuple[str, ...]
-    architectures: tuple[str, ...]
     compositions: tuple[str, ...]
     derivative_orders: tuple[int, ...]
     spin_blocks: tuple[int, ...]
     density_fitted: bool | None
-    min_atoms: int
-    max_atoms: int
-    min_aos: int
-    max_aos: int
-    min_grid_points: int
-    max_grid_points: int
+    min_dense_point_ao_square_work: int
     tile_policy: str
     tile_points: int | None
     min_device_bytes: int
@@ -89,8 +83,10 @@ class QualifiedForceActiveAoProfile:
     def __post_init__(self) -> None:
         if not self.profile_id or not self.evidence:
             raise ValueError("qualified force active-AO profile needs evidence")
-        if not self.architectures or not self.compositions:
-            raise ValueError("qualified force active-AO profile needs a device/domain")
+        if not self.compositions:
+            raise ValueError(
+                "qualified force active-AO profile needs an execution domain"
+            )
         if any(
             value not in _SUPPORTED_DERIVATIVE_ORDERS
             for value in self.derivative_orders
@@ -102,13 +98,11 @@ class QualifiedForceActiveAoProfile:
             raise ValueError("profile composition scope is invalid")
         if self.density_fitted is not None and type(self.density_fitted) is not bool:
             raise TypeError("profile density-fitting scope must be bool or None")
-        for low, high, name in (
-            (self.min_atoms, self.max_atoms, "atoms"),
-            (self.min_aos, self.max_aos, "AOs"),
-            (self.min_grid_points, self.max_grid_points, "grid points"),
+        if (
+            type(self.min_dense_point_ao_square_work) is not int
+            or self.min_dense_point_ao_square_work <= 0
         ):
-            if type(low) is not int or type(high) is not int or low <= 0 or high < low:
-                raise ValueError(f"invalid qualified {name} range")
+            raise ValueError("qualified dense-work crossover must be positive")
         if self.tile_policy not in ("fixed", "budget-auto"):
             raise ValueError("qualified tile policy is invalid")
         if self.tile_points is not None and (
@@ -133,17 +127,15 @@ class QualifiedForceActiveAoProfile:
 
     def matches(self, workload: ForceActiveAoWorkload) -> bool:
         return (
-            workload.architecture in self.architectures
-            and workload.composition in self.compositions
+            workload.composition in self.compositions
             and workload.derivative_order in self.derivative_orders
             and workload.spin_blocks in self.spin_blocks
             and (
                 self.density_fitted is None
                 or workload.density_fitted is self.density_fitted
             )
-            and self.min_atoms <= workload.atoms <= self.max_atoms
-            and self.min_aos <= workload.aos <= self.max_aos
-            and self.min_grid_points <= workload.grid_points <= self.max_grid_points
+            and workload.grid_points * workload.aos * workload.aos
+            >= self.min_dense_point_ao_square_work
             and workload.tile_policy == self.tile_policy
             and (self.tile_points is None or workload.tile_points == self.tile_points)
             and workload.max_device_bytes >= self.min_device_bytes
@@ -164,10 +156,32 @@ class ForceActiveAoDecision:
         return self.cutoff is not None
 
 
-# #1598 promotion registry. Current complete force evidence does not cross the
-# repository's 5% endpoint threshold, so automatic production selection is
-# intentionally dense until an evidence-bound profile is added.
-QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = ()
+# #1598 / #1853 promotion registry. Admission is capability- and cost-driven,
+# not molecule-, size-, or CUDA-architecture-window driven. The retained 48-atom
+# endpoint supplies only the initial dense point×AO² crossover calibration.
+# Architecture remains diagnostic provenance in the workload record, not a
+# selection predicate. Unsupported execution capability/resource conditions or
+# insufficient work fall back dense.
+QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
+    QualifiedForceActiveAoProfile(
+        profile_id="ordinary-direct-active-ao-cost-v3",
+        evidence=(
+            "benchmarks/results/pbe0-public-force-policy-20261005/README.md",
+            "benchmarks/results/pbe0-force-followups-20261005/README.md",
+        ),
+        compositions=("ordinary",),
+        derivative_orders=(1, 2),
+        spin_blocks=(1, 2),
+        density_fitted=False,
+        min_dense_point_ao_square_work=173_946_175_488,
+        tile_policy="fixed",
+        tile_points=256,
+        min_device_bytes=512 << 20,
+        min_host_bytes=256 << 20,
+        cutoff=1e-16,
+        cache_bytes=16 << 20,
+    ),
+)
 
 
 def resolve_force_active_ao_policy(

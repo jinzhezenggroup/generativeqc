@@ -132,6 +132,27 @@ void symmetrize(std::size_t o, std::size_t v, double* target, const double* sour
     assert "fusion" in findings[0].recommendation
 
 
+def test_audit_keeps_high_rank_materialization_visible_through_helper_call() -> None:
+    source = r"""
+double source_weight(const double* weights, std::size_t n, std::size_t p,
+                     std::size_t q, std::size_t r, std::size_t s);
+
+void pullback(std::size_t n, const double* c, const double* weights, double* first) {
+  for (std::size_t iu = 0; iu < n; ++iu)
+    for (std::size_t q = 0; q < n; ++q)
+      for (std::size_t r = 0; r < n; ++r)
+        for (std::size_t s = 0; s < n; ++s)
+          for (std::size_t p = 0; p < n; ++p)
+            first[((iu * n + q) * n + r) * n + s] +=
+                c[iu * n + p] * source_weight(weights, n, p, q, r, s);
+}
+"""
+    findings = audit_text(source, path="synthetic.cpp")
+    assert len(findings) == 1
+    assert findings[0].classification == "high-rank-output-materialization"
+    assert findings[0].lhs == "first[((iu * n + q) * n + r) * n + s]"
+
+
 def test_production_has_no_avoidable_rank2_quartic_scalar_reduction() -> None:
     scanned, findings = audit_tree(ROOT / "src", excludes=DEFAULT_EXCLUDES)
     assert scanned > 0

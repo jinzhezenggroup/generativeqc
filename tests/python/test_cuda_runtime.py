@@ -3,7 +3,7 @@ import typing
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
 
 
 def _cuda_tolerances() -> tuple[float, float]:
@@ -13,6 +13,11 @@ def _cuda_tolerances() -> tuple[float, float]:
     if os.environ.get("CUMETAL_ROOT"):
         return 2.0e-6, 2.0e-5
     return 2.0e-10, 2.0e-9
+
+
+def _diagnostic_phase(phase: str) -> None:
+    if os.environ.get("CUMETAL_DIAGNOSTIC_PHASES") == "1":
+        print(f"CUMETAL_QC_PHASE {phase}", flush=True)
 
 
 def test_cuda_minimal_rhf_matches_cpu_reference() -> None:
@@ -28,9 +33,13 @@ def test_cuda_minimal_rhf_matches_cpu_reference() -> None:
         "energy_tolerance": 1.0e-10,
         "density_tolerance": 1.0e-8,
     }
+    _diagnostic_phase("rhf_cpu_reference_start")
     reference = Calculator(device="cpu", **options).singlepoint(atoms)
+    _diagnostic_phase("rhf_cpu_reference_finished")
     try:
+        _diagnostic_phase("rhf_cuda_endpoint_start")
         result = Calculator(device="cuda", **options).singlepoint(atoms)
+        _diagnostic_phase("rhf_cuda_endpoint_finished")
     except RuntimeError as error:
         pytest.skip(f"CUDA device unavailable: {error}")
 
@@ -38,6 +47,7 @@ def test_cuda_minimal_rhf_matches_cpu_reference() -> None:
     assert result.executed_backend == "cuda"
     assert result.energy == pytest.approx(reference.energy, abs=energy_atol)
     assert np.allclose(result.forces, reference.forces, atol=force_atol, rtol=0.0)
+    _diagnostic_phase("rhf_numerical_assertions_passed")
 
 
 def test_cuda_minimal_uhf_matches_cpu_reference() -> None:
@@ -61,6 +71,71 @@ def test_cuda_minimal_uhf_matches_cpu_reference() -> None:
     assert result.executed_backend == "cuda"
     assert result.energy == pytest.approx(reference.energy, abs=energy_atol)
     assert np.allclose(result.forces, reference.forces, atol=force_atol, rtol=0.0)
+
+
+def test_cuda_minimal_density_fitting_matches_cpu_reference() -> None:
+    """Exercise the public CUDA DF SCF path with a tiny independent CPU DF oracle."""
+
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    basis = (
+        Shell(0, 0, (Primitive(1.0, 1.0),)),
+        Shell(1, 0, (Primitive(1.0, 1.0),)),
+    )
+    options = {
+        "basis": basis,
+        "auxiliary_basis": basis,
+        "energy_tolerance": 1.0e-10,
+        "density_tolerance": 1.0e-8,
+    }
+    reference = Calculator(device="cpu", density_fitting="cpu", **options).singlepoint(
+        atoms, properties=("energy",)
+    )
+    try:
+        result = Calculator(
+            device="cuda", density_fitting="cuda", **options
+        ).singlepoint(atoms, properties=("energy",))
+    except RuntimeError as error:
+        pytest.skip(f"CUDA device unavailable: {error}")
+
+    energy_atol, _ = _cuda_tolerances()
+    assert result.executed_backend == "cuda"
+    assert result.converged and reference.converged
+    assert result.energy == pytest.approx(reference.energy, abs=energy_atol)
+    assert result.forces is None
+
+
+def test_cuda_minimal_pbe_rks_matches_cpu_reference() -> None:
+    """Exercise one real PBE RKS CUDA solve with the provider-aware tolerance."""
+
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    basis = (
+        Shell(0, 0, (Primitive(1.0, 1.0),)),
+        Shell(1, 0, (Primitive(1.0, 1.0),)),
+    )
+    options = {
+        "method": "pbe-rks",
+        "basis": basis,
+        "ks_options": KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+        "energy_tolerance": 1.0e-10,
+        "density_tolerance": 1.0e-8,
+    }
+    reference = Calculator(device="cpu", **options).singlepoint(
+        atoms, properties=("energy",)
+    )
+    try:
+        result = Calculator(device="cuda", **options).singlepoint(
+            atoms, properties=("energy",)
+        )
+    except RuntimeError as error:
+        pytest.skip(f"CUDA device unavailable: {error}")
+
+    energy_atol, _ = _cuda_tolerances()
+    assert result.executed_backend == "cuda"
+    assert result.converged and reference.converged
+    assert result.energy == pytest.approx(reference.energy, abs=energy_atol)
+    assert result.forces is None
 
 
 @pytest.mark.parametrize("fixture_name", ("minimal_h2", "water", "water_sdf"))

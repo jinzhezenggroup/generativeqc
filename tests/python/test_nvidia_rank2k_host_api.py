@@ -10,12 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from tools.link_cuda_implib import provider_for_symbol
+
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def _symbols() -> list[str]:
-    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
-    return cmake.split("set(GENERATIVEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
 
 
 def _run(*command: str) -> subprocess.CompletedProcess[str]:
@@ -40,8 +37,11 @@ def toolchain(tmp_path: Path) -> tuple[str, str, str, list[str]]:
     return cc, cxx, cache, includes
 
 
-def test_rank2k_is_in_curated_wheel_imports() -> None:
-    assert "cublasDsyr2k_v2" in _symbols()
+def test_rank2k_is_in_automatic_cublas_provider_family() -> None:
+    provider = provider_for_symbol("cublasDsyr2k_v2")
+    assert provider is not None
+    assert provider.name == "cublas"
+    assert provider.load_name == "libcublas.so.12"
 
 
 def test_rank2k_declaration_and_alias(
@@ -88,7 +88,7 @@ def test_rank2k_lazy_import_forwards_all_arguments_without_provider_dependency(
     provider = tmp_path / "mock-provider.so"
     generate(
         "libcublas.so",
-        _symbols(),
+        ["cublasDsyr2k_v2"],
         str(provider),
         targets[machine],
         ROOT / "cmake/3rdparty/implib",

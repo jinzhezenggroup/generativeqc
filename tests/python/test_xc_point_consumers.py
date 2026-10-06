@@ -1,10 +1,8 @@
 """Execute the emitted bounded point selector without loading CUDA or the runtime."""
 
-import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
 from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
@@ -12,7 +10,7 @@ from tools.generate_xc_split_hybrid_registry import emit_registry
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_admitted_point_consumers(tmp_path: Path) -> None:
+def test_admitted_point_consumers(tmp_path: Path, native_cxx: object) -> None:
     """Admitted legacy and split keys resolve; unsupported keys must fail.
 
     Stub launchers record template arguments, so this tests the emitted host
@@ -22,9 +20,6 @@ def test_admitted_point_consumers(tmp_path: Path) -> None:
     Spin, AO precision and point counts are deliberately absent from the AOT key:
     they remain validated data/layout arguments rather than extra code variants.
     """
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
@@ -32,6 +27,9 @@ def test_admitted_point_consumers(tmp_path: Path) -> None:
     source.write_text(
         "#include <cstdint>\n#include <stdexcept>\n#include <limits>\n"
         '#include "generated_split_hybrid_registry.cuh"\n'
+        '#include "dft/semilocal_family.hpp"\n'
+        "using generativeqc::dft::SemilocalFamily;\n"
+        "using generativeqc::dft::semilocal_family_code;\n"
         "namespace generated = generativeqc::dft::generated;\n"
         "using CudaXcPointLauncher = void (*)();\n"
         "struct CudaXcPointCapabilities {\n"
@@ -89,19 +87,9 @@ int main() {
 """
     )
     binary = tmp_path / "dispatch"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-I",
-            str(tmp_path),
-            "-I",
-            str(ROOT / "src"),
-            str(source),
-            "-o",
-            str(binary),
-        ],
-        check=True,
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=("-std=c++17", "-O2", f"-I{tmp_path}", f"-I{ROOT / 'src'}"),
     )
     subprocess.run([str(binary)], check=True)

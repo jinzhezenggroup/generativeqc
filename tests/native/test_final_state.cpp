@@ -106,6 +106,99 @@ void analytic_spin_states() {
   }
 }
 
+void stationary_uhf_determinant_reuse() {
+  // A physical HF determinant is defined by its occupied subspace, not by a
+  // unique canonical gauge inside that subspace. Rotating two occupied alpha
+  // orbitals preserves D and [F, D] while individual columns no longer solve
+  // F C = S C eps. The ordinary retained-state path may consume that proven
+  // stationary determinant; reference export and correction remain canonical.
+  const Matrix identity{1, 0, 0, 0, 1, 0, 0, 0, 1};
+  const Matrix fock{-3, 0, 0, 0, -2, 0, 0, 0, 1};
+  const Matrix alpha_density{1, 0, 0, 0, 1, 0, 0, 0, 0};
+  const Matrix beta_density{1, 0, 0, 0, 0, 0, 0, 0, 0};
+  const double t = std::sqrt(.5);
+  const Matrix alpha_coefficients{t, -t, 0, t, t, 0, 0, 0, 1};
+
+  FinalStateIdentity id{
+      {41, 43, 5, 7},
+      11,
+      resolve_fock_build(make_hf_fock_spec(FockSpin::Unrestricted), FockBackend::Cpu),
+      {2, 1}};
+  const std::vector<Matrix> density{alpha_density, beta_density};
+  const PhysicalFockFrame physical{id, true, {fock, fock}};
+  const FinalFrameCandidate candidate{
+      id, 6, true, {{{-3, -2, 1}, alpha_coefficients}, {{-3, -2, 1}, identity}}};
+
+  FinalStateLimits limits;
+  FinalStateDiagnostic diagnostic;
+  std::string detail;
+  require(!validate_final_state(id, identity, fock, 0, density, physical, candidate, limits,
+                                diagnostic, detail, nullptr),
+          "noncanonical retained determinant bypassed the default eigenframe gate");
+
+  limits.allow_stationary_reuse = true;
+  require(validate_final_state(id, identity, fock, 0, density, physical, candidate, limits,
+                               diagnostic, detail, nullptr),
+          "physical stationary UHF determinant was rejected by the reuse contract");
+
+  unsigned unexpected_solves = 0;
+  const PhysicalFockOperation evaluate = [&](const auto& current, const auto& d) {
+    require(d == density, "stationary reuse changed the SCF determinant");
+    return PhysicalFockFrame{current, true, {fock, fock}};
+  };
+  const initial_guess::EigenOperation eigen = [&](const auto&, const auto*, const auto*, auto) {
+    ++unexpected_solves;
+    return reference::EigenResult{};
+  };
+  const auto selected = select_final_state(id, identity, fock, identity, 0, density, &candidate,
+                                           evaluate, eigen, limits, true, false, nullptr);
+  require(selected.state && selected.reused && unexpected_solves == 0 &&
+              selected.eigen_solves == 0 && selected.density_updates == 0 &&
+              selected.fixed_point_checks == 0,
+          "stationary retained determinant performed a canonical correction or projector probe");
+  near(selected.state->weighted_density[0][0], -3, "wrong alpha stationary Pulay weight");
+  near(selected.state->weighted_density[0][4], -2, "wrong alpha stationary Pulay weight");
+  near(selected.state->weighted_density[1][0], -3, "wrong beta stationary Pulay weight");
+
+  limits.require_canonicality = true;
+  require(!validate_final_state(id, identity, fock, 0, density, physical, candidate, limits,
+                                diagnostic, detail, nullptr),
+          "physical-reference export accepted a noncanonical determinant frame");
+
+  // Opting into stationary reuse must not remove the canonical correction or
+  // force projector check for forced rebuild, export, or an absent candidate.
+  const initial_guess::EigenOperation canonical = [&](const auto& input, const auto* overlap,
+                                                      const auto* x, auto n) {
+    require(input == fock && overlap && *overlap == identity && x && *x == identity && n == 3,
+            "canonical correction lost its actual F/S/X inputs");
+    return reference::EigenResult{{-3, -2, 1}, identity};
+  };
+  for (const bool weighted : {false, true}) {
+    for (const int route : {0, 1, 2}) {
+      limits.require_canonicality = route == 1;
+      const auto corrected = select_final_state(id, identity, fock, identity, 0, density,
+                                                route == 2 ? nullptr : &candidate, evaluate,
+                                                canonical, limits, weighted, route == 0, nullptr);
+      require(corrected.state && !corrected.reused && corrected.fock_evaluations == 2 &&
+                  corrected.density_updates == 1 &&
+                  corrected.fixed_point_checks == unsigned(weighted) &&
+                  corrected.eigen_solves == 2U * (1U + unsigned(weighted)) &&
+                  corrected.fixed_point_eigen_solves == 2U * unsigned(weighted),
+              "stationary reuse bypassed canonical correction or accepted force probe");
+      near(corrected.state->diagnostic.energy, selected.state->diagnostic.energy,
+           "canonical correction changed the stationary energy");
+      require(corrected.state->density == density,
+              "canonical correction changed the stationary determinant");
+      if (weighted) {
+        require(corrected.state->weighted_density == selected.state->weighted_density,
+                "canonical correction changed the stationary Pulay weight");
+      } else {
+        require(corrected.state->weighted_density.empty(), "energy-only correction constructed W");
+      }
+    }
+  }
+}
+
 void identity_and_physical_origin() {
   const std::vector<std::function<void(FinalStateIdentity&)>> changes{
       [](auto& id) { ++id.factor.basis; },
@@ -438,6 +531,7 @@ int main() {
     backend = &operations;
 #endif
     analytic_spin_states();
+    stationary_uhf_determinant_reuse();
     identity_and_physical_origin();
     malformed_states_and_strict_gates();
     degenerate_gauge();

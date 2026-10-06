@@ -160,8 +160,15 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
         restored = prepared.execute(strict=True, properties=("energy",))
         assert restored.energies == pytest.approx(cold.energies, abs=1e-9)
         if device == "cpu":
-            with pytest.raises((ValueError, RuntimeError), match="forces|gradient"):
-                prepared.execute(properties=("energy", "forces"))
+            # Forces are now explicitly supported for these small s/p systems.
+            # Require success: a non-strict result alone could hide a failed
+            # generated consumer after a successful native SCF replay.
+            forced = prepared.execute(strict=True, properties=("energy", "forces"))
+            assert forced.energies == pytest.approx(cold.energies, abs=1e-9)
+            assert all(
+                item.forces is not None and np.isfinite(item.forces).all()
+                for item in forced.items
+            )
         prepared.clear_warm_starts()
         assert all(warm_snapshot(prepared, i) is None for i in range(3))
         no_seed = prepared.execute(strict=True, properties=("energy",))

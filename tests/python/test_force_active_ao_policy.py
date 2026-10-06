@@ -36,17 +36,11 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
     values = {
         "profile_id": "test-qualified-domain",
         "evidence": ("test:complete-cold-warm-moved",),
-        "architectures": ("sm_120",),
         "compositions": ("ordinary", "composite"),
         "derivative_orders": (1, 2),
         "spin_blocks": (1, 2),
         "density_fitted": False,
-        "min_atoms": 24,
-        "max_atoms": 96,
-        "min_aos": 128,
-        "max_aos": 1024,
-        "min_grid_points": 100_000,
-        "max_grid_points": 4_000_000,
+        "min_dense_point_ao_square_work": 100_000_000_000,
         "tile_policy": "fixed",
         "tile_points": 256,
         "min_device_bytes": 512 << 20,
@@ -58,10 +52,50 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
     return QualifiedForceActiveAoProfile(**values)
 
 
-def test_production_auto_policy_has_no_unqualified_positive_profile() -> None:
-    assert QUALIFIED_FORCE_ACTIVE_AO_PROFILES == ()
-    decision = resolve_force_active_ao_policy(_workload())
-    assert decision.cutoff is None
+def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> None:
+    assert tuple(
+        profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+    ) == ("ordinary-direct-active-ao-cost-v3",)
+
+    below_crossover = resolve_force_active_ao_policy(_workload())
+    assert not below_crossover.selected
+    assert below_crossover.reason == "no-qualified-profile"
+
+    # Admission is continuous in predicted dense point×AO² work. Atom count,
+    # AO count and grid count are not benchmark fingerprints.
+    for workload in (
+        _workload(grid_points=1_179_648),
+        _workload(atoms=40, aos=512, grid_points=700_000),
+        _workload(atoms=120, aos=960, grid_points=3_000_000),
+        _workload(atoms=200, aos=384, grid_points=1_179_648),
+        _workload(derivative_order=1, grid_points=1_179_648),
+        _workload(spin_blocks=2, grid_points=1_179_648),
+        _workload(architecture="sm_90", grid_points=1_179_648),
+        _workload(architecture="sm_89", aos=512, grid_points=700_000),
+    ):
+        decision = resolve_force_active_ao_policy(workload)
+        assert decision.selected
+        assert decision.profile_id == "ordinary-direct-active-ao-cost-v3"
+        assert decision.cutoff == 1e-16
+        assert decision.cache_bytes == 16 << 20
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"composition": "composite", "grid_points": 1_179_648},
+        {"density_fitted": True, "grid_points": 1_179_648},
+        {"grid_points": 1_179_647},
+        {"tile_points": 128, "grid_points": 1_179_648},
+        {"max_device_bytes": (512 << 20) - 1, "grid_points": 1_179_648},
+        {"max_host_bytes": (256 << 20) - 1, "grid_points": 1_179_648},
+    ],
+)
+def test_production_cost_profile_keeps_capability_or_profitability_misses_dense(
+    updates: dict[str, object],
+) -> None:
+    decision = resolve_force_active_ao_policy(_workload(**updates))
+    assert not decision.selected
     assert decision.reason == "no-qualified-profile"
 
 
@@ -102,7 +136,7 @@ def test_same_resolver_can_cover_composite_without_method_identity() -> None:
     )
     assert decision.selected
     names = {field.name.lower() for field in fields(QualifiedForceActiveAoProfile)}
-    for forbidden in ("method", "functional", "selector"):
+    for forbidden in ("method", "functional", "selector", "architecture"):
         assert not any(forbidden in name for name in names)
 
 
@@ -126,9 +160,7 @@ def test_capability_miss_is_dense(updates: dict[str, object], reason: str) -> No
 @pytest.mark.parametrize(
     "updates",
     [
-        {"architecture": "sm_90"},
         {"density_fitted": True},
-        {"atoms": 12},
         {"aos": 64},
         {"grid_points": 50_000},
         {"tile_points": 128},
@@ -145,6 +177,17 @@ def test_adjacent_unqualified_workloads_fall_back_dense(
     )
     assert not decision.selected
     assert decision.reason == "no-qualified-profile"
+
+
+@pytest.mark.parametrize("architecture", ("sm_89", "sm_90", "sm_120"))
+def test_custom_profile_admission_is_architecture_independent(
+    architecture: str,
+) -> None:
+    decision = resolve_force_active_ao_policy(
+        _workload(architecture=architecture), profiles=(_profile(),)
+    )
+    assert decision.selected
+    assert decision.profile_id == "test-qualified-domain"
 
 
 def test_overlapping_profiles_fail_closed() -> None:
