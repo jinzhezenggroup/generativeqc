@@ -911,10 +911,7 @@ class Calculator:
                 self._device_name == "cuda"
                 or (
                     self._device_name == "cpu"
-                    and (
-                        qualified_basis(self._basis)
-                        or cpu_direct_semilocal_force
-                    )
+                    and (qualified_basis(self._basis) or cpu_direct_semilocal_force)
                 )
             )
         )

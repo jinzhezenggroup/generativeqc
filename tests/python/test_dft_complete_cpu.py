@@ -1090,9 +1090,7 @@ def test_failure_isolation_native_malformed_geometry_and_detached_state() -> Non
             assert method_capabilities(method).supported_properties == frozenset(
                 {"energy"}
             )
-        assert calc.capabilities.supported_properties == frozenset(
-            {"energy", "forces"}
-        )
+        assert calc.capabilities.supported_properties == frozenset({"energy", "forces"})
 
 
 @pytest.mark.parametrize("fail_publication", [False, True])

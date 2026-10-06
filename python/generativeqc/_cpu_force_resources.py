@@ -32,11 +32,7 @@ def qualified_all_electron_basis(basis: typing.Any) -> bool:
     if isinstance(basis, BasisSet):
         if any(element.ecp_core_electrons for element in basis.elements):
             return False
-        shells = (
-            shell
-            for element in basis.elements
-            for shell in element.shells
-        )
+        shells = (shell for element in basis.elements for shell in element.shells)
     else:
         try:
             shells = iter(basis)

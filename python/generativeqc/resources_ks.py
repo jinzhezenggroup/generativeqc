@@ -331,9 +331,7 @@ def ks_resource_request(
         if not math.isfinite(value) or value <= 0:
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
-    cpu_forces = backend == "cpu" and (
-        qualified_basis(selected) or include_forces
-    )
+    cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
     pbe, unrestricted = bool(model.ao_order), method.endswith("uks")
     items = []
     for atoms, charge, multiplicity in zip(
