@@ -1,9 +1,9 @@
 """Shared legality and resource planning for TensorIR CUDA reductions.
 
-The scientific reduction remains TensorIR-owned.  This module only decides
-whether the existing cooperative CUDA reduction shape is active and which
-lowering provider is requested.  CUB is qualification-only: the production
-default remains the generated reduction.
+The scientific reduction remains TensorIR-owned. This module decides whether
+the existing cooperative CUDA reduction shape is active and carries the
+lowering-only provider binding used by code generation/qualification. Provider
+identity is deliberately absent from TensorSchedule.
 """
 
 from __future__ import annotations
@@ -18,6 +18,26 @@ from .cuda_plan import ELEMENTWISE
 
 ReductionProvider = Literal["generated", "cub"]
 REDUCTION_PROVIDERS: tuple[ReductionProvider, ...] = ("generated", "cub")
+
+
+@dataclass(frozen=True)
+class ReductionLoweringBinding:
+    """Prepared/qualification implementation choice below TensorSchedule."""
+
+    provider: ReductionProvider = "generated"
+
+    def __post_init__(self) -> None:
+        if self.provider not in REDUCTION_PROVIDERS:
+            raise ValueError(f"unknown CUDA reduction provider {self.provider!r}")
+
+    def to_payload(self) -> dict[str, str]:
+        return {
+            "schema": "generativeqc.tensor.cuda.reduction-lowering.v1",
+            "provider": self.provider,
+        }
+
+
+DEFAULT_REDUCTION_LOWERING = ReductionLoweringBinding()
 
 
 @dataclass(frozen=True)
@@ -59,10 +79,8 @@ def reduction_extent(node: typing.Any) -> int:
     raise ValueError("reduction extent requires a TensorIR reduce or einsum node")
 
 
-def cooperative_reduction_provider(
-    plan: typing.Any, index: int
-) -> ReductionProvider | None:
-    """Return the active cooperative provider, or None for ordinary lowering."""
+def cooperative_reduction_eligible(plan: typing.Any, index: int) -> bool:
+    """Whether this plan step admits cooperative reduction lowering."""
 
     step = plan.steps[index]
     reduction_like = step.node.op == "reduce" or (
@@ -71,30 +89,35 @@ def cooperative_reduction_provider(
         and step.gemm == "none"
         and any(plan.steps[child].virtual for child in step.inputs)
     )
-    if (
-        not plan.schedule.stream_reductions
-        or step.virtual
-        or not reduction_like
-        or plan.target.warp_size != 32
-        or reduction_extent(step.node) < plan.target.warp_size
-    ):
-        return None
-    provider = plan.schedule.reduction_provider
-    if provider not in REDUCTION_PROVIDERS:
-        raise ValueError(f"unknown CUDA reduction provider {provider!r}")
-    return typing.cast("ReductionProvider", provider)
+    return bool(
+        plan.schedule.stream_reductions
+        and not step.virtual
+        and reduction_like
+        and plan.target.warp_size == 32
+        and reduction_extent(step.node) >= plan.target.warp_size
+    )
 
 
-def cooperative_reduction_shared_bytes(plan: typing.Any, index: int) -> int:
-    """Planned shared-memory bytes for one cooperative reduction kernel.
+def cooperative_reduction_provider(
+    plan: typing.Any,
+    index: int,
+    lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> ReductionProvider | None:
+    """Return the bound cooperative provider, or None for ordinary lowering."""
 
-    The generated warp-tree lowering has an exact partial-warp footprint.
-    CUB TempStorage is toolkit/header implementation detail, so use one
-    accumulator per thread as a conservative static bound.  PTXAS resource
-    evidence remains authoritative before any performance promotion.
-    """
+    if not isinstance(lowering, ReductionLoweringBinding):
+        raise TypeError("cooperative reduction lowering requires a typed binding")
+    return lowering.provider if cooperative_reduction_eligible(plan, index) else None
 
-    provider = cooperative_reduction_provider(plan, index)
+
+def cooperative_reduction_shared_bytes(
+    plan: typing.Any,
+    index: int,
+    lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> int:
+    """Planned shared-memory bytes for one cooperative reduction kernel."""
+
+    provider = cooperative_reduction_provider(plan, index, lowering)
     if provider is None:
         return 0
     accumulator = scalar_type(
@@ -198,7 +221,7 @@ def streamed_reduction_fusion_groups(
         list[tuple[int, dict[int, tuple[typing.Any, ...]]]],
     ] = {}
     for index, step in enumerate(plan.steps):
-        if cooperative_reduction_provider(plan, index) is None:
+        if not cooperative_reduction_eligible(plan, index):
             continue
         ancestors = _virtual_accesses(plan, index)
         if not ancestors:

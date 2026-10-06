@@ -123,7 +123,6 @@ class TensorSchedule:
     recompute: bool = False
     stream_reductions: bool = field(default=False, kw_only=True)
     streamed_gemm_reduction: bool = field(default=False, kw_only=True)
-    reduction_provider: str = field(default="generated", kw_only=True)
     inplace_donation: bool = field(default=False, kw_only=True)
     direct_gemm: bool = True
     layouts: bool = False
@@ -153,8 +152,6 @@ class TensorSchedule:
         ):
             if type(getattr(self, name)) is not bool:
                 raise TypeError(f"{name} must be boolean")
-        if self.reduction_provider not in ("generated", "cub"):
-            raise ValueError("reduction_provider must be 'generated' or 'cub'")
         if self.streamed_gemm_reduction and not self.stream_reductions:
             raise ValueError("streamed_gemm_reduction requires stream_reductions")
 
@@ -755,10 +752,6 @@ def plan_cuda(
     TargetScheduleShape(schedule.threads, target.warp_size).validate_for(
         target.target_info
     )
-    if schedule.reduction_provider == "cub" and not schedule.stream_reductions:
-        raise ValueError(
-            "CUB reduction provider requires stream_reductions for the pilot"
-        )
     nodes, inputs, outputs = _occurrences(program, schedule.recompute)
     mixed_accumulation_steps = frozenset[int]()
     if program.provenance.get("precision_execution") is not None:

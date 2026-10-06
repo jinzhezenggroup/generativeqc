@@ -20,7 +20,11 @@ from .cuda_plan import (
     static_data_slices,
     strides,
 )
-from .cuda_reduction import cooperative_reduction_provider
+from .cuda_reduction import (
+    DEFAULT_REDUCTION_LOWERING,
+    ReductionLoweringBinding,
+    cooperative_reduction_provider,
+)
 from .ir import TRANSCENDENTALS
 from .scaled_arithmetic import emit_scaled_bilinear
 
@@ -436,10 +440,14 @@ __global__ void {_name(prefix, f"scatter_{i}")}(unsigned char* p, const {ty}* c,
 """
 
 
-def _cooperative_reduce(plan: typing.Any, i: int) -> bool:
-    """Whether this step uses either cooperative reduction provider."""
+def _cooperative_reduce(
+    plan: typing.Any,
+    i: int,
+    lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> bool:
+    """Whether this step uses the bound cooperative reduction provider."""
 
-    return cooperative_reduction_provider(plan, i) is not None
+    return cooperative_reduction_provider(plan, i, lowering) is not None
 
 
 def _cooperative_reduction_expression(
@@ -567,7 +575,12 @@ def _cooperative_reduce_kernel(
     raise ValueError("cooperative reduction kernel requested for an ordinary step")
 
 
-def _launch(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.Any:
+def _launch(
+    plan: typing.Any,
+    i: typing.Any,
+    prefix: typing.Any = "",
+    lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> typing.Any:
     step, threads = plan.steps[i], plan.schedule.threads
     node = step.node
     if step.virtual or node.op in ("input", "constant") or not node.spec.size:
@@ -575,7 +588,7 @@ def _launch(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.
     scalar = scalar_type(node.spec.dtype)
     ty = scalar.ctype
     pointer = f"reinterpret_cast<{ty}*>(p + {step.offset})"
-    if _cooperative_reduce(plan, i):
+    if _cooperative_reduce(plan, i, lowering):
         return f"ctx.section(profile, metrics.kernel_ms, [&] {{ {prefix}kernel_{i}<<<blocks({node.spec.size}LL, 1), {threads}, 0, ctx.stream>>>(p, ctx.error); cuda_check(cudaGetLastError()); }});"
     if step.gemm == "none":
         width = plan.schedule.elements_per_thread
@@ -643,7 +656,11 @@ for (I n0 = 0; n0 < {g.n}LL; n0 += {nt}LL) {{
 
 
 def emit_cuda(
-    plan: TensorPlan, symbol_prefix: str = "", *, embed_static_data: bool = True
+    plan: TensorPlan,
+    symbol_prefix: str = "",
+    *,
+    embed_static_data: bool = True,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
 ) -> str:
     """Return standalone C++17 CUDA source with an optional symbol prefix.
 
@@ -671,7 +688,8 @@ def emit_cuda(
     namespace = f"namespace {_name(prefix, 'generated')} {{" if prefix else ""
     parts = ['#include "cuda_graph_context.cuh"']
     if any(
-        cooperative_reduction_provider(plan, i) == "cub" for i in range(len(plan.steps))
+        cooperative_reduction_provider(plan, i, reduction_lowering) == "cub"
+        for i in range(len(plan.steps))
     ):
         parts.append("#include <cub/block/block_reduce.cuh>")
     parts.append("using namespace generativeqc_tensor;")
@@ -717,8 +735,12 @@ def emit_cuda(
         )
         if not step.virtual and node.op not in ("input", "constant"):
             if step.gemm == "none":
-                if _cooperative_reduce(plan, i):
-                    parts.append(_cooperative_reduce_kernel(plan, i, prefix))
+                if _cooperative_reduce(plan, i, reduction_lowering):
+                    parts.append(
+                        _cooperative_reduction_kernel(
+                            plan, i, prefix, reduction_lowering
+                        )
+                    )
                     continue
                 width = plan.schedule.elements_per_thread
                 if width == 1:
@@ -862,7 +884,7 @@ static int {_name(prefix, "tensor_run_impl")}(void* pointer, const void* const* 
         ctx.section(profile, metrics.input_ms, [&] {{ {" ".join(copies_in)} }});
         ctx.submit_region(profile, [&] {{
             cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
-            {" ".join(_launch(plan, i, prefix) for i in range(len(plan.steps)))}
+            {" ".join(_launch(plan, i, prefix, reduction_lowering) for i in range(len(plan.steps)))}
         }});
         int arithmetic_error = 0;
         ctx.section(profile, metrics.output_ms, [&] {{

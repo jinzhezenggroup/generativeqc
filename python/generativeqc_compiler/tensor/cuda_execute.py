@@ -57,6 +57,7 @@ from generativeqc_compiler.common.specialization import (
 
 from .cuda_dtype import compile_options, scalar_type, symmetry_tolerance
 from .cuda_emit import emit_cuda
+from .cuda_reduction import DEFAULT_REDUCTION_LOWERING, ReductionLoweringBinding
 from .cuda_plan import (
     VALIDATION_CHUNK,
     TensorPlan,
@@ -178,7 +179,11 @@ def _read_static_data(artifact: CudaArtifact, expected_bytes: int) -> np.ndarray
 
 
 def compile_cuda(
-    plan: TensorPlan, compiler: CudaCompilerAdapter, cache: Path
+    plan: TensorPlan,
+    compiler: CudaCompilerAdapter,
+    cache: Path,
+    *,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
 ) -> CudaArtifact:
     """Compile/cache one whole plan with a finite NVCC process-tree timeout.
 
@@ -190,7 +195,13 @@ def compile_cuda(
     if compiler.target != plan.target:
         raise ValueError("compiler target does not match tensor plan target")
     options = compile_options(plan)
-    source = emit_cuda(plan, embed_static_data=False)
+    if not isinstance(reduction_lowering, ReductionLoweringBinding):
+        raise TypeError("CUDA compilation requires a typed reduction lowering binding")
+    source = emit_cuda(
+        plan,
+        embed_static_data=False,
+        reduction_lowering=reduction_lowering,
+    )
     static_data = tensor_static_data(plan)
     static_sha256 = hashlib.sha256(static_data).hexdigest()
     host_compiler = os.environ.get("NVCC_CCBIN") or shutil.which("gcc")
@@ -206,6 +217,7 @@ def compile_cuda(
     identity = {
         "schema": LAYOUT_VERSION,
         "plan": plan.identity,
+        "reduction_lowering": reduction_lowering.to_payload(),
         "source": tensor_source_identity(),
         "generated": canonical_hash(source),
         "static_data": {"bytes": len(static_data), "sha256": static_sha256},
