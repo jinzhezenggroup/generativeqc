@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/direct_warp_queue.hpp",
+  "reason": "Portable bounded pop-only queue algorithm shared by host concurrency tests and the CUDA scheduling adapter; it owns no scientific admission or floating-point chemistry.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "direct_integrals"
+}
