@@ -28,6 +28,7 @@ AUDITED_PREFIXES = (
     "public-policy:",
     "hf-runtime:",
     "tensor-schedule:",
+    "tensor-lowering:",
     "tensor-execution:",
     "dft-policy:",
 )
@@ -135,7 +136,6 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
     if schedule is None:
         raise ValueError("missing audited TensorSchedule")
     result: dict[str, str] = {}
-    reduction_provider_seen = False
     for node in schedule.body:
         if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
             continue
@@ -148,16 +148,37 @@ def _discover_tensor_schedule(root: Path) -> dict[str, str]:
                     f"TensorSchedule.{name} has a non-literal boolean default"
                 )
             result[f"tensor-schedule:{name}"] = relative.as_posix()
-        elif name == "reduction_provider":
-            if _literal_default(node.value) != "generated":
-                raise ValueError(
-                    "TensorSchedule.reduction_provider default drifted from generated"
-                )
-            reduction_provider_seen = True
-            result["tensor-schedule:reduction_provider"] = relative.as_posix()
-    if not reduction_provider_seen:
-        raise ValueError("missing audited TensorSchedule.reduction_provider")
     return result
+
+
+def _discover_tensor_reduction_lowering(root: Path) -> dict[str, str]:
+    relative = Path("python/generativeqc_compiler/tensor/cuda_reduction.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    binding = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == "ReductionLoweringBinding"
+        ),
+        None,
+    )
+    if binding is None:
+        raise ValueError("missing audited ReductionLoweringBinding")
+    provider_default = None
+    for node in binding.body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "provider"
+        ):
+            provider_default = _literal_default(node.value)
+            break
+    if provider_default != "generated":
+        raise ValueError(
+            "ReductionLoweringBinding provider default drifted from generated"
+        )
+    return {"tensor-lowering:reduction-provider-cub": relative.as_posix()}
 
 
 def _discover_tensor_execution(root: Path) -> dict[str, str]:
@@ -196,6 +217,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_public_precision(root),
         _discover_runtime_controls(root),
         _discover_tensor_schedule(root),
+        _discover_tensor_reduction_lowering(root),
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
     ):
