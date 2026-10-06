@@ -38,12 +38,12 @@ to MethodIR owners, CC/HF/DFT/GFN method APIs, or generic schedule search.
 implementation selectors in
 `manifests/maintenance/provider_selection_boundaries.json`.
 
-The initial debt contains three families:
+The remaining guarded debt contains two method/runtime families. Tensor CUDA
+cooperative reductions have already moved provider identity below `TensorSchedule`:
+the schedule describes cooperative execution shape, while a typed
+`ReductionLoweringBinding` selects generated CUDA or CUB for qualification and
+artifact binding.
 
-- Tensor CUDA still carries `reduction_provider` in `TensorSchedule` and the
-  schedule-search/artifact identity. This is owned by #1886/#1889: the semantic
-  reduction schedule should remain in the planner, while generated/CUB choice
-  moves to shared lowering candidates and a prepared binding.
 - CC/DF-CCSD(T) still carries `matrix_gemm`, `df_matrix_gemm`, and
   `lambda_matrix_gemm` through method/solver surfaces. This is migration debt
   under #1890.
