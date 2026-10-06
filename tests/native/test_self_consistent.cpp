@@ -194,23 +194,30 @@ void verify_shared_diis_coefficient_policy() {
 void verify_method_neutral_diis() {
   generativeqc::solver::Diis disabled(0, 2);
   const std::vector<double> original{2.0, 4.0};
-  require(disabled.update(original, {1.0, 0.0}) == original,
-          "disabled shared DIIS changed the input state");
+  const auto disabled_update = disabled.update_with_status(original, {1.0, 0.0});
+  require(disabled_update.vector == original && !disabled_update.modified,
+          "disabled shared DIIS changed the input state or reported modification");
   require(disabled.restarts() == 0, "disabled shared DIIS reported a restart");
 
   generativeqc::solver::Diis diis(2, 2);
-  require(diis.update({0.0, 0.0}, {1.0, 0.0}) == std::vector<double>({0.0, 0.0}),
-          "first shared DIIS state changed");
-  const auto extrapolated = diis.update({2.0, 4.0}, {0.0, 1.0});
-  require(std::abs(extrapolated[0] - 1.0) < 1.0e-14 && std::abs(extrapolated[1] - 2.0) < 1.0e-14,
-          "shared DIIS Pulay extrapolation changed");
+  const auto first = diis.update_with_status({0.0, 0.0}, {1.0, 0.0});
+  require(first.vector == std::vector<double>({0.0, 0.0}) && !first.modified,
+          "first shared DIIS state changed or reported modification");
+  const auto extrapolated = diis.update_with_status({2.0, 4.0}, {0.0, 1.0});
+  require(extrapolated.modified && std::abs(extrapolated.vector[0] - 1.0) < 1.0e-14 &&
+              std::abs(extrapolated.vector[1] - 2.0) < 1.0e-14,
+          "shared DIIS Pulay extrapolation/status changed");
 
   generativeqc::solver::Diis dependent(2, 2);
-  dependent.update({0.0, 0.0}, {1.0, 1.0});
-  const auto retained = dependent.update({3.0, 5.0}, {1.0, 1.0});
-  require(retained == std::vector<double>({3.0, 5.0}),
+  (void)dependent.update_with_status({0.0, 0.0}, {1.0, 1.0});
+  const auto retained = dependent.update_with_status({3.0, 5.0}, {1.0, 1.0});
+  require(retained.vector == std::vector<double>({3.0, 5.0}) && !retained.modified,
           "shared DIIS did not retain the latest state after a singular history");
   require(dependent.restarts() == 1, "shared DIIS did not count dependent-history retirement");
+
+  generativeqc::solver::Diis wrapper(0, 2);
+  require(wrapper.update(original, {1.0, 0.0}) == original,
+          "shared DIIS compatibility update changed");
 }
 
 void verify_three_history_diis_gram_symmetry() {
