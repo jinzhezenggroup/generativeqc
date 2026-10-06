@@ -60,7 +60,7 @@ jobs:
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false'
     runs-on: macos-15
-    # Keep the 50-minute full-suite step inside a separate finite job budget.
+    # Keep the 40-minute qualification budget inside a separate finite job budget.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
     env:
       CUMETAL_COMMIT: 8a1434ffc1a4f7a17d2f8a41e157afbac22af171
