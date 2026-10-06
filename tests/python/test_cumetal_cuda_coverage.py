@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import runpy
 import subprocess
 import sys
@@ -219,3 +220,76 @@ def test_cumetal_workflow_preserves_endpoint_diagnostics_after_qualification() -
     assert workflow.index("Preserve CuMetal QC endpoint diagnostics") > workflow.index(
         "Run bounded CuMetal QC qualification on the Apple GPU"
     )
+
+
+def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    runtime_job = workflow.split("\n  cuda-tests:", 1)[1].split(
+        "\n  cumetal-benchmark:", 1
+    )[0]
+    assert "runs-on: macos-26" in runtime_job
+    assert "CUMETAL_TOOLCHAIN_ID: macos26-xcode26.3-sdk26.2" in runtime_job
+    assert 'CUMETAL_XCODE_VERSION: "26.3"' in runtime_job
+    assert 'CUMETAL_MACOS_SDK_VERSION: "26.2"' in runtime_job
+    assert (
+        "DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer" in runtime_job
+    )
+    for step in runtime_job.split("      - name: ")[1:]:
+        name = step.splitlines()[0]
+        if name in {
+            "Cache CuMetal toolchain",
+            "Restore CuMetal toolchain",
+            "Restore CuMetal ccache",
+            "Restore GenerativeQC ccache",
+        }:
+            key = step.split("          key:", 1)[1].splitlines()[0]
+            assert "${{ env.CUMETAL_TOOLCHAIN_ID }}" in key
+        if name in {"Cache CuMetal toolchain", "Restore CuMetal toolchain"}:
+            assert "restore-keys:" not in step
+        if name.startswith("Run bounded CuMetal QC"):
+            assert (
+                "CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}"
+                in step
+            )
+
+
+@pytest.mark.parametrize("failure", (None, "missing-xcode", "xcode", "sdk", "os"))
+def test_cumetal_toolchain_preflight_fails_closed(
+    tmp_path: Path, failure: str | None
+) -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    step = workflow.split("- name: Verify Apple Silicon and CuMetal toolchain", 1)[1]
+    script = step.split("        run: |\n", 1)[1].split("\n      - ", 1)[0]
+    script = "\n".join(line[10:] for line in script.splitlines())
+    developer = tmp_path / "Xcode_26.3.app/Contents/Developer"
+    if failure != "missing-xcode":
+        developer.mkdir(parents=True)
+    commands = {
+        "uname": "echo arm64",
+        "sw_vers": f"echo {'15.7.9' if failure == 'os' else '26.6.2'}",
+        "xcodebuild": f"echo 'Xcode {'26.2' if failure == 'xcode' else '26.3'}'",
+        "xcrun": (
+            'if [ "$*" = "--sdk macosx --show-sdk-version" ]; then\n'
+            f"echo {'26.1' if failure == 'sdk' else '26.2'}\n"
+            "else echo 'mock Metal toolchain'; fi"
+        ),
+    }
+    for name, body in commands.items():
+        path = tmp_path / name
+        path.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+        path.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-e", "-c", script],
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "DEVELOPER_DIR": str(developer),
+            "CUMETAL_XCODE_VERSION": "26.3",
+            "CUMETAL_MACOS_SDK_VERSION": "26.2",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+    assert (result.returncode == 0) == (failure is None), result.stdout + result.stderr

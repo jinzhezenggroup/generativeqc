@@ -59,7 +59,7 @@ jobs:
     name: CUDA runtime tests (CuMetal / Apple GPU)
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false'
-    runs-on: macos-15
+    runs-on: macos-26
     # Keep the 40-minute qualification budget inside a separate finite job budget.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
     env:
@@ -67,6 +67,12 @@ jobs:
       CUMETAL_SOURCE: /tmp/cuda-metal
       CUMETAL_PREFIX: /tmp/cumetal-install
       CUMETAL_CCACHE_DIR: /tmp/cumetal-ccache
+      # Registered PTX targets AIR 2.8 / macOS 26. Keep the runner, Metal
+      # compiler, SDK, and immutable build-tree cache identity aligned.
+      CUMETAL_TOOLCHAIN_ID: macos26-xcode26.3-sdk26.2
+      CUMETAL_XCODE_VERSION: "26.3"
+      CUMETAL_MACOS_SDK_VERSION: "26.2"
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       GENERATIVEQC_BUILD: ${{ github.workspace }}/build-cumetal
       CCACHE_DIR: /tmp/generativeqc-ccache
       CCACHE_MAXSIZE: 2G
@@ -76,10 +82,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify Apple Silicon runner
+      - name: Verify Apple Silicon and CuMetal toolchain
         run: |
           test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 26
+          test -d "$DEVELOPER_DIR"
+          version="$(xcodebuild -version)"
+          printf '%s\n' "$version"
+          grep -Fxq "Xcode $CUMETAL_XCODE_VERSION" <<< "$version"
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          printf 'macOS SDK %s\n' "$sdk_version"
+          test "$sdk_version" = "$CUMETAL_MACOS_SDK_VERSION"
+          xcrun --sdk macosx --show-sdk-path
           xcrun --find metal
+          xcrun metal --version
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -103,14 +119,14 @@ jobs:
           path: |
             /tmp/cuda-metal
             /tmp/cumetal-install
-          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
+          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}
 
       - name: Restore CuMetal ccache
         if: steps.cache-cumetal.outputs.cache-hit != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CUMETAL_CCACHE_DIR }}
-          key: ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
+          key: ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}
           restore-keys: |
             ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-
 
@@ -121,8 +137,11 @@ jobs:
           # Include every family that can alter generated/native compilation.
           # The previous key omitted compiler/CMake inputs, so an immutable
           # exact cache could stay permanently half-stale after codegen changes.
-          key: ccache-cumetal-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          # ccache validates compiler/flags/headers when reusing older entries;
+          # unlike the immutable toolchain directory, these are safe fallbacks.
           restore-keys: |
+            ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
 
@@ -263,6 +282,7 @@ jobs:
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: gate
           CUMETAL_DEBUG_REGISTRATION: "1"
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "90"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
@@ -295,6 +315,7 @@ jobs:
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: full
           CUMETAL_DEBUG_REGISTRATION: "1"
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "180"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"
           GENERATIVEQC_DFT_CUDA_TEST: "1"
