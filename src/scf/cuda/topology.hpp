@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <vector>
 
 #include "scf/cuda/direct_metadata.hpp"
@@ -58,6 +59,16 @@ std::size_t checked_expanded_primitive_references(const std::vector<core::System
  * Direct-HF resident-PSSS task table. Keep this independent of matrix_direct:
  * those owners still require the spherical-to-Cartesian transform. */
 enum class ResidentPsssPolicy { Build, Skip };
+
+/** Build the complete shared psss force inventory from immutable shell pairs.
+ * Census precedes allocation and admits only metadata that fits byte_budget.
+ * On a rejected inventory outputs are empty. include_tasks=false preserves the
+ * matrix-value packer's historical ket-only metadata contract. The caller owns
+ * upload/lifetime and separately admits the compiler's resident bra capacity. */
+bool make_direct_force_resident_bra_schedule(
+    const HostBatch& host, std::vector<PsssResidentTask>& tasks,
+    std::vector<std::uint32_t>& ket_pairs, std::size_t& bra_primitive_pair_capacity,
+    std::size_t byte_budget = std::numeric_limits<std::size_t>::max(), bool include_tasks = true);
 
 /** DF values consume Cartesian basis metadata only, not SCF/task state.
  * The explicit mode permits g metadata without extending any SCF kernel domain.
