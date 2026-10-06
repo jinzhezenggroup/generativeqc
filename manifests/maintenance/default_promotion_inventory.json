@@ -474,16 +474,16 @@
       "id": "tensor.reduction-provider-cub",
       "classification": "negative-evidence",
       "controls": [
-        "tensor-schedule:reduction_provider"
+        "tensor-lowering:reduction-provider-cub"
       ],
       "owner_issues": [
         971
       ],
       "sources": [
-        "python/generativeqc_compiler/tensor/cuda_plan.py"
+        "python/generativeqc_compiler/tensor/cuda_reduction.py"
       ],
-      "rationale": "The CUB/CCCL reduction provider is qualification-only and retained evidence rejected the tested candidate; generated reduction remains the production/default provider.",
-      "revisit_condition": "Reconsider only after a new source/device/workload campaign crosses complete-endpoint and numerical gates; representability or a kernel microbenchmark is insufficient.",
+      "rationale": "The CUB/CCCL reduction provider is qualification-only in a lowering binding below TensorSchedule, and retained evidence rejected the tested candidate; generated reduction remains the production/default lowering.",
+      "revisit_condition": "Reconsider only after a new source/device/workload campaign crosses complete-endpoint and numerical gates; promotion changes the prepared lowering binding, never the scientific TensorSchedule.",
       "evidence": [
         "issue:#971",
         "benchmarks:benchmarks/results/issue971-cub-block-reduce-h200/summary.json"
