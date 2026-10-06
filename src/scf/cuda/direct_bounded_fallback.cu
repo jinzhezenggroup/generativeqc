@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <type_traits>
 
 #include "generated_derivative_cuda_shell_aot.cuh"
@@ -24,6 +26,7 @@
 #include "scf/cuda/direct_queue_profile.cuh"
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_task_encoding.cuh"
+#include "scf/cuda/direct_warp_queue.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -39,7 +42,7 @@ namespace generativeqc::scf::cuda_execution {
  * outer domain plus exact work only in surviving blocks.
  */
 template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
-          int FixedRadialOperator = -1>
+          int FixedRadialOperator = -1, bool WarpPull = false>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -53,12 +56,19 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     double secondary_exchange_coefficient, bool coulomb_only, bool exchange_only,
     detail::BoundedDirectBlockDomain block_domain = {}) {
   static_assert(FixedAngularOrder < 0 || (Force && FixedAngularOrder <= 12));
+  static_assert(!WarpPull || (Force && FixedAngularOrder < 0 && FixedRadialOperator < 0));
+  static_assert(detail::kDirectQuartetThreads == 32U);
   const auto radial_operator = FixedRadialOperator < 0
                                    ? runtime_radial_operator
                                    : static_cast<DirectRangeOperator>(FixedRadialOperator);
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
   __shared__ unsigned long long block_quartet;
+  // Bounded CTA-local metadata, not another topology-sized task inventory.
+  // The ordinary template has no queue arrays; verify linked resources anyway.
+  __shared__ detail::BoundedClassWarpStorage<
+      WarpPull, detail::kDirectQuartetShellClassCount, detail::kBoundedDirectQueueCapacity>
+      warp_queue;
   const unsigned lane = threadIdx.x % detail::kDirectQuartetThreads;
   const unsigned warp = threadIdx.x / detail::kDirectQuartetThreads;
   constexpr auto full_block_candidates =
@@ -138,6 +148,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
          candidate_begin += detail::kBoundedDirectQueueCapacity) {
       if (threadIdx.x == 0) queue_count = 0;
+      reset_direct_warp_queue(warp_queue);
       __syncthreads();
       const std::size_t candidate = candidate_begin + threadIdx.x;
       if (candidate < page_end) {
@@ -176,6 +187,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             const std::uint32_t slot = atomicAdd(&queue_count, 1U);
             queue[slot] = {static_cast<std::uint32_t>(first_pair),
                            static_cast<std::uint32_t>(second_pair), 0U};
+            // Link already-admitted descriptors exactly once. Publishing a
+            // head alone is not sufficient: retain the CTA barrier below.
+            publish_direct_warp_task(warp_queue, shell_class, slot);
             if constexpr (Force) {
               profile_bounded_direct_shell_quartet(batch, queue[slot], profile);
             }
@@ -299,8 +313,15 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
       __syncthreads();
 
       if constexpr (FixedAngularOrder < 0 || FixedAngularOrder >= 4) {
-        for (std::uint32_t slot = warp; slot < queue_count;
-             slot += kBoundedDirectThreads / detail::kDirectQuartetThreads) {
+        // A warp keeps a class while it has tasks, then tries another class.
+        // Scalar-owned descriptors still hit the original skip conditions;
+        // classification changes neither their owner nor their evaluation count.
+        unsigned preferred_class = warp;
+        for (std::uint32_t slot = first_direct_warp_task(warp_queue, warp, preferred_class);
+             slot < queue_count;
+             slot = next_direct_warp_task(
+                 warp_queue, slot, kBoundedDirectThreads / detail::kDirectQuartetThreads,
+                 preferred_class)) {
           const ActiveShellQuartetTile base = queue[slot];
           const std::int32_t first_shell = batch.shell_pair_first[base.first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[base.first_pair];
@@ -492,7 +513,8 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
 #undef GENERATIVEQC_ANGULAR_FORCE
 }
 
-void launch_bounded_direct_shell_quartet_kernel_scaled(
+template <bool WarpPull>
+void launch_bounded_direct_shell_quartet_kernel_scaled_impl(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
     std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
@@ -507,7 +529,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
-      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>
+      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true, -1, -1, WarpPull>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
@@ -515,7 +537,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               density, active, output, global_cursor, profile, coulomb_coefficient,
               exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
     } else {
-      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
+      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true, -1, -1, WarpPull>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
@@ -525,7 +547,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
-      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, true>
+      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, true, -1, -1, WarpPull>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
@@ -533,7 +555,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               density, active, output, global_cursor, profile, coulomb_coefficient,
               exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
     } else {
-      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
+      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true, -1, -1, WarpPull>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
@@ -541,6 +563,40 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               density, active, output, global_cursor, profile, coulomb_coefficient,
               exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
     }
+  }
+}
+
+void launch_bounded_direct_shell_quartet_kernel_scaled(
+    bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
+    std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch, double screening_tolerance,
+    const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
+    const std::uint32_t* shell_pair_order, const double* shell_pair_block_bounds,
+    const double* system_density_bounds, const std::uint64_t* enabled_mask_pointer,
+    std::uint64_t enabled_mask, const std::uint32_t* bounded_generated_overflow,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
+    detail::BoundedDirectBlockDomain block_domain) {
+  // Diagnostic control only. No molecule/function name selection, no default
+  // promotion, and no modification to the caller's CTA/page geometry. The
+  // 128-thread experiment in #1978 is a separate comparison, not composed here.
+  const char* requested = std::getenv("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_WARP_PULL");
+  const bool warp_pull = requested != nullptr && std::strcmp(requested, "1") == 0 &&
+                         block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U;
+  if (warp_pull) {
+    launch_bounded_direct_shell_quartet_kernel_scaled_impl<true>(
+        unrestricted, purpose, grid, block, shared_bytes, stream, batch, screening_tolerance,
+        shell_pair_bounds, shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
+        system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
+        schwarz_bounds, density, active, output, global_cursor, profile, coulomb_coefficient,
+        exchange_coefficient, separate_sources, block_domain);
+  } else {
+    launch_bounded_direct_shell_quartet_kernel_scaled_impl<false>(
+        unrestricted, purpose, grid, block, shared_bytes, stream, batch, screening_tolerance,
+        shell_pair_bounds, shell_pair_density_bounds, shell_pair_order, shell_pair_block_bounds,
+        system_density_bounds, enabled_mask_pointer, enabled_mask, bounded_generated_overflow,
+        schwarz_bounds, density, active, output, global_cursor, profile, coulomb_coefficient,
+        exchange_coefficient, separate_sources, block_domain);
   }
 }
 
