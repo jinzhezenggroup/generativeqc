@@ -1,8 +1,8 @@
 name: CI
 
 on:
-  # Pull requests already run the full workflow. Limit push runs to master so
-  # a same-repository PR branch does not schedule the same jobs twice.
+  # Pull requests and merge groups own correctness. Master pushes remain only
+  # to publish stable caches that ephemeral queue refs can consume.
   push:
     branches: [master]
   pull_request:
@@ -757,7 +757,7 @@ jobs:
         shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]
     runs-on: ubuntu-24.04
     # Full nightly/manual qualification includes expensive Hessian and Au replay.
-    # Keep routine PR/push feedback capped separately; do not truncate that tier.
+    # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
     # The broad core suite is split deterministically by test file so routine
     # feedback does not leave one ~18-minute serial critical-path shard.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
@@ -859,8 +859,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
-      # The six Python shards build the same native library. One shard saves
-      # the cache immediately so the next queued master run can reuse it.
+      # The six Python shards build the same native library. Stable refs may
+      # publish it, while ephemeral merge-group refs remain read-only consumers.
       - name: Save Python-build ccache immediately
         if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.python_ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1424,7 +1424,7 @@ jobs:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-benchmark/libgenerativeqc.so
         with:
           # Hosted GitHub runners are noisy for wall-clock gating; simulation
-          # provides the stable PR/master regression signal without Macro Runner quota.
+          # provides the stable PR/scheduled regression signal without Macro Runner quota.
           # PRs keep two always-on endpoints and can add a targeted advanced-DFT
           # endpoint through GENERATIVEQC_CODSPEED_EXTRA_CASES.
           mode: simulation
