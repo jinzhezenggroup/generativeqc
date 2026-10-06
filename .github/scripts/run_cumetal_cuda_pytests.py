@@ -32,7 +32,7 @@ SUITE_BUDGET_SECONDS = int(
 )
 
 # Required on routine PR/merge-queue runs. These deliberately span the public
-# RHF, UHF, density-fitting/output-selection, and DFT CUDA owners without pulling
+# RHF, UHF, density-fitting, and DFT CUDA owners without pulling
 # in the long force/Hessian/post-HF qualification suites.
 GATE_NODEIDS = (
     "tests/python/test_cuda_runtime.py::test_cuda_minimal_rhf_matches_cpu_reference",
