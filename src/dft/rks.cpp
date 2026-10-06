@@ -73,16 +73,30 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
   const auto backend = primary.backend;
   if (backend != FockBackend::Cpu && backend != FockBackend::Cuda)
     throw std::invalid_argument("WB97M-V composition requires CPU or CUDA Fock execution");
+  auto primary_spec =
+      make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange);
+  auto correction_spec =
+      make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
+                                    dft::generated::kWb97mvLongExchange,
+                                    dft::generated::kWb97mvOmega);
+  const bool fitted =
+      primary.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+      primary.spec.exchange.approximation == FockApproximation::DensityFitted;
+  if (fitted) {
+    primary_spec.coulomb.approximation = FockApproximation::DensityFitted;
+    primary_spec.exchange.approximation = FockApproximation::DensityFitted;
+    correction_spec.exchange.approximation = FockApproximation::DensityFitted;
+  }
   const auto expected_primary =
-      resolve_fock_build(make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange),
-                         backend, primary.screening_tolerance);
+      resolve_fock_build(primary_spec, backend, primary.screening_tolerance,
+                         primary.metric_relative_threshold);
   const auto expected_correction =
-      resolve_fock_build(make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
-                                                       dft::generated::kWb97mvLongExchange,
-                                                       dft::generated::kWb97mvOmega),
-                         backend, primary.screening_tolerance);
-  if (correction.backend != backend || primary != expected_primary ||
-      correction != expected_correction || nonlocal.variant != dft::nlc::Vv10Variant::vv10 ||
+      resolve_fock_build(correction_spec, backend, correction.screening_tolerance,
+                         correction.metric_relative_threshold);
+  if (correction.backend != backend ||
+      (fitted && correction.metric_relative_threshold != primary.metric_relative_threshold) ||
+      primary != expected_primary || correction != expected_correction ||
+      nonlocal.variant != dft::nlc::Vv10Variant::vv10 ||
       nonlocal.b != dft::generated::kWb97mvNonlocalB ||
       nonlocal.c != dft::generated::kWb97mvNonlocalC ||
       nonlocal.coefficient != dft::generated::kWb97mvNonlocalCoefficient)
