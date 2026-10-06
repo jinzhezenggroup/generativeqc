@@ -1,10 +1,6 @@
-"""Historical DPPP and resident-PPPS adapters to the general shell lowering.
-
-These call the same implementation as generic users; no second scientific
-kernel definition is maintained for the old entry-point names."""
+"""Resident-PPPS adapter to the general shell lowering.\n\nHistorical DPPP wrappers were retired after all repository callers migrated to\nthe generic fused-shell plan and emitter APIs.\n"""
 
 from __future__ import annotations
-
 
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 
@@ -23,7 +19,7 @@ from .common import _specialize_dppp_identifiers
 from .dispatch import emit_shell_class_fused_cuda
 from .force_resident import _emit_ppps_resident_bra_rys3_force_consumer_cuda
 
-# These compatibility wrappers predate explicit target plumbing. Keep their
+# This compatibility adapter predates explicit target plumbing. Keep its
 # historical source identity isolated here instead of letting generic APIs
 # silently select sm_120.
 _LEGACY_CUDA_TARGET = cuda_target_info("sm_120")
