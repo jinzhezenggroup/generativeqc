@@ -40,8 +40,9 @@ struct DirectForceSources {
   }
 
   /** source is in [0, count); each array keeps the native -dE/dR convention. */
-  GENERATIVEQC_DIRECT_FORCE_HD static constexpr double* output(
-      double* forces, std::size_t total_atoms, unsigned source) noexcept {
+  GENERATIVEQC_DIRECT_FORCE_HD static constexpr double* output(double* forces,
+                                                               std::size_t total_atoms,
+                                                               unsigned source) noexcept {
     return forces + source * total_atoms * 3U;
   }
 };
