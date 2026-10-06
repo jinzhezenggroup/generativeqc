@@ -72,6 +72,7 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
             "cuda_nonlocal_correlation",
             "molecular_nonlocal_domain",
             "incremental_xc",
+            "stationary_second_order",
         ):
             if type(item.get(field)) is not bool:
                 raise TypeError(f"native semilocal {field} must be bool")
@@ -146,6 +147,7 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
                     f"     {'true' if item['cuda_nonlocal_correlation'] else 'false'},",
                     f"     {'true' if item['molecular_nonlocal_domain'] else 'false'},",
                     f"     {'true' if item['incremental_xc'] else 'false'},",
+                    f"     {'true' if item['stationary_second_order'] else 'false'},",
                     f"     {{{cpp_fast_path_capabilities(item)}}},",
                     f"     {{{ids_cpp}}},",
                     f"     {{{coeffs_cpp}}},",
@@ -199,6 +201,7 @@ struct SemilocalFamilyMetadata {{
   bool cuda_nonlocal_correlation;
   bool molecular_nonlocal_domain;
   bool incremental_xc;
+  bool stationary_second_order;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -284,6 +287,11 @@ constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) 
   return semilocal_family_metadata(family).incremental_xc;
 }}
 
+constexpr bool semilocal_family_supports_stationary_second_order(
+    SemilocalFamily family) noexcept {{
+  return semilocal_family_metadata(family).stationary_second_order;
+}}
+
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {{
   if (const auto* metadata = semilocal_family_metadata_from_code(code)) return metadata->family;
   throw std::invalid_argument("unknown native KS semilocal family code");
@@ -326,6 +334,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "cuda_nonlocal_correlation": {bool(item["cuda_nonlocal_correlation"])!r},',
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
+            f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
             f'        "components": {component_text},',
             f'        "range_omega": {json.dumps(item["range_omega"])},',
             f'        "coefficient_policy": {json.dumps(item["coefficient_policy"])},',
@@ -374,6 +383,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    cuda_nonlocal_correlation: bool\n"
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
+        "    stationary_second_order: bool\n"
         "    components: tuple[tuple[str, str], ...]\n"
         "    range_omega: str\n"
         "    coefficient_policy: str\n"
