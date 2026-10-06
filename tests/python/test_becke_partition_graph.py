@@ -16,7 +16,10 @@ from generativeqc_compiler.xc.becke_coefficients import (
 from generativeqc_compiler.xc.becke_partition import (
     recognize_becke_partition_graph,
 )
-from generativeqc_compiler.xc.grid_partition_ir import grid_partition_program
+from generativeqc_compiler.xc.grid_partition_ir import (
+    grid_partition_domain_program,
+    grid_partition_program,
+)
 from test_becke_pair_coefficients import helper
 
 __all__ = ["helper"]
@@ -95,8 +98,9 @@ def test_recognition_authenticates_composition_not_companion_hashes() -> None:
 
 
 @pytest.mark.parametrize("atoms", [1, 2, 3, 8])
+@pytest.mark.parametrize("dynamic_domain", [False, True])
 def test_whole_generated_jvp_matches_generic_and_coefficient_force(
-    helper: ct.CDLL, atoms: int
+    helper: ct.CDLL, atoms: int, dynamic_domain: bool
 ) -> None:
     """Bind existing norm tangents; the entire product/ratio JVP comes from AD.
 
@@ -125,7 +129,17 @@ def test_whole_generated_jvp_matches_generic_and_coefficient_force(
             bindings[f"dseparation_{atom}_{neighbor}"] = np.dot(
                 separation / length, motion[atom] - motion[neighbor]
             )
-    program = grid_partition_program(atoms, helper.iterations)
+    if dynamic_domain:
+        bindings["atoms"] = atoms
+        for atom in range(atoms, 8):
+            bindings[f"distance_{atom}"] = 0
+            bindings[f"ddistance_{atom}"] = 17
+            for neighbor in range(atom):
+                bindings[f"separation_{atom}_{neighbor}"] = 0
+                bindings[f"dseparation_{atom}_{neighbor}"] = 23
+        program = grid_partition_domain_program(8, helper.iterations)
+    else:
+        program = grid_partition_program(atoms, helper.iterations)
     _, tangent = program.evaluate(**bindings)
     expected = np.sum(seeds * tangent)
     for route in (0, 2):

@@ -64,3 +64,9 @@ but do not meet full-composition production acceptance.
 #1894; #1830; #1950; PR #1996;
 `2026-10-06-becke-dense-coefficients.md` preserves the second losing schedule;
 `2026-10-05-becke-partition-primitive.md` preserves the first losing schedule.
+# Follow-up: bounded native domain
+
+The exact-domain limitation recorded here is addressed in the draft branch by
+`2026-10-06-becke-native-domain.md`. That follow-up authenticates an actual
+active-prefix primal/JVP family rather than reusing an exact witness at other
+dimensions. It does not promote the losing schedule or close the issue.

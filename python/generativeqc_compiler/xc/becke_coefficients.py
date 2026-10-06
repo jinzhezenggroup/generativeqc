@@ -78,12 +78,7 @@ def plan_becke_pair_coefficients(
         budget_bytes=budget_bytes,
         occupied_bytes=occupied_bytes,
     )
-    if (
-        phased is None
-        or not cached_geometry
-        or operation.atoms is not None
-        and operation.atoms != atoms
-    ):
+    if phased is None or not cached_geometry or not operation.supports_atoms(atoms):
         return None
     return BeckePairCoefficientPlan(operation, phased)
 

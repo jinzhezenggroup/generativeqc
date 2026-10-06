@@ -59,7 +59,13 @@ from generativeqc_compiler.method.stationary_resources import (
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
 from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
-from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
+from ._stationary_cuda import (
+    _DOUBLE,
+    _CudaSources,
+    _native_grid_artifact,
+    _ptr,
+    _resolve_becke_primitive_policy,
+)
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
@@ -279,6 +285,7 @@ class PreparedCompositeStationaryCudaGradient:
             )
         layout = plan_composite_stationary_cuda_resources(
             basis,
+            becke_primitive=_resolve_becke_primitive_policy(),
             grid_plan=lambda points: plan_tiles(
                 basis,
                 backend="cuda",

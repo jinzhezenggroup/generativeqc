@@ -285,7 +285,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a",
+        "geometry_resources_sha256": "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56",
         "public_wrapper_sha256": (
             "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
         ),
@@ -295,11 +295,14 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "phased_becke_policy_sha256": (
             "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
         ),
+        "becke_primitive_policy_sha256": (
+            "9d11620513c8800057827b5af1fee1659552c1d43dd7d014c6fcb53c95f901ad"
+        ),
         "ordinary_tile_resources_sha256": (
-            "ae04ceaa389b148cb6d8f3a1316a4f23ebdbe698753efe1cf5ae81d96251ca42"
+            "1889ebf22dff9d64f602f714ab5157e69b01bf122ba682f04cea04b2c232dba8"
         ),
         "initializer_sha256": (
-            "93c90107478ad20ff9d78231acfd4b13254a39278f2ae82a5dd5e22be29dc321"
+            "66e194029f680b9107882fa06df707d48efdb7aba8759707e7f538406168c689"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -344,7 +347,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
         ),
         "native_owner_sha256": (
-            "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
+            "3f78cb6d8af0fa39c8420ea4c61fc8a9783d7ee78a47f288bd596de4f01496a7"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -374,13 +377,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "a6f197f1ac3fa905f87a8b1d29b083fa51af9c14f57afabb05ad1376a1496264"
+            "6b3343808acd8ba16c1de2bfc21b1fa491028e7005ff7d8a80521823f60ed535"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
         ),
         "native_metrics_sha256": (
             "21e067818117b8ebaf8eeb218aeface0680681fdd6f39285ed6f981c3cef969a"
+        ),
+        "native_becke_primitive_admission_sha256": (
+            "b7f8d1b346ae580f2c977cece992aa5cbea0582adcc9e0f2ab76c0fa94831e4b"
+        ),
+        "native_becke_primitive_metrics_sha256": (
+            "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
         ),
         "native_finish_span_sha256": (
             "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
@@ -2706,6 +2715,49 @@ def test_automatic_phased_becke_policy_changes_fail_closed(
     assert source.count(old) == 1
     stationary_contract_tree(tmp_path, source.replace(old, new, 1))
     with pytest.raises(RuntimeError, match="phased Becke policy contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ('BECKE_PRIMITIVE", "off")', 'BECKE_PRIMITIVE", "coefficients")'),
+        ('return mode == "coefficients"', "return True"),
+    ],
+)
+def test_losing_primitive_default_and_selection_changes_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert source.count(old) == 1
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match="Becke primitive policy contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "owner->atoms > stationary_becke_primitive_max_atoms",
+            "owner->atoms > 128",
+        ),
+        ("reverse.maxThreadsPerBlock < 128", "reverse.maxThreadsPerBlock < 1"),
+        ("output[3] = owner->becke_primitive_reverse_pair_visits", "output[3] = 0"),
+    ],
+)
+def test_native_primitive_domain_capability_and_work_proofs_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text()
+    assert native.count(old) == 1
+    target.write_text(native.replace(old, new, 1))
+    with pytest.raises(
+        RuntimeError, match="native_becke_primitive_.* contract changed"
+    ):
         qualify_capacity._source_limits(tmp_path)
 
 

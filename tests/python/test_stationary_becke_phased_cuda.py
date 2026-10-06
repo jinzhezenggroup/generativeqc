@@ -85,6 +85,8 @@ def native() -> SimpleNamespace:
         ],
         "stationary_finish": [pointer, pointer, size],
     }
+    if hasattr(library, "stationary_configure_becke_primitive_v1"):
+        signatures["stationary_configure_becke_primitive_v1"] = [pointer, ct.c_int]
     for name, arguments in signatures.items():
         getattr(library, name).argtypes = [*arguments, *tail]
     library.stationary_destroy.argtypes = [pointer]
@@ -94,6 +96,12 @@ def native() -> SimpleNamespace:
         ct.POINTER(ct.c_uint64),
         size,
     ]
+    if hasattr(library, "stationary_becke_primitive_metrics_v1"):
+        library.stationary_becke_primitive_metrics_v1.argtypes = [
+            pointer,
+            ct.POINTER(ct.c_uint64),
+            size,
+        ]
 
     def call(name: str, *arguments: object) -> None:
         error = ct.create_string_buffer(4096)
@@ -108,14 +116,24 @@ def native() -> SimpleNamespace:
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
 @pytest.mark.parametrize("external", [False, True])
+@pytest.mark.parametrize("primitive", [False, True])
 def test_shared_owner_phases_preserve_sources_and_work(
-    native: SimpleNamespace, atoms: int, implicit: bool, selection: str, external: bool
+    native: SimpleNamespace,
+    atoms: int,
+    implicit: bool,
+    selection: str,
+    external: bool,
+    primitive: bool,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
 
     Synthetic AO/features isolate routing and lifetime; they are not a molecular
     oracle. Independent Becke Decimal tests and complete E/F gates are separate.
     """
+    if primitive and not hasattr(
+        native.library, "stationary_configure_becke_primitive_v1"
+    ):
+        pytest.skip("artifact predates whole-domain primitive admission")
     cupy = native.cupy
     rng = np.random.default_rng(183000 + atoms)
     centers = rng.normal(size=(atoms, 3)) * 3
@@ -183,6 +201,10 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     "stationary_configure_phased_becke_v1",
                     handle,
                     plan.phased_becke_bytes,
+                )
+            if hasattr(native.library, "stationary_configure_becke_primitive_v1"):
+                native.call(
+                    "stationary_configure_becke_primitive_v1", handle, int(primitive)
                 )
             native.call(
                 "stationary_topology",
@@ -297,6 +319,20 @@ def test_shared_owner_phases_preserve_sources_and_work(
             assert phase_metrics[0] == plan.phased_becke_bytes
             assert phase_metrics[1] == (6 if phased else 0)
             assert metrics[0] == plan.allocation_bytes
+            if hasattr(native.library, "stationary_becke_primitive_metrics_v1"):
+                primitive_metrics = (ct.c_uint64 * 4)()
+                assert (
+                    native.library.stationary_becke_primitive_metrics_v1(
+                        handle, primitive_metrics, 4
+                    )
+                    == 0
+                )
+                assert tuple(primitive_metrics) == (
+                    int(primitive),
+                    int(primitive and phased),
+                    6 if primitive and phased else 0,
+                    3 * 257 * atoms * (atoms - 1) // 2 if primitive and phased else 0,
+                )
             valid_points = device["points"].get()
             valid_tail = None
             for invalid in (False, True, False):

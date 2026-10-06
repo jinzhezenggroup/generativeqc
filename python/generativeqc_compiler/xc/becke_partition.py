@@ -13,7 +13,9 @@ from dataclasses import dataclass
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.grid import checked_int
 from generativeqc_compiler.xc.grid_partition_ir import (
+    grid_partition_domain_program,
     grid_partition_program,
+    partition_domain_graph_kind,
     partition_graph_kind,
 )
 from generativeqc_compiler.xc.grid_phased import (
@@ -52,10 +54,35 @@ class BeckePartitionDerivativeOp:
     program_identities: tuple[tuple[str, str], ...]
     composition_identity: str | None = None
     atoms: int | None = None
+    atom_limit: int | None = None
+
+    def supports_atoms(self, atoms: int) -> bool:
+        """Admit only the actual authenticated exact or active-prefix domain."""
+        return (
+            type(atoms) is int
+            and 1 <= atoms <= (self.atom_limit or 128)
+            and (self.atoms is None or atoms == self.atoms)
+        )
 
     @property
     def identity(self) -> str:
         """Bind scientific graphs, zero semantics and ordered reduction policy."""
+        if self.atom_limit is not None:
+            return canonical_hash(
+                {
+                    "schema": "generativeqc.becke-partition-derivative-op/v3",
+                    "programs": self.program_identities,
+                    "composition": self.composition_identity,
+                    "atom_domain": [1, self.atom_limit],
+                    "partition": "becke-equal-radius",
+                    "inactive_pairs": "both-factors-one-safe-ratio-operands",
+                    "inactive_products": "zero-denominator-contribution",
+                    "zero_semantics": "single-zero-retains-pullback-multi-zero-annihilates",
+                    "normalization": "selected-product-over-all-active-products",
+                    "geometry": "validated-point-and-center-distance-bindings",
+                    "reduction": "ascending-neighbors-no-fp-atomics",
+                }
+            )
         if self.composition_identity is not None:
             return canonical_hash(
                 {
@@ -151,9 +178,57 @@ def recognize_becke_partition_graph(
     )
 
 
+def recognize_becke_partition_domain_graph(
+    program: GridResponseProgram,
+    *,
+    atom_limit: int = 128,
+    iterations: int = 3,
+    partition: str = "becke-equal-radius",
+) -> BeckePartitionDerivativeOp | None:
+    """Authenticate the entire guarded primal/JVP family and its runtime bound.
+
+    A fixed-size canonical graph is deliberately not accepted as a dynamic
+    witness. Native owners may truncate the generated domains only because the
+    actual reachable composition contains the active-prefix neutral elements.
+    """
+    if (
+        type(atom_limit) is not int
+        or not 1 <= atom_limit <= 128
+        or partition != "becke-equal-radius"
+    ):
+        return None
+    expected = grid_partition_domain_program(atom_limit, iterations)
+    try:
+        actual = _actual_identity(program, partition_domain_graph_kind(atom_limit))
+    except ValueError:
+        return None
+    if actual != expected.identity:
+        return None
+    scalar = recognize_becke_partition_derivative(
+        ratio=grid_response_program("ratio", iterations),
+        logarithm=grid_response_program("log", iterations),
+        switch=grid_response_program("becke", iterations),
+        iterations=iterations,
+        partition=partition,
+    )
+    if scalar is None:
+        return None
+    return BeckePartitionDerivativeOp(
+        iterations, scalar.program_identities, actual, atom_limit=atom_limit
+    )
+
+
 def validate_becke_partition_derivative(operation: BeckePartitionDerivativeOp) -> None:
     """Reauthenticate canonical roots before emitting a matched operation."""
-    if operation.composition_identity is not None:
+    if operation.atom_limit is not None:
+        if operation.composition_identity is None or operation.atoms is not None:
+            raise ValueError("Becke primitive has an inconsistent dynamic atom domain")
+        current = recognize_becke_partition_domain_graph(
+            grid_partition_domain_program(operation.atom_limit, operation.iterations),
+            atom_limit=operation.atom_limit,
+            iterations=operation.iterations,
+        )
+    elif operation.composition_identity is not None:
         if operation.atoms is None:
             raise ValueError("Becke primitive composition lacks its atom domain")
         current = recognize_becke_partition_graph(
@@ -208,7 +283,7 @@ def plan_becke_partition_derivative(
         budget_bytes=budget_bytes,
         occupied_bytes=occupied_bytes,
     )
-    if phased is None or operation.atoms is not None and operation.atoms != atoms:
+    if phased is None or not operation.supports_atoms(atoms):
         return None
     plan = BeckePartitionDerivativePlan(operation, phased)
     return plan if occupied_bytes + plan.scratch_bytes <= budget_bytes else None

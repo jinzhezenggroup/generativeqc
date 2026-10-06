@@ -60,8 +60,30 @@ def test_phased_becke_policy_rejects_non_boolean_explicit_values(
         runtime._resolve_phased_becke_policy(96, selection)
 
 
+def test_becke_primitive_policy_is_explicit_and_never_promotes_losing_schedule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    monkeypatch.delenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", raising=False)
+    assert runtime._resolve_becke_primitive_policy() is False
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
+    assert runtime._resolve_becke_primitive_policy() is True
+    assert runtime._resolve_becke_primitive_policy(False) is False
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "off")
+    assert runtime._resolve_becke_primitive_policy() is False
+    assert runtime._resolve_becke_primitive_policy(True) is True
+    for invalid in (0, 1, "coefficients"):
+        with pytest.raises(TypeError, match="boolean or None"):
+            runtime._resolve_becke_primitive_policy(invalid)
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "auto")
+    with pytest.raises(ValueError, match="primitive mode must be"):
+        runtime._resolve_becke_primitive_policy()
+
+
+@pytest.mark.parametrize("primitive_abi", [False, True])
 def test_source_owner_validates_spin_storage_and_packs_ao_indices(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, primitive_abi: bool
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
@@ -89,6 +111,10 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
         "stationary_destroy",
     )
     library = SimpleNamespace(**{name: MagicMock(return_value=0) for name in names})
+    if primitive_abi:
+        library.stationary_configure_becke_primitive_v1 = MagicMock(return_value=0)
+        library.stationary_becke_primitive_metrics_v1 = MagicMock(return_value=0)
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
     monkeypatch.setattr(runtime, "file_hash", lambda _path: "binary")
     monkeypatch.setattr(runtime.ct, "CDLL", lambda _path: library)
     monkeypatch.setattr(runtime, "_native_ao_atoms", lambda _basis: np.array([0, 0]))
@@ -133,6 +159,13 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     owner = runtime._CudaSources(
         basis, artifact, compiler, 0, 4, 2, 4096, spin_blocks=2
     )
+    assert owner.becke_primitive_supported is primitive_abi
+    assert owner.resources.becke_primitive is False
+    if primitive_abi:
+        assert library.stationary_configure_becke_primitive_v1.call_args.args[:2] == (
+            owner.handle,
+            1,
+        )
     assert owner.tasks.shape == (2, 9)
     density = np.stack((np.eye(2), 2 * np.eye(2)))
     owner.reset(1.0e-12, density, 3 * density)

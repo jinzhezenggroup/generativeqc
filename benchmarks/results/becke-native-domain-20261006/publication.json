@@ -1,0 +1,53 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Authenticated native route passes synthetic owner/work/invalidation/publication and sanitizer gates. Independent physical RKS/UKS references, quantitative full-native errors and complete endpoints remain unqualified; no promotion or issue completion.",
+    "scope": "numerical",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4314,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "a12fdb1d619e5d6ecd0a9c97c455306eee66708ab6087de484f2d0f00da54f6c"
+    },
+    {
+      "bytes": 42519,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "7a85be7b7b406d72d3679c41285153dc930c4709dccfcb94a10452b4c7cb83d7"
+    },
+    {
+      "bytes": 1657,
+      "path": "source-files.sha256",
+      "role": "input",
+      "sha256": "d3dbb2a8517e39b9bf056ec59a85a0fb13c70956dd68a1f020bea92258a5e4b9"
+    },
+    {
+      "bytes": 4988,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "f4e1ded72c760f3d655bb3c9267d20112b1ac21be0a42a02cbe05b55aa3c5459"
+    },
+    {
+      "bytes": 2140,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "ca138572766644697caf960188731038f82e6ad4f4936e8faa88e04b70fa47b1"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-native-domain-20261006/reproduce.sh"
+    ],
+    "prerequisites": "main Slurm gpu:5090:1, CUDA 12.9 sm_120, ccache, compute-sanitizer, compiler dependencies, NumPy/pytest/CuPy. PYTHON and CUDA_ROOT select installations; preserve scheduler device visibility.",
+    "source_restore": "Keep the bundle outside the restored checkout. Check out source.revision, apply source.patch, then run the recipe from that checkout. Later host-only capacity and Decimal follow-ups are not part of this frozen GPU cohort."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "5b021012fc3ef9cb9111cea197855029b80967bc"
+  }
+}

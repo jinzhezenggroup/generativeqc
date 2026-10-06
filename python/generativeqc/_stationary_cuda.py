@@ -11,6 +11,7 @@ interpreter fallback is available.
 from __future__ import annotations
 
 import ctypes as ct
+import os
 import threading
 import typing
 from contextlib import ExitStack, contextmanager, nullcontext
@@ -121,6 +122,23 @@ def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
     if type(selection) is not bool:
         raise TypeError("phased Becke selection must be boolean or None")
     return selection
+
+
+def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool:
+    """Keep the measured losing primitive qualification-only and method-neutral.
+
+    Explicit owner selections take precedence over the experiment environment.
+    Native admission/metrics, not this request, prove actual execution. Older
+    artifacts and insufficient concurrent resources retain their bounded route.
+    """
+    if selection is not None:
+        if type(selection) is not bool:
+            raise TypeError("Becke primitive selection must be boolean or None")
+        return selection
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "off")
+    if mode not in {"off", "coefficients"}:
+        raise ValueError("Becke primitive mode must be 'off' or 'coefficients'")
+    return mode == "coefficients"
 
 
 class _StationaryTaskSource(typing.Protocol):
@@ -504,10 +522,12 @@ class _CudaSources:
         integral_derivatives: bool = True,
         cooperative_becke: bool | None = None,
         phased_becke: bool | None = None,
+        becke_primitive: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
+        becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
         self.source_names = source_names
         self.integral_derivatives = integral_derivatives
         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
@@ -729,6 +749,7 @@ class _CudaSources:
             budget_bytes=budget,
             cooperative_becke=cooperative_becke,
             phased_becke=phased_becke,
+            becke_primitive=becke_primitive,
         )
         self._call(
             "stationary_create",
@@ -765,6 +786,19 @@ class _CudaSources:
             )
         # An older AOT artifact retains its bounded route. The plan reservation
         # stays conservative; only native metrics report actual phase allocation.
+        configure_primitive = getattr(
+            lib, "stationary_configure_becke_primitive_v1", None
+        )
+        self.becke_primitive_supported = configure_primitive is not None and hasattr(
+            lib, "stationary_becke_primitive_metrics_v1"
+        )
+        if self.becke_primitive_supported:
+            configure_primitive.argtypes = [ct.c_void_p, ct.c_int, *tail]
+            self._call(
+                "stationary_configure_becke_primitive_v1",
+                self.handle,
+                int(becke_primitive),
+            )
         if profile_device:
             self.enable_profile()
         self._call(
@@ -1593,6 +1627,29 @@ class _CudaSources:
             metrics["phased_becke_bytes"], metrics["phased_becke_batches"] = (
                 phased_values
             )
+        primitive_metrics = getattr(
+            self.library, "stationary_becke_primitive_metrics_v1", None
+        )
+        if primitive_metrics is not None:
+            primitive_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            primitive_values = (ct.c_uint64 * 4)()
+            if primitive_metrics(self.handle, primitive_values, 4):
+                raise RuntimeError("stationary Becke primitive metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "becke_primitive_requested",
+                        "becke_primitive_selected",
+                        "becke_primitive_batches",
+                        "becke_primitive_reverse_pair_visits",
+                    ),
+                    primitive_values,
+                )
+            )
         profile = (ct.c_double * 10)()
         if self.profile_device:
             self.library.stationary_profile_metrics.argtypes = [
@@ -2135,6 +2192,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "center_geometry_preparations",
         "becke_pair_state_evaluations",
         "phased_becke_batches",
+        "becke_primitive_batches",
+        "becke_primitive_reverse_pair_visits",
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]
@@ -2355,6 +2414,7 @@ def _plan_stationary_cuda_tile(
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
         phased_becke=_resolve_phased_becke_policy(na, None),
+        becke_primitive=_resolve_becke_primitive_policy(),
     )
     return _StationaryCudaTileLayout(
         grid_plan,
