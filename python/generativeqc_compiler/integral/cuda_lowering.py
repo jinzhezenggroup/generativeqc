@@ -57,23 +57,13 @@ from .lowering.force_rys_uniform import (
 from .lowering.force_subgroup import (
     _emit_subgroup_force_consumer_cuda,
 )
-from .lowering.legacy import (
-    DpppFusedPlan,
-    build_dppp_fused_plan,
-    dppp_components,
-    emit_dppp_fused_cuda,
-    emit_ppps_resident_bra_rys3_cuda,
-    evaluate_dppp_fused_component,
-)
+from .lowering.legacy import emit_ppps_resident_bra_rys3_cuda
 from .lowering.selection import (
     _supports_rys_component_lane_fock,
     supports_component_lane_rys,
 )
 
-emit_ppps_1110_resident_bra_cuda = emit_ppps_resident_bra_rys3_cuda
-
 __all__ = [
-    "DpppFusedPlan",
     "_component_axis_expression",
     "_component_names",
     "_cuda_array_declaration",
@@ -102,13 +92,8 @@ __all__ = [
     "_shell_letter",
     "_specialize_dppp_identifiers",
     "_supports_rys_component_lane_fock",
-    "build_dppp_fused_plan",
-    "dppp_components",
-    "emit_dppp_fused_cuda",
-    "emit_ppps_1110_resident_bra_cuda",
     "emit_ppps_resident_bra_rys3_cuda",
     "emit_shell_class_fused_cuda",
     "emit_uncached_primitive_geometry_cuda",
-    "evaluate_dppp_fused_component",
     "supports_component_lane_rys",
 ]
