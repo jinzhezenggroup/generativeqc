@@ -1681,7 +1681,9 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
     )
     # Keep Fock screening distinct from the force consumer under scheduler templating.
     force_impl = fallback_source.index("template <bool WarpPull>")
-    force_wrapper = fallback_source.index("launch_bounded_direct_shell_quartet_kernel_scaled(")
+    force_wrapper = fallback_source.index(
+        "launch_bounded_direct_shell_quartet_kernel_scaled("
+    )
     force_body = fallback_source[force_impl:force_wrapper]
     assert force_impl < force_wrapper < fock_wrapper
     assert "DirectScreeningPurpose::Fock, true, -1, -1," in force_body
