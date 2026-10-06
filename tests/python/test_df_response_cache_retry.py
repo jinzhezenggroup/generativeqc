@@ -20,6 +20,7 @@ _SHIM = r"""
 
 #include <cassert>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -95,6 +96,10 @@ struct DFCCSDTResult {
   bool recycling_discarded_primal_attempt = false;
   double total_seconds = 0;
   int semantic_work = 13;
+};
+struct DFGapResponseFingerprints;
+struct DFPhysicalResponseComparison {
+  std::size_t output_bytes{};
 };
 RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::System&,
                                         const generativeqc_method_descriptor& d, void*, void*,
@@ -231,6 +236,39 @@ int main() {
     republished_failure = true;
   }
   assert(republished_failure && calls == 2 && drains == 2 && clears == 1 && cache.retained == 10);
+  // The diagnostic output stays live beside the retained cache during primal
+  // admission. Exercise that reservation without changing the retry wrapper.
+  auto diagnostic_call = [&](DFPhysicalResponseComparison& comparison) {
+    return run_df_ccsdt_native_attempt(
+        execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
+        true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
+        nullptr, 0, 0, nullptr, &comparison);
+  };
+  for (std::size_t output_bytes : {20, 21}) {
+    reset();
+    cache.retained = 10;
+    descriptor.limit = 110;
+    DFPhysicalResponseComparison comparison{output_bytes};
+    bool refused = false;
+    try {
+      (void)diagnostic_call(comparison);
+    } catch (const std::length_error&) {
+      refused = true;
+    }
+    assert(refused == (output_bytes == 21));
+    assert(calls == 1 && late_calls == 1 && drains == 1 && live == 0 && clears == 0 &&
+           cache.retained == 10);
+  }
+  reset();
+  DFPhysicalResponseComparison overflow{static_cast<std::size_t>(INT64_MAX)};
+  bool overflowed = false;
+  try {
+    (void)diagnostic_call(overflow);
+  } catch (const std::overflow_error&) {
+    overflowed = true;
+  }
+  assert(overflowed && calls == 0 && late_calls == 0 && live == 0 && drains == 0 && clears == 0 &&
+         cache.retained == 40);
   }
   puts(
       "PASS: three late phases retry once after drain+clear; physical errors propagate; repeated "
@@ -257,8 +295,14 @@ def test_retained_cache_retry_covers_late_phases_once(tmp_path: Path) -> None:
             "}  // namespace generativeqc::methods::detail"
         )
     ]
+    capacity = (ROOT / "src/posthf/capacity.hpp").read_text()
+    checked_add = capacity[
+        capacity.index("inline std::size_t checked_add(") : capacity.index(
+            "inline std::size_t checked_mul("
+        )
+    ]
     probe = tmp_path / "retry.cpp"
-    probe.write_text(_SHIM + prefix + _TAIL + wrapper + _MAIN)
+    probe.write_text(_SHIM + checked_add + prefix + _TAIL + wrapper + _MAIN)
     binary = tmp_path / "retry"
     compile_owner(compiler, tmp_path, [probe], binary)
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=10)
