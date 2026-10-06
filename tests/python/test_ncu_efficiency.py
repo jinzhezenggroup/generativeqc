@@ -53,6 +53,9 @@ def test_direct_force_capture_separates_resource_bound_from_execution_mechanism(
     assert assessment.derived_metrics["barrier_stall_fraction"] == pytest.approx(
         13.67 / 31.10
     )
+    assert assessment.derived_metrics["local_memory_requests"] == (
+        58_849_833_769 + 27_175_631_760
+    )
     assert any("homogeneous class/queue/CTA" in row for row in assessment.guidance)
 
 
@@ -79,6 +82,7 @@ def test_scalar_cc_reduction_is_not_misclassified_as_register_or_spill_problem()
     assert "serial-or-underexposed-reduction" in assessment.mechanisms
     assert "barrier-tail" not in assessment.mechanisms
     assert "local-state-traffic-present" not in assessment.mechanisms
+    assert assessment.derived_metrics["local_memory_requests"] == 0
     assert any("cooperative/tiled reduction" in row for row in assessment.guidance)
 
 
@@ -105,6 +109,63 @@ def test_exact_jk_capture_distinguishes_scoreboard_local_state_from_barrier_tail
     assert "long-scoreboard-latency" in assessment.mechanisms
     assert "scoreboard-local-state" in assessment.mechanisms
     assert "barrier-tail" not in assessment.mechanisms
+
+
+@pytest.mark.parametrize(
+    "missing_counter", ["local_load_requests", "local_store_requests"]
+)
+@pytest.mark.parametrize("omit_counter", [False, True])
+@pytest.mark.parametrize("measured_requests", [0, 7])
+def test_partial_local_counters_do_not_claim_a_measured_total(
+    missing_counter: str, omit_counter: bool, measured_requests: int
+) -> None:
+    payload = _evidence(
+        executed_threads_per_warp_instruction=1.0,
+        warp_cycles_per_issued_instruction=10.0,
+        barrier_cycles_per_issued_instruction=0.0,
+        local_load_requests=measured_requests,
+        local_store_requests=measured_requests,
+    ).to_payload()
+    fields = payload["evidence"]
+    assert isinstance(fields, dict)
+    if omit_counter:
+        del fields[missing_counter]
+    else:
+        fields[missing_counter] = None
+
+    assessment = assess_ncu_execution(NcuExecutionEvidence.from_payload(payload))
+
+    assert assessment.derived_metrics["local_memory_requests"] is None
+    assert "serial-or-underexposed-reduction" not in assessment.mechanisms
+    assert not any("cooperative/tiled reduction" in row for row in assessment.guidance)
+    assert ("local-state-traffic-present" in assessment.mechanisms) == (
+        measured_requests > 0
+    )
+
+
+@pytest.mark.parametrize("omit_counter", [False, True])
+def test_unknown_barrier_counter_does_not_rule_out_barrier_tuning(
+    omit_counter: bool,
+) -> None:
+    payload = _evidence(
+        executed_threads_per_warp_instruction=9.79,
+        warp_cycles_per_issued_instruction=10.0,
+        long_scoreboard_cycles_per_issued_instruction=5.0,
+        local_load_requests=7,
+        local_store_requests=7,
+    ).to_payload()
+    fields = payload["evidence"]
+    assert isinstance(fields, dict)
+    if omit_counter:
+        del fields["barrier_cycles_per_issued_instruction"]
+
+    assessment = assess_ncu_execution(NcuExecutionEvidence.from_payload(payload))
+
+    assert assessment.derived_metrics["barrier_stall_fraction"] is None
+    assert "long-scoreboard-latency" in assessment.mechanisms
+    assert "local-state-traffic-present" in assessment.mechanisms
+    assert "scoreboard-local-state" not in assessment.mechanisms
+    assert not any("over barrier tuning" in row for row in assessment.guidance)
 
 
 def test_payload_round_trip_requires_explicit_fraction_units() -> None:

@@ -45,7 +45,7 @@ class NcuExecutionEvidence:
     Fractions use [0, 1], never percentages. Local-memory request counters are
     dynamic requests reported by NCU and must not be relabelled as spill bytes.
     Stall fields are cycles per issued instruction from one compatible
-    WarpStateStats capture.
+    WarpStateStats capture. Missing counters remain unknown, not measured zero.
     """
 
     architecture: str
@@ -222,11 +222,9 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
     local_requests = None
     if (
         evidence.local_load_requests is not None
-        or evidence.local_store_requests is not None
+        and evidence.local_store_requests is not None
     ):
-        local_requests = (evidence.local_load_requests or 0) + (
-            evidence.local_store_requests or 0
-        )
+        local_requests = evidence.local_load_requests + evidence.local_store_requests
 
     mechanisms: list[str] = []
     guidance: list[str] = []
@@ -267,7 +265,10 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
     if scoreboard_limited:
         mechanisms.append("long-scoreboard-latency")
 
-    local_state_traffic = local_requests is not None and local_requests > 0
+    local_state_traffic = any(
+        requests is not None and requests > 0
+        for requests in (evidence.local_load_requests, evidence.local_store_requests)
+    )
     if local_state_traffic:
         mechanisms.append("local-state-traffic-present")
         diagnostics.append(
@@ -307,6 +308,7 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
 
     scoreboard_local = (
         lane_underutilized
+        and barrier_fraction is not None
         and not barrier_tail
         and scoreboard_limited
         and local_state_traffic
