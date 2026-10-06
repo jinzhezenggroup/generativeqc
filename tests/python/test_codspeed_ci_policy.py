@@ -10,7 +10,9 @@ def test_codspeed_pr_tier_stays_bounded_and_change_aware() -> None:
     job = workflow.split("\n  cpu-benchmark:\n", 1)[1].split(
         "\n  upload-coverage:\n", 1
     )[0]
-    assert "if: github.event_name != 'merge_group' && github.event_name != 'push'" in job
+    assert (
+        "if: github.event_name != 'merge_group' && github.event_name != 'push'" in job
+    )
     assert (
         "GENERATIVEQC_CODSPEED_TIER: "
         "${{ github.event_name == 'pull_request' && 'pr' || 'full' }}"

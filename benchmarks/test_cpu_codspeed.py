@@ -117,19 +117,17 @@ def _validate_result(
     *,
     require_forces: bool = False,
 ) -> float:
-    if not getattr(result, "converged"):
+    if not result.converged:
         raise RuntimeError(f"{case_name} did not converge")
-    energy = float(getattr(result, "energy"))
+    energy = float(result.energy)
     if not math.isfinite(energy):
         raise RuntimeError(f"{case_name} returned a non-finite energy")
     if require_forces:
-        forces = getattr(result, "forces")
+        forces = result.forces
         if forces is None:
             raise RuntimeError(f"{case_name} did not return forces")
         if any(
-            not math.isfinite(float(component))
-            for row in forces
-            for component in row
+            not math.isfinite(float(component)) for row in forces for component in row
         ):
             raise RuntimeError(f"{case_name} returned non-finite forces")
     return energy
