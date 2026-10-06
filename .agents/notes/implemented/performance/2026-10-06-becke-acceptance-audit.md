@@ -1,6 +1,6 @@
-# Audit: complete generated Becke derivative acceptance
+# Decision: retain the qualified generated Becke primitive without promotion
 
-Status: proposed; final paired observations and completion review pending
+Status: implemented; full original-Becke qualification/comparison audited
 Date: 2026-10-06
 Related: #1894; draft PR #1996
 
@@ -51,13 +51,13 @@ the cap publication's scientific/test manifest and dirty patch, not just its
 revision label. The new reproduction shell is syntax-checked, not separately
 rerun as an additional campaign.
 
-## Remaining paired comparison
+## Genuine paired comparison
 
 The primary grouped endpoints show no established material bottleneck reduction.
 Do not call them statistically interleaved. Supplemental job 6204, finite
-`main/gpu:5090:1` on n1, is collecting five genuine balanced A/B pairs for each
-original-warm and moved-warm endpoint at 48 and 96. Its result is not yet a
-completion or promotion proof. Retain all measured calls, actual work and
+`main/gpu:5090:1` on n1, collects five genuine balanced A/B pairs for each
+original-warm and moved-warm endpoint at 48 and 96. Terminal evidence and the
+final requirement audit are recorded below. Retain all measured calls, work and
 independent errors; do not discard unfavorable samples.
 
 Two simultaneous large SCF owners may exceed the card's memory. Instead keep
@@ -87,12 +87,67 @@ metadata/private compatibility-view names; retain their frozen inputs and
 terminal failures, not successful paired qualifications. They do not justify
 changing scientific code, source guards or tolerances.
 
-## Completion boundary
+## Final observed evidence and decision
 
-Inspect the actual terminal paired output and PR/CI state, validate/publish the
-full raw evidence, then repeat the issue's requirement-by-requirement audit.
-Until that evidence is present, keep the goal active, PR draft and primitive
-default off. Even an admissible timing assessment is not default-promotion
-authority without accuracy, compilation and memory gates. Keep #1892 Direct and
-#1893 AO/XC ownership separate from this Becke result. No merge or release is
-authorized by this audit.
+Job6204 ends at **2026-10-06 14:53:53 +08**, terminal controller `COMPLETED`,
+`ExitCode=0:0`; both foreground run and SSH exit zero. The finite limit is
+1:40:00. All 40 timed complete public E+F calls, 40 separate untimed complete
+primes and four initial/move setup calls retain full vectors and actual solver
+histories/work. Every one of the 80 replays actually uses warm start without
+fallback and performs one iteration/Fock. All 84 calls pass unchanged independent
+reference gates: energy 1e-8 hartree and full forces 1e-7 hartree/bohr. Maximum
+errors are 1.0231815394945443e-10 hartree and 2.4116125763029572e-11 hartree/bohr.
+References are hash-bound original6173 GPU4PySCF protocols, not new independent
+molecular cases. Setup histories remain 48 cold/moved 25/12 and 96 29/15; these
+are not normalized into either primary arm's different histories.
+
+| Atoms | Phase | Phased median s | Primitive median s | Relative improvement |
+| --- | --- | --- | --- | --- |
+| 48 | warm | 11.118597746 | 11.150388047 | -0.285920% |
+| 48 | moved-warm | 11.095403552 | 11.113459669 | -0.162735% |
+| 96 | warm | 39.553353164 | 39.699553661 | -0.369629% |
+| 96 | moved-warm | 39.500424147 | 39.558033291 | -0.145844% |
+
+Assess each size/geometry independently. None clears the shared 2% improvement
+floor. The median/relative-MAD gate is descriptive, not a confidence interval or
+proof that every future primitive workload must be slower. Its `not-run`
+outcome here denotes no passing performance threshold, not missing execution.
+Neither the complete primary protocol nor this genuine paired supplement
+establishes a material geometry-response improvement. The original acceptance
+explicitly permits retaining a non-winning route; retain this lowering opt-in
+and the phased/generic fallback, without promotion.
+
+The final reviewed publication is
+`benchmarks/results/becke-paired-warm-20261006/publication.json`, created through
+`tools/evidence.py publish`. The shared record reader reconstructs all five
+complete protocol companions losslessly. Two harness-failure summaries preserve
+actual observations, errors and frozen script/driver/manifest identities; raw
+retry trees remain ignored. The first selection exceeded the per-file review
+limit and remains ignored. Use meaningful protocol/failure companions and
+reviewed summaries, not byte fragments, retry-tree publication or weakened
+retention policy. All scientific samples and solver work remain unchanged.
+
+All 1400 scientific/build hashes pass in the original restored source and match
+current science and the frozen paired inputs. Keep the original binary/source
+revision/dirty patch and its 382 ccache launcher proofs, not a relabeled fresh
+build. The reproduction shell passes syntax checks; the entire recipe was not
+rerun as a separate campaign. Fresh compiler-only duration, a newly instrumented
+per-call generated artifact binding and global device peak memory remain
+unavailable, not invented or inferred from logical bytes/reservations. There
+is no performance promotion requiring those additional promotion gates.
+
+The requirement table above covers the entire original acceptance: canonical
+AD generation, independent fixed-grid CPU/FD, RKS/UKS and changed geometry,
+counters/bytes/launches, direct retained-phase comparison, complete48/96 E+F and
+method-neutral compatible consumers. The profiling boundary is met by the
+retained seven separate phases, not by attributing the full combined AO/XC
+parent to Becke or re-running unchanged losing routes. Native cap/source
+lifetime, bounded deterministic execution and mandatory Slurm/ccache provenance
+remain separately verified rather than inferred from a test total.
+
+PR draft/issue state remains for maintainer review; qualification/comparison
+does not authorize merging, closing the issue or publishing a Release. Default
+remains off. Revisit only a materially different normalized-product reverse,
+normalization/gather or pair-reuse argument, with independent accuracy, complete
+identical-work pairs, compilation cost and memory gates before promotion. Keep
+#1892 Direct and #1893 AO/XC ownership separate.
