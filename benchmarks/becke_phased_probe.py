@@ -15,6 +15,10 @@ from pathlib import Path
 
 import numpy as np
 from generativeqc_compiler.dft.grid import MolecularGrid
+from generativeqc_compiler.xc.becke_coefficients import (
+    emit_becke_pair_coefficients,
+    plan_becke_pair_coefficients,
+)
 from generativeqc_compiler.xc.becke_partition import (
     emit_becke_partition_derivative,
     plan_becke_partition_derivative,
@@ -37,7 +41,9 @@ def main() -> None:
     parser.add_argument("--atoms", type=int, nargs="+", default=[24, 48, 96])
     parser.add_argument("--tiles", type=int, default=32)
     parser.add_argument("--tile-points", type=int, nargs="+", default=[256, 1024])
-    parser.add_argument("--partition-derivative", action="store_true")
+    routes = parser.add_mutually_exclusive_group()
+    routes.add_argument("--partition-derivative", action="store_true")
+    routes.add_argument("--pair-coefficients", action="store_true")
     arguments = parser.parse_args()
     operation = recognize_becke_partition_derivative(
         ratio=grid_response_program("ratio"),
@@ -49,12 +55,16 @@ def main() -> None:
         (
             "#define GENERATIVEQC_BECKE_PARTITION_PROBE 1\n"
             if arguments.partition_derivative
+            else "#define GENERATIVEQC_BECKE_COEFFICIENT_PROBE 1\n"
+            if arguments.pair_coefficients
             else ""
         )
         + emit_grid_adjoint()
         + emit_grid_partials(3, device=True)
         + (
-            emit_becke_partition_derivative(operation)
+            emit_becke_pair_coefficients(operation)
+            if arguments.pair_coefficients
+            else emit_becke_partition_derivative(operation)
             if arguments.partition_derivative
             else emit_phased_becke()
         )
@@ -71,7 +81,13 @@ def main() -> None:
         parser.error("emitted source beside the library does not match this checkout")
     helper = ct.CDLL(str(arguments.library.resolve()))
     pointer = ct.POINTER(ct.c_double)
-    probe = helper.probe_partition if arguments.partition_derivative else helper.probe
+    probe = (
+        helper.probe_coefficients
+        if arguments.pair_coefficients
+        else helper.probe_partition
+        if arguments.partition_derivative
+        else helper.probe
+    )
     probe.argtypes = [
         ct.c_size_t,
         ct.c_size_t,
@@ -94,11 +110,13 @@ def main() -> None:
         "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
         "library_sha256": hashlib.sha256(arguments.library.read_bytes()).hexdigest(),
         "timing_scope": "sampled tiles, Becke-only plus per-point publication; CUDA events; NOT endpoint",
-        "order": "ABBAABBA; A=phased, B=partition-derivative"
+        "order": "ABBAABBA; A=phased, B=pair-coefficients"
+        if arguments.pair_coefficients
+        else "ABBAABBA; A=phased, B=partition-derivative"
         if arguments.partition_derivative
         else "ABBAABBA; A=bounded cooperative, B=phased",
         "primitive_identity": operation.identity
-        if arguments.partition_derivative
+        if arguments.partition_derivative or arguments.pair_coefficients
         else None,
         "cases": [],
     }
@@ -199,6 +217,36 @@ def main() -> None:
                         },
                         "counter_scope": "GPU-observed normalization membership; reverse/gather visits derived from exact generated domains; separate post-timing pass",
                         "memory_traffic": "logical scratch/visit model only; cache-level hardware bytes not measured",
+                    }
+                )
+            if arguments.pair_coefficients:
+                coefficient_plan = plan_becke_pair_coefficients(
+                    operation=operation,
+                    atoms=atoms,
+                    points=tile_points,
+                    budget_bytes=1 << 30,
+                    cached_geometry=True,
+                )
+                assert coefficient_plan is not None
+                reverse_visits = len(points) * plan.pairs
+                case["candidate_median_ms"] = case.pop("phased_median_ms")
+                case.update(
+                    {
+                        "coefficient_scratch_bytes": coefficient_plan.scratch_bytes,
+                        "pair_evaluations_model_old": reverse_visits,
+                        "pair_evaluations_model_new": reverse_visits,
+                        "reverse_pair_visits": reverse_visits,
+                        "gather_pair_visits": 2 * reverse_visits,
+                        "reverse_write_bytes_model_old": 4 * 8 * reverse_visits,
+                        "reverse_write_bytes_model_new": 2 * 8 * reverse_visits,
+                        "gather_pair_read_bytes_model_old": 2 * 4 * 8 * reverse_visits,
+                        "gather_pair_read_bytes_model_new": 2 * 2 * 8 * reverse_visits,
+                        "gather_geometry_read_bytes_model_new": 2
+                        * 3
+                        * 8
+                        * reverse_visits,
+                        "counter_scope": "dense generated pair/ordered-gather domains; work counts derived from sampled points, not measured hardware counters",
+                        "memory_traffic": "logical scratch/visit model; additional gather center metadata included separately; cache-level hardware bytes not measured",
                     }
                 )
             report["cases"].append(case)

@@ -1,0 +1,883 @@
+diff --git a/benchmarks/becke_phased_probe.cu b/benchmarks/becke_phased_probe.cu
+index 5a988ee2b..82268a020 100644
+--- a/benchmarks/becke_phased_probe.cu
++++ b/benchmarks/becke_phased_probe.cu
+@@ -162,10 +162,28 @@ __global__ void partition_gather(DerivativeWorkspace input, int* error) {
+ }
+ #endif
+ 
++#if defined(GENERATIVEQC_BECKE_COEFFICIENT_PROBE)
++__global__ void coefficient_reverse(Workspace work, const uint2* indices,
++                                    const CenterPair* centers, int* error) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= work.points || failed(error)) return;
++  const Geometry geometry{centers, local_ratio_prepared};
++  const auto pair = indices[blockIdx.y];
++  if (!generativeqc_grid_coefficients::pair_coefficient_reverse_phase(
++          work, point, pair.x, pair.y, geometry, local_log))
++    atomicExch(error, 1);
++}
++__global__ void coefficient_gather(Workspace work, const CenterPair* centers, int* error) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= work.points || failed(error)) return;
++  generativeqc_grid_coefficients::atom_gather_coefficient_phase(work, point, blockIdx.y, centers);
++}
++#endif
++
+ // Allocation, input transfer, center preparation, and final readback are outside
+ // the event interval. Each interval includes every sampled tile and publication.
+ // This deliberately is NOT an XC geometry stage or an energy/force endpoint.
+-template <bool Partition>
++template <bool Partition, bool Coefficients = false>
+ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const double* host_centers,
+                  const double* host_points, const int64_t* host_owners, const double* host_seeds,
+                  double* old_output, double* new_output, double* milliseconds,
+@@ -211,7 +229,7 @@ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const dou
+     auto launch = [&](bool phased, bool collect = false) {
+       for (size_t begin = 0; begin < point_count; begin += tile_points) {
+         const size_t count = std::min(tile_points, point_count - begin);
+-        if (!phased && !Partition) {
++        if (!phased && !Partition && !Coefficients) {
+           cooperative<<<count, 32, shared_pairs * sizeof(PointPair)>>>(
+               points.data + 3 * begin, centers.data, atoms, owners.data + begin, seeds.data + begin,
+               geometry.data, old_scratch.data, old_result.data + 3 * atoms * begin, error.data);
+@@ -238,13 +256,25 @@ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const dou
+           {
+             normalize<<<(count + 127) / 128, 128>>>(work, owners.data + begin, seeds.data + begin,
+                                                     error.data);
+-            if (pair_count)
+-              pair_phase<true><<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
+-            atom_phase<2><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
++#if defined(GENERATIVEQC_BECKE_COEFFICIENT_PROBE)
++            if (Coefficients && phased) {
++              if (pair_count)
++                coefficient_reverse<<<pair_blocks, 128>>>(work, indices.data, geometry.data,
++                                                          error.data);
++              coefficient_gather<<<atom_blocks, 128>>>(work, geometry.data, error.data);
++            } else
++#endif
++            {
++              if (pair_count)
++                pair_phase<true>
++                    <<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
++              atom_phase<2><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
++            }
+           }
+           atom_phase<3>
+               <<<atom_blocks, 128>>>(work, nullptr, nullptr, owners.data + begin, error.data);
+-          double* destination = Partition && !phased ? old_result.data : new_result.data;
++          double* destination =
++              (Partition || Coefficients) && !phased ? old_result.data : new_result.data;
+           publish<<<atom_blocks, 128>>>(work, destination + 3 * atoms * begin, error.data);
+         }
+       }
+@@ -252,8 +282,8 @@ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const dou
+     };
+     // Candidate-first priming makes initcheck exercise its own initialization,
+     // rather than inheriting dense product/bar writes from the baseline arm.
+-    launch(Partition);
+-    launch(!Partition);
++    launch(Partition || Coefficients);
++    launch(!Partition && !Coefficients);
+     check(cudaDeviceSynchronize());
+     Event start, stop;
+     for (size_t repeat = 0; repeat < 8; ++repeat) {
+@@ -295,6 +325,15 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
+   return probe_routes<false>(atoms, point_count, tile_points, host_centers, host_points,
+                              host_owners, host_seeds, old_output, new_output, milliseconds);
+ }
++#if defined(GENERATIVEQC_BECKE_COEFFICIENT_PROBE)
++extern "C" int probe_coefficients(size_t atoms, size_t point_count, size_t tile_points,
++                                  const double* host_centers, const double* host_points,
++                                  const int64_t* host_owners, const double* host_seeds,
++                                  double* old_output, double* new_output, double* milliseconds) {
++  return probe_routes<false, true>(atoms, point_count, tile_points, host_centers, host_points,
++                                   host_owners, host_seeds, old_output, new_output, milliseconds);
++}
++#endif
+ #if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
+ extern "C" int probe_partition(size_t atoms, size_t point_count, size_t tile_points,
+                                const double* host_centers, const double* host_points,
+diff --git a/benchmarks/becke_phased_probe.py b/benchmarks/becke_phased_probe.py
+index 519f18ccc..6aed996b5 100644
+--- a/benchmarks/becke_phased_probe.py
++++ b/benchmarks/becke_phased_probe.py
+@@ -15,6 +15,10 @@ from pathlib import Path
+ 
+ import numpy as np
+ from generativeqc_compiler.dft.grid import MolecularGrid
++from generativeqc_compiler.xc.becke_coefficients import (
++    emit_becke_pair_coefficients,
++    plan_becke_pair_coefficients,
++)
+ from generativeqc_compiler.xc.becke_partition import (
+     emit_becke_partition_derivative,
+     plan_becke_partition_derivative,
+@@ -37,7 +41,9 @@ def main() -> None:
+     parser.add_argument("--atoms", type=int, nargs="+", default=[24, 48, 96])
+     parser.add_argument("--tiles", type=int, default=32)
+     parser.add_argument("--tile-points", type=int, nargs="+", default=[256, 1024])
+-    parser.add_argument("--partition-derivative", action="store_true")
++    routes = parser.add_mutually_exclusive_group()
++    routes.add_argument("--partition-derivative", action="store_true")
++    routes.add_argument("--pair-coefficients", action="store_true")
+     arguments = parser.parse_args()
+     operation = recognize_becke_partition_derivative(
+         ratio=grid_response_program("ratio"),
+@@ -49,12 +55,16 @@ def main() -> None:
+         (
+             "#define GENERATIVEQC_BECKE_PARTITION_PROBE 1\n"
+             if arguments.partition_derivative
++            else "#define GENERATIVEQC_BECKE_COEFFICIENT_PROBE 1\n"
++            if arguments.pair_coefficients
+             else ""
+         )
+         + emit_grid_adjoint()
+         + emit_grid_partials(3, device=True)
+         + (
+-            emit_becke_partition_derivative(operation)
++            emit_becke_pair_coefficients(operation)
++            if arguments.pair_coefficients
++            else emit_becke_partition_derivative(operation)
+             if arguments.partition_derivative
+             else emit_phased_becke()
+         )
+@@ -71,7 +81,13 @@ def main() -> None:
+         parser.error("emitted source beside the library does not match this checkout")
+     helper = ct.CDLL(str(arguments.library.resolve()))
+     pointer = ct.POINTER(ct.c_double)
+-    probe = helper.probe_partition if arguments.partition_derivative else helper.probe
++    probe = (
++        helper.probe_coefficients
++        if arguments.pair_coefficients
++        else helper.probe_partition
++        if arguments.partition_derivative
++        else helper.probe
++    )
+     probe.argtypes = [
+         ct.c_size_t,
+         ct.c_size_t,
+@@ -94,8 +110,10 @@ def main() -> None:
+         "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+         "library_sha256": hashlib.sha256(arguments.library.read_bytes()).hexdigest(),
+         "timing_scope": "sampled tiles, Becke-only plus per-point publication; CUDA events; NOT endpoint",
+-        "order": "ABBAABBA; A=phased, B=partition-derivative"
+-        if arguments.partition_derivative
++        "order": "ABBAABBA; A=phased, B=pair-coefficients"
++        if arguments.pair_coefficients
++        else "ABBAABBA; A=phased, B=partition-derivative"
++        if arguments.partition_derivative or arguments.pair_coefficients
+         else "ABBAABBA; A=bounded cooperative, B=phased",
+         "primitive_identity": operation.identity
+         if arguments.partition_derivative
+@@ -201,6 +219,36 @@ def main() -> None:
+                         "memory_traffic": "logical scratch/visit model only; cache-level hardware bytes not measured",
+                     }
+                 )
++            if arguments.pair_coefficients:
++                coefficient_plan = plan_becke_pair_coefficients(
++                    operation=operation,
++                    atoms=atoms,
++                    points=tile_points,
++                    budget_bytes=1 << 30,
++                    cached_geometry=True,
++                )
++                assert coefficient_plan is not None
++                reverse_visits = len(points) * plan.pairs
++                case["candidate_median_ms"] = case.pop("phased_median_ms")
++                case.update(
++                    {
++                        "coefficient_scratch_bytes": coefficient_plan.scratch_bytes,
++                        "pair_evaluations_model_old": reverse_visits,
++                        "pair_evaluations_model_new": reverse_visits,
++                        "reverse_pair_visits": reverse_visits,
++                        "gather_pair_visits": 2 * reverse_visits,
++                        "reverse_write_bytes_model_old": 4 * 8 * reverse_visits,
++                        "reverse_write_bytes_model_new": 2 * 8 * reverse_visits,
++                        "gather_pair_read_bytes_model_old": 2 * 4 * 8 * reverse_visits,
++                        "gather_pair_read_bytes_model_new": 2 * 2 * 8 * reverse_visits,
++                        "gather_geometry_read_bytes_model_new": 2
++                        * 3
++                        * 8
++                        * reverse_visits,
++                        "counter_scope": "dense generated pair/ordered-gather domains; work counts derived from sampled points, not measured hardware counters",
++                        "memory_traffic": "logical scratch/visit model; additional gather center metadata included separately; cache-level hardware bytes not measured",
++                    }
++                )
+             report["cases"].append(case)
+             arguments.output.write_text(json.dumps(report, indent=2) + "\n")
+             print(json.dumps(case), flush=True)
+diff --git a/python/generativeqc_compiler/xc/grid_phased.py b/python/generativeqc_compiler/xc/grid_phased.py
+index e1ef187c3..f3d9f6e72 100644
+--- a/python/generativeqc_compiler/xc/grid_phased.py
++++ b/python/generativeqc_compiler/xc/grid_phased.py
+@@ -170,29 +170,52 @@ GENERATIVEQC_PHASE_HD bool point_normalize_phase(Workspace work, size_t point,
+   return true;
+ }
+ 
++struct PairPullbackCoefficients {
++  std::array<double, 2> values{};
++  std::array<double, 4> separation{};
++};
++
++GENERATIVEQC_PHASE_HD inline double pair_pullback_component(double difference,
++    double separation, size_t word, double direction) {
++  return word ? separation * direction : difference;
++}
++
+ template <class Geometry, class Log, class Bars>
+-GENERATIVEQC_PHASE_HD bool pair_reverse_with_bars_phase(Workspace work, size_t point,
+-    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars) {
++GENERATIVEQC_PHASE_HD bool pair_pullback_coefficients(Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars,
++    PairPullbackCoefficients& result) {
++  // A saturated pair must overwrite a reused output with exact zero state.
++  result = {};
+   const size_t index = center_pair_index(first, second);
+   PointPair state{{}, {work.pair(2, index, point), work.pair(3, index, point)}, {}};
+-  std::array<double, 4> pullback{};
+   bool valid = true;
+   if (state.factor[1] != 0) {
+-    const auto separation = geometry.separation(first, second, valid);
++    result.separation = geometry.separation(first, second, valid);
+     const auto coordinate = geometry.coordinate(work.field(0, point)[first] -
+-        work.field(0, point)[second], first, second, separation[0]);
++        work.field(0, point)[second], first, second, result.separation[0]);
+     state.ratio = {coordinate[1], coordinate[2]};
+     const double bar_mu = pair_adjoint<false>(state, first, second,
+         work.field(4, point), work.field(5, point), bars,
+         work.zero_counts(point), work.maximum[point], logarithm);
+-    pullback[0] = bar_mu * state.ratio[0];
+-    for (size_t axis = 0; axis < 3; ++axis)
+-      pullback[axis + 1] = bar_mu * state.ratio[1] * separation[axis + 1];
++    result.values = {bar_mu * state.ratio[0], bar_mu * state.ratio[1]};
+   }
++  for (double value : result.values) valid = valid && std::isfinite(value);
++  return valid;
++}
++
++template <class Geometry, class Log, class Bars>
++GENERATIVEQC_PHASE_HD bool pair_reverse_with_bars_phase(Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars) {
++  PairPullbackCoefficients coefficients;
++  bool valid = pair_pullback_coefficients(work, point, first, second, geometry,
++                                         logarithm, bars, coefficients);
++  const size_t index = center_pair_index(first, second);
+   // All primal consumers finished at the normalization boundary. Reuse storage.
+   for (size_t word = 0; word < 4; ++word) {
+-    work.pair(word, index, point) = pullback[word];
+-    valid = valid && std::isfinite(pullback[word]);
++    const double value = pair_pullback_component(coefficients.values[0],
++        coefficients.values[1], word, coefficients.separation[word]);
++    work.pair(word, index, point) = value;
++    valid = valid && std::isfinite(value);
+   }
+   return valid;
+ }
+@@ -208,9 +231,17 @@ struct AllNeighbors {
+   GENERATIVEQC_PHASE_HD size_t operator()(size_t index) const { return index; }
+ };
+ 
+-template <class Neighbors>
+-GENERATIVEQC_PHASE_HD void atom_gather_selected_phase(Workspace work, size_t point,
+-    size_t atom, size_t count, Neighbors neighbors) {
++struct PairWords {
++  Workspace work;
++  size_t point;
++  GENERATIVEQC_PHASE_HD double operator()(size_t word, size_t index) const {
++    return work.pair(word, index, point);
++  }
++};
++
++template <class Neighbors, class Values>
++GENERATIVEQC_PHASE_HD void atom_gather_with_values_phase(Workspace work, size_t point,
++    size_t atom, size_t count, Neighbors neighbors, Values values) {
+   std::array<double, 4> pullback{};
+   for (size_t cursor = 0; cursor < count; ++cursor) {
+     const size_t neighbor = neighbors(cursor);
+@@ -218,11 +249,17 @@ GENERATIVEQC_PHASE_HD void atom_gather_selected_phase(Workspace work, size_t poi
+     const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
+     const double sign = neighbor > atom ? -1 : 1;
+     for (size_t word = 0; word < 4; ++word)
+-      pullback[word] += sign * work.pair(word, index, point);
++      pullback[word] += sign * values(word, index);
+   }
+   for (size_t word = 0; word < 4; ++word) work.field(7 + word, point)[atom] = pullback[word];
+ }
+ 
++template <class Neighbors>
++GENERATIVEQC_PHASE_HD void atom_gather_selected_phase(Workspace work, size_t point,
++    size_t atom, size_t count, Neighbors neighbors) {
++  atom_gather_with_values_phase(work, point, atom, count, neighbors, PairWords{work, point});
++}
++
+ GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
+   atom_gather_selected_phase(work, point, atom, work.atoms, AllNeighbors{});
+ }
+diff --git a/python/generativeqc_compiler/xc/becke_coefficients.py b/python/generativeqc_compiler/xc/becke_coefficients.py
+new file mode 100644
+index 000000000..c946781c7
+--- /dev/null
++++ b/python/generativeqc_compiler/xc/becke_coefficients.py
+@@ -0,0 +1,147 @@
++"""Dense Becke reverse schedule with two shared-AD coefficients per pair.
++
++This is a storage/dataflow experiment, not a new partition formula. It keeps
++the parallel pair domain and the ordinary normalization. Only validated cached
++center geometry can expand coefficients during the existing ordered gather.
++Whole-composition recognition and native-owner promotion remain separate gates.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from generativeqc_compiler.xc.becke_partition import (
++    BeckePartitionDerivativeOp,
++    recognize_becke_partition_derivative,
++)
++from generativeqc_compiler.xc.grid_phased import (
++    PhasedBeckePlan,
++    emit_phased_becke,
++    plan_phased_becke,
++)
++from generativeqc_compiler.xc.grid_response_ir import grid_response_program
++
++
++@dataclass(frozen=True)
++class BeckePairCoefficientPlan:
++    """Keep the four-word primal reservation, overwrite only two reverse words.
++
++    Logical reverse writes and gather reads exclude geometry metadata and cache
++    transactions. Gather additionally reads the three center unit components
++    per incident pair. Neither these models nor scratch bytes measure an
++    endpoint's concurrent peak; the native owner must admit all live storage.
++    """
++
++    operation: BeckePartitionDerivativeOp
++    phased: PhasedBeckePlan
++
++    @property
++    def scratch_bytes(self) -> int:
++        return self.phased.scratch_bytes
++
++    @property
++    def reverse_pair_visits(self) -> int:
++        return self.phased.pair_evaluations
++
++    @property
++    def reverse_write_bytes(self) -> int:
++        return 2 * 8 * self.reverse_pair_visits
++
++    @property
++    def gather_pair_read_bytes(self) -> int:
++        return 2 * 2 * 8 * self.reverse_pair_visits
++
++    @property
++    def gather_geometry_read_bytes(self) -> int:
++        return 2 * 3 * 8 * self.reverse_pair_visits
++
++
++def plan_becke_pair_coefficients(
++    *,
++    operation: BeckePartitionDerivativeOp,
++    atoms: int,
++    points: int,
++    budget_bytes: int,
++    cached_geometry: bool,
++    occupied_bytes: int = 0,
++) -> BeckePairCoefficientPlan | None:
++    """Fail closed without cached geometry or whole concurrent admission.
++
++    The owner must prepare/validate and rebind center geometry before execution,
++    and include that metadata in occupied_bytes. A false precondition requires
++    the ordinary phased/generic route, never on-demand gather geometry rebuilds.
++    """
++    if type(cached_geometry) is not bool:
++        raise ValueError("cached_geometry must be a boolean")
++    phased = plan_phased_becke(
++        atoms=atoms,
++        points=points,
++        budget_bytes=budget_bytes,
++        occupied_bytes=occupied_bytes,
++    )
++    if phased is None or not cached_geometry:
++        return None
++    return BeckePairCoefficientPlan(operation, phased)
++
++
++_SOURCE = r"""
++#if defined(__CUDACC__)
++#define GENERATIVEQC_COEFFICIENT_HD __host__ __device__
++#else
++#define GENERATIVEQC_COEFFICIENT_HD
++#endif
++namespace generativeqc_grid_coefficients {
++using namespace generativeqc_grid_phased;
++
++template <class Geometry, class Log>
++GENERATIVEQC_COEFFICIENT_HD bool pair_coefficient_reverse_phase(Workspace work,
++    size_t point, size_t first, size_t second, Geometry geometry, Log logarithm) {
++  PairPullbackCoefficients coefficients;
++  const bool valid = pair_pullback_coefficients(work, point, first, second, geometry,
++      logarithm, work.field(6, point), coefficients);
++  const size_t index = center_pair_index(first, second);
++  // Primal consumers are complete. Retain the same peak reservation but write
++  // only the scalar distance/separation pullbacks, not a full xyz pair cache.
++  for (size_t word = 0; word < 2; ++word)
++    work.pair(word, index, point) = coefficients.values[word];
++  return valid;
++}
++
++struct CoefficientPairWords {
++  Workspace work;
++  size_t point;
++  const CenterPair* centers;
++  GENERATIVEQC_COEFFICIENT_HD double operator()(size_t word, size_t index) const {
++    // Cached center directions are already finite unit components. Expand in
++    // exactly the dense reverse's multiplication order before the ordered sum.
++    if (!word) return work.pair(0, index, point);
++    return pair_pullback_component(0.0, work.pair(1, index, point), word,
++                                   centers[index].distance[word]);
++  }
++};
++
++GENERATIVEQC_COEFFICIENT_HD void atom_gather_coefficient_phase(Workspace work,
++    size_t point, size_t atom, const CenterPair* centers) {
++  atom_gather_with_values_phase(work, point, atom, work.atoms, AllNeighbors{},
++                               CoefficientPairWords{work, point, centers});
++}
++} // namespace generativeqc_grid_coefficients
++#undef GENERATIVEQC_COEFFICIENT_HD
++"""
++
++
++def emit_becke_pair_coefficients(operation: BeckePartitionDerivativeOp) -> str:
++    """Emit only shared AD owners plus a dense coefficient storage schedule."""
++    current = recognize_becke_partition_derivative(
++        ratio=grid_response_program("ratio", operation.iterations),
++        logarithm=grid_response_program("log", operation.iterations),
++        switch=grid_response_program("becke", operation.iterations),
++        iterations=operation.iterations,
++    )
++    if current != operation:
++        raise ValueError("Becke coefficients no longer match their canonical AD graphs")
++    return (
++        emit_phased_becke()
++        + f"// Canonical Becke coefficient operation: {operation.identity}\n"
++        + _SOURCE
++    )
+diff --git a/tests/python/test_becke_pair_coefficients.py b/tests/python/test_becke_pair_coefficients.py
+new file mode 100644
+index 000000000..a19aa0717
+--- /dev/null
++++ b/tests/python/test_becke_pair_coefficients.py
+@@ -0,0 +1,239 @@
++"""Independent host gates for dense pair coefficients and bounded fallbacks."""
++
++from __future__ import annotations
++
++import ctypes as ct
++import shutil
++import subprocess
++
++import numpy as np
++import pytest
++import test_becke_cooperative as retained
++import test_becke_phased as phased
++from generativeqc_compiler.xc.becke_coefficients import (
++    emit_becke_pair_coefficients,
++    plan_becke_pair_coefficients,
++)
++from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
++from test_becke_partition_primitive import candidate_routes, operation
++
++
++def coefficient_harness() -> str:
++    """Reuse the ordinary transactional owner with the dense storage schedule.
++
++    Generic mode 0 and ordinary phased mode 1 stay independent comparators.
++    Mode 2 selects coefficients only for prepared geometry; direct geometry
++    falls back. Mode 3 poisons the two unused reverse words to prove that gather
++    cannot accidentally consume the previous primal factors or dense xyz state.
++    """
++    source = phased.HARNESS
++
++    def change(before: str, after: str) -> None:
++        nonlocal source
++        assert source.count(before) == 1, "shared phase harness changed"
++        source = source.replace(before, after)
++
++    change(
++        "static size_t pairs_evaluated, norms_evaluated, logs_evaluated;",
++        """static size_t pairs_evaluated, norms_evaluated, logs_evaluated;
++static bool coefficient_enabled, poison_unused_pair_words;""",
++    )
++    change(
++        "template <class Geometry>\nbool phases",
++        """template <class Geometry>
++bool selected_reverse(generativeqc_grid_phased::Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry) {
++  if constexpr (requires { geometry.pairs; })
++    if (coefficient_enabled)
++      return generativeqc_grid_coefficients::pair_coefficient_reverse_phase(
++          work, point, first, second, geometry, counted_log);
++  return generativeqc_grid_phased::pair_reverse_phase(
++      work, point, first, second, geometry, counted_log);
++}
++template <class Geometry>
++void selected_gather(generativeqc_grid_phased::Workspace work, size_t point,
++    size_t atom, Geometry geometry) {
++  if constexpr (requires { geometry.pairs; })
++    if (coefficient_enabled) {
++      generativeqc_grid_coefficients::atom_gather_coefficient_phase(
++          work, point, atom, geometry.pairs);
++      return;
++    }
++  generativeqc_grid_phased::atom_gather_phase(work, point, atom);
++}
++template <class Geometry>
++bool phases""",
++    )
++    change(
++        "pair_reverse_phase(work, point, first, second, geometry, counted_log)",
++        "selected_reverse(work, point, first, second, geometry)",
++    )
++    change(
++        "  for (size_t point = 0; point < work.points; ++point)\n    for (size_t atom = 0; atom < work.atoms; ++atom) atom_gather_phase(work, point, atom);",
++        """  if constexpr (requires { geometry.pairs; })
++    if (poison_unused_pair_words)
++      for (size_t point = 0; point < work.points; ++point)
++        for (size_t index = 0; index < work.atoms * (work.atoms - 1) / 2; ++index)
++          for (size_t word = 2; word < 4; ++word)
++            work.pair(word, index, point) = std::numeric_limits<double>::quiet_NaN();
++  for (size_t point = 0; point < work.points; ++point)
++    for (size_t atom = 0; atom < work.atoms; ++atom)
++      selected_gather(work, point, atom, geometry);""",
++    )
++    change(
++        "  pairs_evaluated = norms_evaluated = logs_evaluated = 0;",
++        """  pairs_evaluated = norms_evaluated = logs_evaluated = 0;
++  coefficient_enabled = phased >= 2;
++  poison_unused_pair_words = phased == 3;""",
++    )
++    return source
++
++
++@pytest.fixture(scope="module", params=[1, 3, 5])
++def helper(
++    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
++) -> ct.CDLL:
++    """Compile the canonical AD once per switch iteration using verified ccache."""
++    compiler, cache = shutil.which("c++"), shutil.which("ccache")
++    if compiler is None or cache is None:
++        pytest.skip("C++ compiler and verified ccache required")
++    subprocess.run([cache, "--version"], check=True, capture_output=True)
++    directory = tmp_path_factory.mktemp("becke-coefficients")
++    source, library = directory / "probe.cpp", directory / "probe.so"
++    source.write_text(
++        emit_grid_adjoint()
++        + emit_grid_partials(request.param)
++        + emit_becke_pair_coefficients(operation(request.param))
++        + coefficient_harness()
++    )
++    subprocess.run(
++        [
++            cache,
++            compiler,
++            "-std=c++20",
++            "-O2",
++            "-ffp-contract=off",
++            "-shared",
++            "-fPIC",
++            str(source),
++            "-o",
++            str(library),
++        ],
++        check=True,
++        capture_output=True,
++        text=True,
++        timeout=60,
++    )
++    result = ct.CDLL(str(library))
++    pointer = ct.POINTER(ct.c_double)
++    result.run.argtypes = [
++        pointer,
++        ct.c_size_t,
++        pointer,
++        ct.c_size_t,
++        ct.POINTER(ct.c_int64),
++        pointer,
++        ct.c_bool,
++        ct.c_size_t,
++        pointer,
++        ct.POINTER(ct.c_size_t),
++    ]
++    result.run.restype = ct.c_int
++    result.iterations = request.param
++    return result
++
++
++@pytest.mark.parametrize("atoms", [1, 2, 3, 12, 33, 48, 96, 128])
++@pytest.mark.parametrize("cached", [False, True])
++def test_coefficients_match_generic_phased_and_rebound_geometry(
++    helper: ct.CDLL, atoms: int, cached: bool
++) -> None:
++    """Dense pair work and neighbor order survive changed-geometry rebinding."""
++    rng = np.random.default_rng(1894200 + atoms)
++    centers = rng.normal(size=(atoms, 3)) * 2
++    points = rng.normal(size=(17, 3)) * 3
++    owners = rng.integers(atoms, size=len(points), dtype=np.int64)
++    seeds = rng.normal(size=len(points))
++    for geometry in (centers, centers + rng.normal(size=centers.shape) * 0.05, centers):
++        generic = retained.run(helper, points, geometry, owners, seeds, cached, 0)
++        baseline = retained.run(helper, points, geometry, owners, seeds, cached, 1)
++        actual = retained.run(helper, points, geometry, owners, seeds, cached, 2)
++        assert generic[0] == baseline[0] == actual[0] == 0
++        np.testing.assert_array_equal(actual[1], baseline[1])
++        np.testing.assert_allclose(actual[1], generic[1], rtol=5e-12, atol=2e-11)
++        assert actual[2][0] == baseline[2][0] == len(points) * atoms * (atoms - 1) // 2
++        np.testing.assert_array_equal(actual[2], baseline[2])
++
++
++@pytest.mark.parametrize(
++    "case",
++    [
++        "saturated",
++        "rounded_zero",
++        "coincident",
++        "collision",
++        "invalid_owner",
++        "nonfinite",
++        "nan_seed",
++        "huge",
++        "empty",
++    ],
++)
++def test_coefficient_edge_and_failure_semantics(helper: ct.CDLL, case: str) -> None:
++    retained.test_cooperative_edge_semantics(candidate_routes(helper), case)
++
++
++def test_coefficient_decimal_fd_translation_and_permutation(helper: ct.CDLL) -> None:
++    retained.test_cooperative_independent_decimal_fd_translation_and_permutation(
++        candidate_routes(helper)
++    )
++
++
++def test_unused_reverse_words_can_be_poisoned(helper: ct.CDLL) -> None:
++    rng = np.random.default_rng(1894201)
++    centers = rng.normal(size=(48, 3)) * 2
++    points = rng.normal(size=(17, 3)) * 3
++    owners = rng.integers(48, size=len(points), dtype=np.int64)
++    seeds = rng.normal(size=len(points))
++    baseline = retained.run(helper, points, centers, owners, seeds, True, 1)
++    actual = retained.run(helper, points, centers, owners, seeds, True, 3)
++    assert baseline[0] == actual[0] == 0
++    np.testing.assert_array_equal(actual[1], baseline[1])
++
++
++def test_coefficient_plan_charges_concurrent_storage_and_requires_geometry() -> None:
++    plan = plan_becke_pair_coefficients(
++        operation=operation(),
++        atoms=96,
++        points=256,
++        budget_bytes=1 << 30,
++        cached_geometry=True,
++    )
++    assert plan is not None
++    assert plan.scratch_bytes == plan.phased.scratch_bytes == 39716864
++    assert plan.reverse_write_bytes == 2 * 8 * 4560 * 256
++    assert plan.gather_pair_read_bytes == 2 * plan.reverse_write_bytes
++    assert plan.gather_geometry_read_bytes == 3 * 2 * 8 * 4560 * 256
++    for cached, occupied, extra, admitted in [
++        (True, 0, 0, True),
++        (True, 1, 0, False),
++        (True, 1, 1, True),
++        (False, 0, 0, False),
++    ]:
++        result = plan_becke_pair_coefficients(
++            operation=operation(),
++            atoms=96,
++            points=256,
++            budget_bytes=plan.scratch_bytes + extra,
++            occupied_bytes=occupied,
++            cached_geometry=cached,
++        )
++        assert (result is not None) == admitted
++    with pytest.raises(ValueError, match="boolean"):
++        plan_becke_pair_coefficients(
++            operation=operation(),
++            atoms=96,
++            points=256,
++            budget_bytes=1 << 30,
++            cached_geometry=1,
++        )
+diff --git a/tests/python/test_becke_coefficient_cuda.py b/tests/python/test_becke_coefficient_cuda.py
+new file mode 100644
+index 000000000..2442981d0
+--- /dev/null
++++ b/tests/python/test_becke_coefficient_cuda.py
+@@ -0,0 +1,88 @@
++"""Exercise the dense coefficient ABI with the independent existing device gates."""
++
++from __future__ import annotations
++
++import ctypes as ct
++import os
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++import numpy as np
++import pytest
++from test_becke_pair_coefficients import helper
++from test_becke_partition_cuda import (
++    test_device_changed_geometry_tail_and_host_ad,
++    test_device_independent_decimal_directional_derivative,
++    test_device_zero_and_failure_publication,
++)
++
++if TYPE_CHECKING:
++    from test_becke_partition_cuda import Probe
++
++__all__ = [
++    "helper",
++    "test_device_changed_geometry_tail_and_host_ad",
++    "test_device_independent_decimal_directional_derivative",
++    "test_device_zero_and_failure_publication",
++]
++
++
++@pytest.fixture(scope="module")
++def probe() -> Probe:
++    """Call actual coefficient kernels; reported counts are the dense contract."""
++    path = os.environ.get("GENERATIVEQC_BECKE_COEFFICIENT_PROBE")
++    if not path:
++        pytest.skip("emitted coefficient CUDA probe is not configured")
++    if not os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_STEP_ID") in {
++        None,
++        "batch",
++        "extern",
++    }:
++        pytest.fail("real-GPU coefficient gates require an explicit finite Slurm step")
++    library = ct.CDLL(str(Path(path).resolve()))
++    pointer = ct.POINTER(ct.c_double)
++    library.probe_coefficients.argtypes = [
++        ct.c_size_t,
++        ct.c_size_t,
++        ct.c_size_t,
++        pointer,
++        pointer,
++        ct.POINTER(ct.c_int64),
++        pointer,
++        pointer,
++        pointer,
++        pointer,
++    ]
++    library.probe_coefficients.restype = ct.c_int
++
++    def run(
++        points: np.ndarray,
++        centers: np.ndarray,
++        owners: np.ndarray,
++        seeds: np.ndarray,
++        tile_points: int = 256,
++    ) -> tuple[int, np.ndarray, np.ndarray]:
++        baseline = np.full((len(points), len(centers), 3), 12345.0)
++        candidate = np.full_like(baseline, 12345.0)
++        times = np.empty(8)
++        as_pointer = lambda array: array.ctypes.data_as(pointer)
++        status = library.probe_coefficients(
++            len(centers),
++            len(points),
++            tile_points,
++            as_pointer(centers),
++            as_pointer(points),
++            owners.ctypes.data_as(ct.POINTER(ct.c_int64)),
++            as_pointer(seeds),
++            as_pointer(baseline),
++            as_pointer(candidate),
++            as_pointer(times),
++        )
++        if status == 0:
++            np.testing.assert_array_equal(candidate, baseline)
++        else:
++            np.testing.assert_array_equal(baseline, 12345.0)
++            np.testing.assert_array_equal(candidate, 12345.0)
++        return status, candidate, np.full(len(points), len(centers), dtype=np.uintp)
++
++    return run
+diff --git a/.agents/notes/proposed/2026-10-06-becke-dense-coefficients.md b/.agents/notes/proposed/2026-10-06-becke-dense-coefficients.md
+new file mode 100644
+index 000000000..1ec264889
+--- /dev/null
++++ b/.agents/notes/proposed/2026-10-06-becke-dense-coefficients.md
+@@ -0,0 +1,69 @@
++# Experiment: dense canonical-AD pair coefficients
++
++Status: proposed; host-qualified, device/performance qualification pending
++Date: 2026-10-06
++
++## Problem and full objective
++
++#1894 still requires whole normalized-product graph recognition, independent
++fixed-grid gates, RKS/UKS changed-geometry native forces, phase/work/traffic
++attribution and complete paired 48/96-atom PBE0 E+F endpoints. The rejected
++indexed-domain candidate in PR #1996 does not satisfy those requirements.
++Its sampled grid products mostly stay live; serial reverse enumeration loses.
++
++## Candidate dataflow
++
++Keep the ordinary parallel pair domain, ordered normalization and neighbor
++gather. Extract the canonical scalar pullback into one shared owner used by
++both the ordinary four-word reverse and the two-word candidate. Both consumers
++use the same component-expansion owner, with the same multiplication order.
++No second scientific formula, logarithm move, broad zero pruning, full xyz
++cache or fused reverse/gather is introduced.
++
++The candidate writes only the distance-difference and center-separation
++coefficients. Its ordered gather expands the latter using already prepared,
++finite center unit directions. Pair primal/log state still requires four
++words, so the peak pair reservation and total scratch do not shrink. The
++point-normalization boundary protects storage aliasing. The two obsolete
++reverse words are never consumed; a host gate poisons them with NaNs.
++
++Require cached center geometry and complete concurrent resource admission;
++the ordinary phased/generic path remains the unsupported/resource fallback.
++Geometry metadata belongs to the native owner, must be charged as occupied
++storage, and must be validated/rebound for every geometry change. No cached
++point state or floating-point atomic reduction is introduced.
++
++## Work and traffic model
++
++Every primal/reverse pair and both ordered incident consumers remain. Reverse
++pair writes change from four doubles to two; gather pair reads from four
++doubles per incident visit to two. Gather additionally reads three center unit
++components per visit. Those center reads and extra multiplies can outweigh the
++pair-panel saving. These are logical dataflow counts, not hardware-cache
++transaction measurements or an endpoint speed claim.
++
++At 96 atoms by 256 points, both plans reserve 39,716,864 scratch bytes. Geometry
++metadata and all concurrent native owners are additional admission inputs.
++
++## Qualification ledger
++
++- Initial host cohort: 532 gates pass across coefficient, indexed primitive,
++  phased, cooperative, tiled and center-geometry suites. Switch iterations
++  1/3/5, cached/direct fallback, geometry rebinding, Decimal/finite differences,
++  translation/permutation, rounded zeros and failure publication are covered.
++- A final finite-zero overwrite invariant is added before freezing the source;
++  the final mathematical source repeats all 532 host gates successfully.
++- n1 Slurm job 6128 terminates with exit 2 at CUDA compilation: the new probe
++  kernel initially assumes int64 pair indices, while the existing owner uses
++  uint2. No GPU numerical or timing evidence is produced. Correct the consumer
++  to the existing uint2 contract and freeze a separate retry cohort; do not
++  overwrite the failed snapshot or restart the unchanged source.
++- Device tests, all four sanitizers and clean isolated ABBAABBA: pending.
++- Whole-composition recognition, native force ownership, phase profiling and
++  complete endpoints: pending. No production promotion is authorized by these
++  isolated tests, even if the candidate wins.
++
++## References
++
++#1894; #1830; #1950; PR #1996;
++`2026-10-05-becke-partition-primitive.md` preserves the rejected index route.

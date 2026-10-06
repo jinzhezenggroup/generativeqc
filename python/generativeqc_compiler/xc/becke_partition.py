@@ -12,6 +12,10 @@ from dataclasses import dataclass
 
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.dft.grid import checked_int
+from generativeqc_compiler.xc.grid_partition_ir import (
+    grid_partition_program,
+    partition_graph_kind,
+)
 from generativeqc_compiler.xc.grid_phased import (
     PhasedBeckePlan,
     emit_phased_becke,
@@ -19,51 +23,53 @@ from generativeqc_compiler.xc.grid_phased import (
 )
 from generativeqc_compiler.xc.grid_response_ir import (
     GridResponseProgram,
+    grid_response_graph_identity,
     grid_response_program,
 )
 
 
 def _actual_identity(program: GridResponseProgram, kind: str) -> str:
     """Authenticate reachable AD roots instead of trusting cached metadata."""
-    graph, roots = program.graph, program.roots
-    if any(root.graph is not graph for root in roots):
-        raise ValueError("Becke AD roots belong to a different graph")
-    order = graph.topological_order(roots)
-    indices = {identifier: index for index, identifier in enumerate(order)}
-    return canonical_hash(
-        {
-            "schema": "generativeqc.grid-response-program/v1",
-            "kind": kind,
-            "nodes": [
-                (
-                    graph.nodes[identifier].operation,
-                    [indices[child] for child in graph.nodes[identifier].arguments],
-                    str(graph.nodes[identifier].payload),
-                )
-                for identifier in order
-            ],
-            "roots": [indices[root.identifier] for root in roots],
-        }
-    )
+    return grid_response_graph_identity(program.graph, program.roots, kind)
 
 
 @dataclass(frozen=True)
 class BeckePartitionDerivativeOp:
-    """A matched first-order normalized-product dependency contract.
+    """A recognized canonical Becke normalized-product derivative contract.
+
+    Whole-graph operations bind an authenticated primal/JVP composition and its
+    atom domain. Legacy scalar-only operations preserve the prototype identity
+    but do not establish production whole-composition recognition.
 
     Two exact zero factors annihilate every first derivative of an atom product.
     One zero does not: rounded switch zeros can retain a nonzero slope. The
-    generated index domain therefore retains every atom with zero count <= 1,
+    experimental index domain therefore retains every atom with zero count <= 1,
     including saturated and underflowed products. This is not a floating-point
     magnitude cutoff, an early log-product stop or a full xyz derivative cache.
     """
 
     iterations: int
     program_identities: tuple[tuple[str, str], ...]
+    composition_identity: str | None = None
+    atoms: int | None = None
 
     @property
     def identity(self) -> str:
         """Bind scientific graphs, zero semantics and ordered reduction policy."""
+        if self.composition_identity is not None:
+            return canonical_hash(
+                {
+                    "schema": "generativeqc.becke-partition-derivative-op/v2",
+                    "programs": self.program_identities,
+                    "composition": self.composition_identity,
+                    "atoms": self.atoms,
+                    "partition": "becke-equal-radius",
+                    "zero_semantics": "single-zero-retains-pullback-multi-zero-annihilates",
+                    "normalization": "selected-product-over-all-products",
+                    "geometry": "validated-point-and-center-distance-bindings",
+                    "reduction": "ascending-neighbors-no-fp-atomics",
+                }
+            )
         return canonical_hash(
             {
                 "schema": "generativeqc.becke-partition-derivative-op/v1",
@@ -104,6 +110,68 @@ def recognize_becke_partition_derivative(
     return BeckePartitionDerivativeOp(iterations, tuple(identities))
 
 
+def recognize_becke_partition_graph(
+    program: GridResponseProgram,
+    *,
+    atoms: int,
+    iterations: int = 3,
+    partition: str = "becke-equal-radius",
+) -> BeckePartitionDerivativeOp | None:
+    """Match the complete reachable normalized-product primal AND generated JVP.
+
+    Shape, complementary pair orientation, all denominator products, integer
+    owner selection, saturation and rounded-zero branch semantics participate
+    in matching. Supplied identities and unreachable companion roots do not.
+    Unsupported dimensions/partitions or cross-graph roots fail closed.
+    """
+    if (
+        type(atoms) is not int
+        or not 1 <= atoms <= 128
+        or partition != "becke-equal-radius"
+    ):
+        return None
+    expected = grid_partition_program(atoms, iterations)
+    try:
+        actual = _actual_identity(program, partition_graph_kind(atoms))
+    except ValueError:
+        return None
+    if actual != expected.identity:
+        return None
+    scalar = recognize_becke_partition_derivative(
+        ratio=grid_response_program("ratio", iterations),
+        logarithm=grid_response_program("log", iterations),
+        switch=grid_response_program("becke", iterations),
+        iterations=iterations,
+        partition=partition,
+    )
+    if scalar is None:
+        return None
+    return BeckePartitionDerivativeOp(
+        iterations, scalar.program_identities, actual, atoms
+    )
+
+
+def validate_becke_partition_derivative(operation: BeckePartitionDerivativeOp) -> None:
+    """Reauthenticate canonical roots before emitting a matched operation."""
+    if operation.composition_identity is not None:
+        if operation.atoms is None:
+            raise ValueError("Becke primitive composition lacks its atom domain")
+        current = recognize_becke_partition_graph(
+            grid_partition_program(operation.atoms, operation.iterations),
+            atoms=operation.atoms,
+            iterations=operation.iterations,
+        )
+    else:
+        current = recognize_becke_partition_derivative(
+            ratio=grid_response_program("ratio", operation.iterations),
+            logarithm=grid_response_program("log", operation.iterations),
+            switch=grid_response_program("becke", operation.iterations),
+            iterations=operation.iterations,
+        )
+    if current != operation:
+        raise ValueError("Becke primitive no longer matches its canonical AD graphs")
+
+
 @dataclass(frozen=True)
 class BeckePartitionDerivativePlan:
     """Bounded dense primal panels plus point-major exact reverse indices.
@@ -140,7 +208,7 @@ def plan_becke_partition_derivative(
         budget_bytes=budget_bytes,
         occupied_bytes=occupied_bytes,
     )
-    if phased is None:
+    if phased is None or operation.atoms is not None and operation.atoms != atoms:
         return None
     plan = BeckePartitionDerivativePlan(operation, phased)
     return plan if occupied_bytes + plan.scratch_bytes <= budget_bytes else None
@@ -256,14 +324,7 @@ GENERATIVEQC_PARTITION_HD void partition_gather_phase(DerivativeWorkspace input,
 
 def emit_becke_partition_derivative(operation: BeckePartitionDerivativeOp) -> str:
     """Emit a dependency lowering that calls the authoritative AD phase bodies."""
-    current = recognize_becke_partition_derivative(
-        ratio=grid_response_program("ratio", operation.iterations),
-        logarithm=grid_response_program("log", operation.iterations),
-        switch=grid_response_program("becke", operation.iterations),
-        iterations=operation.iterations,
-    )
-    if current != operation:
-        raise ValueError("Becke primitive no longer matches its canonical AD graphs")
+    validate_becke_partition_derivative(operation)
     return (
         emit_phased_becke()
         + f"// Canonical Becke derivative operation: {operation.identity}\n"

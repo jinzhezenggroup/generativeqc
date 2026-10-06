@@ -162,10 +162,28 @@ __global__ void partition_gather(DerivativeWorkspace input, int* error) {
 }
 #endif
 
+#if defined(GENERATIVEQC_BECKE_COEFFICIENT_PROBE)
+__global__ void coefficient_reverse(Workspace work, const uint2* indices, const CenterPair* centers,
+                                    int* error) {
+  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
+  if (point >= work.points || failed(error)) return;
+  const Geometry geometry{centers, local_ratio_prepared};
+  const auto pair = indices[blockIdx.y];
+  if (!generativeqc_grid_coefficients::pair_coefficient_reverse_phase(work, point, pair.x, pair.y,
+                                                                      geometry, local_log))
+    atomicExch(error, 1);
+}
+__global__ void coefficient_gather(Workspace work, const CenterPair* centers, int* error) {
+  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
+  if (point >= work.points || failed(error)) return;
+  generativeqc_grid_coefficients::atom_gather_coefficient_phase(work, point, blockIdx.y, centers);
+}
+#endif
+
 // Allocation, input transfer, center preparation, and final readback are outside
 // the event interval. Each interval includes every sampled tile and publication.
 // This deliberately is NOT an XC geometry stage or an energy/force endpoint.
-template <bool Partition>
+template <bool Partition, bool Coefficients = false>
 int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const double* host_centers,
                  const double* host_points, const int64_t* host_owners, const double* host_seeds,
                  double* old_output, double* new_output, double* milliseconds,
@@ -211,7 +229,7 @@ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const dou
     auto launch = [&](bool phased, bool collect = false) {
       for (size_t begin = 0; begin < point_count; begin += tile_points) {
         const size_t count = std::min(tile_points, point_count - begin);
-        if (!phased && !Partition) {
+        if (!phased && !Partition && !Coefficients) {
           cooperative<<<count, 32, shared_pairs * sizeof(PointPair)>>>(
               points.data + 3 * begin, centers.data, atoms, owners.data + begin, seeds.data + begin,
               geometry.data, old_scratch.data, old_result.data + 3 * atoms * begin, error.data);
@@ -238,13 +256,25 @@ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const dou
           {
             normalize<<<(count + 127) / 128, 128>>>(work, owners.data + begin, seeds.data + begin,
                                                     error.data);
-            if (pair_count)
-              pair_phase<true><<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
-            atom_phase<2><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
+#if defined(GENERATIVEQC_BECKE_COEFFICIENT_PROBE)
+            if (Coefficients && phased) {
+              if (pair_count)
+                coefficient_reverse<<<pair_blocks, 128>>>(work, indices.data, geometry.data,
+                                                          error.data);
+              coefficient_gather<<<atom_blocks, 128>>>(work, geometry.data, error.data);
+            } else
+#endif
+            {
+              if (pair_count)
+                pair_phase<true>
+                    <<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
+              atom_phase<2><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
+            }
           }
           atom_phase<3>
               <<<atom_blocks, 128>>>(work, nullptr, nullptr, owners.data + begin, error.data);
-          double* destination = Partition && !phased ? old_result.data : new_result.data;
+          double* destination =
+              (Partition || Coefficients) && !phased ? old_result.data : new_result.data;
           publish<<<atom_blocks, 128>>>(work, destination + 3 * atoms * begin, error.data);
         }
       }
@@ -252,8 +282,8 @@ int probe_routes(size_t atoms, size_t point_count, size_t tile_points, const dou
     };
     // Candidate-first priming makes initcheck exercise its own initialization,
     // rather than inheriting dense product/bar writes from the baseline arm.
-    launch(Partition);
-    launch(!Partition);
+    launch(Partition || Coefficients);
+    launch(!Partition && !Coefficients);
     check(cudaDeviceSynchronize());
     Event start, stop;
     for (size_t repeat = 0; repeat < 8; ++repeat) {
@@ -295,6 +325,15 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
   return probe_routes<false>(atoms, point_count, tile_points, host_centers, host_points,
                              host_owners, host_seeds, old_output, new_output, milliseconds);
 }
+#if defined(GENERATIVEQC_BECKE_COEFFICIENT_PROBE)
+extern "C" int probe_coefficients(size_t atoms, size_t point_count, size_t tile_points,
+                                  const double* host_centers, const double* host_points,
+                                  const int64_t* host_owners, const double* host_seeds,
+                                  double* old_output, double* new_output, double* milliseconds) {
+  return probe_routes<false, true>(atoms, point_count, tile_points, host_centers, host_points,
+                                   host_owners, host_seeds, old_output, new_output, milliseconds);
+}
+#endif
 #if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
 extern "C" int probe_partition(size_t atoms, size_t point_count, size_t tile_points,
                                const double* host_centers, const double* host_points,

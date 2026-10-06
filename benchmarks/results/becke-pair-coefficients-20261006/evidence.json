@@ -1,0 +1,396 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json",
+      "sha256": "27374079e2214d5ac8ed6d60ec18875f79f537b6fd69bbf5c81d3cd641670e96"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {},
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "identity_source": "Slurm step receipt: gres/gpu:5090:1",
+    "name": "NVIDIA GeForce RTX 5090",
+    "node": "node1",
+    "slurm_job": "6129",
+    "step": "0"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm_job": "6129",
+    "slurm_step": "0",
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "ir": "Original samples report null due to a coefficient-mode logging omission. Read the immutable operation annotation from the SHA-256-verified frozen emitted CUDA instead; original samples remain unchanged."
+  },
+  "hashes": {
+    "equation": "db68a81002c6216aae2f3d875af8c439beecc6f75480982312d960fcabad2f85",
+    "ir": "508d7d369f92f9b1cfe2d3f48aedcb51d3c8de2ba0eedd1ef229ecd1f3d1ef70",
+    "schedule": "b3e004c97b488b78ec93662fd2983e1f5b97c83d8162b8358791fc65c1e41a4d",
+    "source": "56796bb323c49bb23d33ff9f9a37500216fe2300ea477366a70c50b7f7c651e8"
+  },
+  "inputs_hash": "7126d6b5facee5eebdc891e6e2ee46d3ff609fac55c2328acc58cc4a61bb4aa2",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Only logical scratch/visit models are reported; concurrent native peak and hardware traffic are unmeasured."
+  },
+  "performance": {
+    "reason": "All four isolated median point estimates lose; no material speed advantage demonstrated. Reject for promotion; no statistically resolved endpoint regression or complete E+F comparison is claimed.",
+    "status": "fail"
+  },
+  "residuals": {},
+  "revision": "bc627c9a005b479fdba869cc9d4cf73e4dab1f45",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "complete_endpoint": false,
+    "device": "cuda",
+    "fast_compile": false,
+    "iterations": 3,
+    "measured_operation": "legacy scalar-root witness; later full-graph identity is NOT the measured identity",
+    "scope": "sampled tiles, Becke-only plus per-point publication; CUDA events; NOT endpoint",
+    "traffic": "logical pair/geometry models, not hardware transactions"
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Synthetic signed fixed-grid seeds, not an SCF endpoint; no solver trace is inferred.",
+  "stages": {
+    "compilation": {
+      "binary_sha256": "7b98067b50d28e107fedf0aa61c175732487c32dde8c7f3d746547c58bf610e6",
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "Native RKS/UKS integration, moved geometry and complete 48/96-atom PBE0 E+F remain pending.",
+      "status": "not-run"
+    },
+    "numerical": {
+      "cuda_passed": 21,
+      "cuda_skipped": 28,
+      "isolated_max_gradient_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reason": "21 CUDA numerical/failure/independent Decimal gates; 28 explicitly skipped iteration-1/5 host parameterizations; all four sanitizers clean.",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "No native primitive dispatch or default promotion.",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Frozen GPU cohort uses scalar companions; later complete normalized-product IR/recognition is separately host-qualified, not attributed to this operation identity.",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "source_sha256": "56796bb323c49bb23d33ff9f9a37500216fe2300ea477366a70c50b7f7c651e8",
+      "status": "pass"
+    }
+  },
+  "subject": "issue1894 dense two-coefficient schedule: isolated non-winning result",
+  "tier": "gpu-numerical",
+  "timings": [
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.010334239959716798,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.01054377555847168,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.010541952133178711,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.010300767898559571,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.010318047523498535,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.010568703651428223,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.01056339168548584,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.010310751914978027,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.020672191619873048,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.021142431259155273,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.021132863998413087,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.02065977668762207,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.020651615142822266,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.02114374351501465,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.021148128509521483,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.020648479461669922,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.025285888671875,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.025920927047729494,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.025924352645874022,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.025284128189086916,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.02528761672973633,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.02591472053527832,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.02591049575805664,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.025285663604736327,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06811164855957032,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.0687890853881836,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06882134246826171,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06807577514648437,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06809391784667969,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06880646514892579,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06881401824951172,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated Becke sampled tiles; NOT endpoint",
+      "seconds": 0.06808428955078125,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    }
+  ],
+  "toolchain": {
+    "ccache": "4.5.1",
+    "command": "ccache nvcc -std=c++20 -O3 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Xcompiler=-fPIC -shared coefficients.cu -o coefficients.so",
+    "cuda": "12.9.86",
+    "library_sha256": "7b98067b50d28e107fedf0aa61c175732487c32dde8c7f3d746547c58bf610e6",
+    "python": "3.13.9"
+  }
+}
