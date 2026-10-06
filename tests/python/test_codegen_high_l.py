@@ -58,7 +58,6 @@ from codegen_test_support import (
     itertools,
     math,
     pytest,
-    re,
     replace,
     rys_boys_values,
     sample_variables,
@@ -681,31 +680,6 @@ def test_weighted_psss_graph_cse_matches_component_oracle() -> None:
                 weighted.gradients[center][axis],
                 variables,
             ) == pytest.approx(expected, rel=3.0e-12, abs=3.0e-12)
-
-
-def assert_rtx5090_resources(
-    ptxas_output: str,
-    limits: dict[str, tuple[int, int, int]],
-) -> None:
-    """Reject CUDA 12.9 resource regressions before production integration."""
-
-    for function, (register_limit, stack_limit, shared_limit) in limits.items():
-        match = re.search(
-            rf"Function properties for {function}\n"
-            r"\s+(\d+) bytes stack frame, (\d+) bytes spill stores, "
-            r"(\d+) bytes spill loads\n"
-            r"ptxas info\s+: Used (\d+) registers([^\n]*)",
-            ptxas_output,
-        )
-        assert match is not None, f"missing ptxas resources for {function}"
-        stack, spill_stores, spill_loads, registers = map(int, match.groups()[:4])
-        shared_match = re.search(r"(\d+) bytes smem", match.group(5))
-        shared = int(shared_match.group(1)) if shared_match is not None else 0
-        assert registers <= register_limit
-        assert stack <= stack_limit
-        assert spill_stores == 0
-        assert spill_loads == 0
-        assert shared <= shared_limit
 
 
 def test_shell_spec_generates_cca_components_and_compile_time_bounds() -> None:

@@ -51,6 +51,73 @@ from codegen_test_support import (
 )
 
 
+def assert_rtx5090_resources(
+    ptxas_output: str,
+    limits: dict[str, tuple[int, int, int]],
+) -> None:
+    """Reject CUDA 12.9 resource regressions before production integration."""
+
+    for function, (register_limit, stack_limit, shared_limit) in limits.items():
+        match = re.search(
+            rf"Function properties for {function}\n"
+            r"\s+(\d+) bytes stack frame, (\d+) bytes spill stores, "
+            r"(\d+) bytes spill loads\n"
+            r"ptxas info\s+: Used (\d+) registers([^\n]*)",
+            ptxas_output,
+        )
+        assert match is not None, f"missing ptxas resources for {function}"
+        stack, spill_stores, spill_loads, registers = map(int, match.groups()[:4])
+        shared_match = re.search(r"(\d+) bytes smem", match.group(5))
+        shared = int(shared_match.group(1)) if shared_match is not None else 0
+        assert registers <= register_limit
+        assert stack <= stack_limit
+        assert spill_stores == 0
+        assert spill_loads == 0
+        assert shared <= shared_limit
+
+
+@pytest.mark.parametrize("shared", (0, 2072))
+def test_rtx5090_resource_parser_accepts_the_qualified_envelope(shared: int) -> None:
+    """Exercise the CUDA suite's resource helper without requiring NVCC."""
+    shared_suffix = f", {shared} bytes smem" if shared else ""
+    output = (
+        "ptxas info    : Function properties for generated_probe\n"
+        "    40 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\n"
+        f"ptxas info    : Used 168 registers{shared_suffix}\n"
+    )
+    assert_rtx5090_resources(output, {"generated_probe": (168, 40, 2072)})
+
+
+@pytest.mark.parametrize(
+    ("function", "stack", "stores", "loads", "registers", "shared"),
+    (
+        ("missing_probe", 40, 0, 0, 168, 2072),
+        ("generated_probe", 41, 0, 0, 168, 2072),
+        ("generated_probe", 40, 1, 0, 168, 2072),
+        ("generated_probe", 40, 0, 1, 168, 2072),
+        ("generated_probe", 40, 0, 0, 169, 2072),
+        ("generated_probe", 40, 0, 0, 168, 2073),
+    ),
+)
+def test_rtx5090_resource_parser_rejects_missing_or_excess_resources(
+    function: str,
+    stack: int,
+    stores: int,
+    loads: int,
+    registers: int,
+    shared: int,
+) -> None:
+    """Keep all original fail-closed resource limits effective after the split."""
+    output = (
+        f"ptxas info    : Function properties for {function}\n"
+        f"    {stack} bytes stack frame, {stores} bytes spill stores, "
+        f"{loads} bytes spill loads\n"
+        f"ptxas info    : Used {registers} registers, {shared} bytes smem\n"
+    )
+    with pytest.raises(AssertionError):
+        assert_rtx5090_resources(output, {"generated_probe": (168, 40, 2072)})
+
+
 @pytest.mark.parametrize(
     ("name", "recurrence", "resource_limits"),
     (
