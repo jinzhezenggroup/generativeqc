@@ -31,20 +31,19 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
-  const auto* family_metadata =
-      split_hybrid || automatic_libxc ? nullptr : semilocal_family_metadata_from_code(model.functional);
+  const auto* family_metadata = split_hybrid || automatic_libxc
+                                    ? nullptr
+                                    : semilocal_family_metadata_from_code(model.functional);
   if (!split_hybrid && !automatic_libxc && !family_metadata) return false;
   const auto family = split_hybrid
                           ? SemilocalFamily::R2scan
                           : (automatic_libxc ? SemilocalFamily::Lda : family_metadata->family);
   const bool scalable_semilocal =
       family_metadata && family_metadata->component_coefficients_are_native_scales;
-  const bool molecular_nonlocal =
-      family_metadata && family_metadata->molecular_nonlocal_domain;
+  const bool molecular_nonlocal = family_metadata && family_metadata->molecular_nonlocal_domain;
   const double qualified_exact_exchange =
       family_metadata ? family_metadata->cuda_global_hybrid_exact_exchange : -1.0;
-  const bool canonical_global_hybrid =
-      qualified_exact_exchange > 0.0 && !scalable_semilocal;
+  const bool canonical_global_hybrid = qualified_exact_exchange > 0.0 && !scalable_semilocal;
   const double expected_semilocal_exchange =
       scalable_semilocal && qualified_exact_exchange > 0.0 ? 1.0 - qualified_exact_exchange : 1.0;
   const double exchange_divisor = model.spins == 1 ? 2.0 : 1.0;
@@ -137,9 +136,8 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       (family_metadata && fock.backend == scf::FockBackend::Cuda && model.nonlocal_correlation &&
        !family_metadata->cuda_nonlocal_correlation) ||
       (!canonical_global_hybrid && !molecular_nonlocal &&
-       (!scalable_semilocal ||
-        (fock.backend == scf::FockBackend::Cuda && !cuda_scaled_global_hybrid &&
-         !cuda_range_exchange)) &&
+       (!scalable_semilocal || (fock.backend == scf::FockBackend::Cuda &&
+                                !cuda_scaled_global_hybrid && !cuda_range_exchange)) &&
        (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
         (fock.spec.exchange.present && !cuda_primary_exchange && !cuda_range_exchange) ||
         (model.range_correction && !cuda_range_exchange))) ||
