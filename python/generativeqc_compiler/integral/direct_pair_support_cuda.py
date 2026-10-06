@@ -290,10 +290,13 @@ struct ShellPairHermiteCoefficients {
   }
 };
 
+/** One authoritative pair recurrence for raw and cached Gaussian geometry.
+ * The caller supplies the same axis Gaussian base and exponent sum, allowing
+ * cached p/mu/P to share preparation without reconstructing raw exponents. */
 template <unsigned FirstAngular, unsigned SecondAngular, typename Scalar>
-__device__ inline void fill_shell_pair_hermite(
+__device__ inline void fill_shell_pair_hermite_geometry(
     unsigned maximum_i, unsigned maximum_j, Scalar product, Scalar center_a, Scalar center_b,
-    double alpha, double beta,
+    double p, Scalar base,
     ShellPairHermiteCoefficients<Scalar, FirstAngular, SecondAngular>& coefficients) {
   static_assert(FirstAngular <= kMaximumAngularMomentum);
   static_assert(SecondAngular <= kMaximumAngularMomentum);
@@ -304,10 +307,7 @@ __device__ inline void fill_shell_pair_hermite(
        ++item) {
     coefficients.data[item] = scalar<Scalar>(0.0);
   }
-  const double p = alpha + beta;
-  const double mu = alpha * beta / p;
-  const Scalar ab = center_a - center_b;
-  coefficients.at(0, 0, 0) = qexp(-mu * ab * ab);
+  coefficients.at(0, 0, 0) = base;
   const Scalar pa = product - center_a;
   const Scalar pb = product - center_b;
   const double inverse_two_p = 0.5 / p;
@@ -333,6 +333,18 @@ __device__ inline void fill_shell_pair_hermite(
       }
     }
   }
+}
+
+template <unsigned FirstAngular, unsigned SecondAngular, typename Scalar>
+__device__ inline void fill_shell_pair_hermite(
+    unsigned maximum_i, unsigned maximum_j, Scalar product, Scalar center_a, Scalar center_b,
+    double alpha, double beta,
+    ShellPairHermiteCoefficients<Scalar, FirstAngular, SecondAngular>& coefficients) {
+  const double p = alpha + beta;
+  const double mu = alpha * beta / p;
+  const Scalar ab = center_a - center_b;
+  fill_shell_pair_hermite_geometry<FirstAngular, SecondAngular>(
+      maximum_i, maximum_j, product, center_a, center_b, p, qexp(-mu * ab * ab), coefficients);
 }
 
 }  // namespace generativeqc::scf::cuda_execution

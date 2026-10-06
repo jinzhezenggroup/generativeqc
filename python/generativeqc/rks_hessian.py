@@ -37,6 +37,7 @@ from .rks_hessian_integrals import (
     checked_direction,
     checked_second_hvp_options,
     generated_weighted_first_integral_gradient,
+    generated_weighted_first_integral_gradient_cuda,
     generated_weighted_second_integral_hvp,
     nuclear_hvp_from_topology,
     rks_integral_topology,
@@ -234,6 +235,33 @@ def _coulomb_shell_plan_weights(
     return immutable(fixed), immutable(moving)
 
 
+def _coulomb_response_factor_coefficients(
+    plan: StationaryHVPPlan,
+) -> tuple[float, float]:
+    """Extract the bilinear Coulomb response factors from the MethodIR JVP."""
+    block = plan.integral_block("coulomb", terms=1, coordinates=1)
+
+    def evaluate(left: float, right: float, dleft: float, dright: float) -> float:
+        feeds = {
+            "density_left": np.asarray([[left]], dtype=np.float64),
+            "density_right": np.asarray([[right]], dtype=np.float64),
+            "d_density_left": np.asarray([[dleft]], dtype=np.float64),
+            "d_density_right": np.asarray([[dright]], dtype=np.float64),
+        }
+        value = execute(block.response_weights, feeds).outputs["response_weights"]
+        return float(np.asarray(value).reshape(-1)[0])
+
+    left = evaluate(0.0, 1.0, 1.0, 0.0)
+    right = evaluate(1.0, 0.0, 0.0, 1.0)
+    probe = evaluate(2.0, 3.0, 5.0, 7.0)
+    expected = left * 5.0 * 3.0 + right * 2.0 * 7.0
+    if not np.isfinite((left, right, probe)).all() or not np.isclose(
+        probe, expected, rtol=0.0, atol=1e-14
+    ):
+        raise RuntimeError("stationary Coulomb response weight is not bilinear")
+    return left, right
+
+
 def _integral_source_hvp(
     source_name: str,
     plan: StationaryHVPPlan,
@@ -242,6 +270,9 @@ def _integral_source_hvp(
     direction: np.ndarray,
     cache: Path,
     integral_budget_bytes: int,
+    first_backend: str,
+    first_compiler: typing.Any,
+    first_device_id: int,
     second_backend: str,
     second_compiler: typing.Any,
     second_device_id: int,
@@ -249,12 +280,26 @@ def _integral_source_hvp(
     """Apply one plan-owned integral source as d(weight)dI + weight d2I(v)."""
     if source_name in ("one_electron", "overlap_pulay"):
         fixed, moving = _pair_plan_weights(plan, source_name, response, operator)
-        first = generated_weighted_first_integral_gradient(
-            rks_integral_topology(operator),
-            source_name,
-            pair_weights=moving,
-            cache=cache,
-        )
+        if first_backend == "cuda":
+            first, first_diagnostic = generated_weighted_first_integral_gradient_cuda(
+                rks_integral_topology(operator),
+                source_name,
+                first_compiler,
+                pair_weights=moving,
+                cache=cache,
+                device_id=first_device_id,
+                budget_bytes=integral_budget_bytes,
+            )
+        elif first_backend == "cpu":
+            first = generated_weighted_first_integral_gradient(
+                rks_integral_topology(operator),
+                source_name,
+                pair_weights=moving,
+                cache=cache,
+            )
+            first_diagnostic = {"backend": "cpu-generated-plan-weighted-first"}
+        else:
+            raise ValueError("first-integral backend must be cpu or cuda")
         second, diagnostic = generated_weighted_second_integral_hvp(
             rks_integral_topology(operator),
             source_name,
@@ -274,12 +319,29 @@ def _integral_source_hvp(
         def fixed_weights(slots: tuple[int, int, int, int]) -> np.ndarray:
             return _coulomb_shell_plan_weights(plan, response, operator, slots)[0]
 
-        first = generated_weighted_first_integral_gradient(
-            rks_integral_topology(operator),
-            source_name,
-            eri_shell_weights=response_weights,
-            cache=cache,
-        )
+        if first_backend == "cuda":
+            coefficients = _coulomb_response_factor_coefficients(plan)
+            first, first_diagnostic = generated_weighted_first_integral_gradient_cuda(
+                rks_integral_topology(operator),
+                source_name,
+                first_compiler,
+                density=operator.state.density[0],
+                density_response=response.response.density_derivative,
+                coulomb_response_coefficients=coefficients,
+                cache=cache,
+                device_id=first_device_id,
+                budget_bytes=integral_budget_bytes,
+            )
+        elif first_backend == "cpu":
+            first = generated_weighted_first_integral_gradient(
+                rks_integral_topology(operator),
+                source_name,
+                eri_shell_weights=response_weights,
+                cache=cache,
+            )
+            first_diagnostic = {"backend": "cpu-generated-plan-weighted-first"}
+        else:
+            raise ValueError("first-integral backend must be cpu or cuda")
         second, diagnostic = generated_weighted_second_integral_hvp(
             rks_integral_topology(operator),
             source_name,
@@ -298,7 +360,8 @@ def _integral_source_hvp(
         raise FloatingPointError("nonfinite semilocal RKS integral HVP source")
     diagnostic = {
         **diagnostic,
-        "response_first_integral": "cpu-generated-plan-weighted",
+        "response_first_integral": first_diagnostic,
+        "response_first_integral_backend": first_diagnostic["backend"],
         "second_integral_backend": diagnostic["backend"],
         "stationary_hvp_plan": plan.identity,
     }
@@ -329,6 +392,9 @@ def _rks_hvp_with_response(
     execution: str,
     integral_budget_bytes: int,
     plan_weight_workspace_bytes: int,
+    first_backend: str,
+    first_compiler: typing.Any,
+    first_device_id: int,
     second_backend: str,
     second_compiler: typing.Any,
     second_device_id: int,
@@ -350,6 +416,9 @@ def _rks_hvp_with_response(
                 context.direction,
                 cache,
                 integral_budget_bytes,
+                first_backend,
+                first_compiler,
+                first_device_id,
                 second_backend,
                 second_compiler,
                 second_device_id,
@@ -445,10 +514,14 @@ def _rks_hvp_with_response(
             "integral_providers": deepcopy(provider_diagnostics),
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace_bytes,
-            "response_first_integral_backend": "cpu",
+            "directional_first_integral_backend": directional.integral_first_backend,
+            "response_first_integral_backend": first_backend,
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if second_backend == "cuda" else "host"
+                "mixed-host-device"
+                if directional.integral_first_backend == "cuda"
+                or second_backend == "cuda"
+                else "host"
             ),
             "xc_second_order": "native-scf-point-response/analytic-grid-mixed",
             "full_molecular_hessian_allocated": False,
@@ -475,6 +548,9 @@ def rks_hvp(
     cache: typing.Any = ".artifacts",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
     second_backend: str = "cpu",
     second_compiler: typing.Any = None,
     second_device_id: int = 0,
@@ -497,6 +573,10 @@ def rks_hvp(
         vector,
         cache=cache_path,
         solver_options=solver_options,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
+        first_budget_bytes=integral_budget_bytes,
     )
     return _rks_hvp_with_response(
         operator,
@@ -507,12 +587,15 @@ def rks_hvp(
         response_driver_identity="native-rks-shared-cpks-direction-v1",
         nuclear_response_solves=1,
         execution=(
-            "bounded-mixed-cuda-second-rks-hvp-v1"
-            if second_backend == "cuda"
+            "bounded-mixed-cuda-integrals-rks-hvp-v1"
+            if first_backend == "cuda" or second_backend == "cuda"
             else "bounded-cpu-native-rks-hvp-v2"
         ),
         integral_budget_bytes=integral_budget_bytes,
         plan_weight_workspace_bytes=plan_weight_workspace,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
         second_backend=second_backend,
         second_compiler=second_compiler,
         second_device_id=second_device_id,
@@ -528,6 +611,9 @@ def rks_hvp_many(
     strategy: str = "recycled",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
     second_backend: str = "cpu",
     second_compiler: typing.Any = None,
     second_device_id: int = 0,
@@ -566,6 +652,10 @@ def rks_hvp_many(
         cache=cache_path,
         strategy=strategy,
         solver_options=solver_options,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
+        first_budget_bytes=integral_budget_bytes,
     )
     results = tuple(
         _rks_hvp_with_response(
@@ -577,12 +667,15 @@ def rks_hvp_many(
             response_driver_identity="native-rks-shared-cpks-multi-rhs-v1",
             nuclear_response_solves=0,
             execution=(
-                "bounded-mixed-cuda-second-rks-hvp-multi-rhs-v1"
-                if second_backend == "cuda"
+                "bounded-mixed-cuda-integrals-rks-hvp-multi-rhs-v1"
+                if first_backend == "cuda" or second_backend == "cuda"
                 else "bounded-cpu-native-rks-hvp-multi-rhs-v1"
             ),
             integral_budget_bytes=integral_budget_bytes,
             plan_weight_workspace_bytes=plan_weight_workspace,
+            first_backend=first_backend,
+            first_compiler=first_compiler,
+            first_device_id=first_device_id,
             second_backend=second_backend,
             second_compiler=second_compiler,
             second_device_id=second_device_id,
@@ -616,16 +709,19 @@ def rks_hvp_many(
             "rank_deficient_rhs": directional.solve_result.rank_deficient_rhs,
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace,
-            "response_first_integral_backend": "cpu",
+            "directional_first_integral_backend": first_backend,
+            "response_first_integral_backend": first_backend,
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if second_backend == "cuda" else "host"
+                "mixed-host-device"
+                if first_backend == "cuda" or second_backend == "cuda"
+                else "host"
             ),
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
             "execution": (
-                "bounded-mixed-cuda-second-rks-hvp-multi-rhs-v1"
-                if second_backend == "cuda"
+                "bounded-mixed-cuda-integrals-rks-hvp-multi-rhs-v1"
+                if first_backend == "cuda" or second_backend == "cuda"
                 else "bounded-cpu-native-rks-hvp-multi-rhs-v1"
             ),
             "public_calculator_endpoint": _public_calculator_endpoint,
@@ -651,6 +747,9 @@ def rks_hessian(
     output_budget_bytes: int = 64 << 20,
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
     second_backend: str = "cpu",
     second_compiler: typing.Any = None,
     second_device_id: int = 0,
@@ -707,6 +806,9 @@ def rks_hessian(
             strategy=strategy,
             integral_budget_bytes=integral_budget_bytes,
             solver_options=solver_options,
+            first_backend=first_backend,
+            first_compiler=first_compiler,
+            first_device_id=first_device_id,
             second_backend=second_backend,
             second_compiler=second_compiler,
             second_device_id=second_device_id,
@@ -751,10 +853,13 @@ def rks_hessian(
             "output_peak_bound_bytes": output_peak_bound,
             "output_budget_bytes": output_budget_bytes,
             "integral_budget_bytes": integral_budget_bytes,
-            "response_first_integral_backend": "cpu",
+            "directional_first_integral_backend": first_backend,
+            "response_first_integral_backend": first_backend,
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if second_backend == "cuda" else "host"
+                "mixed-host-device"
+                if first_backend == "cuda" or second_backend == "cuda"
+                else "host"
             ),
             "raw_symmetry_error": symmetry_error,
             "posthoc_symmetrization": False,

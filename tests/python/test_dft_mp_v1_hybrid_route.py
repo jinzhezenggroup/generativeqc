@@ -20,7 +20,12 @@ from generativeqc.ks import (
     cuda_global_hybrid_force_eligible,
     ks_coefficients,
 )
-from generativeqc_compiler.method import compile_ks_execution_plan, resolve_method
+from generativeqc_compiler.method import (
+    D4Spec,
+    DispersionCorrectionPrimitive,
+    compile_ks_execution_plan,
+    resolve_method,
+)
 
 from tools.dft_mp_v1 import qualify_capacity
 
@@ -122,12 +127,14 @@ def _promoted(
             else _native.DENSITY_FITTING_NONE
         ),
         "semilocal_force": False,
-        "named_cpu_all_electron_force": False,
-        "cuda_wb97mv_force": False,
+        "cpu_composed_all_electron_force": False,
+        "cuda_nonlocal_force": False,
         "qualified_basis": lambda basis: blocked == "ecp",
         "qualified_direct_semilocal_context": qualified_direct_semilocal_context,
         "cuda_global_hybrid_force_eligible": cuda_global_hybrid_force_eligible,
         "SPLIT_HYBRID_SCF_DOMAIN": SPLIT_HYBRID_SCF_DOMAIN,
+        "D4Spec": D4Spec,
+        "DispersionCorrectionPrimitive": DispersionCorrectionPrimitive,
         "_native": _native,
         "_method_manifest": method_manifest,
     }
@@ -173,8 +180,10 @@ def _promoted(
     for name, expression in predicates:
         scope[name] = eval(  # noqa: S307 - execute only the trusted repository predicate
             compile(ast.Expression(expression), "<Calculator force route>", "eval"),
-            {"__builtins__": {"all": all}},
-            scope,
+            {
+                "__builtins__": {"all": all, "any": any, "isinstance": isinstance},
+                **scope,
+            },
         )
     return scope["promoted"]
 

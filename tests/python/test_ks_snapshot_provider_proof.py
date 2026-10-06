@@ -138,3 +138,24 @@ def test_fitted_fallback_policy_uses_native_proof(
     assert NativeKsSnapshot.density_fitted.fget(snapshot) == (
         "density-fitted" in proof[:2]
     )
+
+
+def test_snapshot_api_compiles_with_direct_capability_dependencies(
+    tmp_path: Path, native_cxx: typing.Any
+) -> None:
+    """Compile the real CPU translation unit, without transitive-header stubs."""
+    root = Path(__file__).resolve().parents[2]
+    native_cxx.compile_object(
+        root / "src/api/c_api_ks_snapshot.cpp",
+        tmp_path / "ks_snapshot.o",
+        args=(
+            "-std=c++20",
+            "-DGENERATIVEQC_HAS_CUDA=0",
+            "-DGENERATIVEQC_HAS_OPENBLAS=0",
+            "-DGENERATIVEQC_CUDA_PROVIDER_CUMETAL=0",
+            f"-I{root / 'include'}",
+            f"-I{root / 'src'}",
+            f"-I{root / 'src/xtb/native'}",
+            f"-I{root / 'src/xtb/native/src'}",
+        ),
+    )

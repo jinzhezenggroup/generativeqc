@@ -59,6 +59,7 @@ from ._dft_gradient import (
     native_ao_geometry_identity,
 )
 from ._stationary_rsh_cpu import RangeExchangeExecutor
+from .ks import uses_molecular_nonlocal_domain
 from .nonlocal_runtime import NativeNonlocalPairProvider
 
 
@@ -478,9 +479,11 @@ def complete_rks_gradient_diagnostic(
     plan = StationaryGradientPlan(
         method,
         StationaryMeanField(
-            state._source._batch._calculator._ks_options.scf_domain
-            if state.identity.method.startswith("wb97m-v")
-            else SCF_POINT_MODEL,
+            (
+                state._source._batch._calculator._ks_options.scf_domain
+                if uses_molecular_nonlocal_domain(state._source.method_ir)
+                else SCF_POINT_MODEL
+            ),
             hamiltonian=state._source.hamiltonian,
         ),
     )

@@ -60,7 +60,11 @@ generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch*
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy);
 /** Live native proof: 0=all-electron, 1=ECP; never inferred from electron count. */
-/** Current-owner proof of the complete RSH/VV10 model, including its density domain. */
+/** Current-owner proof of a complete range-exchange/nonlocal model, including its domain. */
+generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count);
+/** Compatibility alias for the original WB97M-V-specific symbol. */
 generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);

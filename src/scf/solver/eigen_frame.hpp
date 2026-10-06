@@ -12,7 +12,8 @@ struct EigenFrameDiagnostic {
 };
 /** Apply the common absolute/scaled gates to finite backend-produced evidence.
  * Product overflow must be reported by the producer before calling this gate. */
-bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& detail);
+bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& detail,
+                        bool require_eigen_residual = true);
 
 /** Validate the returned frame independently of the production eigen backend.
  * A null overlap means I. The existing physical-reference absolute 1e-8
@@ -22,5 +23,6 @@ bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& det
 bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<double>* overlap,
                           const std::vector<double>& eigenvalues,
                           const std::vector<double>& coefficients, std::size_t n,
-                          EigenFrameDiagnostic& diagnostic, std::string& detail);
+                          EigenFrameDiagnostic& diagnostic, std::string& detail,
+                          bool require_eigen_residual = true);
 }  // namespace generativeqc::scf::solver
