@@ -3,6 +3,8 @@
 Run with GENERATIVEQC_HYBRID_FORCE_CUDA_TEST=1 in a finite Slurm GPU allocation.
 Each case checks the converged endpoint, both reconverged finite-difference
 steps, source accounting, and reuse of the prepared force owner.
+GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST=1 explicitly admits the phased primitive
+on these small physical systems; it does not change production's auto threshold.
 """
 
 import json
@@ -38,6 +40,21 @@ def pinned_reference() -> None:
 
     assert pyscf.__version__ == "2.14.0"
     assert libxc.libxc_version() == "7.0.0"
+
+
+@pytest.fixture(autouse=True)
+def small_physical_becke_primitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the authenticated active-prefix primitive on physical RKS/UKS.
+
+    Production automatic phase admission starts at 48 atoms. The small-system
+    scientific oracle gate intentionally selects the same phased owner without
+    changing its native domain, memory admission, or generated math.
+    """
+    if os.environ.get("GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST") == "1":
+        from generativeqc import _stationary_cuda as runtime
+
+        monkeypatch.setattr(runtime, "_AUTO_PHASED_BECKE_MIN_ATOMS", 2)
+        monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
 
 
 @pytest.mark.parametrize(
@@ -243,6 +260,15 @@ def test_public_cuda_global_hybrid_force(
         per_execution = len(atoms) * (len(atoms) - 1) // 2
         assert len(force_work) == 2
         for work in force_work:
+            if os.environ.get("GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST") == "1":
+                assert work["becke_primitive_requested"] == 1
+                assert work["becke_primitive_selected"] == 1
+                assert work["becke_primitive_batches"] > 0
+                assert work["becke_reverse_pair_visits"] > 0
+                assert (
+                    work["becke_primitive_reverse_pair_visits"]
+                    == work["becke_reverse_pair_visits"]
+                )
             assert (
                 work["stationary_integral_derivative_route"]
                 == "prepared-native-complete"
@@ -331,6 +357,18 @@ def test_public_cuda_global_hybrid_force(
             "finite_difference": estimates,
             "analytic_directional_derivative": analytic,
             "artifacts": artifacts,
+            "becke_small_physical_admission": os.environ.get(
+                "GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST"
+            )
+            == "1",
+            "becke_force_work": [
+                {
+                    key: value
+                    for key, value in work.items()
+                    if key.startswith(("becke_", "phased_becke_"))
+                }
+                for work in force_work
+            ],
         },
     )
 

@@ -371,7 +371,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "3f78cb6d8af0fa39c8420ea4c61fc8a9783d7ee78a47f288bd596de4f01496a7"
+    "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -405,7 +405,16 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "6b3343808acd8ba16c1de2bfc21b1fa491028e7005ff7d8a80521823f60ed535"
+    "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
+)
+NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256 = (
+    "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
+)
+NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256 = (
+    "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
+)
+NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256 = (
+    "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
 )
 NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256 = (
     "b7f8d1b346ae580f2c977cece992aa5cbea0582adcc9e0f2ab76c0fa94831e4b"
@@ -920,6 +929,18 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_becke_primitive_metrics_sha256": (
             "int stationary_becke_primitive_metrics_v1(",
             NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_phase_metrics_sha256": (
+            "int stationary_becke_phase_metrics_v1(",
+            NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_phase_profile_sha256": (
+            "int stationary_becke_phase_profile_v1(",
+            NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256,
+        ),
+        "native_profile_sha256": (
+            "int stationary_profile(",
+            NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256,
         ),
         "native_finish_span_sha256": (
             "int stationary_finish_span(",

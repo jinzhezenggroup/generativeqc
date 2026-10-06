@@ -347,7 +347,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
         ),
         "native_owner_sha256": (
-            "3f78cb6d8af0fa39c8420ea4c61fc8a9783d7ee78a47f288bd596de4f01496a7"
+            "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -377,7 +377,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "6b3343808acd8ba16c1de2bfc21b1fa491028e7005ff7d8a80521823f60ed535"
+            "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -390,6 +390,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "native_becke_primitive_metrics_sha256": (
             "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
+        ),
+        "native_becke_phase_metrics_sha256": (
+            "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
+        ),
+        "native_becke_phase_profile_sha256": (
+            "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
+        ),
+        "native_profile_sha256": (
+            "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
         ),
         "native_finish_span_sha256": (
             "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
@@ -2402,6 +2411,24 @@ def test_geometry_resource_budget_changes_fail_closed(
             "p->atoms > stationary_becke_max_atoms",
             "p->atoms > 128",
             "native_configure_becke_sha256",
+        ),
+        (
+            "int stationary_becke_phase_metrics_v1(",
+            "const uint64_t reverse_words = owner->becke_primitive ? 2 : 4;",
+            "const uint64_t reverse_words = 1;",
+            "native_becke_phase_metrics_sha256",
+        ),
+        (
+            "int stationary_becke_phase_profile_v1(",
+            "count != 7",
+            "count != 8",
+            "native_becke_phase_profile_sha256",
+        ),
+        (
+            "int stationary_profile(",
+            "cudaEvent_t events[12]{};",
+            "cudaEvent_t events[4]{};",
+            "native_profile_sha256",
         ),
     ],
 )

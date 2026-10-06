@@ -111,6 +111,34 @@ _INT = ct.POINTER(ct.c_int64)
 _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
 _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
 _AUTO_PHASED_BECKE_MIN_ATOMS = 48
+_BECKE_PHASE_NAMES = (
+    "point_center_distance",
+    "pair_primal_switch_log",
+    "atom_log_reduction",
+    "normalization",
+    "reverse_derivative",
+    "atom_gather",
+    "point_motion_publication",
+)
+_BECKE_PHASE_COUNTER_NAMES = (
+    "becke_phase_batches",
+    "becke_phase_points",
+    "becke_distance_atom_entries",
+    "becke_pair_primal_visits",
+    "becke_log_incident_visits",
+    "becke_normalization_atom_entries",
+    "becke_reverse_pair_visits",
+    "becke_gather_incident_visits",
+    "becke_motion_atom_entries",
+    "becke_phase_launches",
+    "becke_primal_pair_panel_write_bytes",
+    "becke_reverse_pair_panel_write_bytes",
+    "becke_gather_unique_pair_panel_read_bytes",
+    "becke_gather_extra_center_direction_read_bytes",
+    "becke_profile_batches",
+    "becke_profile_event_records",
+    "becke_profile_synchronizations",
+)
 
 
 def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
@@ -1650,6 +1678,45 @@ class _CudaSources:
                     primitive_values,
                 )
             )
+        becke_counters = getattr(
+            self.library, "stationary_becke_phase_metrics_v1", None
+        )
+        if becke_counters is not None:
+            becke_counters.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            becke_values = (ct.c_uint64 * len(_BECKE_PHASE_COUNTER_NAMES))()
+            if becke_counters(self.handle, becke_values, len(becke_values)):
+                raise RuntimeError("stationary Becke phase counters unavailable")
+            metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values))
+            metrics["becke_work_counter_semantics"] = (
+                "launched dense domains; failed forces are not accepted work"
+            )
+            metrics["becke_traffic_model"] = (
+                "logical distinct pair-panel values and extra cached directions; "
+                "not executed loads or hardware transactions"
+            )
+        becke_profile = getattr(self.library, "stationary_becke_phase_profile_v1", None)
+        metrics["becke_phase_profile_supported"] = becke_profile is not None
+        metrics["becke_phase_profile_enabled"] = (
+            self.profile_device and becke_profile is not None
+        )
+        if becke_profile is not None:
+            becke_profile.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_double),
+                ct.c_size_t,
+            ]
+            becke_times = (ct.c_double * len(_BECKE_PHASE_NAMES))()
+            if becke_profile(self.handle, becke_times, len(becke_times)):
+                raise RuntimeError("stationary Becke phase profile unavailable")
+            metrics["becke_phase_ms"] = dict(zip(_BECKE_PHASE_NAMES, becke_times))
+            metrics["becke_phase_profile_scope"] = (
+                "phased kernels after AO/XC seeds; intrusive per-tile fence "
+                "when enabled; generic fallback is not split"
+            )
         profile = (ct.c_double * 10)()
         if self.profile_device:
             self.library.stationary_profile_metrics.argtypes = [
@@ -2194,6 +2261,7 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "phased_becke_batches",
         "becke_primitive_batches",
         "becke_primitive_reverse_pair_visits",
+        *_BECKE_PHASE_COUNTER_NAMES,
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]
@@ -2201,6 +2269,11 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         result["device_phase_ms"] = {
             name: value - before["device_phase_ms"][name]
             for name, value in after["device_phase_ms"].items()
+        }
+    if "becke_phase_ms" in after and "becke_phase_ms" in before:
+        result["becke_phase_ms"] = {
+            name: value - before["becke_phase_ms"][name]
+            for name, value in after["becke_phase_ms"].items()
         }
     return result
 

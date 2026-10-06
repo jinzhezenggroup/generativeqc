@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes as ct
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,6 +85,7 @@ def native() -> SimpleNamespace:
             size,
         ],
         "stationary_finish": [pointer, pointer, size],
+        "stationary_profile": [pointer],
     }
     if hasattr(library, "stationary_configure_becke_primitive_v1"):
         signatures["stationary_configure_becke_primitive_v1"] = [pointer, ct.c_int]
@@ -102,6 +104,12 @@ def native() -> SimpleNamespace:
             ct.POINTER(ct.c_uint64),
             size,
         ]
+    for name, scalar in (
+        ("stationary_becke_phase_metrics_v1", ct.c_uint64),
+        ("stationary_becke_phase_profile_v1", ct.c_double),
+    ):
+        if hasattr(library, name):
+            getattr(library, name).argtypes = [pointer, ct.POINTER(scalar), size]
 
     def call(name: str, *arguments: object) -> None:
         error = ct.create_string_buffer(4096)
@@ -117,6 +125,7 @@ def native() -> SimpleNamespace:
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
 @pytest.mark.parametrize("external", [False, True])
 @pytest.mark.parametrize("primitive", [False, True])
+@pytest.mark.parametrize("profiled", [False, True])
 def test_shared_owner_phases_preserve_sources_and_work(
     native: SimpleNamespace,
     atoms: int,
@@ -124,6 +133,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
     selection: str,
     external: bool,
     primitive: bool,
+    profiled: bool,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
 
@@ -134,6 +144,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
         native.library, "stationary_configure_becke_primitive_v1"
     ):
         pytest.skip("artifact predates whole-domain primitive admission")
+    if profiled and not hasattr(native.library, "stationary_becke_phase_profile_v1"):
+        pytest.skip("artifact predates separate Becke phase profiling")
     cupy = native.cupy
     rng = np.random.default_rng(183000 + atoms)
     centers = rng.normal(size=(atoms, 3)) * 3
@@ -157,6 +169,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
     host_atoms = np.array([0, 1, atoms - 2, atoms - 1], dtype=np.int64)
     baseline = []
     for phased in (False, True):
+        max_abs_error = 0.0
+        max_scaled_error = 0.0
         plan = plan_stationary_cuda_resources(
             atoms=atoms,
             aos=4,
@@ -189,6 +203,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
         )
         stream = cupy.cuda.Stream(non_blocking=True)
         try:
+            if profiled:
+                native.call("stationary_profile", handle)
             native.call(
                 "stationary_configure_becke",
                 handle,
@@ -301,6 +317,17 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     "stationary_finish", handle, result.ctypes.data, result.size
                 )
                 if phased:
+                    difference = np.abs(result - baseline[geometry])
+                    max_abs_error = max(max_abs_error, float(np.max(difference)))
+                    max_scaled_error = max(
+                        max_scaled_error,
+                        float(
+                            np.max(
+                                difference
+                                / (2e-11 + 5e-12 * np.abs(baseline[geometry]))
+                            )
+                        ),
+                    )
                     np.testing.assert_allclose(
                         result, baseline[geometry], rtol=5e-12, atol=2e-11
                     )
@@ -319,6 +346,80 @@ def test_shared_owner_phases_preserve_sources_and_work(
             assert phase_metrics[0] == plan.phased_becke_bytes
             assert phase_metrics[1] == (6 if phased else 0)
             assert metrics[0] == plan.allocation_bytes
+            if hasattr(native.library, "stationary_becke_phase_metrics_v1"):
+                phase_work = (ct.c_uint64 * 17)()
+                phase_times = (ct.c_double * 7)()
+                assert (
+                    native.library.stationary_becke_phase_metrics_v1(
+                        handle, phase_work, 17
+                    )
+                    == 0
+                )
+                assert (
+                    native.library.stationary_becke_phase_profile_v1(
+                        handle, phase_times, 7
+                    )
+                    == 0
+                )
+                points = 3 * 257 if phased else 0
+                pairs = points * atoms * (atoms - 1) // 2
+                words = 2 if primitive and phased else 4
+                profiled_batches = 6 if profiled and phased else 0
+                assert tuple(phase_work) == (
+                    6 if phased else 0,
+                    points,
+                    points * atoms,
+                    pairs,
+                    2 * pairs,
+                    points * atoms,
+                    pairs,
+                    2 * pairs,
+                    points * atoms,
+                    42 if phased else 0,
+                    4 * 8 * pairs,
+                    words * 8 * pairs,
+                    2 * words * 8 * pairs,
+                    2 * 3 * 8 * pairs if primitive and phased else 0,
+                    profiled_batches,
+                    8 * profiled_batches,
+                    profiled_batches,
+                )
+                if profiled_batches:
+                    assert all(
+                        np.isfinite(value) and value > 0 for value in phase_times
+                    )
+                else:
+                    assert tuple(phase_times) == (0.0,) * 7
+                if path := os.environ.get("GENERATIVEQC_BECKE_PHASE_RECORD"):
+                    with Path(path).open("a") as records:
+                        records.write(
+                            json.dumps(
+                                {
+                                    "atoms": atoms,
+                                    "implicit": implicit,
+                                    "selection": selection,
+                                    "external": external,
+                                    "primitive_requested": primitive,
+                                    "phased": phased,
+                                    "profiled": profiled,
+                                    "phase_work": list(phase_work),
+                                    "phase_ms": list(phase_times),
+                                    "generic_ad_max_abs_error": max_abs_error
+                                    if phased
+                                    else None,
+                                    "generic_ad_max_scaled_error": max_scaled_error
+                                    if phased
+                                    else None,
+                                    "generic_ad_tolerance": {
+                                        "atol": 2e-11,
+                                        "rtol": 5e-12,
+                                    },
+                                    "scope": "synthetic shared-owner qualification; not endpoint",
+                                },
+                                sort_keys=True,
+                            )
+                            + "\n"
+                        )
             if hasattr(native.library, "stationary_becke_primitive_metrics_v1"):
                 primitive_metrics = (ct.c_uint64 * 4)()
                 assert (
