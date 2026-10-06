@@ -36,7 +36,6 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
     values = {
         "profile_id": "test-qualified-domain",
         "evidence": ("test:complete-cold-warm-moved",),
-        "architectures": ("sm_120",),
         "compositions": ("ordinary", "composite"),
         "derivative_orders": (1, 2),
         "spin_blocks": (1, 2),
@@ -56,7 +55,7 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
 def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> None:
     assert tuple(
         profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("sm120-ordinary-direct-active-ao-v2",)
+    ) == ("ordinary-direct-active-ao-cost-v3",)
 
     below_crossover = resolve_force_active_ao_policy(_workload())
     assert not below_crossover.selected
@@ -71,6 +70,8 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
         _workload(atoms=200, aos=384, grid_points=1_179_648),
         _workload(derivative_order=1, grid_points=1_179_648),
         _workload(spin_blocks=2, grid_points=1_179_648),
+        _workload(architecture="sm_90", grid_points=1_179_648),
+        _workload(architecture="sm_89", aos=512, grid_points=700_000),
     ):
         decision = resolve_force_active_ao_policy(workload)
         assert decision.selected
@@ -82,7 +83,6 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
 @pytest.mark.parametrize(
     "updates",
     [
-        {"architecture": "sm_90", "grid_points": 1_179_648},
         {"composition": "composite", "grid_points": 1_179_648},
         {"density_fitted": True, "grid_points": 1_179_648},
         {"grid_points": 1_179_647},
@@ -136,7 +136,7 @@ def test_same_resolver_can_cover_composite_without_method_identity() -> None:
     )
     assert decision.selected
     names = {field.name.lower() for field in fields(QualifiedForceActiveAoProfile)}
-    for forbidden in ("method", "functional", "selector"):
+    for forbidden in ("method", "functional", "selector", "architecture"):
         assert not any(forbidden in name for name in names)
 
 
