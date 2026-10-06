@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 #include "generated_direct_resident_psss_schedule.cuh"
@@ -18,6 +19,20 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+bool direct_force_resident_bra_capacity_supported(std::size_t task_count,
+                                                  std::size_t primitive_pair_capacity) noexcept {
+  return task_count != 0U && task_count <= std::numeric_limits<unsigned>::max() &&
+         primitive_pair_capacity != 0U &&
+         primitive_pair_capacity <= kResidentPsssMaximumBraPrimitivePairs;
+}
+
+bool direct_force_resident_bra_schedule_available(
+    DirectForceResidentBraSchedule schedule) noexcept {
+  return schedule.tasks != nullptr && schedule.ket_pairs != nullptr &&
+         direct_force_resident_bra_capacity_supported(schedule.task_count,
+                                                      schedule.bra_primitive_pair_capacity);
+}
+
 /** Fixed-capacity wrapper for the small generic high-order force grids. */
 template <bool Unrestricted, unsigned AngularOrder,
           DirectForceOutputMode Mode = DirectForceOutputMode::Combined>
@@ -27,8 +42,8 @@ __global__ void two_electron_force_quartet_kernel(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
     double exchange_coefficient) {
-  contract_two_electron_force_quartet_subtile_scaled<
-      Unrestricted, AngularOrder, Mode == DirectForceOutputMode::Separate>(
+  contract_two_electron_force_quartet_subtile_scaled<Unrestricted, AngularOrder,
+                                                     Mode == DirectForceOutputMode::Separate>(
       batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
       schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
       exchange_coefficient, static_cast<std::size_t>(blockIdx.x), threadIdx.x);
@@ -242,8 +257,8 @@ __global__ void two_electron_force_quartet_persistent_kernel(
     if (lane == 0) active_subtile = atomicAdd(task_head, 1U);
     active_subtile = __shfl_sync(0xffffffffU, active_subtile, 0);
     if (active_subtile >= work_count) return;
-    contract_two_electron_force_quartet_subtile_scaled<
-      Unrestricted, AngularOrder, Mode == DirectForceOutputMode::Separate>(
+    contract_two_electron_force_quartet_subtile_scaled<Unrestricted, AngularOrder,
+                                                       Mode == DirectForceOutputMode::Separate>(
         batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
         schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
         exchange_coefficient, active_subtile, threadIdx.x);
@@ -287,9 +302,9 @@ void launch_angular_force_quartets(
                             schwarz_bounds, density, active, forces, coulomb_coefficient,
                             exchange_coefficient);
       } else if constexpr (AngularOrder == kFusedPsssAngularOrder) {
-        if (psss_resident_tasks != nullptr && psss_resident_ket_pairs != nullptr &&
-            psss_resident_task_count != 0 && resident_psss_bra_primitive_pairs != 0 &&
-            resident_psss_bra_primitive_pairs <= kResidentPsssMaximumBraPrimitivePairs) {
+        if (direct_force_resident_bra_schedule_available(
+                {psss_resident_tasks, psss_resident_ket_pairs, psss_resident_task_count,
+                 resident_psss_bra_primitive_pairs})) {
           two_electron_force_psss_resident_bra_kernel<Unrestricted, Mode>
               <<<static_cast<unsigned>(psss_resident_task_count), kResidentPsssThreads,
                  resident_psss_bra_primitive_pairs * sizeof(PrimitivePairData), stream>>>(
@@ -393,17 +408,19 @@ void launch_two_electron_force_psss_resident_bra_kernel_scaled(
     double exchange_coefficient, DirectForceOutputMode output_mode) {
   auto launch = [&]<DirectForceOutputMode Mode>() {
     if (unrestricted == true) {
-      two_electron_force_psss_resident_bra_kernel<true, Mode><<<grid, block, shared_bytes, stream>>>(
-          batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
-          shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-          schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
-          exchange_coefficient);
+      two_electron_force_psss_resident_bra_kernel<true, Mode>
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
+              shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
+              schwarz_bounds, density, active, forces, generated_shell_class_mask,
+              coulomb_coefficient, exchange_coefficient);
     } else {
-      two_electron_force_psss_resident_bra_kernel<false, Mode><<<grid, block, shared_bytes, stream>>>(
-          batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
-          shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-          schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
-          exchange_coefficient);
+      two_electron_force_psss_resident_bra_kernel<false, Mode>
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
+              shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
+              schwarz_bounds, density, active, forces, generated_shell_class_mask,
+              coulomb_coefficient, exchange_coefficient);
     }
   };
   if (output_mode == DirectForceOutputMode::Separate)
@@ -426,6 +443,24 @@ void launch_two_electron_force_psss_resident_bra_kernel(
       resident_task_count, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
       force_density_product_screening, schwarz_bounds, density, active, forces,
       generated_shell_class_mask, 1.0, exchange_coefficient);
+}
+
+cudaError_t launch_direct_force_resident_bra(
+    DirectForceOutputMode output_mode, bool unrestricted, cudaStream_t stream, DeviceBatch batch,
+    DirectForceResidentBraSchedule schedule, double screening_tolerance,
+    const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
+    bool force_density_product_screening, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask,
+    double coulomb_coefficient, double exchange_coefficient) {
+  if (!direct_force_resident_bra_schedule_available(schedule)) return cudaErrorNotSupported;
+  launch_two_electron_force_psss_resident_bra_kernel_scaled(
+      unrestricted, static_cast<unsigned>(schedule.task_count), kResidentPsssThreads,
+      schedule.bra_primitive_pair_capacity * sizeof(PrimitivePairData), stream, batch,
+      schedule.tasks, schedule.ket_pairs, schedule.task_count, screening_tolerance,
+      shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening, schwarz_bounds,
+      density, active, forces, generated_shell_class_mask, coulomb_coefficient,
+      exchange_coefficient, output_mode);
+  return cudaGetLastError();
 }
 
 void dispatch_angular_force_quartets_scaled(

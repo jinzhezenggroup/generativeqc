@@ -6,11 +6,23 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "scf/cuda/direct_metadata.hpp"
+#include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_force_sources.hpp"
+#include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+/** Launch one admitted psss lease with the compiler-owned launch dimensions.
+ * Returning NotSupported leaves ownership with the caller's bounded scheduler;
+ * success transfers the whole psss domain for this stream-ordered force call. */
+cudaError_t launch_direct_force_resident_bra(
+    DirectForceOutputMode output_mode, bool unrestricted, cudaStream_t stream, DeviceBatch batch,
+    DirectForceResidentBraSchedule schedule, double screening_tolerance,
+    const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
+    bool force_density_product_screening, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask,
+    double coulomb_coefficient, double exchange_coefficient);
 
 /** Shared resident-bra scheduler for Combined or Separate signed J/K forces.
  * Caller admits a complete canonical bra view and owns stream-ordered lifetime.

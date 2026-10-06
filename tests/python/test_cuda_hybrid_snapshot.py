@@ -67,8 +67,12 @@ def test_cuda_hybrid_snapshot_matches_cpu_composition_and_state(method: str) -> 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks", "pbe-rks"))
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("force_schedule", ("bounded", "angular", "resident"))
 def test_separate_full_range_derivatives_match_libcint(
-    method: str, representation: str
+    method: str,
+    representation: str,
+    force_schedule: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One shell traversal must still publish independent J'/K' source channels.
 
@@ -80,6 +84,16 @@ def test_separate_full_range_derivatives_match_libcint(
     from pyscf.grad import rhf
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    # Preparation freezes optional resources. Each schedule must independently
+    # match Libcint at the same final density, including disabled K and both
+    # public AO representations; runtime flags cannot repair an existing plan.
+    monkeypatch.setenv(
+        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
+        "off" if force_schedule == "bounded" else "angular",
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_PSSS_RESIDENT_BRA", "1" if force_schedule == "resident" else "0"
+    )
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
     unrestricted = method.endswith("uks")
     charge, multiplicity = (1, 2) if unrestricted else (0, 1)

@@ -12,7 +12,9 @@ from test_direct_jk_optional_allocation import _definition
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_shared_inventory_has_exact_batched_ownership_and_budget(tmp_path: Path) -> None:
+def test_shared_inventory_has_exact_batched_ownership_and_budget(
+    tmp_path: Path,
+) -> None:
     """Exercise multi-chunk bras, mixed classes, empty systems and exact budgets."""
     source = (ROOT / "src/scf/cuda/topology.cpp").read_text()
     definition = _definition(source, "bool make_direct_force_resident_bra_schedule(")
