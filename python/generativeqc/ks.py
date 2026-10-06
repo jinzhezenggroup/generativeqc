@@ -488,6 +488,29 @@ def electronic_method_ir(method_ir: MethodIR) -> MethodIR:
     return _d4_electronic_projection(method_ir) or method_ir
 
 
+def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
+    """Check the manifest-owned public stationary HVP/Hessian qualification."""
+    try:
+        record = _native_semilocal_record(method_ir)
+        plan = compile_ks_execution_plan(method_ir)
+    except (TypeError, ValueError, NotImplementedError):
+        return False
+    return (
+        bool(record["stationary_second_order"])
+        and not plan.exchange
+        and plan.nonlocal_correlation is None
+        and not plan.post_scf
+    )
+
+
+def uses_molecular_nonlocal_domain(method_ir: MethodIR) -> bool:
+    """Return the generated molecular nonlocal-domain capability for one KS graph."""
+    try:
+        return bool(_native_semilocal_record(method_ir)["molecular_nonlocal_domain"])
+    except (TypeError, ValueError, NotImplementedError):
+        return False
+
+
 def _record_components(record: typing.Mapping[str, typing.Any]) -> dict[str, Fraction]:
     return {name: Fraction(coefficient) for name, coefficient in record["components"]}
 
