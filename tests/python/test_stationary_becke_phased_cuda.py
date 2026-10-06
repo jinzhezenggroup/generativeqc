@@ -120,7 +120,7 @@ def native() -> SimpleNamespace:
     return SimpleNamespace(cupy=cupy, library=library, call=call)
 
 
-@pytest.mark.parametrize("atoms", [48, 96])
+@pytest.mark.parametrize("atoms", [48, 96, 128])
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
 @pytest.mark.parametrize("external", [False, True])
@@ -139,6 +139,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
 
     Synthetic AO/features isolate routing and lifetime; they are not a molecular
     oracle. Independent Becke Decimal tests and complete E/F gates are separate.
+    Include the actual 128-atom primitive cap, not only the two endpoint sizes.
     """
     if primitive and not hasattr(
         native.library, "stationary_configure_becke_primitive_v1"
