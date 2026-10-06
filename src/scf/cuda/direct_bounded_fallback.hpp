@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
@@ -31,7 +32,8 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
     const double* block_bounds, const double* system_bounds, const std::uint32_t* class_state,
     const double* schwarz, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* cursor, DirectRangeOperator range, double omega, double coulomb_coefficient,
-    double exchange_coefficient, detail::BoundedDirectBlockDomain domain = {});
+    double exchange_coefficient, detail::BoundedDirectBlockDomain domain = {},
+    DirectForceResidentBraSchedule resident = {});
 
 /** Force-output fallback; purpose selects screening semantics, not the scientific output. */
 /** Method-neutral force variant. Coefficients multiply the Coulomb and exchange

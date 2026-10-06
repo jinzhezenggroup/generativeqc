@@ -8,15 +8,13 @@
 #include <type_traits>
 
 #include "generated_derivative_cuda_shell_aot.cuh"
+#include "scf/cuda/direct_angular_force.hpp"
 #include "scf/cuda/direct_bounded_contraction.cuh"
 #include "scf/cuda/direct_bounded_fallback.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
 #include "scf/cuda/direct_force_execution.cuh"
-#include "scf/cuda/direct_force_low_order.cuh"
-#include "scf/cuda/direct_force_order2.cuh"
-#include "scf/cuda/direct_force_order3.cuh"
 #include "scf/cuda/direct_force_order4_sources.cuh"
 #include "scf/cuda/direct_force_order5_sources.cuh"
 #include "scf/cuda/direct_metadata.hpp"
@@ -466,35 +464,52 @@ cudaError_t launch_angular_force_passes(
     const std::uint32_t* class_state, const double* schwarz, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient, double omega,
-    detail::BoundedDirectBlockDomain domain) {
-  auto error = cudaMemsetAsync(cursor, 0, sizeof(*cursor), stream);
-  if (error != cudaSuccess) return error;
-  auto launch = [&]<bool PairDerivatives>() {
-    constexpr std::size_t shared_bytes =
-        PairDerivatives ? sizeof(MaterializedDirectPairDerivativeRecurrence) : 0U;
-    bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, Order,
-                                        static_cast<int>(Range), PairDerivatives>
-        <<<grid, block, shared_bytes, stream>>>(
-            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds, pair_order,
-            block_bounds, system_bounds, nullptr, 0U, class_state, schwarz, density, active, output,
-            cursor, nullptr, coulomb_coefficient, exchange_coefficient, Range, omega, 0.0, false,
-            Range == DirectRangeOperator::Long, domain);
-  };
-  if constexpr (Order == 8 && Range == DirectRangeOperator::FullSources) {
-    if (materialized_pair_derivative_available(batch))
-      launch.template operator()<true>();
-    else
+    detail::BoundedDirectBlockDomain domain, DirectForceResidentBraSchedule resident) {
+  auto launch_bounded = [&]() {
+    auto error = cudaMemsetAsync(cursor, 0, sizeof(*cursor), stream);
+    if (error != cudaSuccess) return error;
+    auto launch = [&]<bool PairDerivatives>() {
+      constexpr std::size_t shared_bytes =
+          PairDerivatives ? sizeof(MaterializedDirectPairDerivativeRecurrence) : 0U;
+      bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, Order,
+                                          static_cast<int>(Range), PairDerivatives>
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds, pair_order,
+              block_bounds, system_bounds, nullptr, 0U, class_state, schwarz, density, active,
+              output, cursor, nullptr, coulomb_coefficient, exchange_coefficient, Range, omega, 0.0,
+              false, Range == DirectRangeOperator::Long, domain);
+    };
+    if constexpr (Order == 8 && Range == DirectRangeOperator::FullSources) {
+      if (materialized_pair_derivative_available(batch))
+        launch.template operator()<true>();
+      else
+        launch.template operator()<false>();
+    } else {
       launch.template operator()<false>();
+    }
+    return cudaGetLastError();
+  };
+  cudaError_t error = cudaSuccess;
+  if constexpr (Order == 1U && Range == DirectRangeOperator::FullSources) {
+    // The resident lease owns the complete psss class. Replace this pass,
+    // rather than adding a second traversal or masking individual channels.
+    error = direct_force_resident_bra_schedule_available(resident)
+                ? launch_direct_force_resident_bra(DirectForceOutputMode::Separate, Unrestricted,
+                                                   stream, batch, resident, screening_tolerance,
+                                                   shell_pair_bounds, shell_pair_density_bounds,
+                                                   true, schwarz, density, active, output, 0U,
+                                                   coulomb_coefficient, exchange_coefficient)
+                : launch_bounded();
   } else {
-    launch.template operator()<false>();
+    error = launch_bounded();
   }
-  error = cudaGetLastError();
   if (error != cudaSuccess) return error;
   if constexpr (Order < 12U)
     return launch_angular_force_passes<Unrestricted, Range, Order + 1U>(
         grid, block, stream, batch, screening_tolerance, shell_pair_bounds,
         shell_pair_density_bounds, pair_order, block_bounds, system_bounds, class_state, schwarz,
-        density, active, output, cursor, coulomb_coefficient, exchange_coefficient, omega, domain);
+        density, active, output, cursor, coulomb_coefficient, exchange_coefficient, omega, domain,
+        resident);
   return cudaSuccess;
 }
 
@@ -505,14 +520,16 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
     const double* block_bounds, const double* system_bounds, const std::uint32_t* class_state,
     const double* schwarz, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* cursor, DirectRangeOperator range, double omega, double coulomb_coefficient,
-    double exchange_coefficient, detail::BoundedDirectBlockDomain domain) {
+    double exchange_coefficient, detail::BoundedDirectBlockDomain domain,
+    DirectForceResidentBraSchedule resident) {
   if (range != DirectRangeOperator::FullSources && range != DirectRangeOperator::Long)
     return cudaErrorInvalidValue;
 #define GENERATIVEQC_ANGULAR_FORCE(U, R)                                                           \
   launch_angular_force_passes<U, R>(                                                               \
       worker_blocks, kBoundedDirectThreads, stream, batch, screening_tolerance, shell_pair_bounds, \
       shell_pair_density_bounds, pair_order, block_bounds, system_bounds, class_state, schwarz,    \
-      density, active, output, cursor, coulomb_coefficient, exchange_coefficient, omega, domain)
+      density, active, output, cursor, coulomb_coefficient, exchange_coefficient, omega, domain,   \
+      resident)
   if (range == DirectRangeOperator::Long)
     return unrestricted ? GENERATIVEQC_ANGULAR_FORCE(true, DirectRangeOperator::Long)
                         : GENERATIVEQC_ANGULAR_FORCE(false, DirectRangeOperator::Long);

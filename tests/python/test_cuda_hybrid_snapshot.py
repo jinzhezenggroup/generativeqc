@@ -69,13 +69,13 @@ def test_cuda_hybrid_snapshot_matches_cpu_composition_and_state(method: str) -> 
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
 @pytest.mark.parametrize("materialized_derivative", ("0", "1"))
 @pytest.mark.parametrize("two_oxygens", (False, True))
-@pytest.mark.parametrize("angular_partition", (False, True))
+@pytest.mark.parametrize("force_schedule", ("bounded", "angular", "resident"))
 def test_separate_full_range_derivatives_match_libcint(
     method: str,
     representation: str,
     materialized_derivative: str,
     two_oxygens: bool,
-    angular_partition: bool,
+    force_schedule: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One shell traversal must still publish independent J'/K' source channels.
@@ -92,7 +92,11 @@ def test_separate_full_range_derivatives_match_libcint(
         "GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES", materialized_derivative
     )
     monkeypatch.setenv(
-        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "angular" if angular_partition else "none"
+        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
+        "off" if force_schedule == "bounded" else "angular",
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_PSSS_RESIDENT_BRA", "1" if force_schedule == "resident" else "0"
     )
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
     if two_oxygens:

@@ -1079,7 +1079,7 @@ cudaError_t launch_bounded_shell_angular_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DirectCoulombRange range, double omega, double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain) {
+    detail::BoundedDirectBlockDomain block_domain, DirectForceResidentBraSchedule resident) {
   if (range != DirectCoulombRange::Full && range != DirectCoulombRange::Long)
     return cudaErrorInvalidValue;
   // Keep the host provider independent of the Direct consumer's radial enum
@@ -1090,7 +1090,7 @@ cudaError_t launch_bounded_shell_angular_energy_derivative(
       class_state, schwarz_bounds, density, active, output, cursor,
       range == DirectCoulombRange::Full ? DirectRangeOperator::FullSources
                                         : DirectRangeOperator::Long,
-      omega, coulomb_coefficient, exchange_coefficient, block_domain);
+      omega, coulomb_coefficient, exchange_coefficient, block_domain, resident);
 }
 
 void launch_bounded_shell_range_exchange_derivative(

@@ -1,13 +1,16 @@
 """Fault-inject the production shell derivative wrappers without CUDA hardware."""
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_force_density_coefficient,
 )
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,10 +31,9 @@ def _extract_function(source: str, symbol: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def host_lifetime_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: "NativeCxx"
+) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     bodies = []
     for route in ("full_range", "rsh"):
@@ -47,23 +49,17 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "// PRODUCTION_DENSITY_COEFFICIENT", emit_direct_force_density_coefficient()
     )
     cpp.write_text(prefix + body + SUFFIX)
-    result = subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-O0",
             "-I" + str(folder),
             "-I" + str(ROOT / "src"),
-            str(cpp),
-            "-o",
-            str(binary),
         ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
+        compile_timeout=60,
     )
-    assert result.returncode == 0, result.stderr
     return binary
 
 
@@ -251,6 +247,7 @@ struct GeneratedExchangePlan {
   double *shell_pair_density_bounds=nullptr, *system_density_bounds=nullptr;
   double* direct_spin=nullptr;
   int bounded_block_domain=0;
+  int force_resident_bra=41;
 };
 // PRODUCTION_DENSITY_COEFFICIENT
 int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const double* alpha,const double*) {
@@ -296,6 +293,11 @@ template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&
      (range==DirectCoulombRange::Long && std::get<18>(values)!=0.0))
     throw std::runtime_error("wrong angular radial/source arguments");
   if(std::get<20>(values)!=37) throw std::runtime_error("angular route lost borrowed domain");
+  if constexpr (sizeof...(Args)==22) {
+    if(range!=DirectCoulombRange::Full || std::get<21>(values)!=41)
+      throw std::runtime_error("full-range route lost resident lease");
+  } else if(range==DirectCoulombRange::Full)
+    throw std::runtime_error("full-range route omitted resident lease");
   if(range==DirectCoulombRange::Full) ++full_calls; else ++range_calls;
   // Model the real launcher's returned-error seam and partial device work:
   // thirteen owning-stream cursor resets, each followed by a launch check.
