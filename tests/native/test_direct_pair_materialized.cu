@@ -203,15 +203,15 @@ __global__ void retained_derivatives(DeviceBatch batch, ActiveShellQuartetTile t
   }
 }
 
-template <bool Unrestricted>
+template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate>
 __global__ void shared_derivatives(DeviceBatch batch, ActiveShellQuartetTile task,
                                    const double* schwarz, double threshold, const double* density,
                                    const std::uint8_t* active, double* forces, unsigned channel,
                                    MaterializedDirectPairWork* work, double* values) {
   __shared__ MaterializedDirectPairDerivativeRecurrence shared;
-  contract_materialized_direct_pair_full_source_force<Unrestricted>(
+  contract_materialized_direct_pair_force<Unrestricted, Mode>(
       batch, task, threshold, schwarz, density, active, forces, channel == 2 ? 0.0 : 0.73,
-      channel == 1 ? 0.0 : 0.29, shared, work, values);
+      channel == 1 ? 0.0 : (channel == 3 ? -0.29 : 0.29), shared, work, values);
 }
 
 std::size_t triangle_row(std::size_t ordinal) {
@@ -452,7 +452,7 @@ void qualify_dft_stream() {
 
 /** Signed primitive contractions, independent host J'/K' orbits and exact work.
  * Repeated atoms test chain-rule seeding and translation recovery together. */
-template <bool Unrestricted>
+template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate>
 void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold) {
   Fixture fixture({2, 2, 2, 2}, Unrestricted, atom_layout == 2);
   const std::vector<std::int32_t> atoms = atom_layout == 0 ? std::vector<std::int32_t>{0, 1, 2, 3}
@@ -481,13 +481,13 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
   check(cudaGetLastError());
   check(cudaDeviceSynchronize());
   const auto raw = expected_values.read();
-  for (unsigned channel = 0; channel < 3; ++channel) {
+  for (unsigned channel = 0; channel < 4; ++channel) {
     values.clear();
     forces.clear();
     work.clear();
-    shared_derivatives<Unrestricted><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
-                                                 density.data, active.data, forces.data, channel,
-                                                 work.data, values.data);
+    shared_derivatives<Unrestricted, Mode><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                                       density.data, active.data, forces.data,
+                                                       channel, work.data, values.data);
     check(cudaGetLastError());
     check(cudaDeviceSynchronize());
     const auto actual = values.read(), actual_forces = forces.read();
@@ -516,7 +516,8 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
         if (channel != 2) weights[0] += 0.5 * 0.73 * total(a, b) * total(c, d);
         if (channel != 1)
           for (unsigned spin = 0; spin < (Unrestricted ? 2U : 1U); ++spin)
-            weights[1] += 0.5 * 0.29 * fixture.host_density[spin * matrix + a + n * c] *
+            weights[1] += 0.5 * (channel == 3 ? -0.29 : 0.29) *
+                          fixture.host_density[spin * matrix + a + n * c] *
                           fixture.host_density[spin * matrix + b + n * d];
       }
       for (unsigned center = 0; center < unique.size(); ++center)
@@ -524,10 +525,14 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
           const auto index = (ordinal * 4 + center) * 3 + axis;
           close(actual[index], admitted ? raw[index] : 0.0,
                 "shared derivative differs from raw AD");
-          if (admitted)
-            for (unsigned source = 0; source < 2; ++source)
-              expected_forces[source * 12 + unique[center] * 3 + axis] -=
-                  weights[source] * raw[index];
+          if (admitted) {
+            if constexpr (Mode == DirectForceOutputMode::Combined)
+              expected_forces[unique[center] * 3 + axis] -= (weights[0] + weights[1]) * raw[index];
+            else
+              for (unsigned source = 0; source < 2; ++source)
+                expected_forces[source * 12 + unique[center] * 3 + axis] -=
+                    weights[source] * raw[index];
+          }
         }
     }
     for (std::size_t index = 0; index < actual_forces.size(); ++index)
@@ -548,9 +553,9 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
   check(cudaMemcpy(active.data, &disabled, 1, cudaMemcpyHostToDevice));
   forces.clear();
   work.clear();
-  shared_derivatives<Unrestricted><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
-                                               density.data, active.data, forces.data, 0, work.data,
-                                               nullptr);
+  shared_derivatives<Unrestricted, Mode><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                                     density.data, active.data, forces.data, 0,
+                                                     work.data, nullptr);
   check(cudaGetLastError());
   check(cudaDeviceSynchronize());
   if (work.read()[0].coulomb_preparations != 0)
@@ -559,9 +564,9 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
   check(cudaMemcpy(active.data, &enabled, 1, cudaMemcpyHostToDevice));
   density.clear();
   work.clear();
-  shared_derivatives<Unrestricted><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
-                                               density.data, active.data, forces.data, 0, work.data,
-                                               nullptr);
+  shared_derivatives<Unrestricted, Mode><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                                     density.data, active.data, forces.data, 0,
+                                                     work.data, nullptr);
   check(cudaGetLastError());
   check(cudaDeviceSynchronize());
   if (work.read()[0].coulomb_preparations != 0)
@@ -576,6 +581,13 @@ int main(int argc, char** argv) {
       qualify_derivatives<false>(0, true, 0.0);
       qualify_derivatives<true>(2, false, 0.0);
       qualify_derivatives<false>(0, false, 2.0);
+      // A separate host orbit controls the signed combined force. The second
+      // output array is a zero canary for the one-channel ABI.
+      qualify_derivatives<false, DirectForceOutputMode::Combined>(0, false, 0.0);
+      qualify_derivatives<true, DirectForceOutputMode::Combined>(1, false, 0.8);
+      qualify_derivatives<false, DirectForceOutputMode::Combined>(0, true, 0.0);
+      qualify_derivatives<true, DirectForceOutputMode::Combined>(2, false, 0.0);
+      qualify_derivatives<false, DirectForceOutputMode::Combined>(0, false, 2.0);
       std::cout << "dddd derivative workspace bytes "
                 << sizeof(MaterializedDirectPairDerivativeRecurrence) << '\n';
       std::cout << "materialized dddd derivatives, RHF/UHF J'/K' and exact work PASS\n";

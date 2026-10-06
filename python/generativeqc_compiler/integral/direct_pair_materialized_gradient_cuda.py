@@ -7,16 +7,17 @@ the pair geometry response; the scalar L+1 simplex is prepared once per product.
 
 
 def emit_direct_pair_materialized_gradient_support() -> str:
-    """Emit a uniform CTA consumer for separate full-range J'/K' dddd forces.
+    """Emit a uniform CTA consumer for both full-range dddd force layouts.
 
     Six 256-component slots cover the Cartesian shell domain. The caller must
-    prove the full-source operator, resident cache and retained recurrence mode.
+    prove a full-range operator, resident cache and retained recurrence mode.
     Every AO component retains its Schwarz and independent density gates.
     """
     return r"""
 #if defined(__CUDACC__)
 #include "scf/cuda/direct_force_density.cuh"
 #include "scf/cuda/direct_force_scatter.cuh"
+#include "scf/cuda/direct_force_sources.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -68,16 +69,18 @@ __device__ inline Vec3<Dual3> prepare_materialized_direct_pair_derivative(
 }
 
 /** Uniform CTA entry; all six packets and atoms share each prepared pair product.
- * J' and K' use the same component derivative and preserve independent source
- * outputs. Inactive lanes participate in every publish/retire barrier. */
-template <bool Unrestricted>
-__device__ inline void contract_materialized_direct_pair_full_source_force(
+ * Separate preserves independent J'/K' outputs; Combined precontracts their
+ * signed density weights before the shared component derivative is consumed.
+ * Inactive lanes participate in every publish/retire barrier. */
+template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate>
+__device__ inline void contract_materialized_direct_pair_force(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
     double* forces, double coulomb_coefficient, double exchange_coefficient,
     MaterializedDirectPairDerivativeRecurrence& shared,
     MaterializedDirectPairWork* work = nullptr, double* checked_derivatives = nullptr) {
   constexpr unsigned Slots = 6;
+  constexpr unsigned Sources = DirectForceSources<Mode>::count;
   const auto first_pair = task.first_pair, second_pair = task.second_pair;
   const auto system = batch.shell_pair_systems[first_pair];
   if ((active && !active[system]) ||
@@ -97,7 +100,7 @@ __device__ inline void contract_materialized_direct_pair_full_source_force(
                                              : first_count * second_count;
   std::size_t i[Slots]{}, j[Slots]{}, k[Slots]{}, l[Slots]{};
   bool admitted[Slots]{};
-  double weights[Slots][2]{}, derivative_sum[Slots][3]{};
+  double weights[Slots][Sources]{}, derivative_sum[Slots][3]{};
   bool any_admitted = false;
   for (unsigned slot = 0; slot < Slots; ++slot) {
     const std::size_t ordinal = slot * detail::kDirectQuartetTileSize + threadIdx.x;
@@ -105,11 +108,16 @@ __device__ inline void contract_materialized_direct_pair_full_source_force(
         first_count, second_count, ao_begin, n, i[slot], j[slot], k[slot], l[slot]) ||
         !direct_ao_quartet_survives_schwarz(schwarz_bounds, physical, n,
             i[slot], j[slot], k[slot], l[slot], screening_tolerance)) continue;
-    weights[slot][0] = direct_force_density_coefficient_scaled<Unrestricted>(n, physical, spin,
-        density, i[slot], j[slot], k[slot], l[slot], coulomb_coefficient, 0.0);
-    weights[slot][1] = direct_force_density_coefficient_scaled<Unrestricted>(n, physical, spin,
-        density, i[slot], j[slot], k[slot], l[slot], 0.0, exchange_coefficient);
-    admitted[slot] = weights[slot][0] != 0.0 || weights[slot][1] != 0.0;
+    // The common source contract carries the caller's signed coefficients;
+    // Combined must not introduce an extra exchange or spin factor.
+    for (unsigned source = 0; source < Sources; ++source) {
+      const auto coefficients = DirectForceSources<Mode>::coefficients(
+          source, coulomb_coefficient, exchange_coefficient);
+      weights[slot][source] = direct_force_density_coefficient_scaled<Unrestricted>(
+          n, physical, spin, density, i[slot], j[slot], k[slot], l[slot],
+          coefficients.coulomb, coefficients.exchange);
+      admitted[slot] |= weights[slot][source] != 0.0;
+    }
     any_admitted |= admitted[slot];
   }
   if (!__syncthreads_or(any_admitted)) return;
@@ -200,7 +208,7 @@ __device__ inline void contract_materialized_direct_pair_full_source_force(
       for (unsigned axis = 0; axis < 3; ++axis) {
         derivative_sum[slot][axis] += derivative[axis];
         if (checked_derivatives) checked_derivatives[(ordinal * 4 + center) * 3 + axis] = derivative[axis];
-        for (unsigned source = 0; source < 2; ++source) {
+        for (unsigned source = 0; source < Sources; ++source) {
           const double value = -weights[slot][source] * derivative[axis];
           if (value != 0.0) atomicAdd(forces + source * source_stride + coordinate + axis, value);
         }
@@ -213,7 +221,7 @@ __device__ inline void contract_materialized_direct_pair_full_source_force(
     const std::size_t ordinal = slot * detail::kDirectQuartetTileSize + threadIdx.x;
     for (unsigned axis = 0; axis < 3; ++axis) {
       if (checked_derivatives) checked_derivatives[(ordinal * 4 + centers - 1) * 3 + axis] = -derivative_sum[slot][axis];
-      for (unsigned source = 0; source < 2; ++source) {
+      for (unsigned source = 0; source < Sources; ++source) {
         const double value = weights[slot][source] * derivative_sum[slot][axis];
         if (value != 0.0) atomicAdd(forces + source * source_stride + final_coordinate + axis, value);
       }
