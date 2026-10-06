@@ -161,7 +161,8 @@
       "contract": "#1890",
       "reason": "RHF prepared execution still branches on a named cuBLAS selector; migrate selection below scientific/runtime policy.",
       "selectors": {
-        "use_cublas": 12
+        "use_cublas": 12,
+        "use_cusolver": 4
       }
     }
   }
