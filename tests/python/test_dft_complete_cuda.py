@@ -915,7 +915,7 @@ def test_public_cuda_force_active_ao_profile_replay(
 
     assert tuple(
         profile.profile_id for profile in policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("sm120-ordinary-rks-second-jet-v1",)
+    ) == ("sm120-ordinary-rks-second-jet-v2",)
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     xyz = np.asarray([position for _, position in ATOMS])
     moved = xyz.copy()
@@ -971,6 +971,7 @@ def test_public_cuda_force_active_ao_profile_replay(
         max_aos=1024,
         min_grid_points=1,
         max_grid_points=4_000_000,
+        min_dense_point_ao_square_work=1,
         tile_policy="fixed",
         tile_points=256,
         min_device_bytes=512 << 20,
