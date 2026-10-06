@@ -25,6 +25,7 @@ class _SemilocalFamilyFields(TypedDict):
     cuda_nonlocal_correlation: bool
     molecular_nonlocal_domain: bool
     incremental_xc: bool
+    stationary_second_order: bool
     components: tuple[tuple[str, str], ...]
     range_omega: str
     coefficient_policy: str
@@ -55,6 +56,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "cuda_nonlocal_correlation": False,
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
+        "stationary_second_order": True,
         "components": (
             ("LDA_X", "1"),
             ("LDA_C_PW", "1"),
@@ -80,6 +82,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "cuda_nonlocal_correlation": False,
         "molecular_nonlocal_domain": False,
         "incremental_xc": True,
+        "stationary_second_order": True,
         "components": (
             ("GGA_X_PBE", "1"),
             ("GGA_C_PBE", "1"),
@@ -105,6 +108,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "cuda_nonlocal_correlation": False,
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
+        "stationary_second_order": False,
         "components": (
             ("MGGA_X_R2SCAN", "1"),
             ("MGGA_C_R2SCAN", "1"),
@@ -130,6 +134,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "cuda_nonlocal_correlation": False,
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
+        "stationary_second_order": False,
         "components": (
             ("LDA_X", "2/25"),
             ("GGA_X_B88", "18/25"),
@@ -157,6 +162,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "cuda_nonlocal_correlation": True,
         "molecular_nonlocal_domain": True,
         "incremental_xc": False,
+        "stationary_second_order": False,
         "components": (
             ("MGGA_X_WB97M_V", "1"),
             ("MGGA_C_WB97M_V", "1"),
