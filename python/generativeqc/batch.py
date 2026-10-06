@@ -7,7 +7,7 @@ import os
 import typing
 from contextlib import suppress
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Self
 
@@ -250,6 +250,19 @@ class PreparedBatch:
                 in calculator._capabilities.supported_properties,
             )
         self.resource_plan = resource_plan
+        self._planned_properties = None
+        from ._cpu_force_resources import qualified_direct_semilocal_context
+
+        self._output_aware_cpu_forces = qualified_direct_semilocal_context(calculator)
+        if self._output_aware_cpu_forces and resource_plan is not None:
+            self._planned_properties = next(
+                (
+                    request.identity.observables
+                    for request in resource_plan.requests
+                    if request.name == "ks"
+                ),
+                None,
+            )
         self.resource_diagnostics = None
         self._resource_ledger = None
         dispersion_request = None
@@ -259,6 +272,7 @@ class PreparedBatch:
                 charges=self._charges,
                 multiplicities=self._multiplicities,
                 ks_options=self._effective_ks_options,
+                properties=self._planned_properties,
             )
             dispersion_request = calculator._dispersion_resource_request(self._systems)
             requests = (
@@ -754,11 +768,10 @@ class PreparedBatch:
         from generativeqc_compiler.dft import NativeAO
 
         from ._cpu_force_resources import (
-            CPU_DIRECT_SEMILOCAL_FORCE_METHODS,
             CPU_FORCE_HOST_CAP,
             cpu_force_inventory,
-            qualified_all_electron_basis,
             qualified_basis,
+            qualified_direct_semilocal_context,
         )
         from ._dft_gradient import StationaryKsState
         from ._stationary_cpu import complete_rks_gradient_diagnostic
@@ -767,14 +780,7 @@ class PreparedBatch:
         calculator = self._calculator
         ecp_force = qualified_basis(calculator._basis)
         direct_semilocal_all_electron = (
-            calculator._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
-            and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
-            and calculator._automatic_libxc_name is None
-            and calculator._dispersion_method_ir is None
-            and calculator._ks_options is not None
-            and calculator._ks_options.coefficients == (1.0, 1.0, 0.0)
-            and calculator._ks_options.execution_plan.nonlocal_correlation is None
-            and qualified_all_electron_basis(calculator._basis)
+            not ecp_force and qualified_direct_semilocal_context(calculator)
         )
         direct_all_electron = direct_semilocal_all_electron or (
             calculator._method_name
@@ -877,6 +883,51 @@ class PreparedBatch:
             finally:
                 state._source.close()
 
+    def _execution_resource_request(self, properties: frozenset[str]) -> typing.Any:
+        """Rebudget optional CPU force scratch without changing resident owners."""
+        calculator = self._calculator
+        options = {
+            "charges": self._charges,
+            "multiplicities": self._multiplicities,
+            "ks_options": self._effective_ks_options,
+        }
+        expected = calculator._resource_request(
+            self._systems, **options, properties=self._planned_properties
+        )
+        if expected != next(
+            request
+            for request in self.resource_plan.requests
+            if request.name == expected.name
+        ):
+            raise ValueError(
+                f"{expected.name.upper()} resource inputs or execution schedule changed after preparation"
+            )
+        if not self._output_aware_cpu_forces:
+            return expected, self.resource_plan
+        candidate = self.resource_plan
+        current = calculator._resource_request(
+            self._systems, **options, properties=properties
+        )
+        if current != expected:
+            # Preserve all provider selections, phases, other owners and the
+            # caller's budget. Only this serialized CPU workspace changes.
+            candidate = replace(
+                self.resource_plan,
+                requests=tuple(
+                    current if request.name == current.name else request
+                    for request in self.resource_plan.requests
+                ),
+                status="infeasible",
+                diagnostic="requested CPU forces exceed the prepared resource budget",
+            )
+            if all(
+                candidate.peak_bytes.get(space, 0) <= limit
+                for space, limit in candidate.budget.limits().items()
+            ):
+                candidate = replace(candidate, status="feasible", diagnostic=None)
+            candidate.require_feasible()
+        return current, candidate
+
     def execute(
         self,
         coordinates: Sequence[Sequence[Sequence[float]] | np.ndarray | None]
@@ -893,11 +944,13 @@ class PreparedBatch:
 
         RCCSD retains its energy-only default; request
         ``properties=("energy", "forces")`` explicitly for its qualified force
-        domain. Other methods default to their supported properties. Energy-only
+        domain. Direct all-electron CPU LDA/PBE also defaults to energy only.
+        Other methods default to their supported properties. Energy-only
         execution returns ``forces=None``.
         Output selection does not change the prepared model or warm snapshot;
         a later force replay rebuilds response caches when necessary. Resource
-        plans retain their conservative energy-plus-force capacity allowance.
+        plans revalidate optional CPU semilocal force capacity before replay;
+        other owners retain their conservative force capacity allowance.
         Generated force failures retain the original exception type and detail
         in the failed item's ``status_message``, including in strict mode.
         """
@@ -905,11 +958,7 @@ class PreparedBatch:
         from .initial_guess import read_initial_guess_diagnostic
 
         if properties is None:
-            properties = (
-                frozenset({"energy"})
-                if self._calculator._method == _native.METHOD_RCCSD
-                else self._calculator._capabilities.supported_properties
-            )
+            properties = self._calculator._default_properties(batch=True)
         if isinstance(properties, (str, bytes)):
             raise TypeError("properties must be an iterable of property names")
         try:
@@ -1048,7 +1097,8 @@ class PreparedBatch:
                 for index in range(count)
             )
         )
-        if self.resource_plan is None:
+        execution_plan = self.resource_plan
+        if execution_plan is None:
             status = self._library.generativeqc_batch_execute(
                 self._batch,
                 inputs_pointer,
@@ -1059,21 +1109,10 @@ class PreparedBatch:
         else:
             from .resources_native import observe_method_call
 
-            current = self._calculator._resource_request(
-                self._systems,
-                charges=self._charges,
-                multiplicities=self._multiplicities,
-                ks_options=self._effective_ks_options,
-            )
-            if current != next(
-                r for r in self.resource_plan.requests if r.name == current.name
-            ):
-                raise ValueError(
-                    f"{current.name.upper()} resource inputs or execution schedule changed after preparation"
-                )
+            current, execution_plan = self._execution_resource_request(requested)
             status, self.resource_diagnostics = observe_method_call(
                 self._library,
-                self.resource_plan,
+                execution_plan,
                 self._resource_ledger,
                 lambda: self._library.generativeqc_batch_execute(
                     self._batch, inputs_pointer, input_count, output_array, count
@@ -1388,6 +1427,10 @@ class PreparedBatch:
                 if self.resource_diagnostics is not None:
                     error.resource_diagnostics = self.resource_diagnostics
                 raise
+        if execution_plan is not None and all(item.succeeded for item in result.items):
+            self.resource_plan = execution_plan
+            if self._output_aware_cpu_forces:
+                self._planned_properties = requested
         return result
 
     def save_checkpoint(

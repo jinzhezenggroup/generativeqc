@@ -227,7 +227,11 @@ def test_semilocal_rks_public_contract_exposes_cpu_forces(method: str) -> None:
         assert item.forces is None
     plan = calculator.estimate_resources([atoms]).require_feasible()
     request = next(request for request in plan.requests if request.name == "ks")
-    assert request.identity.observables == ("energy", "forces")
+    assert request.identity.observables == ("energy",)
+    force_plan = calculator.estimate_resources(
+        [atoms], properties=("energy", "forces")
+    ).require_feasible()
+    assert force_plan.requests[0].identity.observables == ("energy", "forces")
 
 
 @pytest.mark.parametrize("method", ("lda-uks", "pbe-uks"))

@@ -8,6 +8,14 @@ The diagnostic route alone does not grant a public capability. A bounded
 `Calculator` wrapper now promotes direct all-electron LDA/PBE RKS/UKS forces
 for qualified s/p/d basis contexts, after resource, state-identity and
 Hamiltonian checks; the backend-neutral registry remains energy-only.
+Direct all-electron CPU semilocal forces require explicit
+`properties=("energy", "forces")`; ordinary singlepoint and batch calls retain
+energy-only defaults. `Calculator.estimate_resources(properties=...)` includes
+the force workspace only when requested for this context. A prepared CPU
+semilocal batch revalidates that workspace against its unchanged budget and
+provider selections before an explicit force replay. Failed requests or replays
+do not replace its previously accepted plan. Other contexts, including ECP,
+retain their existing defaults and conservative capacity reservations.
 
 The separate [CUDA diagnostic](stationary_cuda_diagnostic.md) consumes a live
 native CUDA snapshot and executes all seven sources on device with explicit

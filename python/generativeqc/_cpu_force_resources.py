@@ -41,6 +41,23 @@ def qualified_all_electron_basis(basis: typing.Any) -> bool:
     return all(shell.angular_momentum <= 2 for shell in shells)
 
 
+def qualified_direct_semilocal_context(calculator: typing.Any) -> bool:
+    """One admission predicate for the optional all-electron CPU force owner."""
+    from . import _native
+
+    return (
+        calculator._device_name == "cpu"
+        and calculator._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
+        and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
+        and calculator._automatic_libxc_name is None
+        and calculator._dispersion_method_ir is None
+        and calculator._ks_options is not None
+        and calculator._ks_options.coefficients == (1.0, 1.0, 0.0)
+        and calculator._ks_options.execution_plan.nonlocal_correlation is None
+        and qualified_all_electron_basis(calculator._basis)
+    )
+
+
 def qualified_basis(basis: typing.Any) -> bool:
     """CPU promotion is specific to s/p/d ECP records, including their fragments."""
     return (

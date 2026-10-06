@@ -6,6 +6,10 @@ RHF and UHF expose CPU/CUDA energies and analytic nuclear forces. The
 backend-neutral `LDA_RKS`, `PBE_RKS`, `LDA_UKS`, and `PBE_UKS` registry
 rows remain energy-only, while a qualified CPU all-electron s/p/d execution
 context promotes analytic forces through the shared stationary-gradient owner.
+These all-electron CPU semilocal calculations retain energy-only defaults;
+request `properties=("energy", "forces")` explicitly for the bounded force path.
+Its existing admission limits include 16 AOs, eight atoms, 128 primitives and
+one million grid points, plus the stationary consumer's work and byte budgets.
 RKS is closed-shell; UKS uses independent
 alpha/beta densities with total-density J and validated integer spin
 occupations. LDA uses `GridSpec v1` and versioned unpolarized/polarized tails;

@@ -852,9 +852,8 @@ class Calculator:
             )
         self._capabilities = method_capabilities(self._method_name)
         from ._cpu_force_resources import (
-            CPU_DIRECT_SEMILOCAL_FORCE_METHODS,
-            qualified_all_electron_basis,
             qualified_basis,
+            qualified_direct_semilocal_context,
         )
 
         basis_has_ecp = isinstance(self._basis, BasisSet) and any(
@@ -893,11 +892,7 @@ class Calculator:
                     for shell in element.shells
                 )
             )
-        cpu_direct_semilocal_force = (
-            self._device_name == "cpu"
-            and self._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
-            and qualified_all_electron_basis(self._basis)
-        )
+        cpu_direct_semilocal_force = qualified_direct_semilocal_context(self)
         semilocal_force = (
             self._automatic_libxc_name is None
             and self._ks_options is not None
@@ -1088,6 +1083,38 @@ class Calculator:
                 supported_properties=frozenset({"energy"}),
                 supported_second_order=frozenset(),
             )
+
+    def _default_properties(self, *, batch: bool = False) -> frozenset[str]:
+        """New bounded CPU forces are opt-in; retain established defaults."""
+        from ._cpu_force_resources import qualified_direct_semilocal_context
+
+        if (
+            self._method == _native.METHOD_RCCSD
+            or (
+                not batch
+                and self._method == _native.METHOD_MP2
+                and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+            )
+            or qualified_direct_semilocal_context(self)
+        ):
+            return frozenset({"energy"})
+        return self._capabilities.supported_properties
+
+    def _resource_properties(self, properties: typing.Any) -> frozenset[str]:
+        """Validate an output request before building its capacity contract."""
+        if properties is None:
+            return self._default_properties()
+        if isinstance(properties, (str, bytes)):
+            raise TypeError("properties must be an iterable of property names")
+        requested = frozenset(properties)
+        if "energy" not in requested:
+            raise ValueError("properties must include 'energy'")
+        if requested - self._capabilities.supported_properties:
+            raise ValueError(
+                "method does not support properties: "
+                + ", ".join(sorted(requested - self._capabilities.supported_properties))
+            )
+        return requested
 
     @property
     def initial_guess(self) -> InitialGuessSpec | None:
@@ -1721,6 +1748,7 @@ class Calculator:
         charges: typing.Any = None,
         multiplicities: typing.Any = None,
         ks_options: typing.Any = None,
+        properties: typing.Any = None,
     ) -> typing.Any:
         from .initial_guess import with_initial_guess_resources
 
@@ -1730,6 +1758,7 @@ class Calculator:
             charges=charges,
             multiplicities=multiplicities,
             ks_options=ks_options,
+            properties=properties,
         )
         return with_initial_guess_resources(
             request, self, systems, charges, multiplicities
@@ -1742,6 +1771,7 @@ class Calculator:
         charges: typing.Any = None,
         multiplicities: typing.Any = None,
         ks_options: typing.Any = None,
+        properties: typing.Any = None,
     ) -> typing.Any:
         """Resolve this calculator's active scientific controls without executing."""
         if self._capabilities.family == "density_functional":
@@ -1750,8 +1780,15 @@ class Calculator:
                     "DFT density-fitting resource plans are not qualified; "
                     "use density_fitting_memory_budget_bytes for the native DF provider"
                 )
+            from ._cpu_force_resources import qualified_direct_semilocal_context
             from .resources_ks import ks_resource_request
 
+            requested = self._resource_properties(properties)
+            planned = (
+                requested
+                if qualified_direct_semilocal_context(self)
+                else self._capabilities.supported_properties
+            )
             return ks_resource_request(
                 systems,
                 charges=charges,
@@ -1772,7 +1809,7 @@ class Calculator:
                 ks_options=self._ks_options if ks_options is None else ks_options,
                 device_id=self._device_id,
                 library=self._library,
-                include_forces="forces" in self._capabilities.supported_properties,
+                include_forces="forces" in planned,
             )
         if self._method == _native.METHOD_MP2:
             raise NotImplementedError(
@@ -1923,8 +1960,14 @@ class Calculator:
         charges: typing.Any = None,
         multiplicities: typing.Any = None,
         budget: typing.Any = None,
+        properties: Iterable[str] | None = None,
     ) -> typing.Any:
-        """Dry-run the active scientific inputs; no solve or warm-state mutation."""
+        """Dry-run the active scientific inputs; no solve or warm-state mutation.
+
+        Optional direct all-electron CPU semilocal forces reserve their workspace
+        only when explicitly requested in ``properties``. Other contexts retain
+        their existing conservative capacity allowance.
+        """
         from generativeqc_compiler.common.resources import (
             ResourceBudget,
             plan_resources,
@@ -1954,6 +1997,7 @@ class Calculator:
                 charges=charges,
                 multiplicities=multiplicities,
                 ks_options=effective_ks_options,
+                properties=properties,
             )
         ]
         dispersion_request = self._dispersion_resource_request(systems)
@@ -2174,8 +2218,9 @@ class Calculator:
         Energy and convergence diagnostics are always returned. Select
         ``properties=("energy",)`` to omit analytic-force evaluation; the
         returned ``Result.forces`` is then ``None``. RCCSD retains its energy-only
-        default; request ``properties=("energy", "forces")`` explicitly for the
-        qualified force domain. Other methods request their supported properties,
+        default, as do direct all-electron CPU LDA/PBE calculations; request
+        ``properties=("energy", "forces")`` explicitly for their bounded force
+        domains. Other methods request their supported properties,
         except density-fitted MP2, which also defaults to energy only.
 
         GFN2 retains one native runtime per calculator while starting fresh SCC
@@ -2207,15 +2252,7 @@ class Calculator:
     ) -> Result:
         """Execute under the retained context's transaction lock, when present."""
         if properties is None:
-            properties = (
-                frozenset({"energy"})
-                if self._method == _native.METHOD_RCCSD
-                or (
-                    self._method == _native.METHOD_MP2
-                    and self._density_fitting_mode != _native.DENSITY_FITTING_NONE
-                )
-                else self._capabilities.supported_properties
-            )
+            properties = self._default_properties()
         if isinstance(properties, (str, bytes)):
             raise TypeError("properties must be an iterable of property names")
         try:
@@ -2252,7 +2289,10 @@ class Calculator:
         resource_plan = None
         if self._resource_budget is not None:
             resource_plan = self.estimate_resources(
-                [native_atoms], charges=[charge], multiplicities=[multiplicity]
+                [native_atoms],
+                charges=[charge],
+                multiplicities=[multiplicity],
+                properties=requested_properties,
             ).require_feasible()
         if self._dispersion_method_ir is not None or (
             compute_forces and self._capabilities.family == "density_functional"
