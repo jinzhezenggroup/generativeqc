@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All four isolated median point estimates lose; no material speed advantage demonstrated. Reject for promotion; no statistically resolved endpoint regression or complete E+F comparison is claimed.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 14233,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "75a4c62aa18979f3c260c13e9e7ca4aee36643264b65501d7e9cf0722fa843e0"
+    },
+    {
+      "bytes": 9945,
+      "path": "samples.json",
+      "role": "samples",
+      "sha256": "27374079e2214d5ac8ed6d60ec18875f79f537b6fd69bbf5c81d3cd641670e96"
+    },
+    {
+      "bytes": 38790,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "41abee29e4e6f42dbe35f943febfd7c979d7736407b6758a3c5a53a7c59eb7aa"
+    },
+    {
+      "bytes": 780,
+      "path": "source-files.sha256",
+      "role": "input",
+      "sha256": "c44ad5946e9001fd0253f713602405cec959f19df53f3377a53ffa7bc88fb165"
+    },
+    {
+      "bytes": 4011,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "ed18cada4e015e11dc0501d8a2e32b44929b108ccaa4dcda484ee230a8056600"
+    },
+    {
+      "bytes": 2423,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "97a92dd9f355972e829556e118fdab4cbc5fe2bf2360d21bc93c881a809a5e50"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-pair-coefficients-20261006/reproduce.sh"
+    ],
+    "prerequisites": "main Slurm gpu:5090:1, CUDA 12.9, ccache, compute-sanitizer, NumPy/pytest/compiler dependencies; PYTHON and CUDA_ROOT select local installations.",
+    "source_restore": "Check out source.revision, apply source.patch, verify source-files.sha256; retain the publication outside the restored checkout before running the finite Slurm recipe."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "bc627c9a005b479fdba869cc9d4cf73e4dab1f45"
+  }
+}

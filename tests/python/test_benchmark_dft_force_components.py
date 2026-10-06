@@ -7,6 +7,70 @@ import pytest
 from tools.benchmark_dft_force_components import _coverage, extract_records
 
 
+@pytest.mark.parametrize(
+    "supported,enabled,batches",
+    [(False, True, 4), (True, False, 4), (True, True, 0), (True, True, 4)],
+)
+def test_becke_phase_observations_are_not_clean_wall_components(
+    supported: bool, enabled: bool, batches: int
+) -> None:
+    from benchmarks.dft_force_components import BECKE_PHASES, normalize_force_work
+
+    work = {
+        "endpoint_seconds": 1.0,
+        "becke_primitive_requested": 1,
+        "becke_primitive_selected": 0,
+        "becke_reverse_pair_visits": 64,
+        "becke_reverse_pair_panel_write_bytes": 2048,
+        "becke_profile_batches": batches,
+        "becke_phase_profile_supported": supported,
+        "becke_phase_profile_enabled": enabled,
+        "becke_phase_ms": dict.fromkeys(BECKE_PHASES, 2000.0),
+        "becke_work_counter_semantics": "launched dense domains",
+        "becke_traffic_model": "logical values, not hardware traffic",
+    }
+    result = normalize_force_work(work)
+    owner = result["becke_owners"]["stationary"]
+    assert owner["selection"]["becke_primitive_requested"] == 1
+    assert owner["selection"]["becke_primitive_selected"] == 0
+    assert owner["work_counters"]["becke_reverse_pair_visits"] == 64
+    assert owner["logical_traffic_bytes"] == {
+        "becke_reverse_pair_panel_write_bytes": 2048
+    }
+    assert owner["profiled_ms"] == dict.fromkeys(
+        BECKE_PHASES, 2000.0 if supported and enabled and batches else None
+    )
+    assert owner["profile_intrusive"] == bool(supported and enabled and batches)
+    assert result["attributed_wall_seconds"] == 0.0
+    assert result["endpoint_seconds"] == 1.0
+
+
+def test_composite_becke_owners_remain_separate_and_old_abi_is_unmeasured() -> None:
+    from benchmarks.dft_force_components import BECKE_PHASES, normalize_force_work
+
+    work = {
+        "execution": "cuda-complete-composite",
+        "component_seconds": {},
+        "stationary_source_work": {
+            "semilocal": {
+                "becke_primitive_selected": 1,
+                "becke_reverse_pair_visits": 16,
+            },
+            "nonlocal": {
+                "becke_primitive_selected": 0,
+                "becke_reverse_pair_visits": 32,
+            },
+        },
+    }
+    result = normalize_force_work(work)
+    owners = result["becke_owners"]
+    assert set(owners) == {"semilocal", "nonlocal"}
+    for name, selected, visits in (("semilocal", 1, 16), ("nonlocal", 0, 32)):
+        assert owners[name]["selection"]["becke_primitive_selected"] == selected
+        assert owners[name]["work_counters"]["becke_reverse_pair_visits"] == visits
+        assert owners[name]["profiled_ms"] == dict.fromkeys(BECKE_PHASES)
+
+
 def test_extract_stationary_record_uses_normalized_component_schema() -> None:
     payload = {
         "schema": "generativeqc.stationary-cuda-force-benchmark.v1",

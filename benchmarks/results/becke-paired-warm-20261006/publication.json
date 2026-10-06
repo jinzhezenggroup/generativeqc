@@ -1,0 +1,113 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Five genuine balanced pairs per size/geometry are measured, but no resolved complete warm E+F gain passes the shared descriptive threshold. Keep the primitive default off and phased/generic fallback; not a cold/moved speedup or promotion claim.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 54527,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "d7fce19fca92784ac46c2155970f209424d7502c85f5cd9eef450867fed2ec0b"
+    },
+    {
+      "bytes": 83063,
+      "path": "observations.json.gz",
+      "role": "samples",
+      "sha256": "ad5fb106ac03cbc3eb8031ed53c1d2ae1ba8b3846a90f7a00e7ab2cc5fdf9946"
+    },
+    {
+      "bytes": 65843,
+      "path": "source-files.sha256.gz",
+      "role": "input",
+      "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7"
+    },
+    {
+      "bytes": 41187,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "28b896c0178756088aa1ef075f0ced709f15a9ab5d705eb84cdfcc2dd473fc7f"
+    },
+    {
+      "bytes": 10745,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "cb1a3c81fc2bc9b870812dc743b59eff3d087959715af794f57229d664863151"
+    },
+    {
+      "bytes": 13464,
+      "path": "paired-warm.py",
+      "role": "reproduction",
+      "sha256": "26000b291b4375a98e43b7f11f682ad9d37cc1bee678b0ba0af2fcb0a96af907"
+    },
+    {
+      "bytes": 4156,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "27914dc2e0ff83a88e69e94fbcfc44e01ab059afe4ef932936bb7814bcbe068d"
+    },
+    {
+      "bytes": 2369,
+      "path": "summary.md",
+      "role": "summary",
+      "sha256": "970ed568ea28e609161d5377118340a5f9b8b2827417d19af9b9b65148dca8f6"
+    },
+    {
+      "bytes": 81758,
+      "path": "protocols/paired-48.json.gz",
+      "role": "samples",
+      "sha256": "e06b9fc89a26f04635798e4e1966d637928754e6e8bbe02728904d33f5b36247"
+    },
+    {
+      "bytes": 17907,
+      "path": "protocols/reference-48.json.gz",
+      "role": "samples",
+      "sha256": "46cce92306519c36eff7989c8f982189ec652d8b5697118703a73934d54a3edc"
+    },
+    {
+      "bytes": 126410,
+      "path": "protocols/paired-96.json.gz",
+      "role": "samples",
+      "sha256": "fa9580b2f8bd8799705fc2cb14b920c2a5a897c86ce3450d131f8138ab0a38c6"
+    },
+    {
+      "bytes": 31055,
+      "path": "protocols/reference-96.json.gz",
+      "role": "samples",
+      "sha256": "3f71adb0d239a05a6c70e5acdfe5c2b1525d58082211e038991159fa7d0d76dc"
+    },
+    {
+      "bytes": 34359,
+      "path": "protocols/feasibility-48.json.gz",
+      "role": "samples",
+      "sha256": "0651c0d743e408fe3b019e933a62cb9c7af5f4569b8fdf01f5af761dc17fbcc3"
+    },
+    {
+      "bytes": 599,
+      "path": "protocols/harness-failure-6200.json.gz",
+      "role": "samples",
+      "sha256": "7d829153022c68721c9035ce6ae9193e4e711d1ad05fb48ff6abba42ba342b0b"
+    },
+    {
+      "bytes": 11910,
+      "path": "protocols/harness-failure-6201.json.gz",
+      "role": "samples",
+      "sha256": "fb1283753c20b911a2afdae4c1c56e4ee5f9939ca5b6d4234d913ee2589369ef"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-paired-warm-20261006/reproduce.sh"
+    ],
+    "prerequisites": "CUDA12.9 sm120/RTX5090; finite main/gpu:5090:1 Slurm with preserved visibility; ccache/CMake/Ninja and C++/CUDA compiler; Python compiler dependencies, NumPy/CuPy/pytest. Set CUDA_ROOT/PYTHON; add installed cuTENSOR library path if required. Published independent vectors reuse the original GPU4PySCF/PySCF2.14/Libxc7 campaign. Full recipe not separately rerun.",
+    "source_restore": "Keep bundle outside checkout, restore original source.revision and apply source.patch, then verify the decompressed 1400-input manifest. The exact measured paired driver and independent reference companions are bound by this publication."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "a65b075ca0b38f61508a5e596ba408d4f8214807"
+  }
+}

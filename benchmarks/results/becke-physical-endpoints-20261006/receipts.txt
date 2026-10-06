@@ -1,0 +1,462 @@
+
+=== job 6173: job.txt ===
+JobId=6173 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=01:55:00 TimeMin=N/A SubmitTime=2026-10-06T12:25:18 EligibleTime=2026-10-06T12:25:18 AccrueTime=Unknown StartTime=2026-10-06T12:25:18 EndTime=2026-10-06T14:20:18 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T12:25:18 Scheduler=Main Partition=main AllocNode:Sid=localhost:408461 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== job 6173: job.exit ===
+0
+
+=== job 6173: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=2
+
+=== job 6173: ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== job 6173: ccache-before.txt ===
+Summary:
+  Hits:             5484 /  9168 (59.82 %)
+    Direct:         5241 /  9193 (57.01 %)
+    Preprocessed:    243 /  3951 (6.15 %)
+  Misses:           3684
+    Direct:         3952
+    Preprocessed:   3708
+  Uncacheable:      3376
+Primary storage:
+  Hits:            11878 / 18385 (64.61 %)
+  Misses:           6507
+  Cache size (GB):  2.63 /  5.00 (52.55 %)
+
+Use the -v/--verbose option for more details.
+
+=== job 6173: ccache-after.txt ===
+Summary:
+  Hits:             5851 /  9590 (61.01 %)
+    Direct:         5608 /  9615 (58.33 %)
+    Preprocessed:    243 /  4006 (6.07 %)
+  Misses:           3739
+    Direct:         4007
+    Preprocessed:   3763
+  Uncacheable:      3692
+Primary storage:
+  Hits:            12623 / 19229 (65.65 %)
+  Misses:           6606
+  Cache size (GB):  2.80 /  5.00 (56.00 %)
+
+Use the -v/--verbose option for more details.
+
+=== job 6173: core-check.txt ===
+build/cuda-release-sm120/libgenerativeqc.so: OK
+
+=== job 6173: environment.txt ===
+node1
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+Tue Oct  6 12:25:20 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.95.05              Driver Version: 580.95.05      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 5090        Off |   00000000:01:00.0 Off |                  N/A |
+| 30%   43C    P1            193W /  600W |   23781MiB /  32607MiB |     99%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA GeForce RTX 5090        Off |   00000000:21:00.0 Off |                  N/A |
+|  0%   28C    P8             10W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA GeForce RTX 5090        Off |   00000000:41:00.0 Off |                  N/A |
+|  0%   28C    P8             18W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA GeForce RTX 5090        Off |   00000000:61:00.0 Off |                  N/A |
+| 30%   46C    P1            185W /  600W |   23753MiB /  32607MiB |     99%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   4  NVIDIA GeForce RTX 5090        Off |   00000000:81:00.0 Off |                  N/A |
+|  0%   29C    P8             17W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   5  NVIDIA GeForce RTX 5090        Off |   00000000:A1:00.0 Off |                  N/A |
+|  0%   25C    P8             25W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   6  NVIDIA GeForce RTX 5090        Off |   00000000:C1:00.0 Off |                  N/A |
+|  0%   26C    P8             16W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   7  NVIDIA GeForce RTX 5090        Off |   00000000:E1:00.0 Off |                  N/A |
+|  0%   25C    P8             12W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    0   N/A  N/A          406011      C   ...m-20261002/gpu-env/bin/python      23758MiB |
+|    1   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    2   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    3   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    3   N/A  N/A          404348      C   ...m-20261002/gpu-env/bin/python      23730MiB |
+|    4   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    5   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    6   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    7   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
++-----------------------------------------------------------------------------------------+
+Python 3.13.9
+
+=== job 6184: job.txt ===
+JobId=6184 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=00:25:00 TimeMin=N/A SubmitTime=2026-10-06T12:48:55 EligibleTime=2026-10-06T12:48:55 AccrueTime=Unknown StartTime=2026-10-06T12:48:55 EndTime=2026-10-06T13:13:55 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T12:48:55 Scheduler=Main Partition=main AllocNode:Sid=localhost:419472 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== job 6184: job.exit ===
+0
+
+=== job 6184: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== job 6184: ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== job 6184: ccache-before.txt ===
+Summary:
+  Hits:             5485 /  9177 (59.77 %)
+    Direct:         5242 /  9202 (56.97 %)
+    Preprocessed:    243 /  3959 (6.14 %)
+  Misses:           3692
+    Direct:         3960
+    Preprocessed:   3716
+  Uncacheable:      3457
+Primary storage:
+  Hits:            11881 / 18403 (64.56 %)
+  Misses:           6522
+  Cache size (GB):  2.68 /  5.00 (53.61 %)
+
+Use the -v/--verbose option for more details.
+
+=== job 6184: ccache-after.txt ===
+Summary:
+  Hits:             5537 /  9231 (59.98 %)
+    Direct:         5294 /  9256 (57.20 %)
+    Preprocessed:    243 /  3961 (6.13 %)
+  Misses:           3694
+    Direct:         3962
+    Preprocessed:   3718
+  Uncacheable:      3485
+Primary storage:
+  Hits:            11987 / 18511 (64.76 %)
+  Misses:           6524
+  Cache size (GB):  2.68 /  5.00 (53.65 %)
+
+Use the -v/--verbose option for more details.
+
+=== job 6184: core-check.txt ===
+build/cuda-release-sm120/libgenerativeqc.so: OK
+
+=== job 6184: environment.txt ===
+node1
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+Tue Oct  6 12:48:56 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.95.05              Driver Version: 580.95.05      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 5090        Off |   00000000:01:00.0 Off |                  N/A |
+|  0%   28C    P8             21W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA GeForce RTX 5090        Off |   00000000:21:00.0 Off |                  N/A |
+| 30%   43C    P1            146W /  600W |   16891MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA GeForce RTX 5090        Off |   00000000:41:00.0 Off |                  N/A |
+| 30%   44C    P1            181W /  600W |   17287MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA GeForce RTX 5090        Off |   00000000:61:00.0 Off |                  N/A |
+| 30%   47C    P1            220W /  600W |   23753MiB /  32607MiB |     99%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   4  NVIDIA GeForce RTX 5090        Off |   00000000:81:00.0 Off |                  N/A |
+| 30%   42C    P1            181W /  600W |   17287MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   5  NVIDIA GeForce RTX 5090        Off |   00000000:A1:00.0 Off |                  N/A |
+|  0%   25C    P8             24W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   6  NVIDIA GeForce RTX 5090        Off |   00000000:C1:00.0 Off |                  N/A |
+|  0%   26C    P8             17W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   7  NVIDIA GeForce RTX 5090        Off |   00000000:E1:00.0 Off |                  N/A |
+|  0%   26C    P8             12W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    1   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    1   N/A  N/A          419014      C   ...m-20261002/gpu-env/bin/python      16868MiB |
+|    2   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    2   N/A  N/A          418948      C   ...m-20261002/gpu-env/bin/python      17264MiB |
+|    3   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    3   N/A  N/A          417334      C   ...m-20261002/gpu-env/bin/python      23730MiB |
+|    4   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    4   N/A  N/A          418575      C   python                                17264MiB |
+|    5   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    6   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    7   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
++-----------------------------------------------------------------------------------------+
+Python 3.13.9
+
+=== job 6193: job.txt ===
+JobId=6193 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=00:45:00 TimeMin=N/A SubmitTime=2026-10-06T13:07:57 EligibleTime=2026-10-06T13:07:57 AccrueTime=Unknown StartTime=2026-10-06T13:07:57 EndTime=2026-10-06T13:52:57 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T13:07:57 Scheduler=Main Partition=main AllocNode:Sid=localhost:452501 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== job 6193: job.exit ===
+0
+
+=== job 6193: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=3
+
+=== job 6193: ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== job 6193: ccache-before.txt ===
+Summary:
+  Hits:             5850 /  9580 (61.06 %)
+    Direct:         5607 /  9605 (58.38 %)
+    Preprocessed:    243 /  3997 (6.08 %)
+  Misses:           3730
+    Direct:         3998
+    Preprocessed:   3754
+  Uncacheable:      3637
+Primary storage:
+  Hits:            12621 / 19209 (65.70 %)
+  Misses:           6588
+  Cache size (GB):  2.75 /  5.00 (55.00 %)
+
+Use the -v/--verbose option for more details.
+
+=== job 6193: ccache-after.txt ===
+Summary:
+  Hits:             5851 /  9589 (61.02 %)
+    Direct:         5608 /  9614 (58.33 %)
+    Preprocessed:    243 /  4005 (6.07 %)
+  Misses:           3738
+    Direct:         4006
+    Preprocessed:   3762
+  Uncacheable:      3678
+Primary storage:
+  Hits:            12623 / 19227 (65.65 %)
+  Misses:           6604
+  Cache size (GB):  2.80 /  5.00 (56.00 %)
+
+Use the -v/--verbose option for more details.
+
+=== job 6193: core-check.txt ===
+build/cuda-release-sm120/libgenerativeqc.so: OK
+
+=== job 6193: environment.txt ===
+node1
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+Tue Oct  6 13:07:59 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.95.05              Driver Version: 580.95.05      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 5090        Off |   00000000:01:00.0 Off |                  N/A |
+| 30%   46C    P1            206W /  600W |   23781MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA GeForce RTX 5090        Off |   00000000:21:00.0 Off |                  N/A |
+| 30%   46C    P1            148W /  600W |   23289MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA GeForce RTX 5090        Off |   00000000:41:00.0 Off |                  N/A |
+| 30%   50C    P1            227W /  600W |   23753MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA GeForce RTX 5090        Off |   00000000:61:00.0 Off |                  N/A |
+|  0%   31C    P8             27W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   4  NVIDIA GeForce RTX 5090        Off |   00000000:81:00.0 Off |                  N/A |
+| 30%   44C    P1            142W /  600W |   23853MiB /  32607MiB |     98%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   5  NVIDIA GeForce RTX 5090        Off |   00000000:A1:00.0 Off |                  N/A |
+| 30%   36C    P1            100W /  600W |   23753MiB /  32607MiB |     67%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   6  NVIDIA GeForce RTX 5090        Off |   00000000:C1:00.0 Off |                  N/A |
+|  0%   29C    P8             15W /  600W |      15MiB /  32607MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   7  NVIDIA GeForce RTX 5090        Off |   00000000:E1:00.0 Off |                  N/A |
+| 30%   43C    P1            142W /  600W |   23281MiB /  32607MiB |    100%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    0   N/A  N/A          446706      C   ...m-20261002/gpu-env/bin/python      23758MiB |
+|    1   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    1   N/A  N/A          450810      C   ...m-20261002/gpu-env/bin/python      23266MiB |
+|    2   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    2   N/A  N/A          448195      C   ...m-20261002/gpu-env/bin/python      23730MiB |
+|    3   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    4   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    4   N/A  N/A          445832      C   python                                23830MiB |
+|    5   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    5   N/A  N/A          445303      C   ...m-20261002/gpu-env/bin/python      23730MiB |
+|    6   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    7   N/A  N/A            4323      G   /usr/lib/xorg/Xorg                        4MiB |
+|    7   N/A  N/A          450052      C   ...m-20261002/gpu-env/bin/python      23258MiB |
++-----------------------------------------------------------------------------------------+
+Python 3.13.9
+
+=== main protocol progress ===
+2026-10-06T12:25:21+08:00 reference-48 START
+2026-10-06T12:27:56+08:00 phased-48 START
+2026-10-06T12:32:52+08:00 primitive-48 START
+2026-10-06T12:37:35+08:00 intrusive-48 START
+2026-10-06T12:42:23+08:00 reference-96 START
+2026-10-06T12:47:16+08:00 primitive-96 START
+2026-10-06T13:01:44+08:00 phased-96 START
+2026-10-06T13:15:32+08:00 intrusive-96 START
+2026-10-06T13:28:50+08:00 COMPLETE
+
+=== authoritative terminal accounting ===
+2026-10-06T13:30:44+08:00
+sacct is unavailable: Slurm accounting storage disabled.
+=== controller record 6173 ===
+JobId=6173 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=01:03:32 TimeLimit=01:55:00 TimeMin=N/A SubmitTime=2026-10-06T12:25:18 EligibleTime=2026-10-06T12:25:18 AccrueTime=Unknown StartTime=2026-10-06T12:25:18 EndTime=2026-10-06T13:28:50 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T12:25:18 Scheduler=Main Partition=main AllocNode:Sid=localhost:408461 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+=== controller record 6184 ===
+slurm_load_jobs error: Invalid job id specified
+Controller record purged; preserve separate foreground srun/SSH exit and job.exit receipts, not an inferred Slurm accounting result.
+=== controller record 6193 ===
+slurm_load_jobs error: Invalid job id specified
+Controller record purged; preserve separate foreground srun/SSH exit and job.exit receipts, not an inferred Slurm accounting result.
+
+=== foreground srun/SSH receipt: endpoint-ssh.exit ===
+0
+
+=== foreground srun/SSH receipt: phased-profile48-ssh.exit ===
+0
+
+=== foreground srun/SSH receipt: phased-profile96-ssh.exit ===
+0
+
+=== core build: build.exit ===
+0
+
+=== core build: ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== core build: ccache-before.txt ===
+Summary:
+  Hits:             4773 /  8054 (59.26 %)
+    Direct:         4530 /  8078 (56.08 %)
+    Preprocessed:    243 /  3547 (6.85 %)
+  Misses:           3281
+    Direct:         3548
+    Preprocessed:   3304
+  Uncacheable:      3178
+Primary storage:
+  Hits:            10410 / 16155 (64.44 %)
+  Misses:           5745
+  Cache size (GB):  2.31 /  5.00 (46.14 %)
+
+Use the -v/--verbose option for more details.
+
+=== core build: ccache-after.txt ===
+Summary:
+  Hits:             5483 /  9158 (59.87 %)
+    Direct:         5240 /  9183 (57.06 %)
+    Preprocessed:    243 /  3942 (6.16 %)
+  Misses:           3675
+    Direct:         3943
+    Preprocessed:   3699
+  Uncacheable:      3320
+Primary storage:
+  Hits:            11876 / 18365 (64.67 %)
+  Misses:           6489
+  Cache size (GB):  2.62 /  5.00 (52.44 %)
+
+Use the -v/--verbose option for more details.
+
+=== core build: core.sha256 ===
+806f28a2191ecbdaea5964e4ab8e3b53629ca1ea44b66aee1cda069df8db3f1d  build/cuda-release-sm120/libgenerativeqc.so

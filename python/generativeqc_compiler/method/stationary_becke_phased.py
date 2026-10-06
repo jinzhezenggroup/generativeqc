@@ -5,7 +5,13 @@ contract. Allocation, capability checks, stream ordering and launches remain in
 the native owner. Scalar science stays in the authoritative grid-response AD.
 """
 
-from generativeqc_compiler.xc.grid_phased import emit_phased_becke
+from functools import lru_cache
+
+from generativeqc_compiler.xc.becke_coefficients import emit_becke_pair_coefficients
+from generativeqc_compiler.xc.becke_partition import (
+    recognize_becke_partition_domain_graph,
+)
+from generativeqc_compiler.xc.grid_partition_ir import grid_partition_domain_program
 
 _KERNELS = r"""
 #include <cuda/atomic>
@@ -40,7 +46,7 @@ __global__ void phased_becke_indices(size_t atoms, uint2* indices) {
         make_uint2(first, second);
 }
 
-template <int Phase>
+template <int Phase, bool Primitive = false>
 __global__ void phased_becke_atom(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   const size_t atom = blockIdx.y;
@@ -50,7 +56,12 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   if constexpr (Phase == 0)
     valid = distance_phase(input.work, point, atom, input.points, input.centers, local_norm);
   if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom);
-  if constexpr (Phase == 2) atom_gather_phase(input.work, point, atom);
+  if constexpr (Phase == 2) {
+    if constexpr (Primitive)
+      generativeqc_grid_coefficients::atom_gather_coefficient_phase(
+          input.work, point, atom, input.center_pairs);
+    else atom_gather_phase(input.work, point, atom);
+  }
   if constexpr (Phase == 3) {
     valid = point_motion_phase(input.work, point, atom, input.owner(point));
     // One point per admitted geometry lane. The existing all-source reduction
@@ -62,7 +73,7 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   if (!valid) atomicExch(input.error, 1);
 }
 
-template <bool Reverse>
+template <bool Reverse, bool Primitive = false>
 __global__ void phased_becke_pair(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   if (point >= input.work.points || input.failed()) return;
@@ -72,9 +83,12 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
   const PreparedCenterGeometry<decltype(&local_ratio_prepared)> geometry{
       input.center_pairs, local_ratio_prepared};
   bool valid;
-  if constexpr (Reverse)
-    valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
-  else
+  if constexpr (Reverse) {
+    if constexpr (Primitive)
+      valid = generativeqc_grid_coefficients::pair_coefficient_reverse_phase(
+          input.work, point, indices.x, indices.y, geometry, local_log);
+    else valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
+  } else
     valid = pair_primal_phase(input.work, point, indices.x, indices.y, geometry, local_log, local_becke);
   if (!valid) atomicExch(input.error, 1);
 }
@@ -89,6 +103,28 @@ __global__ void phased_becke_normalize(PhasedBeckeInput input) {
 """
 
 
-def emit_stationary_phased_becke_cuda() -> str:
-    """Emit the plan's iteration domains and ordered source-panel consumption."""
-    return emit_phased_becke() + _KERNELS
+@lru_cache(maxsize=4, typed=True)
+def emit_stationary_phased_becke_cuda(
+    atom_limit: int = 128, *, iterations: int = 3
+) -> str:
+    """Bind dynamic native kernels to an authenticated bounded AD composition.
+
+    Recognition is finite source-generation work. The native owner selects
+    either ordinary phases or the qualification-only coefficient primitive;
+    neither selection constructs graphs or recognizes them at force execution.
+    The emitted bound is part of native admission, not just an annotation.
+    """
+    operation = recognize_becke_partition_domain_graph(
+        grid_partition_domain_program(atom_limit, iterations),
+        atom_limit=atom_limit,
+        iterations=iterations,
+    )
+    if operation is None:
+        raise ValueError("stationary Becke domain does not match canonical AD")
+    return (
+        emit_becke_pair_coefficients(operation)
+        + "namespace generativeqc_stationary_cuda {\n"
+        + f"constexpr size_t stationary_becke_primitive_max_atoms = {atom_limit};\n"
+        + "}\n"
+        + _KERNELS
+    )

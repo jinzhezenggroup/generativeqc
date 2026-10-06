@@ -170,43 +170,98 @@ GENERATIVEQC_PHASE_HD bool point_normalize_phase(Workspace work, size_t point,
   return true;
 }
 
-template <class Geometry, class Log>
-GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
-    size_t first, size_t second, Geometry geometry, Log logarithm) {
+struct PairPullbackCoefficients {
+  std::array<double, 2> values{};
+  std::array<double, 4> separation{};
+};
+
+GENERATIVEQC_PHASE_HD inline double pair_pullback_component(double difference,
+    double separation, size_t word, double direction) {
+  return word ? separation * direction : difference;
+}
+
+template <class Geometry, class Log, class Bars>
+GENERATIVEQC_PHASE_HD bool pair_pullback_coefficients(Workspace work, size_t point,
+    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars,
+    PairPullbackCoefficients& result) {
+  // A saturated pair must overwrite a reused output with exact zero state.
+  result = {};
   const size_t index = center_pair_index(first, second);
   PointPair state{{}, {work.pair(2, index, point), work.pair(3, index, point)}, {}};
-  std::array<double, 4> pullback{};
   bool valid = true;
   if (state.factor[1] != 0) {
-    const auto separation = geometry.separation(first, second, valid);
+    result.separation = geometry.separation(first, second, valid);
     const auto coordinate = geometry.coordinate(work.field(0, point)[first] -
-        work.field(0, point)[second], first, second, separation[0]);
+        work.field(0, point)[second], first, second, result.separation[0]);
     state.ratio = {coordinate[1], coordinate[2]};
     const double bar_mu = pair_adjoint<false>(state, first, second,
-        work.field(4, point), work.field(5, point), work.field(6, point),
+        work.field(4, point), work.field(5, point), bars,
         work.zero_counts(point), work.maximum[point], logarithm);
-    pullback[0] = bar_mu * state.ratio[0];
-    for (size_t axis = 0; axis < 3; ++axis)
-      pullback[axis + 1] = bar_mu * state.ratio[1] * separation[axis + 1];
+    result.values = {bar_mu * state.ratio[0], bar_mu * state.ratio[1]};
   }
+  for (double value : result.values) valid = valid && std::isfinite(value);
+  return valid;
+}
+
+template <class Geometry, class Log, class Bars>
+GENERATIVEQC_PHASE_HD bool pair_reverse_with_bars_phase(Workspace work, size_t point,
+    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars) {
+  PairPullbackCoefficients coefficients;
+  bool valid = pair_pullback_coefficients(work, point, first, second, geometry,
+                                         logarithm, bars, coefficients);
+  const size_t index = center_pair_index(first, second);
   // All primal consumers finished at the normalization boundary. Reuse storage.
   for (size_t word = 0; word < 4; ++word) {
-    work.pair(word, index, point) = pullback[word];
-    valid = valid && std::isfinite(pullback[word]);
+    const double value = pair_pullback_component(coefficients.values[0],
+        coefficients.values[1], word, coefficients.separation[word]);
+    work.pair(word, index, point) = value;
+    valid = valid && std::isfinite(value);
   }
   return valid;
 }
 
-GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
+template <class Geometry, class Log>
+GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
+    size_t first, size_t second, Geometry geometry, Log logarithm) {
+  return pair_reverse_with_bars_phase(work, point, first, second, geometry,
+                                     logarithm, work.field(6, point));
+}
+
+struct AllNeighbors {
+  GENERATIVEQC_PHASE_HD size_t operator()(size_t index) const { return index; }
+};
+
+struct PairWords {
+  Workspace work;
+  size_t point;
+  GENERATIVEQC_PHASE_HD double operator()(size_t word, size_t index) const {
+    return work.pair(word, index, point);
+  }
+};
+
+template <class Neighbors, class Values>
+GENERATIVEQC_PHASE_HD void atom_gather_with_values_phase(Workspace work, size_t point,
+    size_t atom, size_t count, Neighbors neighbors, Values values) {
   std::array<double, 4> pullback{};
-  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
+  for (size_t cursor = 0; cursor < count; ++cursor) {
+    const size_t neighbor = neighbors(cursor);
     if (neighbor == atom) continue;
     const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
     const double sign = neighbor > atom ? -1 : 1;
     for (size_t word = 0; word < 4; ++word)
-      pullback[word] += sign * work.pair(word, index, point);
+      pullback[word] += sign * values(word, index);
   }
   for (size_t word = 0; word < 4; ++word) work.field(7 + word, point)[atom] = pullback[word];
+}
+
+template <class Neighbors>
+GENERATIVEQC_PHASE_HD void atom_gather_selected_phase(Workspace work, size_t point,
+    size_t atom, size_t count, Neighbors neighbors) {
+  atom_gather_with_values_phase(work, point, atom, count, neighbors, PairWords{work, point});
+}
+
+GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
+  atom_gather_selected_phase(work, point, atom, work.atoms, AllNeighbors{});
 }
 
 GENERATIVEQC_PHASE_HD bool point_motion_phase(Workspace work, size_t point,

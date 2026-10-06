@@ -1,0 +1,395 @@
+{
+  "attachments": [
+    {
+      "path": "samples.json",
+      "sha256": "d7a7a4a16707d89291510d8fec039835b2a7892ba648d3680d3cf251a2250515"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {},
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "identity_source": "retained Slurm step receipt: gres/gpu:5090:1",
+    "name": "NVIDIA GeForce RTX 5090",
+    "node": "node1",
+    "slurm_job": "6116",
+    "step": "0"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm_job": "6116",
+    "slurm_step": "0",
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "db68a81002c6216aae2f3d875af8c439beecc6f75480982312d960fcabad2f85",
+    "ir": "508d7d369f92f9b1cfe2d3f48aedcb51d3c8de2ba0eedd1ef229ecd1f3d1ef70",
+    "schedule": "eea1f7a1f3df199aa122c428e55148cbe2d4dcfa22e5a8873c521db2c8e3aac3",
+    "source": "49359bd11a7cd49a00fc273d908898fea201c7d5e2bf0102e1ee05425fdcfb85"
+  },
+  "inputs_hash": "7126d6b5facee5eebdc891e6e2ee46d3ff609fac55c2328acc58cc4a61bb4aa2",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Logical scratch bytes per tile are in samples.json; concurrent owner peak/device traffic are not measured."
+  },
+  "performance": {
+    "reason": "Candidate is slower in all four isolated ABBAABBA comparisons; reject before native integration. Complete E+F endpoints remain unmeasured.",
+    "status": "fail"
+  },
+  "residuals": {},
+  "revision": "c5ab37ec9e7b3d38d2e06729319f9eef66510e5c",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "complete_endpoint": false,
+    "counters": "observed live membership; visits derived after timing; logical bytes, not hardware traffic",
+    "device": "cuda",
+    "fast_compile": false,
+    "iterations": 3,
+    "scalar_root_match_only": true,
+    "scope": "sampled tiles, Becke-only plus per-point publication; CUDA events; NOT endpoint"
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Not an SCF endpoint; synthetic signed grid seeds. No solver work is inferred.",
+  "stages": {
+    "compilation": {
+      "binary_sha256": "0f8ee8c088ee0574e7922c14022a181476fddf4df8b3e27b069a61c421e01106",
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "No RKS/UKS native owner integration or complete 48/96-atom PBE0 E+F endpoint; issue1894 remains open.",
+      "status": "not-run"
+    },
+    "numerical": {
+      "cuda_passed": 21,
+      "cuda_skipped": 28,
+      "host_passed": 450,
+      "isolated_max_gradient_difference": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reason": "21 CUDA gates include generic-host-AD and independent Decimal finite differences; 28 iteration-1/5 device parameterizations explicitly skipped; four sanitizers clean. 450 host gates rechecked separately.",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "Benchmark-only rejected schedule; production dispatch is unchanged.",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Only reachable canonical scalar AD roots are authenticated; whole normalized-product composition matching remains pending.",
+      "status": "not-run"
+    },
+    "source": {
+      "emitted_source_sha256": "49359bd11a7cd49a00fc273d908898fea201c7d5e2bf0102e1ee05425fdcfb85",
+      "reason": null,
+      "status": "pass"
+    }
+  },
+  "subject": "issue1894 indexed Becke schedule: isolated performance rejection",
+  "tier": "gpu-numerical",
+  "timings": [
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.010221728324890137,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.017531328201293946,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.01752851104736328,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.010217696189880372,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.010207743644714355,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.017530975341796876,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.017523231506347655,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "297b246cedf134666d524bf4856b0b5fcc6c28bc47cc4f4965b23a80a6fd680f",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.010225536346435547,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.02041878318786621,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.02682524871826172,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.026840288162231444,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.020415584564208986,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.020414335250854492,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.026808031082153322,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.0268504638671875,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "8c54648b4eb70ee57a1a67f61974efe3ad95b238afa85d7e8bde0e03afb776eb",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.02041574478149414,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.025058752059936525,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.03888063812255859,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.03887814331054688,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.02507881546020508,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.025073247909545897,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.03888832092285156,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.03888224029541015,
+      "selection": "candidate",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "b1eae86bee6b74bec216941b4222202ddffe19656663e91bd2922e358fc4471a",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.025074432373046875,
+      "selection": "baseline",
+      "tile_points": 256,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.06732342529296875,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.08736793518066406,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.08746460723876953,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.06762351989746093,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.0676107177734375,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.08752925109863281,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.08755423736572265,
+      "selection": "candidate",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "e6173106b47e452d7dc4028d476383bb407b24cf4b1c50b58db6282f141d18ad",
+      "scope": "isolated sampled Becke tiles, NOT E+F endpoint",
+      "seconds": 0.0675696029663086,
+      "selection": "baseline",
+      "tile_points": 1024,
+      "workload": "unchanged-geometry"
+    }
+  ],
+  "toolchain": {
+    "ccache": "4.5.1",
+    "command": "ccache nvcc -std=c++20 -O3 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Xcompiler=-fPIC -shared partition.cu -o partition.so",
+    "cuda": "12.9.86",
+    "library_sha256": "0f8ee8c088ee0574e7922c14022a181476fddf4df8b3e27b069a61c421e01106",
+    "python": "3.13.9"
+  }
+}

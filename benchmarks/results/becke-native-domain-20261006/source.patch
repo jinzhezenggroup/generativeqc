@@ -1,0 +1,917 @@
+diff --git a/python/generativeqc/_stationary_composite_cuda.py b/python/generativeqc/_stationary_composite_cuda.py
+index 2e9a64df3..a01bedc39 100644
+--- a/python/generativeqc/_stationary_composite_cuda.py
++++ b/python/generativeqc/_stationary_composite_cuda.py
+@@ -59,7 +59,13 @@ from generativeqc_compiler.method.stationary_resources import (
+ from . import _native
+ from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
+ from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+-from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
++from ._stationary_cuda import (
++    _DOUBLE,
++    _CudaSources,
++    _native_grid_artifact,
++    _ptr,
++    _resolve_becke_primitive_policy,
++)
+ from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
+ from .nonlocal_runtime import _ResidentNonlocalForceOwner
+ 
+@@ -279,6 +285,7 @@ class PreparedCompositeStationaryCudaGradient:
+             )
+         layout = plan_composite_stationary_cuda_resources(
+             basis,
++            becke_primitive=_resolve_becke_primitive_policy(),
+             grid_plan=lambda points: plan_tiles(
+                 basis,
+                 backend="cuda",
+diff --git a/python/generativeqc/_stationary_cuda.py b/python/generativeqc/_stationary_cuda.py
+index d735c832c..3b3a8fb3e 100644
+--- a/python/generativeqc/_stationary_cuda.py
++++ b/python/generativeqc/_stationary_cuda.py
+@@ -11,6 +11,7 @@ interpreter fallback is available.
+ from __future__ import annotations
+ 
+ import ctypes as ct
++import os
+ import threading
+ import typing
+ from contextlib import ExitStack, contextmanager, nullcontext
+@@ -123,6 +124,23 @@ def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
+     return selection
+ 
+ 
++def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool:
++    """Keep the measured losing primitive qualification-only and method-neutral.
++
++    Explicit owner selections take precedence over the experiment environment.
++    Native admission/metrics, not this request, prove actual execution. Older
++    artifacts and insufficient concurrent resources retain their bounded route.
++    """
++    if selection is not None:
++        if type(selection) is not bool:
++            raise TypeError("Becke primitive selection must be boolean or None")
++        return selection
++    mode = os.environ.get("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "off")
++    if mode not in {"off", "coefficients"}:
++        raise ValueError("Becke primitive mode must be 'off' or 'coefficients'")
++    return mode == "coefficients"
++
++
+ class _StationaryTaskSource(typing.Protocol):
+     """Versioned/identity-bearing bounded derivative task producer."""
+ 
+@@ -504,10 +522,12 @@ class _CudaSources:
+         integral_derivatives: bool = True,
+         cooperative_becke: bool | None = None,
+         phased_becke: bool | None = None,
++        becke_primitive: bool | None = None,
+     ) -> None:
+         if type(integral_derivatives) is not bool:
+             raise TypeError("integral_derivatives must be boolean")
+         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
++        becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
+         self.source_names = source_names
+         self.integral_derivatives = integral_derivatives
+         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
+@@ -729,6 +749,7 @@ class _CudaSources:
+             budget_bytes=budget,
+             cooperative_becke=cooperative_becke,
+             phased_becke=phased_becke,
++            becke_primitive=becke_primitive,
+         )
+         self._call(
+             "stationary_create",
+@@ -765,6 +786,19 @@ class _CudaSources:
+             )
+         # An older AOT artifact retains its bounded route. The plan reservation
+         # stays conservative; only native metrics report actual phase allocation.
++        configure_primitive = getattr(
++            lib, "stationary_configure_becke_primitive_v1", None
++        )
++        self.becke_primitive_supported = configure_primitive is not None and hasattr(
++            lib, "stationary_becke_primitive_metrics_v1"
++        )
++        if self.becke_primitive_supported:
++            configure_primitive.argtypes = [ct.c_void_p, ct.c_int, *tail]
++            self._call(
++                "stationary_configure_becke_primitive_v1",
++                self.handle,
++                int(becke_primitive),
++            )
+         if profile_device:
+             self.enable_profile()
+         self._call(
+@@ -1593,6 +1627,29 @@ class _CudaSources:
+             metrics["phased_becke_bytes"], metrics["phased_becke_batches"] = (
+                 phased_values
+             )
++        primitive_metrics = getattr(
++            self.library, "stationary_becke_primitive_metrics_v1", None
++        )
++        if primitive_metrics is not None:
++            primitive_metrics.argtypes = [
++                ct.c_void_p,
++                ct.POINTER(ct.c_uint64),
++                ct.c_size_t,
++            ]
++            primitive_values = (ct.c_uint64 * 4)()
++            if primitive_metrics(self.handle, primitive_values, 4):
++                raise RuntimeError("stationary Becke primitive metrics unavailable")
++            metrics.update(
++                zip(
++                    (
++                        "becke_primitive_requested",
++                        "becke_primitive_selected",
++                        "becke_primitive_batches",
++                        "becke_primitive_reverse_pair_visits",
++                    ),
++                    primitive_values,
++                )
++            )
+         profile = (ct.c_double * 10)()
+         if self.profile_device:
+             self.library.stationary_profile_metrics.argtypes = [
+@@ -2135,6 +2192,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
+         "center_geometry_preparations",
+         "becke_pair_state_evaluations",
+         "phased_becke_batches",
++        "becke_primitive_batches",
++        "becke_primitive_reverse_pair_visits",
+     ):
+         if name in after and name in before:
+             result[name] = after[name] - before[name]
+@@ -2355,6 +2414,7 @@ def _plan_stationary_cuda_tile(
+         - sum(value.peak_bytes for value in tensor_plans.values())
+         - native_geometry_reserve,
+         phased_becke=_resolve_phased_becke_policy(na, None),
++        becke_primitive=_resolve_becke_primitive_policy(),
+     )
+     return _StationaryCudaTileLayout(
+         grid_plan,
+diff --git a/python/generativeqc_compiler/method/stationary_becke_phased.py b/python/generativeqc_compiler/method/stationary_becke_phased.py
+index be86f7774..23954aa4c 100644
+--- a/python/generativeqc_compiler/method/stationary_becke_phased.py
++++ b/python/generativeqc_compiler/method/stationary_becke_phased.py
+@@ -5,7 +5,13 @@ contract. Allocation, capability checks, stream ordering and launches remain in
+ the native owner. Scalar science stays in the authoritative grid-response AD.
+ """
+ 
+-from generativeqc_compiler.xc.grid_phased import emit_phased_becke
++from functools import lru_cache
++
++from generativeqc_compiler.xc.becke_coefficients import emit_becke_pair_coefficients
++from generativeqc_compiler.xc.becke_partition import (
++    recognize_becke_partition_domain_graph,
++)
++from generativeqc_compiler.xc.grid_partition_ir import grid_partition_domain_program
+ 
+ _KERNELS = r"""
+ #include <cuda/atomic>
+@@ -40,7 +46,7 @@ __global__ void phased_becke_indices(size_t atoms, uint2* indices) {
+         make_uint2(first, second);
+ }
+ 
+-template <int Phase>
++template <int Phase, bool Primitive = false>
+ __global__ void phased_becke_atom(PhasedBeckeInput input) {
+   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
+   const size_t atom = blockIdx.y;
+@@ -50,7 +56,12 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
+   if constexpr (Phase == 0)
+     valid = distance_phase(input.work, point, atom, input.points, input.centers, local_norm);
+   if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom);
+-  if constexpr (Phase == 2) atom_gather_phase(input.work, point, atom);
++  if constexpr (Phase == 2) {
++    if constexpr (Primitive)
++      generativeqc_grid_coefficients::atom_gather_coefficient_phase(
++          input.work, point, atom, input.center_pairs);
++    else atom_gather_phase(input.work, point, atom);
++  }
+   if constexpr (Phase == 3) {
+     valid = point_motion_phase(input.work, point, atom, input.owner(point));
+     // One point per admitted geometry lane. The existing all-source reduction
+@@ -62,7 +73,7 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
+   if (!valid) atomicExch(input.error, 1);
+ }
+ 
+-template <bool Reverse>
++template <bool Reverse, bool Primitive = false>
+ __global__ void phased_becke_pair(PhasedBeckeInput input) {
+   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
+   if (point >= input.work.points || input.failed()) return;
+@@ -72,9 +83,12 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
+   const PreparedCenterGeometry<decltype(&local_ratio_prepared)> geometry{
+       input.center_pairs, local_ratio_prepared};
+   bool valid;
+-  if constexpr (Reverse)
+-    valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
+-  else
++  if constexpr (Reverse) {
++    if constexpr (Primitive)
++      valid = generativeqc_grid_coefficients::pair_coefficient_reverse_phase(
++          input.work, point, indices.x, indices.y, geometry, local_log);
++    else valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
++  } else
+     valid = pair_primal_phase(input.work, point, indices.x, indices.y, geometry, local_log, local_becke);
+   if (!valid) atomicExch(input.error, 1);
+ }
+@@ -89,6 +103,28 @@ __global__ void phased_becke_normalize(PhasedBeckeInput input) {
+ """
+ 
+ 
+-def emit_stationary_phased_becke_cuda() -> str:
+-    """Emit the plan's iteration domains and ordered source-panel consumption."""
+-    return emit_phased_becke() + _KERNELS
++@lru_cache(maxsize=4, typed=True)
++def emit_stationary_phased_becke_cuda(
++    atom_limit: int = 128, *, iterations: int = 3
++) -> str:
++    """Bind dynamic native kernels to an authenticated bounded AD composition.
++
++    Recognition is finite source-generation work. The native owner selects
++    either ordinary phases or the qualification-only coefficient primitive;
++    neither selection constructs graphs or recognizes them at force execution.
++    The emitted bound is part of native admission, not just an annotation.
++    """
++    operation = recognize_becke_partition_domain_graph(
++        grid_partition_domain_program(atom_limit, iterations),
++        atom_limit=atom_limit,
++        iterations=iterations,
++    )
++    if operation is None:
++        raise ValueError("stationary Becke domain does not match canonical AD")
++    return (
++        emit_becke_pair_coefficients(operation)
++        + "namespace generativeqc_stationary_cuda {\n"
++        + f"constexpr size_t stationary_becke_primitive_max_atoms = {atom_limit};\n"
++        + "}\n"
++        + _KERNELS
++    )
+diff --git a/python/generativeqc_compiler/method/stationary_composite_resources.py b/python/generativeqc_compiler/method/stationary_composite_resources.py
+index d47a3930e..cff9f2a77 100644
+--- a/python/generativeqc_compiler/method/stationary_composite_resources.py
++++ b/python/generativeqc_compiler/method/stationary_composite_resources.py
+@@ -40,6 +40,7 @@ def plan_composite_stationary_cuda_resources(
+     max_device_bytes: int,
+     max_host_bytes: int,
+     tile_points: int | None = None,
++    becke_primitive: bool = False,
+ ) -> CompositeStationaryCudaResources:
+     """Prefer 1024 points, retaining bounded smaller tiles under tight totals.
+ 
+@@ -84,6 +85,7 @@ def plan_composite_stationary_cuda_resources(
+             )
+             // 2,
+             cooperative_becke=True,
++            becke_primitive=becke_primitive,
+         )
+         device = (
+             grid.peak_bytes
+diff --git a/python/generativeqc_compiler/method/stationary_cuda.py b/python/generativeqc_compiler/method/stationary_cuda.py
+index 6bcf13668..8c717b887 100644
+--- a/python/generativeqc_compiler/method/stationary_cuda.py
++++ b/python/generativeqc_compiler/method/stationary_cuda.py
+@@ -1440,7 +1440,7 @@ def emit_stationary_wrapper_cuda(
+         + ";\n"
+         + "}\n"
+         + _runtime_layout_cuda(plan)
+-        + emit_stationary_phased_becke_cuda()
++        + emit_stationary_phased_becke_cuda(iterations=iterations)
+         + '#include "dft/stationary_gradient_cuda.cuh"\n'
+         + emit_stationary_scientific_kernels(plan)
+     )
+diff --git a/python/generativeqc_compiler/method/stationary_resources.py b/python/generativeqc_compiler/method/stationary_resources.py
+index 1844b03c1..e3c9e3c84 100644
+--- a/python/generativeqc_compiler/method/stationary_resources.py
++++ b/python/generativeqc_compiler/method/stationary_resources.py
+@@ -227,6 +227,7 @@ class StationaryCudaResources:
+     becke_threads_per_point: int = 1
+     becke_shared_bytes: int = 0
+     phased_becke_bytes: int = 0
++    becke_primitive: bool = False
+ 
+ 
+ def plan_stationary_cuda_resources(
+@@ -242,6 +243,7 @@ def plan_stationary_cuda_resources(
+     budget_bytes: int,
+     cooperative_becke: bool | None = None,
+     phased_becke: bool = False,
++    becke_primitive: bool = False,
+ ) -> StationaryCudaResources:
+     """Choose up to one lane per point within the admitted owner's byte budget.
+ 
+@@ -263,6 +265,8 @@ def plan_stationary_cuda_resources(
+         raise ValueError("cooperative Becke selection must be boolean")
+     if type(phased_becke) is not bool:
+         raise ValueError("phased Becke selection must be boolean")
++    if type(becke_primitive) is not bool:
++        raise ValueError("Becke primitive selection must be boolean")
+     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
+         raise ValueError("stationary CUDA byte budget is not representable")
+     minimum = stationary_cuda_allocation_bytes(
+@@ -315,7 +319,7 @@ def plan_stationary_cuda_resources(
+     # Qualification-only opt-in. Preserve the lane count, integral reserve and
+     # bounded route; never evict a concurrent owner to admit a pair cache.
+     if (
+-        phased_becke
++        (phased_becke or becke_primitive)
+         and atoms > BECKE_RETAINED_MAX_ATOMS
+         and lanes == points
+         and center_bytes
+@@ -336,6 +340,7 @@ def plan_stationary_cuda_resources(
+         becke_threads,
+         shared_bytes,
+         phase_bytes,
++        bool(phase_bytes and becke_primitive),
+     )
+ 
+ 
+diff --git a/python/generativeqc_compiler/xc/becke_coefficients.py b/python/generativeqc_compiler/xc/becke_coefficients.py
+index d342ba3d3..90a56e4f6 100644
+--- a/python/generativeqc_compiler/xc/becke_coefficients.py
++++ b/python/generativeqc_compiler/xc/becke_coefficients.py
+@@ -78,12 +78,7 @@ def plan_becke_pair_coefficients(
+         budget_bytes=budget_bytes,
+         occupied_bytes=occupied_bytes,
+     )
+-    if (
+-        phased is None
+-        or not cached_geometry
+-        or operation.atoms is not None
+-        and operation.atoms != atoms
+-    ):
++    if phased is None or not cached_geometry or not operation.supports_atoms(atoms):
+         return None
+     return BeckePairCoefficientPlan(operation, phased)
+ 
+diff --git a/python/generativeqc_compiler/xc/becke_partition.py b/python/generativeqc_compiler/xc/becke_partition.py
+index acf0a8684..da786f354 100644
+--- a/python/generativeqc_compiler/xc/becke_partition.py
++++ b/python/generativeqc_compiler/xc/becke_partition.py
+@@ -13,7 +13,9 @@ from dataclasses import dataclass
+ from generativeqc_compiler.common.provenance import canonical_hash
+ from generativeqc_compiler.dft.grid import checked_int
+ from generativeqc_compiler.xc.grid_partition_ir import (
++    grid_partition_domain_program,
+     grid_partition_program,
++    partition_domain_graph_kind,
+     partition_graph_kind,
+ )
+ from generativeqc_compiler.xc.grid_phased import (
+@@ -52,10 +54,35 @@ class BeckePartitionDerivativeOp:
+     program_identities: tuple[tuple[str, str], ...]
+     composition_identity: str | None = None
+     atoms: int | None = None
++    atom_limit: int | None = None
++
++    def supports_atoms(self, atoms: int) -> bool:
++        """Admit only the actual authenticated exact or active-prefix domain."""
++        return (
++            type(atoms) is int
++            and 1 <= atoms <= (self.atom_limit or 128)
++            and (self.atoms is None or atoms == self.atoms)
++        )
+ 
+     @property
+     def identity(self) -> str:
+         """Bind scientific graphs, zero semantics and ordered reduction policy."""
++        if self.atom_limit is not None:
++            return canonical_hash(
++                {
++                    "schema": "generativeqc.becke-partition-derivative-op/v3",
++                    "programs": self.program_identities,
++                    "composition": self.composition_identity,
++                    "atom_domain": [1, self.atom_limit],
++                    "partition": "becke-equal-radius",
++                    "inactive_pairs": "both-factors-one-safe-ratio-operands",
++                    "inactive_products": "zero-denominator-contribution",
++                    "zero_semantics": "single-zero-retains-pullback-multi-zero-annihilates",
++                    "normalization": "selected-product-over-all-active-products",
++                    "geometry": "validated-point-and-center-distance-bindings",
++                    "reduction": "ascending-neighbors-no-fp-atomics",
++                }
++            )
+         if self.composition_identity is not None:
+             return canonical_hash(
+                 {
+@@ -151,9 +178,57 @@ def recognize_becke_partition_graph(
+     )
+ 
+ 
++def recognize_becke_partition_domain_graph(
++    program: GridResponseProgram,
++    *,
++    atom_limit: int = 128,
++    iterations: int = 3,
++    partition: str = "becke-equal-radius",
++) -> BeckePartitionDerivativeOp | None:
++    """Authenticate the entire guarded primal/JVP family and its runtime bound.
++
++    A fixed-size canonical graph is deliberately not accepted as a dynamic
++    witness. Native owners may truncate the generated domains only because the
++    actual reachable composition contains the active-prefix neutral elements.
++    """
++    if (
++        type(atom_limit) is not int
++        or not 1 <= atom_limit <= 128
++        or partition != "becke-equal-radius"
++    ):
++        return None
++    expected = grid_partition_domain_program(atom_limit, iterations)
++    try:
++        actual = _actual_identity(program, partition_domain_graph_kind(atom_limit))
++    except ValueError:
++        return None
++    if actual != expected.identity:
++        return None
++    scalar = recognize_becke_partition_derivative(
++        ratio=grid_response_program("ratio", iterations),
++        logarithm=grid_response_program("log", iterations),
++        switch=grid_response_program("becke", iterations),
++        iterations=iterations,
++        partition=partition,
++    )
++    if scalar is None:
++        return None
++    return BeckePartitionDerivativeOp(
++        iterations, scalar.program_identities, actual, atom_limit=atom_limit
++    )
++
++
+ def validate_becke_partition_derivative(operation: BeckePartitionDerivativeOp) -> None:
+     """Reauthenticate canonical roots before emitting a matched operation."""
+-    if operation.composition_identity is not None:
++    if operation.atom_limit is not None:
++        if operation.composition_identity is None or operation.atoms is not None:
++            raise ValueError("Becke primitive has an inconsistent dynamic atom domain")
++        current = recognize_becke_partition_domain_graph(
++            grid_partition_domain_program(operation.atom_limit, operation.iterations),
++            atom_limit=operation.atom_limit,
++            iterations=operation.iterations,
++        )
++    elif operation.composition_identity is not None:
+         if operation.atoms is None:
+             raise ValueError("Becke primitive composition lacks its atom domain")
+         current = recognize_becke_partition_graph(
+@@ -208,7 +283,7 @@ def plan_becke_partition_derivative(
+         budget_bytes=budget_bytes,
+         occupied_bytes=occupied_bytes,
+     )
+-    if phased is None or operation.atoms is not None and operation.atoms != atoms:
++    if phased is None or not operation.supports_atoms(atoms):
+         return None
+     plan = BeckePartitionDerivativePlan(operation, phased)
+     return plan if occupied_bytes + plan.scratch_bytes <= budget_bytes else None
+diff --git a/python/generativeqc_compiler/xc/grid_partition_ir.py b/python/generativeqc_compiler/xc/grid_partition_ir.py
+index 032542c90..2775b58b2 100644
+--- a/python/generativeqc_compiler/xc/grid_partition_ir.py
++++ b/python/generativeqc_compiler/xc/grid_partition_ir.py
+@@ -26,6 +26,12 @@ def partition_graph_kind(atoms: int) -> str:
+     return f"becke-normalized-product/equal-radius/{atoms}"
+ 
+ 
++def partition_domain_graph_kind(atom_limit: int) -> str:
++    """Identify a runtime prefix domain, not a representative fixed-size graph."""
++    checked_int(atom_limit, "partition domain atom limit", high=128)
++    return f"becke-normalized-product/equal-radius/active-prefix/1-{atom_limit}"
++
++
+ @lru_cache(maxsize=4, typed=True)
+ def grid_partition_program(atoms: int, iterations: int = 3) -> GridResponseProgram:
+     """Differentiate the complete objective, including all denominator products.
+@@ -37,21 +43,59 @@ def grid_partition_program(atoms: int, iterations: int = 3) -> GridResponseProgr
+     Compiler graph size is explicitly bounded; larger unsupported dimensions
+     must retain the existing generic route, not build unbounded scalar graphs.
+     """
+-    kind = partition_graph_kind(atoms)
++    return _partition_program(atoms, iterations, dynamic_domain=False)
++
++
++@lru_cache(maxsize=2, typed=True)
++def grid_partition_domain_program(
++    atom_limit: int = 128, iterations: int = 3
++) -> GridResponseProgram:
++    """Differentiate the actual bounded family used by a dynamic native owner.
++
++    The integer ``atoms`` leaf selects an active prefix in [1, atom_limit].
++    Inactive pairs contribute one to BOTH incident products, and inactive atom
++    products contribute zero to the denominator. Thus each valid prefix has
++    exactly the canonical objective and JVP for its actual atom count. Neither
++    ``atoms`` nor ``owner`` has a tangent. Runtime admission must enforce these
++    integer domains; padding distances and tangents do not affect the roots.
++
++    This finite compiler witness is built at source generation, never at a
++    geometry, tile or seed bind. It is not a fixed-N witness reused at other N.
++    """
++    return _partition_program(atom_limit, iterations, dynamic_domain=True)
++
++
++def _partition_program(
++    atoms: int, iterations: int, *, dynamic_domain: bool
++) -> GridResponseProgram:
++    """Share the canonical expression between exact and active-prefix graphs."""
++    kind = (
++        partition_domain_graph_kind(atoms)
++        if dynamic_domain
++        else partition_graph_kind(atoms)
++    )
+     if type(iterations) is not int or not 1 <= iterations <= 5:
+         raise ValueError("partition iterations must be an integer in [1, 5]")
+     graph = Graph()
+     names = [f"distance_{atom}" for atom in range(atoms)]
+     distances = [graph.variable(name) for name in names]
++    active = graph.variable("atoms") if dynamic_domain else None
+     factors = [[] for _ in range(atoms)]
+     for first in range(atoms):
+         for second in range(first):
+             name = f"separation_{first}_{second}"
+             names.append(name)
++            difference = distances[first] - distances[second]
++            separation = graph.variable(name)
++            if active is not None:
++                # Guard the ratio operands as well as its consumers. Even an
++                # eager scalar evaluator must not divide by padding's zero.
++                difference = graph.select_le(active, first, 0, difference)
++                separation = graph.select_le(active, first, 1, separation)
+             coordinate = grid_response_primal(
+                 graph,
+                 "ratio",
+-                {"a": distances[first] - distances[second], "b": graph.variable(name)},
++                {"a": difference, "b": separation},
+                 iterations,
+             )
+             clipped = graph.select_le(
+@@ -66,9 +110,18 @@ def grid_partition_program(atoms: int, iterations: int = 3) -> GridResponseProgr
+                 graph.select_le(0, raw, raw, 0),
+                 graph.select_le(1, raw, graph.select_le(raw, 1, raw, 1), raw),
+             )
++            complement = 1 - factor
++            if active is not None:
++                factor = graph.select_le(active, first, 1, factor)
++                complement = graph.select_le(active, first, 1, complement)
+             factors[first].append(factor)
+-            factors[second].append(1 - factor)
++            factors[second].append(complement)
+     products = [graph.multiply_many(values) for values in factors]
++    if active is not None:
++        products = [
++            graph.select_le(active, atom, 0, product)
++            for atom, product in enumerate(products)
++        ]
+     owner = graph.variable("owner")
+     numerator = products[-1]
+     for atom in range(atoms - 2, -1, -1):
+diff --git a/src/dft/stationary_gradient_cuda.cuh b/src/dft/stationary_gradient_cuda.cuh
+index 8a43b3407..c3265df4b 100644
+--- a/src/dft/stationary_gradient_cuda.cuh
++++ b/src/dft/stationary_gradient_cuda.cuh
+@@ -22,6 +22,8 @@ struct Owner {
+       becke_shared_bytes{}, byte_budget{}, phased_bytes{};
+   bool failed = true, topology_ready = false;
+   bool profile = false, geometry_pending = false;
++  bool becke_primitive_requested = false, becke_primitive = false,
++       becke_primitive_configured = false;
+   cudaStream_t geometry_stream{};
+   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
+   double synchronization_wait_ms{}, setup_transfer_ms{}, setup_validation_ms{};
+@@ -36,6 +38,7 @@ struct Owner {
+   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
+   uint64_t center_distance_evaluations{}, center_geometry_preparations{},
+       becke_pair_state_evaluations{}, phased_batches{};
++  uint64_t becke_primitive_batches{}, becke_primitive_reverse_pair_visits{};
+   bool retains_becke_pair_state() const {
+     return bool(phased_storage) ||
+            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
+@@ -227,8 +230,15 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
+     phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
+     phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
+     phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+-    phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
+-    phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
++    if (owner.becke_primitive) {
++      phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
++      phased_becke_atom<2, true><<<atom_blocks, 128, 0, stream>>>(phased);
++      ++owner.becke_primitive_batches;
++      owner.becke_primitive_reverse_pair_visits += view.npoint * na * (na - 1) / 2;
++    } else {
++      phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
++      phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
++    }
+     phased_becke_atom<3><<<atom_blocks, 128, 0, stream>>>(phased);
+     owner.launches += 7;
+     ++owner.phased_batches;
+@@ -402,6 +412,37 @@ int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t c
+   output[1] = owner->phased_batches;
+   return 0;
+ }
++int stationary_configure_becke_primitive_v1(void* pointer, int enabled, char* error, size_t size) {
++  using namespace generativeqc_stationary_cuda;
++  auto* owner = static_cast<Owner*>(pointer);
++  return guarded(owner, error, size, [&] {
++    if (!owner || owner->topology_ready || owner->becke_primitive_configured ||
++        (enabled != 0 && enabled != 1))
++      throw std::invalid_argument("Becke primitive must be configured once before topology");
++    owner->context.check_device();
++    owner->becke_primitive_configured = true;
++    owner->becke_primitive_requested = enabled;
++    // A losing schedule is opt-in only. Reuse the already admitted reservation,
++    // center lifetime and point lanes; never allocate or evict another owner.
++    if (!enabled || !owner->phased_storage || !owner->center_pairs ||
++        owner->atoms > stationary_becke_primitive_max_atoms)
++      return;
++    cudaFuncAttributes reverse{}, gather{};
++    cuda_check(cudaFuncGetAttributes(&reverse, phased_becke_pair<true, true>));
++    cuda_check(cudaFuncGetAttributes(&gather, phased_becke_atom<2, true>));
++    if (reverse.maxThreadsPerBlock < 128 || gather.maxThreadsPerBlock < 128) return;
++    owner->becke_primitive = true;
++  });
++}
++int stationary_becke_primitive_metrics_v1(void* pointer, uint64_t* output, size_t count) {
++  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
++  if (!owner || !output || count != 4) return 1;
++  output[0] = owner->becke_primitive_requested;
++  output[1] = owner->becke_primitive;
++  output[2] = owner->becke_primitive_batches;
++  output[3] = owner->becke_primitive_reverse_pair_visits;
++  return 0;
++}
+ int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
+                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
+   using namespace generativeqc_stationary_cuda;
+diff --git a/tests/python/test_becke_partition_graph.py b/tests/python/test_becke_partition_graph.py
+index 8d3826440..a7293d0e6 100644
+--- a/tests/python/test_becke_partition_graph.py
++++ b/tests/python/test_becke_partition_graph.py
+@@ -16,7 +16,10 @@ from generativeqc_compiler.xc.becke_coefficients import (
+ from generativeqc_compiler.xc.becke_partition import (
+     recognize_becke_partition_graph,
+ )
+-from generativeqc_compiler.xc.grid_partition_ir import grid_partition_program
++from generativeqc_compiler.xc.grid_partition_ir import (
++    grid_partition_domain_program,
++    grid_partition_program,
++)
+ from test_becke_pair_coefficients import helper
+ 
+ __all__ = ["helper"]
+@@ -95,8 +98,9 @@ def test_recognition_authenticates_composition_not_companion_hashes() -> None:
+ 
+ 
+ @pytest.mark.parametrize("atoms", [1, 2, 3, 8])
++@pytest.mark.parametrize("dynamic_domain", [False, True])
+ def test_whole_generated_jvp_matches_generic_and_coefficient_force(
+-    helper: ct.CDLL, atoms: int
++    helper: ct.CDLL, atoms: int, dynamic_domain: bool
+ ) -> None:
+     """Bind existing norm tangents; the entire product/ratio JVP comes from AD.
+ 
+@@ -125,7 +129,17 @@ def test_whole_generated_jvp_matches_generic_and_coefficient_force(
+             bindings[f"dseparation_{atom}_{neighbor}"] = np.dot(
+                 separation / length, motion[atom] - motion[neighbor]
+             )
+-    program = grid_partition_program(atoms, helper.iterations)
++    if dynamic_domain:
++        bindings["atoms"] = atoms
++        for atom in range(atoms, 8):
++            bindings[f"distance_{atom}"] = 0
++            bindings[f"ddistance_{atom}"] = 17
++            for neighbor in range(atom):
++                bindings[f"separation_{atom}_{neighbor}"] = 0
++                bindings[f"dseparation_{atom}_{neighbor}"] = 23
++        program = grid_partition_domain_program(8, helper.iterations)
++    else:
++        program = grid_partition_program(atoms, helper.iterations)
+     _, tangent = program.evaluate(**bindings)
+     expected = np.sum(seeds * tangent)
+     for route in (0, 2):
+diff --git a/tests/python/test_stationary_becke_phased_cuda.py b/tests/python/test_stationary_becke_phased_cuda.py
+index 9036915c4..9c0bca99c 100644
+--- a/tests/python/test_stationary_becke_phased_cuda.py
++++ b/tests/python/test_stationary_becke_phased_cuda.py
+@@ -85,6 +85,8 @@ def native() -> SimpleNamespace:
+         ],
+         "stationary_finish": [pointer, pointer, size],
+     }
++    if hasattr(library, "stationary_configure_becke_primitive_v1"):
++        signatures["stationary_configure_becke_primitive_v1"] = [pointer, ct.c_int]
+     for name, arguments in signatures.items():
+         getattr(library, name).argtypes = [*arguments, *tail]
+     library.stationary_destroy.argtypes = [pointer]
+@@ -94,6 +96,12 @@ def native() -> SimpleNamespace:
+         ct.POINTER(ct.c_uint64),
+         size,
+     ]
++    if hasattr(library, "stationary_becke_primitive_metrics_v1"):
++        library.stationary_becke_primitive_metrics_v1.argtypes = [
++            pointer,
++            ct.POINTER(ct.c_uint64),
++            size,
++        ]
+ 
+     def call(name: str, *arguments: object) -> None:
+         error = ct.create_string_buffer(4096)
+@@ -108,14 +116,24 @@ def native() -> SimpleNamespace:
+ @pytest.mark.parametrize("implicit", [False, True])
+ @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
+ @pytest.mark.parametrize("external", [False, True])
++@pytest.mark.parametrize("primitive", [False, True])
+ def test_shared_owner_phases_preserve_sources_and_work(
+-    native: SimpleNamespace, atoms: int, implicit: bool, selection: str, external: bool
++    native: SimpleNamespace,
++    atoms: int,
++    implicit: bool,
++    selection: str,
++    external: bool,
++    primitive: bool,
+ ) -> None:
+     """Replay identical AO/XC inputs through the actual bounded/phased owner.
+ 
+     Synthetic AO/features isolate routing and lifetime; they are not a molecular
+     oracle. Independent Becke Decimal tests and complete E/F gates are separate.
+     """
++    if primitive and not hasattr(
++        native.library, "stationary_configure_becke_primitive_v1"
++    ):
++        pytest.skip("artifact predates whole-domain primitive admission")
+     cupy = native.cupy
+     rng = np.random.default_rng(183000 + atoms)
+     centers = rng.normal(size=(atoms, 3)) * 3
+@@ -184,6 +202,10 @@ def test_shared_owner_phases_preserve_sources_and_work(
+                     handle,
+                     plan.phased_becke_bytes,
+                 )
++            if hasattr(native.library, "stationary_configure_becke_primitive_v1"):
++                native.call(
++                    "stationary_configure_becke_primitive_v1", handle, int(primitive)
++                )
+             native.call(
+                 "stationary_topology",
+                 handle,
+@@ -297,6 +319,20 @@ def test_shared_owner_phases_preserve_sources_and_work(
+             assert phase_metrics[0] == plan.phased_becke_bytes
+             assert phase_metrics[1] == (6 if phased else 0)
+             assert metrics[0] == plan.allocation_bytes
++            if hasattr(native.library, "stationary_becke_primitive_metrics_v1"):
++                primitive_metrics = (ct.c_uint64 * 4)()
++                assert (
++                    native.library.stationary_becke_primitive_metrics_v1(
++                        handle, primitive_metrics, 4
++                    )
++                    == 0
++                )
++                assert tuple(primitive_metrics) == (
++                    int(primitive),
++                    int(primitive and phased),
++                    6 if primitive and phased else 0,
++                    3 * 257 * atoms * (atoms - 1) // 2 if primitive and phased else 0,
++                )
+             valid_points = device["points"].get()
+             valid_tail = None
+             for invalid in (False, True, False):
+diff --git a/tests/python/test_stationary_becke_phased_resources.py b/tests/python/test_stationary_becke_phased_resources.py
+index 23d7c1b46..763ac86af 100644
+--- a/tests/python/test_stationary_becke_phased_resources.py
++++ b/tests/python/test_stationary_becke_phased_resources.py
+@@ -4,9 +4,16 @@ from dataclasses import replace
+ 
+ import pytest
+ from generativeqc_compiler.common.cuda_target import cuda_target_info
++from generativeqc_compiler.method.stationary_becke_phased import (
++    emit_stationary_phased_becke_cuda,
++)
+ from generativeqc_compiler.method.stationary_resources import (
+     plan_stationary_cuda_resources,
+ )
++from generativeqc_compiler.xc.becke_partition import (
++    recognize_becke_partition_domain_graph,
++)
++from generativeqc_compiler.xc.grid_partition_ir import grid_partition_domain_program
+ from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
+ 
+ 
+@@ -79,3 +86,63 @@ def test_phases_keep_small_uncached_unqualified_and_multi_point_lanes_bounded()
+     assert uncached.center_geometry_bytes == uncached.phased_becke_bytes == 0
+     with pytest.raises(ValueError, match="phased Becke selection must be boolean"):
+         plan_stationary_cuda_resources(**shape, budget_bytes=1 << 30, phased_becke=1)
++
++
++@pytest.mark.parametrize("atoms", [24, 33, 48, 96, 128])
++def test_primitive_admission_reuses_exact_concurrent_phase_reservation(
++    atoms: int,
++) -> None:
++    shape = {
++        "atoms": atoms,
++        "aos": 8 * atoms,
++        "primitives": 16 * atoms,
++        "points": 256,
++        "tasks": 256,
++        "spins": 1,
++        "sources": 8,
++        "target": cuda_target_info("sm_120"),
++    }
++    phased = plan_stationary_cuda_resources(
++        **shape, budget_bytes=1 << 30, phased_becke=True
++    )
++    primitive = plan_stationary_cuda_resources(
++        **shape, budget_bytes=1 << 30, becke_primitive=True
++    )
++    assert replace(primitive, becke_primitive=False) == phased
++    assert primitive.becke_primitive == bool(phased.phased_becke_bytes)
++    if primitive.becke_primitive:
++        bounded = plan_stationary_cuda_resources(
++            **shape, budget_bytes=primitive.allocation_bytes - 1, becke_primitive=True
++        )
++        assert bounded.phased_becke_bytes == 0
++        assert bounded.becke_primitive is False
++        assert bounded.geometry_lanes == phased.geometry_lanes
++    for changes in (
++        {"cooperative_becke": False},
++        {"target": cuda_target_info("sm_80")},
++    ):
++        bounded = plan_stationary_cuda_resources(
++            **{**shape, **changes}, budget_bytes=1 << 30, becke_primitive=True
++        )
++        assert bounded.becke_primitive is False
++        assert bounded.phased_becke_bytes == 0
++    with pytest.raises(ValueError, match="primitive selection must be boolean"):
++        plan_stationary_cuda_resources(**shape, budget_bytes=1 << 30, becke_primitive=1)
++
++
++@pytest.mark.parametrize("iterations", [1, 3, 5])
++def test_shared_stationary_emission_binds_actual_dynamic_graph_and_native_bound(
++    iterations: int,
++) -> None:
++    operation = recognize_becke_partition_domain_graph(
++        grid_partition_domain_program(4, iterations),
++        atom_limit=4,
++        iterations=iterations,
++    )
++    assert operation is not None
++    source = emit_stationary_phased_becke_cuda(4, iterations=iterations)
++    assert operation.identity in source
++    assert "stationary_becke_primitive_max_atoms = 4;" in source
++    assert "pair_coefficient_reverse_phase(" in source
++    assert "atom_gather_coefficient_phase(" in source
++    assert emit_stationary_phased_becke_cuda(4, iterations=iterations) is source
+diff --git a/tests/python/test_stationary_cuda_merge_boundary.py b/tests/python/test_stationary_cuda_merge_boundary.py
+index e7d3002e3..5f2a80532 100644
+--- a/tests/python/test_stationary_cuda_merge_boundary.py
++++ b/tests/python/test_stationary_cuda_merge_boundary.py
+@@ -60,8 +60,30 @@ def test_phased_becke_policy_rejects_non_boolean_explicit_values(
+         runtime._resolve_phased_becke_policy(96, selection)
+ 
+ 
++def test_becke_primitive_policy_is_explicit_and_never_promotes_losing_schedule(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    from generativeqc import _stationary_cuda as runtime
++
++    monkeypatch.delenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", raising=False)
++    assert runtime._resolve_becke_primitive_policy() is False
++    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
++    assert runtime._resolve_becke_primitive_policy() is True
++    assert runtime._resolve_becke_primitive_policy(False) is False
++    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "off")
++    assert runtime._resolve_becke_primitive_policy() is False
++    assert runtime._resolve_becke_primitive_policy(True) is True
++    for invalid in (0, 1, "coefficients"):
++        with pytest.raises(TypeError, match="boolean or None"):
++            runtime._resolve_becke_primitive_policy(invalid)
++    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "auto")
++    with pytest.raises(ValueError, match="primitive mode must be"):
++        runtime._resolve_becke_primitive_policy()
++
++
++@pytest.mark.parametrize("primitive_abi", [False, True])
+ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
+-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, primitive_abi: bool
+ ) -> None:
+     from generativeqc import _stationary_cuda as runtime
+ 
+@@ -89,6 +111,10 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
+         "stationary_destroy",
+     )
+     library = SimpleNamespace(**{name: MagicMock(return_value=0) for name in names})
++    if primitive_abi:
++        library.stationary_configure_becke_primitive_v1 = MagicMock(return_value=0)
++        library.stationary_becke_primitive_metrics_v1 = MagicMock(return_value=0)
++    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
+     monkeypatch.setattr(runtime, "file_hash", lambda _path: "binary")
+     monkeypatch.setattr(runtime.ct, "CDLL", lambda _path: library)
+     monkeypatch.setattr(runtime, "_native_ao_atoms", lambda _basis: np.array([0, 0]))
+@@ -133,6 +159,13 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
+     owner = runtime._CudaSources(
+         basis, artifact, compiler, 0, 4, 2, 4096, spin_blocks=2
+     )
++    assert owner.becke_primitive_supported is primitive_abi
++    assert owner.resources.becke_primitive is False
++    if primitive_abi:
++        assert library.stationary_configure_becke_primitive_v1.call_args.args[:2] == (
++            owner.handle,
++            1,
++        )
+     assert owner.tasks.shape == (2, 9)
+     density = np.stack((np.eye(2), 2 * np.eye(2)))
+     owner.reset(1.0e-12, density, 3 * density)

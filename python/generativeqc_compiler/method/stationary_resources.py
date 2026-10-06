@@ -227,6 +227,7 @@ class StationaryCudaResources:
     becke_threads_per_point: int = 1
     becke_shared_bytes: int = 0
     phased_becke_bytes: int = 0
+    becke_primitive: bool = False
 
 
 def plan_stationary_cuda_resources(
@@ -242,6 +243,7 @@ def plan_stationary_cuda_resources(
     budget_bytes: int,
     cooperative_becke: bool | None = None,
     phased_becke: bool = False,
+    becke_primitive: bool = False,
 ) -> StationaryCudaResources:
     """Choose up to one lane per point within the admitted owner's byte budget.
 
@@ -263,6 +265,8 @@ def plan_stationary_cuda_resources(
         raise ValueError("cooperative Becke selection must be boolean")
     if type(phased_becke) is not bool:
         raise ValueError("phased Becke selection must be boolean")
+    if type(becke_primitive) is not bool:
+        raise ValueError("Becke primitive selection must be boolean")
     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
         raise ValueError("stationary CUDA byte budget is not representable")
     minimum = stationary_cuda_allocation_bytes(
@@ -315,7 +319,7 @@ def plan_stationary_cuda_resources(
     # Qualification-only opt-in. Preserve the lane count, integral reserve and
     # bounded route; never evict a concurrent owner to admit a pair cache.
     if (
-        phased_becke
+        (phased_becke or becke_primitive)
         and atoms > BECKE_RETAINED_MAX_ATOMS
         and lanes == points
         and center_bytes
@@ -336,6 +340,7 @@ def plan_stationary_cuda_resources(
         becke_threads,
         shared_bytes,
         phase_bytes,
+        bool(phase_bytes and becke_primitive),
     )
 
 

@@ -34,6 +34,75 @@ WORK_COUNT_POLICY = (
     "generated/screened/compacted/executed; logical/capacity bounds remain under "
     "capacity, and unavailable stages are left empty rather than inferred"
 )
+BECKE_PHASES = (
+    "point_center_distance",
+    "pair_primal_switch_log",
+    "atom_log_reduction",
+    "normalization",
+    "reverse_derivative",
+    "atom_gather",
+    "point_motion_publication",
+)
+
+
+def _becke_owner(work: Mapping[str, typing.Any]) -> dict[str, typing.Any]:
+    """Retain route evidence without mistaking logical bytes for GPU traffic.
+
+    Native times are cumulative/delta event observations, not additive wall
+    components. Disabled profiling and the unsplit generic route are unmeasured
+    even when their ABI returns a zero-filled duration array.
+    """
+    profile_measured = (
+        work.get("becke_phase_profile_supported") is True
+        and work.get("becke_phase_profile_enabled") is True
+        and (_int_or_none(work.get("becke_profile_batches")) or 0) > 0
+    )
+    times = _mapping(work.get("becke_phase_ms")) if profile_measured else {}
+    selection_names = (
+        "becke_primitive_requested",
+        "becke_primitive_selected",
+        "becke_threads_per_point",
+        "becke_shared_bytes",
+        "phased_becke_bytes",
+    )
+    counters: dict[str, int] = {}
+    logical_bytes: dict[str, int] = {}
+    for name, value in work.items():
+        if (
+            name.startswith(("becke_", "phased_becke_"))
+            and name not in selection_names
+            and name.endswith(
+                (
+                    "_batches",
+                    "_points",
+                    "_entries",
+                    "_visits",
+                    "_launches",
+                    "_bytes",
+                    "_records",
+                    "_synchronizations",
+                    "_evaluations",
+                )
+            )
+        ):
+            _store_counter(
+                logical_bytes if name.endswith("_bytes") else counters, name, value
+            )
+    return {
+        "selection": {name: work.get(name) for name in selection_names},
+        "work_counters": counters,
+        "work_counter_semantics": work.get("becke_work_counter_semantics"),
+        "logical_traffic_bytes": logical_bytes,
+        "logical_traffic_model": work.get("becke_traffic_model"),
+        "profile_supported": work.get("becke_phase_profile_supported"),
+        "profile_enabled": work.get("becke_phase_profile_enabled"),
+        "profile_intrusive": profile_measured,
+        "profile_scope": work.get("becke_phase_profile_scope"),
+        "profiled_ms": {
+            name: _value(times, name, field=f"becke_phase_ms.{name}")
+            for name in BECKE_PHASES
+        },
+    }
 
 
 def _finite_nonnegative(value: typing.Any, *, field: str) -> float | None:
@@ -318,6 +387,10 @@ def _normalize_composite(
             ),
         },
         "source_component_seconds": dict(component),
+        "becke_owners": {
+            str(name): _becke_owner(_mapping(metrics))
+            for name, metrics in _mapping(work.get("stationary_source_work")).items()
+        },
         "endpoint_seconds": endpoint,
         "attributed_wall_seconds": attributed,
         "unattributed_wall_seconds": _unattributed(endpoint, attributed),
@@ -442,6 +515,7 @@ def _normalize_stationary(
     return {
         "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
+        "becke_owners": {"stationary": _becke_owner(work)},
         "source_exclusive_wall_seconds": dict(phases),
         "grid_work_plan": dict(_mapping(work.get("grid_work_plan"))),
         "resident_ao_selection": (

@@ -59,7 +59,14 @@ from generativeqc_compiler.method.stationary_resources import (
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
 from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
-from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
+from ._stationary_cuda import (
+    _DOUBLE,
+    _CudaSources,
+    _metric_delta,
+    _native_grid_artifact,
+    _ptr,
+    _resolve_becke_primitive_policy,
+)
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
@@ -279,6 +286,7 @@ class PreparedCompositeStationaryCudaGradient:
             )
         layout = plan_composite_stationary_cuda_resources(
             basis,
+            becke_primitive=_resolve_becke_primitive_policy(),
             grid_plan=lambda points: plan_tiles(
                 basis,
                 backend="cuda",
@@ -405,6 +413,11 @@ class PreparedCompositeStationaryCudaGradient:
                 self.close()
                 raise
         component_seconds = {"prepare": perf_counter() - started}
+        # Both retained owners have independent streams and cumulative counters.
+        # Snapshot before nuclear/grid work; never merge their device durations
+        # into a clean host-wall endpoint or omit the nonlocal owner's traffic.
+        source_metrics_before = self.sources.metrics()
+        nonlocal_metrics_before = self.nonlocal_sources.metrics()
         component_start = perf_counter()
         evaluate = source._library.generativeqc_ks_snapshot_cuda_integral_gradient_v1
         evaluate.argtypes = [
@@ -578,6 +591,14 @@ class PreparedCompositeStationaryCudaGradient:
             "prepared_execution_reused": reused,
             "execution_index": self.executions,
             "snapshot_export_work": dict(source.export_work),
+            "stationary_source_work": {
+                "semilocal": _metric_delta(
+                    self.sources.metrics(), source_metrics_before
+                ),
+                "nonlocal": _metric_delta(
+                    self.nonlocal_sources.metrics(), nonlocal_metrics_before
+                ),
+            },
             "host_scope": "snapshot validation, bounded tile scheduling, and canonical host source sum",
             "endpoint_seconds": perf_counter() - started,
             "component_seconds": component_seconds,
