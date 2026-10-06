@@ -33,10 +33,14 @@ The separate default-off switch
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES=1` is also frozen at preparation.
 It selects dddd tasks in the stationary DFT `FullSources` bounded scheduler,
 including its angular-partition qualification mode. The existing FP64 `Dual3`
-algebra shares one pair-product Hermite/Coulomb preparation for all six component
-packets and both J'/K' density channels. Distinct atom seeds collapse repeated
-shell centers; only N-1 atoms are differentiated and translation recovers the
-last. Each component retains its Schwarz and independent source-density gates.
+Hermite response algebra borrows one scalar order-9 Coulomb simplex per
+primitive-pair product for all six component packets, independent atoms and both
+J'/K' density channels. The existing Coulomb IR defines its spatial responses
+as the next Cartesian states; a view exposes those responses to the same
+contraction body. Bra Hermite responses survive all ket products. Distinct atom
+seeds collapse repeated shell centers; only N-1 atoms are differentiated and
+translation recovers the last. Each component retains its Schwarz and
+independent source-density gates.
 
 The derivative workspace is below 32 KiB, uses no global derivative tensor and
 has a separate kernel specialization so the disabled path retains its resource
@@ -54,6 +58,9 @@ and its fallback work counts, also set
 before/after statistics in the pytest temporary directory. The same executable's
 `--derivatives` case checks raw component derivatives, independent host source
 contractions, repeated atoms, same-pair domains and exact preparation counts.
+`tests/python/test_materialized_coulomb_response.py` checks every degree-0--8
+spatial response against differentiation of the authoritative Coulomb IR with
+its existing Boys leaf rule.
 
 `tests/python/test_cuda_hybrid_snapshot.py::test_separate_full_range_derivatives_match_libcint`,
 enabled by `GENERATIVEQC_RESOURCE_CUDA_TEST=1` inside Slurm, exercises both

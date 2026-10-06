@@ -1,8 +1,8 @@
-"""Share the retained FP64 forward derivative recurrence across dddd sources.
+"""Share one scalar Coulomb recurrence across dddd components and responses.
 
-Dual3 is the existing scalar differentiation algebra. This lowering changes
-its lifetime to one primitive-pair product and independent atom, with no new
-derivative equations or raw four-index derivative tensor.
+The Coulomb IR defines states as Cartesian spatial derivatives, so its first
+response is a raised spatial state. Existing Dual3 Hermite coefficients carry
+the pair geometry response; the scalar L+1 simplex is prepared once per product.
 """
 
 
@@ -20,14 +20,30 @@ def emit_direct_pair_materialized_gradient_support() -> str:
 
 namespace generativeqc::scf::cuda_execution {
 
-/** One dddd Dual3 simplex shared by all components and both density channels.
- * The AD scalar carries x/y/z for one atom; repeated shell centers share its
- * seed. Only N-1 distinct atoms are differentiated, preserving translation. */
+/** The scalar Coulomb IR's first spatial response is the next Cartesian state.
+ * R^n_tuv differentiates (-2*rho)^n F_n(rho |P-Q|^2), as defined by the existing
+ * Coulomb derivative algebra. The atom response scales each raised state by
+ * d(P-Q)/dR_atom. Full Coulomb and total spatial degree <=8 are the admitted
+ * domain; the L+1 scalar simplex supplies every response read. */
+struct MaterializedCoulombSpatialResponse {
+  const CoulombAuxiliary<double, 9>& scalar_states;
+  double product_response;
+  __device__ Dual3 at(unsigned n, unsigned t, unsigned u, unsigned v) const {
+    return {scalar_states.at(n, t, u, v),
+            product_response * scalar_states.at(n, t + 1, u, v),
+            product_response * scalar_states.at(n, t, u + 1, v),
+            product_response * scalar_states.at(n, t, u, v + 1)};
+  }
+};
+
+/** Bra Hermite responses for the N-1 independent atoms survive all ket products.
+ * One scalar Coulomb simplex serves every atom, component and source response;
+ * the ket Hermite response is retired before the next atom replaces it. */
 struct MaterializedDirectPairDerivativeRecurrence {
   using Pair = ShellPairHermiteCoefficients<Dual3, 2, 2>;
-  Pair bra[3], ket[3];
-  CoulombAuxiliary<Dual3, 8> coulomb;
-  Vec3<Dual3> first_product, second_product;
+  Pair bra[3][3], ket[3];
+  CoulombAuxiliary<double, 9> coulomb;
+  Vec3<Dual3> first_product[3], second_product;
   double p, q, coefficients[4];
 };
 static_assert(sizeof(MaterializedDirectPairDerivativeRecurrence) <= (32U << 10));
@@ -51,7 +67,7 @@ __device__ inline Vec3<Dual3> prepare_materialized_direct_pair_derivative(
   return product;
 }
 
-/** Uniform CTA entry; all six packets share each atom's prepared pair product.
+/** Uniform CTA entry; all six packets and atoms share each prepared pair product.
  * J' and K' use the same component derivative and preserve independent source
  * outputs. Inactive lanes participate in every publish/retire barrier. */
 template <bool Unrestricted>
@@ -102,44 +118,57 @@ __device__ inline void contract_materialized_direct_pair_full_source_force(
   const auto nb = batch.shell_primitive_offsets[sj + 1] - batch.shell_primitive_offsets[sj];
   const auto nd = batch.shell_primitive_offsets[sl + 1] - batch.shell_primitive_offsets[sl];
   const std::size_t source_stride = std::size_t(batch.total_atoms) * 3;
-  for (unsigned center = 0; center + 1 < centers; ++center) {
-    const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
-    const auto first = atom_position<Dual3>(batch, atoms[0], coordinate);
-    const auto second = atom_position<Dual3>(batch, atoms[1], coordinate);
-    const auto third = atom_position<Dual3>(batch, atoms[2], coordinate);
-    const auto fourth = atom_position<Dual3>(batch, atoms[3], coordinate);
-    Dual3 gradients[Slots]{};
-    for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
-      if (threadIdx.x == 0) {
-        const auto& cached = batch.shell_primitive_pairs[bra];
-        const auto a = batch.shell_primitive_offsets[si] + (bra - bra_begin) / nb;
-        const auto b = batch.shell_primitive_offsets[sj] + (bra - bra_begin) % nb;
-        shared.p = cached.exponent_sum;
-        shared.first_product = prepare_materialized_direct_pair_derivative(cached,
-            batch.primitive_exponents[a], batch.primitive_exponents[b], first, second, shared.bra);
-        shared.coefficients[0] = batch.primitive_coefficients[a];
-        shared.coefficients[1] = batch.primitive_coefficients[b];
+  // Keep a bounded derivative sum per component/independent atom. Primitive
+  // traversal and coefficient order remain unchanged within each response.
+  double gradients[3][Slots][3]{};
+  for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
+    if (threadIdx.x == 0) {
+      const auto& cached = batch.shell_primitive_pairs[bra];
+      const auto a = batch.shell_primitive_offsets[si] + (bra - bra_begin) / nb;
+      const auto b = batch.shell_primitive_offsets[sj] + (bra - bra_begin) % nb;
+      shared.p = cached.exponent_sum;
+      shared.coefficients[0] = batch.primitive_coefficients[a];
+      shared.coefficients[1] = batch.primitive_coefficients[b];
+      for (unsigned center = 0; center + 1 < centers; ++center) {
+        const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
+        shared.first_product[center] = prepare_materialized_direct_pair_derivative(cached,
+            batch.primitive_exponents[a], batch.primitive_exponents[b],
+            atom_position<Dual3>(batch, atoms[0], coordinate),
+            atom_position<Dual3>(batch, atoms[1], coordinate), shared.bra[center]);
         if (work) atomicAdd(&work->bra_preparations, 1ULL);
       }
+    }
+    __syncthreads();
+    for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
+      if (threadIdx.x == 0) {
+        const auto& cached = batch.shell_primitive_pairs[ket];
+        const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
+        const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
+        shared.q = cached.exponent_sum;
+        shared.coefficients[2] = batch.primitive_coefficients[c];
+        shared.coefficients[3] = batch.primitive_coefficients[d];
+        const Vec3<double> first_product{shared.first_product[0].x.value,
+            shared.first_product[0].y.value, shared.first_product[0].z.value};
+        fill_coulomb<9>(shared.p * shared.q / (shared.p + shared.q),
+                       first_product, cached.product_center, shared.coulomb);
+        if (work) atomicAdd(&work->coulomb_preparations, 1ULL);
+      }
       __syncthreads();
-      for (auto ket = ket_begin; ket < batch.shell_pair_primitive_offsets[second_pair + 1]; ++ket) {
+      for (unsigned center = 0; center + 1 < centers; ++center) {
         if (threadIdx.x == 0) {
           const auto& cached = batch.shell_primitive_pairs[ket];
           const auto c = batch.shell_primitive_offsets[sk] + (ket - ket_begin) / nd;
           const auto d = batch.shell_primitive_offsets[sl] + (ket - ket_begin) % nd;
-          shared.q = cached.exponent_sum;
+          const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
           shared.second_product = prepare_materialized_direct_pair_derivative(cached,
-              batch.primitive_exponents[c], batch.primitive_exponents[d], third, fourth, shared.ket);
-          shared.coefficients[2] = batch.primitive_coefficients[c];
-          shared.coefficients[3] = batch.primitive_coefficients[d];
-          fill_coulomb<8>(shared.p * shared.q / (shared.p + shared.q),
-              shared.first_product, shared.second_product, shared.coulomb);
-          if (work) {
-            atomicAdd(&work->ket_preparations, 1ULL);
-            atomicAdd(&work->coulomb_preparations, 1ULL);
-          }
+              batch.primitive_exponents[c], batch.primitive_exponents[d],
+              atom_position<Dual3>(batch, atoms[2], coordinate),
+              atom_position<Dual3>(batch, atoms[3], coordinate), shared.ket);
+          if (work) atomicAdd(&work->ket_preparations, 1ULL);
         }
         __syncthreads();
+        const MaterializedCoulombSpatialResponse response{shared.coulomb,
+            shared.first_product[center].x.derivative_x - shared.second_product.x.derivative_x};
         for (unsigned slot = 0; slot < Slots; ++slot) {
           if (!admitted[slot]) continue;
           const double coefficient = batch.direct_ao_coefficients[ao_begin + i[slot]] *
@@ -148,20 +177,25 @@ __device__ inline void contract_materialized_direct_pair_full_source_force(
               batch.direct_ao_coefficients[ao_begin + l[slot]];
           const double weight = coefficient * shared.coefficients[0] * shared.coefficients[1] *
                                 shared.coefficients[2] * shared.coefficients[3];
-          gradients[slot] = gradients[slot] + weight * consume_cartesian_coulomb<8>(
+          const auto component = weight * consume_cartesian_coulomb_states<8, Dual3>(
               shared.p, shared.q, direct_ao_angular(batch, ao_begin + i[slot]),
               direct_ao_angular(batch, ao_begin + j[slot]),
               direct_ao_angular(batch, ao_begin + k[slot]),
-              direct_ao_angular(batch, ao_begin + l[slot]), shared.bra, shared.ket, shared.coulomb);
+              direct_ao_angular(batch, ao_begin + l[slot]), shared.bra[center], shared.ket, response);
+          gradients[center][slot][0] += component.derivative_x;
+          gradients[center][slot][1] += component.derivative_y;
+          gradients[center][slot][2] += component.derivative_z;
           if (work) atomicAdd(&work->component_contractions, 1ULL);
         }
         __syncthreads();
       }
     }
+  }
+  for (unsigned center = 0; center + 1 < centers; ++center) {
+    const auto coordinate = std::int64_t(unique_atoms[center]) * 3;
     for (unsigned slot = 0; slot < Slots; ++slot) {
       if (!admitted[slot]) continue;
-      const double derivative[3] = {gradients[slot].derivative_x, gradients[slot].derivative_y,
-                                    gradients[slot].derivative_z};
+      const auto& derivative = gradients[center][slot];
       const std::size_t ordinal = slot * detail::kDirectQuartetTileSize + threadIdx.x;
       for (unsigned axis = 0; axis < 3; ++axis) {
         derivative_sum[slot][axis] += derivative[axis];

@@ -536,8 +536,8 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
     const auto independent = unique.size() - 1;
     const auto live = std::size_t(admitted_count != 0);
     if (counters.bra_preparations != 4 * independent * live ||
-        counters.coulomb_preparations != 16 * independent * live ||
-        counters.ket_preparations != counters.coulomb_preparations ||
+        counters.coulomb_preparations != 16 * live ||
+        counters.ket_preparations != 16 * independent * live ||
         counters.component_contractions != 16 * independent * admitted_count ||
         counters.published_components != admitted_count)
       throw std::runtime_error("materialized derivative preparation/work mismatch");
