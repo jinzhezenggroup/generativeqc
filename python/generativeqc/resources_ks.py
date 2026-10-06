@@ -284,11 +284,14 @@ def ks_resource_request(
     ks_options: typing.Any = None,
     device_id: typing.Any = 0,
     library: typing.Any = None,
+    include_forces: typing.Any = False,
     name: typing.Any = "ks",
     first_phase: typing.Any = 0,
     last_phase: typing.Any = 0,
 ) -> typing.Any:
-    """Resolve one complete energy-only KS request for the shared global planner."""
+    """Resolve one complete KS request for the shared global planner."""
+    if type(include_forces) is not bool:
+        raise TypeError("include_forces must be boolean")
     if method not in _METHODS or backend not in ("cpu", "cuda"):
         raise NotImplementedError(
             "KS planning supports native CPU LDA/PBE/PBE0 and CUDA LDA/PBE RKS/UKS energies"
@@ -328,7 +331,9 @@ def ks_resource_request(
         if not math.isfinite(value) or value <= 0:
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
-    cpu_forces = backend == "cpu" and qualified_basis(selected)
+    cpu_forces = backend == "cpu" and (
+        qualified_basis(selected) or include_forces
+    )
     pbe, unrestricted = bool(model.ao_order), method.endswith("uks")
     items = []
     for atoms, charge, multiplicity in zip(

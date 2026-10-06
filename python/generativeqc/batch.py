@@ -750,12 +750,14 @@ class PreparedBatch:
                 state._source.close()
 
     def _public_dft_cpu_force(self, index: typing.Any, atoms: typing.Any) -> typing.Any:
-        """Bounded CPU stationary force for qualified ECP or named direct hybrids."""
+        """Bounded CPU stationary force for qualified ECP or all-electron owners."""
         from generativeqc_compiler.dft import NativeAO
 
         from ._cpu_force_resources import (
+            CPU_DIRECT_SEMILOCAL_FORCE_METHODS,
             CPU_FORCE_HOST_CAP,
             cpu_force_inventory,
+            qualified_all_electron_basis,
             qualified_basis,
         )
         from ._dft_gradient import StationaryKsState
@@ -764,7 +766,17 @@ class PreparedBatch:
 
         calculator = self._calculator
         ecp_force = qualified_basis(calculator._basis)
-        direct_all_electron = (
+        direct_semilocal_all_electron = (
+            calculator._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
+            and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
+            and calculator._automatic_libxc_name is None
+            and calculator._dispersion_method_ir is None
+            and calculator._ks_options is not None
+            and calculator._ks_options.coefficients == (1.0, 1.0, 0.0)
+            and calculator._ks_options.execution_plan.nonlocal_correlation is None
+            and qualified_all_electron_basis(calculator._basis)
+        )
+        direct_all_electron = direct_semilocal_all_electron or (
             calculator._method_name
             in (
                 "pbe0-rks",
@@ -794,7 +806,7 @@ class PreparedBatch:
             ecp_force or direct_all_electron or density_fitted_all_electron
         ):
             raise NotImplementedError(
-                "public CPU forces require a qualified ECP or named all-electron owner"
+                "public CPU forces require a qualified ECP or all-electron owner"
             )
         if len(atoms) > 8:
             raise ValueError("CPU public force dense-export domain exceeded")

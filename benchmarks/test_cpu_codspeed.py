@@ -162,10 +162,10 @@ def test_cpu_warm_endpoint_walltime(
     assert math.isfinite(energy)
 
 
-def test_cpu_rhf_force_walltime(benchmark: _BenchmarkFixture) -> None:
-    """Keep the real CPU analytic-force path in routine performance telemetry."""
-    calculator = Calculator(method="rhf", basis="sto-3g", device="cpu")
-    case_name = "water-rhf-force-sto3g"
+def test_cpu_pbe_force_walltime(benchmark: _BenchmarkFixture) -> None:
+    """Track the public semilocal CPU analytic-force endpoint."""
+    calculator = Calculator(method="pbe-rks", basis="sto-3g", device="cpu")
+    case_name = "water-pbe-force-sto3g"
 
     warmup = calculator.singlepoint(_WATER, properties=("energy", "forces"))
     _validate_result(warmup, case_name, require_forces=True)

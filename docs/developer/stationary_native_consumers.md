@@ -4,7 +4,10 @@ The internal `complete_rks_gradient_diagnostic` has two explicit execution
 routes. `reference` remains the default validated diagnostic; `native` replaces
 its three scalar/TensorIR interpreter consumers without changing the complete
 LDA/PBE RKS energy definition, stationary-state lease or signed source inventory.
-Neither route enables public `Calculator` forces.
+The diagnostic route alone does not grant a public capability. A bounded
+`Calculator` wrapper now promotes direct all-electron LDA/PBE RKS/UKS forces
+for qualified s/p/d basis contexts, after resource, state-identity and
+Hamiltonian checks; the backend-neutral registry remains energy-only.
 
 The separate [CUDA diagnostic](stationary_cuda_diagnostic.md) consumes a live
 native CUDA snapshot and executes all seven sources on device with explicit

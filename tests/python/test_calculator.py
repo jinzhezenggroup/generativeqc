@@ -207,59 +207,49 @@ def test_method_capabilities_report_families_and_properties() -> None:
         assert uks.supported_properties == frozenset(("energy",))
 
 
-def test_lda_rks_public_contract_is_cpu_energy_only() -> None:
-    calculator = Calculator(method="lda-rks", basis="sto-3g", device="cpu")
-    result = calculator.singlepoint([("He", (0.0, 0.0, 0.0))])
+@pytest.mark.parametrize("method", ("lda-rks", "pbe-rks"))
+def test_semilocal_rks_public_contract_exposes_cpu_forces(method: str) -> None:
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    calculator = Calculator(method=method, basis="sto-3g", device="cpu")
 
-    assert result.converged
-    assert result.forces is None
-    assert result.executed_backend == "cpu_reference"
-    with pytest.raises(ValueError, match="does not support properties.*forces"):
-        calculator.singlepoint(
-            [("He", (0.0, 0.0, 0.0))], properties=("energy", "forces")
-        )
-    with calculator.prepare_batch([[("He", (0.0, 0.0, 0.0))]]) as batch:
-        assert batch.execute(strict=True).items[0].forces is None
-    plan = calculator.estimate_resources([[("He", (0.0, 0.0, 0.0))]])
-    assert plan.status == "feasible" and plan.requests[0].name == "ks"
-
-
-def test_pbe_rks_public_contract_is_cpu_energy_only() -> None:
-    calculator = Calculator(method="pbe-rks", basis="sto-3g", device="cpu")
-    result = calculator.singlepoint([("He", (0.0, 0.0, 0.0))])
-
-    assert result.converged
-    assert result.forces is None
-    assert result.executed_backend == "cpu_reference"
-    with pytest.raises(ValueError, match="does not support properties.*forces"):
-        calculator.singlepoint(
-            [("He", (0.0, 0.0, 0.0))], properties=("energy", "forces")
-        )
-    with calculator.prepare_batch([[("He", (0.0, 0.0, 0.0))]]) as batch:
-        assert batch.execute(strict=True).items[0].forces is None
+    # The backend-neutral registry remains conservative; the prepared
+    # Calculator promotes the independently qualified CPU/basis context.
+    assert method_capabilities(method).supported_properties == frozenset({"energy"})
+    assert calculator.capabilities.supported_properties == frozenset(
+        {"energy", "forces"}
+    )
+    energy_only = calculator.singlepoint(atoms, properties=("energy",))
+    assert energy_only.converged
+    assert energy_only.forces is None
+    assert energy_only.executed_backend == "cpu_reference"
+    with calculator.prepare_batch([atoms]) as batch:
+        item = batch.execute(strict=True, properties=("energy",)).items[0]
+        assert item.forces is None
+    plan = calculator.estimate_resources([atoms]).require_feasible()
+    request = next(request for request in plan.requests if request.name == "ks")
+    assert request.identity.observables == ("energy", "forces")
 
 
 @pytest.mark.parametrize("method", ("lda-uks", "pbe-uks"))
-def test_uks_public_contract_on_cpu_is_energy_only(method: typing.Any) -> None:
+def test_semilocal_uks_public_contract_exposes_cpu_forces(method: str) -> None:
     atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
     calculator = Calculator(method=method, basis="sto-3g", device="cpu")
-    result = calculator.singlepoint(atoms, charge=-1, multiplicity=2)
-
+    assert method_capabilities(method).supported_properties == frozenset({"energy"})
+    assert calculator.capabilities.supported_properties == frozenset(
+        {"energy", "forces"}
+    )
+    result = calculator.singlepoint(
+        atoms,
+        charge=-1,
+        multiplicity=2,
+        properties=("energy",),
+    )
     assert result.converged
     assert result.forces is None
     assert result.executed_backend == "cpu_reference"
     assert np.isfinite(result.density_rms)
     assert np.isfinite(result.physical_residual_rms)
     assert result.density_rms != result.physical_residual_rms
-    with pytest.raises(ValueError, match="does not support properties.*forces"):
-        calculator.singlepoint(
-            atoms,
-            charge=-1,
-            multiplicity=2,
-            properties=("energy", "forces"),
-        )
-    with calculator.prepare_batch([atoms], charges=[-1], multiplicities=[2]) as batch:
-        assert batch.execute(strict=True).items[0].forces is None
 
 
 @pytest.mark.parametrize("method", ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks"))

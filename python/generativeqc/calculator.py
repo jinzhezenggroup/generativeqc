@@ -148,8 +148,9 @@ def method_capabilities(method: str) -> MethodCapabilities:
 class Calculator:
     """Prepare and execute a native single-system electronic-structure calculation.
 
-    Coordinates are in Bohr. The current implementation accepts RHF, UHF, or
-    energy-only LDA/PBE RKS/UKS on CPU/CUDA and
+    Coordinates are in Bohr. The current implementation accepts RHF, UHF, and
+    LDA/PBE RKS/UKS on CPU/CUDA; qualified execution contexts expose analytic
+    forces through the shared stationary-gradient consumers. It also accepts
     a bundled STO-3G/def2-SVP/def2-TZVP basis for H-Ar, local canonical JSON,
     immutable `BasisSet` records, or explicit `Shell` objects. Element symbols
     cover H-Og; execution depends on every actual shell and Hamiltonian. Both the CPU reference and CUDA backend support Cartesian
@@ -850,7 +851,11 @@ class Calculator:
                 f"method {method!r} is reserved but not implemented"
             )
         self._capabilities = method_capabilities(self._method_name)
-        from ._cpu_force_resources import qualified_basis
+        from ._cpu_force_resources import (
+            CPU_DIRECT_SEMILOCAL_FORCE_METHODS,
+            qualified_all_electron_basis,
+            qualified_basis,
+        )
 
         basis_has_ecp = isinstance(self._basis, BasisSet) and any(
             element.ecp_core_electrons for element in self._basis.elements
@@ -888,6 +893,11 @@ class Calculator:
                     for shell in element.shells
                 )
             )
+        cpu_direct_semilocal_force = (
+            self._device_name == "cpu"
+            and self._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
+            and qualified_all_electron_basis(self._basis)
+        )
         semilocal_force = (
             self._automatic_libxc_name is None
             and self._ks_options is not None
@@ -899,7 +909,13 @@ class Calculator:
             and not (self._method_name == "pbe-d4-rks" and basis_has_ecp)
             and (
                 self._device_name == "cuda"
-                or (self._device_name == "cpu" and qualified_basis(self._basis))
+                or (
+                    self._device_name == "cpu"
+                    and (
+                        qualified_basis(self._basis)
+                        or cpu_direct_semilocal_force
+                    )
+                )
             )
         )
         from .ks import (
@@ -1759,6 +1775,7 @@ class Calculator:
                 ks_options=self._ks_options if ks_options is None else ks_options,
                 device_id=self._device_id,
                 library=self._library,
+                include_forces="forces" in self._capabilities.supported_properties,
             )
         if self._method == _native.METHOD_MP2:
             raise NotImplementedError(

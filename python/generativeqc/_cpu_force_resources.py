@@ -22,6 +22,27 @@ from generativeqc_compiler.integral.weighted_eri_inputs import PRIMITIVE_RANGE_R
 from .basis import BasisSet
 
 CPU_FORCE_HOST_CAP = 256 << 20
+CPU_DIRECT_SEMILOCAL_FORCE_METHODS = frozenset(
+    ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks")
+)
+
+
+def qualified_all_electron_basis(basis: typing.Any) -> bool:
+    """Bound direct CPU semilocal promotion to all-electron s/p/d bases."""
+    if isinstance(basis, BasisSet):
+        if any(element.ecp_core_electrons for element in basis.elements):
+            return False
+        shells = (
+            shell
+            for element in basis.elements
+            for shell in element.shells
+        )
+    else:
+        try:
+            shells = iter(basis)
+        except TypeError:
+            return False
+    return all(shell.angular_momentum <= 2 for shell in shells)
 
 
 def qualified_basis(basis: typing.Any) -> bool:

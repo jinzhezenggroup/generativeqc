@@ -32,7 +32,7 @@ def test_codspeed_pr_tier_stays_bounded_and_change_aware() -> None:
     assert 'pr_extra="wb97mv"' in benchmark
     assert "GENERATIVEQC_CODSPEED_EXTRA_CASES" in benchmark
     assert "grid_shape=(12, 4, 8)" in benchmark
-    assert "test_cpu_rhf_force_walltime" in benchmark
+    assert "test_cpu_pbe_force_walltime" in benchmark
     assert 'properties=("energy", "forces")' in benchmark
     assert "test_cpu_rhf_changed_geometry_pair_walltime" in benchmark
     assert "prepare_batch([_WATER], warm_start=True)" in benchmark

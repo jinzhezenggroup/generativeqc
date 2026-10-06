@@ -2,9 +2,11 @@
 
 ## Executable method boundary
 
-RHF and UHF expose CPU/CUDA energies and analytic nuclear forces. `LDA_RKS`,
-`PBE_RKS`, `LDA_UKS`, and `PBE_UKS` expose CPU, energy-only,
-conventional-Coulomb vertical slices. RKS is closed-shell; UKS uses independent
+RHF and UHF expose CPU/CUDA energies and analytic nuclear forces. The
+backend-neutral `LDA_RKS`, `PBE_RKS`, `LDA_UKS`, and `PBE_UKS` registry
+rows remain energy-only, while a qualified CPU all-electron s/p/d execution
+context promotes analytic forces through the shared stationary-gradient owner.
+RKS is closed-shell; UKS uses independent
 alpha/beta densities with total-density J and validated integer spin
 occupations. LDA uses `GridSpec v1` and versioned unpolarized/polarized tails;
 PBE uses exact interior expressions plus explicit versioned production-tail
