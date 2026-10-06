@@ -108,11 +108,11 @@ set is exactly `{"energy"}`. A force request fails before source validation or
 solver work, so the conventional RCCSD(T) force capability cannot be inherited
 accidentally.
 
-C2a is deliberately not a native Calculator registration. It currently uses the
-existing native RHF snapshot-export bridge and therefore inherits that bridge's
-<=12-AO qualification boundary. The next registration slice must give the
-native method owner the same correlation-DF Hamiltonian semantics instead of
-merely enabling the existing conventional RCCSD(T) owner.
+C2a is deliberately not a native Calculator registration. It uses the existing
+native RHF snapshot-export bridge and retains that bridge's <=12-AO validation
+boundary. Production public energy and forces are owned separately by the native
+DfRccsdt provider, which preserves the same conventional-RHF +
+correlation-only-DF method definition.
 
 C2b registers a distinct `df-rccsd(t)` / `df-ccsd(t)` public method. It is
 CUDA/FP64, requires an explicit auxiliary basis and keeps the reference
@@ -220,29 +220,31 @@ bytes (Q inputs and one accumulator read/write), not measured physical traffic.
 Packing traffic is recorded separately. Queries and counters account for a
 partial final tile without charging unevaluated padded Q rows.
 
-Conventional admission rejects the DF representation unless an owner explicitly
-opts in. Native CUDA Lambda accepts the factorized representation as described
-in [DF response composition](df_ccsdt_gradient.md); molecular triples and force
-consumers remain conventional. The separate internal DF triples energy owner
-is described below.
-This internal supplied-Hamiltonian solver does not register a public DF
-Calculator endpoint. Its qualification is
-`tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
+Conventional RCCSD admission rejects the DF representation unless the dedicated
+DF owner explicitly opts in. Native CUDA Lambda accepts the factorized
+representation as described in
+[DF response composition](df_ccsdt_gradient.md). The public DfRccsdt method
+composes this solver, the DF triples owner, and the complete response/force owner
+through `run_df_ccsdt_native`; the supplied-Hamiltonian solver in this section
+remains an internal validation component and does not register capabilities by
+itself. Its qualification is `tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
 also checked for 230-AO ethane using `benchmarks/df_ccsd_native_solver_probe.py`:
 energy must agree within 3e-9 Eh, every amplitude within 1e-8, and expanded
 physical residuals must be below 1e-10. That adapter reconstructs the same packed
 AO factors consumed by the independent oracle before the symmetric MO transform;
 stored full MO factors are not substituted for the oracle's packed source.
-Complete hundreds-AO native CCSD(T) energy and forces still require the remaining
-source/response owners.
+This solver probe alone is not hundreds-AO endpoint evidence. Complete
+hundreds-AO energy/force qualification is provided by the composed native owner
+and retained endpoint campaigns described in the gradient/response
+documentation.
 
 ## Internal native DF triples energy
 
 `cc::triples::evaluate_df_cuda` evaluates standard closed-shell FP64 `(T)` from
 supplied Q-major `B_ov/B_vv`, retained `ovoo/ovov`, Fov, T1/T2 and orbital
 energies. It requires physically symmetric Bvv pairs and a canonical occupied/
-virtual gap above the denominator threshold. It is an internal phase API;
-public molecular descriptors and response consumers do not select it yet.
+virtual gap above the denominator threshold. It remains an internal phase API; the public DfRccsdt provider reaches it only
+through the complete native owner rather than exposing the phase API directly.
 
 The compiler owns the panel and moment TensorIR in `cc/occupied_triples.py`.
 `tools/generate_df_occupied_triples.py` derives direct BLAS products from the
@@ -308,7 +310,9 @@ full unit-weight A and M cotangents with all nuclear centers in one traversal.
 It selects six-term expansion metadata for both basis views when g is present;
 through-f calls retain their three-term metadata and original evaluator. Legacy
 integral exporters and public method derivative capabilities retain their f limit.
-These internal source/weight derivatives do not certify a complete CC nuclear force.
+These internal source/weight derivatives do not certify a complete CC nuclear
+force by themselves; the composed native owner supplies the remaining response
+and publication gates.
 
 `scf::CudaDfNuclearSink` is the internal device-weight consumer for source-response
 callbacks. It uploads basis metadata once, binds one producer stream, and contracts
