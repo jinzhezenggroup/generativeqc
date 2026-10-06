@@ -140,6 +140,7 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
         ("pbe-uks", False),
         ("pbe0-rks", False),
         ("r2scan-rks", False),
+        ("pbe-d4-rks", False),
     ],
 )
 def test_stationary_second_order_preserves_spin_and_method_domain(

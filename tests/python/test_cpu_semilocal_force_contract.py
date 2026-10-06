@@ -316,10 +316,8 @@ def test_nonlocal_contexts_do_not_advertise_rejected_forces(
         calc.singlepoint(H2, properties=FORCES)
 
 
-def test_existing_ecp_and_hf_defaults_stay_force_enabled(
-    fake_native: typing.Any,
-) -> typing.Any:
-    ecp = BasisSet(
+def _synthetic_ecp_basis() -> BasisSet:
+    return BasisSet(
         "synthetic",
         (
             ElementBasis(1, (BasisShell(0, ("1",), (("1",),)),)),
@@ -342,6 +340,12 @@ def test_existing_ecp_and_hf_defaults_stay_force_enabled(
         ),
         BasisProvenance("synthetic", "1", "CC0", "0" * 64),
     )
+
+
+def test_existing_ecp_and_hf_defaults_stay_force_enabled(
+    fake_native: typing.Any,
+) -> typing.Any:
+    ecp = _synthetic_ecp_basis()
     for method, basis in (("pbe-rks", ecp), ("rhf", "sto-3g"), ("uhf", "sto-3g")):
         calc = Calculator(method=method, basis=basis)
         assert calc._default_properties() == FORCES
@@ -546,3 +550,43 @@ def test_d3_composition_reuses_electronic_force_and_adds_gradient_once(
                 assert item.forces is None
     assert requested == [False, True, False]
     assert fake_native.force_calls == 1
+
+
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_ecp_dispersion_force_gate_preserves_d3_and_rejects_d4(
+    fake_native: typing.Any, spin: str
+) -> None:
+    basis = _synthetic_ecp_basis()
+    d3 = Calculator(
+        method=resolve_method("PBE-D3(BJ)", spin=spin),
+        basis=basis,
+        ks_options=KsOptions(grid=GridSpec()),
+    )
+    assert d3.capabilities.supported_properties == FORCES
+    d4 = Calculator(
+        method=resolve_method("PBE-D4(BJ-EEQ-ATM)", spin=spin),
+        basis=basis,
+        ks_options=KsOptions(grid=GridSpec()),
+    )
+    assert d4.capabilities.supported_properties == ENERGY
+    if spin == "unpolarized":
+        intrinsic = Calculator(
+            method="pbe-d4-rks", basis=basis, ks_options=KsOptions(grid=GridSpec())
+        )
+        assert intrinsic.capabilities.supported_properties == ENERGY
+
+
+@pytest.mark.parametrize("mode", ["named", "explicit", "resolved"])
+def test_intrinsic_d4_constructor_does_not_request_second_order_projection(
+    fake_native: typing.Any, mode: str
+) -> None:
+    graph = resolve_method("PBE-D4(BJ-EEQ-ATM)", spin="unpolarized")
+    options = KsOptions(grid=GridSpec())
+    if mode == "explicit":
+        options = KsOptions(composition=graph, grid=GridSpec())
+    elif mode == "resolved":
+        options = Calculator(method="pbe-d4-rks", ks_options=options).ks_options
+    calculator = Calculator(method="pbe-d4-rks", ks_options=options)
+    assert calculator.ks_options.method_ir.identity == graph.identity
+    assert calculator.capabilities.supported_properties == FORCES
+    assert not calculator.second_order_capabilities

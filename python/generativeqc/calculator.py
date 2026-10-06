@@ -848,7 +848,16 @@ class Calculator:
                 self._device_name == "cuda"
                 and self._ks_options.execution_plan.nonlocal_correlation is not None
             )
-            and not (self._dispersion_method_ir is not None and basis_has_ecp)
+            and not (
+                basis_has_ecp
+                and any(
+                    isinstance(primitive, DispersionCorrectionPrimitive)
+                    and isinstance(primitive.specification, D4Spec)
+                    for primitive in (
+                        self._dispersion_method_ir or self._ks_options.method_ir
+                    ).primitives
+                )
+            )
             and (
                 self._device_name == "cuda"
                 or (

@@ -510,10 +510,10 @@ def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
     return (
         bool(record["stationary_second_order"])
         and method_ir.spin == "unpolarized"
-        and ks_coefficients(method_ir) == (1.0, 1.0, 0.0)
         and not plan.exchange
         and plan.nonlocal_correlation is None
         and not plan.post_scf
+        and ks_coefficients(method_ir) == (1.0, 1.0, 0.0)
     )
 
 

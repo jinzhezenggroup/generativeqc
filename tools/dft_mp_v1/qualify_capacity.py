@@ -264,14 +264,15 @@ NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
 )
 # The complete predicate now also admits a bounded all-electron CPU branch.
-# That branch remains inside the CPU device guard: CUDA semilocal coefficients,
-# automatic-Libxc/nonlocal exclusions, promotion and runtime ownership are
-# unchanged. Keep hashing the full predicate so future guard drift fails closed.
+# The capability refactor keeps that branch inside the CPU device guard. CUDA
+# coefficients, automatic-Libxc/nonlocal exclusions and runtime ownership retain
+# their contracts; structural D4/ECP rejection preserves the admitted D3 owner.
+# Keep hashing the full predicate so future guard drift fails closed.
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "083183902052ec67c806a67e6bbdf2422b21e609e1a10ec0f1a8b9035a6370d5"
+    "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
-    "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
+    "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
     "3defc2e5e05b2fd1af16e82bda36fa479a41b7b7a15029a49fecf98090e9c95b"
@@ -360,8 +361,10 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
     "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
 )
+# Audited capability-driven electronic projection and molecular-nonlocal proof.
+# Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "5bd874ce5ba8d4d5d78eb282244144052822bb2f0266d40d33361735302b1a97"
+    "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
 )
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"

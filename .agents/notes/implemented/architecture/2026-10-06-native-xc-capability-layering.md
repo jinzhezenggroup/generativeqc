@@ -38,6 +38,20 @@ policy drift. Generated compatibility imports avoid a second mutable registry.
 - Keep scientific source/asset hashes based on the actual compiler inputs
 - Device-free registry and admission checks do not qualify GPU numerics
 
+## Admission follow-up
+
+Second-order admission rejects geometry-only post-SCF contributions before it
+calls the electronic-only coefficient resolver. This preserves named, explicit
+and previously resolved PBE-D4 construction while keeping its Hessian closed.
+The ECP force exclusion tests D4 correction primitives in the full composition,
+including intrinsic D4; it must not reject the separately owned D3 gradient.
+
+Capacity qualification retains exact source fingerprints and all numeric work,
+byte and derivative bounds. Only the reviewed snapshot decoder and public
+capability/promotion fingerprints were refreshed for this refactor. Mutation
+tests continue to reject guard changes, including each structural D4/ECP test;
+these static contracts are not new numerical or performance qualification.
+
 ## Evidence
 
 The compiler structure check passes with zero dependency errors after the
