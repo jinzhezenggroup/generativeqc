@@ -274,7 +274,8 @@ def test_production_grid_cuda_energy_and_force(
 
     calc = _production_calculator(method)
     with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
-        energy = batch.execute(strict=True).items[0].energy
+        public_result = batch.execute(strict=True).items[0]
+        energy = public_result.energy
         state = StationaryKsState.from_native(batch, basis)
         assert state._source.grid_spec.version == 2
         assert state._source.grid_provenance["policy_version"] == 2
@@ -288,6 +289,9 @@ def test_production_grid_cuda_energy_and_force(
         )
         ref_energy, ref_gradient, _ = independent_gradient(basis, state, method)
         assert energy == pytest.approx(ref_energy, abs=2e-9)
+        np.testing.assert_allclose(
+            public_result.forces, -ref_gradient, atol=1e-7, rtol=0
+        )
         np.testing.assert_allclose(result.gradient, ref_gradient, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-10, rtol=0)
 
@@ -309,7 +313,8 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         ) as batch,
         NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
     ):
-        energy = batch.execute(strict=True).items[0].energy
+        public_result = batch.execute(strict=True).items[0]
+        energy = public_result.energy
         state = StationaryKsState.from_native(batch, basis)
         assert state.density.shape[0] == 2
         assert not np.allclose(state.density[0], state.density[1], atol=1e-12, rtol=0)
@@ -323,6 +328,7 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         )
         reference_energy, reference = independent_uks_gradient(basis, state, method)
         assert abs(energy - reference_energy) < 2e-9
+        np.testing.assert_allclose(public_result.forces, -reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
         assert result.work["xc_points"] == len(state.grid.points)
@@ -402,7 +408,8 @@ def test_complete_cuda_r2scan_independent_analytic(
         ) as batch,
         NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
     ):
-        energy = batch.execute(strict=True).items[0].energy
+        public_result = batch.execute(strict=True).items[0]
+        energy = public_result.energy
         state = StationaryKsState.from_native(batch, basis)
         assert state.identity.method == method
         result = _diagnostic(
@@ -428,6 +435,7 @@ def test_complete_cuda_r2scan_independent_analytic(
             },
         )
         assert energy_error < 2e-8
+        np.testing.assert_allclose(public_result.forces, -reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient, reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-9, rtol=0)
         assert result.work["xc_points"] == len(state.grid.points)
@@ -913,9 +921,7 @@ def test_public_cuda_force_active_ao_profile_replay(
         independent_uks_gradient,
     )
 
-    assert tuple(
-        profile.profile_id for profile in policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("ordinary-direct-active-ao-cost-v3",)
+    monkeypatch.setattr(policy, "QUALIFIED_FORCE_ACTIVE_AO_PROFILES", ())
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     xyz = np.asarray([position for _, position in ATOMS])
     moved = xyz.copy()

@@ -93,6 +93,7 @@ hf_force_finalization
 :caption: DFT and XC
 
 dft_grid
+preao_force_domain
 dft_d3
 xc_expressions
 xc_integration

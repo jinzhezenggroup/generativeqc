@@ -252,6 +252,8 @@ def _evaluate(
     if op in {
         "runtime_indexed_select",
         "runtime_indexed_scatter_add",
+        "runtime_cartesian_select",
+        "runtime_cartesian_scatter_add",
         "scatter_add",
         "segment_sum",
     }:

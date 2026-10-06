@@ -570,6 +570,7 @@ class PreparedBatch:
         from .profiles import probe_device
 
         device = probe_device(self._library, self._calculator._device_id)["device"]
+        self._stationary_cuda_device_name = device["name"]
         return cuda_target_info(f"sm_{device['major']}{device['minor']}")
 
     def _stationary_cuda_compiler(self) -> typing.Any:
@@ -662,6 +663,7 @@ class PreparedBatch:
                 )
                 workload = ForceActiveAoWorkload(
                     architecture=target.architecture,
+                    device_name=getattr(self, "_stationary_cuda_device_name", None),
                     derivative_order=(
                         2
                         if composite_force or "sigma" in state.identity.ingredients
@@ -706,6 +708,8 @@ class PreparedBatch:
                         max_host_bytes=max_host_bytes,
                         active_ao_cutoff=decision.cutoff,
                         active_ao_cache_bytes=decision.cache_bytes,
+                        active_ao_producer=decision.producer,
+                        active_ao_max_active_fraction=decision.max_active_fraction,
                     )
                     work = dict(work)
                     work["force_active_ao_policy"] = force_active_ao_policy_record(
@@ -740,6 +744,8 @@ class PreparedBatch:
                     "max_host_bytes": max_host_bytes,
                     "resident_ao_cutoff": decision.cutoff,
                     "resident_ao_cache_bytes": decision.cache_bytes,
+                    "resident_ao_producer": decision.producer,
+                    "resident_ao_max_active_fraction": decision.max_active_fraction,
                     "max_grid_points": None,
                     "max_grid_pair_visits": None,
                 }

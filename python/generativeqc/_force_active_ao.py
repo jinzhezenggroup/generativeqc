@@ -29,10 +29,15 @@ class ForceActiveAoWorkload:
     max_device_bytes: int
     max_host_bytes: int
     resident_grid: bool
+    device_name: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.architecture:
+        if type(self.architecture) is not str or not self.architecture:
             raise ValueError("force active-AO architecture must be nonempty")
+        if self.device_name is not None and (
+            type(self.device_name) is not str or not self.device_name
+        ):
+            raise ValueError("force active-AO device name must be nonempty or absent")
         if type(self.derivative_order) is not int or self.derivative_order <= 0:
             raise ValueError("force active-AO derivative order must be positive")
         if self.spin_blocks not in (1, 2):
@@ -79,6 +84,9 @@ class QualifiedForceActiveAoProfile:
     min_host_bytes: int
     cutoff: float
     cache_bytes: int
+    producer: str = "sampled-jets"
+    max_active_fraction: float = 1.0
+    max_dense_point_ao_square_work: int | None = None
 
     def __post_init__(self) -> None:
         if not self.profile_id or not self.evidence:
@@ -87,6 +95,15 @@ class QualifiedForceActiveAoProfile:
             raise ValueError(
                 "qualified force active-AO profile needs an execution domain"
             )
+        if type(self.producer) is not str or self.producer not in (
+            "sampled-jets",
+            "pre-ao-envelope-native-csr",
+        ):
+            raise ValueError("qualified force active-AO producer is unsupported")
+        if type(self.max_active_fraction) not in (int, float) or not (
+            0 < self.max_active_fraction <= 1
+        ):
+            raise ValueError("qualified AO occupancy limit must be in (0,1]")
         if any(
             value not in _SUPPORTED_DERIVATIVE_ORDERS
             for value in self.derivative_orders
@@ -103,6 +120,11 @@ class QualifiedForceActiveAoProfile:
             or self.min_dense_point_ao_square_work <= 0
         ):
             raise ValueError("qualified dense-work crossover must be positive")
+        if self.max_dense_point_ao_square_work is not None and (
+            type(self.max_dense_point_ao_square_work) is not int
+            or self.max_dense_point_ao_square_work < self.min_dense_point_ao_square_work
+        ):
+            raise ValueError("qualified dense-work ceiling must cover the crossover")
         if self.tile_policy not in ("fixed", "budget-auto"):
             raise ValueError("qualified tile policy is invalid")
         if self.tile_points is not None and (
@@ -127,7 +149,8 @@ class QualifiedForceActiveAoProfile:
 
     def matches(self, workload: ForceActiveAoWorkload) -> bool:
         return (
-            workload.composition in self.compositions
+            workload.architecture.startswith("sm_")
+            and workload.composition in self.compositions
             and workload.derivative_order in self.derivative_orders
             and workload.spin_blocks in self.spin_blocks
             and (
@@ -136,6 +159,11 @@ class QualifiedForceActiveAoProfile:
             )
             and workload.grid_points * workload.aos * workload.aos
             >= self.min_dense_point_ao_square_work
+            and (
+                self.max_dense_point_ao_square_work is None
+                or workload.grid_points * workload.aos * workload.aos
+                <= self.max_dense_point_ao_square_work
+            )
             and workload.tile_policy == self.tile_policy
             and (self.tile_points is None or workload.tile_points == self.tile_points)
             and workload.max_device_bytes >= self.min_device_bytes
@@ -150,18 +178,18 @@ class ForceActiveAoDecision:
     reason: str
     cutoff: float | None
     cache_bytes: int
+    producer: str = "sampled-jets"
+    max_active_fraction: float = 1.0
 
     @property
     def selected(self) -> bool:
         return self.cutoff is not None
 
 
-# #1598 / #1853 promotion registry. Admission is capability- and cost-driven,
-# not molecule-, size-, or CUDA-architecture-window driven. The retained 48-atom
-# endpoint supplies only the initial dense point×AO² crossover calibration.
-# Architecture remains diagnostic provenance in the workload record, not a
-# selection predicate. Unsupported execution capability/resource conditions or
-# insufficient work fall back dense.
+# Preserve #2007's faster sampled route above its existing work crossover.
+# #1893 extends previously dense work to the resident pre-AO producer below it;
+# occupancy/resource misses remain dense, without product or shape whitelists.
+_SAMPLED_DENSE_WORK_CROSSOVER = 173_946_175_488
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
         profile_id="ordinary-direct-active-ao-cost-v3",
@@ -173,13 +201,33 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         derivative_orders=(1, 2),
         spin_blocks=(1, 2),
         density_fitted=False,
-        min_dense_point_ao_square_work=173_946_175_488,
+        min_dense_point_ao_square_work=_SAMPLED_DENSE_WORK_CROSSOVER,
         tile_policy="fixed",
         tile_points=256,
         min_device_bytes=512 << 20,
         min_host_bytes=256 << 20,
         cutoff=1e-16,
         cache_bytes=16 << 20,
+    ),
+    QualifiedForceActiveAoProfile(
+        profile_id="cuda-resident-preao-native-csr-v1",
+        evidence=(
+            ".agents/notes/implemented/performance/2026-10-06-pre-ao-native-csr.md",
+        ),
+        compositions=("ordinary",),
+        derivative_orders=(1, 2),
+        spin_blocks=(1, 2),
+        density_fitted=False,
+        min_dense_point_ao_square_work=1,
+        max_dense_point_ao_square_work=_SAMPLED_DENSE_WORK_CROSSOVER - 1,
+        tile_policy="fixed",
+        tile_points=256,
+        min_device_bytes=512 << 20,
+        min_host_bytes=256 << 20,
+        cutoff=1e-16,
+        cache_bytes=64 << 20,
+        producer="pre-ao-envelope-native-csr",
+        max_active_fraction=0.8,
     ),
 )
 
@@ -216,6 +264,8 @@ def resolve_force_active_ao_policy(
         "qualified-workload-profile",
         float(profile.cutoff),
         profile.cache_bytes,
+        profile.producer,
+        float(profile.max_active_fraction),
     )
 
 
@@ -248,6 +298,8 @@ def force_active_ao_policy_record(
         "reason": decision.reason,
         "cutoff": decision.cutoff,
         "cache_bytes": decision.cache_bytes,
+        "producer": decision.producer if decision.selected else None,
+        "max_active_fraction": decision.max_active_fraction,
         "workload": decision.workload.record(),
         "actual_mode": actual,
         "selected_point_ao_square_sum": selected_work,

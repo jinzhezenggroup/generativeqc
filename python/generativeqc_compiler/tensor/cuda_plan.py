@@ -91,12 +91,15 @@ def _logical_node_flops(node: Node) -> int:
         for child, labels in zip(node.inputs, node.attrs["labels"], strict=True):
             domains.update(zip(labels, child.spec.shape, strict=True))
         return len(node.inputs) * prod(domains.values())
+    if node.op == "runtime_cartesian_scatter_add":
+        return node.inputs[0].spec.size
     if node.op not in VIEWS and node.op not in (
         "input",
         "constant",
         "gather",
         "indexed_gather",
         "runtime_indexed_select",
+        "runtime_cartesian_select",
     ):
         return sum(child.spec.size for child in node.inputs)
     return 0

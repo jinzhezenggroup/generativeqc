@@ -1852,6 +1852,8 @@ class PreparedStationaryCudaExecution:
         page_work_budget: int,
         resident_ao_cutoff: float | None = None,
         resident_ao_cache_bytes: int = 0,
+        resident_ao_producer: str = "sampled-jets",
+        resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
@@ -1885,6 +1887,8 @@ class PreparedStationaryCudaExecution:
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
                 "resident_ao_cutoff": resident_ao_cutoff,
                 "resident_ao_cache_bytes": resident_ao_cache_bytes,
+                "resident_ao_producer": resident_ao_producer,
+                "resident_ao_max_active_fraction": resident_ao_max_active_fraction,
                 "tensor_plans": [
                     (name, value.identity)
                     for name, value in sorted(tensor_plans.items())
@@ -1950,6 +1954,8 @@ class PreparedStationaryCudaExecution:
         profile_device: bool = False,
         resident_ao_cutoff: float | None = None,
         resident_ao_cache_bytes: int = 0,
+        resident_ao_producer: str = "sampled-jets",
+        resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
     ) -> None:
         if not integral_derivatives and (
@@ -1984,6 +1990,8 @@ class PreparedStationaryCudaExecution:
             page_work_budget=page_work_budget,
             resident_ao_cutoff=resident_ao_cutoff,
             resident_ao_cache_bytes=resident_ao_cache_bytes,
+            resident_ao_producer=resident_ao_producer,
+            resident_ao_max_active_fraction=resident_ao_max_active_fraction,
             integral_derivatives=integral_derivatives,
         )
         if self._lease.contract is not None:
@@ -2024,6 +2032,8 @@ class PreparedStationaryCudaExecution:
 
         tensor_peak = sum(value.peak_bytes for value in tensor_plans.values())
         device_peak_bound = grid_plan.peak_bytes + source_bytes + tensor_peak
+        if resident_ao_producer == "pre-ao-envelope-native-csr":
+            device_peak_bound += resident_ao_cache_bytes
         if device_peak_bound > max_device_bytes:
             raise ValueError("prepared stationary CUDA device budget exceeded")
         retained_host = host_bound + sum(
@@ -2289,6 +2299,11 @@ def _grid_metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "kernel_ms",
     ):
         result[name] = after[name] - before[name]
+    if "ao_grid_work" in after and "ao_grid_work" in before:
+        result["ao_grid_work"] = {
+            name: value - before["ao_grid_work"][name]
+            for name, value in after["ao_grid_work"].items()
+        }
     return result
 
 
@@ -2524,6 +2539,8 @@ def _stationary_resident_ao_cache(
     *,
     cutoff: float | None,
     budget_bytes: int,
+    producer: str = "sampled-jets",
+    max_active_fraction: float = 1.0,
 ) -> typing.Any:
     """Bind optional force masks to the current token-checked resident grid."""
     if cutoff is None or resident is None:
@@ -2531,7 +2548,11 @@ def _stationary_resident_ao_cache(
             prepared._resident_ao_maps = None
             prepared._resident_ao_map_key = None
         return None
-    from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+    from ._resident_ao_maps import (
+        ResidentAoMapCache,
+        ResidentAoMapDomain,
+        ResidentDeviceAoMapOwner,
+    )
 
     state._source.check_current()
     domain = ResidentAoMapDomain(
@@ -2551,6 +2572,8 @@ def _stationary_resident_ao_cache(
         grid.basis_generation,
         float(cutoff),
         budget_bytes,
+        producer,
+        max_active_fraction,
     )
     owner = None if prepared is None else prepared._resident_ao_maps
     if owner is None or prepared._resident_ao_map_key != key:
@@ -2560,8 +2583,22 @@ def _stationary_resident_ao_cache(
             prepared._resident_ao_maps = None
             prepared._resident_ao_map_key = None
         owner = None
-        owner = ResidentAoMapCache(
-            grid, domain, cutoff=cutoff, budget_bytes=budget_bytes
+        owner = (
+            ResidentDeviceAoMapOwner(
+                grid,
+                domain,
+                cutoff=cutoff,
+                budget_bytes=budget_bytes,
+                max_active_fraction=max_active_fraction,
+            )
+            if producer == "pre-ao-envelope-native-csr"
+            else ResidentAoMapCache(
+                grid,
+                domain,
+                cutoff=cutoff,
+                budget_bytes=budget_bytes,
+                producer=producer,
+            )
         )
         if prepared is not None:
             prepared._resident_ao_maps = owner
@@ -2594,6 +2631,8 @@ def _complete_rks_cuda_gradient_diagnostic(
     profile_device: bool = False,
     resident_ao_cutoff: float | None = None,
     resident_ao_cache_bytes: int = 16 << 20,
+    resident_ao_producer: str = "sampled-jets",
+    resident_ao_max_active_fraction: float = 1.0,
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
@@ -2802,6 +2841,23 @@ def _complete_rks_cuda_gradient_diagnostic(
         ),
         max_host_bytes,
     )
+    if type(resident_ao_producer) is not str or resident_ao_producer not in {
+        "sampled-jets",
+        "pre-ao-envelope",
+        "pre-ao-envelope-native-csr",
+    }:
+        raise ValueError("unsupported resident AO domain producer")
+    if resident_ao_producer == "pre-ao-envelope-native-csr":
+        # Charge both device storage/staging and the host offset mirror without
+        # consuming the already admitted dense fallback's resource headroom.
+        dense_device_bound = (
+            grid_plan.peak_bytes
+            + source_bytes
+            + sum(value.peak_bytes for value in tensor_plans.values())
+        )
+        ao_map_reserve = min(
+            ao_map_reserve, max(0, max_device_bytes - dense_device_bound)
+        )
     host_bound += ao_map_reserve
     cache = Path(cache)
     spec = state._source.grid_spec
@@ -2877,6 +2933,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                 profile_device=profile_device,
                 resident_ao_cutoff=resident_ao_cutoff,
                 resident_ao_cache_bytes=ao_map_reserve,
+                resident_ao_producer=resident_ao_producer,
+                resident_ao_max_active_fraction=resident_ao_max_active_fraction,
                 integral_derivatives=primitive_demand.integral_derivatives,
             )
         artifact = prepared.stationary_artifact
@@ -2961,6 +3019,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             sources.timeline = timeline
             with timeline.phase("metrics_collection"):
                 source_before, grid_before = sources.metrics(), ao.metrics()
+        if profile_device:
+            ao.profile_stages()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
         fitted_integral_provider = getattr(
@@ -3191,6 +3251,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             resident_grid,
             cutoff=resident_ao_cutoff,
             budget_bytes=ao_map_reserve,
+            producer=resident_ao_producer,
+            max_active_fraction=resident_ao_max_active_fraction,
         )
         for chunk_begin, chunk_end in grid_work.chunks():
             with timeline.phase("xc_geometry_enqueue"):
@@ -3198,17 +3260,26 @@ def _complete_rks_cuda_gradient_diagnostic(
                     end = min(begin + tile_points, chunk_end)
                     if resident_grid is not None:
                         point_pointer = resident_grid.points + 3 * begin * 8
-                        selected_ao_ids = (
-                            None
+                        feature_lease = (
+                            ao.feature_task_device_points(
+                                point_pointer,
+                                end - begin,
+                                None,
+                                ingredients,
+                            )
                             if ao_maps is None
-                            else ao_maps.select(ao, ao_maps.domain, begin, end - begin)
+                            else ao_maps.feature_task(
+                                ao,
+                                ao_maps.domain,
+                                begin,
+                                end - begin,
+                                ingredients,
+                            )
                         )
-                        with ao.feature_task_device_points(
-                            point_pointer,
-                            end - begin,
-                            selected_ao_ids,
-                            ingredients,
-                        ) as task:
+                        with feature_lease as task:
+                            task.layout.require_derivative_order(
+                                2 if needs_first else 1
+                            )
                             sources.geometry_molecular_resident_weights(
                                 task,
                                 begin,
@@ -3408,13 +3479,19 @@ def _complete_rks_cuda_gradient_diagnostic(
             "mode": "disabled"
             if resident_ao_cutoff is None
             else (
-                "dense-no-resident-grid" if ao_maps is None else "sampled-jet-cutoff"
+                "dense-no-resident-grid" if ao_maps is None else resident_ao_producer
             ),
             "cutoff": resident_ao_cutoff,
             "cache_budget_requested_bytes": resident_ao_cache_bytes,
             "cache_host_reserve_bytes": ao_map_reserve,
+            "cache_device_reserve_bytes": (
+                ao_map_reserve
+                if resident_ao_producer == "pre-ao-envelope-native-csr"
+                else 0
+            ),
             "full_ao_capacity": n,
             "derivative_order": grid_plan.order,
+            "max_active_fraction": resident_ao_max_active_fraction,
             "work": None if ao_maps is None else ao_maps.work,
         },
         grid_tile_schedule=(
@@ -3469,6 +3546,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         native_integral_resources=dict(native_integral_resources),
         native_integral_host_reserve=native_integral_host_reserve,
         additional_device_peak_bound=peak
+        + (
+            ao_map_reserve
+            if prepared is None and resident_ao_producer == "pre-ao-envelope-native-csr"
+            else 0
+        )
         + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
@@ -3628,6 +3710,8 @@ def complete_rks_cuda_gradient_diagnostic(
     profile_device: bool = False,
     resident_ao_cutoff: float | None = None,
     resident_ao_cache_bytes: int = 16 << 20,
+    resident_ao_producer: str = "sampled-jets",
+    resident_ao_max_active_fraction: float = 1.0,
 ) -> typing.Any:
     """Execute once, optionally retaining validated CUDA owners for later replay."""
     kwargs = {
@@ -3651,6 +3735,8 @@ def complete_rks_cuda_gradient_diagnostic(
         "profile_device": profile_device,
         "resident_ao_cutoff": resident_ao_cutoff,
         "resident_ao_cache_bytes": resident_ao_cache_bytes,
+        "resident_ao_producer": resident_ao_producer,
+        "resident_ao_max_active_fraction": resident_ao_max_active_fraction,
     }
     if prepared is None:
         return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)

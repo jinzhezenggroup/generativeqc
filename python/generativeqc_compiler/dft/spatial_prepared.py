@@ -12,7 +12,7 @@ import threading
 import time
 import typing
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from generativeqc_compiler.common.arrays import immutable
 from generativeqc_compiler.common.resources import (
@@ -42,6 +42,8 @@ from .spatial import (
 if typing.TYPE_CHECKING:
     import numpy as np
 
+    from .indexed_layout import AoGridBlockLayout
+
 
 @dataclass(frozen=True)
 class SpatialFeatureTile:
@@ -55,6 +57,7 @@ class SpatialFeatureTile:
     features: dict[str, np.ndarray]
     generation_id: str
     ao_jets: np.ndarray | None = None
+    layout: AoGridBlockLayout | None = None
 
 
 def _request(
@@ -342,10 +345,28 @@ class PreparedSpatialGrid:
         if self._leased:
             raise RuntimeError("prepared spatial grid has an active task lease")
 
-    def _tiles(self) -> typing.Any:
+    def _tiles(self, *, with_layout: bool = False) -> typing.Any:
+        """Keep legacy pairs; native consumers opt into the certified descriptor."""
         for task in self.tasks.tasks:
             for begin in range(0, len(task.point_ids), self.tile_plan.tile_points):
-                yield task, task.point_ids[begin : begin + self.tile_plan.tile_points]
+                ids = task.point_ids[begin : begin + self.tile_plan.tile_points]
+                if not with_layout:
+                    yield task, ids
+                    continue
+                layout = task.block_layout(
+                    self.basis.nao,
+                    self.basis.identity,
+                    order=self.tile_plan.order,
+                    point_start=begin,
+                    npoint=len(ids),
+                    basis_generation=(
+                        None if self._cuda is None else self._cuda.basis_generation
+                    ),
+                    geometry_generation=(
+                        None if self._cuda is None else self._cuda.geometry_generation
+                    ),
+                )
+                yield task, ids, layout
 
     @property
     def source_statistics(self) -> typing.Any:
@@ -413,7 +434,7 @@ class PreparedSpatialGrid:
             if self._cuda and not set(ingredients).issubset(self._cuda.ingredients):
                 raise ValueError("consumer ingredients exceed prepared CUDA outputs")
             d, execution = self._start_execution(density, stamp=stamp, route=route)
-        for task, ids in self._tiles():
+        for task, ids, layout in self._tiles(with_layout=True):
             with self._lock:
                 self._check()
                 if execution != self._execution:
@@ -425,6 +446,7 @@ class PreparedSpatialGrid:
                         ao_ids=task.ao_ids,
                         download_jets=include_jets,
                         stamp=stamp,
+                        block_layout=layout,
                     )
                     jets = values.pop("ao_jets", None)
                     if jets is not None:
@@ -453,6 +475,7 @@ class PreparedSpatialGrid:
                     values,
                     self.tasks.generation_id,
                     jets if include_jets else None,
+                    replace(layout, derivative_order=order),
                 )
             yield result
 
@@ -483,9 +506,12 @@ class PreparedSpatialGrid:
             self._leased = True
 
             def iterator() -> typing.Any:
-                for task, ids in self._tiles():
+                for task, ids, layout in self._tiles(with_layout=True):
                     with cuda.task(
-                        self.grid.points[ids], task.ao_ids, stamp=stamp
+                        self.grid.points[ids],
+                        task.ao_ids,
+                        stamp=stamp,
+                        block_layout=layout,
                     ) as lease:
                         yield task, ids, lease
 
@@ -525,9 +551,13 @@ class PreparedSpatialGrid:
             self._leased = True
 
             def iterator() -> typing.Any:
-                for task, ids in self._tiles():
+                for task, ids, layout in self._tiles(with_layout=True):
                     with cuda.xc_task(
-                        self.grid.points[ids], task.ao_ids, functional, stamp=stamp
+                        self.grid.points[ids],
+                        task.ao_ids,
+                        functional,
+                        stamp=stamp,
+                        block_layout=layout,
                     ) as lease:
                         yield task, ids, lease
 

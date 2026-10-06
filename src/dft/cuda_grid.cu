@@ -8,6 +8,7 @@
 #include <new>
 
 #include "../tensor/cuda_runtime.cuh"
+#include "ao_grid_work.hpp"
 #include "generativeqc/generativeqc.h"
 #include "grid_task_view.cuh"
 #include "xc_point.hpp"
@@ -18,11 +19,30 @@ using namespace generativeqc_tensor;
 thread_local unsigned fail_next_grid_allocation = 0;
 thread_local bool fail_next_grid_runtime = false;
 #endif
+/** Geometry-bound CSR backing for the existing AoGridBlockLayout contract.
+ * Only scalar tile offsets have a host mirror for provider shape binding.
+ * Scientific AO labels never leave the device or upload during warm replay.
+ */
+struct ResidentAoMap {
+  generativeqc::runtime::OwnedCudaBuffer<size_t> offsets_device, indices;
+  std::vector<size_t> offsets;
+  std::string identity;
+  const double* points{};
+  std::uint64_t geometry_epoch{};
+  size_t nao{}, npoint{}, tile_points{}, ao_map_entries{};
+  unsigned jets{};
+  int map_derivative_order{};
+  bool local_ao = true;
+};
 struct GridPlan {
   Context context;
+  // The CSR buffers synchronize their lifetime stream before it is destroyed.
+  std::unique_ptr<ResidentAoMap> resident_map;
   // Destroy the binding before its borrowed stream/arena owner.
   std::unique_ptr<generativeqc::tensor::PreparedBoundedContraction> projection;
   double projection_prepare_seconds{};
+  generativeqc::dft::AoGridWork work_metrics;
+  bool profile_stages = false;
   bool density_ready = false, density_jets_ready = false;
   // Only split_restricted_density establishes this witness for the owned copy.
   // Equal dimensions, aliased source pointers, and host values prove nothing.
@@ -30,6 +50,7 @@ struct GridPlan {
   size_t natom{}, nprimitive{}, nao{}, capacity{}, jets{}, packed_size{};
   size_t active_capacity{}, last_points{}, last_active{};
   std::uint64_t generation{};
+  std::uint64_t geometry_epoch{};
   bool local = false, view_ready = false, features_ready = false, last_identity_map = false;
   bool orbital_enabled = false, orbital_ready = false, use_orbitals = false;
   size_t orbital_capacity[2]{}, orbital_count[2]{}, orbital_tile{};
@@ -39,6 +60,7 @@ struct GridPlan {
   double *local_density{}, *local_potential{}, *potential{};
   double *factors[2]{}, *factor_panel{}, *psi{};
   size_t* ao_ids{};
+  const size_t* current_ao_ids{};
 };
 size_t mul(size_t a, size_t b) {
   if (b && a > SIZE_MAX / b) throw std::overflow_error("grid allocation overflow");
@@ -73,9 +95,9 @@ int guarded(char* error, size_t size, F operation) noexcept {
 
 // Gather every local matrix element, including all cross-shell terms. A
 // sparse AO mask does not imply a sparse global density matrix.
-__global__ void gather_density(const double* global, const size_t* ids, I nao, I active,
+__global__ void gather_density(const double* global, const size_t* ids, I nao, I active, I spins,
                                double* local) {
-  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < 2 * active * active;
+  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < spins * active * active;
        i += I(blockDim.x) * gridDim.x) {
     const I spin = i / (active * active), row = i / active % active, col = i % active;
     const I global_row = ids ? ids[row] : row;
@@ -321,6 +343,8 @@ int grid_cuda_centers_v1(void* pointer, const double* centers, size_t elements, 
       if (!std::isfinite(centers[i])) throw std::invalid_argument("nonfinite CUDA grid center");
     p.view_ready = p.features_ready = p.density_jets_ready = false;
     p.density_ready = p.orbital_ready = p.use_orbitals = false;
+    p.resident_map.reset();
+    ++p.geometry_epoch;
     ++p.generation;
     ctx.section(true, ctx.metrics.input_ms, [&] {
       cuda_check(cudaMemcpyAsync(p.basis, centers, elements * sizeof(double),
@@ -482,7 +506,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
                                        int features, const size_t* ao_ids, size_t active,
                                        double* feature_output, double* jet_output,
                                        int defer_error_to_consumer, int points_on_device,
-                                       char* error, size_t size) {
+                                       char* error, size_t size, size_t resident_begin = SIZE_MAX,
+                                       const char* map_identity = nullptr) {
   return guarded(error, size, [&] {
     if (!pointer || (features != 0 && features != 1) ||
         (defer_error_to_consumer != 0 && defer_error_to_consumer != 1) ||
@@ -495,17 +520,33 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     p.view_ready = p.density_jets_ready = false;
     ++p.generation;
     bool identity_map = false;
+    const bool resident = resident_begin != SIZE_MAX;
+    if (resident) {
+      if (!p.local || !points_on_device || !p.resident_map || !map_identity ||
+          p.resident_map->identity != map_identity ||
+          p.resident_map->geometry_epoch != p.geometry_epoch)
+        throw std::invalid_argument("stale resident AO map owner");
+      const auto& owner = *p.resident_map;
+      const auto block = generativeqc::dft::bind_native_ao_grid_block(
+          owner, owner.offsets, owner.indices.get(), resident_begin);
+      if (npoint != block.npoint || points != owner.points + 3 * resident_begin)
+        throw std::invalid_argument("resident AO map point order mismatch");
+      active = block.nactive;
+      identity_map = !block.indexed;
+      ao_ids = block.indexed ? owner.indices.get() + owner.offsets[resident_begin / p.capacity]
+                             : nullptr;
+    }
     if (!p.local) {
       if (ao_ids) throw std::invalid_argument("dense plan does not own AO gather buffers");
       active = p.nao;
     } else {
       if (active > p.active_capacity)
         throw std::invalid_argument("selected AO map exceeds capacity");
-      identity_map = !ao_ids && active == p.nao;
+      if (!resident) identity_map = !ao_ids && active == p.nao;
       if (active && !ao_ids && !identity_map)
         throw std::invalid_argument(
             "selected AO map requires explicit IDs or the full identity map");
-      for (size_t i = 0; ao_ids && i < active; ++i)
+      for (size_t i = 0; !resident && ao_ids && i < active; ++i)
         if (ao_ids[i] >= p.nao || (i && ao_ids[i] <= ao_ids[i - 1]))
           throw std::invalid_argument("selected AO map must be sorted unique and in range");
     }
@@ -520,14 +561,16 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     p.last_active = active;
     p.last_identity_map = identity_map;
     p.features_ready = features != 0;
+    p.current_ao_ids = resident ? ao_ids : p.ao_ids;
     // A nonempty borrowed feature lease has no host numerical output. Avoid
     // turning every input/kernel/library subsection into a host fence merely
     // to collect detailed timings; the final error publication below remains
     // the single correctness synchronization for this tile. Explicit host
     // outputs, empty publication, and non-feature consumers retain detailed
     // section timing.
-    const bool detailed_profile =
+    bool detailed_profile =
         !defer_error_to_consumer && !(npoint && features && !feature_output && !jet_output);
+    detailed_profile = detailed_profile || p.profile_stages;
     const double* task_points = p.points;
     if (points_on_device) {
       if (npoint) require_device_pointer(points, ctx.device);
@@ -542,11 +585,14 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
             cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
       cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
       if (features) cuda_check(cudaMemsetAsync(p.features, 0, 13 * npoint * 8, ctx.stream));
-      if (p.local && active && !identity_map)
+      if (!resident && p.local && active && !identity_map)
         cuda_check(cudaMemcpyAsync(p.ao_ids, ao_ids, active * sizeof(size_t),
                                    cudaMemcpyHostToDevice, ctx.stream));
     });
     p.current_points = task_points;
+    if (!resident && p.local && active && !identity_map)
+      generativeqc::dft::AoGridWork::accumulate(p.work_metrics.ao_map_h2d_bytes,
+                                                active * sizeof(size_t));
     // Even an empty point tile publishes its new map and clears prior errors;
     // a borrowed view must never expose the previous task's AO labels.
     if (!npoint) {
@@ -554,20 +600,25 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
       p.view_ready = true;
       return;
     }
+    const auto ao_ms_before = ctx.metrics.kernel_ms;
     if (active)
       ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
         scheduled_ao(ctx.stream, p.basis, p.natom, p.nprimitive, active, task_points, npoint,
-                     p.jets, p.ao, ctx.error, p.local && !identity_map ? p.ao_ids : nullptr);
+                     p.jets, p.ao, ctx.error,
+                     p.local && !identity_map ? p.current_ao_ids : nullptr);
         cuda_check(cudaGetLastError());
       });
+    p.work_metrics.record_ao(npoint, active, p.nao, p.jets);
+    if (p.profile_stages) p.work_metrics.ao_stage_ms += ctx.metrics.kernel_ms - ao_ms_before;
     if (features && p.use_orbitals) {
+      generativeqc::dft::AoGridWork::accumulate(p.work_metrics.orbital_feature_tiles, 1);
       const I ao_stride = npoint * active;
       for (int spin = 0; spin < 2; ++spin) {
         for (size_t begin = 0; active && begin < p.orbital_count[spin]; begin += p.orbital_tile) {
           const size_t width = std::min(p.orbital_tile, p.orbital_count[spin] - begin);
           ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
             gather_factor<<<blocks(active * width, 128), 128, 0, ctx.stream>>>(
-                p.factors[spin], p.local && !identity_map ? p.ao_ids : nullptr, active,
+                p.factors[spin], p.local && !identity_map ? p.current_ao_ids : nullptr, active,
                 p.orbital_count[spin], begin, width, p.factor_panel);
             cuda_check(cudaGetLastError());
           });
@@ -597,18 +648,27 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         });
     } else if (features) {
       const I stride = npoint * active;
+      const I density_spins = p.identical_spin_density ? 1 : 2;
+      const auto gather_ms_before = ctx.metrics.packing_ms;
       if (p.local && active && !identity_map)
         ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
-          gather_density<<<blocks(2 * active * active, 128), 128, 0, ctx.stream>>>(
-              p.density, p.ao_ids, p.nao, active, p.local_density);
+          gather_density<<<blocks(density_spins * active * active, 128), 128, 0, ctx.stream>>>(
+              p.density, p.current_ao_ids, p.nao, active, density_spins, p.local_density);
           cuda_check(cudaGetLastError());
+          generativeqc::dft::AoGridWork::accumulate(p.work_metrics.density_gather_passes, 1);
+          generativeqc::dft::AoGridWork::accumulate(
+              p.work_metrics.density_gather_elements,
+              generativeqc::dft::AoGridWork::product(density_spins, active * active));
         });
+      if (p.profile_stages)
+        p.work_metrics.density_gather_ms += ctx.metrics.packing_ms - gather_ms_before;
+      const auto projection_ms_before = ctx.metrics.library_ms;
       if (active)
         ctx.section(detailed_profile, ctx.metrics.library_ms, [&] {
           const double* density = p.local && !identity_map ? p.local_density : p.density;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
-          for (int spin = 0; spin < (p.identical_spin_density ? 1 : 2); ++spin)
+          for (I spin = 0; spin < density_spins; ++spin)
             p.projection->execute(
                 generativeqc::dft::generated::grid_panel_descriptor(count, npoint, active, active),
                 ctx.stream, p.ao + first * stride, density + spin * active * active,
@@ -620,12 +680,19 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
             cuda_check(cudaMemcpyAsync(p.work + (4 + first) * stride, p.work + first * stride,
                                        count * stride * sizeof(double), cudaMemcpyDeviceToDevice,
                                        ctx.stream));
+          p.work_metrics.record_projection(npoint, active, density_spins, count,
+                                           p.identical_spin_density);
         });
+      if (p.profile_stages)
+        p.work_metrics.projection_ms += ctx.metrics.library_ms - projection_ms_before;
+      const auto feature_ms_before = ctx.metrics.packing_ms;
       ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
         scheduled_grid_features(ctx.stream, p.ao, p.work, npoint, active, p.features, ctx.error,
                                 p.feature_mask);
         cuda_check(cudaGetLastError());
+        generativeqc::dft::AoGridWork::accumulate(p.work_metrics.feature_passes, 1);
       });
+      if (p.profile_stages) p.work_metrics.feature_ms += ctx.metrics.packing_ms - feature_ms_before;
     }
     if (defer_error_to_consumer) {
       p.density_jets_ready = features && !p.use_orbitals;
@@ -674,12 +741,111 @@ int grid_cuda_run_selected_device_deferred_v1(void* pointer, const double* point
                                      feature_output, jet_output, 1, 1, error, size);
 }
 
+/** Build once, before AO evaluation. Budget rejection leaves the dense domain
+ * available; malformed identities and numerical/runtime errors never do.
+ * info: ready, retained bytes, numeric peak, labels, tiles, D2H bytes,
+ * offsets H2D bytes, conservative AO-region classifications.
+ */
+int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size_t npoint,
+                                       double cutoff, size_t budget, const char* identity,
+                                       size_t* info, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !points || !npoint || !identity || !*identity || !info ||
+        !std::isfinite(cutoff) || cutoff <= 0)
+      throw std::invalid_argument("invalid resident AO map domain");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (!p.local || p.active_capacity != p.nao)
+      throw std::invalid_argument("resident AO map requires full-capacity local storage");
+    require_device_pointer(points, ctx.device);
+    std::fill(info, info + 8, 0);
+    p.view_ready = p.features_ready = p.density_jets_ready = false;
+    p.current_points = nullptr;
+    ++p.generation;
+    // Drop the old inventory before allocating a replacement under one budget.
+    p.resident_map.reset();
+    const size_t tiles = 1 + (npoint - 1) / p.capacity;
+    const size_t words = add(p.nao, 31) / 32;
+    const size_t offset_bytes = mul(add(tiles, 1), sizeof(size_t));
+    const size_t mask_bytes = mul(mul(tiles, words), sizeof(unsigned));
+    const size_t bounds_bytes = mul(mul(tiles, 6), sizeof(double));
+    const size_t staging = add(mul(offset_bytes, 2), add(mask_bytes, bounds_bytes));
+    info[4] = tiles;
+    if (add(staging, sizeof(size_t)) > budget) return;
+    auto owner = std::make_unique<ResidentAoMap>();
+    owner->identity = identity;
+    owner->points = points;
+    owner->geometry_epoch = p.geometry_epoch;
+    owner->nao = p.nao;
+    owner->npoint = npoint;
+    owner->tile_points = p.capacity;
+    owner->jets = p.jets;
+    constexpr unsigned jet_counts[] = {1, 4, 10, 20};
+    while (jet_counts[owner->map_derivative_order] != p.jets) ++owner->map_derivative_order;
+    owner->offsets.resize(tiles + 1);
+    generativeqc::runtime::OwnedCudaBuffer<unsigned> masks(ctx.device, tiles * words, ctx.stream);
+    generativeqc::runtime::OwnedCudaBuffer<double> bounds(ctx.device, tiles * 6, ctx.stream);
+    owner->offsets_device.allocate(ctx.device, tiles + 1, ctx.stream);
+    cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
+    cuda_check(cudaMemsetAsync(owner->offsets_device.get(), 0, offset_bytes, ctx.stream));
+    ao_region_boxes_kernel<<<blocks(tiles, 1), 1, 0, ctx.stream>>>(points, npoint, p.capacity,
+                                                                   tiles, bounds.get(), ctx.error);
+    cuda_check(cudaGetLastError());
+    ao_region_mask_kernel<<<dim3((words + 3) / 4, std::min(size_t{65535}, tiles)), 128, 0,
+                            ctx.stream>>>(
+        p.basis, p.natom, p.nprimitive, p.nao, p.jets, bounds.get(), tiles, cutoff, masks.get(),
+        reinterpret_cast<unsigned long long*>(owner->offsets_device.get()), ctx.error);
+    cuda_check(cudaGetLastError());
+    int failure = 0;
+    cuda_check(cudaMemcpyAsync(owner->offsets.data(), owner->offsets_device.get(), offset_bytes,
+                               cudaMemcpyDeviceToHost, ctx.stream));
+    cuda_check(
+        cudaMemcpyAsync(&failure, ctx.error, sizeof(int), cudaMemcpyDeviceToHost, ctx.stream));
+    cuda_check(cudaStreamSynchronize(ctx.stream));
+    info[5] = add(offset_bytes, sizeof(int));
+    info[7] = mul(mul(tiles, p.nao), p.jets);
+    if (failure) throw std::runtime_error("nonfinite resident AO map points");
+    for (size_t tile = 0; tile < tiles; ++tile) {
+      if (owner->offsets[tile + 1] > p.nao)
+        throw std::runtime_error("resident AO map count exceeds basis");
+      owner->offsets[tile + 1] = add(owner->offsets[tile], owner->offsets[tile + 1]);
+    }
+    owner->ao_map_entries = owner->offsets.back();
+    const size_t index_bytes = mul(std::max(size_t{1}, owner->ao_map_entries), sizeof(size_t));
+    info[2] = staging;
+    if (add(staging, index_bytes) > budget) return;
+    info[2] = add(staging, index_bytes);
+    owner->indices.allocate(ctx.device, index_bytes / sizeof(size_t), ctx.stream);
+    cuda_check(cudaMemcpyAsync(owner->offsets_device.get(), owner->offsets.data(), offset_bytes,
+                               cudaMemcpyHostToDevice, ctx.stream));
+    ao_region_compact_kernel<<<blocks(tiles, 1), 128, 0, ctx.stream>>>(
+        masks.get(), words, tiles, owner->offsets_device.get(), owner->indices.get());
+    cuda_check(cudaGetLastError());
+    cuda_check(cudaStreamSynchronize(ctx.stream));
+    info[0] = 1;
+    info[1] = add(mul(offset_bytes, 2), index_bytes);
+    info[3] = owner->ao_map_entries;
+    info[6] = offset_bytes;
+    p.resident_map = std::move(owner);
+  });
+}
+
+int grid_cuda_run_ao_map_device_deferred_v1(void* pointer, const double* points, size_t npoint,
+                                            size_t begin, const char* identity, char* error,
+                                            size_t size) {
+  return grid_cuda_run_selected_impl(pointer, points, npoint, 1, nullptr, 0, nullptr, nullptr, 1, 1,
+                                     error, size, begin, identity);
+}
+
 // Explicit, synchronous discovery for a caller-owned fixed-geometry mask.
 // Borrow the existing identity-map storage only after invalidating its task
 // generation. No density contraction, grid-coordinate copy, or new device
 // allocation is needed. The next grid run uploads its own selected map.
-int grid_cuda_select_ao_device_v1(void* pointer, const double* points, size_t npoint, double cutoff,
-                                  unsigned* selected, char* error, size_t size) {
+static int grid_cuda_select_ao_device_impl(void* pointer, const double* points, size_t npoint,
+                                           double cutoff, unsigned* selected, bool envelope,
+                                           char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !selected || !npoint || !std::isfinite(cutoff) || cutoff <= 0)
       throw std::invalid_argument("invalid resident AO selection input");
@@ -700,9 +866,20 @@ int grid_cuda_select_ao_device_v1(void* pointer, const double* points, size_t np
       cuda_check(cudaMemsetAsync(flags, 0, p.nao * sizeof(unsigned), ctx.stream));
     });
     ctx.section(false, ctx.metrics.kernel_ms, [&] {
+      if (envelope) {
+        // Projection scratch is dead during discovery and has at least eight
+        // doubles even for the smallest nonempty supported domain.
+        ao_region_box_kernel<<<1, 1, 0, ctx.stream>>>(points, npoint, p.work, ctx.error);
+        cuda_check(cudaGetLastError());
+        ao_region_screen_kernel<<<blocks(p.nao, 128), 128, 0, ctx.stream>>>(
+            p.basis, p.natom, p.nprimitive, p.nao, p.jets, p.work, cutoff, flags, ctx.error);
+        cuda_check(cudaGetLastError());
+        return;
+      }
       scheduled_ao(ctx.stream, p.basis, p.natom, p.nprimitive, p.nao, points, npoint, p.jets, p.ao,
                    ctx.error, nullptr);
       cuda_check(cudaGetLastError());
+      p.work_metrics.record_ao(npoint, p.nao, p.nao, p.jets, true);
       const auto point_blocks = std::min(size_t{65535}, (npoint + 127) / 128);
       active_ao_columns<<<dim3((p.nao + 31) / 32, point_blocks), 128, 0, ctx.stream>>>(
           p.ao, npoint, p.nao, p.jets, cutoff, flags, ctx.error);
@@ -717,6 +894,19 @@ int grid_cuda_select_ao_device_v1(void* pointer, const double* points, size_t np
     });
     if (failure) throw std::runtime_error("nonfinite resident AO selection output");
   });
+}
+
+int grid_cuda_select_ao_device_v1(void* pointer, const double* points, size_t npoint, double cutoff,
+                                  unsigned* selected, char* error, size_t size) {
+  return grid_cuda_select_ao_device_impl(pointer, points, npoint, cutoff, selected, false, error,
+                                         size);
+}
+
+int grid_cuda_screen_ao_region_device_v1(void* pointer, const double* points, size_t npoint,
+                                         double cutoff, unsigned* selected, char* error,
+                                         size_t size) {
+  return grid_cuda_select_ao_device_impl(pointer, points, npoint, cutoff, selected, true, error,
+                                         size);
 }
 int grid_cuda_run_v1(void* pointer, const double* points, size_t npoint, int features,
                      double* feature_output, double* jet_output, char* error, size_t size) {
@@ -738,7 +928,7 @@ int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, ch
                p.nao,
                p.last_active,
                p.jets,
-               p.last_identity_map ? nullptr : p.ao_ids,
+               p.last_identity_map ? nullptr : p.current_ao_ids,
                p.current_points,
                p.ao,
                p.features_ready ? p.features : nullptr,
@@ -862,9 +1052,11 @@ int grid_cuda_scatter_v1(void* pointer, std::uint64_t generation, const double* 
     if (count)
       ctx.section(true, ctx.metrics.packing_ms, [&] {
         scatter_matrix<<<blocks(count, 128), 128, 0, ctx.stream>>>(
-            p.local_potential, p.last_identity_map ? nullptr : p.ao_ids, p.nao, p.last_active,
-            p.potential, ctx.error);
+            p.local_potential, p.last_identity_map ? nullptr : p.current_ao_ids, p.nao,
+            p.last_active, p.potential, ctx.error);
         cuda_check(cudaGetLastError());
+        generativeqc::dft::AoGridWork::accumulate(p.work_metrics.scatter_passes, 1);
+        generativeqc::dft::AoGridWork::accumulate(p.work_metrics.scatter_elements, count);
       });
     int failure = 0;
     ctx.section(true, ctx.metrics.output_ms, [&] {
@@ -917,6 +1109,28 @@ int grid_cuda_metrics_v1(void* pointer, Metrics* metrics, int* versions, char* e
     cuda_check(cudaRuntimeGetVersion(versions));
     cuda_check(cudaDriverGetVersion(versions + 1));
     versions[2] = static_cast<GridPlan*>(pointer)->projection->provider_version();
+  });
+}
+/** Opt-in intrusive stage timing. Normal resident leases keep their deferred
+ * error gate and never synchronize solely to report these stage durations. */
+int grid_cuda_profile_stages_v1(void* pointer, int enabled, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || (enabled != 0 && enabled != 1))
+      throw std::invalid_argument("invalid AO/grid profiling mode");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    std::lock_guard<std::mutex> lock(p.context.mutex);
+    p.context.check_device();
+    p.profile_stages = enabled;
+  });
+}
+int grid_cuda_work_metrics_v1(void* pointer, generativeqc::dft::AoGridWork* output, char* error,
+                              size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !output) throw std::invalid_argument("null AO/grid work metrics");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    std::lock_guard<std::mutex> lock(p.context.mutex);
+    p.context.check_device();
+    *output = p.work_metrics;
   });
 }
 }

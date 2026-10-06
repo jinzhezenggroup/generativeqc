@@ -52,8 +52,11 @@ def fixture(
             point_count: int,
             ids: typing.Any,
             ingredients: tuple[str, ...],
+            *,
+            block_layout: typing.Any = None,
         ) -> typing.Iterator[SimpleNamespace]:
             assert ids is None
+            assert block_layout is None
             assert ingredients == ("rho", "gradient", "tau")
             begin = (pointer - resident_grid.points) // (3 * 8)
             assert pointer == resident_grid.points + 3 * begin * 8
@@ -336,7 +339,8 @@ def test_production_driver_uses_shared_pass_accumulators() -> None:
     assert "nonlocal_sources=self.nonlocal_sources" in driver
     assert "_ResidentNonlocalForceOwner(" in driver
     assert "seed_from_snapshot(state._source, task)" in join
-    assert join.count("with grid.feature_task_device_points(") == 1
+    assert join.count("grid.feature_task_device_points(") == 1
+    assert join.count("ao_maps.feature_task(") == 1
     assert "with grid.feature_task(" not in join
     assert "except NotImplementedError:" in join
     assert join.count("nonlocal_owner.collect(") == 1
@@ -576,9 +580,18 @@ def test_local_ao_maps_reach_both_consumers_without_skipping_points(
 
     @contextmanager
     def feature(
-        pointer: int, count: int, ids: typing.Any, ingredients: tuple[str, ...]
+        pointer: int,
+        count: int,
+        ids: typing.Any,
+        ingredients: tuple[str, ...],
+        *,
+        block_layout: typing.Any = None,
     ) -> typing.Iterator[SimpleNamespace]:
         assert ids is selected
+        assert block_layout is args["ao_maps"].last_layout
+        assert block_layout.nactive == len(ids) and block_layout.npoint == count
+        assert block_layout.point_start == (pointer - 8192) // 24
+        block_layout.require_derivative_order(2)
         events.append(("selected", len(ids)))
         with original(pointer, count, None, ingredients) as task:
             yield task
@@ -589,13 +602,37 @@ def test_local_ao_maps_reach_both_consumers_without_skipping_points(
         def reset_work(self) -> None:
             events.append(("mask_reset",))
 
-        def select(
+        def select_block(
             self, grid: typing.Any, actual_domain: typing.Any, begin: int, count: int
-        ) -> np.ndarray:
+        ) -> tuple[np.ndarray, typing.Any]:
+            from generativeqc_compiler.dft.indexed_layout import AoGridBlockLayout
+
             assert actual_domain is domain
             assert grid is args["grid"] and count == 2
             events.append(("mask", begin))
-            return selected
+            self.last_layout = AoGridBlockLayout(
+                2, len(selected), count, 2, "basis", True, 2, begin
+            )
+            return selected, self.last_layout
+
+        @contextmanager
+        def feature_task(
+            self,
+            grid: typing.Any,
+            domain: typing.Any,
+            begin: int,
+            count: int,
+            ingredients: typing.Iterable[str],
+        ) -> typing.Iterator[typing.Any]:
+            ids, layout = self.select_block(grid, domain, begin, count)
+            with grid.feature_task_device_points(
+                domain.point_pointer + 24 * begin,
+                count,
+                ids,
+                ingredients,
+                block_layout=layout,
+            ) as task:
+                yield task
 
     args["grid"].feature_task_device_points = feature
     args.update(ao_maps=Maps(), ao_domain=domain)

@@ -5,6 +5,7 @@
 CudaXcAoTiles local_maps(std::size_t points, std::size_t tile_points, std::size_t nao,
                          unsigned variant) {
   CudaXcAoTiles maps;
+  maps.derivative_order = 1;
   maps.offsets.push_back(0);
   for (std::size_t begin = 0; begin < points; begin += tile_points) {
     const auto tile = begin / tile_points;
@@ -162,13 +163,16 @@ void local_ao_cases() {
         }
     const auto dense = cuda_xc_layout(basis, grid, 4U, false, 19);
     const auto valid = local_maps(grid.point_count(), 19, basis.nao, 0);
-    for (unsigned failure = 0; failure < 5; ++failure) {
+    for (unsigned failure = 0; failure < 8; ++failure) {
       auto bad = valid;
       if (failure == 0) bad.offsets.pop_back();
       if (failure == 1) bad.indices[1] = bad.indices[0];
       if (failure == 2) bad.indices[0] = basis.nao;
       if (failure == 3) bad.offsets[1] = bad.indices.size() + 1;
       if (failure == 4) std::swap(bad.indices[0], bad.indices[1]);
+      if (failure == 5) bad.derivative_order = -1;
+      if (failure == 6) bad.derivative_order = 0;
+      if (failure == 7) bad.derivative_order = 4;
       bool rejected = false;
       try {
         (void)cuda_xc_local_ao_layout(dense, bad);

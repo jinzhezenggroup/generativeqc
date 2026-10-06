@@ -50,8 +50,12 @@ def test_grid_factory_prepares_projection_on_requested_device(
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
+#include "dft/ao_grid_work.hpp"
 #include "tensor/metrics.hpp"
 #include "runtime/allocation_measurement.hpp"
+#include "runtime/bounded_workspace.hpp"
 using cudaError_t=int;
 struct Stream {int device;};
 struct Handle {int device;};
@@ -105,10 +109,21 @@ void error_text(char* p,std::size_t n,const char* s){if(p&&n)std::snprintf(p,n,"
 }
 namespace generativeqc::runtime {
 void cuda_resource_check(int s){generativeqc_tensor::cuda_check(s);}
+template <class T> int resource_cuda_malloc(T** p,std::size_t n){
+  return cudaMalloc(reinterpret_cast<void**>(p),n);
+}
+int resource_cuda_free(void* p){return cudaFree(p);}
 """
     source = prelude
-    source += _definition("src/runtime/cuda_resources.cuh", "class CudaDeviceScope")
-    source += ";}\nnamespace generativeqc_tensor {\n"
+    # Keep the actual CSR buffer ownership/destruction types in the extracted
+    # GridPlan; only CUDA API allocation is replaced by the host double.
+    for marker in (
+        "class CudaDeviceScope",
+        "template <class T>\nstruct BorrowedCudaBuffer",
+        "template <class T>\nclass OwnedCudaBuffer",
+    ):
+        source += _definition("src/runtime/cuda_resources.cuh", marker) + ";\n"
+    source += "}\nnamespace generativeqc_tensor {\n"
     source += _definition("src/tensor/cuda_runtime.cuh", "struct Context")
     source += ";}\nnamespace generativeqc::tensor {\n"
     source += _definition(
@@ -134,6 +149,7 @@ std::unique_ptr<tensor::PreparedBoundedContraction> prepare_grid_panel(
 using namespace generativeqc_tensor;
 """
     for marker in (
+        "struct ResidentAoMap",
         "struct GridPlan",
         "size_t mul(",
         "size_t add(",

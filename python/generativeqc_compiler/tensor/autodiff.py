@@ -27,7 +27,7 @@ from types import MappingProxyType
 
 import numpy as np
 
-from .interpreter import evaluate_nodes
+from .interpreter import _evaluate, evaluate_nodes
 from .ir import Node, _execution_power_exponent
 from .program import Program
 from .scaled_arithmetic import scaled_bilinear_value
@@ -482,6 +482,13 @@ def _jvp_runtime_indexed_scatter_add(
     return result
 
 
+def _jvp_runtime_cartesian(
+    node: Node, values: typing.Any, tangents: typing.Any
+) -> np.ndarray:
+    """The map is immutable control data; only the scientific source varies."""
+    return _evaluate(node, [tangents[0], *values[1:]], {})
+
+
 def _jvp_reduce(node: Node, values: typing.Any, tangents: typing.Any) -> np.ndarray:
     return np.sum(tangents[0], axis=node.attrs["axes"], dtype=node.spec.dtype)
 
@@ -544,6 +551,8 @@ _JVP_RULES = {
     "segment_sum": _jvp_segment_sum,
     "runtime_indexed_select": _jvp_runtime_indexed_select,
     "runtime_indexed_scatter_add": _jvp_runtime_indexed_scatter_add,
+    "runtime_cartesian_select": _jvp_runtime_cartesian,
+    "runtime_cartesian_scatter_add": _jvp_runtime_cartesian,
     "reduce": _jvp_reduce,
     "broadcast": _jvp_broadcast,
 }
@@ -733,6 +742,25 @@ def _vjp_runtime_indexed_scatter_add(
     return [source, *(_zeros(mapping.spec) for mapping in node.inputs[1:])]
 
 
+def _vjp_runtime_cartesian(
+    node: Node, values: typing.Any, bar: typing.Any
+) -> list[np.ndarray]:
+    """Reference transpose keeps repeated-index accumulation in logical order."""
+    selected = dict(zip(node.attrs["axes"], values[1:], strict=True))
+    source = _zeros(node.inputs[0].spec)
+    local_shape = bar.shape if node.op == "runtime_cartesian_select" else source.shape
+    for coordinate in np.ndindex(local_shape):
+        target = tuple(
+            int(selected[axis][position]) if axis in selected else position
+            for axis, position in enumerate(coordinate)
+        )
+        if node.op == "runtime_cartesian_select":
+            source[target] += bar[coordinate]
+        else:
+            source[coordinate] = bar[target]
+    return [source, *(_zeros(mapping.spec) for mapping in node.inputs[1:])]
+
+
 def _vjp_reduce(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndarray]:
     input_shape = node.inputs[0].spec.shape
     reduced = set(node.attrs["axes"])
@@ -766,6 +794,8 @@ _VJP_RULES = {
     "segment_sum": _vjp_segment_sum,
     "runtime_indexed_select": _vjp_runtime_indexed_select,
     "runtime_indexed_scatter_add": _vjp_runtime_indexed_scatter_add,
+    "runtime_cartesian_select": _vjp_runtime_cartesian,
+    "runtime_cartesian_scatter_add": _vjp_runtime_cartesian,
     "reduce": _vjp_reduce,
     "broadcast": _vjp_broadcast,
 }
