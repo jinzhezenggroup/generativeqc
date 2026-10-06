@@ -913,7 +913,9 @@ def test_public_cuda_force_active_ao_profile_replay(
         independent_uks_gradient,
     )
 
-    assert policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES == ()
+    assert tuple(
+        profile.profile_id for profile in policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+    ) == ("sm120-ordinary-rks-second-jet-v1",)
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     xyz = np.asarray([position for _, position in ATOMS])
     moved = xyz.copy()
