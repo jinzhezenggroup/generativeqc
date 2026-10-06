@@ -58,10 +58,50 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
     return QualifiedForceActiveAoProfile(**values)
 
 
-def test_production_auto_policy_has_no_unqualified_positive_profile() -> None:
-    assert QUALIFIED_FORCE_ACTIVE_AO_PROFILES == ()
-    decision = resolve_force_active_ao_policy(_workload())
-    assert decision.cutoff is None
+def test_production_auto_policy_promotes_only_the_measured_large_rks_envelope() -> None:
+    assert tuple(profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES) == (
+        "sm120-ordinary-rks-second-jet-v1",
+    )
+
+    below_envelope = resolve_force_active_ao_policy(_workload())
+    assert not below_envelope.selected
+    assert below_envelope.reason == "no-qualified-profile"
+
+    for workload in (
+        _workload(grid_points=1_179_648),
+        _workload(atoms=96, aos=768, grid_points=2_359_296),
+        _workload(atoms=72, aos=576, grid_points=1_769_472),
+    ):
+        decision = resolve_force_active_ao_policy(workload)
+        assert decision.selected
+        assert decision.profile_id == "sm120-ordinary-rks-second-jet-v1"
+        assert decision.cutoff == 1e-16
+        assert decision.cache_bytes == 16 << 20
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"architecture": "sm_90", "grid_points": 1_179_648},
+        {"derivative_order": 1, "grid_points": 1_179_648},
+        {"spin_blocks": 2, "grid_points": 1_179_648},
+        {"composition": "composite", "grid_points": 1_179_648},
+        {"density_fitted": True, "grid_points": 1_179_648},
+        {"atoms": 47, "grid_points": 1_179_648},
+        {"aos": 383, "grid_points": 1_179_648},
+        {"atoms": 97, "aos": 768, "grid_points": 2_359_296},
+        {"aos": 769, "grid_points": 2_359_296},
+        {"grid_points": 2_359_297},
+        {"tile_points": 128, "grid_points": 1_179_648},
+        {"max_device_bytes": (512 << 20) - 1, "grid_points": 1_179_648},
+        {"max_host_bytes": (256 << 20) - 1, "grid_points": 1_179_648},
+    ],
+)
+def test_production_profile_keeps_adjacent_unqualified_domains_dense(
+    updates: dict[str, object],
+) -> None:
+    decision = resolve_force_active_ao_policy(_workload(**updates))
+    assert not decision.selected
     assert decision.reason == "no-qualified-profile"
 
 
