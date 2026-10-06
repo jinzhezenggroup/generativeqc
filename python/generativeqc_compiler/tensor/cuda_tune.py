@@ -42,6 +42,7 @@ from .cuda_search import (
     plan_schedule_search,
     require_compiled_resources,
 )
+from .cuda_reduction import DEFAULT_REDUCTION_LOWERING, ReductionLoweringBinding
 from .interpreter import execute
 from .precision import describe_precision
 
@@ -203,6 +204,7 @@ class TensorSelection:
     artifact: CudaArtifact
     evidence: dict
     evidence_path: Path
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING
 
 
 def tune_cuda(
@@ -214,6 +216,7 @@ def tune_cuda(
     schedules: typing.Any = None,
     search_space: TensorScheduleSpace | None = None,
     precision_programs: typing.Any = None,
+    reduction_lowerings: typing.Any = None,
     search_limits: TensorSearchLimits = DEFAULT_SEARCH_LIMITS,
     screening: TensorScreeningPolicy | None = DEFAULT_SCREENING_POLICY,
     repeats: int = 8,
@@ -253,8 +256,26 @@ def tune_cuda(
         raise ValueError(
             "precision variant count exceeds the candidate limit or is empty"
         )
+    reduction_lowerings = (
+        (DEFAULT_REDUCTION_LOWERING,)
+        if reduction_lowerings is None
+        else tuple(islice(reduction_lowerings, search_limits.maximum_candidates + 1))
+    )
+    if (
+        not 1 <= len(reduction_lowerings) <= search_limits.maximum_candidates
+        or any(
+            not isinstance(lowering, ReductionLoweringBinding)
+            for lowering in reduction_lowerings
+        )
+    ):
+        raise ValueError(
+            "reduction lowering count exceeds the candidate limit, is empty, "
+            "or contains an untyped binding"
+        )
     maximum_schedules = max(
-        1, search_limits.maximum_candidates // len(precision_programs)
+        1,
+        search_limits.maximum_candidates
+        // (len(precision_programs) * len(reduction_lowerings)),
     )
     schedules = (
         candidate_schedules(search_space, maximum=maximum_schedules)
@@ -290,6 +311,7 @@ def tune_cuda(
         schedules,
         search_limits,
         precision_programs=precision_programs,
+        reduction_lowerings=reduction_lowerings,
     )
     compile_shortlist = _static_compile_shortlist(
         search, search_limits.maximum_compilations
@@ -305,7 +327,12 @@ def tune_cuda(
         repeats,
     )
     screening_active = screening_plan["active"]
-    artifact = compile_cuda(baseline, compiler, cache)
+    artifact = compile_cuda(
+        baseline,
+        compiler,
+        cache,
+        reduction_lowering=DEFAULT_REDUCTION_LOWERING,
+    )
     references = [execute(baseline.program, values).outputs for values in fixtures]
     feed_identities = []
     import hashlib
@@ -329,6 +356,7 @@ def tune_cuda(
         for feeds in feed_identities
     ]
     best_plan, best_artifact, best_score = baseline, artifact, 1.0
+    best_lowering = DEFAULT_REDUCTION_LOWERING
     candidates, screened = [], []
     compilation_attempts = 0
     selected_profiles = []
@@ -340,6 +368,9 @@ def tune_cuda(
             "schedules": [asdict(s) for s in schedules],
             "precision_schedules": [
                 describe_precision(program).identity for program in precision_programs
+            ],
+            "reduction_lowerings": [
+                lowering.to_payload() for lowering in reduction_lowerings
             ],
             "search_limits": asdict(search_limits),
             "screening": asdict(screening) if screening is not None else None,
@@ -358,8 +389,14 @@ def tune_cuda(
             startup.append(result.metrics)
             reference_cuda.execute(feeds)
 
-        def qualify(plan: typing.Any, compiled: typing.Any, row: typing.Any) -> None:
+        def qualify(
+            plan: typing.Any,
+            compiled: typing.Any,
+            row: typing.Any,
+            lowering: ReductionLoweringBinding,
+        ) -> None:
             nonlocal best_plan, best_artifact, best_score, selected_profiles
+            nonlocal best_lowering
             try:
                 check_deadline()
                 row.update(stage="endpoint", endpoint_attempted=True)
@@ -425,6 +462,7 @@ def tune_cuda(
                         )
                     if passed and score > best_score:
                         best_plan, best_artifact, best_score = plan, compiled, score
+                        best_lowering = lowering
                         selected_profiles = row["promotion_profiles"]
             except (ValueError, RuntimeError, TimeoutError) as error:
                 row.update(status="rejected", reason=str(error))
@@ -455,11 +493,17 @@ def tune_cuda(
                 continue
             try:
                 plan = proposal.plan
+                lowering = proposal.reduction_lowering
                 row["stage"] = "compile"
                 compilation_attempts += 1
                 compile_started = time.monotonic()
                 try:
-                    compiled = compile_cuda(plan, compiler, cache)
+                    compiled = compile_cuda(
+                        plan,
+                        compiler,
+                        cache,
+                        reduction_lowering=lowering,
+                    )
                 finally:
                     row["compile_wall_seconds"] = time.monotonic() - compile_started
                 row["artifact"] = compiled.metadata
@@ -486,7 +530,7 @@ def tune_cuda(
                 )
                 check_deadline()
                 if not screening_active:
-                    qualify(plan, compiled, row)
+                    qualify(plan, compiled, row, lowering)
                     continue
                 row["stage"] = "representative-timing"
                 screen = {
@@ -516,7 +560,7 @@ def tune_cuda(
                     max_absolute_error=max(errors),
                 )
                 row["status"] = "screened"
-                screened.append((plan, compiled, row))
+                screened.append((plan, compiled, row, lowering))
             except (ValueError, RuntimeError, TimeoutError) as error:
                 row.update(status="rejected", reason=str(error))
 
@@ -525,7 +569,7 @@ def tune_cuda(
             # No screen-speed threshold: noisy/negative screens can still reach
             # qualification. Only the unchanged complete gates can promote.
             ranked = sorted(screened, key=lambda item: -item[2]["screening"]["score"])
-            for rank, (_, _, row) in enumerate(ranked, 1):
+            for rank, (_, _, row, _) in enumerate(ranked, 1):
                 row["shortlist_rank"] = rank
                 if rank > screening.maximum_finalists:
                     row.update(
@@ -533,8 +577,8 @@ def tune_cuda(
                         stage="shortlist",
                         reason="outside representative-timing shortlist; ranking only",
                     )
-            for plan, compiled, row in ranked[: screening.maximum_finalists]:
-                qualify(plan, compiled, row)
+            for plan, compiled, row, lowering in ranked[: screening.maximum_finalists]:
+                qualify(plan, compiled, row, lowering)
 
         evidence = {
             "schema": "generativeqc.tensor.cuda.tuning",
@@ -549,6 +593,7 @@ def tune_cuda(
             "selected_plan": best_plan.identity,
             "selected_artifact": best_artifact.metadata["key"],
             "selected_schedule": asdict(best_plan.schedule),
+            "selected_reduction_lowering": best_lowering.to_payload(),
             "selected_profiles": selected_profiles,
             "screening_plan": screening_plan,
             "search_summary": {
@@ -572,7 +617,13 @@ def tune_cuda(
         }
     path = Path(cache) / "selections" / key / "evidence.json"
     atomic_json(path, evidence)
-    return TensorSelection(best_plan, best_artifact, evidence, path)
+    return TensorSelection(
+        best_plan,
+        best_artifact,
+        evidence,
+        path,
+        reduction_lowering=best_lowering,
+    )
 
 
 def _screening_plan(
