@@ -1,38 +1,6 @@
 {
   "schema": 1,
   "files": {
-    "python/generativeqc_compiler/tensor/cuda_plan.py": {
-      "classification": "migration",
-      "contract": "#1889",
-      "reason": "TensorSchedule still carries a named reduction-provider selector. Provider choice must move below semantic schedule planning into the shared lowering binding.",
-      "selectors": {
-        "reduction_provider": 4
-      }
-    },
-    "python/generativeqc_compiler/tensor/cuda_providers.py": {
-      "classification": "provider",
-      "contract": "#1886",
-      "reason": "Shared lowering diagnostics currently name the legacy plan-level reduction selector while migration to provider-owned selection is incomplete.",
-      "selectors": {
-        "reduction_provider": 3
-      }
-    },
-    "python/generativeqc_compiler/tensor/cuda_reduction.py": {
-      "classification": "migration",
-      "contract": "#1889",
-      "reason": "Cooperative reduction codegen still reads provider choice from TensorSchedule instead of a prepared shared lowering binding.",
-      "selectors": {
-        "reduction_provider": 1
-      }
-    },
-    "python/generativeqc_compiler/tensor/cuda_search.py": {
-      "classification": "migration",
-      "contract": "#1889",
-      "reason": "Tensor schedule search still exposes provider identity as a search axis and serialized schedule field; retain only until provider-neutral candidate selection owns the comparison.",
-      "selectors": {
-        "reduction_provider": 3
-      }
-    },
     "src/cc/cuda_solver.cu": {
       "classification": "migration",
       "contract": "#1890",
