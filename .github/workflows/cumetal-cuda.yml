@@ -94,9 +94,9 @@ jobs:
       - name: Install CuMetal build prerequisites and ccache
         run: brew install llvm z3 ninja ccache
 
-      - name: Cache CuMetal toolchain
+      - name: Restore CuMetal toolchain
         id: cache-cumetal
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             /tmp/cuda-metal
@@ -104,8 +104,9 @@ jobs:
           key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
 
       - name: Restore CuMetal ccache
+        id: cumetal_ccache
         if: steps.cache-cumetal.outputs.cache-hit != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CUMETAL_CCACHE_DIR }}
           key: ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
@@ -113,7 +114,8 @@ jobs:
             ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore GenerativeQC ccache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: generativeqc_ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CCACHE_DIR }}
           # Include every family that can alter generated/native compilation.
@@ -146,6 +148,13 @@ jobs:
           cmake --build "$CUMETAL_SOURCE/build" --parallel 3
           cmake --install "$CUMETAL_SOURCE/build"
           ccache --show-stats
+
+      - name: Save CuMetal compiler cache
+        if: github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true' && steps.cumetal_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CUMETAL_CCACHE_DIR }}
+          key: ${{ steps.cumetal_ccache.outputs.cache-primary-key }}
 
       - name: Verify CuMetal
         run: CUMETAL_ROOT="$CUMETAL_PREFIX" "$CUMETAL_PREFIX/bin/cumetal" doctor
@@ -182,6 +191,15 @@ jobs:
           done
           "$FAKE_CUDA/bin/nvcc" --version
 
+      - name: Save CuMetal toolchain
+        if: github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /tmp/cuda-metal
+            /tmp/cumetal-install
+          key: ${{ steps.cache-cumetal.outputs.cache-primary-key }}
+
       - name: Reset ccache statistics
         run: ccache --zero-stats
 
@@ -206,6 +224,13 @@ jobs:
 
       - name: Build CUDA runtime test target
         run: cmake --build "$GENERATIVEQC_BUILD" --target generativeqc_cuda_runtime_tests --parallel 3
+
+      - name: Save GenerativeQC ccache
+        if: github.event_name != 'merge_group' && steps.generativeqc_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.generativeqc_ccache.outputs.cache-primary-key }}
 
       - name: Show ccache statistics
         run: ccache --show-stats
