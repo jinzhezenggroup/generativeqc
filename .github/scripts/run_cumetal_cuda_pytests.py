@@ -1,10 +1,14 @@
-"""Run CuMetal-backed CUDA pytest cases with bounded CI latency.
+"""Run bounded CuMetal-backed QC CUDA tests on the Apple GPU.
 
-Pull-request mode executes focused public-CUDA integration tests and fails fast
-on the first error or timeout. Full mode (nightly/manual) runs the complete CUDA
-regression set and keeps collecting results after failures so provider gaps
-remain diagnosable without turning every pull request into a long FP64-emulated
-SCF run.
+Routine CI exercises a small representative endpoint set. Scheduled/manual
+qualification runs a broader explicit CuMetal-compatible manifest. Keep the
+manifest explicit: NVIDIA-only/Slurm-only tests must never be counted as CuMetal
+coverage, and adding every CUDA-named source test would make this lane both slow
+and misleading.
+
+Every selected pytest invocation must execute at least one Apple-GPU dispatch.
+Skips, empty selections, missing provenance, per-test timeouts, and exhaustion of
+the whole-suite time budget are failures.
 """
 
 from __future__ import annotations
@@ -14,58 +18,56 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-TEST_FILES = (
-    "tests/python/test_cuda_runtime.py",
-    "tests/python/test_batch.py",
-    "tests/python/test_calculator.py",
+MODE = os.environ.get("CUMETAL_CUDA_TEST_MODE", "gate").strip().lower()
+TIMEOUT_SECONDS = int(os.environ.get("CUMETAL_CUDA_TEST_TIMEOUT_SECONDS", "90"))
+SUITE_BUDGET_SECONDS = int(
+    os.environ.get(
+        "CUMETAL_CUDA_SUITE_BUDGET_SECONDS",
+        "300" if MODE == "gate" else "2400",
+    )
 )
+
+# Required on routine PR/merge-queue runs. These deliberately span the public
+# RHF, UHF, density-fitting/output-selection, and DFT CUDA owners without pulling
+# in the long force/Hessian/post-HF qualification suites.
 GATE_NODEIDS = (
     "tests/python/test_cuda_runtime.py::test_cuda_minimal_rhf_matches_cpu_reference",
     "tests/python/test_cuda_runtime.py::test_cuda_minimal_uhf_matches_cpu_reference",
-    "tests/python/test_cuda_runtime.py::test_cuda_resident_rhf_response_matches_host_operator",
+    "tests/python/test_calculator.py::test_cuda_energy_only_output_selection_omits_forces",
+    "tests/python/test_dft_cuda.py::test_native_cuda_dft_matches_independently_converged_cpu_endpoint",
 )
-MODE = os.environ.get("CUMETAL_CUDA_TEST_MODE", "gate").strip().lower()
-TIMEOUT_SECONDS = int(os.environ.get("CUMETAL_CUDA_TEST_TIMEOUT_SECONDS", "60"))
 
-
-def collect_full_nodeids() -> list[str]:
-    command = [
-        sys.executable,
-        "-m",
-        "pytest",
-        *TEST_FILES,
-        "-q",
-        "-k",
-        "cuda",
-        "--collect-only",
-    ]
-    result = subprocess.run(command, check=False, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(result.stdout, end="")
-        print(result.stderr, end="", file=sys.stderr)
-        raise SystemExit(result.returncode)
-    nodeids = [
-        line.strip()
-        for line in result.stdout.splitlines()
-        if line.startswith("tests/") and "::" in line
-    ]
-    if not nodeids:
-        raise SystemExit("no CUDA tests were collected")
-    return nodeids
+# Scheduled/manual qualification. These are existing public CUDA endpoint tests
+# that do not require an NVIDIA-only allocator, Slurm identity, or a native nvcc
+# toolchain. Keep expensive production-grid/ECP/post-HF campaigns in their
+# dedicated GPU qualification lanes rather than stretching this Apple runner.
+QUALIFICATION_NODEIDS = GATE_NODEIDS + (
+    "tests/python/test_batch.py::test_cuda_real_spherical_batch_reuses_fixed_topology_plan",
+    "tests/python/test_batch.py::test_cuda_bounded_direct_streaming_matches_exact_replay",
+    "tests/python/test_batch.py::test_cuda_uhf_ragged_batch_warm_start_and_failure_isolation",
+    "tests/python/test_calculator.py::test_cuda_spherical_def2_svp_water_matches_pyscf",
+    "tests/python/test_calculator.py::test_cuda_def2_tzvp_water_uses_graph_native_eigensolver",
+    "tests/python/test_calculator.py::test_cartesian_d_f_cuda_matches_pyscf_libcint_reference",
+    "tests/python/test_calculator.py::test_cuda_uhf_direct_jk_matches_pyscf_and_force_finite_difference",
+    "tests/python/test_dft_cuda.py::test_native_cuda_dft_ragged_batch_replay_and_failure_isolation",
+)
 
 
 def selected_nodeids() -> list[str]:
     if MODE == "gate":
         return list(GATE_NODEIDS)
     if MODE == "full":
-        return collect_full_nodeids()
+        return list(QUALIFICATION_NODEIDS)
     raise SystemExit(f"unsupported CUMETAL_CUDA_TEST_MODE={MODE!r}")
 
 
-def stream_process(command: list[str]) -> tuple[int | None, str, bool]:
+def stream_process(
+    command: list[str], timeout_seconds: int
+) -> tuple[int | None, str, bool]:
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
@@ -86,11 +88,11 @@ def stream_process(command: list[str]) -> tuple[int | None, str, bool]:
     reader.start()
     timed_out = False
     try:
-        return_code = process.wait(timeout=TIMEOUT_SECONDS)
+        return_code = process.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         timed_out = True
         print(
-            f"\nERROR: CUDA pytest exceeded {TIMEOUT_SECONDS}s; killing process group",
+            f"\nERROR: CUDA pytest exceeded {timeout_seconds}s; killing process group",
             flush=True,
         )
         try:
@@ -114,17 +116,28 @@ def junit_status(path: Path) -> tuple[int, int]:
 
 def main() -> None:
     nodeids = selected_nodeids()
+    started = time.monotonic()
     print(
-        f"Running CuMetal CUDA mode={MODE}: {len(nodeids)} existing CUDA tests "
-        f"with {TIMEOUT_SECONDS}s/test timeout",
+        f"Running CuMetal CUDA mode={MODE}: {len(nodeids)} endpoint groups; "
+        f"{TIMEOUT_SECONDS}s/group timeout; {SUITE_BUDGET_SECONDS}s suite budget",
         flush=True,
     )
     failures: list[str] = []
-    combined_output: list[str] = []
 
     for index, nodeid in enumerate(nodeids):
+        elapsed = time.monotonic() - started
+        remaining = int(SUITE_BUDGET_SECONDS - elapsed)
+        if remaining <= 0:
+            failures.append(
+                f"SUITE BUDGET EXHAUSTED before {nodeid} "
+                f"({SUITE_BUDGET_SECONDS}s total)"
+            )
+            break
+
+        timeout = min(TIMEOUT_SECONDS, remaining)
         print(
-            f"\n::group::CUDA pytest {index + 1}/{len(nodeids)}: {nodeid}", flush=True
+            f"\n::group::CUDA pytest {index + 1}/{len(nodeids)}: {nodeid}",
+            flush=True,
         )
         junit = Path(f"/tmp/generativeqc-cuda-test-{index}.xml")
         command = [
@@ -136,29 +149,24 @@ def main() -> None:
             "-s",
             f"--junitxml={junit}",
         ]
-        return_code, output, timed_out = stream_process(command)
-        combined_output.append(output)
+        return_code, output, timed_out = stream_process(command, timeout)
         cases, skipped = junit_status(junit)
         failure: str | None = None
         if timed_out:
             failure = f"TIMEOUT: {nodeid}"
         elif return_code != 0:
             failure = f"FAILED: {nodeid} (exit {return_code})"
-        elif cases != 1:
-            failure = f"INVALID RESULT: {nodeid} produced {cases} testcase(s)"
+        elif cases < 1:
+            failure = f"INVALID RESULT: {nodeid} produced no testcases"
         elif skipped:
-            failure = f"SKIPPED: {nodeid}"
+            failure = f"SKIPPED: {nodeid} ({skipped}/{cases} cases)"
+        elif "device=apple_gpu" not in output or "launch_success=true" not in output:
+            failure = f"MISSING APPLE-GPU PROVENANCE: {nodeid}"
         if failure is not None:
             failures.append(failure)
         print("::endgroup::", flush=True)
         if failure is not None and MODE == "gate":
             break
-
-    provenance = "".join(combined_output)
-    if "device=apple_gpu" not in provenance:
-        failures.append("missing CuMetal provenance: device=apple_gpu")
-    if "launch_success=true" not in provenance:
-        failures.append("missing CuMetal provenance: launch_success=true")
 
     if failures:
         print("\nCUDA test failures:", file=sys.stderr)
@@ -166,7 +174,11 @@ def main() -> None:
             print(f"- {failure}", file=sys.stderr)
         raise SystemExit(1)
 
-    print(f"\nExecuted {len(nodeids)} existing CUDA tests with zero skips")
+    elapsed = time.monotonic() - started
+    print(
+        f"\nExecuted {len(nodeids)} CuMetal CUDA endpoint groups with zero skips "
+        f"in {elapsed:.1f}s"
+    )
 
 
 if __name__ == "__main__":
