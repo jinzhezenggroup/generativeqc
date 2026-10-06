@@ -37,6 +37,7 @@ from .rks_hessian_integrals import (
     checked_direction,
     checked_second_hvp_options,
     generated_weighted_first_integral_gradient,
+    generated_weighted_first_integral_gradient_cuda,
     generated_weighted_second_integral_hvp,
     nuclear_hvp_from_topology,
     rks_integral_topology,
@@ -234,6 +235,35 @@ def _coulomb_shell_plan_weights(
     return immutable(fixed), immutable(moving)
 
 
+def _coulomb_response_factor_coefficients(
+    plan: StationaryHVPPlan,
+) -> tuple[float, float]:
+    """Extract the bilinear Coulomb response factors from the MethodIR JVP."""
+    block = plan.integral_block("coulomb", terms=1, coordinates=1)
+
+    def evaluate(
+        left: float, right: float, dleft: float, dright: float
+    ) -> float:
+        feeds = {
+            "density_left": np.asarray([[left]], dtype=np.float64),
+            "density_right": np.asarray([[right]], dtype=np.float64),
+            "d_density_left": np.asarray([[dleft]], dtype=np.float64),
+            "d_density_right": np.asarray([[dright]], dtype=np.float64),
+        }
+        value = execute(block.response_weights, feeds).outputs["response_weights"]
+        return float(np.asarray(value).reshape(-1)[0])
+
+    left = evaluate(0.0, 1.0, 1.0, 0.0)
+    right = evaluate(1.0, 0.0, 0.0, 1.0)
+    probe = evaluate(2.0, 3.0, 5.0, 7.0)
+    expected = left * 5.0 * 3.0 + right * 2.0 * 7.0
+    if not np.isfinite((left, right, probe)).all() or not np.isclose(
+        probe, expected, rtol=0.0, atol=1e-14
+    ):
+        raise RuntimeError("stationary Coulomb response weight is not bilinear")
+    return left, right
+
+
 def _integral_source_hvp(
     source_name: str,
     plan: StationaryHVPPlan,
@@ -242,6 +272,9 @@ def _integral_source_hvp(
     direction: np.ndarray,
     cache: Path,
     integral_budget_bytes: int,
+    first_backend: str,
+    first_compiler: typing.Any,
+    first_device_id: int,
     second_backend: str,
     second_compiler: typing.Any,
     second_device_id: int,
@@ -249,12 +282,26 @@ def _integral_source_hvp(
     """Apply one plan-owned integral source as d(weight)dI + weight d2I(v)."""
     if source_name in ("one_electron", "overlap_pulay"):
         fixed, moving = _pair_plan_weights(plan, source_name, response, operator)
-        first = generated_weighted_first_integral_gradient(
-            rks_integral_topology(operator),
-            source_name,
-            pair_weights=moving,
-            cache=cache,
-        )
+        if first_backend == "cuda":
+            first, first_diagnostic = generated_weighted_first_integral_gradient_cuda(
+                rks_integral_topology(operator),
+                source_name,
+                first_compiler,
+                pair_weights=moving,
+                cache=cache,
+                device_id=first_device_id,
+                budget_bytes=integral_budget_bytes,
+            )
+        elif first_backend == "cpu":
+            first = generated_weighted_first_integral_gradient(
+                rks_integral_topology(operator),
+                source_name,
+                pair_weights=moving,
+                cache=cache,
+            )
+            first_diagnostic = {"backend": "cpu-generated-plan-weighted-first"}
+        else:
+            raise ValueError("first-integral backend must be cpu or cuda")
         second, diagnostic = generated_weighted_second_integral_hvp(
             rks_integral_topology(operator),
             source_name,
@@ -274,12 +321,29 @@ def _integral_source_hvp(
         def fixed_weights(slots: tuple[int, int, int, int]) -> np.ndarray:
             return _coulomb_shell_plan_weights(plan, response, operator, slots)[0]
 
-        first = generated_weighted_first_integral_gradient(
-            rks_integral_topology(operator),
-            source_name,
-            eri_shell_weights=response_weights,
-            cache=cache,
-        )
+        if first_backend == "cuda":
+            coefficients = _coulomb_response_factor_coefficients(plan)
+            first, first_diagnostic = generated_weighted_first_integral_gradient_cuda(
+                rks_integral_topology(operator),
+                source_name,
+                first_compiler,
+                density=operator.state.density[0],
+                density_response=response.response.density_derivative,
+                coulomb_response_coefficients=coefficients,
+                cache=cache,
+                device_id=first_device_id,
+                budget_bytes=integral_budget_bytes,
+            )
+        elif first_backend == "cpu":
+            first = generated_weighted_first_integral_gradient(
+                rks_integral_topology(operator),
+                source_name,
+                eri_shell_weights=response_weights,
+                cache=cache,
+            )
+            first_diagnostic = {"backend": "cpu-generated-plan-weighted-first"}
+        else:
+            raise ValueError("first-integral backend must be cpu or cuda")
         second, diagnostic = generated_weighted_second_integral_hvp(
             rks_integral_topology(operator),
             source_name,
@@ -298,7 +362,8 @@ def _integral_source_hvp(
         raise FloatingPointError("nonfinite semilocal RKS integral HVP source")
     diagnostic = {
         **diagnostic,
-        "response_first_integral": "cpu-generated-plan-weighted",
+        "response_first_integral": first_diagnostic,
+        "response_first_integral_backend": first_diagnostic["backend"],
         "second_integral_backend": diagnostic["backend"],
         "stationary_hvp_plan": plan.identity,
     }
@@ -329,6 +394,9 @@ def _rks_hvp_with_response(
     execution: str,
     integral_budget_bytes: int,
     plan_weight_workspace_bytes: int,
+    first_backend: str,
+    first_compiler: typing.Any,
+    first_device_id: int,
     second_backend: str,
     second_compiler: typing.Any,
     second_device_id: int,
@@ -350,6 +418,9 @@ def _rks_hvp_with_response(
                 context.direction,
                 cache,
                 integral_budget_bytes,
+                first_backend,
+                first_compiler,
+                first_device_id,
                 second_backend,
                 second_compiler,
                 second_device_id,
@@ -446,7 +517,7 @@ def _rks_hvp_with_response(
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace_bytes,
             "directional_first_integral_backend": directional.integral_first_backend,
-            "response_first_integral_backend": "cpu",
+            "response_first_integral_backend": first_backend,
             "second_integral_backend": second_backend,
             "execution_residency": (
                 "mixed-host-device"
@@ -524,6 +595,9 @@ def rks_hvp(
         ),
         integral_budget_bytes=integral_budget_bytes,
         plan_weight_workspace_bytes=plan_weight_workspace,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
         second_backend=second_backend,
         second_compiler=second_compiler,
         second_device_id=second_device_id,
@@ -601,6 +675,9 @@ def rks_hvp_many(
             ),
             integral_budget_bytes=integral_budget_bytes,
             plan_weight_workspace_bytes=plan_weight_workspace,
+            first_backend=first_backend,
+            first_compiler=first_compiler,
+            first_device_id=first_device_id,
             second_backend=second_backend,
             second_compiler=second_compiler,
             second_device_id=second_device_id,
@@ -635,7 +712,7 @@ def rks_hvp_many(
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace,
             "directional_first_integral_backend": first_backend,
-            "response_first_integral_backend": "cpu",
+            "response_first_integral_backend": first_backend,
             "second_integral_backend": second_backend,
             "execution_residency": (
                 "mixed-host-device"
@@ -779,7 +856,7 @@ def rks_hessian(
             "output_budget_bytes": output_budget_bytes,
             "integral_budget_bytes": integral_budget_bytes,
             "directional_first_integral_backend": first_backend,
-            "response_first_integral_backend": "cpu",
+            "response_first_integral_backend": first_backend,
             "second_integral_backend": second_backend,
             "execution_residency": (
                 "mixed-host-device"

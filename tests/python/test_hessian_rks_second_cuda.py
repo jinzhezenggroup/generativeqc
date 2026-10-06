@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import generativeqc.rks_hessian as rks_hessian_module
 import generativeqc.rks_hessian_directional as rks_directional
 import numpy as np
 import pytest
@@ -92,6 +93,11 @@ def test_complete_rks_hvp_can_use_cuda_directional_first_integrals(
         "generated_directional_semilocal_rks_integral_first_order",
         forbidden,
     )
+    monkeypatch.setattr(
+        rks_hessian_module,
+        "generated_weighted_first_integral_gradient",
+        forbidden,
+    )
     actual = rks_hvp(
         operator,
         direction,
@@ -116,7 +122,13 @@ def test_complete_rks_hvp_can_use_cuda_directional_first_integrals(
     )
     assert actual.directional_response.diagnostics["integral_first_backend"] == "cuda"
     assert actual.diagnostics["directional_first_integral_backend"] == "cuda"
-    assert actual.diagnostics["response_first_integral_backend"] == "cpu"
+    assert actual.diagnostics["response_first_integral_backend"] == "cuda"
+    for name in ("one_electron", "coulomb", "overlap_pulay"):
+        diagnostic = actual.diagnostics["integral_providers"][name]
+        assert diagnostic["response_first_integral_backend"].startswith("cuda-")
+        first = diagnostic["response_first_integral"]
+        assert first["raw_derivative_downloads"] == 0
+        assert not first["rank_four_weight_materialization"]
     assert actual.diagnostics["execution_residency"] == "mixed-host-device"
 
 
@@ -183,6 +195,7 @@ def test_full_rks_hessian_threads_cuda_second_integrals(
 
     np.testing.assert_allclose(actual.matrix, expected.matrix, atol=2e-9, rtol=8e-10)
     assert actual.diagnostics["directional_first_integral_backend"] == "cuda"
+    assert actual.diagnostics["response_first_integral_backend"] == "cuda"
     assert actual.diagnostics["second_integral_backend"] == "cuda"
     assert actual.diagnostics["execution_residency"] == "mixed-host-device"
     assert not actual.diagnostics["posthoc_symmetrization"]

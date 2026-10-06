@@ -36,6 +36,15 @@ from generativeqc_compiler.integral.first_directional_execute import (
     DirectionalFirstAccumulator,
     compile_directional_first,
 )
+from generativeqc_compiler.integral.first_gradient import (
+    FirstGradientTerm,
+    FirstGradientWeight,
+    first_gradient_identity,
+)
+from generativeqc_compiler.integral.first_gradient_execute import (
+    FirstGradientAccumulator,
+    compile_first_gradient,
+)
 from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
@@ -68,6 +77,7 @@ __all__ = [
     "generated_directional_semilocal_rks_integral_first_order",
     "generated_directional_semilocal_rks_integral_first_order_cuda",
     "generated_weighted_first_integral_gradient",
+    "generated_weighted_first_integral_gradient_cuda",
     "generated_weighted_second_integral_hvp",
     "nuclear_hvp_from_topology",
     "rks_integral_topology",
@@ -470,6 +480,209 @@ def generated_directional_semilocal_rks_integral_first_order_cuda(
             ),
         }
     return matrices[0], matrices[1], diagnostics
+
+
+def generated_weighted_first_integral_gradient_cuda(
+    topology: RKSIntegralTopology,
+    source_name: str,
+    compiler: typing.Any,
+    *,
+    pair_weights: typing.Any = None,
+    density: typing.Any = None,
+    density_response: typing.Any = None,
+    coulomb_response_coefficients: tuple[float, float] | None = None,
+    cache: typing.Any = ".artifacts",
+    device_id: int = 0,
+    budget_bytes: int = 64 << 20,
+    record_capacity: int = 128,
+    component_tile: int = 8,
+) -> tuple[np.ndarray, dict[str, typing.Any]]:
+    """Contract plan-owned response weights with first integrals on CUDA.
+
+    Pair sources upload one already plan-generated AO weight matrix. Coulomb
+    keeps the exact bilinear response weight factorized into D and D1 matrices;
+    the two scalar coefficients are supplied by the MethodIR plan consumer.
+    No AO-rank-four response-weight tensor is materialized.
+    """
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+
+    topology.check_current()
+    if source_name not in ("one_electron", "coulomb", "overlap_pulay"):
+        raise ValueError("unknown stationary first-integral source")
+    if not isinstance(compiler, CudaCompilerAdapter):
+        raise TypeError(
+            "CUDA RKS weighted first integrals require an explicit CudaCompilerAdapter"
+        )
+    if type(component_tile) is not int or not 1 <= component_tile <= 8:
+        raise ValueError("first-gradient component_tile must be between one and eight")
+
+    weight = FirstGradientWeight
+    if source_name == "coulomb":
+        if pair_weights is not None:
+            raise ValueError("CUDA Coulomb first derivative does not take pair_weights")
+        d0 = _checked_ao_weight(density, topology.nbf, "RKS reference density")
+        d1 = _checked_ao_weight(
+            density_response, topology.nbf, "RKS density response"
+        )
+        if (
+            coulomb_response_coefficients is None
+            or len(coulomb_response_coefficients) != 2
+            or not np.isfinite(coulomb_response_coefficients).all()
+        ):
+            raise ValueError(
+                "CUDA Coulomb first derivative requires two finite plan coefficients"
+            )
+        left, right = map(float, coulomb_response_coefficients)
+        weights = np.stack((d1, d0))
+        terms = (
+            FirstGradientTerm(
+                (weight(0, (0, 1)), weight(1, (2, 3))),
+                coefficient=left,
+            ),
+            FirstGradientTerm(
+                (weight(1, (0, 1)), weight(0, (2, 3))),
+                coefficient=right,
+            ),
+        )
+        weight_slots = 2
+    else:
+        if (
+            density is not None
+            or density_response is not None
+            or coulomb_response_coefficients is not None
+        ):
+            raise ValueError("pair first derivative received Coulomb-only inputs")
+        pair = _checked_ao_weight(
+            pair_weights, topology.nbf, f"{source_name} response weight"
+        )
+        weights = pair[None, :, :]
+        terms = (FirstGradientTerm((weight(0, (0, 1)),)),)
+        weight_slots = 1
+
+    shells = topology.shells
+    offsets = np.cumsum((0, *topology.shell_sizes))
+    primitives = tuple(
+        normalized_radial_primitives(
+            shell.angular_momentum,
+            tuple((p.exponent, p.coefficient) for p in shell.primitives),
+        )
+        for shell in shells
+    )
+    coords = np.asarray([atom.position for atom in topology.atoms], dtype=np.float64)
+    charges = np.asarray(
+        [atom.atomic_number for atom in topology.atoms], dtype=np.float64
+    )
+    programs: dict[str, typing.Any] = {}
+    cache_path = Path(cache) / "weighted-first-cuda"
+
+    def compiled(
+        ir: typing.Any,
+        indices: tuple[int, ...],
+        local_terms: tuple[FirstGradientTerm, ...],
+    ) -> typing.Any:
+        key = first_gradient_identity(ir, indices, local_terms)
+        if key not in programs:
+            programs[key] = compile_first_gradient(
+                ir,
+                compiler,
+                cache_path,
+                component_indices=indices,
+                terms=local_terms,
+            )
+        return programs[key]
+
+    if source_name == "coulomb":
+        seed_ir = build_weighted_eri_ir((0, 0, 0, 0))
+    else:
+        family = "overlap" if source_name == "overlap_pulay" else "kinetic"
+        seed_ir = build_one_electron_derivative_ir(family, (0, 0))
+    seed = compiled(seed_ir, (0,), terms)
+    with FirstGradientAccumulator(
+        seed,
+        nbf=topology.nbf,
+        natoms=len(topology.atoms),
+        weight_slots=weight_slots,
+        capacity=record_capacity,
+        device_id=device_id,
+        budget_bytes=budget_bytes,
+    ) as owner:
+        owner.reset(weights)
+
+        def append(
+            ir: typing.Any,
+            slots: tuple[int, ...],
+            atoms: tuple[int, ...],
+        ) -> None:
+            count = ir.signature.component_count
+            for start in range(0, count, component_tile):
+                indices = tuple(range(start, min(start + component_tile, count)))
+                owner.append_shell(
+                    compiled(ir, indices, terms),
+                    tuple(primitives[s] for s in slots),
+                    coords[list(atoms)],
+                    offsets=tuple(int(offsets[s]) for s in slots),
+                    atoms=tuple(int(atom) for atom in atoms),
+                )
+
+        if source_name == "coulomb":
+            for slots in product(range(len(shells)), repeat=4):
+                angular = tuple(shells[s].angular_momentum for s in slots)
+                atoms = tuple(shells[s].atom_index for s in slots)
+                append(build_weighted_eri_ir(angular), slots, atoms)
+        else:
+            for a, b in product(range(len(shells)), repeat=2):
+                angular = (shells[a].angular_momentum, shells[b].angular_momentum)
+                atoms = (shells[a].atom_index, shells[b].atom_index)
+                if source_name == "one_electron":
+                    append(
+                        build_one_electron_derivative_ir("kinetic", angular),
+                        (a, b),
+                        atoms,
+                    )
+                    for nucleus, charge in enumerate(charges):
+                        append(
+                            build_one_electron_derivative_ir(
+                                "nuclear_attraction",
+                                angular,
+                                charge=float(charge),
+                            ),
+                            (a, b),
+                            (*atoms, nucleus),
+                        )
+                else:
+                    append(
+                        build_one_electron_derivative_ir("overlap", angular),
+                        (a, b),
+                        atoms,
+                    )
+
+        result = owner.finish()
+        topology.check_current()
+        diagnostic = {
+            "backend": "cuda-generated-plan-weighted-first",
+            "source": source_name,
+            "weight_slots": weight_slots,
+            "weight_uploads": owner.statistics["weight_uploads"],
+            "gradient_downloads": owner.statistics["gradient_downloads"],
+            "primitive_records": owner.statistics["primitive_records"],
+            "chunks": owner.statistics["chunks"],
+            "compiled_programs": len(programs),
+            "storage": dict(owner.storage),
+            "program_identities": tuple(
+                sorted(
+                    artifact.program_identity for artifact in programs.values()
+                )
+            ),
+            "native_artifacts": tuple(
+                sorted(
+                    artifact.native.metadata["key"] for artifact in programs.values()
+                )
+            ),
+            "raw_derivative_downloads": 0,
+            "rank_four_weight_materialization": False,
+            "device_id": device_id,
+        }
+    return result, diagnostic
 
 
 def generated_weighted_first_integral_gradient(
