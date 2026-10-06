@@ -56,9 +56,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     detail::BoundedDirectBlockDomain block_domain = {}) {
   static_assert(FixedAngularOrder < 0 || (Force && FixedAngularOrder <= 12));
   static_assert(!DynamicWarpPull || (Force && FixedAngularOrder < 0));
-  using WarpStorage = BoundedWarpQueueStorage<DynamicWarpPull,
-                                             detail::kBoundedDirectQueueCapacity,
-                                             detail::kDirectQuartetShellClassCount>;
+  using WarpStorage = BoundedWarpQueueStorage<DynamicWarpPull, detail::kBoundedDirectQueueCapacity,
+                                              detail::kDirectQuartetShellClassCount>;
   __shared__ WarpStorage warp_queue;
   const auto radial_operator = FixedRadialOperator < 0
                                    ? runtime_radial_operator
@@ -534,14 +533,14 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
         std::getenv("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_SCHEDULE"), block.x, block.y, block.z);
     block.x = schedule.threads;
     if (schedule.dynamic) {
-#define GENERATIVEQC_WARP_FORCE(U)                                                        \
-  bounded_direct_shell_quartet_kernel<U, DirectScreeningPurpose::Force, true, -1, -1, true> \
-      <<<grid, block, shared_bytes, stream>>>(                                             \
-          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,       \
-          shell_pair_order, shell_pair_block_bounds, system_density_bounds,               \
-          enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds, \
-          density, active, output, global_cursor, profile, coulomb_coefficient,            \
-          exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain)
+#define GENERATIVEQC_WARP_FORCE(U)                                                                 \
+  bounded_direct_shell_quartet_kernel<U, DirectScreeningPurpose::Force, true, -1, -1, true>        \
+      <<<grid, block, shared_bytes, stream>>>(                                                     \
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,                \
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,  \
+          enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,       \
+          global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0, \
+          0.0, false, false, block_domain)
       if (unrestricted) {
         GENERATIVEQC_WARP_FORCE(true);
       } else {

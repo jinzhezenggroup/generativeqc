@@ -26,8 +26,7 @@ struct DeviceWords {
 };
 
 template <bool Dynamic>
-__global__ void ownership_probe(unsigned count, unsigned mode, unsigned* visits,
-                                unsigned* errors) {
+__global__ void ownership_probe(unsigned count, unsigned mode, unsigned* visits, unsigned* errors) {
   __shared__ BoundedWarpQueueStorage<Dynamic, capacity, classes> queue;
   __shared__ unsigned tile_state[capacity];
   const unsigned lane = threadIdx.x % 32U;
@@ -75,21 +74,24 @@ int main() {
     for (unsigned threads : {128U, 256U}) {
       for (bool dynamic : {false, true}) {
         for (unsigned mode : {0U, 1U, 2U}) {
-          for (unsigned count : {0U, 1U, 7U, 8U, 31U, 32U, 33U, 63U, 64U, 65U,
-                                 127U, 128U, 129U, 255U, 256U}) {
+          for (unsigned count :
+               {0U, 1U, 7U, 8U, 31U, 32U, 33U, 63U, 64U, 65U, 127U, 128U, 129U, 255U, 256U}) {
             checked(cudaMemset(visits.pointer, 0, words * sizeof(unsigned)));
             checked(cudaMemset(errors.pointer, 0, sizeof(unsigned)));
             if (dynamic) {
-              ownership_probe<true><<<blocks, threads>>>(count, mode, visits.pointer, errors.pointer);
+              ownership_probe<true>
+                  <<<blocks, threads>>>(count, mode, visits.pointer, errors.pointer);
             } else {
-              ownership_probe<false><<<blocks, threads>>>(count, mode, visits.pointer, errors.pointer);
+              ownership_probe<false>
+                  <<<blocks, threads>>>(count, mode, visits.pointer, errors.pointer);
             }
             checked(cudaGetLastError());
             checked(cudaDeviceSynchronize());
             checked(cudaMemcpy(actual.data(), visits.pointer, words * sizeof(unsigned),
                                cudaMemcpyDeviceToHost));
             unsigned failures = 0;
-            checked(cudaMemcpy(&failures, errors.pointer, sizeof(unsigned), cudaMemcpyDeviceToHost));
+            checked(
+                cudaMemcpy(&failures, errors.pointer, sizeof(unsigned), cudaMemcpyDeviceToHost));
             if (failures != 0U) throw std::runtime_error("cross-warp task ownership failure");
             for (unsigned index = 0U; index < words; ++index) {
               if (actual[index] != (index % capacity < count ? 1U : 0U)) {

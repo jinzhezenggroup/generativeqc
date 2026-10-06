@@ -64,10 +64,10 @@ constexpr bool check_recovery() {
 }
 
 static_assert(check_recovery());
-#define CHECK_PACKET(N)                      \
-  static_assert(check_packet(N, 0U, 1U));     \
-  static_assert(check_packet(N, 1U, 4U));     \
-  static_assert(check_packet(N, 2U, 8U));     \
+#define CHECK_PACKET(N)                   \
+  static_assert(check_packet(N, 0U, 1U)); \
+  static_assert(check_packet(N, 1U, 4U)); \
+  static_assert(check_packet(N, 2U, 8U)); \
   static_assert(check_packet(N, 3U, 32U))
 CHECK_PACKET(0U);
 CHECK_PACKET(1U);

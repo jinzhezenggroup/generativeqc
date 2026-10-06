@@ -21,7 +21,7 @@ struct BoundedForceWarpSchedule {
 
 /** Keep the incumbent for absent/invalid settings and nonstandard launch shapes. */
 constexpr BoundedForceWarpSchedule bounded_force_warp_schedule(const char* setting, unsigned x,
-                                                              unsigned y, unsigned z) {
+                                                               unsigned y, unsigned z) {
   if (setting == nullptr || x != 256U || y != 1U || z != 1U) return {x, false};
   const std::string_view name{setting};
   if (name == "static128") return {128U, false};

@@ -70,23 +70,34 @@ def test_candidate_and_static_fallback_ownership(threads: int, indexed: bool) ->
 
 def test_scientific_owner_and_packet_lifetime_are_preserved() -> None:
     source = SOURCE.read_text()
-    assert source.count("direct_shell_quartet_survives_screening<Unrestricted, Purpose>") == 1
+    assert (
+        source.count("direct_shell_quartet_survives_screening<Unrestricted, Purpose>")
+        == 1
+    )
     assert source.count("atomicAdd(global_cursor, 1ULL)") == 1
     assert "candidate_begin += candidate_packet" in source
     assert "Force ? blockDim.x : detail::kBoundedDirectQueueCapacity" in source
-    assert "if constexpr (DynamicWarpPull) warp_queue.classes[slot] = shell_class;" in source
+    assert (
+        "if constexpr (DynamicWarpPull) warp_queue.classes[slot] = shell_class;"
+        in source
+    )
     publish = source.index("warp_queue.prepare(queue_count)")
     consume = source.index("task_cursor.next(warp_queue, lane, queue_count)")
     assert "__syncthreads();" in source[publish:consume]
     retire = source.index("/**\n * Diagnostic angular partition", consume)
     assert "__syncthreads();" in source[consume:retire]
     # The queue handles are separate from the mutable per-task tile field.
-    assert "if (lane == 0) queue[slot].tile = tile;\n            __syncwarp();" in source
+    assert (
+        "if (lane == 0) queue[slot].tile = tile;\n            __syncwarp();" in source
+    )
     assert source.count("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_SCHEDULE") == 1
     launch = source[
         source.index("void launch_bounded_direct_shell_quartet_kernel_scaled(") :
     ]
-    assert "if (purpose == DirectScreeningPurpose::Force)" in launch.split("std::getenv")[0]
+    assert (
+        "if (purpose == DirectScreeningPurpose::Force)"
+        in launch.split("std::getenv")[0]
+    )
     range_launches = source[
         source.index("void launch_bounded_direct_range_exchange_force_kernel(") :
     ]
@@ -95,7 +106,13 @@ def test_scientific_owner_and_packet_lifetime_are_preserved() -> None:
 
 def test_queue_has_no_raw_domain_or_scientific_dependency() -> None:
     header = HEADER.read_text()
-    for forbidden in ("global_cursor", "DeviceBatch", "schwarz", "contract_", "cudaMalloc"):
+    for forbidden in (
+        "global_cursor",
+        "DeviceBatch",
+        "schwarz",
+        "contract_",
+        "cudaMalloc",
+    ):
         assert forbidden not in header
     assert "__shfl_sync(0xffffffffU, slot, 0)" in header
     assert "return atomicAdd(cursor, 1U);" in header
