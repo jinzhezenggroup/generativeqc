@@ -15,8 +15,14 @@ from pathlib import Path
 
 import numpy as np
 from generativeqc_compiler.dft.grid import MolecularGrid
+from generativeqc_compiler.xc.becke_partition import (
+    emit_becke_partition_derivative,
+    plan_becke_partition_derivative,
+    recognize_becke_partition_derivative,
+)
 from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
 from generativeqc_compiler.xc.grid_phased import emit_phased_becke, plan_phased_becke
+from generativeqc_compiler.xc.grid_response_ir import grid_response_program
 
 from benchmarks._support import raw_output_path
 from benchmarks.readme_hf_scaling import scaling_cases
@@ -31,11 +37,27 @@ def main() -> None:
     parser.add_argument("--atoms", type=int, nargs="+", default=[24, 48, 96])
     parser.add_argument("--tiles", type=int, default=32)
     parser.add_argument("--tile-points", type=int, nargs="+", default=[256, 1024])
+    parser.add_argument("--partition-derivative", action="store_true")
     arguments = parser.parse_args()
+    operation = recognize_becke_partition_derivative(
+        ratio=grid_response_program("ratio"),
+        logarithm=grid_response_program("log"),
+        switch=grid_response_program("becke"),
+    )
+    assert operation is not None
     source = (
-        emit_grid_adjoint()
+        (
+            "#define GENERATIVEQC_BECKE_PARTITION_PROBE 1\n"
+            if arguments.partition_derivative
+            else ""
+        )
+        + emit_grid_adjoint()
         + emit_grid_partials(3, device=True)
-        + emit_phased_becke()
+        + (
+            emit_becke_partition_derivative(operation)
+            if arguments.partition_derivative
+            else emit_phased_becke()
+        )
         + Path(__file__).with_suffix(".cu").read_text()
     )
     if arguments.emit:
@@ -49,7 +71,8 @@ def main() -> None:
         parser.error("emitted source beside the library does not match this checkout")
     helper = ct.CDLL(str(arguments.library.resolve()))
     pointer = ct.POINTER(ct.c_double)
-    helper.probe.argtypes = [
+    probe = helper.probe_partition if arguments.partition_derivative else helper.probe
+    probe.argtypes = [
         ct.c_size_t,
         ct.c_size_t,
         ct.c_size_t,
@@ -61,7 +84,9 @@ def main() -> None:
         pointer,
         pointer,
     ]
-    helper.probe.restype = ct.c_int
+    if arguments.partition_derivative:
+        probe.argtypes += [ct.POINTER(ct.c_size_t)]
+    probe.restype = ct.c_int
     report = {
         "schema": "becke-phased-isolated-v1",
         "job": os.environ["SLURM_JOB_ID"],
@@ -69,7 +94,12 @@ def main() -> None:
         "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
         "library_sha256": hashlib.sha256(arguments.library.read_bytes()).hexdigest(),
         "timing_scope": "sampled tiles, Becke-only plus per-point publication; CUDA events; NOT endpoint",
-        "order": "ABBAABBA; A=bounded cooperative, B=phased",
+        "order": "ABBAABBA; A=phased, B=partition-derivative"
+        if arguments.partition_derivative
+        else "ABBAABBA; A=bounded cooperative, B=phased",
+        "primitive_identity": operation.identity
+        if arguments.partition_derivative
+        else None,
         "cases": [],
     }
     for atoms in arguments.atoms:
@@ -97,7 +127,7 @@ def main() -> None:
             new = np.full_like(old, np.nan)
             times = np.empty(8)
             as_pointer = lambda array: array.ctypes.data_as(pointer)
-            status = helper.probe(
+            values = [
                 atoms,
                 len(points),
                 tile_points,
@@ -108,7 +138,11 @@ def main() -> None:
                 as_pointer(old),
                 as_pointer(new),
                 as_pointer(times),
-            )
+            ]
+            live_counts = np.zeros(len(points), dtype=np.uintp)
+            if arguments.partition_derivative:
+                values.append(live_counts.ctypes.data_as(ct.POINTER(ct.c_size_t)))
+            status = probe(*values)
             if status:
                 raise RuntimeError(f"probe failed: {status}")
             np.testing.assert_allclose(new, old, rtol=5e-12, atol=2e-12)
@@ -139,6 +173,34 @@ def main() -> None:
                     + seeds.tobytes()
                 ).hexdigest(),
             }
+            if arguments.partition_derivative:
+                primitive_plan = plan_becke_partition_derivative(
+                    operation=operation,
+                    atoms=atoms,
+                    points=tile_points,
+                    budget_bytes=1 << 30,
+                )
+                assert primitive_plan is not None
+                live = live_counts.astype(np.int64)
+                reverse_visits = int(np.sum(live * atoms - live * (live + 1) // 2))
+                case.update(
+                    {
+                        "candidate_median_ms": case.pop("phased_median_ms"),
+                        "primitive_scratch_bytes": primitive_plan.scratch_bytes,
+                        "pair_evaluations_model_old": len(points) * plan.pairs,
+                        "reverse_pair_visits": reverse_visits,
+                        "gather_pair_visits": 2 * reverse_visits,
+                        "dense_reverse_pair_visits": len(points) * plan.pairs,
+                        "live_atom_counts": {
+                            str(int(value)): int(count)
+                            for value, count in zip(
+                                *np.unique(live, return_counts=True), strict=True
+                            )
+                        },
+                        "counter_scope": "GPU-observed normalization membership; reverse/gather visits derived from exact generated domains; separate post-timing pass",
+                        "memory_traffic": "logical scratch/visit model only; cache-level hardware bytes not measured",
+                    }
+                )
             report["cases"].append(case)
             arguments.output.write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(case), flush=True)

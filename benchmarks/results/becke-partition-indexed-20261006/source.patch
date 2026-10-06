@@ -1,0 +1,1146 @@
+diff --git a/benchmarks/becke_phased_probe.cu b/benchmarks/becke_phased_probe.cu
+index addbc7f7d..a4ac6cf63 100644
+--- a/benchmarks/becke_phased_probe.cu
++++ b/benchmarks/becke_phased_probe.cu
+@@ -133,13 +133,42 @@ __global__ void publish(Workspace work, double* output, int* error) {
+     output[(point * work.atoms + atom) * 3 + axis] = work.field(8 + axis, point)[atom];
+ }
+ 
++#if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
++using generativeqc_grid_partition::DerivativeWorkspace;
++__global__ void partition_normalize(DerivativeWorkspace input, const int64_t* owners,
++                                   const double* seeds, size_t* live_counts, int* error) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= input.work.points || failed(error)) return;
++  if (!generativeqc_grid_partition::partition_normalize_phase(
++          input, point, owners[point], seeds[point], local_ratio))
++    atomicExch(error, 1);
++  else if (live_counts)
++    live_counts[point] = input.counts[point];
++}
++__global__ void partition_reverse(DerivativeWorkspace input, const CenterPair* centers,
++                                 int* error) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= input.work.points || failed(error)) return;
++  const Geometry geometry{centers, local_ratio_prepared};
++  size_t visits;
++  if (!generativeqc_grid_partition::partition_reverse_atom_phase(
++          input, point, blockIdx.y, geometry, local_log, visits)) atomicExch(error, 1);
++}
++__global__ void partition_gather(DerivativeWorkspace input, int* error) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= input.work.points || failed(error)) return;
++  generativeqc_grid_partition::partition_gather_phase(input, point, blockIdx.y);
++}
++#endif
++
+ // Allocation, input transfer, center preparation, and final readback are outside
+ // the event interval. Each interval includes every sampled tile and publication.
+ // This deliberately is NOT an XC geometry stage or an energy/force endpoint.
+-extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
++template <bool Partition>
++int probe_routes(size_t atoms, size_t point_count, size_t tile_points,
+                      const double* host_centers, const double* host_points,
+                      const int64_t* host_owners, const double* host_seeds, double* old_output,
+-                     double* new_output, double* milliseconds) {
++                     double* new_output, double* milliseconds, size_t* host_live_counts = nullptr) {
+   try {
+     if (!atoms || atoms > 128 || !tile_points || !point_count) return -2;
+     const size_t pair_count = atoms * (atoms - 1) / 2;
+@@ -152,6 +181,12 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
+     Device<double> pair_storage(4 * pair_count * tile_points), fields(11 * atoms * tile_points);
+     Device<size_t> zeros(atoms * tile_points);
+     Device<double> maximum(tile_points), new_result(3 * atoms * point_count);
++#if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
++    Device<size_t> live_indices(Partition ? atoms * tile_points : 0);
++    Device<size_t> live_counts(Partition ? tile_points : 0);
++    Device<size_t> observed_counts(Partition && host_live_counts ? point_count : 0);
++    Device<double> common_bars(Partition ? tile_points : 0);
++#endif
+     check(
+         cudaMemcpy(centers.data, host_centers, 3 * atoms * sizeof(double), cudaMemcpyHostToDevice));
+     check(cudaMemcpy(points.data, host_points, 3 * point_count * sizeof(double),
+@@ -172,10 +207,10 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
+     if (status) return -3;
+     const size_t rows = std::min(size_t{4}, atoms - 1);
+     const size_t shared_pairs = atoms <= 32 ? pair_count : rows * (2 * atoms - rows - 1) / 2;
+-    auto launch = [&](bool phased) {
++    auto launch = [&](bool phased, bool collect = false) {
+       for (size_t begin = 0; begin < point_count; begin += tile_points) {
+         const size_t count = std::min(tile_points, point_count - begin);
+-        if (!phased) {
++        if (!phased && !Partition) {
+           cooperative<<<count, 32, shared_pairs * sizeof(PointPair)>>>(
+               points.data + 3 * begin, centers.data, atoms, owners.data + begin, seeds.data + begin,
+               geometry.data, old_scratch.data, old_result.data + 3 * atoms * begin, error.data);
+@@ -188,20 +223,36 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
+           if (pair_count)
+             pair_phase<false><<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
+           atom_phase<1><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
+-          normalize<<<(count + 127) / 128, 128>>>(work, owners.data + begin, seeds.data + begin,
+-                                                  error.data);
+-          if (pair_count)
+-            pair_phase<true><<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
+-          atom_phase<2><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
++#if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
++          if (Partition && phased) {
++            DerivativeWorkspace input{work, live_indices.data, live_counts.data, common_bars.data};
++            partition_normalize<<<(count + 127) / 128, 128>>>(input, owners.data + begin,
++                seeds.data + begin, collect && host_live_counts ? observed_counts.data + begin : nullptr,
++                error.data);
++            if (pair_count)
++              partition_reverse<<<atom_blocks, 128>>>(input, geometry.data, error.data);
++            partition_gather<<<atom_blocks, 128>>>(input, error.data);
++          } else
++#endif
++          {
++            normalize<<<(count + 127) / 128, 128>>>(work, owners.data + begin, seeds.data + begin,
++                                                    error.data);
++            if (pair_count)
++              pair_phase<true><<<pair_blocks, 128>>>(work, indices.data, geometry.data, error.data);
++            atom_phase<2><<<atom_blocks, 128>>>(work, nullptr, nullptr, nullptr, error.data);
++          }
+           atom_phase<3>
+               <<<atom_blocks, 128>>>(work, nullptr, nullptr, owners.data + begin, error.data);
+-          publish<<<atom_blocks, 128>>>(work, new_result.data + 3 * atoms * begin, error.data);
++          double* destination = Partition && !phased ? old_result.data : new_result.data;
++          publish<<<atom_blocks, 128>>>(work, destination + 3 * atoms * begin, error.data);
+         }
+       }
+       check(cudaGetLastError());
+     };
+-    launch(false);
+-    launch(true);
++    // Candidate-first priming makes initcheck exercise its own initialization,
++    // rather than inheriting dense product/bar writes from the baseline arm.
++    launch(Partition);
++    launch(!Partition);
+     check(cudaDeviceSynchronize());
+     Event start, stop;
+     for (size_t repeat = 0; repeat < 8; ++repeat) {
+@@ -214,6 +265,15 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
+       check(cudaEventElapsedTime(&elapsed, start.value, stop.value));
+       milliseconds[repeat] = elapsed;
+     }
++#if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
++    if (Partition && host_live_counts) {
++      // A separate post-timing pass records exact dependency membership. Its
++      // additional global stores do not contaminate either CUDA-event arm.
++      launch(true, true);
++      check(cudaMemcpy(host_live_counts, observed_counts.data, point_count * sizeof(size_t),
++                       cudaMemcpyDeviceToHost));
++    }
++#endif
+     check(cudaMemcpy(&status, error.data, sizeof(int), cudaMemcpyDeviceToHost));
+     if (status) return -4;
+     check(cudaMemcpy(old_output, old_result.data, 3 * atoms * point_count * sizeof(double),
+@@ -226,3 +286,20 @@ extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
+     return -1;
+   }
+ }
++
++extern "C" int probe(size_t atoms, size_t point_count, size_t tile_points,
++                     const double* host_centers, const double* host_points,
++                     const int64_t* host_owners, const double* host_seeds, double* old_output,
++                     double* new_output, double* milliseconds) {
++  return probe_routes<false>(atoms, point_count, tile_points, host_centers, host_points,
++      host_owners, host_seeds, old_output, new_output, milliseconds);
++}
++#if defined(GENERATIVEQC_BECKE_PARTITION_PROBE)
++extern "C" int probe_partition(size_t atoms, size_t point_count, size_t tile_points,
++                     const double* host_centers, const double* host_points,
++                     const int64_t* host_owners, const double* host_seeds, double* old_output,
++                     double* new_output, double* milliseconds, size_t* live_counts) {
++  return probe_routes<true>(atoms, point_count, tile_points, host_centers, host_points,
++      host_owners, host_seeds, old_output, new_output, milliseconds, live_counts);
++}
++#endif
+diff --git a/benchmarks/becke_phased_probe.py b/benchmarks/becke_phased_probe.py
+index febca81e0..519f18ccc 100644
+--- a/benchmarks/becke_phased_probe.py
++++ b/benchmarks/becke_phased_probe.py
+@@ -15,8 +15,14 @@ from pathlib import Path
+ 
+ import numpy as np
+ from generativeqc_compiler.dft.grid import MolecularGrid
++from generativeqc_compiler.xc.becke_partition import (
++    emit_becke_partition_derivative,
++    plan_becke_partition_derivative,
++    recognize_becke_partition_derivative,
++)
+ from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
+ from generativeqc_compiler.xc.grid_phased import emit_phased_becke, plan_phased_becke
++from generativeqc_compiler.xc.grid_response_ir import grid_response_program
+ 
+ from benchmarks._support import raw_output_path
+ from benchmarks.readme_hf_scaling import scaling_cases
+@@ -31,11 +37,27 @@ def main() -> None:
+     parser.add_argument("--atoms", type=int, nargs="+", default=[24, 48, 96])
+     parser.add_argument("--tiles", type=int, default=32)
+     parser.add_argument("--tile-points", type=int, nargs="+", default=[256, 1024])
++    parser.add_argument("--partition-derivative", action="store_true")
+     arguments = parser.parse_args()
++    operation = recognize_becke_partition_derivative(
++        ratio=grid_response_program("ratio"),
++        logarithm=grid_response_program("log"),
++        switch=grid_response_program("becke"),
++    )
++    assert operation is not None
+     source = (
+-        emit_grid_adjoint()
++        (
++            "#define GENERATIVEQC_BECKE_PARTITION_PROBE 1\n"
++            if arguments.partition_derivative
++            else ""
++        )
++        + emit_grid_adjoint()
+         + emit_grid_partials(3, device=True)
+-        + emit_phased_becke()
++        + (
++            emit_becke_partition_derivative(operation)
++            if arguments.partition_derivative
++            else emit_phased_becke()
++        )
+         + Path(__file__).with_suffix(".cu").read_text()
+     )
+     if arguments.emit:
+@@ -49,7 +71,8 @@ def main() -> None:
+         parser.error("emitted source beside the library does not match this checkout")
+     helper = ct.CDLL(str(arguments.library.resolve()))
+     pointer = ct.POINTER(ct.c_double)
+-    helper.probe.argtypes = [
++    probe = helper.probe_partition if arguments.partition_derivative else helper.probe
++    probe.argtypes = [
+         ct.c_size_t,
+         ct.c_size_t,
+         ct.c_size_t,
+@@ -61,7 +84,9 @@ def main() -> None:
+         pointer,
+         pointer,
+     ]
+-    helper.probe.restype = ct.c_int
++    if arguments.partition_derivative:
++        probe.argtypes += [ct.POINTER(ct.c_size_t)]
++    probe.restype = ct.c_int
+     report = {
+         "schema": "becke-phased-isolated-v1",
+         "job": os.environ["SLURM_JOB_ID"],
+@@ -69,7 +94,12 @@ def main() -> None:
+         "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+         "library_sha256": hashlib.sha256(arguments.library.read_bytes()).hexdigest(),
+         "timing_scope": "sampled tiles, Becke-only plus per-point publication; CUDA events; NOT endpoint",
+-        "order": "ABBAABBA; A=bounded cooperative, B=phased",
++        "order": "ABBAABBA; A=phased, B=partition-derivative"
++        if arguments.partition_derivative
++        else "ABBAABBA; A=bounded cooperative, B=phased",
++        "primitive_identity": operation.identity
++        if arguments.partition_derivative
++        else None,
+         "cases": [],
+     }
+     for atoms in arguments.atoms:
+@@ -97,7 +127,7 @@ def main() -> None:
+             new = np.full_like(old, np.nan)
+             times = np.empty(8)
+             as_pointer = lambda array: array.ctypes.data_as(pointer)
+-            status = helper.probe(
++            values = [
+                 atoms,
+                 len(points),
+                 tile_points,
+@@ -108,7 +138,11 @@ def main() -> None:
+                 as_pointer(old),
+                 as_pointer(new),
+                 as_pointer(times),
+-            )
++            ]
++            live_counts = np.zeros(len(points), dtype=np.uintp)
++            if arguments.partition_derivative:
++                values.append(live_counts.ctypes.data_as(ct.POINTER(ct.c_size_t)))
++            status = probe(*values)
+             if status:
+                 raise RuntimeError(f"probe failed: {status}")
+             np.testing.assert_allclose(new, old, rtol=5e-12, atol=2e-12)
+@@ -139,6 +173,34 @@ def main() -> None:
+                     + seeds.tobytes()
+                 ).hexdigest(),
+             }
++            if arguments.partition_derivative:
++                primitive_plan = plan_becke_partition_derivative(
++                    operation=operation,
++                    atoms=atoms,
++                    points=tile_points,
++                    budget_bytes=1 << 30,
++                )
++                assert primitive_plan is not None
++                live = live_counts.astype(np.int64)
++                reverse_visits = int(np.sum(live * atoms - live * (live + 1) // 2))
++                case.update(
++                    {
++                        "candidate_median_ms": case.pop("phased_median_ms"),
++                        "primitive_scratch_bytes": primitive_plan.scratch_bytes,
++                        "pair_evaluations_model_old": len(points) * plan.pairs,
++                        "reverse_pair_visits": reverse_visits,
++                        "gather_pair_visits": 2 * reverse_visits,
++                        "dense_reverse_pair_visits": len(points) * plan.pairs,
++                        "live_atom_counts": {
++                            str(int(value)): int(count)
++                            for value, count in zip(
++                                *np.unique(live, return_counts=True), strict=True
++                            )
++                        },
++                        "counter_scope": "GPU-observed normalization membership; reverse/gather visits derived from exact generated domains; separate post-timing pass",
++                        "memory_traffic": "logical scratch/visit model only; cache-level hardware bytes not measured",
++                    }
++                )
+             report["cases"].append(case)
+             arguments.output.write_text(json.dumps(report, indent=2) + "\n")
+             print(json.dumps(case), flush=True)
+diff --git a/python/generativeqc_compiler/xc/grid_native.py b/python/generativeqc_compiler/xc/grid_native.py
+index 11cf6c53c..5124b67e8 100644
+--- a/python/generativeqc_compiler/xc/grid_native.py
++++ b/python/generativeqc_compiler/xc/grid_native.py
+@@ -182,7 +182,7 @@ GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zer
+   return maximum;
+ }
+ template <class Logs, class Products, class Bars, class Zeros, class Ratio>
+-GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, double seed,
++GENERATIVEQC_GRID_HD double normalized_product_adjoint(size_t na, size_t owner, double seed,
+     Logs logs, Products products, Bars bar_product, Zeros zeros,
+     double maximum, Ratio ratio) {
+   double total = 0;
+@@ -195,6 +195,10 @@ GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, do
+   const auto objective = ratio(products[owner], total);
+   for (size_t a = 0; a < na; ++a)
+     bar_product[a] = seed * (objective[2] + (a == owner ? objective[1] : 0));
++  // Indexed consumers broadcast this same denominator adjoint instead of
++  // materializing it for products whose first derivatives are annihilated.
++  // Preserve the dense branch's addition and multiplication order.
++  return seed * (objective[2] + 0.0);
+ }
+ GENERATIVEQC_GRID_HD inline void point_motion_adjoint(size_t na, size_t owner,
+     const double* bar_distance, const std::array<double, 4>* distances, double* gradient) {
+diff --git a/python/generativeqc_compiler/xc/grid_phased.py b/python/generativeqc_compiler/xc/grid_phased.py
+index 06e4bd4ed..e1ef187c3 100644
+--- a/python/generativeqc_compiler/xc/grid_phased.py
++++ b/python/generativeqc_compiler/xc/grid_phased.py
+@@ -170,9 +170,9 @@ GENERATIVEQC_PHASE_HD bool point_normalize_phase(Workspace work, size_t point,
+   return true;
+ }
+ 
+-template <class Geometry, class Log>
+-GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
+-    size_t first, size_t second, Geometry geometry, Log logarithm) {
++template <class Geometry, class Log, class Bars>
++GENERATIVEQC_PHASE_HD bool pair_reverse_with_bars_phase(Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars) {
+   const size_t index = center_pair_index(first, second);
+   PointPair state{{}, {work.pair(2, index, point), work.pair(3, index, point)}, {}};
+   std::array<double, 4> pullback{};
+@@ -183,7 +183,7 @@ GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
+         work.field(0, point)[second], first, second, separation[0]);
+     state.ratio = {coordinate[1], coordinate[2]};
+     const double bar_mu = pair_adjoint<false>(state, first, second,
+-        work.field(4, point), work.field(5, point), work.field(6, point),
++        work.field(4, point), work.field(5, point), bars,
+         work.zero_counts(point), work.maximum[point], logarithm);
+     pullback[0] = bar_mu * state.ratio[0];
+     for (size_t axis = 0; axis < 3; ++axis)
+@@ -197,9 +197,23 @@ GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
+   return valid;
+ }
+ 
+-GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
++template <class Geometry, class Log>
++GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry, Log logarithm) {
++  return pair_reverse_with_bars_phase(work, point, first, second, geometry,
++                                     logarithm, work.field(6, point));
++}
++
++struct AllNeighbors {
++  GENERATIVEQC_PHASE_HD size_t operator()(size_t index) const { return index; }
++};
++
++template <class Neighbors>
++GENERATIVEQC_PHASE_HD void atom_gather_selected_phase(Workspace work, size_t point,
++    size_t atom, size_t count, Neighbors neighbors) {
+   std::array<double, 4> pullback{};
+-  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
++  for (size_t cursor = 0; cursor < count; ++cursor) {
++    const size_t neighbor = neighbors(cursor);
+     if (neighbor == atom) continue;
+     const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
+     const double sign = neighbor > atom ? -1 : 1;
+@@ -209,6 +223,10 @@ GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_
+   for (size_t word = 0; word < 4; ++word) work.field(7 + word, point)[atom] = pullback[word];
+ }
+ 
++GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
++  atom_gather_selected_phase(work, point, atom, work.atoms, AllNeighbors{});
++}
++
+ GENERATIVEQC_PHASE_HD bool point_motion_phase(Workspace work, size_t point,
+     size_t atom, size_t owner) {
+   bool valid = true;
+diff --git a/python/generativeqc_compiler/xc/becke_partition.py b/python/generativeqc_compiler/xc/becke_partition.py
+new file mode 100644
+index 000000000..85f18d484
+--- /dev/null
++++ b/python/generativeqc_compiler/xc/becke_partition.py
+@@ -0,0 +1,271 @@
++"""Recognize canonical Becke AD and plan exact normalized-product dependencies.
++
++This candidate changes the reverse iteration domain, not the switch, logarithm,
++ratio, saturation or single-zero pullback. It still executes the shared emitted
++AD primitives. Runtime owners must admit the index panels and keep the ordinary
++phased/generic routes for unsupported graphs or insufficient concurrent memory.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from generativeqc_compiler.common.provenance import canonical_hash
++from generativeqc_compiler.dft.grid import checked_int
++from generativeqc_compiler.xc.grid_phased import (
++    PhasedBeckePlan,
++    emit_phased_becke,
++    plan_phased_becke,
++)
++from generativeqc_compiler.xc.grid_response_ir import (
++    GridResponseProgram,
++    grid_response_program,
++)
++
++
++def _actual_identity(program: GridResponseProgram, kind: str) -> str:
++    """Authenticate reachable AD roots instead of trusting cached metadata."""
++    graph, roots = program.graph, program.roots
++    if any(root.graph is not graph for root in roots):
++        raise ValueError("Becke AD roots belong to a different graph")
++    order = graph.topological_order(roots)
++    indices = {identifier: index for index, identifier in enumerate(order)}
++    return canonical_hash(
++        {
++            "schema": "generativeqc.grid-response-program/v1",
++            "kind": kind,
++            "nodes": [
++                (
++                    graph.nodes[identifier].operation,
++                    [indices[child] for child in graph.nodes[identifier].arguments],
++                    str(graph.nodes[identifier].payload),
++                )
++                for identifier in order
++            ],
++            "roots": [indices[root.identifier] for root in roots],
++        }
++    )
++
++
++@dataclass(frozen=True)
++class BeckePartitionDerivativeOp:
++    """A matched first-order normalized-product dependency contract.
++
++    Two exact zero factors annihilate every first derivative of an atom product.
++    One zero does not: rounded switch zeros can retain a nonzero slope. The
++    generated index domain therefore retains every atom with zero count <= 1,
++    including saturated and underflowed products. This is not a floating-point
++    magnitude cutoff, an early log-product stop or a full xyz derivative cache.
++    """
++
++    iterations: int
++    program_identities: tuple[tuple[str, str], ...]
++
++    @property
++    def identity(self) -> str:
++        """Bind scientific graphs, zero semantics and ordered reduction policy."""
++        return canonical_hash(
++            {
++                "schema": "generativeqc.becke-partition-derivative-op/v1",
++                "programs": self.program_identities,
++                "zero_semantics": "retain-zero-count-0-and-1",
++                "normalization": "ordered-live-products-plus-zero-owner-broadcast-denominator-bar",
++                "pair_owner": "higher-live-atom-or-sole-live-atom",
++                "gather": "ascending-incident-atoms-no-fp-atomics",
++                "geometry": "rebind-canonical-center-pairs-no-point-state-reuse",
++            }
++        )
++
++
++def recognize_becke_partition_derivative(
++    *,
++    ratio: GridResponseProgram,
++    logarithm: GridResponseProgram,
++    switch: GridResponseProgram,
++    iterations: int = 3,
++    partition: str = "becke-equal-radius",
++) -> BeckePartitionDerivativeOp | None:
++    """Fail closed for a changed canonical graph or unsupported partition.
++
++    Radial element radii remain owned by grid preparation; this recognizer does
++    not invent a heteronuclear partition adjustment for the current equal-radius
++    contract. A future adjusted switch must have its own independently qualified
++    pattern. No functional, method or molecule name participates in matching.
++    """
++    checked_int(iterations, "partition iterations", high=5)
++    if partition != "becke-equal-radius":
++        return None
++    identities = []
++    for kind, program in (("ratio", ratio), ("log", logarithm), ("becke", switch)):
++        expected = grid_response_program(kind, iterations).identity
++        if _actual_identity(program, kind) != expected:
++            return None
++        identities.append((kind, expected))
++    return BeckePartitionDerivativeOp(iterations, tuple(identities))
++
++
++@dataclass(frozen=True)
++class BeckePartitionDerivativePlan:
++    """Bounded dense primal panels plus point-major exact reverse indices.
++
++    Index membership is recomputed after every point normalization, never cached
++    across geometry or seed binds. All pair primal/log work remains unchanged.
++    Runtime live-atom counts, not this capacity bound, determine reverse visits.
++    """
++
++    operation: BeckePartitionDerivativeOp
++    phased: PhasedBeckePlan
++
++    @property
++    def index_bytes(self) -> int:
++        return (self.phased.atoms + 2) * self.phased.points * 8
++
++    @property
++    def scratch_bytes(self) -> int:
++        return self.phased.scratch_bytes + self.index_bytes
++
++
++def plan_becke_partition_derivative(
++    *,
++    operation: BeckePartitionDerivativeOp,
++    atoms: int,
++    points: int,
++    budget_bytes: int,
++    occupied_bytes: int = 0,
++) -> BeckePartitionDerivativePlan | None:
++    """Charge both index/count panels against the same concurrent owner budget."""
++    phased = plan_phased_becke(
++        atoms=atoms,
++        points=points,
++        budget_bytes=budget_bytes,
++        occupied_bytes=occupied_bytes,
++    )
++    if phased is None:
++        return None
++    plan = BeckePartitionDerivativePlan(operation, phased)
++    return plan if occupied_bytes + plan.scratch_bytes <= budget_bytes else None
++
++
++_SOURCE = r"""
++#if defined(__CUDACC__)
++#define GENERATIVEQC_PARTITION_HD __host__ __device__
++#else
++#define GENERATIVEQC_PARTITION_HD
++#endif
++namespace generativeqc_grid_partition {
++using namespace generativeqc_grid_phased;
++
++struct DerivativeWorkspace {
++  Workspace work;
++  size_t* indices;
++  size_t* counts;
++  double* common_bars;
++  struct LiveNeighbors {
++    const size_t* indices;
++    size_t stride;
++    GENERATIVEQC_PARTITION_HD size_t operator()(size_t index) const {
++      return indices[index * stride];
++    }
++  };
++  GENERATIVEQC_PARTITION_HD LiveNeighbors neighbors(size_t point) const {
++    return {indices + point, work.points};
++  }
++  template <class Value> struct Indexed {
++    Strided<Value> values;
++    LiveNeighbors neighbors;
++    GENERATIVEQC_PARTITION_HD Value& operator[](size_t index) const {
++      return values[neighbors(index)];
++    }
++  };
++  struct Bars {
++    Strided<double> values;
++    Strided<size_t> zeros;
++    double common;
++    GENERATIVEQC_PARTITION_HD double operator[](size_t atom) const {
++      return zeros[atom] <= 1 ? values[atom] : common;
++    }
++  };
++};
++
++template <class Ratio>
++GENERATIVEQC_PARTITION_HD bool partition_normalize_phase(DerivativeWorkspace input,
++    size_t point, size_t owner, double seed, Ratio ratio) {
++  input.counts[point] = 0;
++  if (owner >= input.work.atoms || !std::isfinite(seed)) return false;
++  size_t owner_slot = input.work.atoms;
++  for (size_t atom = 0; atom < input.work.atoms; ++atom)
++    if (input.work.zero_counts(point)[atom] <= 1) {
++      if (atom == owner) owner_slot = input.counts[point];
++      input.indices[input.counts[point] * input.work.points + point] = atom;
++      ++input.counts[point];
++    }
++  size_t normalized_count = input.counts[point];
++  if (owner_slot == input.work.atoms) {
++    // The selected numerator is exactly zero, but its ratio AD still belongs
++    // to the canonical objective. Include the zero owner only in normalization,
++    // not in the reverse dependency list. Capacity remains at most natom.
++    owner_slot = normalized_count;
++    input.indices[normalized_count * input.work.points + point] = owner;
++    ++normalized_count;
++  }
++  const auto neighbors = input.neighbors(point);
++  const DerivativeWorkspace::Indexed<double> logs{input.work.field(4, point), neighbors};
++  const DerivativeWorkspace::Indexed<size_t> zeros{input.work.zero_counts(point), neighbors};
++  const double maximum = maximum_log_product(normalized_count, logs, zeros);
++  if (!std::isfinite(maximum)) return false;
++  input.work.maximum[point] = maximum;
++  input.common_bars[point] = normalized_product_adjoint(normalized_count, owner_slot,
++      seed, logs, DerivativeWorkspace::Indexed<double>{input.work.field(5, point), neighbors},
++      DerivativeWorkspace::Indexed<double>{input.work.field(6, point), neighbors},
++      zeros, maximum, ratio);
++  return true;
++}
++
++template <class Geometry, class Log>
++GENERATIVEQC_PARTITION_HD bool partition_reverse_atom_phase(DerivativeWorkspace input,
++    size_t point, size_t neighbor, Geometry geometry, Log logarithm, size_t& visits) {
++  visits = 0;
++  const auto live = input.neighbors(point);
++  const DerivativeWorkspace::Bars bars{input.work.field(6, point),
++      input.work.zero_counts(point), input.common_bars[point]};
++  for (size_t cursor = 0; cursor < input.counts[point]; ++cursor) {
++    const size_t atom = live(cursor);
++    if (atom == neighbor) continue;
++    // A pair with two live endpoints belongs only to its higher endpoint.
++    // A dead endpoint still receives geometry response from a live neighbor.
++    if (neighbor > atom && input.work.zero_counts(point)[neighbor] <= 1) continue;
++    ++visits;
++    if (!pair_reverse_with_bars_phase(input.work, point, std::max(atom, neighbor),
++          std::min(atom, neighbor), geometry, logarithm, bars)) return false;
++  }
++  return true;
++}
++
++GENERATIVEQC_PARTITION_HD void partition_gather_phase(DerivativeWorkspace input,
++    size_t point, size_t atom) {
++  if (input.work.zero_counts(point)[atom] <= 1)
++    atom_gather_phase(input.work, point, atom);
++  else
++    atom_gather_selected_phase(input.work, point, atom, input.counts[point],
++                              input.neighbors(point));
++}
++} // namespace generativeqc_grid_partition
++#undef GENERATIVEQC_PARTITION_HD
++"""
++
++
++def emit_becke_partition_derivative(operation: BeckePartitionDerivativeOp) -> str:
++    """Emit a dependency lowering that calls the authoritative AD phase bodies."""
++    current = recognize_becke_partition_derivative(
++        ratio=grid_response_program("ratio", operation.iterations),
++        logarithm=grid_response_program("log", operation.iterations),
++        switch=grid_response_program("becke", operation.iterations),
++        iterations=operation.iterations,
++    )
++    if current != operation:
++        raise ValueError("Becke primitive no longer matches its canonical AD graphs")
++    return (
++        emit_phased_becke()
++        + f"// Canonical Becke derivative operation: {operation.identity}\n"
++        + _SOURCE
++    )
+diff --git a/tests/python/test_becke_partition_primitive.py b/tests/python/test_becke_partition_primitive.py
+new file mode 100644
+index 000000000..ff4db0bc0
+--- /dev/null
++++ b/tests/python/test_becke_partition_primitive.py
+@@ -0,0 +1,306 @@
++"""Host gates for an exact dependency-domain candidate, not GPU speed evidence."""
++
++from __future__ import annotations
++
++import ctypes as ct
++import shutil
++import subprocess
++from dataclasses import replace
++from typing import cast
++
++import numpy as np
++import pytest
++import test_becke_cooperative as retained
++import test_becke_phased as phased
++from generativeqc_compiler.integral.expr import Graph
++from generativeqc_compiler.xc.becke_partition import (
++    BeckePartitionDerivativeOp,
++    emit_becke_partition_derivative,
++    plan_becke_partition_derivative,
++    recognize_becke_partition_derivative,
++)
++from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
++from generativeqc_compiler.xc.grid_response_ir import grid_response_program
++
++
++def operation(iterations: int = 3) -> BeckePartitionDerivativeOp:
++    """Match actual canonical scalar AD roots for the requested switch order."""
++    result = recognize_becke_partition_derivative(
++        ratio=grid_response_program("ratio", iterations),
++        logarithm=grid_response_program("log", iterations),
++        switch=grid_response_program("becke", iterations),
++        iterations=iterations,
++    )
++    assert result is not None
++    return result
++
++
++def candidate_harness() -> str:
++    """Reuse the established transactional harness with different domains only."""
++    source = phased.HARNESS
++
++    def change(before: str, after: str) -> None:
++        nonlocal source
++        assert source.count(before) == 1, "shared phase harness changed"
++        source = source.replace(before, after)
++
++    change(
++        "static size_t pairs_evaluated, norms_evaluated, logs_evaluated;",
++        """static size_t pairs_evaluated, norms_evaluated, logs_evaluated;
++static bool partition_enabled;
++static size_t reverse_visits, gather_visits, live_atoms;
++static std::vector<size_t> live_indices, live_counts;
++static std::vector<double> common_bars;""",
++    )
++    change(
++        "  using namespace generativeqc_grid_phased;\n  for (size_t point = 0; point < work.points; ++point)",
++        """  using namespace generativeqc_grid_phased;
++  using namespace generativeqc_grid_partition;
++  DerivativeWorkspace input{work, live_indices.data(), live_counts.data(), common_bars.data()};
++  for (size_t point = 0; point < work.points; ++point)""",
++    )
++    change(
++        "    if (!point_normalize_phase(work, point, owners[point], seeds[point], local_ratio)) return false;",
++        """    if (partition_enabled) {
++      if (!partition_normalize_phase(input, point, owners[point], seeds[point], local_ratio)) return false;
++      live_atoms += input.counts[point];
++    } else if (!point_normalize_phase(work, point, owners[point], seeds[point], local_ratio)) return false;""",
++    )
++    reverse = """  for (size_t point = 0; point < work.points; ++point)
++    for (size_t first = 0; first < work.atoms; ++first)
++      for (size_t second = 0; second < first; ++second)
++        if (!pair_reverse_phase(work, point, first, second, geometry, counted_log)) return false;"""
++    change(
++        reverse,
++        """  if (partition_enabled) {
++    for (size_t point = 0; point < work.points; ++point)
++      for (size_t atom = 0; atom < work.atoms; ++atom) {
++        size_t visits = 0;
++        if (!partition_reverse_atom_phase(input, point, atom, geometry, counted_log, visits)) return false;
++        reverse_visits += visits;
++      }
++  } else {
++"""
++        + reverse
++        + "\n  }",
++    )
++    change(
++        "    for (size_t atom = 0; atom < work.atoms; ++atom) atom_gather_phase(work, point, atom);",
++        """    for (size_t atom = 0; atom < work.atoms; ++atom) {
++      if (partition_enabled) {
++        partition_gather_phase(input, point, atom);
++        gather_visits += work.zero_counts(point)[atom] <= 1
++            ? work.atoms - 1 : input.counts[point];
++      } else atom_gather_phase(work, point, atom);
++    }""",
++    )
++    change(
++        "  pairs_evaluated = norms_evaluated = logs_evaluated = 0;",
++        """  pairs_evaluated = norms_evaluated = logs_evaluated = 0;
++  reverse_visits = gather_visits = live_atoms = 0;
++  partition_enabled = phased == 2;
++  live_indices.assign(atom_count * point_count, 0);
++  live_counts.assign(point_count, 0);
++  common_bars.assign(point_count, 0);""",
++    )
++    return (
++        source
++        + """
++extern "C" void partition_metrics(size_t* counts) {
++  counts[0] = reverse_visits;
++  counts[1] = gather_visits;
++  counts[2] = live_atoms;
++}
++"""
++    )
++
++
++@pytest.fixture(scope="module", params=[1, 3, 5])
++def helper(
++    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
++) -> ct.CDLL:
++    """Compile the same AD owner and both dependency routes with verified ccache."""
++    compiler, cache = shutil.which("c++"), shutil.which("ccache")
++    if compiler is None or cache is None:
++        pytest.skip("C++ compiler and verified ccache required")
++    subprocess.run([cache, "--version"], check=True, capture_output=True)
++    directory = tmp_path_factory.mktemp("becke-partition-primitive")
++    source, library = directory / "probe.cpp", directory / "probe.so"
++    source.write_text(
++        emit_grid_adjoint()
++        + emit_grid_partials(request.param)
++        + emit_becke_partition_derivative(operation(request.param))
++        + candidate_harness()
++    )
++    subprocess.run(
++        [
++            cache,
++            compiler,
++            "-std=c++20",
++            "-O2",
++            "-ffp-contract=off",
++            "-shared",
++            "-fPIC",
++            str(source),
++            "-o",
++            str(library),
++        ],
++        check=True,
++        capture_output=True,
++        text=True,
++        timeout=60,
++    )
++    result = ct.CDLL(str(library))
++    pointer = ct.POINTER(ct.c_double)
++    result.run.argtypes = [
++        pointer,
++        ct.c_size_t,
++        pointer,
++        ct.c_size_t,
++        ct.POINTER(ct.c_int64),
++        pointer,
++        ct.c_bool,
++        ct.c_size_t,
++        pointer,
++        ct.POINTER(ct.c_size_t),
++    ]
++    result.run.restype = ct.c_int
++    result.partition_metrics.argtypes = [ct.POINTER(ct.c_size_t)]
++    result.partition_metrics.restype = None
++    result.iterations = request.param
++    return result
++
++
++@pytest.mark.parametrize("atoms", [1, 2, 3, 12, 33, 48, 96])
++@pytest.mark.parametrize("cached", [False, True])
++def test_sparse_matches_phased_generic_and_changed_geometry(
++    helper: ct.CDLL, atoms: int, cached: bool
++) -> None:
++    """Every live pair has one writer and two ordered incident consumers."""
++    rng = np.random.default_rng(189400 + atoms)
++    centers = rng.normal(size=(atoms, 3)) * 2
++    points = rng.normal(size=(17, 3)) * 3
++    owners = rng.integers(atoms, size=len(points), dtype=np.int64)
++    seeds = rng.normal(size=len(points))
++    for geometry in (centers, centers + rng.normal(size=centers.shape) * 0.05, centers):
++        baseline = retained.run(helper, points, geometry, owners, seeds, cached, 1)
++        actual = retained.run(helper, points, geometry, owners, seeds, cached, 2)
++        assert baseline[0] == actual[0] == 0
++        np.testing.assert_allclose(actual[1], baseline[1], rtol=5e-13, atol=2e-13)
++        assert actual[2][0] == baseline[2][0] == len(points) * atoms * (atoms - 1) // 2
++        metrics = np.zeros(3, dtype=np.uintp)
++        helper.partition_metrics(metrics.ctypes.data_as(ct.POINTER(ct.c_size_t)))
++        assert metrics[0] <= actual[2][0]
++        assert metrics[1] == 2 * metrics[0]
++        assert metrics[2] <= len(points) * atoms
++
++
++@pytest.mark.parametrize(
++    "case",
++    [
++        "saturated",
++        "rounded_zero",
++        "coincident",
++        "collision",
++        "invalid_owner",
++        "nonfinite",
++        "nan_seed",
++        "huge",
++        "empty",
++    ],
++)
++def test_sparse_edge_and_failure_semantics(helper: ct.CDLL, case: str) -> None:
++    """The existing independent edge suite exercises this candidate route."""
++    retained.test_cooperative_edge_semantics(candidate_routes(helper), case)
++
++
++def test_sparse_independent_decimal_fd_and_invariances(helper: ct.CDLL) -> None:
++    retained.test_cooperative_independent_decimal_fd_translation_and_permutation(
++        candidate_routes(helper)
++    )
++
++
++def test_exact_saturated_domain_reduces_reverse_and_gather_work(
++    helper: ct.CDLL,
++) -> None:
++    """A measured liveness domain is required; random points need not have zeros."""
++    atoms = 96
++    centers = np.zeros((atoms, 3))
++    centers[:, 0] = np.arange(atoms, dtype=float)
++    points = np.array([[-0.75, 0.0, 0.0]])
++    owners = np.array([0], dtype=np.int64)
++    seeds = np.array([0.3])
++    baseline = retained.run(helper, points, centers, owners, seeds, True, 1)
++    actual = retained.run(helper, points, centers, owners, seeds, True, 2)
++    assert baseline[0] == actual[0] == 0
++    np.testing.assert_array_equal(actual[1], baseline[1])
++    metrics = np.zeros(3, dtype=np.uintp)
++    helper.partition_metrics(metrics.ctypes.data_as(ct.POINTER(ct.c_size_t)))
++    assert metrics[0] < actual[2][0]
++    assert metrics[1] == 2 * metrics[0]
++    assert metrics[2] < atoms
++
++
++def test_recognizer_rejects_changed_ad_with_stale_identity() -> None:
++    ratio = grid_response_program("ratio")
++    changed = replace(ratio, roots=(ratio.roots[0] + 1, ratio.roots[1]))
++    arguments = {
++        "ratio": changed,
++        "logarithm": grid_response_program("log"),
++        "switch": grid_response_program("becke"),
++    }
++    assert recognize_becke_partition_derivative(**arguments) is None
++    arguments["ratio"] = ratio
++    assert (
++        recognize_becke_partition_derivative(
++            **arguments, partition="unsupported-adjusted-partition"
++        )
++        is None
++    )
++    assert operation().identity == operation().identity
++    assert operation(1).identity != operation(5).identity
++
++
++def test_resource_admission_charges_indices_and_concurrent_owners() -> None:
++    plan = plan_becke_partition_derivative(
++        operation=operation(), atoms=96, points=256, budget_bytes=1 << 30
++    )
++    assert plan is not None
++    assert plan.index_bytes == 98 * 256 * 8
++    assert plan.scratch_bytes == 39_917_568
++    for spare, admitted in ((-1, False), (0, True), (1, True)):
++        actual = plan_becke_partition_derivative(
++            operation=operation(),
++            atoms=96,
++            points=256,
++            budget_bytes=1000 + plan.scratch_bytes + spare,
++            occupied_bytes=1000,
++        )
++        assert (actual is not None) == admitted
++
++
++def test_two_zero_liveness_is_a_canonical_ad_property_not_a_magnitude_cutoff() -> None:
++    graph = Graph()
++    factors = [graph.variable(f"factor_{index}") for index in range(3)]
++    product = graph.multiply_many(factors)
++    derivatives = [graph.differentiate(product, factor) for factor in factors]
++    for zero_count in range(4):
++        values = {
++            f"factor_{index}": 0.0 if index < zero_count else 0.5 for index in range(3)
++        }
++        actual = [graph.evaluate(root, values) for root in derivatives]
++        assert (all(value == 0 for value in actual)) == (zero_count >= 2)
++
++
++def candidate_routes(helper: ct.CDLL) -> ct.CDLL:
++    """Select actual compiled candidate execution for the reused non-generic gates."""
++
++    class CandidateRoutes:
++        iterations = helper.iterations
++
++        def run(self, *arguments: object) -> int:
++            values = list(arguments)
++            values[7] = 2 if values[7] else 0
++            return helper.run(*values)
++
++    return cast("ct.CDLL", CandidateRoutes())
+diff --git a/tests/python/test_becke_partition_cuda.py b/tests/python/test_becke_partition_cuda.py
+new file mode 100644
+index 000000000..a955f8f9e
+--- /dev/null
++++ b/tests/python/test_becke_partition_cuda.py
+@@ -0,0 +1,166 @@
++"""Real-device primitive gates; opt-in library and finite Slurm step required."""
++
++from __future__ import annotations
++
++import ctypes as ct
++import os
++from collections.abc import Callable
++from decimal import Decimal, localcontext
++from pathlib import Path
++
++import numpy as np
++import pytest
++import test_becke_cooperative as retained
++from test_becke_partition_primitive import helper
++from test_grid_response import CENTERS, DC, POINTS, decimal_partition
++
++__all__ = ["helper"]
++Probe = Callable[..., tuple[int, np.ndarray, np.ndarray]]
++
++
++@pytest.fixture(scope="module")
++def probe() -> Probe:
++    """Call the candidate ABI, not the ordinary cooperative/phased comparator."""
++    path = os.environ.get("GENERATIVEQC_BECKE_PARTITION_PROBE")
++    if not path:
++        pytest.skip("emitted partition primitive CUDA probe is not configured")
++    if not os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_STEP_ID") in {
++        None,
++        "batch",
++        "extern",
++    }:
++        pytest.fail("real-GPU primitive gates require an explicit finite Slurm step")
++    library = ct.CDLL(str(Path(path).resolve()))
++    pointer = ct.POINTER(ct.c_double)
++    library.probe_partition.argtypes = [
++        ct.c_size_t,
++        ct.c_size_t,
++        ct.c_size_t,
++        pointer,
++        pointer,
++        ct.POINTER(ct.c_int64),
++        pointer,
++        pointer,
++        pointer,
++        pointer,
++        ct.POINTER(ct.c_size_t),
++    ]
++    library.probe_partition.restype = ct.c_int
++
++    def run(
++        points: np.ndarray,
++        centers: np.ndarray,
++        owners: np.ndarray,
++        seeds: np.ndarray,
++        tile_points: int = 256,
++    ) -> tuple[int, np.ndarray, np.ndarray]:
++        """Keep failure publication sentinel checks and actual membership counts."""
++        baseline = np.full((len(points), len(centers), 3), 12345.0)
++        candidate = np.full_like(baseline, 12345.0)
++        counts = np.zeros(len(points), dtype=np.uintp)
++        times = np.empty(8)
++        as_pointer = lambda array: array.ctypes.data_as(pointer)
++        status = library.probe_partition(
++            len(centers),
++            len(points),
++            tile_points,
++            as_pointer(centers),
++            as_pointer(points),
++            owners.ctypes.data_as(ct.POINTER(ct.c_int64)),
++            as_pointer(seeds),
++            as_pointer(baseline),
++            as_pointer(candidate),
++            as_pointer(times),
++            counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
++        )
++        if status == 0:
++            np.testing.assert_allclose(candidate, baseline, rtol=5e-12, atol=2e-12)
++            assert np.all(counts <= len(centers))
++        else:
++            np.testing.assert_array_equal(baseline, 12345.0)
++            np.testing.assert_array_equal(candidate, 12345.0)
++        return status, candidate, counts
++
++    return run
++
++
++@pytest.mark.parametrize("atoms", [1, 2, 24, 33, 48, 96, 128])
++@pytest.mark.parametrize("tile_points", [17, 256])
++def test_device_changed_geometry_tail_and_host_ad(
++    probe: Probe, helper: ct.CDLL, atoms: int, tile_points: int
++) -> None:
++    if helper.iterations != 3:
++        pytest.skip("the configured CUDA probe is specialized to iteration 3")
++    rng = np.random.default_rng(1894100 + atoms)
++    centers = rng.normal(size=(atoms, 3)) * 2
++    points = rng.normal(size=(257, 3)) * 3
++    owners = rng.integers(atoms, size=len(points), dtype=np.int64)
++    seeds = rng.normal(size=len(points))
++    moved = centers + rng.normal(size=centers.shape) * 0.01
++    for geometry in (centers, moved, centers):
++        expected = retained.run(helper, points, geometry, owners, seeds, True, 0)
++        status, actual, _ = probe(points, geometry, owners, seeds, tile_points)
++        assert status == expected[0] == 0
++        np.testing.assert_allclose(
++            actual.sum(axis=0), expected[1], rtol=5e-12, atol=2e-11
++        )
++
++
++@pytest.mark.parametrize(
++    "case",
++    ["saturated", "rounded_zero", "coincident", "collision", "nonfinite", "nan_seed"],
++)
++def test_device_zero_and_failure_publication(probe: Probe, case: str) -> None:
++    centers = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.1, 0.0]])
++    points = np.array([[-1.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
++    owners = np.array([0, 1], dtype=np.int64)
++    seeds = np.array([0.3, -0.7])
++    if case == "rounded_zero":
++        points[0, 1], owners[0], seeds[0] = 2e-5, 1, 1e12
++    elif case == "coincident":
++        centers[1] = centers[0]
++    elif case == "collision":
++        points[-1] = centers[0]
++    elif case == "nonfinite":
++        points[-1, 1] = np.inf
++    elif case == "nan_seed":
++        seeds[0] = np.nan
++    status, _, _ = probe(points, centers, owners, seeds)
++    assert (status == 0) == (case in {"saturated", "rounded_zero"})
++
++
++def test_device_independent_decimal_directional_derivative(probe: Probe) -> None:
++    owners = np.array([0, 1, 2], dtype=np.int64)
++    seeds = np.array([0.3, -0.2, 0.7])
++    status, gradient, _ = probe(POINTS, CENTERS, owners, seeds)
++    assert status == 0
++    with localcontext() as context:
++        context.prec = 70
++        step = Decimal("1e-16")
++
++        def moved(
++            values: np.ndarray, motion: np.ndarray, sign: int
++        ) -> list[list[Decimal]]:
++            return [
++                [
++                    Decimal(str(value)) + sign * step * Decimal(str(delta))
++                    for value, delta in zip(row, direction, strict=True)
++                ]
++                for row, direction in zip(values, motion, strict=True)
++            ]
++
++        plus, minus = [
++            decimal_partition(
++                moved(POINTS, DC[owners], sign), moved(CENTERS, DC, sign), 3
++            )
++            for sign in (1, -1)
++        ]
++        expected = sum(
++            Decimal(str(seed)) * (positive[owner] - negative[owner]) / (2 * step)
++            for seed, owner, positive, negative in zip(
++                seeds, owners, plus, minus, strict=True
++            )
++        )
++    np.testing.assert_allclose(
++        np.einsum("pac,ac->", gradient, DC), float(expected), atol=3e-11, rtol=3e-10
++    )

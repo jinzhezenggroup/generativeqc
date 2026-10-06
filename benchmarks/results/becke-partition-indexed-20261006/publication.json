@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Candidate is slower in all four isolated ABBAABBA comparisons; reject before native integration. Complete E+F endpoints remain unmeasured.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 14118,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "bb31e48812e3f727905e166b5c1f99911115b21a9c1ddf522f2a2bd3e210c7b5"
+    },
+    {
+      "bytes": 11907,
+      "path": "samples.json",
+      "role": "samples",
+      "sha256": "d7a7a4a16707d89291510d8fec039835b2a7892ba648d3680d3cf251a2250515"
+    },
+    {
+      "bytes": 49531,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "1b2a4e5b22334db509ce8dc309ca6da621425aedc63daa129956525d82aecb48"
+    },
+    {
+      "bytes": 762,
+      "path": "source-files.sha256",
+      "role": "input",
+      "sha256": "28a7febdbbc7cbed59d199f2aff63b906f00b4a464e2453f40178bcff2a33853"
+    },
+    {
+      "bytes": 3089,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "e84098ca853ece8568bcb32789ed64670ca6f40aee8a53e2cf8794868caa9654"
+    },
+    {
+      "bytes": 2428,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "fec30768a4fb2877e37511cf223ffb4b26a2546813991a3ae3a8ae426a09f656"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-partition-indexed-20261006/reproduce.sh"
+    ],
+    "prerequisites": "RTX 5090 main Slurm partition, ccache, CUDA 12.9, compute-sanitizer, NumPy, pytest, compiler dependencies; set PYTHON/CUDA_ROOT for local installation.",
+    "source_restore": "Check out source.revision, apply source.patch, verify source-files.sha256. Retain the publication bundle outside that checkout until the recipe is invoked."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "c5ab37ec9e7b3d38d2e06729319f9eef66510e5c"
+  }
+}

@@ -170,9 +170,9 @@ GENERATIVEQC_PHASE_HD bool point_normalize_phase(Workspace work, size_t point,
   return true;
 }
 
-template <class Geometry, class Log>
-GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
-    size_t first, size_t second, Geometry geometry, Log logarithm) {
+template <class Geometry, class Log, class Bars>
+GENERATIVEQC_PHASE_HD bool pair_reverse_with_bars_phase(Workspace work, size_t point,
+    size_t first, size_t second, Geometry geometry, Log logarithm, Bars bars) {
   const size_t index = center_pair_index(first, second);
   PointPair state{{}, {work.pair(2, index, point), work.pair(3, index, point)}, {}};
   std::array<double, 4> pullback{};
@@ -183,7 +183,7 @@ GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
         work.field(0, point)[second], first, second, separation[0]);
     state.ratio = {coordinate[1], coordinate[2]};
     const double bar_mu = pair_adjoint<false>(state, first, second,
-        work.field(4, point), work.field(5, point), work.field(6, point),
+        work.field(4, point), work.field(5, point), bars,
         work.zero_counts(point), work.maximum[point], logarithm);
     pullback[0] = bar_mu * state.ratio[0];
     for (size_t axis = 0; axis < 3; ++axis)
@@ -197,9 +197,23 @@ GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
   return valid;
 }
 
-GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
+template <class Geometry, class Log>
+GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
+    size_t first, size_t second, Geometry geometry, Log logarithm) {
+  return pair_reverse_with_bars_phase(work, point, first, second, geometry,
+                                     logarithm, work.field(6, point));
+}
+
+struct AllNeighbors {
+  GENERATIVEQC_PHASE_HD size_t operator()(size_t index) const { return index; }
+};
+
+template <class Neighbors>
+GENERATIVEQC_PHASE_HD void atom_gather_selected_phase(Workspace work, size_t point,
+    size_t atom, size_t count, Neighbors neighbors) {
   std::array<double, 4> pullback{};
-  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
+  for (size_t cursor = 0; cursor < count; ++cursor) {
+    const size_t neighbor = neighbors(cursor);
     if (neighbor == atom) continue;
     const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
     const double sign = neighbor > atom ? -1 : 1;
@@ -207,6 +221,10 @@ GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_
       pullback[word] += sign * work.pair(word, index, point);
   }
   for (size_t word = 0; word < 4; ++word) work.field(7 + word, point)[atom] = pullback[word];
+}
+
+GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
+  atom_gather_selected_phase(work, point, atom, work.atoms, AllNeighbors{});
 }
 
 GENERATIVEQC_PHASE_HD bool point_motion_phase(Workspace work, size_t point,
