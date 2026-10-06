@@ -37,7 +37,7 @@ SUITE_BUDGET_SECONDS = int(
 GATE_NODEIDS = (
     "tests/python/test_cuda_runtime.py::test_cuda_minimal_rhf_matches_cpu_reference",
     "tests/python/test_cuda_runtime.py::test_cuda_minimal_uhf_matches_cpu_reference",
-    "tests/python/test_calculator.py::test_cuda_energy_only_output_selection_omits_forces",
+    "tests/python/test_cuda_runtime.py::test_cuda_minimal_density_fitting_matches_cpu_reference",
     "tests/python/test_dft_cuda.py::test_native_cuda_dft_matches_independently_converged_cpu_endpoint",
 )
 
@@ -46,6 +46,7 @@ GATE_NODEIDS = (
 # toolchain. Keep expensive production-grid/ECP/post-HF campaigns in their
 # dedicated GPU qualification lanes rather than stretching this Apple runner.
 QUALIFICATION_NODEIDS = GATE_NODEIDS + (
+    "tests/python/test_calculator.py::test_cuda_energy_only_output_selection_omits_forces",
     "tests/python/test_batch.py::test_cuda_real_spherical_batch_reuses_fixed_topology_plan",
     "tests/python/test_batch.py::test_cuda_bounded_direct_streaming_matches_exact_replay",
     "tests/python/test_batch.py::test_cuda_uhf_ragged_batch_warm_start_and_failure_isolation",
