@@ -94,7 +94,6 @@ def test_cuda_minimal_density_fitting_matches_cpu_reference() -> None:
     assert result.forces is None
 
 
-
 @pytest.mark.parametrize("fixture_name", ("minimal_h2", "water", "water_sdf"))
 def test_cuda_resident_rhf_response_matches_host_operator(
     fixture_name: typing.Any,
