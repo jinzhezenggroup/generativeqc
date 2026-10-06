@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 
@@ -32,7 +33,7 @@ __device__ __forceinline__ bool direct_ao_force_survives_density_products(
     double quartet_bound, double screening_tolerance, std::size_t dimension,
     std::size_t physical_offset, std::size_t spin_offset, const double* density, std::size_t first,
     std::size_t second, std::size_t third, std::size_t fourth) {
-  if (!isfinite(quartet_bound)) return true;
+  if (!std::isfinite(quartet_bound)) return true;
   const std::size_t pair_first[6] = {first, third, first, second, first, second};
   const std::size_t pair_second[6] = {second, fourth, third, fourth, fourth, third};
   ShellPairDensityBounds pairs[6];
@@ -46,19 +47,19 @@ __device__ __forceinline__ bool direct_ao_force_survives_density_products(
       const double alpha_reverse = density[spin_offset + reverse];
       const double beta_forward = density[spin_offset + matrix_size + forward];
       const double beta_reverse = density[spin_offset + matrix_size + reverse];
-      if (!isfinite(alpha_forward) || !isfinite(alpha_reverse) || !isfinite(beta_forward) ||
-          !isfinite(beta_reverse))
+      if (!std::isfinite(alpha_forward) || !std::isfinite(alpha_reverse) || !std::isfinite(beta_forward) ||
+          !std::isfinite(beta_reverse))
         return true;
       const double total_forward = alpha_forward + beta_forward;
       const double total_reverse = alpha_reverse + beta_reverse;
-      if (!isfinite(total_forward) || !isfinite(total_reverse)) return true;
+      if (!std::isfinite(total_forward) || !std::isfinite(total_reverse)) return true;
       pairs[pair] = {fmax(fabs(total_forward), fabs(total_reverse)),
                      fmax(fabs(alpha_forward), fabs(alpha_reverse)),
                      fmax(fabs(beta_forward), fabs(beta_reverse))};
     } else {
       const double forward_value = density[physical_offset + forward];
       const double reverse_value = density[physical_offset + reverse];
-      if (!isfinite(forward_value) || !isfinite(reverse_value)) return true;
+      if (!std::isfinite(forward_value) || !std::isfinite(reverse_value)) return true;
       const double magnitude = fmax(fabs(forward_value), fabs(reverse_value));
       pairs[pair] = {magnitude, magnitude, 0.0};
     }
