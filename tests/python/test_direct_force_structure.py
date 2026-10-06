@@ -78,3 +78,55 @@ def test_force_execution_cannot_acquire_method_policy(tmp_path: Path) -> None:
     errors = audit_scf_structure(tmp_path)["errors"]
     assert len(errors) == 1
     assert "forbidden cuda_direct_contractions dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        "direct_coulomb.hpp",
+        "direct_jk_kernels.hpp",
+        "direct_angular_force.hpp",
+        "direct_bounded_fallback.hpp",
+    ],
+)
+def test_force_interfaces_can_borrow_resident_schedule(
+    tmp_path: Path, consumer: str
+) -> None:
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / "direct_metadata.hpp").write_text("// Shared task metadata\n")
+    (source / "direct_force_schedule.hpp").write_text(
+        '#include "direct_metadata.hpp"\n'
+    )
+    (source / consumer).write_text('#include "direct_force_schedule.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["direct_force_execution.cuh", "direct_coulomb.hpp", "rhf_policy.hpp"],
+)
+def test_resident_schedule_cannot_acquire_execution_or_host_policy(
+    tmp_path: Path, target: str
+) -> None:
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / target).write_text("// Execution or host ownership\n")
+    (source / "direct_force_schedule.hpp").write_text(f'#include "{target}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_direct_force_schedule dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    ["direct_coulomb.hpp", "direct_jk_kernels.hpp", "direct_angular_force.hpp"],
+)
+def test_resident_schedule_admission_does_not_open_device_implementation(
+    tmp_path: Path, consumer: str
+) -> None:
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / "direct_force_schedule.cuh").write_text("// Device implementation\n")
+    (source / consumer).write_text('#include "direct_force_schedule.cuh"\n')
+    assert len(audit_scf_structure(tmp_path)["errors"]) == 1

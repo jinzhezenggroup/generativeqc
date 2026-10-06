@@ -257,6 +257,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
     "direct_coulomb",
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
+    "scf/cuda/direct_force_schedule.hpp",
     "scf/direct_block_schedule.hpp",
     "scf/cuda/direct_jk.",
     "scf/cuda/direct_jk_plan.",
@@ -304,6 +305,7 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
     "one_electron_export_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
+    "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
@@ -387,6 +389,9 @@ CUDA_ALLOWED["cuda_direct_numerics"] = (
 # The output-layout policy is a leaf shared by device tasks and host interfaces.
 CUDA_MODULES["cuda_direct_force_sources"] = ("direct_force_sources.hpp",)
 CUDA_ALLOWED["cuda_direct_force_sources"] = ()
+# The borrowed resident lease exposes metadata only, never device execution.
+CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
+CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -461,6 +466,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "weighted_eri_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
+    "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/direct_force_sources.hpp",
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",
