@@ -46,11 +46,27 @@ void CudaFockProviderView::validate(const ResolvedFockBuild& strategy) const {
                                                  strategy.metric_relative_threshold) &&
                 data_->metric_relative_threshold == strategy.metric_relative_threshold,
             "CUDA DF Fock item/dimensions/cutoff mismatch");
-    if (strategy.spec.derivative_order)
-      require(data_->df_gradient_orbital && data_->df_gradient_auxiliary &&
-                  data_->df_gradient_budget > 0 &&
-                  ncoord() == 3 * data_->df_gradient_orbital->atoms.size(),
-              "CUDA DF Fock source lacks matching generated derivative metadata");
+    const auto matches_operator = [&](const FockTermSpec& term) {
+      return !term.present || term.approximation != FockApproximation::DensityFitted ||
+             (term.op == data_->op && term.omega == data_->omega);
+    };
+    require(matches_operator(strategy.spec.coulomb) && matches_operator(strategy.spec.exchange),
+            "CUDA DF Fock operator/omega differs from the prepared tensor owner");
+    if (strategy.spec.derivative_order) {
+      if (data_->op == FockOperator::FullRange)
+        require(data_->df_gradient_orbital && data_->df_gradient_auxiliary &&
+                    data_->df_gradient_budget > 0 &&
+                    ncoord() == 3 * data_->df_gradient_orbital->atoms.size(),
+                "CUDA DF Fock source lacks matching generated derivative metadata");
+      else {
+        const auto matrix = nbf() * nbf();
+        const auto metric = data_->raw.naux * data_->raw.naux;
+        const auto tensor = matrix * data_->raw.naux;
+        require(data_->raw.metric_derivative.size() == ncoord() * metric &&
+                    data_->raw.three_center_derivative.size() == ncoord() * tensor,
+                "range-separated CUDA DF Fock source lacks materialized derivatives");
+      }
+    }
   }
 }
 void CudaFockProviderView::validate_density(const std::vector<double>& density,
@@ -96,6 +112,17 @@ std::vector<double> CudaFockProviderView::derivative(
     return out;
   }
   const double cj = spec.coulomb.present ? spec.coulomb.coefficient : 0.0;
+  if (data_->op != FockOperator::FullRange) {
+    const JkCoefficients coefficients{
+        cj, spec.exchange.present ? spec.exchange.coefficient : 0.0};
+    if (spec.spin == FockSpin::Restricted)
+      return build_density_fitting_rhf_gradient(data_->raw, density,
+                                                data_->metric_relative_threshold, coefficients)
+          .derivative;
+    return build_density_fitting_uhf_gradient(data_->raw, density, beta,
+                                              data_->metric_relative_threshold, coefficients)
+        .derivative;
+  }
   // The shared generated response uses -cK*Q:M+, whereas Fock assembly uses
   // +FockExchange*K and energy supplies its independent factor of one half.
   const double ck = spec.exchange.present ? -0.5 * spec.exchange.coefficient : 0.0;
