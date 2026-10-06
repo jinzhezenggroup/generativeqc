@@ -277,7 +277,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "3defc2e5e05b2fd1af16e82bda36fa479a41b7b7a15029a49fecf98090e9c95b"
+    "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -343,13 +343,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "704f72675dcaf35e37497acd34c71a656ef20cea352022052bc5116b8290b07c"
+    "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
 )
 STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
-    "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
+    "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
     "1889ebf22dff9d64f602f714ab5157e69b01bf122ba682f04cea04b2c232dba8"
@@ -375,7 +375,7 @@ SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+    "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
@@ -439,10 +439,10 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "543a82fd68894b485deb025825efb2e93ae61a0942a2da6f0326ddbd5937da27"
+    "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
 )
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "a241beee3699b72cc945c162e6422a658381cd30c1dbfe37606ee704d95d521b"
+    "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -700,6 +700,198 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
         raise RuntimeError("native KS snapshot grid-cache contract changed")
     methods["grid_cache_sha256"] = cache_digest
     return methods
+
+
+def _require_ast_fragments(
+    owner: ast.AST, fragments: tuple[str, ...], *, label: str
+) -> None:
+    """Explain newly admitted source semantics without relaxing owner hashes.
+
+    Full owner fingerprints below still reject additional statements, reordered
+    gates, and any other drift. These independent AST checks prevent refreshing
+    those fingerprints from accidentally admitting broken CSR policy wiring.
+    """
+
+    actual = [ast.dump(node) for node in ast.walk(owner)]
+    for fragment in fragments:
+        expected = ast.parse(fragment).body[0]
+        if isinstance(expected, ast.Expr):
+            expected = expected.value
+        if actual.count(ast.dump(expected)) != 1:
+            raise RuntimeError(f"{label} contract changed: {fragment}")
+
+
+def _resident_ao_policy_contract(tree: ast.Module) -> None:
+    """Bind CSR selection, replay identity, and reserves to their source owners."""
+
+    names = (
+        "complete_rks_cuda_gradient_diagnostic",
+        "_complete_rks_cuda_gradient_diagnostic",
+        "_stationary_resident_ao_cache",
+        "ensure",
+        "_request",
+    )
+    owners = {}
+    for name in names:
+        candidates = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
+        if len(candidates) != 1:
+            raise RuntimeError("stationary CUDA resident AO policy owner is ambiguous")
+        owners[name] = candidates[0]
+    wrapper, endpoint, cache, ensure, request = (owners[name] for name in names)
+    label = "stationary CUDA resident AO policy"
+    for owner in (wrapper, endpoint, ensure, request, cache):
+        defaults = {
+            arg.arg: ast.unparse(value)
+            for arg, value in zip(
+                owner.args.kwonlyargs, owner.args.kw_defaults, strict=True
+            )
+            if value is not None
+        }
+        prefix = "" if owner is cache else "resident_ao_"
+        producer = "producer" if owner is cache else "resident_ao_producer"
+        if (
+            defaults.get(producer) != "'sampled-jets'"
+            or defaults.get(prefix + "max_active_fraction") != "1.0"
+        ):
+            raise RuntimeError(f"{label} defaults contract changed")
+    # Both the public wrapper and prepared replay identity must preserve the
+    # selected producer and threshold, even when current defaults are dense.
+    for owner in (wrapper, request):
+        for field in ("resident_ao_producer", "resident_ao_max_active_fraction"):
+            bindings = [
+                ast.unparse(value)
+                for node in ast.walk(owner)
+                if isinstance(node, ast.Dict)
+                for key, value in zip(node.keys, node.values, strict=True)
+                if isinstance(key, ast.Constant) and key.value == field
+            ]
+            if bindings != [field]:
+                raise RuntimeError(f"{label} identity/forwarding contract changed")
+    for owner, callee in ((endpoint, "prepared.ensure"), (ensure, "self._request")):
+        calls = [
+            node
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Call) and ast.unparse(node.func) == callee
+        ]
+        if len(calls) != 1:
+            raise RuntimeError(f"{label} forwarding owner is ambiguous")
+        for field in ("resident_ao_producer", "resident_ao_max_active_fraction"):
+            bindings = [
+                ast.unparse(keyword.value)
+                for keyword in calls[0].keywords
+                if keyword.arg == field
+            ]
+            if bindings != [field]:
+                raise RuntimeError(f"{label} forwarding contract changed")
+    _require_ast_fragments(
+        endpoint,
+        (
+            (
+                'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
+                "    dense_device_bound = (grid_plan.peak_bytes + source_bytes + "
+                "sum(value.peak_bytes for value in tensor_plans.values()))\n"
+                "    ao_map_reserve = min(ao_map_reserve, "
+                "max(0, max_device_bytes - dense_device_bound))"
+            ),
+            "host_bound += ao_map_reserve",
+            (
+                "_stationary_resident_ao_cache(prepared, ao, state, resident_grid, "
+                "cutoff=resident_ao_cutoff, budget_bytes=ao_map_reserve, "
+                "producer=resident_ao_producer, "
+                "max_active_fraction=resident_ao_max_active_fraction)"
+            ),
+            (
+                "feature_lease = (ao.feature_task_device_points(point_pointer, "
+                "end - begin, None, ingredients) if ao_maps is None else "
+                "ao_maps.feature_task(ao, ao_maps.domain, begin, end - begin, ingredients))"
+            ),
+            "task.layout.require_derivative_order(2 if needs_first else 1)",
+        ),
+        label=label,
+    )
+    _require_ast_fragments(
+        ensure,
+        (
+            (
+                'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
+                "    device_peak_bound += resident_ao_cache_bytes"
+            ),
+            (
+                "if device_peak_bound > max_device_bytes:\n"
+                '    raise ValueError("prepared stationary CUDA device budget exceeded")'
+            ),
+        ),
+        label=label,
+    )
+    _require_ast_fragments(
+        cache,
+        (
+            (
+                "key = (domain, id(grid), grid.geometry_generation, "
+                "grid.basis_generation, float(cutoff), budget_bytes, "
+                "producer, max_active_fraction)"
+            ),
+            (
+                "owner = (ResidentDeviceAoMapOwner(grid, domain, cutoff=cutoff, "
+                "budget_bytes=budget_bytes, max_active_fraction=max_active_fraction) "
+                "if producer == 'pre-ao-envelope-native-csr' else "
+                "ResidentAoMapCache(grid, domain, cutoff=cutoff, "
+                "budget_bytes=budget_bytes, producer=producer))"
+            ),
+        ),
+        label=label,
+    )
+
+
+def _public_resident_ao_policy_contract(owner: ast.FunctionDef) -> None:
+    """Keep the public policy decision attached to ordinary and composite calls."""
+
+    label = "public CUDA resident AO policy"
+    expected = {
+        "resident_ao_producer": "decision.producer",
+        "resident_ao_max_active_fraction": "decision.max_active_fraction",
+    }
+    for field, value in expected.items():
+        bindings = [
+            ast.unparse(item)
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Dict)
+            for key, item in zip(node.keys, node.values, strict=True)
+            if isinstance(key, ast.Constant) and key.value == field
+        ]
+        if bindings != [value]:
+            raise RuntimeError(f"{label} forwarding contract changed")
+    for callee, fields in (
+        (
+            "ForceActiveAoWorkload",
+            {"device_name": "getattr(self, '_stationary_cuda_device_name', None)"},
+        ),
+        (
+            "prepared.execute",
+            {
+                "active_ao_producer": "decision.producer",
+                "active_ao_max_active_fraction": "decision.max_active_fraction",
+            },
+        ),
+    ):
+        calls = [
+            node
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Call) and ast.unparse(node.func) == callee
+        ]
+        if len(calls) != 1:
+            raise RuntimeError(f"{label} forwarding owner is ambiguous")
+        for field, value in fields.items():
+            if [
+                ast.unparse(keyword.value)
+                for keyword in calls[0].keywords
+                if keyword.arg == field
+            ] != [value]:
+                raise RuntimeError(f"{label} forwarding contract changed")
 
 
 def _source_limits(repository: Path) -> dict[str, Any]:
@@ -1239,6 +1431,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if endpoint_owner_digest != STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA endpoint owner contract changed")
     page_contract["endpoint_owner_sha256"] = endpoint_owner_digest
+    _resident_ao_policy_contract(tree)
 
     return {
         "owner": STATIONARY_OWNER,
@@ -1995,6 +2188,7 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     batch_digest = _source_node_sha256(batch, force_methods[0])
     if batch_digest != PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256:
         raise RuntimeError("public CUDA force route changed")
+    _public_resident_ao_policy_contract(force_methods[0])
     return {
         "semilocal_force_predicate_sha256": semilocal_digest,
         "global_hybrid_force_predicate_sha256": hybrid_digest,
@@ -2154,6 +2348,7 @@ def _prepared_aot_route_contract(repository: Path) -> str:
         != PREPARED_AO_REQUEST_CONTRACT_SHA256
     ):
         raise RuntimeError("prepared stationary AO request contract changed")
+    _resident_ao_policy_contract(tree)
     return digest
 
 

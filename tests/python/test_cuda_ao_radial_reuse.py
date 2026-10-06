@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.dft.ao_cuda import (
@@ -20,6 +21,9 @@ from generativeqc_compiler.dft.ao_cuda import (
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 
 def _ao_source() -> tuple[str, str, str]:
@@ -31,17 +35,20 @@ def _ao_source() -> tuple[str, str, str]:
             "__global__ void feature_kernel("
         )
     ]
-    schedule = source[
-        source.index("void scheduled_ao(") : source.rindex("}  // namespace")
-    ]
+    schedule_begin = source.index("void scheduled_ao(")
+    schedule = source[schedule_begin : source.index("}  // namespace", schedule_begin)]
     return policy[:end] + "\n}\n", kernels, schedule
 
 
+def test_ao_probe_schedule_excludes_following_kernel_namespaces() -> None:
+    """Appending independent grid kernels must not corrupt the AO-only probe."""
+    _, _, schedule = _ao_source()
+    assert "}  // namespace" not in schedule
+    assert "ao_region_" not in schedule
+
+
 @pytest.fixture(scope="module")
-def ao_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def ao_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx) -> Path:
     policy, kernels, schedule = _ao_source()
     # Replace only transport syntax. Execute the actual scheduler, including its
     # launch extents, with a small block cap to exercise grid-stride iterations.
@@ -219,20 +226,11 @@ int main(int argc,char** argv) {
     directory = tmp_path_factory.mktemp("cuda-ao-radial")
     source, binary = directory / "probe.cpp", directory / "probe"
     source.write_text(harness)
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-ffp-contract=off",
-            str(source),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    native_cxx.build_executable(
+        (source,),
+        binary,
+        compile_args=("-std=c++20", "-O2", "-ffp-contract=off"),
+        compile_timeout=60,
     )
     return binary
 

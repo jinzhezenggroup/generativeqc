@@ -183,10 +183,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
         ),
         "cuda_force_method_sha256": (
-            "3defc2e5e05b2fd1af16e82bda36fa479a41b7b7a15029a49fecf98090e9c95b"
+            "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
         ),
         "prepared_aot_selection_sha256": (
-            "543a82fd68894b485deb025825efb2e93ae61a0942a2da6f0326ddbd5937da27"
+            "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
         ),
     }
 
@@ -288,7 +288,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
         "geometry_resources_sha256": "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56",
         "public_wrapper_sha256": (
-            "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+            "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
         ),
         "ordinary_tile_layout_sha256": (
             "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -339,13 +339,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "704f72675dcaf35e37497acd34c71a656ef20cea352022052bc5116b8290b07c"
+            "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
         ),
         "resident_ao_cache_sha256": (
-            "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
+            "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
         ),
         "native_owner_sha256": (
             "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
@@ -2940,3 +2940,153 @@ def test_local_ao_capacity_stays_global_and_pair_work_stays_complete() -> None:
         assert "p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);" in body
         assert "std::min(p->geometry_lanes, view->npoint)" in body
         assert "if (!view->nactive)" not in body
+
+
+@pytest.mark.parametrize(
+    "owner,old,new",
+    [
+        (
+            "complete_rks_cuda_gradient_diagnostic",
+            'resident_ao_producer: str = "sampled-jets"',
+            'resident_ao_producer: str = "pre-ao-envelope-native-csr"',
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "resident_ao_max_active_fraction: float = 1.0",
+            "resident_ao_max_active_fraction: float = 0.5",
+        ),
+        *[
+            (owner, f'"{field}": {field}', f'"{field}": None')
+            for owner in ("complete_rks_cuda_gradient_diagnostic", "_request")
+            for field in ("resident_ao_producer", "resident_ao_max_active_fraction")
+        ],
+        *[
+            (owner, f"{field}={field}", f"{field}=None")
+            for owner in ("ensure", "_complete_rks_cuda_gradient_diagnostic")
+            for field in ("resident_ao_producer", "resident_ao_max_active_fraction")
+        ],
+        (
+            "ensure",
+            "device_peak_bound += resident_ao_cache_bytes",
+            "device_peak_bound += 0",
+        ),
+        (
+            "ensure",
+            'if resident_ao_producer == "pre-ao-envelope-native-csr":',
+            "if False:",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "max(0, max_device_bytes - dense_device_bound)",
+            "max_device_bytes",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "host_bound += ao_map_reserve",
+            "host_bound += 0",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "            producer=resident_ao_producer",
+            '            producer="sampled-jets"',
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "            max_active_fraction=resident_ao_max_active_fraction",
+            "            max_active_fraction=1.0",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "else ao_maps.feature_task(",
+            "else ao_maps.select(",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "task.layout.require_derivative_order(\n                                2 if needs_first else 1",
+            "task.layout.require_derivative_order(\n                                1",
+        ),
+        (
+            "_stationary_resident_ao_cache",
+            "        producer,\n",
+            "        None,\n",
+        ),
+        (
+            "_stationary_resident_ao_cache",
+            "        max_active_fraction,\n",
+            "        1.0,\n",
+        ),
+        (
+            "_stationary_resident_ao_cache",
+            "max_active_fraction=max_active_fraction",
+            "max_active_fraction=1.0",
+        ),
+        (
+            "_stationary_resident_ao_cache",
+            'if producer == "pre-ao-envelope-native-csr"',
+            "if False",
+        ),
+    ],
+)
+def test_native_csr_semantic_contract_rejects_policy_and_capacity_drift(
+    tmp_path: Path, owner: str, old: str, new: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    tree = ast.parse(source)
+    # Exercise the semantic proof independently of its whole-owner fingerprints:
+    # refreshing a digest must not silently bless broken forwarding or reserves.
+    qualify_capacity._resident_ao_policy_contract(tree)
+    node = next(
+        item
+        for item in ast.walk(tree)
+        if isinstance(item, ast.FunctionDef) and item.name == owner
+    )
+    segment = ast.get_source_segment(source, node)
+    assert segment is not None and segment.count(old) == 1
+    mutated = source.replace(segment, segment.replace(old, new, 1), 1)
+    with pytest.raises(RuntimeError, match="resident AO policy .*contract changed"):
+        qualify_capacity._resident_ao_policy_contract(ast.parse(mutated))
+    stationary_contract_tree(tmp_path, mutated)
+    with pytest.raises(RuntimeError, match="contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            '"resident_ao_producer": decision.producer',
+            '"resident_ao_producer": "sampled-jets"',
+        ),
+        (
+            '"resident_ao_max_active_fraction": decision.max_active_fraction',
+            '"resident_ao_max_active_fraction": 1.0',
+        ),
+        ("active_ao_producer=decision.producer", 'active_ao_producer="sampled-jets"'),
+        (
+            "active_ao_max_active_fraction=decision.max_active_fraction",
+            "active_ao_max_active_fraction=1.0",
+        ),
+        (
+            'device_name=getattr(self, "_stationary_cuda_device_name", None)',
+            "device_name=None",
+        ),
+    ],
+)
+def test_public_native_csr_policy_forwarding_is_source_bound(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    qualify_capacity._source_public_route(tmp_path)
+    target = tmp_path / "python/generativeqc/batch.py"
+    source = target.read_text()
+    assert source.count(old) == 1
+    target.write_text(source.replace(old, new, 1))
+    owner = next(
+        node
+        for node in ast.walk(ast.parse(target.read_text()))
+        if isinstance(node, ast.FunctionDef) and node.name == "_public_dft_cuda_force"
+    )
+    with pytest.raises(RuntimeError, match="resident AO policy forwarding"):
+        qualify_capacity._public_resident_ao_policy_contract(owner)
+    with pytest.raises(RuntimeError, match="public CUDA force route changed"):
+        qualify_capacity._source_public_route(tmp_path)
