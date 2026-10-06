@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <vector>
 
 #include "cc/df_source_response.hpp"
@@ -61,4 +63,47 @@ DFCCSDTResult run_df_ccsdt_native(
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = false,
     bool request_triples_gap_cotangents = true);
+
+/** One complete response composition on a shared native primal. Timings exclude
+ * the common cold solve, so they must not be presented as cold endpoint times. */
+struct DFGapForceSnapshot {
+  std::vector<double> forces;
+  double energy{}, triples_energy{}, orbital_residual{}, maximum_stationarity{};
+  double clone_seconds{}, response_seconds{}, triples_seconds{}, lambda_seconds{},
+      source_response_seconds{}, orbital_seconds{};
+  std::size_t numeric_capacity_bytes{}, source_weight_values{}, metric_weight_values{};
+  std::size_t orbital_iterations{}, orbital_actions{}, fock_response_work{};
+  cc::LambdaDiagnostic lambda;
+  cc::triples::DFCudaResult triples;
+  cc::triples::DFGapReductionDiagnostic gap;
+};
+
+/** Diagnostic-only serial/all, parallel/all, omitted and repeated serial compositions.
+ * The source token and bitwise nine-input identity are common to all cases.
+ * Retained physical/reference owners are shared, not rebuilt or copied. */
+struct DFGapForceComparison {
+  std::array<DFGapForceSnapshot, 4> cases;
+  std::size_t nocc{}, nvir{}, naux{};
+  std::uint64_t source_identity{}, denominator_identity{}, primal_identity{};
+  std::size_t retained_primal_host_bytes{}, retained_df_source_bytes{},
+      retained_exact_source_bytes{}, output_bytes{}, clone_admission_bytes{};
+  double total_seconds{}, primal_seconds{}, reference_energy{}, reference_energy_change{},
+      reference_density_rms{};
+  int reference_iterations{};
+  CcPerformanceDiagnostic primal;
+  cc::SolverDiagnostic solver;
+};
+
+/** Solve native CUDA RHF/DF-CCSD once, then consume independently owned host
+ * copies through the very same complete force implementation. This isolates
+ * response schedules from cold-reference variability; it is not a substitute
+ * for cold endpoint qualification. Requires an explicit positive numeric budget
+ * and refuses recycled Z guesses. Fixed output buffers are charged during the
+ * cold solve; original host copies and shared sources remain charged until the
+ * entire diagnostic returns. Any failure publishes no partial comparison. */
+DFGapForceComparison diagnose_df_ccsdt_gap_schedules(
+    runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
+    const generativeqc_method_descriptor&, const hf::RHFFrameResponseOptions& frame_options = {},
+    std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
+    bool derived_denominators = true, bool packed_diis = false);
 }  // namespace generativeqc::methods::detail

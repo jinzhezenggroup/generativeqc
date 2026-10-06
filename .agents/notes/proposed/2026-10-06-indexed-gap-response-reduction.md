@@ -299,7 +299,106 @@ CXX/CUDA ccache launchers remain verified; the before/after receipts show
 This qualification does not fabricate a completed large tightened-reference
 endpoint, qualify the original failed cold gate, or promote a default.
 
+### Same-primal diagnostic evidence
+
+The shared-primal diagnostic is implemented without a replacement scientific
+map. Its library SHA256 is
+`39bca1ae5df8a78fdc66c69732e72498b5e07830e234653197fba0819cb34ec5`;
+the comparison executable is
+`cbf2bc2555d634551ce7e0684b94b29eca2b96b096df3c751b96c3e7f9fa8b43`,
+and the complete-force probe is
+`8c20dd30a39ac9607d4991d614c56cd0834364120f2681e005a95b036abfc971`.
+All 8,216 source-manifest entries match before qualification. Explicit CXX/CUDA
+ccache launchers remain verified; build receipts record two additional hits
+and six misses without resetting the shared cache.
+
+Job 2474 passes 15 force tests, including three new diagnostic cases, and three
+new memcheck cases with zero errors. The successful diagnostic fixture inserts
+a physical oxygen p shell before the hydrogen shells, so the parallel path has
+at least four virtual orbitals. Each response is compared with both serial
+references at the unchanged energy `5e-11`, force `5e-10`, Lambda/Z `1e-9` and
+stationarity `1e-8` gates. Independent PySCF energy/triples and two-step force
+finite differences pass. Budget-zero/one refusal leaves all output sentinels
+untouched. Initial job 2473's shell-order oracle rejection is retained, not
+relabeled as a numerical result. Focused local validation is 49 passes and
+111 expected skips; compiler/SCF/vendor/default/boundary, 330-file CUDA ownership
+and configured formatting checks pass.
+
+Job 2477 completes the 230-AO / 488-auxiliary diagnostic using exactly one
+native cold primal. All cases retain denominator identity
+`6315232735855893916` and nine-input bit-pattern census
+`2674132729717729229`. Energy differences are zero, and complete forces pass
+against **both** serial references:
+
+| Composition | Response-only seconds | Maximum force difference |
+|---|---:|---:|
+| Serial/all | 507.087754 | 1.962383589e-10 |
+| Parallel/all | 441.797895 | 2.338831351e-10 |
+| Omitted | 441.374586 | 2.899804841e-10 |
+| Serial/all repeat | 507.570574 | 1.962383589e-10 |
+
+The serial repeat establishes nonzero response variability even with unchanged
+native inputs; these are tolerance passes, not a claim of bitwise forces. Common
+primal work takes 286.577691 seconds, cloning takes about 0.22 seconds per case,
+and total comparison time including original-owner retirement is 2185.512606
+seconds. These response timings are **not cold endpoint speedups**. Corrected
+Lambda and full-Fock/source semantic work are unchanged; Lambda residual is
+`6.116e-13`, the largest Z residual is `1.367e-13`, and the largest stationarity
+residual is `1.492e-11`.
+
+The retained original host state is 358,801,448 bytes, shared DF source is
+49,259,323 bytes, fixed force outputs are 768 bytes, and clone admission is
+769,102,267 bytes. Planned complete numeric capacity is 7,466,723,169 bytes for
+serial/parallel and 7,466,721,329 bytes for omitted, within the 64-GiB budget.
+The whole-diagnostic 200-ms samples observe a 29,977-MiB device peak; this is
+not interchangeable with planned numeric capacity or a per-case device peak.
+Gap launch/work telemetry remains explicit: 1,320 / 495 / 0 region launches
+and 86,356,200 / 3,824 / 0 workspace bytes for serial/parallel/omitted.
+
+Native RHF diagnostics are forwarded verbatim: 21 iterations, energy change
+`1.0800249583553523e-12` and density RMS `9.756517294903296e-12` at requested
+energy/density tolerances `1e-12` / `1e-11`. The existing shared HF stopping
+policy includes its energy-scaled FP64 roundoff guard; this change does not
+alter it or claim the stronger unguarded reference criterion. The analyzer
+explicitly retains `cold_gate_superseded: false`. Shared-primal success narrows
+the investigation but does not prove the original cold discrepancy's cause.
+
+Receipts are `build-same-primal/`, `same-primal-unit-2473/`,
+`same-primal-unit-2474/` and `same-primal-large-2477/` under the retained n2
+root. Full combined qualification job 2478 passes 45 native response tests,
+48 independent complete-force tests across serial/parallel/omitted/default,
+and 82 memcheck tests with zero errors, on this exact library. Its receipts are
+`same-primal-qualification-2478/`; the new diagnostic's three memcheck cases
+remain separately recorded in job 2474, not double-counted in that 82-test run.
+A separate, ignored exploratory
+benchmark wrapper changes only the existing RHF DIIS history to four, keeps
+both requested RHF tolerances at `1e-12`, and reuses the frozen force owner.
+Its executable SHA256 is
+`484b7de849c545bd9cd3824ceb67fea53688d1ba8d634ebf91c6152b71bf13f3`;
+ten compiled CLI rejection/acceptance tests pass. Job 2483 starts only after
+qualification success and explicitly checks the shared-primal result and
+frozen library before proceeding; its numerical outcome is still pending.
+This is a hypothesis test, not a production
+policy change or a new acceptance gate. No running candidate source/library
+is replaced, and only n2 is used.
+
 ### Remaining gates
+
+The same-primal diagnostic adds a private native-state replay input to the existing
+complete force owner, not a second composition. The only caller is a new
+same-primal comparison entry that obtains its own native CUDA cold state,
+admits pinned/working host copies before allocation, and shares the exact
+original source/frame. Four schedules include a final serial repeat so response
+variability can be distinguished from demand/reduction changes. Output buffers
+are fixed and charged before the common solve; original host copies remain
+reserved through all response phases. Shared DF ownership is added back to the
+late orbital phase after the working CC state is consumed. A still-live native
+exact-reference source is also explicitly charged beside that phase's new
+orbital provider. The ordinary cold owner retains its scientific equations and
+defaults, with this live-source allowance corrected rather than ignored.
+Comparison timings include common-owner retirement and must not be called cold
+endpoint speedups. The new path and large shared-primal force comparison pass
+the gates above; original cold failures remain unsuperseded.
 
 - Actual complete native cotangents with parallel enabled, including a
   multi-CTA scalar case, and original independent energy/derivative gates.

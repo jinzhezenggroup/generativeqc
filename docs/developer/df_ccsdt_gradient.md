@@ -244,3 +244,32 @@ Historical response benchmark receipts retain the CLI for their recorded source
 revision. When adapting such a command to the current executable, insert the
 DIIS history and CCSD Q batch limit before the orbital screening threshold.
 Do not rewrite retained receipt commands or imply that they used this layout.
+
+## Same-primal response diagnostic
+
+`methods::detail::diagnose_df_ccsdt_gap_schedules` invokes the native cold
+RHF/DF-CCSD owner once and compares serial/all-output, parallel/all-output,
+omitted-output and repeated serial complete force compositions. Each composition
+uses an independently owned host copy through the existing force implementation;
+the physical reference and original DF source/metric/frame remain shared. A
+bit-pattern census guards the nine explicit triples inputs before each response
+and checks that the retained original is unchanged afterward. No replacement
+metric, CPU oracle or second CC equation is used.
+
+The diagnostic requires an explicit positive numeric budget and disallows Z
+recycling. All fixed force outputs are charged during the common cold solve.
+Admission precedes cloning and includes the original host copy and one working
+copy, with shared source/reference ownership charged once. The original host
+buffers remain reserved in every response phase; the original DF source and any
+still-live exact-reference source remain charged beside the final independent
+orbital provider. A failure publishes no partial comparison. Common native
+owners are released before the total comparison timer is stopped.
+
+`benchmarks/df_gap_same_primal_endpoint.cpp` accepts `INPUT OUTPUT_JSON` with the
+same normalized geometry/basis/budget input as the cold endpoint benchmark.
+It uses the retained cold benchmark's reference, DIIS, response and automatic
+J/K controls. JSON separates the single common native call, clone work and each
+response composition. These are diagnostic timings, **not independent cold
+endpoint timings**, and cannot replace cold acceptance or qualify an endpoint
+speedup. Independent force finite differences, unchanged residual/stationarity
+gates and the strict paired force gate still apply.

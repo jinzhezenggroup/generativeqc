@@ -9,6 +9,25 @@
 #include "posthf/raw_source.hpp"
 #include "runtime/execution_context.hpp"
 
+namespace {
+generativeqc_method_descriptor force_descriptor(std::size_t budget) {
+  generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = GENERATIVEQC_METHOD_RCCSD;
+  descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  descriptor.energy_tolerance = 1e-12;
+  descriptor.density_tolerance = 1e-12;
+  descriptor.ccsd_diis_history = 6;
+  descriptor.ccsd_max_iterations = 200;
+  descriptor.ccsd_energy_tolerance = 1e-12;
+  descriptor.ccsd_residual_tolerance = 1e-10;
+  descriptor.correlation_memory_budget_bytes = budget;
+  return descriptor;
+}
+}  // namespace
+
 extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, std::size_t budget,
                                        double* force_output, double* values, std::size_t* counts,
                                        char* error, std::size_t error_size) noexcept {
@@ -18,19 +37,7 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     core::ContextState context;
     context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
     runtime::ExecutionContext execution(context);
-    generativeqc_method_descriptor descriptor{};
-    descriptor.struct_size = sizeof(descriptor);
-    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
-    descriptor.method = GENERATIVEQC_METHOD_RCCSD;
-    descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
-    descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
-    descriptor.energy_tolerance = 1e-12;
-    descriptor.density_tolerance = 1e-12;
-    descriptor.ccsd_diis_history = 6;
-    descriptor.ccsd_max_iterations = 200;
-    descriptor.ccsd_energy_tolerance = 1e-12;
-    descriptor.ccsd_residual_tolerance = 1e-10;
-    descriptor.correlation_memory_budget_bytes = budget;
+    const auto descriptor = force_descriptor(budget);
     hf::RHFFrameResponseOptions options;
     // Test-only selection runs unchanged independent FD gates through the
     // optional accelerator without changing public method semantics.
@@ -87,6 +94,63 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     std::copy(result.forces.begin(), result.forces.end(), force_output);
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
+    return 0;
+  } catch (const std::exception& failure) {
+    if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
+    return 1;
+  }
+}
+
+extern "C" int df_gap_same_primal_probe(void* opaque, std::size_t budget, double* force_output,
+                                        double* values, std::uint64_t* common_counts,
+                                        std::size_t* case_counts, char* error,
+                                        std::size_t error_size) noexcept {
+  using namespace generativeqc;
+  try {
+    const auto& raw = *static_cast<posthf::RawSource*>(opaque);
+    core::ContextState context;
+    context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+    runtime::ExecutionContext execution(context);
+    const auto comparison = methods::detail::diagnose_df_ccsdt_gap_schedules(
+        execution, raw.orbital(), raw.auxiliary(), force_descriptor(budget));
+    const std::uint64_t shared[]{comparison.retained_primal_host_bytes,
+                                 comparison.retained_df_source_bytes,
+                                 comparison.retained_exact_source_bytes,
+                                 comparison.output_bytes,
+                                 comparison.clone_admission_bytes,
+                                 comparison.source_identity,
+                                 comparison.denominator_identity,
+                                 comparison.primal_identity,
+                                 comparison.nocc,
+                                 comparison.nvir,
+                                 comparison.naux,
+                                 static_cast<std::uint64_t>(comparison.reference_iterations)};
+    std::copy(std::begin(shared), std::end(shared), common_counts);
+    std::size_t force_offset = 0;
+    for (std::size_t index = 0; index < comparison.cases.size(); ++index) {
+      const auto& snapshot = comparison.cases[index];
+      const double scalars[]{snapshot.energy,
+                             snapshot.triples_energy,
+                             snapshot.lambda.independent_residual_norm,
+                             snapshot.orbital_residual,
+                             snapshot.maximum_stationarity,
+                             snapshot.clone_seconds,
+                             snapshot.response_seconds};
+      const std::size_t counts[]{snapshot.numeric_capacity_bytes,
+                                 snapshot.gap.requested,
+                                 snapshot.gap.parallel,
+                                 snapshot.gap.kernels,
+                                 snapshot.gap.workspace_bytes,
+                                 snapshot.gap.materialized_elements,
+                                 snapshot.source_weight_values,
+                                 snapshot.metric_weight_values,
+                                 snapshot.lambda.df_contraction_terms,
+                                 snapshot.fock_response_work};
+      std::copy(snapshot.forces.begin(), snapshot.forces.end(), force_output + force_offset);
+      force_offset += snapshot.forces.size();
+      std::copy(std::begin(scalars), std::end(scalars), values + index * std::size(scalars));
+      std::copy(std::begin(counts), std::end(counts), case_counts + index * std::size(counts));
+    }
     return 0;
   } catch (const std::exception& failure) {
     if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());

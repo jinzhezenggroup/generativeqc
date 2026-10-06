@@ -402,6 +402,7 @@ int probe() {
   runtime::ExecutionContext execution;
   core::System system, auxiliary;
   generativeqc_method_descriptor descriptor;
+  RccsdNativeState* replay_state=nullptr;
   const std::size_t recycle_bytes=123;
   for(bool packed_diis : {false,true})
   for(bool derived_denominators : {false,true})
