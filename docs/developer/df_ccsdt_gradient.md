@@ -191,7 +191,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1]]]]]]]]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE]]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
@@ -222,6 +222,16 @@ Automatic demand promotion still requires complete cold-force acceptance;
 isolated reduction accuracy or a smaller arena does not qualify that change.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
+
+Argument twenty-one optionally sets both RHF energy and density tolerances to a
+finite positive value no larger than `1e-12`. Without it, the benchmark retains
+its original `1e-12` energy and `1e-11` density tolerances. This benchmark-only
+control cannot loosen either criterion or change CC, Lambda, Z, stationarity,
+or paired-force acceptance gates. JSON records both requested tolerances and
+the original RHF's final energy change, density RMS and iteration count; these
+diagnostics do not rebuild or replay the reference. Iteration work is null if
+a discarded endpoint attempt prevents complete work accounting. Match this
+argument across schedules when investigating cold-reference variability.
 
 For example, an exact force endpoint with the default six-vector DIIS history
 and explicit symmetric response is:

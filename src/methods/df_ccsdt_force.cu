@@ -64,6 +64,9 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;
+  result.reference_energy_change = state.reference_energy_change;
+  result.reference_density_rms = state.reference_density_rms;
+  result.reference_iterations = state.reference_iterations;
   result.correlation_energy = state.solved.correlation_energy;
   result.energy = state.solved.total_energy;
   result.primal = state.performance;

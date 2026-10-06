@@ -33,17 +33,25 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
-        "request_triples_gap_cotangents}; }\n"
+        "request_triples_gap_cotangents,descriptor.energy_tolerance,"
+        "descriptor.density_tolerance}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
         "if (argc <"
         + endpoint.split("if (argc <", 1)[1].split("    std::ifstream input", 1)[0]
     )
-    descriptor_diis = next(
+    descriptor_controls = "\n".join(
         line
         for line in endpoint.splitlines()
-        if "descriptor.ccsd_diis_history =" in line
+        if any(
+            field in line
+            for field in (
+                "descriptor.ccsd_diis_history =",
+                "descriptor.energy_tolerance =",
+                "descriptor.density_tolerance =",
+            )
+        )
     )
     assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
@@ -72,6 +80,7 @@ struct DFCCSDTResult {
   bool reduction;
   std::size_t batch_limit, ccsd_batch_limit;
   bool derived_denominators, packed_diis, parallel_gap, request_gap;
+  double reference_energy_tolerance{}, reference_density_tolerance{};
 };
 """
         + declaration
@@ -81,10 +90,10 @@ struct DFCCSDTResult {
 generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) {
   generativeqc::runtime::ExecutionContext execution;
   generativeqc::core::System orbital, auxiliary;
-  generativeqc_method_descriptor descriptor;
+  generativeqc_method_descriptor descriptor{};
 """
         + selectors
-        + descriptor_diis
+        + descriptor_controls
         + "\n"
         + endpoint_call
         + r"""
@@ -101,7 +110,7 @@ int main() {
   if(options.df_matrix_gemm) return 2;
   generativeqc::runtime::ExecutionContext context;
   generativeqc::core::System system;
-  generativeqc_method_descriptor descriptor;
+  generativeqc_method_descriptor descriptor{};
   using generativeqc::methods::detail::run_df_ccsdt_native;
   auto ordinary=run_df_ccsdt_native(context,system,system,descriptor);
   auto explicit_matrix=run_df_ccsdt_native(context,system,system,descriptor,
@@ -291,7 +300,25 @@ int main() {
     bad[index]=token;
     try { (void)select(21,bad);return 35; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,22}) {
+  for(const char* tolerance : {"1e-12", "1e-13"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0",tolerance};
+    const auto result = select(22,selected);
+    if(result.reference_energy_tolerance != std::stod(tolerance) ||
+       result.reference_density_tolerance != std::stod(tolerance) ||
+       !result.parallel_gap || result.request_gap) return 36;
+    const auto legacy = select(21,selected);
+    if(legacy.reference_energy_tolerance != 1e-12 ||
+       legacy.reference_density_tolerance != 1e-11) return 37;
+  }
+  for(const char* tolerance : {"", "0", "-1e-13", "nan", "inf", "1e-11", "1e-13x"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0","1","auto",
+                      "0","1",tolerance};
+    try { (void)select(22,bad);return 38; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,23}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

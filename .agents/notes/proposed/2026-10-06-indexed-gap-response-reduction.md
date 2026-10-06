@@ -208,6 +208,99 @@ ownership checks pass, as do configured Python/C++ formatting checks.
 
 ## Required qualification before promotion/completion
 
+### Cold-reference convergence diagnostic
+
+The benchmark originally requested RHF energy/density tolerances of
+`1e-12` / `1e-11`, while the independent complete-force probe requests
+`1e-12` for both. The native reference owner honors tighter requested
+criteria. This mismatch is a testable hypothesis for cold-reference
+variability, not a demonstrated cause of the failed 230-AO force comparison.
+
+A benchmark-only trailing argument twenty-one can now tighten both reference
+criteria to a finite positive value at most `1e-12`; omitted controls retain
+the original behavior. Original RHF energy change, density RMS and iteration
+count are propagated as diagnostics without changing scientific equations or
+replaying the reference. CC, Lambda, Z, stationarity, strict paired-force and
+large-factor gates remain unchanged. Ten executable CLI tests validate the
+legacy positional slots, tightening-only policy and rejection before GPU setup.
+
+Job 2464 requests `1e-13` and fails at the first 28-AO RHF solve with the
+configured 150-iteration limit. No CC/force endpoint completes, so it is
+negative evidence, not an accepted sample. Do not describe this observation as
+a proved numerical floor or increase solver limits to hide the failure.
+Job 2466 instead requests the independent probe's `1e-12` criteria. Its
+completed 28-AO serial/parallel/omitted samples and additional cold serial
+repeat pass the original paired gates. Maximum force differences against both
+serial references are `4.352e-14` (parallel) and `6.217e-14` (omitted); the two
+serial runs differ by `4.885e-14`. Their final RHF density RMS is approximately
+`1.679e-13`, below the requested criterion.
+
+The first 230-AO serial solve instead fails RHF convergence under `1e-12`
+criteria after 938.920 seconds in the native owner (939.19 seconds wall).
+No large CC/force result is published and the remaining large schedules are
+not attempted. Tightening alone therefore does not qualify the large cold
+comparison or explain its previous discrepancy. Do not increase iterations,
+relax the reference/response gates, or silently treat an uncompleted endpoint
+as a successful comparison. The next diagnostic must hold the exact primal
+payload and original molecular source/frame fixed across response schedules,
+while explicitly charging retained copies and preserving complete ownership.
+Original
+legacy-tolerance failed receipts remain authoritative for their configuration
+and are not superseded by a different reference tolerance.
+
+The diagnostic build library SHA256 is
+`d10838147c8af8957e5bf05eefb718a494b1b18735fa8d01b23c1f45824f9fdf`,
+and endpoint SHA256 is
+`c6e6b1aabc9ba3e37c9aff150f4db318ab8f1cda20ee81eec97cf4ee118c41c0`.
+Its explicit ccache receipts report two hits and five misses across seven
+cacheable calls. Full source verification agrees on all compiled/test inputs;
+the historical remote Agent Note differs from the local note and is explicitly
+recorded in the actual-source manifest and verification receipt, not silently
+represented as the local version. Remote build and run directories are
+`build-reference/`, `reference-pairs-2464/`, `reference-pairs-2466/` under the
+same retained evidence root. The tightened-reference analyzer audits every
+completed candidate against every completed serial reference and writes a
+separate report; it never overwrites the original cold gate failures.
+Uncompleted attempted endpoints are recorded as failures without fabricating
+numerical samples. Focused local validation is 35 passes and 108 expected
+GPU/executable-only skips; the initial missing-`PYTHONPATH` collection failure
+is retained separately. Compiler, SCF, cross-method, vendor, default-promotion
+and 330-file CUDA ownership checks pass, as do the configured formatters.
+
+Diagnostic-build job 2468 completes normally: 45 native response passes,
+48 independent complete-force passes across serial/parallel/omitted/default,
+and 73 memcheck passes with zero errors. These receipts belong to the
+`d1083814...` library, not the later combined source. During investigation,
+remote PR head advances independently to `f04f92ebc80f37c39c1c986f8e83faf6d9a2774b`
+with a generic rational-literal lowering correction and updated policy probes.
+That commit is fast-forward integrated without overwriting its files. The
+benchmark policy probe is extended for the appended reference control and
+rejects argument count 23, preserving its earlier gap/default assertions.
+The old argument-count expectation's local test failure is retained separately.
+The combined compiler/native source requires a new rebuild and qualification;
+the earlier binary's tests/timings must not be relabeled as its evidence.
+
+The combined build is qualified separately by job 2472: 45 native response
+passes, 48 independent complete-force passes across all four controls, and
+82 memcheck passes with zero errors (the added rational-literal CPU cases
+increase the prior 73-test census). Ten executable CLI tests pass on this
+build; focused local compiler/triples/policy validation is 49 passes and
+108 expected GPU/executable-only skips. All ownership, boundary, default and
+configured formatting checks pass. Complete source verification matches all
+8,214 manifest entries before qualification. Subsequent source changes only
+append this evidence to the Agent Note; compiled inputs remain identical.
+
+Combined library SHA256:
+`44331c1ce3794c88a8c5e46f2d95f3644fbd6e14ca23f782e4f8ff85fc9a0e17`.
+The endpoint/probe hashes are unchanged from the diagnostic build. Explicit
+CXX/CUDA ccache launchers remain verified; the before/after receipts show
+14 additional hits and two misses. Raw directories are
+`build-reference-integrated/` and `reference-integrated-qualification-2472/`.
+This qualification does not fabricate a completed large tightened-reference
+endpoint, qualify the original failed cold gate, or promote a default.
+
+### Remaining gates
+
 - Actual complete native cotangents with parallel enabled, including a
   multi-CTA scalar case, and original independent energy/derivative gates.
 - Omission tests prove all seven requested derivatives unchanged, epsilon

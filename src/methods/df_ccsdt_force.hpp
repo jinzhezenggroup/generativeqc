@@ -17,6 +17,9 @@ struct DFCCSDTResult {
   // counters are unavailable; successful-attempt counters are not endpoint totals.
   bool recycling_discarded_primal_attempt{};
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
+  // Final RHF convergence diagnostics from the original cold reference, without replay.
+  double reference_energy_change{}, reference_density_rms{};
+  int reference_iterations{};
   std::vector<double> forces;
   Result method_result;
   generativeqc_correlation_diagnostic correlation{};
