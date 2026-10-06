@@ -80,7 +80,7 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
     ):
         decision = resolve_force_active_ao_policy(workload)
         assert decision.selected
-        assert decision.profile_id == "sm120-ordinary-rks-second-jet-v2"
+        assert decision.profile_id == "sm120-ordinary-direct-active-ao-v2"
         assert decision.cutoff == 1e-16
         assert decision.cache_bytes == 16 << 20
 
