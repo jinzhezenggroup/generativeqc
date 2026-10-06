@@ -114,8 +114,8 @@ __device__ void direct_md_pair_transform(
   const auto second_ao = batch.shell_direct_ao_offsets[second_shell];
   const std::size_t base = static_cast<std::size_t>(system) * batch.direct_nbf;
   const std::size_t matrix_base = base * batch.direct_nbf;
-  const Vec3<double> first = batch.positions[batch.shell_atoms[first_shell]];
-  const Vec3<double> second = batch.positions[batch.shell_atoms[second_shell]];
+  const Vec3<double> first = atom_position<double>(batch, batch.shell_atoms[first_shell], -1);
+  const Vec3<double> second = atom_position<double>(batch, batch.shell_atoms[second_shell], -1);
   const auto begin = batch.shell_pair_primitive_offsets[pair];
   const auto end = batch.shell_pair_primitive_offsets[pair + 1U];
   for (auto primitive = begin + threadIdx.x; primitive < end; primitive += blockDim.x) {
