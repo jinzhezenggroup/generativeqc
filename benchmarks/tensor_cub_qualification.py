@@ -48,6 +48,7 @@ from generativeqc_compiler.tensor import (
     reduce_sum,
 )
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_reduction import ReductionLoweringBinding
 from generativeqc_compiler.tensor.cuda_tune import tune_cuda
 
 SCHEMA = "generativeqc.tensor.cub-qualification.v1"
@@ -209,7 +210,7 @@ def _cub_candidate(evidence: dict[str, Any]) -> dict[str, Any]:
     matches = [
         row
         for row in evidence["candidates"]
-        if row.get("plan", {}).get("schedule", {}).get("reduction_provider") == "cub"
+        if row.get("reduction_lowering", {}).get("provider") == "cub"
     ]
     if len(matches) != 1:
         raise RuntimeError("qualification did not retain exactly one CUB candidate")
@@ -451,22 +452,17 @@ def main() -> None:
     baseline = plan_cuda(
         program,
         compiler.target,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="generated",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
     )
     selection = tune_cuda(
         baseline,
         compiler,
         fixtures,
         output / "cache",
-        schedules=(
-            TensorSchedule(
-                stream_reductions=True,
-                reduction_provider="generated",
-            ),
-            TensorSchedule(stream_reductions=True, reduction_provider="cub"),
+        schedules=(TensorSchedule(stream_reductions=True),),
+        reduction_lowerings=(
+            ReductionLoweringBinding("generated"),
+            ReductionLoweringBinding("cub"),
         ),
         screening=None,
         repeats=args.repeats,
