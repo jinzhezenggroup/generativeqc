@@ -159,9 +159,9 @@ class ForceActiveAoDecision:
 # #1598 / #1853 promotion registry. Admission is capability- and cost-driven,
 # not molecule-size-window driven. The retained 48-atom positive endpoint is the
 # measured crossover anchor: above its dense point×AO² work, map discovery can be
-# amortized by the shared ordinary all-electron Direct force consumer. The broad
-# only remaining gates are true execution capabilities/resources plus the
-# dense-work crossover; unsupported capability or insufficient work falls back dense.
+# amortized by the shared ordinary all-electron Direct force consumer. The only
+# remaining gates are true execution capabilities/resources plus the dense-work
+# crossover; unsupported capability or insufficient work falls back dense.
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
         profile_id="sm120-ordinary-direct-active-ao-v2",
