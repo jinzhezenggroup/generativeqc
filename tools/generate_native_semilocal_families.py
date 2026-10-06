@@ -82,11 +82,21 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
         if item.get("cuda_global_hybrid_exact_exchange") is not None:
             fraction = Fraction(item["cuda_global_hybrid_exact_exchange"])
             if not 0 < fraction <= 1:
-                raise ValueError("CUDA global-hybrid exchange fraction must lie in (0,1]")
-        if item["cuda_nonlocal_correlation"] and not item["native_nonlocal_correlation"]:
+                raise ValueError(
+                    "CUDA global-hybrid exchange fraction must lie in (0,1]"
+                )
+        if (
+            item["cuda_nonlocal_correlation"]
+            and not item["native_nonlocal_correlation"]
+        ):
             raise ValueError("CUDA nonlocal admission requires native nonlocal support")
-        if item["molecular_nonlocal_domain"] and not item["native_nonlocal_correlation"]:
-            raise ValueError("molecular nonlocal domain requires native nonlocal support")
+        if (
+            item["molecular_nonlocal_domain"]
+            and not item["native_nonlocal_correlation"]
+        ):
+            raise ValueError(
+                "molecular nonlocal domain requires native nonlocal support"
+            )
         for component in components:
             if not isinstance(component, list) or len(component) != 2:
                 raise ValueError(
