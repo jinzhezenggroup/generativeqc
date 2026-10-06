@@ -39,6 +39,9 @@ extern "C" int cuMemGetAddressRange_v2(unsigned long long* base,std::size_t* siz
         f'include("{ROOT / "cmake/GenerativeQCCudaImplib.cmake"}")\n'
         "add_library(probe SHARED probe.cpp)\ngenerativeqc_attach_cuda_driver_implib(probe)\n"
         'target_link_options(probe PRIVATE "LINKER:-z,defs")\n'
+        "add_library(probe_copy SHARED probe.cpp)\n"
+        "generativeqc_attach_cuda_driver_implib(probe_copy)\n"
+        'target_link_options(probe_copy PRIVATE "LINKER:-z,defs")\n'
         "add_library(cuda SHARED driver.cpp)\nset_target_properties(cuda PROPERTIES SOVERSION 1)\n"
     )
     build = tmp_path / "build"
@@ -48,12 +51,17 @@ extern "C" int cuMemGetAddressRange_v2(unsigned long long* base,std::size_t* siz
         capture_output=True,
         timeout=60,
     )
+    generated_trampoline = (
+        build / "generated" / "cuda_driver_implib" / "libcuda.so.tramp.S"
+    )
+    assert not generated_trampoline.exists()
     subprocess.run(
         ["cmake", "--build", str(build), "-j2"],
         check=True,
         capture_output=True,
         timeout=60,
     )
+    assert generated_trampoline.is_file()
     dynamic = subprocess.check_output(
         ["readelf", "-d", str(build / "libprobe.so")], text=True
     )

@@ -7,19 +7,33 @@ from pathlib import Path
 
 import pytest
 
+from tools.link_cuda_implib import provider_for_symbol
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_cudart_implib_covers_grid_stream_flags() -> None:
-    """Keep wheel-mode host imports in sync with the CUDA grid owner."""
+def test_cuda_wheel_imports_are_linker_discovered() -> None:
+    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
+    assert "tools/link_cuda_implib.py" in cmake
+    assert "CXX_LINKER_LAUNCHER" in cmake
+    assert "PROPERTY LINKER_LANGUAGE CXX" in cmake
+    assert "CUDA_LINKER_LAUNCHER" not in cmake
+    assert "RULE_LAUNCH_LINK" not in cmake
+    assert "add_library(generativeqc_cuda_wheel_imports INTERFACE)" in cmake
+    assert "target_link_options(generativeqc_cuda_wheel_imports INTERFACE" in cmake
+    assert "GENERATIVEQC_CUDART_SYMBOLS" not in cmake
+    assert "GENERATIVEQC_CUBLAS_SYMBOLS" not in cmake
+    assert "GENERATIVEQC_CUSOLVER_SYMBOLS" not in cmake
+
+
+def test_cudart_classifier_covers_grid_stream_flags() -> None:
+    """Keep the CUDA grid API inside the automatic cudart provider family."""
     grid = (ROOT / "src/dft/cuda_grid.cu").read_text()
     assert "cudaStreamGetFlags(" in grid
-
-    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
-    symbols = (
-        cmake.split("set(GENERATIVEQC_CUDART_SYMBOLS", 1)[1].split(")", 1)[0].split()
-    )
-    assert "cudaStreamGetFlags" in symbols
+    provider = provider_for_symbol("cudaStreamGetFlags")
+    assert provider is not None
+    assert provider.name == "cudart"
+    assert provider.load_name == "libcudart.so.12"
 
 
 def test_provider_free_sgemm_declarations_and_imports(
@@ -69,14 +83,16 @@ static_assert(std::is_same_v<decltype(&cublasGetPointerMode_v2), GetPointerMode>
         text=True,
         timeout=30,
     )
-    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
-    symbols = (
-        cmake.split("set(GENERATIVEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
-    )
-    assert "cublasSgemm_v2" in symbols
-    assert "cublasSgemmStridedBatched" in symbols
-    assert "cublasGetStream_v2" in symbols
-    assert "cublasGetPointerMode_v2" in symbols
+    for symbol in (
+        "cublasSgemm_v2",
+        "cublasSgemmStridedBatched",
+        "cublasGetStream_v2",
+        "cublasGetPointerMode_v2",
+    ):
+        provider = provider_for_symbol(symbol)
+        assert provider is not None
+        assert provider.name == "cublas"
+        assert provider.load_name == "libcublas.so.12"
 
 
 def test_sgemm_trampolines_link_without_providers_and_forward_abi(
@@ -107,10 +123,12 @@ def test_sgemm_trampolines_link_without_providers_and_forward_abi(
         "#pragma once\nenum libraryPropertyType { MAJOR_VERSION=0 };\n"
     )
     includes = ["-I", str(tmp_path), "-I", str(ROOT / "src/runtime/nvidia_host_api")]
-    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
-    symbols = (
-        cmake.split("set(GENERATIVEQC_CUBLAS_SYMBOLS", 1)[1].split(")", 1)[0].split()
-    )
+    symbols = [
+        "cublasGetPointerMode_v2",
+        "cublasGetStream_v2",
+        "cublasSgemmStridedBatched",
+        "cublasSgemm_v2",
+    ]
     provider = tmp_path / "mock-cublas.so"
     generate(
         "libcublas.so",

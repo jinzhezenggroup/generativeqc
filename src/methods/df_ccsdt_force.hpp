@@ -10,8 +10,8 @@
 
 namespace generativeqc::methods::detail {
 /** Complete native endpoint on an unchanged conventional RHF reference with
- * a DF correlation Hamiltonian. The public energy-only selector reuses this
- * owner; public force promotion remains separate. */
+ * a DF correlation Hamiltonian. The public DF-RCCSD(T) selector reuses this
+ * owner for both energy and force requests. */
 struct DFCCSDTResult {
   // If true, total_seconds includes a resource-refused precursor whose work
   // counters are unavailable; successful-attempt counters are not endpoint totals.

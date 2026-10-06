@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import ctypes
 import json
+import os
 import typing
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from generativeqc import Calculator, _generated_methods, _native
 from generativeqc._api_types import MethodCapabilities
@@ -13,7 +15,7 @@ from generativeqc._api_types import MethodCapabilities
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_df_rccsdt_manifest_is_distinct_energy_only_method() -> None:
+def test_df_rccsdt_manifest_is_distinct_energy_force_method() -> None:
     payload = json.loads((ROOT / "manifests/public_methods.json").read_text())
     row = next(
         method for method in payload["methods"] if method["name"] == "df-rccsd(t)"
@@ -24,7 +26,7 @@ def test_df_rccsdt_manifest_is_distinct_energy_only_method() -> None:
         "abi_id": 19,
         "family": "coupled_cluster",
         "provider": "df_rccsdt",
-        "properties": ["energy"],
+        "properties": ["energy", "forces"],
         "supports_batch": False,
         "aliases": ["df-ccsd(t)"],
     }
@@ -32,13 +34,13 @@ def test_df_rccsdt_manifest_is_distinct_energy_only_method() -> None:
     assert _generated_methods.METHOD_NAME_TO_ID["df-ccsd(t)"] == 19
 
 
-def test_df_rccsdt_public_owner_stays_force_fail_closed() -> None:
+def test_df_rccsdt_public_owner_forwards_force_requests() -> None:
     source = (ROOT / "src/methods/df_rccsdt_method.cpp").read_text()
     assert (
-        "run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, false)"
+        "run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces)"
         in source
     )
-    assert "public DF-RCCSD(T) forces remain unqualified" in source
+    assert "public DF-RCCSD(T) forces remain unqualified" not in source
     assert (
         "descriptor_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE" in source
     )
@@ -55,7 +57,7 @@ def available_cc_library(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def capabilities(method: str) -> MethodCapabilities:
         return MethodCapabilities(
-            method, "coupled_cluster", True, False, frozenset({"energy"})
+            method, "coupled_cluster", True, False, frozenset({"energy", "forces"})
         )
 
     library = SimpleNamespace(generativeqc_method_available=available)
@@ -79,6 +81,8 @@ def test_df_rccsdt_constructor_and_descriptor(
         ccsd_diis_history=4,
         **options,
     )
+    assert calc.capabilities.supported_properties == frozenset({"energy", "forces"})
+    assert not calc.capabilities.supports_batch
     auxiliary = ctypes.c_void_p(1234)
     descriptor = calc._method_descriptor(auxiliary_basis=auxiliary)
     assert descriptor.method == _native.METHOD_DF_RCCSD_T
@@ -137,3 +141,47 @@ def test_conventional_cc_constructor_still_rejects_fitting(method: str) -> None:
         Calculator(method=method, device="cuda", density_fitting="cuda")
     with pytest.raises(ValueError, match="auxiliary_basis requires density_fitting"):
         Calculator(method=method, device="cuda", auxiliary_basis="sto-3g")
+
+
+@pytest.mark.skipif(
+    os.environ.get("GENERATIVEQC_DF_COMPLETE_FORCE_TEST") != "1",
+    reason="requires finite Slurm real-GPU allocation and native DF force owner",
+)
+def test_public_df_rccsdt_force_matches_public_energy_difference() -> None:
+    assert os.environ.get("SLURM_JOB_ID")
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    calc = Calculator(
+        method="df-rccsd(t)",
+        basis="sto-3g",
+        auxiliary_basis="sto-3g",
+        device="cuda",
+        correlation_memory_budget_bytes=1 << 30,
+        ccsd_max_iterations=100,
+        ccsd_energy_tolerance=1e-13,
+        ccsd_residual_tolerance=1e-11,
+    )
+    result = calc.singlepoint(atoms, properties=("energy", "forces"))
+    assert result.converged and result.forces is not None
+    assert result.correlation is not None
+    assert result.correlation.response_absolute_residual < 1e-9
+    # H2 can converge at its initial residual, so positive iteration counts
+    # are not a valid publication gate. Identity and provenance cannot come
+    # from the zero-initialized primal correlation diagnostic.
+    assert result.correlation.response_operator_hash
+    assert result.correlation.force_provenance_flags == 0xF
+    assert result.correlation.planned_endpoint_peak_bytes == (
+        result.correlation.numeric_capacity_bytes
+    )
+
+    force = np.asarray(result.forces)
+    analytic = -float(force[1, 2])
+    for step in (1e-4, 3e-5):
+        energies = []
+        for sign in (-1.0, 1.0):
+            moved = [
+                ("H", (0.0, 0.0, -0.7)),
+                ("H", (0.0, 0.0, 0.7 + sign * step)),
+            ]
+            energies.append(calc.singlepoint(moved, properties=("energy",)).energy)
+        numeric = (energies[1] - energies[0]) / (2 * step)
+        np.testing.assert_allclose(numeric, analytic, atol=3e-7, rtol=3e-7)

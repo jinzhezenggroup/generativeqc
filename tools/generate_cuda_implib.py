@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate provider-free lazy-dlopen CUDA trampolines from curated symbols.
+"""Generate provider-free lazy-dlopen CUDA trampolines from resolved symbols.
 
 The emitted C/assembly sources use the vendored MIT-licensed Implib.so
 architecture templates. They define the CUDA host symbols referenced by

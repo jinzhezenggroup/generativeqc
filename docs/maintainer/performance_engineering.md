@@ -4,6 +4,256 @@ GenerativeQC performance work must optimize scientific work and data movement, n
 only kernel throughput or peak scratch size. This document records cross-cutting
 rules for CUDA, generated integrals, response, DFT, and post-HF execution.
 
+## Optimization method taxonomy
+
+Treat performance as a stack of optimization opportunities rather than as a
+kernel-only problem. The categories below are deliberately orthogonal: a complete
+endpoint may need several of them, but each candidate should identify which
+mechanism is expected to remove time and which measurements can falsify that
+hypothesis.
+
+| Symptom | First optimization questions | Evidence to collect |
+| --- | --- | --- |
+| Work grows faster than the scientific problem requires | Can the algebra be reassociated, factorized, symmetry-reduced, screened, sparsified, or solved with fewer expensive operator applications? | semantic work counts, symbolic degree, active-domain sizes, iteration/operator counts |
+| The same expensive source is regenerated | Can one production owner generate it once and feed several consumers, or keep it resident across phases? | source evaluations/passes, cache/residency identity, bytes regenerated |
+| Large intermediates are written and immediately reread | Can producer and consumer be fused, or can the producer contract directly into the final reduction? | intermediate bytes, traversals, launch count, endpoint time |
+| GPU time is dominated by packing/copies or low useful bandwidth | Is the layout appropriate for the consumer, can indexed/packed/local layouts avoid dense work, and can staging be removed? | H2D/D2H bytes, gather/scatter bytes, achieved bandwidth, active occupancy of the logical domain |
+| One generic kernel handles very different workloads poorly | Should execution plans specialize by operator, derivative order, shell/layout class, target, or size while sharing one scientific definition? | per-class work/time, register/local/shared-memory use, fallback fraction |
+| Many short kernels or host waits dominate | Can a larger solver region, graph/device-tail execution, batching, or fewer host synchronizations preserve the same semantics? | launch count, synchronization count, CPU gaps, device-idle intervals |
+| Transfer/preparation and device work alternate serially | Can bounded prefetch, asynchronous copies, or double buffering overlap independent work? | copy/compute overlap, idle gaps, buffer peak, stream/event trace |
+| Compute is throughput-bound in numerically tolerant components | Can compute/storage/accumulation precision be selected independently while retaining strict publication checks? | precision provenance, FP32/FP64 throughput, numerical margins, complete endpoint time |
+| Iterative response/CC work repeatedly applies an expensive operator | Can preconditioning, warm state, recycling, block/multi-RHS execution, or control-flow changes reduce the number of exact applications? | exact/provisional action counts, residual history, complete solve time |
+| Runtime is good but specialization/compilation is excessive | Can equivalent generated variants be canonicalized, packaged AOT, cached, or left to bounded JIT fallback? | compile/cache identity, artifact count/size, cold compile time, runtime coverage |
+
+The default order of attack is: reduce semantic work first; then remove
+recomputation and materialization; then fix layout/data movement and choose the
+right execution plan; only then spend effort on low-level kernel tuning. Launch
+control, overlap, and mixed precision should be driven by a measured residual
+bottleneck rather than enabled merely because the mechanism exists.
+
+### Reduce mathematical and semantic work
+
+The highest-value optimization is usually work that never executes.
+
+- Reassociate or factor contractions when the compiler can prove a lower
+  symbolic cost without changing the declared equation. TensorIR is the preferred
+  owner for these rewrites.
+- Exploit exact symmetry, packed domains, shell/pair topology, and repeated-index
+  structure before expanding work into dense ordered domains.
+- Use scientifically legal screening or active/local domains to remove work
+  whose contribution is provably outside the requested contract. Screening
+  policy must be part of the execution identity and must retain the required
+  final physical validation.
+- Distinguish logically different consumers. Coulomb and exchange, value and
+  derivative, short- and long-range operators, or dense and occupied-factorized
+  contractions may share one scientific source while needing different optimal
+  execution plans.
+- For iterative methods, count expensive operator applications as semantic work.
+  A better preconditioner or reusable Krylov state can dominate a faster kernel
+  if it materially reduces the number of exact actions.
+
+Do not infer complexity from lexical loop depth alone, and do not trade exact
+scientific semantics for a cheaper approximation without changing the method or
+provider identity explicitly.
+
+### Reuse source work and prepared state
+
+Generate expensive source work at the widest lifetime for which its scientific
+identity remains valid. Typical reusable state includes shell-pair topology,
+geometry/Boys/Rys data, molecular grids, AO active maps, integral/source tiles,
+metric/factorization results, transformed occupied blocks, and prepared solver
+metadata.
+
+Prefer one owner with explicit borrowing/lifetime rules over independent
+method-specific caches. Reuse is valid only when geometry, operator, basis,
+precision, screening, generation, and stream/event dependencies match. A stale
+or ambiguously identified cache is a correctness bug, not a performance feature.
+
+The detailed source-reuse and residency rules below remain normative.
+
+### Fuse producers, consumers, and reductions
+
+Materialization is justified only when its reuse value exceeds its storage and
+traffic cost. Look for sequences such as
+
+```text
+produce full intermediate
+write intermediate
+read intermediate
+permute / weight / reduce once
+```
+
+and prefer a generated fused region that applies the permutation, weight,
+denominator, response cotangent, or final reduction while the source values are
+live. Common targets include AO/grid consumers, derivative contractions,
+triples/response tiles, normalized partition derivatives, and permutation-heavy
+tensor equations.
+
+Fusion must preserve a readable scientific owner. Do not replace a canonical
+equation or AD graph with a second hand-maintained formula merely to obtain a
+fused kernel. Keep an unfused or generic route as an oracle/fallback where the
+specialized region has bounded admission conditions.
+
+### Choose representation and layout for the consumer
+
+Dense canonical tensors are not always the cheapest execution representation.
+The planner may choose packed-symmetric, indexed, block-sparse/local, tiled, or
+factorized layouts when the mapping is exact and explicit.
+
+In particular:
+
+- keep grid-local AO work in active/indexed AO dimensions instead of expanding
+  inactive rows and columns only to skip them later;
+- keep symmetric pair domains packed when downstream consumers can operate on
+  the packed identity directly;
+- gather or pack once for several contractions rather than once per consumer;
+- prefer contiguous/coalesced device access and library-compatible layouts when
+  they reduce total endpoint work, not merely one kernel's instruction count;
+- avoid GPU -> host -> GPU round trips when ownership permits direct device
+  consumption; and
+- account for scatter/reduction contention introduced by a sparse or indexed
+  representation rather than assuming fewer values are automatically faster.
+
+A representation change must report both the reduction in logical work and any
+new gather, scatter, metadata, or packing cost.
+
+### Specialize execution plans without duplicating science
+
+One scientific operator may have several execution plans. Specialization may be
+by operator role, derivative order, shell/angular class, tensor/layout class,
+precision, target architecture, or bounded size/resource regime.
+
+Useful specialization includes generated shell-class kernels, separate J/K
+schedules, value-versus-force schedules, target-specific tile/block geometry,
+library-backed GEMM for regular contractions, and generated kernels for
+irregular/fused domains. The selection boundary belongs in compiler/runtime
+planning, not in molecule names or benchmark identities.
+
+Specialization should shrink the expensive generic residual domain rather than
+create a parallel scientific implementation. Retain a bounded generic fallback
+for unsupported classes or resource regimes, and record how much production
+work still uses that fallback.
+
+### Tune GPU resource use after the work is right
+
+Use low-level tuning after semantic work, representation, and dispatch are
+credible. Inspect at least:
+
+- registers per thread, local-memory spills, and stack usage;
+- achieved versus theoretical occupancy and active warps;
+- block/warp geometry and tail utilization;
+- shared-memory capacity, bank behavior, and reuse;
+- global-memory transaction efficiency and achieved bandwidth;
+- instruction mix, FP64/FP32 throughput, and dependency/latency stalls; and
+- atomic/reduction contention.
+
+A high register count or low occupancy is a diagnostic lead, not an automatic
+cause. A kernel can be latency-, bandwidth-, instruction-, launch-, or
+work-amplification-bound with similar occupancy numbers. Validate resource
+changes with profiler counters and the complete endpoint. Static compiler
+resource reports help choose candidates but do not replace device measurement.
+
+### Reduce launch and host-control overhead
+
+When semantic work is already small, repeated launch and synchronization can
+become the bottleneck. Candidates include:
+
+- batching compatible work into fewer launches;
+- compiler-generated fused solver regions;
+- CUDA Graph replay for stable prepared regions;
+- device-tail or persistent control when bounded failure semantics remain
+  observable;
+- eliminating redundant evaluations of the same accepted solver state; and
+- replacing unconditional host fences with explicit event dependencies.
+
+Do not hide a required convergence, error, publication, or lifetime check merely
+to reduce synchronization. Profiling and clean timing should also remain
+separate: instrumentation fences can change the schedule being diagnosed.
+
+### Overlap independent preparation, transfer, and compute
+
+Use asynchronous execution only when a timeline proves there is latency to
+hide. Bounded prefetch and double buffering can overlap preparation or transfer
+for tile N+1 with computation on tile N, but they also consume more retained
+memory and make ownership more complex.
+
+Charge every in-flight buffer to the resource plan, use explicit events for
+ownership transfer, retain a single-buffer fallback for tight budgets, and
+measure actual overlap rather than adding copy and kernel durations. If the
+endpoint is compute-bound with no device idle gap, extra buffering is normally
+the wrong optimization.
+
+### Treat precision as an execution-schedule dimension
+
+Precision is not a global on/off performance flag. When numerically legal, plan
+compute precision, storage precision, and accumulation precision independently
+per component. Throughput-heavy contractions may use lower precision while
+sensitive denominators, reductions, residuals, stationarity checks, energies,
+and forces remain in FP64.
+
+Every mixed-precision path must expose its actual precision provenance, retain a
+strict-FP64 route for the same scientific equation, and pass independent
+numerical gates with margin on difficult cases. Tensor-core or SGEMM utilization
+is implementation evidence; complete-endpoint speedup plus numerical acceptance
+is the promotion criterion.
+
+### Reduce expensive solver/operator applications
+
+For response, CC, SCF, and other iterative endpoints, optimize the control
+problem as well as the operator kernel. Investigate stronger legal
+preconditioners, compatible warm starts, Krylov/subspace recycling, block or
+multi-RHS solves, reuse of accepted residuals, and removal of duplicate
+provisional/audit evaluations.
+
+Always publish the exact final residual/stationarity check required by the
+method. A provisional approximation can accelerate convergence only when the
+final exact physical operator and acceptance gates remain unchanged. Report
+both per-action cost and the number of actions; otherwise an apparent kernel
+win can be erased by extra iterations.
+
+### Optimize generated-code and compilation cost separately
+
+Compiler/code-generation performance has its own objective. Canonicalize
+equivalent specializations, package common qualified variants AOT, cache
+immutable artifacts by complete compiler/source/target identity, and reserve
+JIT for bounded uncovered domains.
+
+Do not weaken runtime code quality solely to make CI compile faster, and do not
+report a fast-build configuration as production performance. Conversely, a
+runtime specialization whose compile/artifact explosion makes normal deployment
+impractical is not a complete performance solution.
+
+### Build a causal profile before choosing the next optimization
+
+Use an attribution chain from the public endpoint down to the proposed
+mechanism:
+
+```text
+complete wall time
+  -> mutually exclusive phase wall time
+  -> semantic work and data movement
+  -> launches / synchronization / idle gaps
+  -> kernel or library activity
+  -> hardware counters and resource use
+```
+
+Parent wall intervals must be mutually exclusive. Nested profiler scopes,
+CUDA-event intervals, API durations, and summed kernel times are explanatory
+views and must not be added together as if they were independent endpoint
+components.
+
+Use source-matched clean timing for the endpoint and separate instrumented runs
+for attribution. Nsight Systems establishes timeline and causality; Nsight
+Compute or equivalent counters diagnose selected kernels. Static resource
+reports and the [CUDA timing estimator](../developer/cuda_time_estimator.md)
+can prioritize experiments but cannot establish a speedup.
+
+A useful performance issue should therefore state the expected mechanism in
+falsifiable terms, for example: fewer exact source evaluations, fewer bytes
+materialized, a smaller active domain, fewer launches/fences, higher useful
+throughput for unchanged work, or fewer expensive solver actions. If none of
+those changes, a speedup hypothesis is incomplete.
+
 ## Work amplification is a first-class metric
 
 A schedule can satisfy a memory budget while repeating expensive work many
