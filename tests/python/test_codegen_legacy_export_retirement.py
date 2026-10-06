@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import generativeqc_compiler.integral as integral
-import generativeqc_compiler.integral.cuda_lowering as cuda_lowering
-
+from generativeqc_compiler import integral
+from generativeqc_compiler.integral import cuda_lowering
 
 RETIRED_EXPORTS = (
     "DpppFusedPlan",
