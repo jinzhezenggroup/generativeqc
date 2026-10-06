@@ -35,6 +35,7 @@ from .batch_schedule import (
     index_table_length,
     index_table_values,
 )
+from .cuda_blas_reduction import rewrite_dense_reductions_for_blas
 from .cuda_dtype import program_precision, scalar_type
 from .cuda_gemm import gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
@@ -124,6 +125,7 @@ class TensorSchedule:
     stream_reductions: bool = field(default=False, kw_only=True)
     streamed_gemm_reduction: bool = field(default=False, kw_only=True)
     reduction_provider: str = field(default="generated", kw_only=True)
+    blas_reductions: bool = field(default=False, kw_only=True)
     inplace_donation: bool = field(default=False, kw_only=True)
     direct_gemm: bool = True
     layouts: bool = False
@@ -147,6 +149,7 @@ class TensorSchedule:
             "recompute",
             "stream_reductions",
             "streamed_gemm_reduction",
+            "blas_reductions",
             "inplace_donation",
             "direct_gemm",
             "layouts",
@@ -745,6 +748,8 @@ def plan_cuda(
         "cuda",
         preserve_reduction_order=not reassociate_contractions,
     )
+    if schedule.blas_reductions:
+        program = rewrite_dense_reductions_for_blas(program)
     checked_size(max_bytes, "tensor byte budget")
     checked_size(library_bytes, "library workspace")
     checked_size(provider_bytes, "provider allowance")
