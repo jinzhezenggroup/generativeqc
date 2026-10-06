@@ -29,3 +29,19 @@ def test_pair_derivative_selector_preserves_spin_screening_and_force_owner() -> 
             f"launch.template operator()<Unrestricted, Purpose, {enabled}>();"
             in dispatch
         )
+
+
+def test_full_range_force_promotes_qualified_static_128_thread_schedule() -> None:
+    """Keep #1978's measured CTA width as the generic full-range force default."""
+    source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
+    constants = (ROOT / "src/scf/cuda/direct_constants.hpp").read_text()
+    begin = source.index("void launch_bounded_direct_shell_quartet_kernel_scaled(")
+    end = source.index("void launch_bounded_direct_range_exchange_force_kernel(", begin)
+    dispatch = source[begin:end]
+
+    assert "constexpr unsigned kBoundedDirectForceThreads = 128;" in constants
+    assert "Force ? blockDim.x : detail::kBoundedDirectQueueCapacity" in source
+    assert "slot += blockDim.x / detail::kDirectQuartetThreads" in source
+    assert "block.x == kBoundedDirectThreads" in dispatch
+    assert "block.x = kBoundedDirectForceThreads;" in dispatch
+    assert "GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_CTA_THREADS" not in source

@@ -173,7 +173,14 @@ constexpr unsigned kGenericOrderFiveAngularOrder = 5;
 constexpr double kForceDensityProductScreeningTolerance = 1.0e-14;
 constexpr unsigned kBoundedDirectThreads =
     static_cast<unsigned>(detail::kBoundedDirectQueueCapacity);
+// #1978 measured the static full-range force fallback at 128 threads: PBE0
+// warm/moved-warm improved by about 4% at both 48 and 96 atoms while preserving
+// the existing force numerics. Keep the queue capacity at 256; only admission
+// and drain width follow this qualified force CTA.
+constexpr unsigned kBoundedDirectForceThreads = 128;
 static_assert(kBoundedDirectThreads % detail::kDirectQuartetThreads == 0);
+static_assert(kBoundedDirectForceThreads % detail::kDirectQuartetThreads == 0);
+static_assert(kBoundedDirectForceThreads <= kBoundedDirectThreads);
 static_assert(kBoundedDirectThreads <= 1024);
 
 }  // namespace generativeqc::scf::cuda_execution

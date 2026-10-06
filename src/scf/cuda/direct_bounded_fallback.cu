@@ -155,8 +155,13 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const std::size_t page_end = block_domain.prefix
                                      ? min(candidate_count, page_begin + indexed_page_candidates)
                                      : candidate_count;
+    // #1978 qualified a 128-thread full-range force CTA. Admission must
+    // follow the actual force launch width so a smaller CTA does not skip the
+    // second half of a 256-candidate queue page.
+    const unsigned candidate_packet =
+        Force ? blockDim.x : detail::kBoundedDirectQueueCapacity;
     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
-         candidate_begin += detail::kBoundedDirectQueueCapacity) {
+         candidate_begin += candidate_packet) {
       if (threadIdx.x == 0) queue_count = 0;
       __syncthreads();
       const std::size_t candidate = candidate_begin + threadIdx.x;
@@ -307,7 +312,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
 
       if constexpr (FixedAngularOrder < 0 || FixedAngularOrder >= 4) {
         for (std::uint32_t slot = warp; slot < queue_count;
-             slot += kBoundedDirectThreads / detail::kDirectQuartetThreads) {
+             slot += blockDim.x / detail::kDirectQuartetThreads) {
           const ActiveShellQuartetTile base = queue[slot];
           const std::int32_t first_shell = batch.shell_pair_first[base.first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[base.first_pair];
@@ -528,6 +533,11 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
     detail::BoundedDirectBlockDomain block_domain) {
+  // Promote the source-matched #1978 static-128 result at the existing
+  // full-range force boundary only. Preserve explicitly nonstandard launch
+  // shapes so diagnostics and specialized callers retain their own contract.
+  if (block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U)
+    block.x = kBoundedDirectForceThreads;
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   auto launch = [&]<bool Unrestricted, DirectScreeningPurpose Purpose, bool PairDerivatives>() {
