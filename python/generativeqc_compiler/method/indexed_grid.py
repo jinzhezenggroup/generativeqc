@@ -76,7 +76,8 @@ class AoGridBlockProgram:
         density = input_tensor(
             "density", TensorSpec((spin, mu, nu), role="input", differentiable=True)
         )
-        local = self.density_layout.select(density) if self.layout.indexed else density
+        layout = self.density_layout
+        local = layout.select(density) if layout is not None else density
         return Program({"local_density": local})
 
     def projection_program(self, jets: int) -> Program:
@@ -107,7 +108,6 @@ class AoGridBlockProgram:
             "local_potential",
             TensorSpec((spin, local_mu, local_nu), role="input", differentiable=True),
         )
-        potential = (
-            self.density_layout.scatter_add(local) if self.layout.indexed else local
-        )
+        layout = self.density_layout
+        potential = layout.scatter_add(local) if layout is not None else local
         return Program({"potential": potential})
