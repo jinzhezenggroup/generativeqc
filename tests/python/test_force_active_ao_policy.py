@@ -55,7 +55,12 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
 def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> None:
     assert tuple(
         profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("ordinary-direct-active-ao-cost-v3", "cuda-resident-preao-native-csr-v1")
+    ) == (
+        "ordinary-direct-active-ao-cost-v3",
+        "cuda-resident-preao-native-csr-v1",
+        "ordinary-direct-active-ao-cost-v3-budget-auto",
+        "cuda-resident-preao-native-csr-v1-budget-auto",
+    )
 
     below_crossover = resolve_force_active_ao_policy(_workload())
     assert below_crossover.selected
@@ -107,6 +112,35 @@ def test_qualified_default_selects_native_csr() -> None:
     assert decision.producer == "pre-ao-envelope-native-csr"
     assert decision.cache_bytes == 64 << 20
     assert decision.max_active_fraction == 0.8
+
+
+@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_90", "sm_120"])
+@pytest.mark.parametrize("device_name", [None, "arbitrary CUDA device"])
+@pytest.mark.parametrize("grid_points", [589_824, 1_179_648])
+def test_automatic_tiles_preserve_producer_and_guards_without_product_whitelists(
+    architecture: str, device_name: str | None, grid_points: int
+) -> None:
+    fixed = _workload(
+        architecture=architecture, device_name=device_name, grid_points=grid_points
+    )
+    automatic = replace(fixed, tile_policy="budget-auto", tile_points=None)
+    incumbent = resolve_force_active_ao_policy(fixed)
+    selected = resolve_force_active_ao_policy(automatic)
+    assert selected.selected
+    assert selected.profile_id == f"{incumbent.profile_id}-budget-auto"
+    assert (selected.producer, selected.cutoff, selected.cache_bytes) == (
+        incumbent.producer,
+        incumbent.cutoff,
+        incumbent.cache_bytes,
+    )
+    assert selected.max_active_fraction == incumbent.max_active_fraction
+    for miss in (
+        replace(automatic, density_fitted=True),
+        replace(automatic, resident_grid=False),
+        replace(automatic, max_device_bytes=(512 << 20) - 1),
+        replace(automatic, max_host_bytes=(256 << 20) - 1),
+    ):
+        assert not resolve_force_active_ao_policy(miss).selected
 
 
 @pytest.mark.parametrize(

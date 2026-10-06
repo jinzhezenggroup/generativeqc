@@ -14,6 +14,10 @@ from time import perf_counter
 
 import numpy as np
 import pytest
+from generativeqc_compiler.method.stationary_resources import (
+    BECKE_COOPERATIVE_THREADS,
+    GEOMETRY_MAX_SCRATCH_BYTES,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
@@ -38,9 +42,9 @@ def cooperative_becke_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
         requested = kwargs.setdefault("cooperative_becke", True)
         original(self, *args, **kwargs)
         if requested and 1 < self.natom <= 128:
-            assert self.metrics()["becke_threads_per_point"] == 32, (
-                "cooperative qualification selected the generic device fallback"
-            )
+            assert (
+                self.metrics()["becke_threads_per_point"] == BECKE_COOPERATIVE_THREADS
+            ), "cooperative qualification selected the generic device fallback"
 
     monkeypatch.setattr(_CudaSources, "__init__", initialize)
 
@@ -180,6 +184,9 @@ def test_complete_cuda_independent_analytic(
         # CUDA SCF, explicit export and the complete diagnostic call.
         endpoint_seconds = perf_counter() - started
         ref_energy, ref_gradient, refs = independent_gradient(basis, state, method)
+        if "two_electron" in result.components:
+            # These LDA/PBE gates have no exact exchange: Combined is exactly J.
+            refs["two_electron"] = refs["coulomb"]
         source_error = {
             key: float(np.max(np.abs(value - refs[key])))
             for key, value in result.components.items()
@@ -1323,7 +1330,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         )
         sources = []
         lane_bytes = 144 * basis.natom
-        maximum_lanes = min(point_capacity, 2048, (8 << 20) // lane_bytes)
+        maximum_lanes = min(
+            point_capacity, 2048, GEOMETRY_MAX_SCRATCH_BYTES // lane_bytes
+        )
         for lanes, cached, cooperative in (
             (lanes, cached, cooperative)
             for lanes in (
@@ -1371,7 +1380,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             )
             assert owner.metrics()["center_geometry_bytes"] == retained_centers
             selected = cooperative and atom_count <= 128
-            assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
+            assert owner.metrics()["becke_threads_per_point"] == (
+                BECKE_COOPERATIVE_THREADS if selected else 1
+            )
             assert owner.metrics()["becke_shared_bytes"] == (
                 16 + 64 * (pairs if atom_count <= 32 else 4 * (2 * atom_count - 5) // 2)
                 if selected

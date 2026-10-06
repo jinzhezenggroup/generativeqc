@@ -457,7 +457,7 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve
     assert plan["grid"].peak_bytes + source + reserve < 512 << 20
-    assert plan["source"].becke_threads_per_point == 32
+    assert plan["source"].becke_threads_per_point == 128
     assert _resource_preflight(basis, host)["host"] == host
     with pytest.raises(ValueError, match="additional-host byte budget"):
         _resource_preflight(basis, host - 1)

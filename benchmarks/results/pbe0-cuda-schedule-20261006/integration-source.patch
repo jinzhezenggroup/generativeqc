@@ -1,0 +1,290 @@
+diff --git a/benchmarks/readme_omol25.py b/benchmarks/readme_omol25.py
+index 45089f46c..3e2d3ebb5 100644
+--- a/benchmarks/readme_omol25.py
++++ b/benchmarks/readme_omol25.py
+@@ -73,7 +73,11 @@ def source_hashes() -> dict[str, str]:
+         "python/generativeqc/_snapshot_grid_cache.py",
+         "python/generativeqc/resources_ks.py",
+         "python/generativeqc/_stationary_cuda.py",
++        "python/generativeqc/_force_active_ao.py",
+         "python/generativeqc/batch.py",
++        "python/generativeqc_compiler/dft/ao_cuda.py",
++        "python/generativeqc_compiler/dft/xc_contraction_cuda.py",
++        "python/generativeqc_compiler/method/stationary_cuda.py",
+         "python/generativeqc_compiler/method/stationary_resources.py",
+         "python/generativeqc_compiler/method/stationary_composite_resources.py",
+         "python/generativeqc/_stationary_composite_cuda.py",
+diff --git a/python/generativeqc/_force_active_ao.py b/python/generativeqc/_force_active_ao.py
+index 68483a62d..3cdc8271e 100644
+--- a/python/generativeqc/_force_active_ao.py
++++ b/python/generativeqc/_force_active_ao.py
+@@ -7,7 +7,7 @@ source/device workload evidence; every miss retains the dense AO domain.
+ from __future__ import annotations
+ 
+ import typing
+-from dataclasses import asdict, dataclass
++from dataclasses import asdict, dataclass, replace
+ 
+ DEFAULT_FORCE_ACTIVE_AO_POLICY = "auto"
+ _SUPPORTED_DERIVATIVE_ORDERS = frozenset((1, 2))
+@@ -232,6 +232,24 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] =
+ )
+ 
+ 
++# Keep explicit 256-point callers and the same continuous producer crossover.
++# Automatic tiles are admitted by the shared complete-owner byte-budget planner;
++# do not let their policy label silently disable the existing indexed consumer.
++QUALIFIED_FORCE_ACTIVE_AO_PROFILES += tuple(
++    replace(
++        profile,
++        profile_id=f"{profile.profile_id}-budget-auto",
++        evidence=(
++            *profile.evidence,
++            ".agents/notes/implemented/performance/2026-10-06-pbe0-budget-admitted-cuda-schedule.md",
++        ),
++        tile_policy="budget-auto",
++        tile_points=None,
++    )
++    for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
++)
++
++
+ def resolve_force_active_ao_policy(
+     workload: ForceActiveAoWorkload,
+     *,
+diff --git a/python/generativeqc/_stationary_cuda.py b/python/generativeqc/_stationary_cuda.py
+index aed90d7b4..1e3ff6944 100644
+--- a/python/generativeqc/_stationary_cuda.py
++++ b/python/generativeqc/_stationary_cuda.py
+@@ -2836,7 +2836,10 @@ def _complete_rks_cuda_gradient_diagnostic(
+ 
+     requested_tile_points = tile_points
+     layout, grid_work = plan_stationary_cuda_grid_schedule(
+-        grid_points=len(state.grid.points), tile_points=tile_points, admit=admit_tile
++        grid_points=len(state.grid.points),
++        tile_points=tile_points,
++        admit=admit_tile,
++        preferred_tile_points=512,
+     )
+     grid_plan = layout.grid_plan
+     tensor_plans = layout.tensor_plans
+diff --git a/python/generativeqc/batch.py b/python/generativeqc/batch.py
+index bf9e8fc92..89d72a00b 100644
+--- a/python/generativeqc/batch.py
++++ b/python/generativeqc/batch.py
+@@ -644,7 +644,7 @@ class PreparedBatch:
+                     tile_policy, policy_tile_points = "budget-auto", None
+                 else:
+                     max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
+-                    tile_policy, policy_tile_points = "fixed", 256
++                    tile_policy, policy_tile_points = "budget-auto", None
+ 
+                 profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
+                 resident_provider = getattr(source, "cuda_resident_grid", None)
+@@ -729,6 +729,7 @@ class PreparedBatch:
+                     all_electron and not source.method_ir.full_range_exact_exchange
+                 )
+                 kwargs = {
++                    "tile_points": policy_tile_points,
+                     "compiler": (
+                         None if packaged else self._stationary_cuda_compiler()
+                     ),
+diff --git a/python/generativeqc_compiler/method/stationary_resources.py b/python/generativeqc_compiler/method/stationary_resources.py
+index e3c9e3c84..c4ad37550 100644
+--- a/python/generativeqc_compiler/method/stationary_resources.py
++++ b/python/generativeqc_compiler/method/stationary_resources.py
+@@ -13,12 +13,12 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
+ from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
+ 
+ GEOMETRY_MAX_LANES = 2048
+-GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
++GEOMETRY_MAX_SCRATCH_BYTES = 16777216
+ GEOMETRY_THREADS = 32
+ BECKE_COOPERATIVE_MAX_ATOMS = 128
+ BECKE_RETAINED_MAX_ATOMS = 32
+ BECKE_PAIR_TILE_ROWS = 4
+-BECKE_COOPERATIVE_THREADS = 32
++BECKE_COOPERATIVE_THREADS = 128
+ BECKE_PAIR_STATE_BYTES = 64
+ BECKE_COOPERATIVE_CONTROL_BYTES = 16
+ STATIONARY_MAX_ATOMS = 128
+@@ -36,14 +36,16 @@ def plan_stationary_cuda_grid_schedule(
+     grid_points: int,
+     tile_points: int | None,
+     admit: Callable[[int], _TileLayout],
++    preferred_tile_points: int = 1024,
+ ) -> _TileLayout:
+     """Select one complete, budget-admitted semilocal or composite grid tile.
+ 
+     The callback is a dry capacity/work query: it must account for every live
+     owner, raise ValueError on rejection, and never allocate or execute CUDA.
+     AO and method owners retain their own layout formulas. The shared schedule
+-    prefers 1024 points, then the qualified 256-point fallback and smaller
+-    tiles; it cannot shrink whole-grid storage or change the scientific grid.
++    prefers the consumer's requested tile (1024 by default), then the qualified
++    256-point fallback and smaller tiles. Preference is a work/coherence choice,
++    not permission to exceed the complete owner's budgets or change its grid.
+     Explicit requests are tried exactly once, including requests above the
+     point count. This preserves caller-controlled capacity and tail tests.
+     """
+@@ -53,13 +55,16 @@ def plan_stationary_cuda_grid_schedule(
+         type(tile_points) is not int or not 1 <= tile_points <= 4096
+     ):
+         raise ValueError("stationary CUDA tile_points must be None or in [1,4096]")
++    if type(preferred_tile_points) is not int or not 1 <= preferred_tile_points <= 4096:
++        raise ValueError("stationary CUDA preferred_tile_points must be in [1,4096]")
+     candidates = (
+         (tile_points,)
+         if tile_points is not None
+         else tuple(
+             dict.fromkeys(
+                 min(points, grid_points)
+-                for points in (1024, 256, 128, 64, 32, 16, 8, 4, 2, 1)
++                for points in (preferred_tile_points, 256, 128, 64, 32, 16, 8, 4, 2, 1)
++                if points <= preferred_tile_points
+             )
+         )
+     )
+diff --git a/tests/python/test_dft_complete_cuda.py b/tests/python/test_dft_complete_cuda.py
+index 63b6ff8aa..ca04616fc 100644
+--- a/tests/python/test_dft_complete_cuda.py
++++ b/tests/python/test_dft_complete_cuda.py
+@@ -14,6 +14,10 @@ from time import perf_counter
+ 
+ import numpy as np
+ import pytest
++from generativeqc_compiler.method.stationary_resources import (
++    BECKE_COOPERATIVE_THREADS,
++    GEOMETRY_MAX_SCRATCH_BYTES,
++)
+ 
+ pytestmark = pytest.mark.skipif(
+     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
+@@ -38,9 +42,9 @@ def cooperative_becke_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
+         requested = kwargs.setdefault("cooperative_becke", True)
+         original(self, *args, **kwargs)
+         if requested and 1 < self.natom <= 128:
+-            assert self.metrics()["becke_threads_per_point"] == 32, (
+-                "cooperative qualification selected the generic device fallback"
+-            )
++            assert (
++                self.metrics()["becke_threads_per_point"] == BECKE_COOPERATIVE_THREADS
++            ), "cooperative qualification selected the generic device fallback"
+ 
+     monkeypatch.setattr(_CudaSources, "__init__", initialize)
+ 
+@@ -180,6 +184,9 @@ def test_complete_cuda_independent_analytic(
+         # CUDA SCF, explicit export and the complete diagnostic call.
+         endpoint_seconds = perf_counter() - started
+         ref_energy, ref_gradient, refs = independent_gradient(basis, state, method)
++        if "two_electron" in result.components:
++            # These LDA/PBE gates have no exact exchange: Combined is exactly J.
++            refs["two_electron"] = refs["coulomb"]
+         source_error = {
+             key: float(np.max(np.abs(value - refs[key])))
+             for key, value in result.components.items()
+@@ -1323,7 +1330,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
+         )
+         sources = []
+         lane_bytes = 144 * basis.natom
+-        maximum_lanes = min(point_capacity, 2048, (8 << 20) // lane_bytes)
++        maximum_lanes = min(
++            point_capacity, 2048, GEOMETRY_MAX_SCRATCH_BYTES // lane_bytes
++        )
+         for lanes, cached, cooperative in (
+             (lanes, cached, cooperative)
+             for lanes in (
+@@ -1371,7 +1380,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
+             )
+             assert owner.metrics()["center_geometry_bytes"] == retained_centers
+             selected = cooperative and atom_count <= 128
+-            assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
++            assert owner.metrics()["becke_threads_per_point"] == (
++                BECKE_COOPERATIVE_THREADS if selected else 1
++            )
+             assert owner.metrics()["becke_shared_bytes"] == (
+                 16 + 64 * (pairs if atom_count <= 32 else 4 * (2 * atom_count - 5) // 2)
+                 if selected
+diff --git a/benchmarks/qualify_cuda_schedule.py b/benchmarks/qualify_cuda_schedule.py
+new file mode 100644
+index 000000000..3cb303d0a
+--- /dev/null
++++ b/benchmarks/qualify_cuda_schedule.py
+@@ -0,0 +1,77 @@
++"""Run complete PBE0 endpoints on an exact CUDA schedule source trial.
++
++Unlike AO-producer qualification, schedule trials may legitimately select a
++different existing AO policy. Preserve that policy and its work receipt rather
++than forcing a producer or assuming that a larger tile remains sparse. Intrusive
++device timers belong in separate runs, never in the clean timing population.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import sys
++from collections.abc import Mapping
++from pathlib import Path
++from typing import Any
++from unittest.mock import patch
++
++import numpy as np
++from generativeqc import _stationary_cuda
++from generativeqc.batch import PreparedBatch
++
++from benchmarks.readme_omol25 import main
++from benchmarks.readme_pbe0 import PBE0
++
++
++def run() -> None:
++    """Retain the standard scientific protocol and actual production routing."""
++    parser = argparse.ArgumentParser(add_help=False)
++    parser.add_argument("--intrusive", action="store_true")
++    arguments, remaining = parser.parse_known_args()
++    diagnostic = _stationary_cuda.complete_rks_cuda_gradient_diagnostic
++    original_force = PreparedBatch._public_dft_cuda_force
++    work_records = []
++
++    def profiled(*values: Any, **kwargs: Any) -> Any:
++        kwargs["profile_device"] = arguments.intrusive
++        return diagnostic(*values, **kwargs)
++
++    def observed_force(self: Any, *values: Any, **kwargs: Any) -> Any:
++        forces, work = original_force(self, *values, **kwargs)
++        work_records.append(work)
++        return forces, work
++
++    def encode(value: Any) -> Any:
++        if isinstance(value, Mapping):
++            return dict(value)
++        if isinstance(value, np.ndarray):
++            return value.tolist()
++        if isinstance(value, np.generic):
++            return value.item()
++        raise TypeError(f"unsupported schedule receipt value: {type(value)}")
++
++    output = (
++        Path(remaining[remaining.index("--output") + 1])
++        if "--output" in remaining
++        else None
++    )
++    with (
++        patch.object(sys, "argv", [sys.argv[0], *remaining]),
++        patch.object(
++            _stationary_cuda, "complete_rks_cuda_gradient_diagnostic", profiled
++        ),
++        patch.object(PreparedBatch, "_public_dft_cuda_force", observed_force),
++    ):
++        try:
++            main(PBE0)
++        finally:
++            if output is not None and output.exists():
++                record = json.loads(output.read_text())
++                record["cuda_schedule_intrusive"] = arguments.intrusive
++                record["cuda_schedule_force_work"] = work_records
++                output.write_text(json.dumps(record, indent=2, default=encode) + "\n")
++
++
++if __name__ == "__main__":
++    run()

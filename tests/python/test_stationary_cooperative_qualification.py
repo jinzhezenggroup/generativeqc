@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.method.stationary_resources import BECKE_COOPERATIVE_THREADS
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -33,7 +34,11 @@ def test_full_force_fixture_selects_opt_in_and_preserves_matrix_choices(
             observed.append((integral_derivatives, cooperative_becke))
 
         def metrics(self) -> dict[str, int]:
-            return {"becke_threads_per_point": 32 if self.selected else 1}
+            return {
+                "becke_threads_per_point": BECKE_COOPERATIVE_THREADS
+                if self.selected
+                else 1
+            }
 
     monkeypatch.setattr(runtime, "_CudaSources", Owner)
     monkeypatch.setenv("GENERATIVEQC_TEST_COOPERATIVE_BECKE", "1")

@@ -52,7 +52,7 @@ def _plan(
 def test_automatic_composite_schedule_prefers_more_concurrent_points() -> None:
     selected = _plan()
     assert selected.grid.tile_points == selected.sources.geometry_lanes == 1024
-    assert selected.sources.becke_threads_per_point == 32
+    assert selected.sources.becke_threads_per_point == 128
     assert selected.device_bound <= 1 << 30
     assert selected.host_bound <= 2 << 30
 

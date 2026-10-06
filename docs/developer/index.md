@@ -95,6 +95,7 @@ hf_force_finalization
 dft_grid
 preao_force_domain
 becke_normalization
+stationary_cuda_scheduling
 dft_d3
 xc_expressions
 xc_integration
