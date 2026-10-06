@@ -40,6 +40,11 @@ through finite Slurm GPU allocations. Compare with `current-default`
 on identical inputs/binaries using five interleaved campaigns. `auto` verifies
 the real capability/cost-based portfolio. `current-default` retains only the
 pre-existing sampled profile with its original crossover and 16 MiB allowance.
+After compiler-input changes, build the needed stationary AOT `*_manifest`
+targets, such as `generativeqc_stationary_pbe0_rks_spd_manifest`, as well as the
+core library. These targets build their corresponding libraries and record the
+current contract/binary identities. Library-only targets can leave an old
+manifest; do not bypass the fail-closed artifact loader to qualify such a build.
 Use `--intrusive` only
 in a separate campaign. Retain all cold/warm/moved/moved-warm E+F, actual Fock
 histories, independent reference gates and every public force work census.
@@ -78,4 +83,4 @@ not qualify a portfolio whose incumbent high-work default is already sampled.
 The qualified objective is stable warm and moved-warm E+F improvement above the
 shared robust-noise gate. Cold/moved results remain visible; a warm qualification
 does not imply statistically significant cold improvement. Rationale and
-evidence are in the [pre-AO native CSR decision](../../.agents/notes/implemented/performance/2026-10-06-pre-ao-native-csr.md).
+evidence are in the [pre-AO portfolio decision](../../.agents/notes/implemented/performance/2026-10-06-pre-ao-portfolio-default.md).
