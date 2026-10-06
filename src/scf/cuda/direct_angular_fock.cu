@@ -29,6 +29,21 @@ __global__ void build_fock_direct_quartet_kernel(
       static_cast<std::size_t>(blockIdx.x), threadIdx.x);
 }
 
+/** One bounded packet shares cached primitive-pair preparation and recurrence.
+ * The exact existing queue/admission domain and generated-class exclusions are
+ * retained. Its shared workspace is below the portable 48 KiB CUDA limit. */
+template <bool Unrestricted, unsigned AngularOrder>
+__global__ void build_fock_direct_pair_materialized_kernel(
+    DeviceBatch batch, const std::uint32_t* count, const ActiveShellQuartetTile* tasks,
+    double screening_tolerance, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* fock, const std::uint64_t* generated_mask) {
+  if (blockIdx.x >= *count) return;
+  __shared__ MaterializedDirectPairRecurrence<AngularOrder> shared;
+  contract_materialized_direct_pair_fock<Unrestricted, AngularOrder>(
+      batch, tasks[blockIdx.x], screening_tolerance, schwarz_bounds, density, active, fock,
+      generated_mask, shared);
+}
+
 /** Pack exact ssss shell tasks across all lanes of one worker warp. */
 template <bool Unrestricted, unsigned AngularOrder>
 __global__ void build_fock_direct_quartet_packed_persistent_kernel(
@@ -131,61 +146,80 @@ void launch_angular_fock_quartets(
         order_tile_count = generic_order5_tile_count;
         order_tiles = generic_order5_tiles;
       }
-      if constexpr (std::is_same_v<EvalScalar, MixedPrecisionFloat>) {
-        // Mixed work begins at order three.  It keeps an independent queue and
-        // persistent head so the ERI recurrence contains no per-warp precision
-        // branch and low-order shell-fused workers remain unchanged.
-        if constexpr (AngularOrder >= kMixedFockMinimumAngularOrder &&
-                      AngularOrder < kPersistentFockAngularOrderCount) {
+      bool materialized = false;
+      if constexpr (AngularOrder >= 5 && std::is_same_v<EvalScalar, double>) {
+        // Component-specific reachable closures and reassociated Hermite sums
+        // retain their own source contracts. Missing pair storage also keeps
+        // the bounded incumbent, without allocation or selection during replay.
+        if (batch.direct_pair_materialized_values && batch.shell_primitive_pairs &&
+            batch.shell_pair_primitive_offsets && !(batch.direct_coulomb_reachable & 1U) &&
+            !(batch.direct_hermite_convolution & 1U)) {
+          build_fock_direct_pair_materialized_kernel<Unrestricted, AngularOrder>
+              <<<static_cast<unsigned>(capacities[AngularOrder]), detail::kDirectQuartetTileSize, 0,
+                 stream>>>(batch, order_tile_count, order_tiles, screening_tolerance,
+                           schwarz_bounds, density, active, fock, generated_fock_shell_class_mask);
+          materialized = true;
+        }
+      }
+      if (!materialized) {
+        if constexpr (std::is_same_v<EvalScalar, MixedPrecisionFloat>) {
+          // Mixed work begins at order three.  It keeps an independent queue and
+          // persistent head so the ERI recurrence contains no per-warp precision
+          // branch and low-order shell-fused workers remain unchanged.
+          if constexpr (AngularOrder >= kMixedFockMinimumAngularOrder &&
+                        AngularOrder < kPersistentFockAngularOrderCount) {
+            const unsigned capacity_blocks = static_cast<unsigned>(
+                capacities[AngularOrder] * detail::direct_quartet_subtiles_per_tile(AngularOrder));
+            build_fock_direct_quartet_persistent_kernel<Unrestricted, AngularOrder, EvalScalar>
+                <<<std::min(capacity_blocks, persistent_worker_blocks),
+                   detail::kDirectQuartetThreads, 0, stream>>>(
+                    batch, order_tile_count, order_tiles, persistent_task_heads + AngularOrder,
+                    screening_tolerance, schwarz_bounds, density, active, fock,
+                    generated_fock_shell_class_mask);
+          } else if constexpr (AngularOrder >= kPersistentFockAngularOrderCount) {
+            build_fock_direct_quartet_kernel<Unrestricted, AngularOrder, EvalScalar>
+                <<<static_cast<unsigned>(capacities[AngularOrder] *
+                                         detail::direct_quartet_subtiles_per_tile(AngularOrder)),
+                   detail::kDirectQuartetThreads, 0, stream>>>(
+                    batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds,
+                    density, active, fock, generated_fock_shell_class_mask);
+          }
+        } else if constexpr (AngularOrder < kPackedSsssAngularOrderCount) {
+          const unsigned capacity_workers =
+              static_cast<unsigned>((capacities[AngularOrder] + detail::kDirectQuartetThreads - 1) /
+                                    detail::kDirectQuartetThreads);
+          build_fock_direct_quartet_packed_persistent_kernel<Unrestricted, AngularOrder>
+              <<<std::min(capacity_workers, persistent_worker_blocks),
+                 detail::kDirectQuartetThreads, 0, stream>>>(
+                  batch, order_tile_count, order_tiles, persistent_task_heads + AngularOrder,
+                  screening_tolerance, schwarz_bounds, density, active, fock);
+        } else if constexpr (AngularOrder == kFusedOrderTwoAngularOrder) {
+          const unsigned capacity_workers =
+              static_cast<unsigned>((capacities[AngularOrder] + detail::kDirectQuartetThreads - 1) /
+                                    detail::kDirectQuartetThreads);
+          build_fock_direct_order2_persistent_kernel<Unrestricted>
+              <<<std::min(capacity_workers, persistent_worker_blocks),
+                 detail::kDirectQuartetThreads, 0, stream>>>(
+                  batch, order_tile_count, order_tiles, persistent_task_heads + AngularOrder,
+                  screening_tolerance, schwarz_bounds, density, active, fock,
+                  generated_fock_shell_class_mask);
+        } else if constexpr (AngularOrder < kPersistentFockAngularOrderCount) {
           const unsigned capacity_blocks = static_cast<unsigned>(
               capacities[AngularOrder] * detail::direct_quartet_subtiles_per_tile(AngularOrder));
-          build_fock_direct_quartet_persistent_kernel<Unrestricted, AngularOrder, EvalScalar>
+          build_fock_direct_quartet_persistent_kernel<Unrestricted, AngularOrder>
               <<<std::min(capacity_blocks, persistent_worker_blocks), detail::kDirectQuartetThreads,
                  0, stream>>>(batch, order_tile_count, order_tiles,
                               persistent_task_heads + AngularOrder, screening_tolerance,
                               schwarz_bounds, density, active, fock,
                               generated_fock_shell_class_mask);
-        } else if constexpr (AngularOrder >= kPersistentFockAngularOrderCount) {
-          build_fock_direct_quartet_kernel<Unrestricted, AngularOrder, EvalScalar>
+        } else {
+          build_fock_direct_quartet_kernel<Unrestricted, AngularOrder>
               <<<static_cast<unsigned>(capacities[AngularOrder] *
                                        detail::direct_quartet_subtiles_per_tile(AngularOrder)),
                  detail::kDirectQuartetThreads, 0, stream>>>(
                   batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds,
                   density, active, fock, generated_fock_shell_class_mask);
         }
-      } else if constexpr (AngularOrder < kPackedSsssAngularOrderCount) {
-        const unsigned capacity_workers =
-            static_cast<unsigned>((capacities[AngularOrder] + detail::kDirectQuartetThreads - 1) /
-                                  detail::kDirectQuartetThreads);
-        build_fock_direct_quartet_packed_persistent_kernel<Unrestricted, AngularOrder>
-            <<<std::min(capacity_workers, persistent_worker_blocks), detail::kDirectQuartetThreads,
-               0, stream>>>(batch, order_tile_count, order_tiles,
-                            persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, fock);
-      } else if constexpr (AngularOrder == kFusedOrderTwoAngularOrder) {
-        const unsigned capacity_workers =
-            static_cast<unsigned>((capacities[AngularOrder] + detail::kDirectQuartetThreads - 1) /
-                                  detail::kDirectQuartetThreads);
-        build_fock_direct_order2_persistent_kernel<Unrestricted>
-            <<<std::min(capacity_workers, persistent_worker_blocks), detail::kDirectQuartetThreads,
-               0, stream>>>(batch, order_tile_count, order_tiles,
-                            persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, fock, generated_fock_shell_class_mask);
-      } else if constexpr (AngularOrder < kPersistentFockAngularOrderCount) {
-        const unsigned capacity_blocks = static_cast<unsigned>(
-            capacities[AngularOrder] * detail::direct_quartet_subtiles_per_tile(AngularOrder));
-        build_fock_direct_quartet_persistent_kernel<Unrestricted, AngularOrder>
-            <<<std::min(capacity_blocks, persistent_worker_blocks), detail::kDirectQuartetThreads,
-               0, stream>>>(batch, order_tile_count, order_tiles,
-                            persistent_task_heads + AngularOrder, screening_tolerance,
-                            schwarz_bounds, density, active, fock, generated_fock_shell_class_mask);
-      } else {
-        build_fock_direct_quartet_kernel<Unrestricted, AngularOrder>
-            <<<static_cast<unsigned>(capacities[AngularOrder] *
-                                     detail::direct_quartet_subtiles_per_tile(AngularOrder)),
-               detail::kDirectQuartetThreads, 0, stream>>>(
-                batch, order_tile_count, order_tiles, screening_tolerance, schwarz_bounds, density,
-                active, fock, generated_fock_shell_class_mask);
       }
     }
     launch_angular_fock_quartets<Unrestricted, EvalScalar, AngularOrder + 1>(
