@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import runpy
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / ".github/scripts/run_cumetal_cuda_pytests.py"
@@ -41,8 +46,7 @@ def test_cumetal_qualification_excludes_known_nvidia_only_response_gate() -> Non
     assert set(namespace["GATE_NODEIDS"]).issubset(qualification)
     assert len(qualification) > len(namespace["GATE_NODEIDS"])
     assert not any(
-        "resident_rhf_response_matches_host_operator" in item
-        for item in qualification
+        "resident_rhf_response_matches_host_operator" in item for item in qualification
     )
 
 
@@ -65,3 +69,104 @@ def test_cumetal_workflow_keeps_routine_and_qualification_budgets_separate() -> 
     assert 'CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"' in workflow
     assert 'GENERATIVEQC_DFT_CUDA_TEST: "1"' in workflow
     assert "Report NVIDIA-only resident-response test coverage" not in workflow
+
+
+@pytest.mark.parametrize("trace_every_endpoint", (False, True))
+def test_junit_provenance_isolated_for_each_native_endpoint(
+    tmp_path: Path, trace_every_endpoint: bool
+) -> None:
+    """Exercise real pytest FD capture, including parameterized native output."""
+    test_file = tmp_path / "test_native_endpoint.py"
+    test_file.write_text(
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.parametrize('endpoint', ('lda-rks', 'pbe-rks', 'lda-uks', 'pbe-uks'))\n"
+        "def test_endpoint(endpoint):\n"
+        f"    if endpoint == 'lda-rks' or {trace_every_endpoint!r}:\n"
+        "        os.write(2, b'device=apple_gpu launch_success=true\\n')\n",
+        encoding="utf-8",
+    )
+    junit = tmp_path / "endpoint.xml"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(test_file),
+            "--capture=fd",
+            "-o",
+            "junit_logging=all",
+            "-o",
+            "junit_log_passing_tests=true",
+            f"--junitxml={junit}",
+            "-q",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases, skipped, missing = _runner()["junit_status"](junit)
+    assert cases == 4
+    assert skipped == 0
+    assert missing == (
+        []
+        if trace_every_endpoint
+        else [
+            "test_endpoint[pbe-rks]",
+            "test_endpoint[lda-uks]",
+            "test_endpoint[pbe-uks]",
+        ]
+    )
+
+
+def test_junit_missing_or_malformed_reports_fail_closed(tmp_path: Path) -> None:
+    status = _runner()["junit_status"]
+    junit = tmp_path / "endpoint.xml"
+    assert status(junit) == (0, 0, [])
+    junit.write_text("<testsuite><testcase", encoding="utf-8")
+    with pytest.raises(ET.ParseError):
+        status(junit)
+    junit.write_text("<testsuite />", encoding="utf-8")
+    assert status(junit) == (0, 0, [])
+
+
+@pytest.mark.parametrize("missing_provenance", (False, True))
+def test_runner_rejects_shared_process_provenance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, missing_provenance: bool
+) -> None:
+    namespace = _runner()
+    main = namespace["main"]
+    runtime = main.__globals__
+    calls = []
+    monkeypatch.setitem(runtime, "selected_nodeids", lambda: ["test_group"])
+    monkeypatch.setitem(runtime, "Path", lambda _: tmp_path / "endpoint.xml")
+
+    def run(command: list[str], timeout: int) -> tuple[int, str, bool]:
+        calls.append((command, timeout))
+        suite = ET.Element("testsuite")
+        for name in ("first", "second"):
+            case = ET.SubElement(suite, "testcase", name=name)
+            if name == "first" or not missing_provenance:
+                ET.SubElement(
+                    case, "system-err"
+                ).text = "device=apple_gpu launch_success=true"
+        ET.ElementTree(suite).write(tmp_path / "endpoint.xml")
+        # A successful process-wide dispatch must not mask an untraced sibling.
+        return 0, "device=apple_gpu launch_success=true", False
+
+    monkeypatch.setitem(runtime, "stream_process", run)
+    if missing_provenance:
+        with pytest.raises(SystemExit) as error:
+            main()
+        assert error.value.code == 1
+    else:
+        main()
+    command, timeout = calls[0]
+    assert "--capture=fd" in command
+    assert "junit_logging=all" in command
+    assert "junit_log_passing_tests=true" in command
+    assert "-s" not in command
+    assert 0 < timeout <= runtime["TIMEOUT_SECONDS"]

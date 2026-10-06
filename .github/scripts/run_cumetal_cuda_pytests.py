@@ -107,13 +107,23 @@ def stream_process(
     return return_code, "".join(output), timed_out
 
 
-def junit_status(path: Path) -> tuple[int, int]:
+def junit_status(path: Path) -> tuple[int, int, list[str]]:
     if not path.exists():
-        return 0, 0
+        return 0, 0, []
     root = ET.parse(path).getroot()
     cases = root.findall(".//testcase")
     skipped = [case for case in cases if case.find("skipped") is not None]
-    return len(cases), len(skipped)
+    missing_provenance = []
+    for case in cases:
+        # Pytest's FD capture retains native CuMetal stdout/stderr separately
+        # for each parameterized endpoint. A sibling's dispatch or a session
+        # smoke must not qualify a case with no Apple-GPU execution of its own.
+        output = "\n".join(
+            case.findtext(stream, "") for stream in ("system-out", "system-err")
+        )
+        if "device=apple_gpu" not in output or "launch_success=true" not in output:
+            missing_provenance.append(case.get("name", "<unnamed>"))
+    return len(cases), len(skipped), missing_provenance
 
 
 def main() -> None:
@@ -142,17 +152,22 @@ def main() -> None:
             flush=True,
         )
         junit = Path(f"/tmp/generativeqc-cuda-test-{index}.xml")
+        junit.unlink(missing_ok=True)
         command = [
             sys.executable,
             "-m",
             "pytest",
             nodeid,
             "-vv",
-            "-s",
+            "--capture=fd",
+            "-o",
+            "junit_logging=all",
+            "-o",
+            "junit_log_passing_tests=true",
             f"--junitxml={junit}",
         ]
-        return_code, output, timed_out = stream_process(command, timeout)
-        cases, skipped = junit_status(junit)
+        return_code, _output, timed_out = stream_process(command, timeout)
+        cases, skipped, missing_provenance = junit_status(junit)
         failure: str | None = None
         if timed_out:
             failure = f"TIMEOUT: {nodeid}"
@@ -162,8 +177,10 @@ def main() -> None:
             failure = f"INVALID RESULT: {nodeid} produced no testcases"
         elif skipped:
             failure = f"SKIPPED: {nodeid} ({skipped}/{cases} cases)"
-        elif "device=apple_gpu" not in output or "launch_success=true" not in output:
-            failure = f"MISSING APPLE-GPU PROVENANCE: {nodeid}"
+        elif missing_provenance:
+            failure = f"MISSING APPLE-GPU PROVENANCE: {nodeid}: " + ", ".join(
+                missing_provenance
+            )
         if failure is not None:
             failures.append(failure)
         print("::endgroup::", flush=True)
