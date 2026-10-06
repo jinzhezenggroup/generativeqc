@@ -1,12 +1,12 @@
 // Standalone real-device scheduler gate. It does NOT qualify ERI/force arithmetic.
-#include "scf/cuda/direct_warp_queue.cuh"
-
 #include <cuda_runtime.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <vector>
+
+#include "scf/cuda/direct_warp_queue.cuh"
 
 namespace gpu = generativeqc::scf::cuda_execution;
 namespace detail = generativeqc::scf::detail;

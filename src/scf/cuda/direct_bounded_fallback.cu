@@ -66,8 +66,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
   __shared__ unsigned long long block_quartet;
   // Bounded CTA-local metadata, not another topology-sized task inventory.
   // The ordinary template has no queue arrays; verify linked resources anyway.
-  __shared__ detail::BoundedClassWarpStorage<
-      WarpPull, detail::kDirectQuartetShellClassCount, detail::kBoundedDirectQueueCapacity>
+  __shared__ detail::BoundedClassWarpStorage<WarpPull, detail::kDirectQuartetShellClassCount,
+                                             detail::kBoundedDirectQueueCapacity>
       warp_queue;
   const unsigned lane = threadIdx.x % detail::kDirectQuartetThreads;
   const unsigned warp = threadIdx.x / detail::kDirectQuartetThreads;
@@ -319,9 +319,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
         unsigned preferred_class = warp;
         for (std::uint32_t slot = first_direct_warp_task(warp_queue, warp, preferred_class);
              slot < queue_count;
-             slot = next_direct_warp_task(
-                 warp_queue, slot, kBoundedDirectThreads / detail::kDirectQuartetThreads,
-                 preferred_class)) {
+             slot = next_direct_warp_task(warp_queue, slot,
+                                          kBoundedDirectThreads / detail::kDirectQuartetThreads,
+                                          preferred_class)) {
           const ActiveShellQuartetTile base = queue[slot];
           const std::int32_t first_shell = batch.shell_pair_first[base.first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[base.first_pair];
@@ -529,39 +529,39 @@ void launch_bounded_direct_shell_quartet_kernel_scaled_impl(
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
-      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true, -1, -1, WarpPull>
-          <<<grid, block, shared_bytes, stream>>>(
-              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
-              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true, -1, -1,
+                                          WarpPull><<<grid, block, shared_bytes, stream>>>(
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
+          enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
+          global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
+          0.0, false, false, block_domain);
     } else {
-      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true, -1, -1, WarpPull>
-          <<<grid, block, shared_bytes, stream>>>(
-              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
-              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+      bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true, -1, -1,
+                                          WarpPull><<<grid, block, shared_bytes, stream>>>(
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
+          enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
+          global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
+          0.0, false, false, block_domain);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
-      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, true, -1, -1, WarpPull>
-          <<<grid, block, shared_bytes, stream>>>(
-              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
-              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, true, -1, -1,
+                                          WarpPull><<<grid, block, shared_bytes, stream>>>(
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
+          enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
+          global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
+          0.0, false, false, block_domain);
     } else {
-      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true, -1, -1, WarpPull>
-          <<<grid, block, shared_bytes, stream>>>(
-              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
-              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
-              density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+      bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true, -1, -1,
+                                          WarpPull><<<grid, block, shared_bytes, stream>>>(
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
+          enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
+          global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
+          0.0, false, false, block_domain);
     }
   }
 }

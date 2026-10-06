@@ -49,8 +49,7 @@ struct BoundedClassWarpQueue {
   GENERATIVEQC_WARP_QUEUE_INLINE std::uint32_t take(unsigned bucket, AtomicOps& atomics) {
     std::uint32_t slot = atomics.load(heads + bucket);
     while (slot != empty) {
-      const std::uint32_t observed =
-          atomics.compare_exchange(heads + bucket, slot, next[slot]);
+      const std::uint32_t observed = atomics.compare_exchange(heads + bucket, slot, next[slot]);
       if (observed == slot) return slot;
       slot = observed;
     }
@@ -63,8 +62,7 @@ struct BoundedClassWarpQueue {
    * Lists are LIFO by admission linearization, not a stable/FIFO reduction order.
    */
   template <class AtomicOps>
-  GENERATIVEQC_WARP_QUEUE_INLINE std::uint32_t take_any(unsigned& preferred,
-                                                       AtomicOps& atomics) {
+  GENERATIVEQC_WARP_QUEUE_INLINE std::uint32_t take_any(unsigned& preferred, AtomicOps& atomics) {
     unsigned bucket = preferred < bucket_count ? preferred : 0U;
     for (unsigned visited = 0; visited < bucket_count; ++visited) {
       const std::uint32_t slot = take(bucket, atomics);

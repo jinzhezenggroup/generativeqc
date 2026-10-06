@@ -13,12 +13,12 @@ struct DirectWarpQueueAtomics {
     return atomicAdd(address, 0U);
   }
   __device__ __forceinline__ std::uint32_t exchange(std::uint32_t* address,
-                                                  std::uint32_t value) const {
+                                                    std::uint32_t value) const {
     return atomicExch(address, value);
   }
   __device__ __forceinline__ std::uint32_t compare_exchange(std::uint32_t* address,
-                                                          std::uint32_t expected,
-                                                          std::uint32_t desired) const {
+                                                            std::uint32_t expected,
+                                                            std::uint32_t desired) const {
     return atomicCAS(address, expected, desired);
   }
 };

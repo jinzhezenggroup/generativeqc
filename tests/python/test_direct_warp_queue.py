@@ -3,6 +3,7 @@
 Model tests are not CUDA numerical/synchronization or performance qualification.
 The native header test explicitly skips without the repository-required ccache.
 """
+
 from __future__ import annotations
 
 import os
@@ -43,8 +44,10 @@ def interleaved_drain(classes: list[int], workers: int, seed: int) -> Counter[in
     rng.shuffle(order)
     heads, links = publish(classes, order)
     # Each worker retains a class after success, exactly as a warp leader does.
-    states = [dict(bucket=i % BUCKETS, phase="load", observed=EMPTY, visited=0)
-              for i in range(workers)]
+    states = [
+        dict(bucket=i % BUCKETS, phase="load", observed=EMPTY, visited=0)
+        for i in range(workers)
+    ]
     visits: Counter[int] = Counter()
     active = list(range(workers))
     steps = 0
@@ -105,7 +108,9 @@ def test_dynamic_worker_count_and_class_skew(workers: int, pattern: str) -> None
         classes = [55 + i % 7 for i in range(CAPACITY)]
     else:
         classes = [rng.randrange(61) for _ in range(CAPACITY)]
-    assert interleaved_drain(classes, workers, 912 + workers) == Counter(range(CAPACITY))
+    assert interleaved_drain(classes, workers, 912 + workers) == Counter(
+        range(CAPACITY)
+    )
 
 
 @pytest.mark.parametrize("seed", range(32))
@@ -152,17 +157,35 @@ def test_portable_storage_bound_and_phase_contract() -> None:
 def test_actual_cpp_queue_with_concurrent_host_threads(tmp_path: Path) -> None:
     ccache = shutil.which("ccache")
     if ccache is None:
-        pytest.skip("ccache unavailable; no uncached native build or CUDA qualification claimed")
+        pytest.skip(
+            "ccache unavailable; no uncached native build or CUDA qualification claimed"
+        )
     cxx = shutil.which(os.environ.get("CXX", "c++"))
     if cxx is None:
         pytest.skip("host C++ compiler unavailable")
     subprocess.run([ccache, "--version"], check=True, capture_output=True, text=True)
     executable = tmp_path / "direct-warp-queue-host"
-    subprocess.run([
-        ccache, cxx, "-std=c++17", "-O2", "-pthread", "-Wall", "-Wextra", "-Werror",
-        "-I", str(ROOT / "src"), str(ROOT / "tests/native/direct_warp_queue_host.cpp"),
-        "-o", str(executable),
-    ], check=True, capture_output=True, text=True)
-    result = subprocess.run([str(executable)], check=True, capture_output=True, text=True,
-                            timeout=120)
+    subprocess.run(
+        [
+            ccache,
+            cxx,
+            "-std=c++17",
+            "-O2",
+            "-pthread",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(ROOT / "src"),
+            str(ROOT / "tests/native/direct_warp_queue_host.cpp"),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = subprocess.run(
+        [str(executable)], check=True, capture_output=True, text=True, timeout=120
+    )
     assert "260 concurrent host batches passed" in result.stdout

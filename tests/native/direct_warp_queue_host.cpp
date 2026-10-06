@@ -1,7 +1,5 @@
 // Host concurrency test of the same queue algorithm used by the CUDA wrapper.
 // This is not scientific derivative, CUDA synchronization, or performance evidence.
-#include "scf/direct_warp_queue.hpp"
-
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -10,6 +8,8 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+
+#include "scf/direct_warp_queue.hpp"
 
 using Queue = generativeqc::scf::detail::BoundedClassWarpQueue<55, 256>;
 
