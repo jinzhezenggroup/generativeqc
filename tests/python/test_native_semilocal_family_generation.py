@@ -20,8 +20,11 @@ def test_native_semilocal_generated_outputs_are_current() -> None:
         encoding="utf-8"
     ) == generator.emit_cpp(families)
     assert (
-        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+        ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
     ).read_text(encoding="utf-8") == generator.emit_python(families)
+    assert (
+        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+    ).read_text(encoding="utf-8") == generator.emit_python_compat()
 
 
 def test_native_semilocal_transport_codes_are_manifest_owned() -> None:
@@ -56,6 +59,8 @@ def test_native_semilocal_execution_traits_are_manifest_owned() -> None:
     assert by_name["PBE"]["native_range_exchange"] is True
     assert by_name["PBE"]["cuda_nonlocal_correlation"] is False
     assert by_name["WB97M-V"]["molecular_nonlocal_domain"] is True
+    assert by_name["LDA"]["aliases"] == ("LDA_XC_PW",)
+    assert all(not record["aliases"] for name, record in by_name.items() if name != "LDA")
 
 
 CUDA_FAST_PATH_CENSUS = {
