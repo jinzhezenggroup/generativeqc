@@ -262,7 +262,6 @@ class Calculator:
             DispersionCorrectionPrimitive,
             GeometricCounterpoisePrimitive,
             MethodIR,
-            SemilocalXCPrimitive,
             resolve_method,
             validate_basis_snapshot,
         )
@@ -410,10 +409,7 @@ class Calculator:
                 )
             )
             if automatic_libxc_resolution is not None:
-                if (
-                    electronic_ir.identity
-                    != automatic_libxc_resolution.method.identity
-                ):
+                if electronic_ir.identity != automatic_libxc_resolution.method.identity:
                     raise RuntimeError(
                         "automatic Libxc MethodIR changed during Calculator resolution"
                     )
