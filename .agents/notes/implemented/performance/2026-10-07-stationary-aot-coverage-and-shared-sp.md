@@ -83,6 +83,27 @@ SCF/electronic-structure, vendor/provider, default-promotion and high-order
 complexity audits pass. Reproduction commands and raw logs are retained locally
 under `.artifacts/`; hardware qualification remains a separate explicit gate.
 
+Node n2 CUDA 12.9 qualification build: all eight PBE0/B3LYP RKS/UKS s/p and
+s/p/d DSOs link successfully and pass the no-GPU package provenance/native-cubin
+audit. The selected inventory contains exactly one shared s/p primitive object
+and 23 shared s/p/d objects (25,395,072 object bytes). Shared emitted sources
+occupy 4,904,417 s/p bytes and 23,002,437 s/p/d bytes. The eight linked artifacts
+total 173,393,440 binary bytes and 173,412,009 bytes including manifests. These
+are bounded-subset compile/footprint counts, not full-catalog scaling or endpoint
+speedup evidence. Binary/source/contract receipts, compiler-cache statistics and
+an offline cuobjdump resource census are retained in ignored `.artifacts/`.
+No register/resource eligibility is inferred from successfully linking a DSO.
+
+The complete current-source native build reaches its explicit 1,500-second
+deadline before producing the core runtime library. Therefore the new real-GPU
+energy/force/reuse/displacement gate is not executed or claimed passed; do not
+substitute a mixed-revision native core to promote this path. Keep the PR draft
+and both issue qualification lanes open. Incremental staging with `rsync -a`
+initially copied changed source bytes with timestamps older than the manifests;
+the audit correctly rejected stale contracts. Advancing the changed input's
+mtime and rerunning the real CMake manifest rules produced matching receipts,
+without clearing compiler caches or editing expected identities to obtain hits.
+
 ## Consequences and revisit conditions
 
 For N packaged profiles, the s/p primitive compile count becomes one instead of
