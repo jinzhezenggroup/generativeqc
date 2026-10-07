@@ -475,7 +475,6 @@ def test_packed_schedule_models_low_order_fock_workers(spec: typing.Any) -> None
     assert not schedule.shared_coulomb
 
 
-
 @pytest.mark.parametrize(
     ("spec", "expected_doubles"),
     (
