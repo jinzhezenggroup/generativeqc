@@ -202,6 +202,8 @@ def _totals(
 def audit(contract: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
     """Return PASS, FAIL, or INCOMPLETE; malformed/uncovered evidence never passes."""
     try:
+        contract = _object(contract, "contract")
+        receipt = _object(receipt, "receipt")
         if contract.get("schema") != SCHEMA or contract.get("version") != 1:
             raise ValueError("unsupported contract schema/version")
         identity = _identity(contract.get("identity"))
@@ -278,6 +280,8 @@ def audit_df_trace(
 ) -> dict[str, Any]:
     """Read existing native JSONL counters without inventing per-transfer events."""
     try:
+        contract = _object(contract, "contract")
+        manifest = _object(manifest, "manifest")
         identity = _identity(contract.get("identity"))
         if contract.get("schema") != SCHEMA or contract.get("version") != 1:
             raise ValueError("unsupported contract schema/version")
@@ -364,6 +368,7 @@ def audit_df_trace(
         StopIteration,
         TypeError,
         ValueError,
+        OSError,
         json.JSONDecodeError,
     ) as exc:
         return {"status": "INCOMPLETE", "reason": str(exc)}

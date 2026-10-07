@@ -372,6 +372,15 @@ def test_historical_trace_sha_tampering_and_empty_stream_are_incomplete(
         "status": "INCOMPLETE",
         "reason": "empty DF trace",
     }
+    missing = tmp_path / "missing.jsonl"
+    altered["records"] = [
+        {
+            "retained": missing.as_posix(),
+            "stored_sha256": "0" * 64,
+            "original_sha256": "0" * 64,
+        }
+    ]
+    assert audit_df_trace(historical, missing, altered)["status"] == "INCOMPLETE"
 
 
 def test_cli_bad_json_reports_incomplete(tmp_path: Path) -> None:
@@ -394,3 +403,22 @@ def test_cli_bad_json_reports_incomplete(tmp_path: Path) -> None:
     )
     assert result.returncode == 2
     assert json.loads(result.stdout)["status"] == "INCOMPLETE"
+    observed.write_text("[]", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/audit_residency_receipts.py"),
+            "--contract",
+            str(expected),
+            "--receipt",
+            str(observed),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {
+        "status": "INCOMPLETE",
+        "reason": "receipt must be an object",
+    }
