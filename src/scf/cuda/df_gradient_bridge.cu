@@ -1578,8 +1578,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         const auto norm_bytes =
             (orbital_shells * orbital_shells + auxiliary_shells) * sizeof(double);
         const auto counter_bytes = shell_counters ? sizeof(observed_shell_screen_work) : 0;
-        const auto density_reservation =
-            borrowed_density ? n * n * sizeof(double) : std::size_t{0};
+        const auto density_reservation = borrowed_density ? n * n * sizeof(double) : std::size_t{0};
         const auto device_headroom = maximum_bytes - arena.stats.device_bytes;
         double* norms = nullptr;
         if (density_reservation <= device_headroom &&
