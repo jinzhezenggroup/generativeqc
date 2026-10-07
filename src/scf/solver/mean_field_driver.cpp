@@ -227,7 +227,7 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
   beta_density = density_from_orbitals(beta_orbitals.vectors, n, beta_occupied, 1.0);
   unsigned physical_fock_builds = 1;
 
-  if (options.compute_forces) {
+  if (options.compute_forces || options.export_physical_reference) {
     const auto epoch = next_host_final_state_epoch();
     FinalStateIdentity identity{
         {epoch, epoch, 2, 2}, epoch, plan.strategy(), {alpha_occupied, beta_occupied}};
@@ -246,10 +246,12 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
     // The #1790 standard-control determinant contracts by about 0.897 per
     // physical projection and needs 24 corrections. Keep a finite margin:
     // at most 33 selector evaluations plus the initial physical Fock above.
-    auto selected = select_final_state(
-        identity, ints.overlap, ints.hcore, orthogonalizer, ints.nuclear_repulsion,
-        {alpha_density, beta_density}, &candidate, physical, eigen,
-        {options.density_tolerance, options.energy_tolerance, 32, false, false}, true);
+    auto selected = select_final_state(identity, ints.overlap, ints.hcore, orthogonalizer,
+                                       ints.nuclear_repulsion, {alpha_density, beta_density},
+                                       &candidate, physical, eigen,
+                                       {options.density_tolerance, options.energy_tolerance, 32,
+                                        options.export_physical_reference, false},
+                                       options.compute_forces);
     physical_fock_builds += selected.fock_evaluations;
     if (!selected.state)
       throw std::runtime_error("CPU UHF final-state correction failed: " + selected.detail);
@@ -259,9 +261,33 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
     alpha_fock = std::move(selected.state->fock[0]);
     beta_fock = std::move(selected.state->fock[1]);
     result.energy = selected.state->diagnostic.energy;
-    result.forces = gradient::analytic_uhf_forces(
-        ints, alpha_density, beta_density, selected.state->weighted_density[0],
-        selected.state->weighted_density[1], plan.energy_derivative(alpha_density, beta_density));
+    if (options.export_physical_reference) {
+      auto reference = std::make_shared<hf::UnrestrictedPhysicalReference>();
+      reference->nbf = n;
+      reference->nocc = {alpha_occupied, beta_occupied};
+      reference->overlap = ints.overlap;
+      reference->hcore = ints.hcore;
+      reference->density = {alpha_density, beta_density};
+      reference->fock = {alpha_fock, beta_fock};
+      for (std::size_t spin = 0; spin < 2; ++spin) {
+        reference->coefficients[spin] = std::move(selected.state->orbitals[spin].vectors);
+        reference->orbital_energies[spin] = std::move(selected.state->orbitals[spin].values);
+      }
+      reference->energy = result.energy;
+      reference->commutator_residual = selected.state->diagnostic.maximum_commutator;
+      reference->canonical_density_drift = selected.state->diagnostic.maximum_density_error;
+      reference->canonical_error = selected.state->diagnostic.maximum_canonical_error;
+      reference->source_identity.emplace(plan.system());
+      reference->source_charge = plan.system().charge;
+      reference->source_electrons = plan.system().electron_count;
+      reference->source_multiplicity = plan.system().multiplicity;
+      core::validate_electronic_reference_shape(reference->electronic_reference());
+      result.unrestricted_reference = std::move(reference);
+    }
+    if (options.compute_forces)
+      result.forces = gradient::analytic_uhf_forces(
+          ints, alpha_density, beta_density, selected.state->weighted_density[0],
+          selected.state->weighted_density[1], plan.energy_derivative(alpha_density, beta_density));
   } else {
     std::tie(alpha_fock, beta_fock) =
         build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
