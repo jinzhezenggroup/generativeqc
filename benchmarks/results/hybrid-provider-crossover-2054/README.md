@@ -67,6 +67,14 @@ omitted the displaced coordinates and replayed the original geometry. It now
 passes the moved coordinates on both changed and moved-warm calls. The two
 earlier complete DF-JK phases and the changed-geometry phase met their
 independent gates, while that moved-warm phase remains retained as a failure.
+Both corrected ABBA pairs subsequently passed the independent PySCF 2.14.0
+energy and full-force gates on the H200 source-tree build; this remains only a
+three-atom pilot and has no crossover-claim eligibility. The next qualification
+uses `build-installed-pbe0.sh`: a new source-matched sm_90 build with only the
+PBE0 RKS stationary profile, an official CMake-installed native prefix, actual
+CXX/CUDA cache-launcher commands, and a new independent three-atom acceptance
+check before the 48-atom and non-water workloads. The prefix identity is
+recorded separately from the earlier source-tree core/AOT binaries.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
