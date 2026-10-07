@@ -1,6 +1,6 @@
 # Proposal: fuse the occupied triples primal and W/V seed traversals
 
-Status: proposed, opt-in only; native numerical gates passed, endpoint qualification pending
+Status: proposed, opt-in only; native gates passed, large paired-force gate failed
 Date: 2026-10-07
 Related: #1763, merged #1999, #2042, #2045; deferred repeatability issue #2019
 
@@ -127,9 +127,142 @@ assuming a CTA/register-limit-only experiment will establish acceptance.
 Raw source/build/test/endpoint evidence stays ignored under
 `.artifacts/1763-tile-fusion/` and on n2 under
 `/data/jzzeng/triples-fusion1763-20261007/`. No Release or external backup is
-authorized. Append actual job IDs, binary/source hashes, GPU/sanitizer gates,
-28/56/230-AO matched cold endpoints, launch census, and measured device peak
-before making any complete-endpoint performance claim or promoting a default.
+authorized. The completed endpoint/census receipts below supplement the initial
+qualification without authorizing a default promotion or a speedup claim.
+
+### Completed endpoints: Slurm 2639
+
+The allocation completed all six unprofiled endpoints, followed by both
+28-AO Nsight profiles, with the same native library and benchmark executable.
+Each unprofiled pair runs unfused then fused in separate cold processes, with
+identical molecular input, tolerances, and selectors except argument 22.
+Fusion is selected without resource fallback in every fused receipt. These are
+single ordered pairs, not randomized repetitions or statistically qualified
+speedups; instrumented timings are kept separate.
+
+| Target | Native complete E+F seconds, unfused -> fused | Triples phase seconds | Maximum paired force difference | `atol=5e-10, rtol=0` |
+| --- | --- | --- | --- | --- |
+| 28 AO | 44.404422247 -> 44.121034643 | 1.235489814 -> 1.069295430 | 4.884981308350689e-14 | pass |
+| 56 AO | 700.384432009 -> 698.856963992 | 21.646959567 -> 20.205735095 | 2.220446049250313e-13 | pass |
+| 230 AO / 488 aux | 690.911690851 -> 666.611140023 | 39.266950292 -> 33.470825709 | **2.9812392554617873e-9** | **fail** |
+
+Total and triples energies are identical in both small unprofiled pairs.
+The large pair differs by `4.121147867408581e-13` in total energy and
+`4.4009934585531596e-15` in triples energy. CCSD/Lambda/Z iteration counts
+match: 21/23/14, 20/23/13, and 20/21/12, respectively. RHF counts match at
+20 and 17 for the small pairs but **differ at 23 -> 20 for the large pair**.
+Its reference phase changes from `151.037961903 -> 132.334370982 s`, explaining
+most of the complete-time difference independently of the scalar fusion.
+Do not attribute the entire large complete-time difference to this schedule.
+
+Across each cold pair, the maxima of independent Lambda residual, Z residual,
+and stationarity are, respectively:
+
+| Target | Lambda residual | Z residual | Stationarity |
+| --- | --- | --- | --- |
+| 28 AO | 9.331867873006706e-13 | 2.8168603803345195e-13 | 3.8276044660168207e-13 |
+| 56 AO | 3.744986304135408e-13 | 2.6641918072076755e-13 | 7.143886177063408e-13 |
+| 230 AO | 6.115238039114635e-13 | 1.3650302921125122e-13 | 1.0210193801540868e-11 |
+
+**The large paired-force gate is rejected.** The independent small/native
+gates do not supersede it. #2019 remains explicitly deferred: neither its
+deferral nor the earlier localization makes this new sample a pass or
+establishes this sample's cause. No RHS/Z/nuclear localization, tolerance
+relaxation, passing-rerun substitution, or default promotion is performed.
+
+The profiled 28-AO pair returns identical total/triples energies and force
+difference `5.417888360170764e-14`. Its instrumented complete timings are
+`45.125718554 -> 45.035645174 s`, triples phase
+`1.415220889 -> 1.368149822 s`; they are not clean timing repetitions. All six
+pairwise comparisons among the four observed 28-AO cold/profile outputs pass
+the unchanged force gate, with maximum `5.417888360170764e-14`. The ignored
+analysis report retains every pair, both same-mode cold/profile comparisons,
+all phase timings, residuals, and actual reference/solver iteration counts.
+
+### Actual census versus scoped modeled work
+
+The 28-AO Nsight SQLite records **413,130 -> 402,350 complete kernel launches**,
+exactly the **10,780** launches removed from this scalar region. Within it,
+the unfused energy/W/V kernels have 1,540/1,540/9,240 launches and summed device
+durations `0.013525534 + 0.155676212 + 0.061133780 = 0.230335526 s`.
+The fused kernel has 1,540 launches and summed device duration `0.054929441 s`.
+The parent resolvent still has 4,200 launches in both profiles; reverse GEMMs,
+Lambda, orbital/nuclear response, and other parent work are not credited as
+eliminated. Summed device durations are not endpoint elapsed times.
+
+Complete transfer counts and bytes are identical in both profiles:
+H2D **288 / 19,200,015 bytes**, D2H **484 / 16,781,430 bytes**, and D2D
+**478 / 53,368,448 bytes**. This is an actual complete 28-AO census, not a
+claim that the larger endpoints have been fully profiled.
+
+| Target | Scalar launches | Simultaneous seed workspace bytes | Modeled FP64 source reads | Modeled scalar arithmetic operations |
+| --- | --- | --- | --- | --- |
+| 28 AO | 12,320 -> 1,540 | 28,672 -> 49,152 | 1,414,533,120 -> 170,311,680 | 1,968,046,080 -> 601,610,240 |
+| 56 AO | 91,840 -> 11,480 | 229,376 -> 393,216 | 84,357,611,520 -> 10,156,769,280 | 117,367,111,680 -> 35,877,847,040 |
+| 230 AO | 1,320 -> 165 | 604,456,216 -> 1,036,210,656 | 3,195,090,794,610 -> 384,693,206,040 | 4,445,343,714,240 -> 1,358,893,130,595 |
+
+Modeled scalar writes remain identical: **9,464,840**, **564,448,640**, and
+**21,378,801,840 FP64 values**, respectively, including energy partials.
+Multiply these logical FP64 read/write counts by eight for modeled bytes;
+`analysis.json` retains both forms. They are source-level work receipts, not
+measured DRAM transactions, executed hardware FLOPs, or eliminated parent
+materializations. Simultaneous seed storage increases as already admitted;
+there is no claim that fusion lowers this workspace.
+
+### Device and memory interpretation
+
+`TARGET_INFO_CUDA_DEVICE` maps trace logical device 0 to GPU inventory ID 3;
+`TARGET_INFO_GPU` maps that ID to physical CUDA index 1 and UUID
+`4b4be14f-ec84-6736-a7d8-968d62900c72`. This matches the Slurm-assigned
+`CUDA_VISIBLE_DEVICES=1` and the NVML sampler's recorded UUID. No visibility
+override is used. The 200-ms samples report total-device-used peaks:
+
+| Target | Sampled total device used MiB, unfused -> fused | Reported numeric capacity bytes, unchanged |
+| --- | --- | --- |
+| 28 AO | 29,677 -> 29,677 | 215,324,092 |
+| 56 AO | 29,679 -> 29,677 | 1,361,600,413 |
+| 230 AO | 30,011 -> 30,011 | 7,107,919,129 |
+
+These samples include device context/driver/other allocations and can miss
+short-lived peaks; they are **not triples workspace or an isolated owner peak**.
+The 28-AO profile's `memKind=2` allocation/free event high-water mark is
+**136,700,650 bytes in both modes**. All 187 allocation/free pairs balance;
+total recorded allocation volume increases exactly 20,480 bytes, from
+312,475,153 to 312,495,633, matching the extra seed workspace. That event census
+does not account for most of the sampled total-device-used figure.
+
+Static inspection finds a **106,240-byte stack and 254 registers/thread** in
+the generic `independent_jk_derivative_kernel`, which still runs twice per
+28-AO profile (summed device durations `39.057690651 -> 39.021885870 s`).
+Implicit driver stack/local-memory reservation is a plausible contributor to
+the large device-used figure, not an established allocation attribution.
+In particular, Nsight's `localMemoryTotal` is nonzero even for the statically
+stack-free fused kernel; do not equate it with spill bytes. Exact isolated
+owner/driver peak attribution remains unqualified, and no memory optimization
+or causal force diagnosis is inferred from these receipts.
+
+### Reproduction and retained artifacts
+
+The endpoint executable SHA256 is
+`9868556fee145f0386fac10cea330ba4f808a5ceb781b1f89157d3cf55eef331`;
+the native library hash is the same one recorded for job 2637. Source/input/
+binary manifests, JSON/time/NVML samples, and reproduction commands are retained
+under `endpoints-2639/`; Nsight SQLite/`.nsys-rep` files stay on n2.
+The compact all-pairs/work/census report is
+`.artifacts/1763-tile-fusion/endpoints-2639/analysis.json`, with offline analysis
+source `.artifacts/1763-tile-fusion/analyze_evidence.py`. Reproduce without
+executing GPU work:
+
+```bash
+root=.artifacts/1763-tile-fusion
+remote=/data/jzzeng/triples-fusion1763-20261007/endpoints-2639
+ssh n2 "python3 - profiles $remote" < "$root/analyze_evidence.py" > "$root/endpoints-2639/profile-census.json"
+python "$root/analyze_evidence.py" endpoints "$root/endpoints-2639" "$root/endpoints-2639/profile-census.json" > "$root/endpoints-2639/analysis.json"
+```
+
+Actual endpoint reproduction must continue to use finite Slurm `srun` on n2,
+`main`, `--gres=gpu:pro6000:1`, retaining the assigned device visibility.
+No new real-GPU run is needed to analyze these completed receipts.
 
 ## Rejected shortcuts and remaining gates
 
