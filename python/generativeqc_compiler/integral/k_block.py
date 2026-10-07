@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from .shell_spec import ShellClassSpec
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .shell_spec import ShellClassSpec
 
 PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES = 32
 
