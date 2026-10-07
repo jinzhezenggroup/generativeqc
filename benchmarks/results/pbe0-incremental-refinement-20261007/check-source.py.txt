@@ -1,0 +1,15 @@
+"""Check the frozen repaired source identity after applying repaired-source.patch."""
+
+from pathlib import Path
+import runpy
+import sys
+
+root = Path(sys.argv[1]).resolve()
+module = runpy.run_path(str(root / "tools/generate_build_identity.py"))
+actual = module["_source_identity"](
+    root, module["_inventory"](root, root / "cmake/GenerativeQCSourceIdentity.json")
+)
+expected = "be6ed903542e00954c5ab8d5b78fd8bc09df5a51028b7cc9ea677ef21aca706e"
+if actual != expected:
+    raise ValueError(f"reconstructed source {actual} differs from measured source {expected}")
+print(actual)

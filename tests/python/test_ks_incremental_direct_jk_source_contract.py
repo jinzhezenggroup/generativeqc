@@ -68,6 +68,20 @@ def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
     assert "sum(options.max_iterations, kMaximumFinalCorrections)" in ks
 
 
+def test_cuda_ks_incremental_energy_refinement_precedes_the_energy_gate() -> None:
+    """Full-density refinement must not depend on a screened delta energy gate."""
+    ks = _source("src/dft/cuda_ks.cpp")
+    assert "incremental_energy_refinement = false;" in ks
+    assert "incremental_energy_full_builds = 0;" in ks
+    assert "!incremental_anchored || incremental_energy_refinement ||" in ks
+    refinement = ks.index("refine_incremental_energy(physical.density_change")
+    convergence = ks.index("const bool converged = has_energy_history", refinement)
+    assert refinement < convergence
+    assert "!incremental_direct_jk || incremental_energy_full_builds >= 2" in ks
+    assert "account_incremental_full_energy_finalization();" in ks
+    assert "output.energy_change < options.energy_tolerance" in ks[convergence:]
+
+
 def test_cuda_ks_incremental_storage_is_explicitly_budgeted() -> None:
     header = _source("src/dft/cuda_ks.hpp")
     ks = _source("src/dft/cuda_ks.cpp")

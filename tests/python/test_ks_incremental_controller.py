@@ -56,11 +56,14 @@ void launch_copy_matrix_kernel(unsigned,unsigned,unsigned,int,std::size_t n,
 void require(bool condition,const char* message) {if(!condition)throw std::runtime_error(message);}
 struct Consumer {
   bool incremental_direct_jk=true, incremental_anchored=false, pending_incremental_delta=false;
+  bool incremental_energy_refinement=false;
+  unsigned incremental_energy_full_builds=0;
   bool final_closure=false, strict_refinement=false, has_exchange=true, has_range_correction=false;
   unsigned incremental_delta_updates=0;
   std::size_t elements=1,matrix=1;
   int stream=0;
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy;
+  scf::ScfOptions options;
   scf::ScfResult output;
   double d=1,a=0,delta=0,maximum=0,jv=0,ja=0,kv=0,ka=0,rv=0,ra=0;
   double *density=&d,*incremental_anchor_density=&a,*incremental_delta_density=&delta,
@@ -68,7 +71,6 @@ struct Consumer {
       *exchange=&kv,*incremental_anchor_exchange=&ka,*range_exchange=&rv,
       *incremental_anchor_range_exchange=&ra;
   Consumer() {
-    scf::ScfOptions options;
     options.incremental_direct_jk=true;
     options.screening_tolerance=0.0;
     options.incremental_direct_jk_rebuild_interval=0;
@@ -85,7 +87,9 @@ struct Consumer {
     unit += "\n}\n"
     for signature in (
         "bool incremental_delta_admitted()",
+        "void refine_incremental_energy(double density_change",
         "const double* prepare_incremental_jk_density()",
+        "void account_incremental_full_energy_finalization()",
         "void finalize_incremental_jk_components()",
     ):
         unit += _definition(source, signature)
@@ -104,6 +108,42 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="refinement") {
+      Consumer probe;
+      probe.build(false);
+      probe.build(false);
+      const double density_tolerance=probe.options.density_tolerance;
+      const double residual_tolerance=std::min(1e-9,density_tolerance);
+      probe.output.energy_change=1e-5;
+      probe.refine_incremental_energy(density_tolerance,residual_tolerance/2,residual_tolerance/2);
+      require(!probe.incremental_energy_refinement,"unstable density triggered energy refinement");
+      probe.refine_incremental_energy(density_tolerance/2,residual_tolerance,residual_tolerance/2);
+      require(!probe.incremental_energy_refinement,"unstable RMS residual triggered refinement");
+      probe.refine_incremental_energy(density_tolerance/2,residual_tolerance/2,residual_tolerance);
+      require(!probe.incremental_energy_refinement,"unstable maximum residual triggered refinement");
+      probe.refine_incremental_energy(density_tolerance/2,residual_tolerance/2,residual_tolerance/2);
+      require(probe.incremental_energy_refinement && !probe.incremental_delta_admitted(),
+              "stationary density waited for the alternating incremental energy gate");
+      require(probe.incremental_energy_full_builds==0,"refinement invented a full build");
+      probe.refine_incremental_energy(density_tolerance*2,residual_tolerance*2,residual_tolerance*2);
+      require(probe.incremental_energy_refinement && !probe.incremental_delta_admitted(),
+              "a later full residual readmitted delta energy evaluations");
+      probe.build(false);
+      require(probe.incremental_energy_full_builds==1,
+              "one full build was counted as a pair of full energy evaluations");
+      probe.build(false);
+      require(probe.incremental_energy_full_builds==2,
+              "full energy qualification did not execute two target-operator builds");
+      probe.account_incremental_full_energy_finalization();
+      const auto& work=probe.output.incremental_direct_jk;
+      require(work.delta_builds==1 && work.anchor_full_builds==2 && work.post_scf_full_builds==1 &&
+                  work.anchor_full_builds+work.delta_builds+work.post_scf_full_builds==
+                      probe.output.iterations,
+              "full-energy finalization invented or lost a physical provider build");
+      require(probe.output.energy_change>probe.options.energy_tolerance,
+              "energy refinement relaxed the requested energy tolerance");
+      return 0;
+    }
     const unsigned accepted=std::stoul(argv[1]);
     Consumer c;
     require(c.incremental_direct_jk && c.incremental_direct_jk_policy.active &&
@@ -148,6 +188,20 @@ def test_actual_controller_counts_early_convergence_and_required_refresh(
 ) -> None:
     result = subprocess.run(
         [str(controller_probe), str(accepted_iterations)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_stationary_density_refines_full_energy_without_relaxing_its_gate(
+    controller_probe: Path,
+) -> None:
+    """Blocked delta energy must not prevent full-operator convergence work."""
+    result = subprocess.run(
+        [str(controller_probe), "refinement"],
         check=False,
         capture_output=True,
         text=True,
