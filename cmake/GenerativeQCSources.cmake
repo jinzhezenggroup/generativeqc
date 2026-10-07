@@ -53,6 +53,7 @@ function(generativeqc_add_dft_sources target)
     src/dft/xc.cpp
     src/dft/dispersion/d3_runtime.cpp
     src/dft/dispersion/d4_runtime.cpp
+    src/dft/dispersion/d4_host_tables.cpp
     src/dft/nonlocal_correlation/vv10_runtime.cpp
     src/dft/nonlocal_correlation/vv10_integration.cpp
     src/methods/dft_method.cpp)

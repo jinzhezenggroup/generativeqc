@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "dft/dispersion/d4_data.hpp"
+#include "dft/dispersion/d4_types.hpp"
 #include "dft/dispersion/d4_math.hpp"
 #include "generated_method_parameters.hpp"
 
@@ -22,6 +22,11 @@
 #endif
 
 namespace generativeqc::dft::dispersion {
+
+inline constexpr std::size_t kD4ElementCount = 86u;
+inline constexpr std::size_t kD4ReferenceCount = 262u;
+inline constexpr std::size_t kD4ReferenceC6Count =
+    kD4ReferenceCount * (kD4ReferenceCount + 1u) / 2u;
 
 // A deliberately bounded scalar baseline, not a promoted GPU schedule.
 inline constexpr int kD4MaximumAtoms = 256;
@@ -58,17 +63,7 @@ struct D4Tables {
 };
 
 // Host view; a device consumer must explicitly upload each array once at setup.
-inline D4Tables gfn2_d4_host_tables() {
-  return {D4ReferenceModel::gfn2,
-          data::kElements.data(),
-          data::kReferences.data(),
-          data::kReferenceC6.data(),
-          data::kElementCount,
-          data::kReferenceCount,
-          data::kReferenceC6.size(),
-          3.0,
-          2.0};
-}
+D4Tables gfn2_d4_host_tables();
 
 GENERATIVEQC_D4_HD inline std::size_t d4_unbounded_workspace_elements(int atoms) {
   if (atoms < 0) return 0u;
@@ -210,8 +205,8 @@ GENERATIVEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
   if (n < 0 || (n > 0 && required_workspace == 0u) || !valid_parameters(p) ||
       workspace_size < required_workspace)
     return D4Status::invalid_argument;
-  if (t.element_count != data::kElementCount || t.reference_count != data::kReferenceCount ||
-      t.reference_c6_count != data::kReferenceCount * (data::kReferenceCount + 1) / 2)
+  if (t.element_count != kD4ElementCount || t.reference_count != kD4ReferenceCount ||
+      t.reference_c6_count != kD4ReferenceCount * (kD4ReferenceCount + 1) / 2)
     return D4Status::unsupported;
   const std::size_t count = static_cast<std::size_t>(n);
   const void* ptrs[] = {z,    xyz, q,          workspace,    energy,

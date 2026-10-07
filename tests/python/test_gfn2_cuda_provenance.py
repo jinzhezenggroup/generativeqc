@@ -35,13 +35,15 @@ def test_gfn2_cuda_source_manifest_is_current_and_gfn2_only() -> None:
     assert "src/backends/cuda/gfn2_spin.cu" in manifest["adaptations"]
 
 
-def test_gfn2_cuda_reuses_canonical_d4_data() -> None:
+def test_gfn2_cuda_reuses_canonical_d4_data_without_parsing_tables() -> None:
     source = (RUNTIME / "src/runtime/gfn2_cuda_execution.cu").read_text(
         encoding="utf-8"
     )
-    assert '#include "dft/dispersion/d4_data.hpp"' in source
+    assert '#include "dft/dispersion/d4_data.hpp"' not in source
+    assert '#include "dft/dispersion/d4_reference.hpp"' in source
     assert '#include "data/parameters/d4.hpp"' not in source
-    assert "canonical_d4::kReferenceC6" in source
+    assert "gfn2_d4_host_tables()" in source
+    assert "canonical_d4.reference_c6" in source
     assert "high * (high + 1u) / 2u + low" in source
     assert not (RUNTIME / "data/parameters/d4.hpp").exists()
 

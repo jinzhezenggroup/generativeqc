@@ -34,7 +34,7 @@
 #include "backends/cuda/gfn2_scc_setup_inputs.cuh"
 #include "backends/cuda/gfn2_scc_setup_topology.hpp"
 #include "backends/cuda/gfn2_terminal_classical_energy.cuh"
-#include "dft/dispersion/d4_data.hpp"
+#include "dft/dispersion/d4_reference.hpp"
 #include "model/gfn2/aes2.hpp"
 #include "model/gfn2/basis.hpp"
 #include "model/gfn2/coordination.hpp"
@@ -1513,26 +1513,28 @@ struct HostPlans {
        * consumer is eligible; dense CPU D4 pair evaluation is intentionally
        * not part of cache construction anymore. */
       d4_coordination.assign(atom_count, 0.0);
-      namespace canonical_d4 = ::generativeqc::dft::dispersion::data;
-      d4_elements.reserve(canonical_d4::kElements.size());
-      for (const auto& element : canonical_d4::kElements) {
+      const auto canonical_d4 = ::generativeqc::dft::dispersion::gfn2_d4_host_tables();
+      d4_elements.reserve(canonical_d4.element_count);
+      for (std::size_t index = 0; index < canonical_d4.element_count; ++index) {
+        const auto& element = canonical_d4.elements[index];
         d4_elements.push_back({element.reference_offset, element.reference_count,
                                element.covalent_radius, element.electronegativity,
                                element.effective_charge, element.hardness, element.r4r2});
       }
-      d4_references.reserve(canonical_d4::kReferences.size());
-      for (const auto& reference : canonical_d4::kReferences) {
+      d4_references.reserve(canonical_d4.reference_count);
+      for (std::size_t index = 0; index < canonical_d4.reference_count; ++index) {
+        const auto& reference = canonical_d4.references[index];
         d4_references.push_back(
             {reference.coordination_number, reference.charge, reference.gaussian_count});
       }
-      const std::size_t reference_count = canonical_d4::kReferences.size();
+      const std::size_t reference_count = canonical_d4.reference_count;
       d4_reference_c6.resize(reference_count * reference_count);
       for (std::size_t first = 0; first < reference_count; ++first) {
         for (std::size_t second = 0; second < reference_count; ++second) {
           const std::size_t high = std::max(first, second);
           const std::size_t low = std::min(first, second);
           d4_reference_c6[first * reference_count + second] =
-              canonical_d4::kReferenceC6[high * (high + 1u) / 2u + low];
+              canonical_d4.reference_c6[high * (high + 1u) / 2u + low];
         }
       }
     }
