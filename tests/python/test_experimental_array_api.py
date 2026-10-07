@@ -7,8 +7,11 @@ import sys
 import textwrap
 from fractions import Fraction
 
+import numpy as np
+
 from generativeqc.experimental import API_VERSION as EXPERIMENTAL_API_VERSION
 from generativeqc.experimental import array_api as xp
+from generativeqc.extensions import tensor
 from generativeqc_compiler.array_api import namespace as compiler_xp
 from generativeqc_compiler.array_api import trace as compiler_trace
 
@@ -47,7 +50,7 @@ def test_experimental_package_keeps_array_surface_lazy() -> None:
     assert completed.returncode == 0, completed.stderr
 
 
-def test_public_preview_reuses_canonical_tensorir_identity() -> None:
+def test_public_preview_reuses_canonical_tensorir_identity_and_execution() -> None:
     spec = _vector_spec()
     public = xp.trace(
         lambda x: {"out": xp.sum(Fraction(1, 2) * x * x)},
@@ -60,6 +63,9 @@ def test_public_preview_reuses_canonical_tensorir_identity() -> None:
 
     assert isinstance(public, xp.Program)
     assert public.logical_hash == internal.logical_hash
+    values = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    execution = tensor.execute(public, {"x": values})
+    assert execution.outputs["out"] == 7.0
 
 
 def test_public_preview_declares_experimental_nonconformance() -> None:
