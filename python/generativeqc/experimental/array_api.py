@@ -8,9 +8,11 @@ API conformance.
 
 from __future__ import annotations
 
+import builtins
 import functools
 import inspect
 import typing
+from fractions import Fraction
 
 import numpy as np
 from generativeqc_compiler.array_api import (
@@ -49,24 +51,145 @@ API_VERSION = 1
 float32 = np.dtype("float32")
 float64 = np.dtype("float64")
 
-add = _namespace.add
-broadcast_to = _namespace.broadcast_to
-divide = _namespace.divide
-einsum = _namespace.einsum
-exp = _namespace.exp
-log = _namespace.log
-matmul = _namespace.matmul
-matrix_transpose = _namespace.matrix_transpose
-multiply = _namespace.multiply
-negative = _namespace.negative
-permute_dims = _namespace.permute_dims
-pow = _namespace.pow
-reshape = _namespace.reshape
-slice = _namespace.slice
-sqrt = _namespace.sqrt
-subtract = _namespace.subtract
-sum = _namespace.sum
-take = _namespace.take
+def _symbolic(*values: object) -> bool:
+    return any(isinstance(value, VibeArray) for value in values)
+
+
+def add(x1: object, x2: object) -> typing.Any:
+    if _symbolic(x1, x2):
+        return _namespace.add(x1, x2)
+    return np.add(x1, x2)
+
+
+def subtract(x1: object, x2: object) -> typing.Any:
+    if _symbolic(x1, x2):
+        return _namespace.subtract(x1, x2)
+    return np.subtract(x1, x2)
+
+
+def multiply(x1: object, x2: object) -> typing.Any:
+    if _symbolic(x1, x2):
+        return _namespace.multiply(x1, x2)
+    return np.multiply(x1, x2)
+
+
+def divide(x1: object, x2: object) -> typing.Any:
+    if _symbolic(x1, x2):
+        return _namespace.divide(x1, x2)
+    return np.divide(x1, x2)
+
+
+def negative(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.negative(x)
+    return np.negative(x)
+
+
+def pow(x: object, exponent: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.pow(x, exponent)
+    return np.power(x, exponent)
+
+
+def exp(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.exp(x)
+    return np.exp(x)
+
+
+def log(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.log(x)
+    return np.log(x)
+
+
+def sqrt(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.sqrt(x)
+    return np.sqrt(x)
+
+
+def reshape(
+    x: object,
+    shape: tuple[int, ...],
+    *,
+    indices: tuple[Index, ...] | None = None,
+) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.reshape(x, shape, indices=indices)
+    if indices is not None:
+        raise ValueError("explicit TensorIR indices require a symbolic array")
+    return np.reshape(x, shape)
+
+
+def broadcast_to(
+    x: object,
+    shape: tuple[int, ...],
+    *,
+    indices: tuple[Index, ...] | None = None,
+    axes: tuple[int, ...] | None = None,
+) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.broadcast_to(x, shape, indices=indices, axes=axes)
+    if indices is not None or axes is not None:
+        raise ValueError("explicit TensorIR broadcast metadata requires a symbolic array")
+    return np.broadcast_to(x, shape)
+
+
+def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.slice(x, ranges)
+    return np.asarray(x)[tuple(builtins.slice(start, stop) for start, stop in ranges)]
+
+
+def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.take(x, indices, axis=axis)
+    return np.take(x, indices, axis=axis)
+
+
+def sum(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    dtype: object = None,
+    keepdims: bool = False,
+) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
+    return np.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
+
+
+def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.permute_dims(x, axes)
+    return np.transpose(x, axes)
+
+
+def matrix_transpose(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.matrix_transpose(x)
+    array = np.asarray(x)
+    if array.ndim < 2:
+        raise ValueError("matrix_transpose requires an array with at least two dimensions")
+    return np.swapaxes(array, -1, -2)
+
+
+def matmul(x1: object, x2: object) -> typing.Any:
+    if _symbolic(x1, x2):
+        return _namespace.matmul(x1, x2)
+    return np.matmul(x1, x2)
+
+
+def einsum(
+    equation: str,
+    *operands: object,
+    coefficient: ExactScalar = 1,
+) -> typing.Any:
+    if _symbolic(*operands):
+        return _namespace.einsum(equation, *operands, coefficient=coefficient)
+    result = np.einsum(equation, *operands, optimize=False)
+    return result * float(Fraction(coefficient))
 
 
 def _dtype_name(dtype: object) -> str:
