@@ -241,7 +241,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     unsigned schedule, std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile,
     std::vector<double>& derivative, std::string& detail, DfGradientResources* resources,
     const CudaDfFinalStateToken* final_state,
-    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection) {
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection,
+    const CudaDfBorrowedResponseDensity* borrowed_response_density) {
   if (resources) *resources = {};
   if (!plan || system >= plan->batch_size || molecule::ao_count(orbital) != plan->nbf ||
       molecule::ao_count(auxiliary) != plan->naux) {
@@ -256,6 +257,18 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   const auto elements = plan->naux * plan->naux, offset = system * elements;
   const char* host_policy = std::getenv("GENERATIVEQC_DF_HOST_RESPONSE_WEIGHTS");
   const bool host_weights = host_policy && host_policy[0] == '1' && host_policy[1] == '\0';
+  const bool select_borrowed_density = borrowed_response_density && !host_weights;
+  if (select_borrowed_density) {
+    const auto& borrowed = *borrowed_response_density;
+    if (!borrowed || borrowed.device_id != plan->device_id ||
+        borrowed.stream != reinterpret_cast<void*>(plan->stream) ||
+        borrowed.matrix_elements != plan->matrix_elements || plan->batch_size != 1 || system != 0 ||
+        terms.size() != 1 || terms[0].density.size() != plan->matrix_elements ||
+        terms[0].coulomb_coefficient == 0.0 || terms[0].exchange_coefficient != 0.0) {
+      detail = "borrowed DF response density does not match one restricted Coulomb term";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+  }
   const char* storage_control = std::getenv("GENERATIVEQC_DF_RESPONSE_STORAGE");
   const std::string_view storage = storage_control ? storage_control : "auto";
   if (storage != "auto" && storage != "panel" && storage != "jk-scratch") {
@@ -592,7 +605,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         maximum_bytes, maximum_auxiliary_tile, derivative, detail, resources, &metric,
         reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr,
         packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
-        streamed_factors.owner_identity ? &streamed_factors : nullptr);
+        streamed_factors.owner_identity ? &streamed_factors : nullptr,
+        select_borrowed_density ? borrowed_response_density : nullptr);
     if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && borrowed_fitted_occupied &&
         space == "auto" && occupied_source == "auto") {
       // The optional all-Q occupied factors may exceed an allowance that still
@@ -601,7 +615,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       // once without it; explicit occupied/source diagnostics retain their gate.
       return execute_cuda_density_fitting_generated_force_response(
           plan, system, orbital, auxiliary, raw_a, raw_metric, terms, schedule, maximum_bytes,
-          maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr);
+          maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr,
+          borrowed_response_density);
     }
     if (status == GENERATIVEQC_STATUS_SUCCESS && borrow && matching_source &&
         plan->resident_exchange_enabled && plan->batch_size == 1 &&
