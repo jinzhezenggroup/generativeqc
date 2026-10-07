@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.audit_residency_receipts import audit, audit_df_trace
+from tools.audit_residency_receipts import _decode_json, audit, audit_df_trace
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "benchmarks/results/residency-receipts-1629"
@@ -486,4 +486,43 @@ def test_cli_rejects_duplicate_members_before_a_false_pass(tmp_path: Path) -> No
     assert json.loads(result.stdout) == {
         "status": "INCOMPLETE",
         "reason": "duplicate JSON member: events",
+    }
+
+
+def test_strict_json_decoder_rejects_nonfinite_and_deep_inputs(tmp_path: Path) -> None:
+    for source in (
+        '{"outer": {"value": 1, "value": 2}}',
+        '{"ignored": NaN}',
+        '{"ignored": Infinity}',
+        '{"ignored": -Infinity}',
+        '{"ignored": 1e309}',
+    ):
+        try:
+            _decode_json(source)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"strict JSON decoder accepted {source}")
+
+    expected = tmp_path / "contract.json"
+    observed = tmp_path / "receipt.json"
+    expected.write_text(json.dumps(contract()), encoding="utf-8")
+    observed.write_text("[" * 10000 + "0" + "]" * 10000, encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/audit_residency_receipts.py"),
+            "--contract",
+            str(expected),
+            "--receipt",
+            str(observed),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {
+        "status": "INCOMPLETE",
+        "reason": "JSON nesting exceeds recursion limit",
     }

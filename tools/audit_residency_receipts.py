@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -46,8 +47,27 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _reject_constant(value: str) -> Any:
+    raise ValueError(f"invalid JSON constant: {value}")
+
+
+def _finite_float(value: str) -> float:
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError("non-finite JSON number")
+    return result
+
+
 def _decode_json(value: str | bytes) -> Any:
-    return json.loads(value, object_pairs_hook=_unique_object)
+    try:
+        return json.loads(
+            value,
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_constant,
+            parse_float=_finite_float,
+        )
+    except RecursionError as exc:
+        raise ValueError("JSON nesting exceeds recursion limit") from exc
 
 
 def _count(value: Any, label: str) -> int:

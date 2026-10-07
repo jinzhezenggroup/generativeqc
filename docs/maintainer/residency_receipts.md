@@ -25,9 +25,9 @@ records direction, byte count, payload identity, and dependency domain. An H2D
 claiming a round trip must cite a preceding D2H sequence with the same payload
 and dependency domain. Equal or summed byte counts alone never prove a pair.
 Unknown, duplicated or reordered events, duplicate JSON members, integer decode
-overflow, capture-only execution and partial coverage return `INCOMPLETE`. A
-complete stream exceeding a hot ratchet returns `FAIL`; only a complete stream
-within every ratchet returns `PASS`.
+overflow, non-finite JSON numbers, excessive nesting, capture-only execution and
+partial coverage return `INCOMPLETE`. A complete stream exceeding a hot ratchet
+returns `FAIL`; only a complete stream within every ratchet returns `PASS`.
 Receipts are assertions from a producer and must be evaluated with that
 producer's coverage and provenance, not inferred from absence of events.
 
