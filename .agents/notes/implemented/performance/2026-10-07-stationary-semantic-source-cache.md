@@ -25,6 +25,9 @@ directory by same-filesystem rename. A losing producer verifies the published
 recipe and exact source bytes. Missing entries regenerate; corrupt or partial
 entries reject before compilation. An explicit source-cache-disabled route
 retains byte bounds and the ordinary binary cache.
+Each product also validates its expected unit count from the demand/schedule:
+removing a manifest record must reject even when the remaining files and their
+individual hashes are intact.
 
 Source recipes include generator/dependency hashes, target, strict FP64 policy,
 exact primitive demand and ordering, shard width, or method/point-program

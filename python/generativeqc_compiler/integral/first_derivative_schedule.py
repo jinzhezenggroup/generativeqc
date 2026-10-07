@@ -261,6 +261,10 @@ def cached_derivative_cuda_source(
         if component_domain is not None
         else MAX_PROGRAM_BYTES,
         max_total_bytes=MAX_PROGRAM_BYTES,
+        expected_units=(len(requests) + CUDA_REQUESTS_PER_UNIT - 1)
+        // CUDA_REQUESTS_PER_UNIT
+        if component_domain is not None
+        else 1,
     )
     work.update(requests=len(requests), recipe_seconds=recipe_seconds)
     return (sources if component_domain is not None else sources[0]), work

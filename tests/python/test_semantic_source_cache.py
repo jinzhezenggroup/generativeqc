@@ -74,6 +74,26 @@ def test_hit_rechecks_budget(tmp_path: Path) -> None:
         cached_sources(tmp_path, {}, forbidden, max_unit_bytes=4)
 
 
+def test_truncated_inventory_rejects_even_intact_remaining_sources(
+    tmp_path: Path,
+) -> None:
+    _, work = cached_sources(
+        tmp_path, {}, lambda: ("first", "second"), expected_units=2
+    )
+    manifest = tmp_path / "semantic-sources" / work["key"] / "sources.json"
+    metadata = json.loads(manifest.read_text())
+    metadata["sources"].pop()
+    manifest.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="integrity"):
+        cached_sources(tmp_path, {}, forbidden, expected_units=2)
+
+
+def test_wrong_producer_inventory_is_not_published(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="inventory"):
+        cached_sources(tmp_path, {}, lambda: ("only one",), expected_units=2)
+    assert not (tmp_path / "semantic-sources").exists()
+
+
 def test_concurrent_producers_publish_only_complete_entries(tmp_path: Path) -> None:
     barrier = Barrier(4)
 

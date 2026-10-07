@@ -28,6 +28,7 @@ def cached_sources(
     *,
     max_unit_bytes: int = 64 << 20,
     max_total_bytes: int = 64 << 20,
+    expected_units: int | None = None,
 ) -> tuple[tuple[str, ...], dict[str, Any]]:
     """Reuse checked source bytes, or atomically publish one complete recipe.
 
@@ -47,6 +48,8 @@ def cached_sources(
             not isinstance(source, str) or not source for source in sources
         ):
             raise ValueError("semantic source cache requires nonempty source units")
+        if expected_units is not None and len(sources) != expected_units:
+            raise ValueError("semantic source cache unit inventory mismatch")
         sizes = tuple(len(source.encode("utf-8")) for source in sources)
         if any(size > max_unit_bytes for size in sizes) or sum(sizes) > max_total_bytes:
             raise ValueError("semantic source cache byte budget exceeded")
@@ -63,6 +66,8 @@ def cached_sources(
             records = metadata["sources"]
             if not isinstance(records, list) or not 0 < len(records) <= 4096:
                 raise ValueError("invalid unit inventory")
+            if expected_units is not None and len(records) != expected_units:
+                raise ValueError("unit inventory mismatch")
             sources, total = [], 0
             for index, record in enumerate(records):
                 path = folder / f"{index}.cu"

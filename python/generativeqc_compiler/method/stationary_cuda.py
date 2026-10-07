@@ -1552,6 +1552,7 @@ def compile_stationary_cuda(
                 primitive_shard_width=primitive_shard_width,
             ),
         ),
+        expected_units=1,
     )
     wrapper_source = wrapper_sources[0]
     binary_started = perf_counter()
