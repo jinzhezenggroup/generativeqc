@@ -4,6 +4,7 @@
 #include <limits>
 #include <new>
 #include <stdexcept>
+#include <type_traits>
 
 #include "dft/xc.hpp"
 #include "molecule/basis.hpp"
@@ -17,6 +18,7 @@
 namespace {
 using namespace generativeqc;
 using namespace scf::initial_guess;
+static_assert(std::is_same_v<decltype(generativeqc_initial_guess_capabilities_v1()), uint32_t>);
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
@@ -59,6 +61,13 @@ std::size_t observe_preparation(const char*, std::size_t) noexcept {
 }
 void finish_observation(std::size_t, int) noexcept {}
 void check() {
+  require(generativeqc_initial_guess_options_version() == 1,
+          "provider capabilities must not change the options schema");
+  require(
+      generativeqc_initial_guess_capabilities_v1() ==
+          (GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO),
+      "native preliminary provider capability mask drifted");
   require(!preliminary_options(nullptr), "default must remain disabled");
   generativeqc_initial_guess_options descriptor{};
   descriptor.struct_size = sizeof(descriptor);
@@ -168,6 +177,31 @@ void check() {
           "MINAO construction did not satisfy the unchanged strict seed gate");
   require(std::abs(raw_minao.projected_electrons - 9.860917687841592) < 1e-10,
           "raw pinned MINAO projection changed");
+  unsigned eigen_calls = 0;
+  const EigenOperation observed_eigen = [&](const auto& matrix, const auto* overlap,
+                                            const auto* orthogonalizer, std::size_t dimension) {
+    require(!overlap && !orthogonalizer && dimension == ints.nbf,
+            "MINAO requested an incompatible backend eigen operation");
+    ++eigen_calls;
+    return scf::reference::symmetric_eigen(matrix, dimension);
+  };
+  PreliminaryDiagnostic injected_diagnostic;
+  const auto injected = prepare_preliminary_density(plan, *controls.preliminary_guess,
+                                                    injected_diagnostic, observed_eigen);
+  require(injected && eigen_calls == 4 && injected_diagnostic.outcome == PreliminaryOutcome::Used &&
+              injected_diagnostic.preliminary_fock_builds == 0,
+          "MINAO did not route every construction and validation solve through its backend");
+  for (std::size_t index = 0; index < admitted_minao.size(); ++index)
+    require(std::abs((*injected)[index] - admitted_minao[index]) < 1e-10,
+            "backend eigen injection changed the admitted MINAO density");
+  const EigenOperation invalid_eigen = [](const auto&, const auto*, const auto*, std::size_t) {
+    return scf::reference::EigenResult{};
+  };
+  try {
+    admissible_minao_density(system, ints, x, raw_minao.density, invalid_eigen);
+    throw std::logic_error("MINAO accepted a malformed backend eigenframe");
+  } catch (const std::runtime_error&) {
+  }
   const auto minao = scf::run_pbe_rks(plan, basis, grid, controls);
   matched(baseline, minao);
   require(minao.preliminary_guess.outcome == PreliminaryOutcome::Used &&
@@ -185,10 +219,10 @@ void check() {
   scf::reference::observation::Observer observer{observe_preparation, finish_observation};
   scf::reference::observation::active = &observer;
   PreliminaryDiagnostic skipped_diagnostic;
-  const auto skipped =
-      prepare_preliminary_density(plan, *controls.preliminary_guess, skipped_diagnostic);
+  const auto skipped = prepare_preliminary_density(plan, *controls.preliminary_guess,
+                                                   skipped_diagnostic, observed_eigen);
   scf::reference::observation::active = nullptr;
-  require(!skipped && observed_preparation_calls == 0 &&
+  require(!skipped && eigen_calls == 4 && observed_preparation_calls == 0 &&
               skipped_diagnostic.outcome == PreliminaryOutcome::BudgetSkipped &&
               skipped_diagnostic.preparation_numeric_capacity == minao_cap,
           "MINAO budget was not checked before numeric preparation");

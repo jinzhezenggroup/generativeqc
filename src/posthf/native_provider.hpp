@@ -11,6 +11,10 @@
 
 namespace generativeqc::posthf {
 using MOSlots = std::array<std::vector<std::size_t>, 4>;
+struct SpinMOSlots {
+  MOSlots slots;
+  std::array<unsigned, 4> spins{};
+};
 inline constexpr std::size_t padded_mo = static_cast<std::size_t>(-1);
 
 /** Candidate AO-tile extent, independent of the source's recurrence scratch.
@@ -48,7 +52,7 @@ class MOBlockProvider {
   virtual std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
                                   generativeqc_tensor::Metrics* metrics = nullptr) const = 0;
   virtual std::size_t provider_bytes() const noexcept = 0;
-  virtual const hf::PhysicalReference& reference() const noexcept = 0;
+  virtual const hf::PhysicalReference& reference() const = 0;
 };
 
 /** Native consumer adapter of CG10's cyclic staged transformation. A private
@@ -58,6 +62,9 @@ class NativeBlockProvider final : public MOBlockProvider {
   NativeBlockProvider(const integrals::ElectronInteractionSource& source,
                       const hf::PhysicalReference& reference, std::size_t budget,
                       unsigned axis_tile = 2, AOTileDomain tile_domain = AOTileDomain::Shell);
+  NativeBlockProvider(const integrals::ElectronInteractionSource& source,
+                      const hf::UnrestrictedPhysicalReference& reference, std::size_t budget,
+                      unsigned axis_tile = 2, AOTileDomain tile_domain = AOTileDomain::Shell);
   NumericBlockPlan plan(const std::array<std::size_t, 4>& shape, bool cuda = false) const;
   std::size_t batch_bytes(const std::array<std::size_t, 4>& shape, std::size_t requests,
                           bool cuda = false) const;
@@ -66,6 +73,9 @@ class NativeBlockProvider final : public MOBlockProvider {
                                             int device = 0,
                                             generativeqc_tensor::Metrics* metrics = nullptr,
                                             ProviderWork* work = nullptr) const;
+  std::vector<std::vector<double>> get_many_spin(const std::vector<SpinMOSlots>& requests,
+                                                 ProviderWork* work = nullptr) const;
+  std::vector<double> get_spin(const SpinMOSlots& request, ProviderWork* work = nullptr) const;
   std::vector<double> get(const MOSlots& slots, bool cuda = false, int device = 0,
                           generativeqc_tensor::Metrics* metrics = nullptr) const override {
     return get(slots, cuda, device, metrics, nullptr);
@@ -76,13 +86,23 @@ class NativeBlockProvider final : public MOBlockProvider {
   std::size_t reference_bytes() const noexcept { return reference_bytes_; }
   std::size_t provider_bytes() const noexcept override { return source_bytes_ + reference_bytes_; }
   const std::array<std::size_t, 4>& tile_shape() const noexcept { return tile_; }
-  const hf::PhysicalReference& reference() const noexcept override { return ref_; }
+  const hf::PhysicalReference& reference() const override;
   const integrals::ElectronInteractionSource& source() const noexcept { return source_; }
 
  private:
+  struct SpinMORequestView {
+    const MOSlots* slots{};
+    std::array<unsigned, 4> spins{};
+  };
   std::size_t common_host_bytes() const;
+  std::vector<std::vector<double>> get_many_impl(const std::vector<SpinMORequestView>& requests,
+                                                 bool cuda, int device,
+                                                 generativeqc_tensor::Metrics* metrics,
+                                                 ProviderWork* work) const;
   const integrals::ElectronInteractionSource& source_;
-  const hf::PhysicalReference& ref_;
+  const hf::PhysicalReference* restricted_ref_{};
+  core::ElectronicReferenceView reference_view_;
+  std::size_t nbf_{};
   std::size_t budget_, source_bytes_, reference_bytes_;
   std::array<std::size_t, 4> tile_;
 };

@@ -26,6 +26,7 @@ EXPECTED_ABI_IDS = {
     "gfn2-xtb": 15,
     "pbe-d4-rks": 18,
     "df-rccsd(t)": 19,
+    "ump2": 20,
 }
 
 

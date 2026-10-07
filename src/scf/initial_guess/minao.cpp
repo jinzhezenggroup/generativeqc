@@ -91,7 +91,8 @@ MinaoDensityResult minao_density(const core::System& system, const integrals::In
 }
 
 Matrix admissible_minao_density(const core::System& system, const integrals::IntegralData& target,
-                                const Matrix& target_orthogonalizer, const Matrix& raw_density) {
+                                const Matrix& target_orthogonalizer, const Matrix& raw_density,
+                                const EigenOperation& eigen) {
   const auto n = target.nbf;
   if (!n || n > std::numeric_limits<std::size_t>::max() / n)
     throw std::invalid_argument("MINAO target dimensions overflow");
@@ -118,7 +119,10 @@ Matrix admissible_minao_density(const core::System& system, const integrals::Int
       metric_density[i * n + j] = metric_density[j * n + i] = value;
     }
   if (!finite(metric_density)) throw std::runtime_error("nonfinite MINAO metric density");
-  auto spectrum = reference::symmetric_eigen(std::move(metric_density), n);
+  auto spectrum = eigen ? eigen(metric_density, nullptr, nullptr, n)
+                        : reference::symmetric_eigen(std::move(metric_density), n);
+  if (spectrum.values.size() != n || spectrum.vectors.size() != n2)
+    throw std::runtime_error("MINAO provider returned an invalid eigenframe shape");
   if (!finite(spectrum.values) || !finite(spectrum.vectors))
     throw std::runtime_error("nonfinite MINAO metric spectrum");
 

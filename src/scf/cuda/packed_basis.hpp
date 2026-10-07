@@ -96,6 +96,9 @@ struct DeviceBatch {
   // classes. An unproved maximum angular momentum fails closed to fallback.
   bool direct_pair_cooperative_derivatives{};
   std::uint8_t direct_maximum_shell_angular{255U};
+  /** Restricted exported-reference Fock only. Null keeps legacy accumulation;
+   * the owner resets and folds this canonical plane on its captured stream. */
+  double* reference_fock_correction{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

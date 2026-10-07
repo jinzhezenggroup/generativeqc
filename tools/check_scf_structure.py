@@ -268,7 +268,14 @@ CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 # such as generated_shell_task.hpp.cuh must not acquire device implementation.
 CUDA_EXACT_ALLOWED = {
     "cuda_direct_fock_lowering": ("scf/generated_shell_task.hpp",),
+    # Generic rounded accumulation changes no compiler-owned spin/operator
+    # equations. Admit this leaf only, not the broader runtime implementation.
+    "cuda_direct_contractions": ("runtime/compensated_atomic.cuh",),
+    "cuda_direct_consumers": ("runtime/compensated_atomic.cuh",),
 }
+# The shared sink must not acquire scientific, provider, or host-plan state.
+CUDA_MODULES["cuda_compensated_atomic"] = ("runtime/compensated_atomic.cuh",)
+CUDA_ALLOWED["cuda_compensated_atomic"] = ()
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (

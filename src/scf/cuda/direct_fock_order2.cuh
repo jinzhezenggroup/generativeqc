@@ -11,6 +11,7 @@
 #include <weighted_eri.cuh>
 
 #include "generated_direct_order2_shell.cuh"
+#include "runtime/compensated_atomic.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -135,8 +136,9 @@ __device__ inline __noinline__ void contract_fock_direct_order2_task(
       continue;
     }
     accumulate_direct_fock_integral<Unrestricted>(
-        n, physical_offset, spin_offset, density, fock, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
-        integral.component[component], coulomb_only, exchange_only);
+        n, physical_offset, spin_offset, density,
+        runtime::CompensatedOutput{fock, batch.reference_fock_correction}, raw_ao[0], raw_ao[1],
+        raw_ao[2], raw_ao[3], integral.component[component], coulomb_only, exchange_only);
   }
 }
 

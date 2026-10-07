@@ -758,9 +758,12 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // This method owns an integer restricted determinant. Fixed-density Fock
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
-  if (execution_plan.spin_channels != 1 || execution_plan.range_exchange ||
-      strategy.backend != scf::FockBackend::Cuda || spec.spin != scf::FockSpin::Restricted ||
-      spec.derivative_order != 0 || !spec.coulomb.present || !spec.exchange.present ||
+  // A range-separated composition may still reserve the ordinary full-range
+  // fitted primary. Its independent long-range Direct correction neither consumes
+  // nor mutates this occupied projection, so range_exchange is not itself a veto.
+  if (execution_plan.spin_channels != 1 || strategy.backend != scf::FockBackend::Cuda ||
+      spec.spin != scf::FockSpin::Restricted || spec.derivative_order != 0 ||
+      !spec.coulomb.present || !spec.exchange.present ||
       spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
       spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
       spec.exchange.op != scf::FockOperator::FullRange)
@@ -941,8 +944,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto started = std::chrono::steady_clock::now();
     try {
       runtime::CpuRetainedCapacity retained(host_numeric_capacity());
+      scf::initial_guess::EigenOperation eigen;
+#if GENERATIVEQC_HAS_CUDA
+      // The prepared CUDA owner already charges its idle solver workspace.
+      // Borrow it synchronously rather than running CPU Jacobi for a CUDA seed.
+      if (cuda_) eigen = cuda_->seed_eigen_operation();
+#endif
       auto density = scf::initial_guess::prepare_preliminary_density(
-          fock_, *options_.preliminary_guess, diagnostic);
+          fock_, *options_.preliminary_guess, diagnostic, eigen);
       diagnostic.preparation_seconds =
           std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
       return density;

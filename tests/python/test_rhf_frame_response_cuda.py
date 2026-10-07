@@ -376,6 +376,45 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
     )
 
 
+@pytest.mark.parametrize("nonfinite", [np.nan, np.inf, -np.inf])
+def test_compensated_jk_preserves_nonfinite_refusal(nonfinite: float) -> None:
+    """Residual recovery must not repair invalid signed inputs into a force."""
+    metadata, _ = load_fixture("water")
+    mol, _, _ = pyscf_molecule(metadata["inputs"])
+    dimension = mol.nao
+    density = np.zeros((dimension, dimension), dtype=np.float64)
+    density[0, 0] = nonfinite
+    output = np.full((2, dimension, dimension), 12345.0)
+    counts = np.zeros(2, dtype=np.uint64)
+    error = ct.create_string_buffer(2048)
+    double_pointer = ct.POINTER(ct.c_double)
+    call = ct.CDLL(
+        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
+    ).rhf_linear_jk_probe
+    call.argtypes = [
+        ct.c_void_p,
+        double_pointer,
+        ct.c_double,
+        double_pointer,
+        ct.POINTER(ct.c_uint64),
+        ct.c_void_p,
+        ct.c_size_t,
+    ]
+    call.restype = ct.c_int
+    with NativeSource(**source_arguments(metadata)) as source:
+        status = call(
+            source._handle,
+            density.ctypes.data_as(double_pointer),
+            0.0,
+            output.ctypes.data_as(double_pointer),
+            counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            error,
+            len(error),
+        )
+    assert status != 0
+    assert b"nonfinite" in error.value
+
+
 @pytest.mark.parametrize("through_f", [False, True])
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
 @pytest.mark.parametrize("unrestricted", [False, True])

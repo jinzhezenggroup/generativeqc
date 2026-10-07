@@ -50,9 +50,10 @@ class ResolvedModel:
     belongs to the fitted model: changing it changes the operator. Screening and
     iteration/arithmetic settings belong to the numerical experiment instead.
     DF's effective rank is recorded in evidence because it can vary by geometry.
-    Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
-    conventional, closed-shell contract. Their identity supports portable HF
-    checkpoints; it does not enable target-accuracy or progressive execution.
+    UMP2 keeps unrestricted spin populations but admits conventional integrals
+    only. Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
+    conventional, closed-shell contract. These identities support portable HF
+    checkpoints; they do not enable target-accuracy or progressive execution.
     DFT requires additional functional identities before this schema can represent it.
     """
 
@@ -75,7 +76,7 @@ class ResolvedModel:
             or self.schema_version != SCHEMA_VERSION
         ):
             raise ValueError("unsupported resolved-model schema")
-        if self.method not in ("rhf", "uhf", "mp2", "rccsd", "rccsd(t)"):
+        if self.method not in ("rhf", "uhf", "mp2", "ump2", "rccsd", "rccsd(t)"):
             raise ValueError("unsupported HF/canonical correlated model")
         if self.hamiltonian != "all-electron-nonrelativistic-coulomb":
             raise ValueError("unsupported Hamiltonian/core treatment")
@@ -94,10 +95,12 @@ class ResolvedModel:
         unpaired = self.multiplicity - 1
         if unpaired > self.electron_count or (self.electron_count - unpaired) % 2:
             raise ValueError("inconsistent electron count and spin populations")
-        if self.method != "uhf" and self.multiplicity != 1:
+        if self.method not in ("uhf", "ump2") and self.multiplicity != 1:
             raise ValueError(
-                "RHF and canonical correlated models require a closed-shell singlet"
+                "RHF and restricted canonical correlated models require a closed-shell singlet"
             )
+        if self.method == "ump2" and self.approximation != "conventional":
+            raise ValueError("UMP2 model requires conventional integrals")
         if (
             self.method in ("rccsd", "rccsd(t)")
             and self.approximation != "conventional"

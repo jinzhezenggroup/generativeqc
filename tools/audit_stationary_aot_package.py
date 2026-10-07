@@ -26,6 +26,7 @@ from typing import Any
 
 from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_COMPONENTS,
+    QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
     QUALIFIED_STATIONARY_AOT_PROFILES,
     _profile_stem,
     _qualified_aot_profile,
@@ -87,8 +88,13 @@ def audit_stationary_aot_directory(
     *,
     architecture: str,
     native_library: Path | None = None,
+    profiles: tuple[str, ...] | None = None,
 ) -> PackageAudit:
-    """Validate and size one checkout/install directory with the full package inventory."""
+    """Validate a declared bounded profile inventory (the full catalog by default).
+
+    Both primitive domains remain mandatory for every selected profile. Never
+    infer coverage from files present: doing so would hide missing artifacts.
+    """
 
     directory = Path(directory).resolve()
     if not directory.is_dir():
@@ -98,7 +104,15 @@ def audit_stationary_aot_directory(
 
     records = []
     manifest_bytes = 0
-    for functional, spin, name, component_domain in QUALIFIED_STATIONARY_PACKAGE:
+    selected = QUALIFIED_STATIONARY_AOT_PROFILE_NAMES if profiles is None else profiles
+    for name in selected:
+        _qualified_aot_profile(name)
+    inventory = tuple(
+        entry
+        for entry in QUALIFIED_STATIONARY_PACKAGE
+        if entry[2].removesuffix("_spd") in selected
+    )
+    for functional, spin, name, component_domain in inventory:
         profile_name = name.removesuffix("_spd")
         plan = _qualified_aot_profile(profile_name).plan
         artifact = load_stationary_aot_artifact(
@@ -219,6 +233,12 @@ def main() -> None:
     parser.add_argument("--compare-native-library", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument(
+        "--profile",
+        action="append",
+        choices=QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
+        help="Repeat for a deliberately bounded package inventory; default is the full catalog",
+    )
+    parser.add_argument(
         "--require-native-cubin",
         action="store_true",
         help="fail if any qualified artifact would require driver PTX JIT",
@@ -229,6 +249,7 @@ def main() -> None:
         args.directory,
         architecture=args.architecture,
         native_library=args.native_library,
+        profiles=None if args.profile is None else tuple(args.profile),
     )
     if args.require_native_cubin:
         assert_native_cubin_path(primary)
@@ -238,6 +259,7 @@ def main() -> None:
             args.compare_directory,
             architecture=args.architecture,
             native_library=args.compare_native_library,
+            profiles=None if args.profile is None else tuple(args.profile),
         )
         assert_same_artifact_identity(primary, installed)
         if args.require_native_cubin:

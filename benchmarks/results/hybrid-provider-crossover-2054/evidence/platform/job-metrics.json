@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "data": {
+    "resource": "job",
+    "name": "i2054-h200-48-holdout",
+    "metrics": [
+      "gpu_usage_rate",
+      "gpu_memory_usage_rate",
+      "cpu_usage_rate",
+      "memory_usage_rate"
+    ],
+    "time_range": {
+      "start": 1791396061,
+      "end": 1791403261,
+      "interval": "1m"
+    },
+    "series": [
+      {
+        "unit": "worker-0",
+        "metric": "gpu_usage_rate",
+        "count": 53,
+        "min": 0,
+        "max": 1,
+        "avg": 0.6439622641509435,
+        "last": 0.15
+      },
+      {
+        "unit": "worker-0",
+        "metric": "gpu_memory_usage_rate",
+        "count": 53,
+        "min": 0.02918474122816,
+        "max": 0.055072403026,
+        "avg": 0.04997706041433698,
+        "last": 0.05469519478614
+      },
+      {
+        "unit": "worker-0",
+        "metric": "cpu_usage_rate",
+        "count": 53,
+        "min": 0.05047962364342,
+        "max": 0.0754185486472,
+        "avg": 0.05402598990149037,
+        "last": 0.0506183061907
+      },
+      {
+        "unit": "worker-0",
+        "metric": "memory_usage_rate",
+        "count": 53,
+        "min": 0.00290231704712,
+        "max": 0.00621906757355,
+        "avg": 0.005212892316422165,
+        "last": 0.0040809631347656
+      }
+    ]
+  }
+}

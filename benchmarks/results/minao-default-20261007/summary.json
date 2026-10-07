@@ -1,0 +1,424 @@
+{
+  "schema": "minao-cold-profit.v1",
+  "cases": {
+    "48": {
+      "core": {
+        "complete_seconds": [
+          102.09361633658409,
+          99.04714549332857,
+          98.79579272121191
+        ],
+        "median_seconds": 99.04714549332857,
+        "prepare_seconds": [
+          1.8381966799497604,
+          1.8613686561584473,
+          1.872226431965828
+        ],
+        "iterations": [
+          23,
+          23,
+          23
+        ],
+        "fock_builds": [
+          23,
+          23,
+          23
+        ],
+        "xc_evaluations": [
+          23,
+          23,
+          23
+        ],
+        "physical_residual_rms": [
+          1.223465080181176e-12,
+          1.2236789856368586e-12,
+          1.2242236633577072e-12
+        ],
+        "density_rms": [
+          7.037382216470924e-13,
+          7.054738931226088e-13,
+          7.033714735968837e-13
+        ],
+        "initial_guess": [
+          null,
+          null,
+          null
+        ],
+        "maximum_reference_energy_error": 4.547473508864641e-12,
+        "maximum_reference_force_error": 2.553024458507025e-11
+      },
+      "minao": {
+        "complete_seconds": [
+          86.94824478030205,
+          86.84199359640479,
+          86.70611710473895
+        ],
+        "median_seconds": 86.84199359640479,
+        "prepare_seconds": [
+          1.9120342880487442,
+          1.9156851805746555,
+          1.8475229293107986
+        ],
+        "iterations": [
+          19,
+          19,
+          19
+        ],
+        "fock_builds": [
+          19,
+          19,
+          19
+        ],
+        "xc_evaluations": [
+          19,
+          19,
+          19
+        ],
+        "physical_residual_rms": [
+          3.972649643297109e-13,
+          3.982301479753958e-13,
+          3.966744182882712e-13
+        ],
+        "density_rms": [
+          1.8910024369558545e-13,
+          1.897631616877335e-13,
+          1.880618424122242e-13
+        ],
+        "initial_guess": [
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 19875968,
+            "preparation_seconds": 0.326403257
+          },
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 19875968,
+            "preparation_seconds": 0.318151863
+          },
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 19875968,
+            "preparation_seconds": 0.317071571
+          }
+        ],
+        "maximum_reference_energy_error": 4.092726157978177e-12,
+        "maximum_reference_force_error": 1.588418285791704e-11
+      },
+      "relative_wall_reduction": 0.12322568041848181,
+      "speedup": 1.1405443540788205,
+      "paired_maximum_density_errors": [
+        1.982392028310187e-11,
+        1.9885093571758716e-11,
+        1.9876322809864178e-11
+      ]
+    },
+    "96": {
+      "core": {
+        "complete_seconds": [
+          200.53213756158948,
+          211.83263166621327,
+          224.65425146743655
+        ],
+        "median_seconds": 211.83263166621327,
+        "prepare_seconds": [
+          5.829748515039682,
+          5.830294128507376,
+          5.817741308361292
+        ],
+        "iterations": [
+          24,
+          26,
+          28
+        ],
+        "fock_builds": [
+          24,
+          26,
+          28
+        ],
+        "xc_evaluations": [
+          24,
+          26,
+          28
+        ],
+        "physical_residual_rms": [
+          5.988579390346074e-13,
+          9.421575833916603e-14,
+          2.1494526025206423e-14
+        ],
+        "density_rms": [
+          3.51322778189868e-13,
+          5.637417965683046e-14,
+          1.82655591598374e-14
+        ],
+        "initial_guess": [
+          null,
+          null,
+          null
+        ],
+        "maximum_reference_energy_error": 7.73070496506989e-11,
+        "maximum_reference_force_error": 2.5145774351642558e-11
+      },
+      "minao": {
+        "complete_seconds": [
+          182.1867468766868,
+          175.69617093726993,
+          181.38946153223515
+        ],
+        "median_seconds": 181.38946153223515,
+        "prepare_seconds": [
+          5.850770320743322,
+          5.805156078189611,
+          5.770040590316057
+        ],
+        "iterations": [
+          21,
+          20,
+          21
+        ],
+        "fock_builds": [
+          21,
+          20,
+          21
+        ],
+        "xc_evaluations": [
+          21,
+          20,
+          21
+        ],
+        "physical_residual_rms": [
+          2.147668708242957e-14,
+          4.419743377678374e-14,
+          2.139891965950655e-14
+        ],
+        "density_rms": [
+          2.2538528779277095e-14,
+          4.3970956982230516e-14,
+          2.1904685324187916e-14
+        ],
+        "initial_guess": [
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 78868736,
+            "preparation_seconds": 2.33747652
+          },
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 78868736,
+            "preparation_seconds": 2.368916471
+          },
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 78868736,
+            "preparation_seconds": 2.328006214
+          }
+        ],
+        "maximum_reference_energy_error": 7.639755494892597e-11,
+        "maximum_reference_force_error": 2.34106067864559e-11
+      },
+      "relative_wall_reduction": 0.1437133169451802,
+      "speedup": 1.1678331799257697,
+      "paired_maximum_density_errors": [
+        1.6816881220904634e-11,
+        4.683586851683685e-12,
+        3.43836070726411e-12
+      ]
+    },
+    "peroxide": {
+      "core": {
+        "complete_seconds": [
+          40.162046048790216,
+          40.170366656035185,
+          40.05661057308316
+        ],
+        "median_seconds": 40.162046048790216,
+        "prepare_seconds": [
+          0.8119102343916893,
+          0.8284543231129646,
+          0.8052160479128361
+        ],
+        "iterations": [
+          26,
+          26,
+          26
+        ],
+        "fock_builds": [
+          26,
+          26,
+          26
+        ],
+        "xc_evaluations": [
+          26,
+          26,
+          26
+        ],
+        "physical_residual_rms": [
+          2.3226171736951117e-12,
+          2.3238348606900397e-12,
+          2.323756920059717e-12
+        ],
+        "density_rms": [
+          1.0009332248543555e-12,
+          1.0005821704430612e-12,
+          1.0014429818176496e-12
+        ],
+        "initial_guess": [
+          null,
+          null,
+          null
+        ],
+        "maximum_reference_energy_error": 4.888534022029489e-12,
+        "maximum_reference_force_error": 1.1435741242848962e-11
+      },
+      "minao": {
+        "complete_seconds": [
+          35.969546023756266,
+          36.08833618089557,
+          35.789821449667215
+        ],
+        "median_seconds": 35.969546023756266,
+        "prepare_seconds": [
+          0.8183917924761772,
+          0.8149616792798042,
+          0.8195443898439407
+        ],
+        "iterations": [
+          21,
+          21,
+          21
+        ],
+        "fock_builds": [
+          21,
+          21,
+          21
+        ],
+        "xc_evaluations": [
+          21,
+          21,
+          21
+        ],
+        "physical_residual_rms": [
+          2.3254700756692596e-12,
+          2.324882137923423e-12,
+          2.3247915919418992e-12
+        ],
+        "density_rms": [
+          1.079292064621647e-12,
+          1.0785176139978542e-12,
+          1.0795171604638101e-12
+        ],
+        "initial_guess": [
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 3204608,
+            "preparation_seconds": 0.03493786
+          },
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 3204608,
+            "preparation_seconds": 0.034770541
+          },
+          {
+            "kind": "minao",
+            "outcome": "used",
+            "work_counters_complete": true,
+            "preliminary_iterations": 0,
+            "preliminary_fock_builds": 0,
+            "target_attempts": 1,
+            "discarded_target_iterations": 0,
+            "discarded_target_fock_builds": 0,
+            "preparation_numeric_capacity": 3204608,
+            "preparation_seconds": 0.034896897
+          }
+        ],
+        "maximum_reference_energy_error": 4.433786671143025e-12,
+        "maximum_reference_force_error": 1.864965126774365e-11
+      },
+      "relative_wall_reduction": 0.10438960256010765,
+      "speedup": 1.116556934643128,
+      "paired_maximum_density_errors": [
+        3.0981596628454344e-11,
+        3.0977529569264917e-11,
+        3.0981793085888e-11
+      ]
+    }
+  },
+  "library_sha256": "f0f066d23ed8508df2bd9bbb9346a30e78dabf6b2c3754fa69570d365c9361d9",
+  "warm_probe": {
+    "seconds_excluded_from_cold": 1.8558326922357082,
+    "initial_guess_diagnostic": {
+      "kind": "minao",
+      "outcome": "existing_density",
+      "work_counters_complete": true,
+      "preliminary_iterations": 0,
+      "preliminary_fock_builds": 0,
+      "target_attempts": 1,
+      "discarded_target_iterations": 0,
+      "discarded_target_fock_builds": 0,
+      "preparation_numeric_capacity": 0,
+      "preparation_seconds": 0.0
+    },
+    "warm_start_used": true,
+    "acceptance": {
+      "energy_error": 4.433786671143025e-12,
+      "force_error": 1.8607906882017744e-11,
+      "gate": true
+    }
+  },
+  "warm_skips_seed": true
+}

@@ -23,6 +23,8 @@ endfunction()
 macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
+    generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
+                       tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)
     if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND TARGET CUDA::cublasLt)
       generativeqc_native_test(generativeqc_native_cublaslt_tests
                          tests/native/test_native_cublaslt.cu NO_GENERATIVEQC
@@ -103,6 +105,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
+    generativeqc_native_test(generativeqc_ump2_contract_tests tests/native/test_ump2_contract.cpp)
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
     generativeqc_native_test(generativeqc_rhf_resident_policy_tests tests/native/test_rhf_resident_policy.cpp NO_GENERATIVEQC)
     target_include_directories(generativeqc_rhf_resident_policy_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")

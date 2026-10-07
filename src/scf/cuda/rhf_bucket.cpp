@@ -279,6 +279,8 @@ std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan* plan) noexcept {
     bytes = runtime::add_capacity(bytes, sizeof(DirectTileValidationRecord));
   if (resources.reference_eri_ != nullptr)
     bytes = runtime::add_capacity(bytes, resources.reference_eri_bytes_);
+  if (resources.reference_fock_correction_ != nullptr)
+    bytes = runtime::add_capacity(bytes, resources.reference_fock_correction_bytes_);
   return bytes;
 }
 

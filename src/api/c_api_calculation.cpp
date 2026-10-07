@@ -14,6 +14,11 @@ extern "C" {
 
 uint32_t generativeqc_initial_guess_options_version(void) { return 1; }
 
+uint32_t generativeqc_initial_guess_capabilities_v1(void) {
+  return GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
+         GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO;
+}
+
 generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_initial_guess_diagnostic* out) {
   if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

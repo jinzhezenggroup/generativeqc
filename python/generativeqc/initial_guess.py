@@ -106,6 +106,26 @@ def require_initial_guess_library(library: object) -> None:
         raise NotImplementedError("unsupported preliminary SCF schema")
 
 
+def supports_automatic_minao(library: object) -> bool:
+    """Require positive provider support; schema 1 alone also describes HF/LDA.
+
+    Automatic selection preserves Hcore on older or incompatible libraries.
+    Explicit policies retain their existing schema and native domain checks.
+    Unexpected query failures remain visible rather than becoming a fallback.
+    """
+    schema = getattr(library, "generativeqc_initial_guess_options_version", None)
+    if schema is None:
+        return False
+    schema.argtypes, schema.restype = [], ctypes.c_uint32
+    if schema() != 1:
+        return False
+    query = getattr(library, "generativeqc_initial_guess_capabilities_v1", None)
+    if query is None:
+        return False
+    query.argtypes, query.restype = [], ctypes.c_uint32
+    return bool(query() & _native.INITIAL_GUESS_CAPABILITY_MINAO)
+
+
 def read_initial_guess_diagnostic(
     library: object, handle: object, index: int | None = None
 ) -> dict | None:
@@ -221,6 +241,31 @@ def _minao_numeric_capacity(n: int, numbers: typing.Sequence[int]) -> int:
     )
 
 
+def initial_guess_for_systems(
+    calculator: typing.Any, systems: typing.Any
+) -> InitialGuessSpec | None:
+    """Resolve automatic element/ECP admission identically for planning and execution.
+
+    A native batch shares one descriptor, so an unsupported item keeps the whole
+    batch on Hcore. Explicit policies retain their existing fail-closed admission.
+    """
+    policy = calculator._initial_guess
+    if policy is None or not getattr(calculator, "_automatic_initial_guess", False):
+        return policy
+    if systems is None:
+        raise ValueError("automatic initial guess requires the target systems")
+    from ._api_types import Atom
+    from .ecp import resolve_ecp
+
+    for system in systems:
+        atoms = tuple(Atom.from_value(atom) for atom in system)
+        if any(not 1 <= atom.atomic_number <= 18 for atom in atoms):
+            return None
+        if any(resolve_ecp(calculator._basis, atoms)[0]):
+            return None
+    return policy
+
+
 def with_initial_guess_resources(
     request: typing.Any,
     calculator: typing.Any,
@@ -234,7 +279,7 @@ def with_initial_guess_resources(
     both complete inventories may overestimate serialized/transient overlap,
     but cannot hide a preliminary owner behind the target's declared budget.
     """
-    policy = calculator._initial_guess
+    policy = initial_guess_for_systems(calculator, systems)
     if policy is None:
         return request
     schedule = {

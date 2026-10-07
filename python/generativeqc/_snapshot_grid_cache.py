@@ -43,7 +43,12 @@ class SnapshotGridCache:
         *,
         owner: int,
     ) -> tuple[ExplicitGrid, bool]:
-        """Return an exactly matching grid and whether serialization was reused."""
+        """Return a typed-identity grid after checking every source value.
+
+        Version 2 avoids JSON/list amplification on a fresh snapshot. Reuse
+        still compares current native contents, not pointers or hash witnesses
+        belonging to a different state lifetime.
+        """
         if (
             self.grid is not None
             and self.owner == owner
@@ -64,6 +69,7 @@ class SnapshotGridCache:
             weights,
             tuple(map(int, owners)),
             {"source": "native-ks-snapshot-v1", "owner": owner},
+            identity_version=2,
         )
         retained_bytes = (
             sys.getsizeof(grid)
