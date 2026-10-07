@@ -76,7 +76,7 @@ budgets and source-accounting gates are not relaxed. The independent hybrid
 oracle preserves the requested AO representation, including five-function d
 shells, rather than silently comparing a spherical endpoint to Cartesian SCF.
 
-Final combined host validation: 633 passed and 61 explicitly gated cases skipped
+Initial combined host validation: 633 passed and 61 explicitly gated cases skipped
 in 105.32 seconds, using ccache for standalone C++ probes. The eight new GPU
 cases are among the skips, not numerical qualifications. Native/CUDA ownership,
 SCF/electronic-structure, vendor/provider, default-promotion and high-order
@@ -139,6 +139,33 @@ sample's actual geometry in the evidence. Preserve the failed attempt logs;
 neutral OH is not claimed qualified. Small-system success does not complete
 investigation-scale/interleaved timing or full-catalog/resource qualification:
 keep the PR draft and both issue lanes open.
+
+Before publishing the hardware evidence, retain upstream PR commit
+`8421952d0a40e1c5c05d8c16d08a906fa7e75790` and its complete manifest-integrity
+repair described below. Rebuild the complete core and all eight actual CMake
+manifest targets against that compiler closure, instead of reusing unsealed
+records or changing expected identities. This incremental refresh completes in
+1 minute 34.50 seconds: only the native source-identity C++ owner recompiles,
+and deterministic source restat preserves every CUDA primitive/wrapper object.
+All eight sealed packages pass the current-source/native-cubin audit. The
+focused host admission/build/generation/loader/integrity/lowering/coverage/
+capacity suite passes 625 tests in 104.25 seconds. A second finite Slurm
+qualification, job 2636, again passes all eight device cases in 56.66 seconds,
+with the same 24 endpoint stages and maximum errors 3.2685e-13 Eh and
+1.1192e-10 Eh/bohr. The new core has native source identity
+`eb0a1ca182e86ddd8adf8b74a4250d99b3200940b233fc9cace8b0586423bf56`
+and binary SHA256
+`7679888fa161d39eee79071eb1d284f20b6e4bff915bb65f9e61423f79d09556`.
+The subsequent complete-core/eight-manifest Ninja invocation has no work to do.
+
+Run the focused host capacity tooling in the actual Git worktree: the rsynced
+n2 source snapshot has no Git metadata and correctly fails its provenance
+precondition. Do not invent a Git HEAD to make that collector run. A separate
+attempt to include the full CPU oracle module in the local host run stops at
+a reconverged r2SCAN test because that host has no native core library. Retain
+these environment diagnostics, but claim neither as a passing qualification.
+The hybrid oracle helper itself is exercised by all current-source GPU cases;
+broader CPU-oracle and investigation/catalog lanes remain separate gates.
 
 ## Consequences and revisit conditions
 
