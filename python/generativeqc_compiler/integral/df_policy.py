@@ -39,6 +39,24 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
   return convert(generated_df_auxiliary_g_derivatives::three_center(alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},
        beta,{B.x,B.y,B.z},{b.x,b.y,b.z},gamma,{C.x,C.y,C.z},{c.x,c.y,c.z}));
 }
+__device__ __forceinline__ Response range_metric(
+    double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c,
+    generativeqc::integrals::CoulombRange range,double omega) {
+  if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(c)<=3)
+    return generated_df_derivatives::range_metric(alpha,A,a,gamma,C,c,range,omega);
+  return convert(generated_df_auxiliary_g_derivatives::range_metric(
+      alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},gamma,{C.x,C.y,C.z},{c.x,c.y,c.z},range,omega));
+}
+__device__ __forceinline__ Response range_three_center(
+    double alpha,Vec3 A,Angular a,double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,
+    generativeqc::integrals::CoulombRange range,double omega) {
+  if(generated_df_derivatives::order(c)<=3)
+    return generated_df_derivatives::range_three_center(
+        alpha,A,a,beta,B,b,gamma,C,c,range,omega);
+  return convert(generated_df_auxiliary_g_derivatives::range_three_center(
+      alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},beta,{B.x,B.y,B.z},{b.x,b.y,b.z},
+      gamma,{C.x,C.y,C.z},{c.x,c.y,c.z},range,omega));
+}
 } // namespace generativeqc::scf::generated_df_g_adapter
 """.replace("__device__", "static __device__")
 
@@ -177,6 +195,51 @@ template<unsigned Math=0> struct CompensatedValue {
   }
 };
 """
+    range_policy = r"""struct RangeValue {
+  using Vec3 = generated_df_g_adapter::Vec3;
+  using Angular = generated_df_g_adapter::Angular;
+  using Accumulator = double;
+  generativeqc::integrals::CoulombRange range{generativeqc::integrals::CoulombRange::Full};
+  double omega{};
+  template <unsigned Rank>
+  __device__ void accumulate(Accumulator& out,const double* e,const Vec3* r,
+                             const Angular* a,double weight) const {
+    static_assert(Rank==2 || Rank==3);
+    generated_df_g_adapter::Response response;
+    if constexpr (Rank==2)
+      response=generated_df_g_adapter::range_metric(e[0],r[0],a[0],e[1],r[1],a[1],range,omega);
+    else
+      response=generated_df_g_adapter::range_three_center(
+          e[0],r[0],a[0],e[1],r[1],a[1],e[2],r[2],a[2],range,omega);
+    out+=weight*response.value;
+  }
+};
+struct RangeDerivative {
+  using Vec3 = generated_df_g_adapter::Vec3;
+  using Angular = generated_df_g_adapter::Angular;
+  struct Accumulator { double gradient[3][3]{}; };
+  generativeqc::integrals::CoulombRange range{generativeqc::integrals::CoulombRange::Full};
+  double omega{};
+  template <unsigned Rank>
+  __device__ void accumulate(Accumulator& out,const double* e,const Vec3* r,
+                             const Angular* a,double weight) const {
+    static_assert(Rank==2 || Rank==3);
+    generated_df_g_adapter::Response result;
+    if constexpr (Rank==2)
+      result=generated_df_g_adapter::range_metric(e[0],r[0],a[0],e[1],r[1],a[1],range,omega);
+    else
+      result=generated_df_g_adapter::range_three_center(
+          e[0],r[0],a[0],e[1],r[1],a[1],e[2],r[2],a[2],range,omega);
+    const Vec3 channels[3]{result.first,Rank==2?result.third:result.second,result.third};
+#pragma unroll
+    for(unsigned slot=0;slot<Rank;++slot) {
+      out.gradient[slot][0]+=weight*channels[slot].x;
+      out.gradient[slot][1]+=weight*channels[slot].y;
+      out.gradient[slot][2]+=weight*channels[slot].z;
+    }
+  }
+};
+"""
     g_support = (
         emit_df_derivatives_cuda(auxiliary_g=True) + _auxiliary_g_policy_adapter()
         if derivatives
@@ -197,5 +260,6 @@ template<unsigned Math=0> struct CompensatedValue {
         + "namespace generativeqc::scf::generated_df_policy {\n"
         + (derivative if derivatives else value)
         + g_policy
+        + (range_policy if derivatives else "")
         + "} // namespace generativeqc::scf::generated_df_policy\n#endif\n"
     )
