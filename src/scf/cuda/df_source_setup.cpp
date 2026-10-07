@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <new>
