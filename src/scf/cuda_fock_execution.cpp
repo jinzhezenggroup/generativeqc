@@ -28,6 +28,12 @@ bool fitted_full_range(const FockTermSpec& term) noexcept {
   return !term.present || (term.approximation == FockApproximation::DensityFitted &&
                            term.op == FockOperator::FullRange);
 }
+bool fitted_value_term(const FockTermSpec& term, bool coulomb) noexcept {
+  if (!term.present) return true;
+  if (term.approximation != FockApproximation::DensityFitted) return false;
+  if (term.op == FockOperator::FullRange) return true;
+  return !coulomb && term.op == FockOperator::LongRange && term.omega > 0.0;
+}
 
 }  // namespace
 
@@ -45,11 +51,15 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
     return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf};
   }
 
-  const bool fitted =
-      fitted_full_range(strategy.spec.coulomb) && fitted_full_range(strategy.spec.exchange);
+  const bool fitted = fitted_value_term(strategy.spec.coulomb, true) &&
+                      fitted_value_term(strategy.spec.exchange, false);
   if (!fitted) return {};
   auto* source = plan.cuda_fitted_source();
   if (!source || !plan.diagnostic().nbf) return {};
+  for (const auto* term : {&strategy.spec.coulomb, &strategy.spec.exchange})
+    if (term->present &&
+        !cuda_density_fitting_jk_plan_operator_matches(source, term->op, term->omega))
+      return {};
   return {cuda_density_fitting_device(source), cuda_density_fitting_stream(source), source,
           plan.diagnostic().nbf};
 }
