@@ -18,9 +18,11 @@ Expose a curated facade at `generativeqc.experimental.array_api`.
 
 - Keep `generativeqc_compiler.array_api` as the sole implementation and semantic
   owner.
-- Make the ordinary public path shape/dtype based: `@array_api.compile`
-  specializes from concrete runtime arguments, so users do not need TensorIR
-  `IndexSpace`, `Index`, or `TensorSpec` declarations.
+- Make the ordinary public path shape/dtype based: namespace functions execute
+  eagerly for NumPy-backed arrays, while `@array_api.compile` reuses the same
+  source expression with symbolic inputs and specializes from concrete runtime
+  shapes/dtypes. Users do not need TensorIR `IndexSpace`, `Index`, or
+  `TensorSpec` declarations.
 - Re-export the canonical symbolic operations, tracing helpers and DLPack
   boundary; retain the explicit TensorIR constructors only as an advanced
   scientific-annotation path.
@@ -63,8 +65,10 @@ array consumers.
 
 - Public capture must lower to exactly the same TensorIR program identity as the
   canonical compiler frontend.
-- Generic public arrays may use ordinary shape broadcasting. Scientifically
-  annotated arrays must not gain compatibility merely because extents match.
+- Generic public arrays may use ordinary shape broadcasting and finite Python
+  float literals in both eager and compiled execution. Scientifically annotated
+  arrays must not gain compatibility merely because extents match and retain
+  exact-scalar spelling rules.
 - Unsupported dtype promotion, dynamic shapes, Python control flow, and other
   undeclared behavior must fail closed.
 - Equal extents must not erase AO/occupied/virtual/auxiliary/spin/batch domain
@@ -81,8 +85,10 @@ array consumers.
 - Public-facade tests compare the public trace logical hash with the internal
   compiler frontend for the same symbolic equation.
 - Inferred-call tests cover `(C * occupation) @ C.T`, generic broadcasting,
-  exact scalars, reshape/indexing/newaxis, empty slices and batched matmul without
-  any TensorIR type declarations.
+  float/exact scalars, reshape/indexing/newaxis, empty slices and batched matmul
+  without any TensorIR type declarations.
+- Eager namespace tests execute the same expression before compilation and
+  compare the eager and TensorIR-backed results.
 - A declared differentiable inferred input is exercised through TensorIR JVP;
   undeclared inferred inputs remain non-differentiable.
 - Import tests verify `generativeqc.experimental` does not eagerly activate the
