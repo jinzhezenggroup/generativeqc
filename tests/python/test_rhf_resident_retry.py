@@ -46,6 +46,8 @@ def test_resident_refusal_preserves_complete_exact_frame(tmp_path: Path) -> None
         "template <class Function>\ngenerativeqc_status direct_jk_guard(",
         "std::size_t cuda_direct_jk_resident_value_bytes(",
         "generativeqc_status prepare_cuda_direct_jk_resident_values(",
+        "bool cuda_direct_jk_linear_available(",
+        "std::size_t cuda_direct_jk_compensation_elements(",
     ]
     definitions = [
         _definition(direct, item) + (";" if item.startswith("struct") else "")
@@ -179,6 +181,9 @@ struct Diagnostic {
   size_t batch_size{1}, device_bytes{16}, resident_value_count{}, resident_value_bytes{},
       host_bytes{}, host_preparation_bytes{};
 };
+struct CanonicalBatch {
+  int nbf{64};
+};
 struct CudaDirectJkPlan {
   const int* canonical_pairs{reinterpret_cast<const int*>(1)};
   double screening_tolerance{};
@@ -190,7 +195,8 @@ struct CudaDirectJkPlan {
   cudaStream_t stream{reinterpret_cast<void*>(1)};
   int numerical_value{};
   int* numerical_failure{&numerical_value};
-  int canonical_batch{}, canonical_cartesian{};
+  CanonicalBatch canonical_batch;
+  int canonical_cartesian{};
   double* canonical_bounds{};
   Slots allocations;
   ~CudaDirectJkPlan() {
@@ -198,7 +204,7 @@ struct CudaDirectJkPlan {
   }
 };
 int direct_jk_pair_rows(CudaDirectJkPlan*, unsigned, size_t) { return 0; }
-void launch_canonical_jk_kernel(cudaStream_t, int, int, int, unsigned, const int*, int, size_t,
+void launch_canonical_jk_kernel(cudaStream_t, CanonicalBatch, int, int, unsigned, const int*, int, size_t,
                                 size_t n, size_t, size_t m, bool same, bool, bool, bool,
                                 DirectCoulombRange, double, double, const double*, const double*,
                                 double*, double*, std::uint64_t*, double* target) {
@@ -245,7 +251,8 @@ size_t bytes(size_t n) { return checked_mul(n, sizeof(double)); }
 namespace scf {
 using ::prepare_cuda_direct_jk_resident_values;
 Diagnostic cuda_direct_jk_plan_diagnostic(CudaDirectJkPlan* p) { return p->diagnostic; }
-bool cuda_direct_jk_linear_available(CudaDirectJkPlan* p) { return p->canonical_pairs; }
+using ::cuda_direct_jk_linear_available;
+using ::cuda_direct_jk_compensation_elements;
 }
 template <class T>
 struct Buffer {
@@ -298,7 +305,9 @@ struct RHFFrameResponseResult {
   std::string resident_jk_reason;
   bool diagonal{};
 };
-constexpr size_t resident = 2080ULL * 2081 / 2 * 8, mandatory = 458768;
+constexpr size_t resident = 2080ULL * 2081 / 2 * 8;
+constexpr size_t mandatory = (14 * 64 * 64 + 1 + 2 * 64 * 64) * sizeof(double) +
+                             2 * sizeof(int);
 RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     const core::System&, const PhysicalReference&, std::span<const double>, std::span<const double>,
     int, const RHFFrameResponseOptions& options,
@@ -318,7 +327,7 @@ RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   bool profile = false;
   auto stream = direct->stream;
   size_t nn = 64 * 64, arena_elements = 0;
-  Buffer<double> storage;
+  Buffer<double> storage, compensation;
   Buffer<int> error;
   Buffer<std::uint64_t> census;
   Event jk_start, jk_stop;
@@ -326,6 +335,8 @@ RHFFrameResponseResult rhf_frame_response_cuda_attempt(
 
 ATTEMPT_SUFFIX = r"""
 
+if (stats.owned_device_bytes != mandatory)
+  throw std::runtime_error("mandatory owner accounting drift");
 if (failure_mode == 2 || failure_mode == 6) {
   Buffer<double> later_derivative;
   later_derivative.allocate(0, 256, stream);
