@@ -1111,15 +1111,52 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
 
-    std::vector<double> hcore(coordinates), pulay(coordinates);
-    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
-      const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
-      const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
-      for (unsigned spin = 0; spin < spins; ++spin)
-        for (std::size_t item = 0; item < matrix_elements; ++item) {
-          hcore[coordinate] += density[spin][item] * dh[item];
-          pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+    std::vector<double> hcore, pulay;
+    scf::OneElectronGradientResources one_electron;
+    bool resident_one_electron = false;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      dft::CudaKsResidentStationaryWeightsBinding resident_weights;
+      const auto resident_status =
+          cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
+      if (resident_status == GENERATIVEQC_STATUS_SUCCESS) {
+        if (!resident_weights || resident_weights.device_id != expected.identity.model.device ||
+            resident_weights.matrix_elements != matrix_elements || resident_weights.spins != spins) {
+          detail = "CUDA DF stationary D/W binding is incompatible with the final KS state";
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
+        const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
+            resident_weights.device_id, system_, {}, {}, 0, maximum_bytes, hcore, pulay, detail,
+            &one_electron, resident_weights.density, resident_weights.weighted_density);
+        if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
+          resident_one_electron = true;
+        } else if (one_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                   one_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+          return one_status;
+        }
+      } else if (resident_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                 resident_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+        return resident_status;
+      }
+    }
+#endif
+    if (!resident_one_electron) {
+      // CPU and bounded CUDA fallback preserve the established exact host
+      // contraction. CUDA only reaches this branch when the optional resident
+      // one-electron consumer cannot be admitted; J/K response ownership is
+      // unaffected.
+      hcore.assign(coordinates, 0.0);
+      pulay.assign(coordinates, 0.0);
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+        const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
+        const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
+        for (unsigned spin = 0; spin < spins; ++spin)
+          for (std::size_t item = 0; item < matrix_elements; ++item) {
+            hcore[coordinate] += density[spin][item] * dh[item];
+            pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+          }
+      }
+      detail.clear();
     }
 
     const std::vector<double> empty;
@@ -1190,7 +1227,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // DF response has separate scratch/transfers which this compact publication
     // bridge does not measure. Do not invent those counts from spin dimensions.
     work[0] = fock_.diagnostic().device_bytes;
+    work[2] = one_electron.device_bytes;
     work[3] = publication_peak_bytes;
+    work[4] = one_electron.host_to_device_bytes;
+    work[5] = one_electron.device_to_host_bytes;
     output = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
