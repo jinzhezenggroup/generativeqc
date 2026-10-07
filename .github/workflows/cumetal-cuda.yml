@@ -74,6 +74,9 @@ jobs:
       GENERATIVEQC_BUILD: ${{ github.workspace }}/build-cumetal
       CCACHE_DIR: /tmp/generativeqc-ccache
       CCACHE_MAXSIZE: 2G
+      # CuMetal's registration JIT validates PTX/toolchain/lib identity internally.
+      # Persist that artifact cache separately from the compiler-object cache.
+      CUMETAL_QC_JIT_CACHE_DIR: /tmp/cumetal-qc-jit
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -144,6 +147,17 @@ jobs:
             ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
+
+      - name: Restore CuMetal QC JIT cache
+        id: cumetal_qc_jit_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}
+          key: cumetal-qc-jit-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-cumetal-ir-fast48-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**') }}
+          # CuMetal's own registration cache key includes PTX, lowering policy,
+          # compiler schema, toolchain inputs, and libcumetal Mach-O UUID.
+          restore-keys: |
+            cumetal-qc-jit-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-cumetal-ir-fast48-
 
       - name: Build pinned CuMetal
         if: steps.cache-cumetal.outputs.cache-hit != 'true'
@@ -337,7 +351,7 @@ jobs:
           # contract and fails rather than retrying the legacy compiler.
           CUMETAL_PTX_BACKEND: cumetal-ir
           CUMETAL_FP64_MODE: fast48
-          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
+          CUMETAL_CACHE_DIR: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "90"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
@@ -363,7 +377,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
           CUMETAL_PTX_BACKEND: cumetal-ir
           CUMETAL_FP64_MODE: fast48
-          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
+          CUMETAL_CACHE_DIR: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}
           CUMETAL_DIAGNOSTIC_OUTPUT: ${{ runner.temp }}/cumetal-timeout-diagnostic
           CUMETAL_DIAGNOSTIC_PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: .venv/bin/python .github/scripts/diagnose_cumetal_timeout.py
@@ -429,6 +443,7 @@ jobs:
         run: uv pip install --python .venv/bin/python 'pytest>=8'
 
       - name: Run bounded CuMetal QC qualification on the Apple GPU
+        id: qc_qualification
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         timeout-minutes: 45
         env:
@@ -443,11 +458,21 @@ jobs:
           CUMETAL_DEBUG_REGISTRATION: "1"
           CUMETAL_PTX_BACKEND: cumetal-ir
           CUMETAL_FP64_MODE: fast48
-          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
+          CUMETAL_CACHE_DIR: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "180"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"
           GENERATIVEQC_DFT_CUDA_TEST: "1"
         run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
+
+      - name: Save CuMetal QC JIT cache
+        if: >-
+          always() && github.event_name != 'merge_group' &&
+          steps.cumetal_qc_jit_cache.outputs.cache-hit != 'true' &&
+          (steps.qc_gate.outcome == 'success' || steps.qc_qualification.outcome == 'success')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}
+          key: ${{ steps.cumetal_qc_jit_cache.outputs.cache-primary-key }}
 
       - name: Preserve CuMetal QC endpoint diagnostics
         if: always()

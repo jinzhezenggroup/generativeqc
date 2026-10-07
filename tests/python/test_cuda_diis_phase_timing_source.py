@@ -19,7 +19,7 @@ def test_trial_events_are_resolved_after_the_existing_diis_drain() -> None:
     )
     positions = [block.index(operation) for operation in operations]
     assert positions == sorted(positions)
-    assert "cudaStreamSynchronize" not in block.split("previous = status[0]")[0]
+    assert "cudaStreamSynchronize" not in block.split("return std::nullopt;")[0]
     assert "cudaEventSynchronize" not in SOURCE
 
 

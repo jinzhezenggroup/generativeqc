@@ -167,23 +167,20 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   if (trace.enabled()) Trace::label("phase", "triples");
   if (with_triples) {
     if (forces) {
-      t = cc::triples::pullback_df_cuda(
+      auto response = cc::triples::pullback_and_fock_df_cuda(
           o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
           state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-          1e-10, budget, device, difference(base, borrowed), 3, parallel_gap_reduction,
+          1e-10, budget, device, difference(base, borrowed), 0, 3, parallel_gap_reduction,
           request_triples_gap_cotangents);
+      t = std::move(response.pullback);
+      result.triples_fock = std::move(response.fock);
       result.triples = t.diagnostic;
       result.triples_gap = t.gap;
       result.numeric_capacity_bytes =
-          std::max(result.numeric_capacity_bytes, t.numeric_capacity_bytes);
+          std::max({result.numeric_capacity_bytes, t.numeric_capacity_bytes,
+                    result.triples_fock.numeric_capacity_bytes});
       tbytes =
           capacity({&t.bov, &t.bvv, &t.ovoo, &t.ovov, &t.fov, &t.t1, &t.t2, &t.eps_o, &t.eps_v});
-      result.triples_fock = cc::triples::fock_response_df_cuda(
-          o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
-          state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-          1e-10, budget, device, checked_add(difference(base, borrowed), tbytes));
-      result.numeric_capacity_bytes =
-          std::max(result.numeric_capacity_bytes, result.triples_fock.numeric_capacity_bytes);
       fbytes = capacity({&result.triples_fock.foo, &result.triples_fock.fvv});
       if (fingerprints)
         record_fingerprints(*fingerprints, 0,

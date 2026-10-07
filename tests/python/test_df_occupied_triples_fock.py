@@ -17,7 +17,7 @@ from generativeqc_compiler.cc.occupied_triples_fock import (
     moment_program,
     resolvent_scalar_program,
 )
-from generativeqc_compiler.cc.triples import _LABELS, VP
+from generativeqc_compiler.cc.triples import _LABELS, VP, triples_energy
 from generativeqc_compiler.cc.triples_fock_response import (
     build_runtime_triples_resolvent_program,
 )
@@ -225,6 +225,124 @@ def native_fock_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
     return call
 
 
+@pytest.fixture(scope="module")
+def native_combined_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
+    if os.environ.get("GENERATIVEQC_DF_TRIPLES_CUDA_TEST") != "1":
+        pytest.skip("requires finite Slurm real-GPU allocation")
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if not compiler or not cache:
+        pytest.skip("requires C++ compiler and ccache")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
+    root = Path(__file__).resolve().parents[2]
+    directory = tmp_path_factory.mktemp("df-triples-combined-native")
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+    obj, output = directory / "probe.o", directory / "probe.so"
+    subprocess.run(
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-O2",
+            "-fPIC",
+            "-DGENERATIVEQC_HAS_CUDA=1",
+            "-I" + str(root / "src"),
+            "-c",
+            str(root / "tests/native/df_triples_fock_probe.cpp"),
+            "-o",
+            str(obj),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+        env={**os.environ, "CCACHE_BASEDIR": str(root)},
+    )
+    subprocess.run(
+        [
+            compiler,
+            "-shared",
+            str(obj),
+            str(library),
+            "-Wl,-rpath," + str(library.parent),
+            "-o",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    dll = ct.CDLL(str(output))
+    call = dll.df_triples_combined_probe
+    dp = ct.POINTER(ct.c_double)
+    call.argtypes = (
+        [ct.c_size_t] * 3
+        + [ct.POINTER(dp), ct.c_double]
+        + [ct.c_size_t] * 4
+        + [ct.POINTER(dp), dp, ct.POINTER(ct.c_size_t), ct.c_void_p, ct.c_size_t]
+    )
+    call.restype = ct.c_int
+    return call
+
+
+def run_combined(
+    call: typing.Any,
+    inputs: list[np.ndarray],
+    *,
+    budget: int = 1 << 30,
+    caller_bytes: int = 0,
+    rows: int = 0,
+    panels: int = 3,
+    threshold: float = 1e-10,
+) -> tuple:
+    q, o, v = inputs[0].shape
+    arrays = [np.ascontiguousarray(x) for x in inputs]
+    output = [
+        np.full((o, o), np.nan),
+        np.full((v, v), np.nan),
+        *(np.full_like(x, np.nan) for x in arrays[:7]),
+    ]
+    values = np.full(3, np.nan)
+    counts = np.full(14, 19, dtype=np.uintp)
+    error = ct.create_string_buffer(2048)
+    dp = ct.POINTER(ct.c_double)
+    status = call(
+        o,
+        v,
+        q,
+        (dp * 9)(*(x.ctypes.data_as(dp) for x in arrays)),
+        threshold,
+        budget,
+        caller_bytes,
+        rows,
+        panels,
+        (dp * len(output))(*(x.ctypes.data_as(dp) for x in output)),
+        values.ctypes.data_as(dp),
+        counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        error,
+        len(error),
+    )
+    return status, output, values, counts, error.value.decode()
+
+
+def test_combined_probe_output_pointer_capacity() -> None:
+    """Exercise all nine output slots without requiring a CUDA library/device."""
+    inputs, _ = case(2, 3, 4)
+    o, v = inputs[5].shape
+    shapes = [(o, o), (v, v), *(x.shape for x in inputs[:7])]
+
+    def probe(*args: typing.Any) -> int:
+        pointers = args[9]
+        assert len(pointers) == len(shapes) == 9
+        for index, shape in enumerate(shapes):
+            np.ctypeslib.as_array(pointers[index], shape=shape).fill(index + 1)
+        return 0
+
+    status, output, _, _, error = run_combined(probe, inputs)
+    assert status == 0, error
+    for index, (actual, shape) in enumerate(zip(output, shapes, strict=True)):
+        assert actual.shape == shape
+        np.testing.assert_array_equal(actual, np.full(shape, index + 1))
+
+
 def run_native(
     call: typing.Any,
     inputs: list[np.ndarray],
@@ -259,6 +377,87 @@ def run_native(
         len(error),
     )
     return status, output, values, counts, error.value.decode()
+
+
+def test_combined_response_reuses_one_input_upload(
+    native_fock_probe: typing.Any, native_combined_probe: typing.Any
+) -> None:
+    from test_df_occupied_triples_response import reverse
+
+    inputs, _ = case(2, 3, 4)
+    caller = 12345
+    status, combined, values, counts, error = run_combined(
+        native_combined_probe, inputs, caller_bytes=caller
+    )
+    assert status == 0, error
+    standalone_status, standalone, _, standalone_counts, standalone_error = run_native(
+        native_fock_probe, inputs, caller_bytes=caller
+    )
+    assert standalone_status == 0, standalone_error
+    for actual, expected in zip(combined[:2], standalone, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=0, rtol=0)
+    for actual, expected in zip(combined[2:], reverse(inputs)[:7], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+
+    o, v = inputs[5].shape
+    ovvv = np.einsum("Qia,Qfb->iafb", inputs[0], inputs[1])
+    expected_energy = triples_energy(
+        o,
+        v,
+        ovvv,
+        inputs[2],
+        inputs[3],
+        inputs[4],
+        inputs[5],
+        inputs[6],
+        inputs[7],
+        inputs[8],
+    )
+    np.testing.assert_allclose(values[0], expected_energy, atol=2e-12, rtol=0)
+    assert values[1] > 0 and values[2] > 0
+
+    input_bytes = sum(x.nbytes for x in inputs)
+    assert counts[1] == counts[2] == input_bytes
+    assert counts[3] == 0
+    assert input_bytes <= counts[0] < input_bytes + 10 * 256
+    assert counts[6] == counts[7] == input_bytes
+    assert counts[4] == counts[5] <= 1 << 30
+    assert counts[4] >= standalone_counts[0]
+
+    tiles = o * (o + 1) * (o + 2) // 6
+    pairs = o * (o + 1) // 2
+    fock_cubes = pairs * o
+    assert counts[8] == counts[12] == tiles
+    assert counts[9] == 12 * tiles
+    assert counts[10] == fock_cubes
+    assert counts[11] == 12 * fock_cubes
+    # Pullback no longer owns another forward W traversal.
+    assert counts[13] == 0
+    assert counts[11] + counts[9] == 12 * (fock_cubes + tiles)
+    assert counts[11] < 12 * (fock_cubes + tiles)
+
+    status, minimal, _, minimal_counts, error = run_combined(
+        native_combined_probe, inputs, caller_bytes=caller, rows=1, panels=1
+    )
+    assert status == 0, error
+    for actual, expected in zip(minimal, combined, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+    exact_budget = int(max(minimal_counts[4], minimal_counts[5]))
+
+    status, exact, _, exact_counts, error = run_combined(
+        native_combined_probe, inputs, budget=exact_budget, caller_bytes=caller
+    )
+    assert status == 0, error
+    for actual, expected in zip(exact, minimal, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+    assert max(exact_counts[4], exact_counts[5]) == exact_budget
+
+    status, refused, refused_values, refused_counts, error = run_combined(
+        native_combined_probe, inputs, budget=exact_budget - 1, caller_bytes=caller
+    )
+    assert status != 0 and "budget" in error
+    assert all(np.isnan(x).all() for x in (*refused, refused_values))
+    np.testing.assert_array_equal(refused_counts, 19)
 
 
 @pytest.mark.parametrize(
@@ -464,3 +663,99 @@ def test_native_preflight_rejects_before_null_input_access(
     )
     assert np.isnan(values).all()
     np.testing.assert_array_equal(counts, 19)
+
+
+@pytest.mark.parametrize("q,rows,panels", ((5_000_000, 0, 3), (3_800_000, 50, 1)))
+def test_combined_reverse_work_preflight_precedes_null_input_access(
+    native_combined_probe: typing.Any,
+    q: int,
+    rows: int,
+    panels: int,
+) -> None:
+    # Fock work fits alone; reverse or aggregate regenerated-panel work overflows.
+    # Input arrays and the device must remain untouched for this logical shape.
+    dp = ct.POINTER(ct.c_double)
+    nulls = (dp * 9)()
+    values = np.full(3, np.nan)
+    counts = np.full(14, 19, dtype=np.uintp)
+    error = ct.create_string_buffer(2048)
+    status = native_combined_probe(
+        100,
+        100,
+        q,
+        nulls,
+        1e-10,
+        np.iinfo(np.uintp).max,
+        0,
+        rows,
+        panels,
+        nulls,
+        values.ctypes.data_as(dp),
+        counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        error,
+        len(error),
+    )
+    assert status != 0 and b"overflow" in error.value
+    assert np.isnan(values).all()
+    np.testing.assert_array_equal(counts, 19)
+
+
+def test_joint_complete_work_preflight_on_host(
+    native_cxx: typing.Any, tmp_path: Path
+) -> None:
+    """Compile the actual pure CUDA-owner admission code without CUDA/device use."""
+    from tools.generate_df_occupied_triples import header
+
+    root = Path(__file__).resolve().parents[2]
+    owner = (root / "src/cc/df_triples_cuda.cu").read_text()
+    layouts = owner[
+        owner.index("constexpr std::size_t provider_allowance") : owner.index(
+            "double validate_inputs("
+        )
+    ]
+    layouts += owner[
+        owner.index("void validate_response_work(") : owner.index(
+            "// A cross-page moment"
+        )
+    ]
+    (tmp_path / "generated.hpp").write_text(header())
+    source = tmp_path / "preflight.cpp"
+    source.write_text(
+        "#include <algorithm>\n#include <array>\n#include <limits>\n"
+        '#include "posthf/capacity.hpp"\n#include "generated.hpp"\n'
+        "namespace generativeqc::cc::triples {\n"
+        "using posthf::checked_add; using posthf::checked_mul;\n"
+        + layouts
+        + "}\n"
+        + r"""
+int main() {
+  using namespace generativeqc::cc::triples;
+  for (const auto controls : {std::array<std::size_t, 3>{5000000, 100, 3},
+                             std::array<std::size_t, 3>{3800000, 50, 1}}) {
+    const auto [q, rows, panels] = controls;
+    const auto fock = fock_layout(100, 100, q, rows, panels, 0, true);
+    // In the paged case, both separate ledgers fit, but their aggregate does not.
+    if (rows == 50) validate_response_work(100, 100, q, fock.value, false);
+    try {
+      (void)joint_response_layout(100, 100, q, rows, panels, 0, true, false);
+      return 1;
+    } catch (const std::overflow_error&) {
+    }
+  }
+  (void)joint_response_layout(2, 3, 4, 2, 3, 0, true, false);
+  (void)joint_response_layout(2, 3, 4, 1, 1, 0, true, true);
+}
+"""
+    )
+    executable = tmp_path / "preflight"
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-I" + str(root / "src"),
+            "-I" + str(root / "include"),
+        ),
+    )
+    subprocess.run([str(executable)], check=True, capture_output=True, timeout=30)

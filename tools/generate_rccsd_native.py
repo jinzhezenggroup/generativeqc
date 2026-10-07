@@ -48,6 +48,10 @@ from generativeqc_compiler.tensor.ir import (
     divide,
     input_tensor,
 )
+from generativeqc_compiler.tensor.iteration_reuse import (
+    IterationReusePlan,
+    analyze_iteration_reuse,
+)
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
@@ -433,7 +437,26 @@ class ArenaPlan:
         )
 
 
-def _arena_plan(program: Program) -> ArenaPlan:
+def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
+    """Declare the conventional solver's immutable reference inputs explicitly.
+
+    This adapter is only for the dense iteration graph. DF external corrections
+    change with amplitudes and must not acquire this lifetime by implication.
+    The generic proof knows neither RCCSD nor its amplitude names.
+    """
+    input_names = {
+        node.attrs["name"] for node in program.live_nodes if node.op == "input"
+    }
+    if input_names - set(INPUT_NAMES):
+        raise ValueError("iteration reuse requires conventional RCCSD inputs")
+    return analyze_iteration_reuse(
+        program, invariant_inputs=tuple(sorted(input_names - {"t1", "t2"}))
+    )
+
+
+def _arena_plan(
+    program: Program, *, retained_nodes: tuple[typing.Any, ...] = ()
+) -> ArenaPlan:
     """Color last-use intervals without aliasing a node with its own inputs.
 
     All emitted operations write their entire output. Reusing a dead slot needs
@@ -453,10 +476,21 @@ def _arena_plan(program: Program) -> ArenaPlan:
     available: dict[tuple[str, ...], list[int]] = defaultdict(list)
     slots: list[tuple[str, ...]] = []
     node_slots = {}
+    # Retained values are prepared before the dynamic traversal. Their slots
+    # must be exclusive even *before* their original position in that traversal;
+    # merely extending each last-use interval would alias early dynamic writes.
+    for node in retained_nodes:
+        number = numbers.get(id(node))
+        if number is None or node.op == "input" or number in node_slots:
+            raise ValueError("invalid retained native arena node")
+        if node.spec.dtype != "float64":
+            raise ValueError("native RCCSD arena requires FP64 intermediates")
+        node_slots[number] = len(slots)
+        slots.append(tuple(sorted(_dim(index) for index in node.spec.indices)))
     for number, node in enumerate(nodes):
         for slot in releases[number]:
             available[slots[slot]].append(slot)
-        if node.op == "input":
+        if node.op == "input" or number in node_slots:
             continue
         if node.spec.dtype != "float64":
             raise ValueError("native RCCSD arena requires FP64 intermediates")
@@ -769,9 +803,15 @@ def _cpu_function(
     input_overrides: dict[str, str] | None = None,
     batch_dim: bool = False,
     output_fields: tuple[str, ...] | None = None,
+    reuse_plan: IterationReusePlan | None = None,
+    reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
 ) -> str:
     names = _prepare_program(program)
-    arena_plan = _arena_plan(program)
+    if (reuse_plan is None) != (reuse_phase is None):
+        raise ValueError("reuse emission requires both a plan and phase")
+    retained = () if reuse_plan is None else reuse_plan.invariant_nodes
+    retained_ids = {id(node) for node in retained}
+    arena_plan = _arena_plan(program, retained_nodes=retained)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     dimensions = "std::size_t o,std::size_t v"
     if batch_dim:
@@ -799,9 +839,20 @@ def _cpu_function(
             ctype = "std::int64_t" if node.spec.dtype == "int64" else "double"
             lines.append(f"  const {ctype}* {names[number]}={access};")
         else:
-            lines += _cpu_node(
-                node, number, names, storage=f"slot{arena_plan.node_slots[number]}"
+            selected = reuse_phase is None or (
+                (id(node) in retained_ids) == (reuse_phase == "prepare")
             )
+            if selected:
+                lines += _cpu_node(
+                    node, number, names, storage=f"slot{arena_plan.node_slots[number]}"
+                )
+            elif reuse_phase == "dynamic":
+                lines.append(
+                    f"  const double* {names[number]}=slot{arena_plan.node_slots[number]};"
+                )
+    if output_type == "void":
+        lines.append("}")
+        return "\n".join(lines)
     outputs = {
         key: names[typing.cast("typing.Any", value)._emit_index]
         for key, value in program.outputs.items()
@@ -862,8 +913,14 @@ def _cpu_function(
     return "\n".join(lines)
 
 
-def _required_function(program: Program, name: str, *, batch_dim: bool = False) -> str:
-    pieces = _arena_plan(program).sizes
+def _required_function(
+    program: Program,
+    name: str,
+    *,
+    batch_dim: bool = False,
+    retained_nodes: tuple[typing.Any, ...] = (),
+) -> str:
+    pieces = _arena_plan(program, retained_nodes=retained_nodes).sizes
     # Emit sequential checked additions rather than an expression whose parser
     # nesting grows with the AD graph. Clang's default bracket limit is finite.
     body = "std::size_t required=0;"
@@ -943,7 +1000,13 @@ def _independent_cpu(
 
 def cpu_header() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
+    iteration_reuse = _iteration_reuse_plan(iteration)
     iteration_cuda = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
+    cuda_reuse = _iteration_reuse_plan(iteration_cuda)
+    if iteration_reuse.identity != cuda_reuse.identity or _arena_plan(
+        iteration, retained_nodes=iteration_reuse.invariant_nodes
+    ) != _arena_plan(iteration_cuda, retained_nodes=cuda_reuse.invariant_nodes):
+        raise ValueError("iteration CPU/CUDA reuse proof or pinned arena diverged")
     iteration_bindings = [
         recipe
         for node in iteration_cuda.live_nodes
@@ -1120,6 +1183,9 @@ def cpu_header() -> str:
                 + ";}catch(const std::length_error&){return false;}}"
             ),
             f'inline constexpr const char* iteration_program_hash="{iteration.logical_hash}";',
+            f'inline constexpr const char* iteration_reuse_plan_hash="{iteration_reuse.identity}";',
+            f"inline constexpr std::size_t iteration_invariant_operation_count={len(iteration_reuse.invariant_nodes)};",
+            f"inline constexpr std::size_t iteration_dynamic_operation_count={len(iteration_reuse.dynamic_nodes)};",
             f'inline constexpr const char* replay_equation_hash="{replay.logical_hash}";',
             f'inline constexpr const char* lambda_rhs_program_hash="{lambda_rhs.logical_hash}";',
             f'inline constexpr const char* lambda_transpose_program_hash="{lambda_transpose.logical_hash}";',
@@ -1138,6 +1204,11 @@ def cpu_header() -> str:
             f'inline constexpr const char* fock_small_weights_program_hash="{fock_small_weights.logical_hash}";',
             f'inline constexpr const char* triples_response_program_hash="{triples_response.logical_hash}";',
             _required_function(iteration, "iteration_arena_elements"),
+            _required_function(
+                iteration,
+                "iteration_reuse_arena_elements",
+                retained_nodes=iteration_reuse.invariant_nodes,
+            ),
             _independent_admission(replay, replay_fast, "replay"),
             _required_function(lambda_rhs, "lambda_rhs_arena_elements"),
             _required_function(lambda_transpose, "lambda_transpose_arena_elements"),
@@ -1172,6 +1243,20 @@ def cpu_header() -> str:
                 triples_response, "triples_response_arena_elements", batch_dim=True
             ),
             _cpu_function(iteration, "run_iteration_cpu", "IterationOutputs"),
+            _cpu_function(
+                iteration,
+                "run_iteration_reuse_prepare_cpu",
+                "void",
+                reuse_plan=iteration_reuse,
+                reuse_phase="prepare",
+            ),
+            _cpu_function(
+                iteration,
+                "run_iteration_reused_cpu",
+                "IterationOutputs",
+                reuse_plan=iteration_reuse,
+                reuse_phase="dynamic",
+            ),
             _independent_cpu(replay, replay_fast, "replay", "ReplayOutputs"),
             _cpu_function(
                 lambda_rhs,
@@ -1655,9 +1740,15 @@ def _cuda_program(
     prepared_contractions: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
+    reuse_plan: IterationReusePlan | None = None,
+    reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
 ) -> str:
     names = _prepare_program(program)
-    arena_plan = _arena_plan(program)
+    if (reuse_plan is None) != (reuse_phase is None):
+        raise ValueError("reuse emission requires both a plan and phase")
+    retained = () if reuse_plan is None else reuse_plan.invariant_nodes
+    retained_ids = {id(node) for node in retained}
+    arena_plan = _arena_plan(program, retained_nodes=retained)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
     kernel_name = prefix if kernel_prefix is None else kernel_prefix
@@ -1727,6 +1818,10 @@ def _cuda_program(
             lines.append(f"  const {ctype}* {names[number]}={access};")
             continue
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
+        if reuse_phase is not None and (
+            (id(node) in retained_ids) != (reuse_phase == "prepare")
+        ):
+            continue
         sources = [names[x._emit_index] for x in node.inputs]
         gemm = _packed_matrix_gemm(node) if prepared_contractions else None
         batch_gemm = (
@@ -1790,6 +1885,9 @@ def _cuda_program(
         ]
         lines = declarations + lines
     lines.append("  generativeqc_tensor::cuda_check(cudaGetLastError());")
+    if output_type == "void":
+        lines.append("}")
+        return "\n".join(lines)
     outputs = {
         key: names[typing.cast("typing.Any", value)._emit_index]
         for key, value in program.outputs.items()
@@ -1881,6 +1979,7 @@ def _independent_cuda(
 
 def cuda_source() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
+    iteration_reuse = _iteration_reuse_plan(iteration)
     expanded = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
     replay = _prepare_production(expanded, "cuda", preserve_reduction_order=True)
     replay_fast = _reassociated_independent(expanded, "cuda")
@@ -1964,6 +2063,29 @@ def cuda_source() -> str:
             '#include "generated_rccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated {",
             _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
+            _cuda_program(
+                iteration,
+                "iteration_reuse_prepare",
+                "void",
+                arena_field="iteration_reuse_arena",
+                kernel_prefix="iteration",
+                emit_kernels=False,
+                reuse_plan=iteration_reuse,
+                reuse_phase="prepare",
+            ),
+            _cuda_program(
+                iteration,
+                "iteration_reused",
+                "DeviceIterationOutputs",
+                arena_field="iteration_reuse_arena",
+                kernel_prefix="iteration",
+                emit_kernels=False,
+                reuse_plan=iteration_reuse,
+                reuse_phase="dynamic",
+                # Do not erase a failed asynchronous preparation before its
+                # future owner has synchronized and checked the error word.
+                reset_error=False,
+            ),
             # Reuse the original scalar kernels for non-contraction nodes;
             # only the traversal and immutable typed bindings differ.
             _cuda_program(
@@ -2048,6 +2170,8 @@ def cuda_source() -> str:
                 input_overrides={name: f"s.{name}" for name in orbital_jvp_input_names},
             ),
             "DeviceIterationOutputs run_iteration_cuda(CudaState& state){return run_iteration(state);}",
+            "void run_iteration_reuse_prepare_cuda(CudaState& state){run_iteration_reuse_prepare(state);}",
+            "DeviceIterationOutputs run_iteration_reused_cuda(CudaState& state){return run_iteration_reused(state);}",
             "DeviceIterationOutputs run_iteration_prepared_cuda(CudaState& state){return run_iteration_prepared(state);}",
             "void prepare_iteration_contractions(CudaState& state,tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){bind_iteration_prepared(state,context,1,calls,summands);}",
             "DeviceReplayOutputs run_replay_cuda(CudaState& state){return run_replay(state);}",
