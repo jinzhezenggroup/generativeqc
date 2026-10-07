@@ -671,11 +671,18 @@ GENERATIVEQC_API uint32_t generativeqc_ks_options_version(void);
 
 /** Explicit preliminary SCF; never an automatic/default selection. */
 typedef int32_t generativeqc_initial_guess_kind;
-enum { GENERATIVEQC_INITIAL_GUESS_HF = 1, GENERATIVEQC_INITIAL_GUESS_LDA = 2 };
+enum {
+  GENERATIVEQC_INITIAL_GUESS_HF = 1,
+  GENERATIVEQC_INITIAL_GUESS_LDA = 2,
+  GENERATIVEQC_INITIAL_GUESS_MINAO = 3
+};
 
-/** CPU FP64, all-electron, restricted exact energy endpoints only. Zero-valued
- * controls select 32 iterations, DIIS 8, tolerances 1e-6/1e-4 and 256 MiB.
- * LDA uses an independent v1 coarse grid (defaults 8/6/12); HF has no grid.
+/** Explicit bounded cold-start policy. HF/LDA retain their CPU FP64,
+ * all-electron restricted exact energy-only domain. MINAO is a zero-Fock
+ * occupied-ANO projection qualified for all-electron restricted H-Ar targets;
+ * it may seed CUDA exact KS and force endpoints. Zero-valued controls select
+ * 32 iterations, DIIS 8, tolerances 1e-6/1e-4 and 256 MiB. LDA uses an
+ * independent v1 coarse grid (defaults 8/6/12); HF/MINAO have no grid.
  * maximum_numeric_bytes bounds preliminary numeric payloads, excluding object
  * headers/allocator/runtime overhead and the retained target owner. Compose
  * both owners through ResourceBudget for a whole-endpoint host capacity bound.
