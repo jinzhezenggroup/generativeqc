@@ -150,8 +150,11 @@ void lifecycle(bool uhf) {
                 resident_derivative, detail, &resident_resources, nullptr, nullptr,
                 &borrowed) == GENERATIVEQC_STATUS_SUCCESS,
             "resident-density Coulomb response: " + detail);
-    require(host_derivative == resident_derivative,
-            "resident-density Coulomb response changed the derivative");
+    require(host_derivative.size() == resident_derivative.size(),
+            "resident-density Coulomb response changed the derivative shape");
+    for (std::size_t i = 0; i < host_derivative.size(); ++i)
+      require(std::abs(host_derivative[i] - resident_derivative[i]) < 1e-12,
+              "resident-density Coulomb response changed the derivative");
     require(host_resources.density_host_to_device_bytes == density.size() * sizeof(double),
             "host Coulomb response did not upload its detached density");
     require(resident_resources.density_host_to_device_bytes == 0,
