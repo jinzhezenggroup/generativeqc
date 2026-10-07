@@ -11,6 +11,85 @@ from generativeqc_compiler.integral.lowering.fock_accumulation import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_restricted_raw_k_block_mapping_matches_eightfold_scatter() -> None:
+    """The shell-block K map must preserve every canonical symmetry channel."""
+
+    n = 4
+    density = [[0.031 * (1 + row + 3 * column) for column in range(n)] for row in range(n)]
+
+    def permutation(
+        p: int, i: int, j: int, k: int, l: int
+    ) -> tuple[int, int, int, int]:
+        values = (
+            (i, j, k, l),
+            (j, i, k, l),
+            (i, j, l, k),
+            (j, i, l, k),
+            (k, l, i, j),
+            (l, k, i, j),
+            (k, l, j, i),
+            (l, k, j, i),
+        )
+        return values[p]
+
+    def unique(p: int, i: int, j: int, k: int, l: int) -> bool:
+        pair_swapped = p >= 4
+        first_pair_diagonal = k == l if pair_swapped else i == j
+        second_pair_diagonal = i == j if pair_swapped else k == l
+        if p & 1 and first_pair_diagonal:
+            return False
+        if p & 2 and second_pair_diagonal:
+            return False
+        return not pair_swapped or i != k or j != l
+
+    def add(
+        target: dict[tuple[int, int], float], row: int, column: int, value: float
+    ) -> None:
+        target[(row, column)] = target.get((row, column), 0.0) + value
+
+    cases = 0
+    for i in range(n):
+        for j in range(i + 1):
+            first_pair = i * (i + 1) // 2 + j
+            for k in range(n):
+                for l in range(k + 1):
+                    second_pair = k * (k + 1) // 2 + l
+                    if first_pair < second_pair:
+                        continue
+                    integral = 0.127 + 0.011 * (i + 2 * j + 3 * k + 5 * l)
+
+                    incumbent: dict[tuple[int, int], float] = {}
+                    for p in range(8):
+                        if not unique(p, i, j, k, l):
+                            continue
+                        a, b, c, d = permutation(p, i, j, k, l)
+                        add(incumbent, a, c, density[b][d] * integral)
+
+                    blocked: dict[tuple[int, int], float] = {}
+                    add(blocked, i, k, density[j][l] * integral)
+                    if i != j:
+                        add(blocked, j, k, density[i][l] * integral)
+                    if k != l:
+                        add(blocked, i, l, density[j][k] * integral)
+                    if i != j and k != l:
+                        add(blocked, j, l, density[i][k] * integral)
+                    if i != k or j != l:
+                        add(blocked, k, i, density[l][j] * integral)
+                        if k != l:
+                            add(blocked, l, i, density[k][j] * integral)
+                        if i != j:
+                            add(blocked, k, j, density[l][i] * integral)
+                        if i != j and k != l:
+                            add(blocked, l, j, density[k][i] * integral)
+
+                    assert blocked.keys() == incumbent.keys()
+                    for key, expected in incumbent.items():
+                        assert blocked[key] == pytest.approx(expected, abs=1.0e-15)
+                    cases += 1
+
+    assert cases == 55
+
+
 def test_generated_scatter_all_canonical_index_coincidences(
     tmp_path: Path, native_cxx: object
 ) -> None:
