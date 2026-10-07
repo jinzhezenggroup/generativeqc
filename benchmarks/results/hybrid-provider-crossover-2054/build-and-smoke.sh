@@ -27,8 +27,8 @@ export PYTHONUTF8=1
 export CCACHE_DIR="$repo_root_2054/.artifacts/compiler-cache/data"
 export CCACHE_BASEDIR="$repo_root_2054"
 
-run_root_2054="$repo_root_2054/.artifacts/benchmarks/hybrid-provider-2054"
-build_dir_2054="$repo_root_2054/.artifacts/build-hybrid-2054-sm90"
+run_root_2054="$repo_root_2054/.artifacts/benchmarks/hybrid-provider-2054/cuda129-smoke"
+build_dir_2054="$repo_root_2054/.artifacts/build-hybrid-2054-sm90-cuda129"
 mkdir -p "$run_root_2054" "$CCACHE_DIR"
 receipt_2054="$run_root_2054/build-receipt.txt"
 {

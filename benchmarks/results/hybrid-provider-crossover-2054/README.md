@@ -47,6 +47,8 @@ records the real CMake launchers, pre/post cache statistics, binary hash and
 three-atom device attempts. It never starts an uncached full build. Its
 task-owned wheel/cache overlay lives under `.artifacts/` and is not a
 production dependency.
+The first CUDA 12.8 attempt stopped at the repository's CUDA >=12.9 configure
+gate; its raw log remains separate from the CUDA 12.9 build directory.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
