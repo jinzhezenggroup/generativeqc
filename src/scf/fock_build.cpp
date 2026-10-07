@@ -38,8 +38,11 @@ void canonicalize(FockTermSpec& term) {
   if (term.op == FockOperator::FullRange) {
     require(term.omega == 0.0, "full-range Fock terms require omega=0");
   } else {
-    require(term.approximation == FockApproximation::Exact,
-            "range-separated Fock terms currently require the exact provider");
+    const bool fitted_long_range =
+        term.approximation == FockApproximation::DensityFitted &&
+        term.op == FockOperator::LongRange;
+    require(term.approximation == FockApproximation::Exact || fitted_long_range,
+            "range-separated Fock terms require exact or long-range density-fitted exchange");
   }
   if (term.approximation == FockApproximation::SeminumericalCosx) {
     const auto& cosx = term.cosx;
@@ -158,6 +161,12 @@ constexpr FockProviderCapabilities supported_fock_domain() {
   return capabilities;
 }
 
+constexpr FockProviderCapabilities density_fitted_fock_domain() {
+  auto capabilities = supported_fock_domain();
+  capabilities.long_range = true;
+  return capabilities;
+}
+
 constexpr FockProviderCapabilities cpu_exact_fock_domain() {
   auto capabilities = supported_fock_domain();
   capabilities.short_range = true;
@@ -219,12 +228,14 @@ constexpr std::array<FockProviderRegistration, 6> kFockProviders{{
                       runtime::ProviderAvailability::Executable, {}, "src/scf/fock_provider.cpp",
                       cpu_exact_fock_domain()),
     make_registration("cpu.df", FockApproximation::DensityFitted, runtime::ProviderBackend::Cpu,
-                      runtime::ProviderAvailability::Executable, {}, "src/scf/fock_provider.cpp"),
+                      runtime::ProviderAvailability::Executable, {}, "src/scf/fock_provider.cpp",
+                      density_fitted_fock_domain()),
     make_registration("cuda.exact", FockApproximation::Exact, runtime::ProviderBackend::Cuda,
                       kCudaAvailability, kCudaReason, "src/scf/cuda_fock_provider.cpp",
                       cuda_exact_fock_domain()),
     make_registration("cuda.df", FockApproximation::DensityFitted, runtime::ProviderBackend::Cuda,
-                      kCudaAvailability, kCudaReason, "src/scf/cuda_fock_provider.cpp"),
+                      kCudaAvailability, kCudaReason, "src/scf/cuda_fock_provider.cpp",
+                      density_fitted_fock_domain()),
     make_registration("cpu.cosx", FockApproximation::SeminumericalCosx,
                       runtime::ProviderBackend::Cpu, runtime::ProviderAvailability::Unavailable,
                       "the CPU COSX path is a correctness oracle, not a Fock provider",
