@@ -290,6 +290,8 @@ int main() {
             "-ffunction-sections",
             "-fdata-sections",
             "-I",
+            str(root / "src"),
+            "-I",
             str(root / "src/xtb/native/src"),
             "-I",
             str(root / "src/xtb/native"),
