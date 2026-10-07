@@ -48,14 +48,11 @@ from generativeqc_compiler.dft.cuda import (
     compile_cuda as compile_grid,
 )
 from generativeqc_compiler.dft.plan import plan_tiles
-from generativeqc_compiler.integral.first_derivative_native import (
-    emit_first_derivative_cuda,
-)
 from generativeqc_compiler.integral.first_derivative_schedule import (
     COMPONENT_LABELS,
     CUDA_REQUESTS_PER_UNIT,
+    cached_derivative_cuda_source,
     derivative_binding,
-    derivative_cuda_sources,
     derivative_requests,
 )
 from generativeqc_compiler.method.stationary_cuda import (
@@ -1780,6 +1777,14 @@ class _CudaSources:
             self.close()
 
 
+def _stationary_source_cache_enabled() -> bool:
+    """Allow a diagnostic no-source-cache fallback without changing binary reuse."""
+    value = os.environ.get("GENERATIVEQC_STATIONARY_SOURCE_CACHE", "1")
+    if value not in ("0", "1"):
+        raise ValueError("GENERATIVEQC_STATIONARY_SOURCE_CACHE must be 0 or 1")
+    return value == "1"
+
+
 def _native_grid_artifact(library: typing.Any, architecture: str) -> CudaArtifact:
     """Bind the already built native CUDA grid code without recompilation."""
     path = Path(library).resolve()
@@ -2066,24 +2071,24 @@ class PreparedStationaryCudaExecution:
         component_mode = integral_derivatives and _component_mode(expansions)
         stationary_artifact = (
             compile_stationary_cuda(
-                (
-                    tuple(
-                        source
-                        for _, source in derivative_cuda_sources(
-                            _component_domain(expansions)
-                        )
-                    )
+                lambda: cached_derivative_cuda_source(
+                    requests,
+                    cache=cache,
+                    target=compiler.target,
+                    component_domain=_component_domain(expansions)
                     if component_mode
-                    else emit_first_derivative_cuda(requests)
+                    else None,
+                    enabled=_stationary_source_cache_enabled(),
                 ),
                 functional=functional,
                 plan=plan,
                 iterations=spec.partition_iterations,
                 compiler=compiler,
                 cache=cache,
-                primitive_shard_width=(
-                    CUDA_REQUESTS_PER_UNIT if component_mode else None
-                ),
+                primitive_shard_width=CUDA_REQUESTS_PER_UNIT
+                if component_mode
+                else None,
+                cache_generated_sources=_stationary_source_cache_enabled(),
             )
             if aot_directory is None or ecp
             else load_stationary_aot_artifact(
@@ -2886,24 +2891,24 @@ def _complete_rks_cuda_gradient_diagnostic(
         with timeline.phase("artifact_lookup_compile"):
             artifact = (
                 compile_stationary_cuda(
-                    (
-                        tuple(
-                            source
-                            for _, source in derivative_cuda_sources(
-                                _component_domain(expansions)
-                            )
-                        )
+                    lambda: cached_derivative_cuda_source(
+                        requests,
+                        cache=cache,
+                        target=compiler.target,
+                        component_domain=_component_domain(expansions)
                         if component_mode
-                        else emit_first_derivative_cuda(requests)
+                        else None,
+                        enabled=_stationary_source_cache_enabled(),
                     ),
                     functional=functional,
                     plan=plan,
                     iterations=spec.partition_iterations,
                     compiler=compiler,
                     cache=cache,
-                    primitive_shard_width=(
-                        CUDA_REQUESTS_PER_UNIT if component_mode else None
-                    ),
+                    primitive_shard_width=CUDA_REQUESTS_PER_UNIT
+                    if component_mode
+                    else None,
+                    cache_generated_sources=_stationary_source_cache_enabled(),
                 )
                 if aot_directory is None or ecp
                 else load_stationary_aot_artifact(
@@ -3688,6 +3693,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         prepared_owner_preparation_seconds=(
             0.0 if prepared is None else prepared.preparation_seconds
         ),
+        stationary_source_cache=artifact.metadata.get("source_cache"),
         prepared_geometry_rebinds=(
             0 if prepared is None else prepared._lease.refreshes
         ),

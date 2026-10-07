@@ -349,8 +349,10 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # complete reduction remain bound by the exact whole-owner source span.
 # The DF resident-one-electron metadata distinguishes device execution from
 # host fallback without changing admission or claiming DF-response coverage.
+# Lazy source-product reuse changes only compilation preparation and telemetry;
+# native requirements, work windows, host reserves and reductions remain audited.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "34b24d3895eed20d7846c81380dd040afbc6d9fadf423a1dbb27f0908f9c4c60"
+    "a43077fab9b73dbe52beacf12442fb2cd1e104e0eff296718b7251ecb4c1b22c"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -461,8 +463,10 @@ NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
+# The JIT side now defers integral source reuse; packaged selection and the
+# prepared request/geometry/resource contracts stay unchanged and fail closed.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
+    "1869293908a30ea3d85731aa3f938dad80c28fcfc337ac9909d96dfe43cfa70c"
 )
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
     "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"
