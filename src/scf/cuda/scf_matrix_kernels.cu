@@ -13,6 +13,24 @@ __global__ void copy_matrix_kernel(std::size_t elements, const double* source,
   if (element < elements) destination[element] = source[element];
 }
 
+__global__ void add_matrix_kernel(std::size_t elements, const double* addend, double* destination) {
+  const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (element < elements) destination[element] += addend[element];
+}
+
+__global__ void prepare_incremental_density_kernel(std::size_t elements, const double* density,
+                                                   const double* anchor_density,
+                                                   double* delta_density,
+                                                   double* max_abs_delta_density) {
+  const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (element >= elements) return;
+  const double delta = density[element] - anchor_density[element];
+  delta_density[element] = delta;
+  const double magnitude = fabs(delta);
+  atomicMax(reinterpret_cast<unsigned long long*>(max_abs_delta_density),
+            static_cast<unsigned long long>(__double_as_longlong(magnitude)));
+}
+
 /** Copy complete per-system matrices selected by a device-resident mask. */
 __global__ void copy_selected_matrices_kernel(std::int32_t batch_size,
                                               std::int32_t matrices_per_system, std::int32_t nbf,
@@ -243,6 +261,19 @@ __global__ void finalize_incremental_direct_jk_kernel(
 void launch_copy_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
                                std::size_t elements, const double* source, double* destination) {
   copy_matrix_kernel<<<grid, block, shared_bytes, stream>>>(elements, source, destination);
+}
+
+void launch_add_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+                              std::size_t elements, const double* addend, double* destination) {
+  add_matrix_kernel<<<grid, block, shared_bytes, stream>>>(elements, addend, destination);
+}
+
+void launch_prepare_incremental_density_kernel(
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::size_t elements,
+    const double* density, const double* anchor_density, double* delta_density,
+    double* max_abs_delta_density) {
+  prepare_incremental_density_kernel<<<grid, block, shared_bytes, stream>>>(
+      elements, density, anchor_density, delta_density, max_abs_delta_density);
 }
 
 void launch_copy_selected_matrices_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
