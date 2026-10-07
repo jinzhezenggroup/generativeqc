@@ -17,7 +17,7 @@ from generativeqc_compiler.cc.occupied_triples_fock import (
     moment_program,
     resolvent_scalar_program,
 )
-from generativeqc_compiler.cc.triples import _LABELS, VP
+from generativeqc_compiler.cc.triples import _LABELS, VP, triples_energy
 from generativeqc_compiler.cc.triples_fock_response import (
     build_runtime_triples_resolvent_program,
 )
@@ -225,6 +225,100 @@ def native_fock_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
     return call
 
 
+@pytest.fixture(scope="module")
+def native_combined_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
+    if os.environ.get("GENERATIVEQC_DF_TRIPLES_CUDA_TEST") != "1":
+        pytest.skip("requires finite Slurm real-GPU allocation")
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if not compiler or not cache:
+        pytest.skip("requires C++ compiler and ccache")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
+    root = Path(__file__).resolve().parents[2]
+    directory = tmp_path_factory.mktemp("df-triples-combined-native")
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+    obj, output = directory / "probe.o", directory / "probe.so"
+    subprocess.run(
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-O2",
+            "-fPIC",
+            "-DGENERATIVEQC_HAS_CUDA=1",
+            "-I" + str(root / "src"),
+            "-c",
+            str(root / "tests/native/df_triples_fock_probe.cpp"),
+            "-o",
+            str(obj),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+        env={**os.environ, "CCACHE_BASEDIR": str(root)},
+    )
+    subprocess.run(
+        [
+            compiler,
+            "-shared",
+            str(obj),
+            str(library),
+            "-Wl,-rpath," + str(library.parent),
+            "-o",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    dll = ct.CDLL(str(output))
+    call = dll.df_triples_combined_probe
+    dp = ct.POINTER(ct.c_double)
+    call.argtypes = (
+        [ct.c_size_t] * 3
+        + [ct.POINTER(dp), ct.c_double]
+        + [ct.c_size_t] * 4
+        + [ct.POINTER(dp), dp, ct.POINTER(ct.c_size_t), ct.c_void_p, ct.c_size_t]
+    )
+    call.restype = ct.c_int
+    return call
+
+
+def run_combined(
+    call: typing.Any,
+    inputs: list[np.ndarray],
+    *,
+    budget: int = 1 << 30,
+    caller_bytes: int = 0,
+    rows: int = 0,
+    panels: int = 3,
+    threshold: float = 1e-10,
+) -> tuple:
+    q, o, v = inputs[0].shape
+    arrays = [np.ascontiguousarray(x) for x in inputs]
+    output = [np.full((o, o), np.nan), np.full((v, v), np.nan)]
+    values = np.full(3, np.nan)
+    counts = np.full(8, 19, dtype=np.uintp)
+    error = ct.create_string_buffer(2048)
+    dp = ct.POINTER(ct.c_double)
+    status = call(
+        o,
+        v,
+        q,
+        (dp * 9)(*(x.ctypes.data_as(dp) for x in arrays)),
+        threshold,
+        budget,
+        caller_bytes,
+        rows,
+        panels,
+        (dp * 2)(*(x.ctypes.data_as(dp) for x in output)),
+        values.ctypes.data_as(dp),
+        counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        error,
+        len(error),
+    )
+    return status, output, values, counts, error.value.decode()
+
+
 def run_native(
     call: typing.Any,
     inputs: list[np.ndarray],
@@ -259,6 +353,39 @@ def run_native(
         len(error),
     )
     return status, output, values, counts, error.value.decode()
+
+
+def test_combined_response_reuses_one_input_upload(
+    native_fock_probe: typing.Any, native_combined_probe: typing.Any
+) -> None:
+    inputs, _ = case(2, 3, 4)
+    caller = 12345
+    status, combined, values, counts, error = run_combined(
+        native_combined_probe, inputs, caller_bytes=caller
+    )
+    assert status == 0, error
+    standalone_status, standalone, _, standalone_counts, standalone_error = run_native(
+        native_fock_probe, inputs, caller_bytes=caller
+    )
+    assert standalone_status == 0, standalone_error
+    for actual, expected in zip(combined, standalone, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=0, rtol=0)
+
+    o, v = inputs[5].shape
+    ovvv = np.einsum("Qia,Qfb->iafb", inputs[0], inputs[1])
+    expected_energy = triples_energy(
+        o, v, ovvv, inputs[2], inputs[3], inputs[4], inputs[5], inputs[6], inputs[7], inputs[8]
+    )
+    np.testing.assert_allclose(values[0], expected_energy, atol=2e-12, rtol=0)
+    assert values[1] > 0 and values[2] > 0
+
+    input_bytes = sum(x.nbytes for x in inputs)
+    assert counts[1] == counts[2] == input_bytes
+    assert counts[3] == 0
+    assert input_bytes <= counts[0] < input_bytes + 10 * 256
+    assert counts[6] == counts[7] == input_bytes
+    assert counts[4] <= 1 << 30 and counts[5] <= 1 << 30
+    assert counts[5] >= standalone_counts[0]
 
 
 @pytest.mark.parametrize(
