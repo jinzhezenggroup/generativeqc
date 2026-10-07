@@ -216,6 +216,7 @@ def test_public_preview_declares_experimental_nonconformance() -> None:
     assert report["scientific_metadata_requires_explicit_indices"] is True
     assert report["compiled_call"] == "shape-dtype-specialized-tensorir-reference"
     assert report["compiled_differentiability"] == "explicit-parameter-names"
+    assert report["namespace_dispatch"] == "numpy-eager-or-symbolic-tensorir"
 
     value = xp.input_array("x", _vector_spec())
     assert isinstance(value, xp.VibeArray)
