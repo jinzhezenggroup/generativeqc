@@ -11,6 +11,16 @@ namespace generativeqc::scf::cuda_execution {
 void launch_copy_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
                                std::size_t elements, const double* source, double* destination);
 
+/** Add one dense FP64 buffer into another without changing stream ownership. */
+void launch_add_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+                              std::size_t elements, const double* addend, double* destination);
+
+/** Form an anchor-relative density delta and accumulate its maximum absolute entry. */
+void launch_prepare_incremental_density_kernel(
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::size_t elements,
+    const double* density, const double* anchor_density, double* delta_density,
+    double* max_abs_delta_density);
+
 /** Preserve launch geometry, stream and per-item state routing. */
 void launch_copy_selected_matrices_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                           cudaStream_t stream, std::int32_t batch_size,
