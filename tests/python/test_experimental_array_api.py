@@ -136,7 +136,12 @@ def test_compiled_lower_supports_explicit_differentiable_inputs() -> None:
 
     values = np.array([1.0, 2.0, 3.0], dtype=np.float64)
     program = norm2.lower(values)
-    assert program.inputs["x"].spec.differentiable is True
+    x_input = next(
+        node
+        for node in program.nodes
+        if node.op == "input" and node.attrs["name"] == "x"
+    )
+    assert x_input.spec.differentiable is True
     result = tensor.jvp(
         program,
         {"x": values},
@@ -148,7 +153,13 @@ def test_compiled_lower_supports_explicit_differentiable_inputs() -> None:
     def fixed(x: object) -> object:
         return xp.sum(x * x)
 
-    assert fixed.lower(values).inputs["x"].spec.differentiable is False
+    fixed_program = fixed.lower(values)
+    fixed_input = next(
+        node
+        for node in fixed_program.nodes
+        if node.op == "input" and node.attrs["name"] == "x"
+    )
+    assert fixed_input.spec.differentiable is False
 
 
 def test_generic_broadcasting_and_exact_scalar_operators_match_numpy() -> None:
