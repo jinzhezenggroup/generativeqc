@@ -180,9 +180,39 @@ struct PreparedFockPlan::Impl {
     const bool derivatives =
         strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0;
     const bool df_derivatives = derivatives;
+    integrals::CoulombRange df_range = integrals::CoulombRange::Full;
+    double df_omega = 0.0;
     if (has_df) {
       auxiliary = aux ? *aux : system;
       fitted.emplace();
+      const auto fitted_identity = [&](const FockTermSpec& term) {
+        if (!term.present || term.approximation != FockApproximation::DensityFitted)
+          return std::pair{integrals::CoulombRange::Full, 0.0};
+        if (term.op == FockOperator::LongRange)
+          return std::pair{integrals::CoulombRange::Long, term.omega};
+        if (term.op == FockOperator::ShortRange)
+          return std::pair{integrals::CoulombRange::Short, term.omega};
+        return std::pair{integrals::CoulombRange::Full, 0.0};
+      };
+      const auto coulomb_identity = fitted_identity(strategy.spec.coulomb);
+      const auto exchange_identity = fitted_identity(strategy.spec.exchange);
+      if (strategy.spec.coulomb.present &&
+          strategy.spec.coulomb.approximation == FockApproximation::DensityFitted) {
+        df_range = coulomb_identity.first;
+        df_omega = coulomb_identity.second;
+      }
+      if (strategy.spec.exchange.present &&
+          strategy.spec.exchange.approximation == FockApproximation::DensityFitted) {
+        if (strategy.spec.coulomb.present &&
+            strategy.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+            exchange_identity != coulomb_identity)
+          throw std::invalid_argument(
+              "one DF source cannot serve different Coulomb and exchange radial operators");
+        df_range = exchange_identity.first;
+        df_omega = exchange_identity.second;
+      }
+      fitted->range = df_range;
+      fitted->omega = df_omega;
     }
     if (strategy.backend == FockBackend::Cpu) {
       auto ints = integrals::build_integrals(system, derivatives, full_exact);
@@ -198,8 +228,8 @@ struct PreparedFockPlan::Impl {
         fitted->one_electron = std::move(ints);
         const bool materialize_df_derivatives =
             derivatives && cpu_materialized_df_derivatives_requested();
-        fitted->raw = integrals::build_density_fitting_integrals(system, *auxiliary,
-                                                                 materialize_df_derivatives);
+        fitted->raw = integrals::build_density_fitting_integrals(
+            system, *auxiliary, materialize_df_derivatives, df_range, df_omega);
         if (derivatives && !materialize_df_derivatives) {
           fitted->raw.ncoord = system.atoms.size() * 3U;
           fitted->df_gradient_orbital = system;
@@ -281,6 +311,8 @@ struct PreparedFockPlan::Impl {
       data.raw.naux = molecule::ao_count(*auxiliary);
       data.raw.ncoord = diagnostic.ncoord;
       data.metric_relative_threshold = strategy.metric_relative_threshold;
+      data.range = df_range;
+      data.omega = df_omega;
       data.resolved_budget = resolved;
       if (df_derivatives) {
         data.df_gradient_orbital = system;
@@ -309,9 +341,14 @@ struct PreparedFockPlan::Impl {
       CudaDensityFittingIntegralSource* raw_source{};
       std::vector<double> metrics;
       std::size_t nbf{}, naux{};
-      checked(create_cuda_density_fitting_integral_source(device, {system}, {*auxiliary},
-                                                          &raw_source, metrics, nbf, naux, detail),
-              detail);
+      const auto source_status =
+          df_range == integrals::CoulombRange::Full
+              ? create_cuda_density_fitting_integral_source(
+                    device, {system}, {*auxiliary}, &raw_source, metrics, nbf, naux, detail)
+              : create_cuda_range_density_fitting_integral_source(
+                    device, {system}, {*auxiliary}, df_range, df_omega, &raw_source, metrics, nbf,
+                    naux, detail);
+      checked(source_status, detail);
       std::unique_ptr<CudaDensityFittingIntegralSource,
                       decltype(&destroy_cuda_density_fitting_integral_source)>
           source(raw_source, &destroy_cuda_density_fitting_integral_source);
