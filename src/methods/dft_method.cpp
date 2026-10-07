@@ -1141,8 +1141,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                    one_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
           return one_status;
         }
-      } else if (resident_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
-                 resident_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+      } else if (resident_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
         return resident_status;
       }
     }
