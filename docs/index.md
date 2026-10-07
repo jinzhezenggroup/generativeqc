@@ -13,8 +13,9 @@ GenerativeQC documentation is organized by **reader and task**, not by the inter
 
 ## Generated material
 
-The [Python API reference](reference/api.md) is generated from the public Python
-exports, signatures, type annotations, and docstrings at Sphinx build time. The
+The [Python API reference](reference/api.md) recursively discovers modules that
+declare `__all__` and generates their exported signatures, type annotations,
+docstrings, inheritance, and source links at Sphinx build time. The
 generated [public method table](public_methods.md), `codegen_capabilities.json`,
 the `cuda_ownership/` ledger, and the generated Libxc import/coverage reports
 remain at the docs root because repository tooling currently writes or consumes

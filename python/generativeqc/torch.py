@@ -14,6 +14,8 @@ if typing.TYPE_CHECKING:
 
     from .batch import PreparedBatch
 
+__all__ = ["batched_energy", "energy"]
+
 
 def _validated_atomic_numbers(
     coordinates: typing.Any, atomic_numbers: typing.Any

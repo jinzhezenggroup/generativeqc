@@ -2,7 +2,7 @@
 
 Reference is for exact lookup rather than teaching.
 
-- [Python API](api.md) — generated from public Python exports, signatures, type annotations, and docstrings.
+- [Python API](api.md) — recursively generated from modules that explicitly declare `__all__`.
 - [Public method table](../public_methods.md) — generated canonical method identities and declared capabilities.
 - [Capability sources](capabilities.md)
 - [Units](units.md)
