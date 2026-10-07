@@ -94,15 +94,51 @@ speedup evidence. Binary/source/contract receipts, compiler-cache statistics and
 an offline cuobjdump resource census are retained in ignored `.artifacts/`.
 No register/resource eligibility is inferred from successfully linking a DSO.
 
-The complete current-source native build reaches its explicit 1,500-second
-deadline before producing the core runtime library. Therefore the new real-GPU
-energy/force/reuse/displacement gate is not executed or claimed passed; do not
-substitute a mixed-revision native core to promote this path. Keep the PR draft
-and both issue qualification lanes open. Incremental staging with `rsync -a`
+The initial complete current-source native build reached its explicit
+1,500-second deadline before producing the core runtime library. At that stage,
+the new real-GPU energy/force/reuse/displacement gate was not executed or claimed
+passed; never substitute a mixed-revision native core to promote this path.
+Incremental staging with `rsync -a`
 initially copied changed source bytes with timestamps older than the manifests;
 the audit correctly rejected stale contracts. Advancing the changed input's
 mtime and rerunning the real CMake manifest rules produced matching receipts,
 without clearing compiler caches or editing expected identities to obtain hits.
+
+Follow-up qualification on the same date resumes the existing build rather than
+discarding its completed objects. Setting Ninja to 96 jobs alone still leaves
+CUDA compilation capped by the default two-job CMake pool. On n2 (192 logical
+CPUs and 503 GiB RAM), configure `GENERATIVEQC_CUDA_COMPILE_JOBS=64` and retain
+Ninja's 96-job total bound. Reuse ccache 4.5.1 and its existing
+`~/.cache/ccache`, with checkout-root `CCACHE_BASEDIR` and an invocation-local
+20 GiB cache limit. Keep release flags, architecture 120 and NVCC split-compile
+threads at 1. The post-pool-adjustment incremental core build completes in
+8 minutes 1.43 seconds; this is not a clean-build or isolated PR speedup sample.
+Its per-invocation ccache log records 7 hits and 176 first-compilation misses;
+the continued build populates the cache rather than claiming a high hit rate.
+A subsequent identical native build reports no work to do.
+
+The complete current-source core and all eight AOT packages then pass the
+hardware gate in finite Slurm job 2633 on node2's RTX PRO 6000 Blackwell,
+preserving assigned `CUDA_VISIBLE_DEVICES=1`. All eight tests pass in 56.55
+seconds and retain 24 complete cold/reuse/displaced host-return endpoints,
+artifact hashes, native source identity and semantic work receipts. Against
+the independent PySCF 2.14.0 / Libxc 7.0.0 oracle, maximum energy error is
+3.2685e-13 Eh and maximum force-component error is 1.1192e-10 Eh/bohr, within
+the unchanged 1e-8 / 1e-7 gates. Each endpoint forbids compiler discovery,
+primitive/wrapper/IR/AD generation and CPU scientific fallback. Native cubins
+remain present, and no endpoint requires driver PTX JIT.
+
+The first hardware attempt exposed an incorrect test-only public constructor
+keyword (`representation` instead of `basis_representation`), which is fixed.
+The next attempt passed both small-domain RKS cases but the independent neutral
+OH UKS reference did not converge at its frozen tolerances. Use neutral bent
+water for RKS and its singly charged doublet for UKS, retaining oxygen p/d,
+spin, reuse and displacement coverage without changing the oracle solver or
+loosening convergence/numerical gates. Record charge, multiplicity and each
+sample's actual geometry in the evidence. Preserve the failed attempt logs;
+neutral OH is not claimed qualified. Small-system success does not complete
+investigation-scale/interleaved timing or full-catalog/resource qualification:
+keep the PR draft and both issue lanes open.
 
 ## Consequences and revisit conditions
 

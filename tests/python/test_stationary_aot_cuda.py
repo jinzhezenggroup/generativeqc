@@ -39,15 +39,20 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
     )
     # Oxygen exercises p primitives even in the compact s/p artifact; the
     # spherical def2-SVP cases additionally exercise the full d-shell domain.
-    atoms = [("O", (0.02, -0.01, 0.0)), ("H", (0.04, 0.02, 1.81))]
-    if spin == "rks":
-        atoms.append(("H", (1.72, 0.01, -0.58)))
+    atoms = [
+        ("O", (0.02, -0.01, 0.0)),
+        ("H", (0.04, 0.02, 1.81)),
+        ("H", (1.72, 0.01, -0.58)),
+    ]
+    # The independent neutral-OH reference did not converge at the frozen
+    # tolerances; bent water cation retains open-shell and p/d coverage.
+    charge = 1 if spin == "uks" else 0
     multiplicity = 2 if spin == "uks" else 1
     calculator = Calculator(
         method=f"{method}-{spin}",
         device="cuda",
         basis=basis_name,
-        representation="spherical",
+        basis_representation="spherical",
         precision="fp64",
         ks_options=KsOptions(
             grid=GridSpec(
@@ -63,7 +68,7 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
     samples = []
     force_work = []
     with calculator.prepare_batch(
-        [atoms], multiplicities=[multiplicity], warm_start=True
+        [atoms], charges=[charge], multiplicities=[multiplicity], warm_start=True
     ) as batch:
         original_force = batch._public_dft_cuda_force
 
@@ -123,6 +128,7 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
                 current_atoms,
                 basis=basis_name,
                 representation="spherical",
+                charge=charge,
                 multiplicity=multiplicity,
             ) as basis:
                 state = StationaryKsState.from_native(batch, basis)
@@ -142,6 +148,7 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
             samples.append(
                 {
                     "stage": stage,
+                    "atoms": current_atoms,
                     "endpoint_seconds": endpoint_seconds,
                     "energy_error_hartree": energy_error,
                     "max_force_error_hartree_per_bohr": force_error,
@@ -159,6 +166,8 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
                         "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
                         "method": method,
                         "spin": spin,
+                        "charge": charge,
+                        "multiplicity": multiplicity,
                         "basis": basis_name,
                         "representation": "spherical",
                         "precision": "fp64",
