@@ -1,0 +1,154 @@
+"""Measure fresh 96-atom PBE0 owners, retaining closure and independent gates."""
+
+from __future__ import annotations
+
+import gzip
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+from time import perf_counter
+
+import cupy as cp
+from generativeqc import Calculator, GridSpec, KsOptions
+
+from benchmarks.compare_df_direct_endpoint import check_endpoint
+from benchmarks.compare_gpu4pyscf_batch import (
+    load_comparison_basis,
+    native_build_metadata,
+    require_tuned_native_build,
+)
+from benchmarks.ks_preliminary_density import read_ao_work
+from benchmarks.readme_hf_scaling import scaling_cases
+from benchmarks.readme_omol25 import protocol
+from benchmarks.readme_pbe0 import PBE0
+
+
+def main() -> None:
+    """Use the README science and cold boundary, without post-cold replays."""
+    assert os.environ.get("SLURM_JOB_ID")
+    assert os.environ.get("CUDA_VISIBLE_DEVICES") is not None
+    output = Path(sys.argv[1])
+    case = scaling_cases()["water-96"]
+    basis_path = Path("benchmarks/results/pbe0-def2-svp-20261001/def2-svp-ho.json")
+    basis, _ = load_comparison_basis(
+        basis_path, case, role="orbital", compute_forces=True
+    )
+    grid = GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32)
+    scientific = protocol(96, basis, grid, 5, benchmark=PBE0)
+    reference_path = Path(
+        "benchmarks/results/pbe0-composed-baseline-20261005/reference-96.json.gz"
+    )
+    reference = json.loads(gzip.decompress(reference_path.read_bytes()))
+    assert reference["status"] == "measured"
+    assert reference["protocol"] == scientific
+    oracle = next(row for row in reference["records"] if row["phase"] == "cold")
+    record = {
+        "schema": "pr2044.pbe0-96.cold.v1",
+        "status": "running",
+        "protocol": scientific,
+        "scope": "independent cold owner only; no warm/moved populations",
+        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
+        "environment": {
+            name: value
+            for name, value in sorted(os.environ.items())
+            if name.startswith("GENERATIVEQC_")
+        },
+        "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "reference_sha256": hashlib.sha256(reference_path.read_bytes()).hexdigest(),
+    }
+    owner = None
+
+    def save() -> None:
+        output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+
+    try:
+        calculator = Calculator(
+            method="pbe0-rks",
+            basis=basis,
+            device="cuda",
+            basis_representation="spherical",
+            ks_options=KsOptions(grid=grid),
+            energy_tolerance=1e-12,
+            density_tolerance=1e-10,
+            screening_tolerance=1e-12,
+            max_iterations=100,
+        )
+        record["native_build"] = native_build_metadata(calculator)
+        require_tuned_native_build(record["native_build"])
+        record["stage"] = "prepare"
+        save()
+        cp.cuda.Stream.null.synchronize()
+        started = perf_counter()
+        owner = calculator.prepare_batch([case.atoms], warm_start=True)
+        cp.cuda.Stream.null.synchronize()
+        prepare_seconds = perf_counter() - started
+        original_force = owner._public_dft_cuda_force
+        force_samples = []
+
+        def observed_force(*arguments: object) -> object:
+            """Include synchronization and all force preparation in its sub-timer."""
+            cp.cuda.Stream.null.synchronize()
+            force_started = perf_counter()
+            result = original_force(*arguments)
+            cp.cuda.Stream.null.synchronize()
+            force_samples.append(
+                {"seconds": perf_counter() - force_started, "work": result[1]}
+            )
+            return result
+
+        owner._public_dft_cuda_force = observed_force
+        record.update(stage="execute", prepare_seconds=prepare_seconds)
+        save()
+        cp.cuda.Stream.null.synchronize()
+        started = perf_counter()
+        item = owner.execute(strict=False, properties=("energy", "forces")).items[0]
+        cp.cuda.Stream.null.synchronize()
+        execute_seconds = perf_counter() - started
+        record.update(
+            status="measured",
+            stage="complete",
+            execute_seconds=execute_seconds,
+            complete_seconds=prepare_seconds + execute_seconds,
+            force_samples=force_samples,
+            energy=item.energy,
+            forces=item.forces.tolist() if item.forces is not None else None,
+            converged=item.converged,
+            native_status=item.status,
+            status_message=item.status_message,
+            iterations=item.iterations,
+            fock_builds=item.fock_builds,
+            density_rms=item.density_rms,
+            physical_residual_rms=item.physical_residual_rms,
+            warm_start_used=item.warm_start_used,
+            warm_start_fallback=item.warm_start_fallback,
+            incremental_direct_jk=item.incremental_direct_jk,
+            ks_diagnostic=(
+                item.ks_diagnostic.to_payload()
+                if item.ks_diagnostic is not None
+                else None
+            ),
+            scf_ao_work=read_ao_work(owner) if item.status == 0 else None,
+            acceptance=check_endpoint(item, oracle),
+        )
+        save()
+        print(json.dumps({
+            key: record[key]
+            for key in (
+                "complete_seconds", "prepare_seconds", "iterations", "fock_builds",
+                "incremental_direct_jk", "acceptance",
+            )
+        }), flush=True)
+    except BaseException as error:
+        record.update(status="failed", error=f"{type(error).__name__}: {error}")
+        save()
+        raise
+    finally:
+        if owner is not None:
+            owner.close()
+
+
+if __name__ == "__main__":
+    main()

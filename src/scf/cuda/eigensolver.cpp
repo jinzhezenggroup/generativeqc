@@ -10,8 +10,10 @@
 #include "scf/cuda/eigensolver_kernels.hpp"
 #include "scf/cuda/launch_geometry.hpp"
 #include "scf/eigensolver_workspace.hpp"
+#include "solver/cuda/symmetric_eigen_provider.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+namespace eigen_provider = ::generativeqc::solver::cuda;
 
 /** Host-only provider dispatch and profiling order. Graph eligibility is resolved at setup before
  * this execution boundary. */
@@ -87,10 +89,14 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
       checked(solver_status(cusolverDnCreate(&resources_.solver_)));
       checked(solver_status(cusolverDnSetStream(resources_.solver_, stream)));
       checked(solver_status(cusolverDnCreateParams(&resources_.solver_parameters_)));
-      checked(solver_status(cusolverDnXsyevd_bufferSize(
-          resources_.solver_, resources_.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
-          CUBLAS_FILL_MODE_LOWER, n, CUDA_R_64F, matrix, n, CUDA_R_64F, eigenvalues, CUDA_R_64F,
-          &resources_.solver_workspace_bytes_, &resources_.solver_host_workspace_bytes_)));
+      eigen_provider::SymmetricEigenWorkspace queried;
+      checked(solver_status(static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
+          {resources_.solver_, resources_.solver_parameters_},
+          eigen_provider::SymmetricEigenFamily::xsyevd,
+          {n, 1, eigen_provider::Eigenvectors::values_and_vectors}, matrix, eigenvalues,
+          queried))));
+      resources_.solver_workspace_bytes_ = queried.device_bytes;
+      resources_.solver_host_workspace_bytes_ = queried.host_bytes;
       if (resources_.solver_workspace_bytes_ > allowance ||
           resources_.solver_host_workspace_bytes_ > allowance)
         throw std::bad_alloc();
@@ -201,46 +207,20 @@ generativeqc_status launch_solver(const EigensolverResources& resources,
     launch_symmetric_eigen_small_kernel(static_cast<unsigned>(batch_size), 1, 0, resources.stream_,
                                         batch_size, nbf, matrices, eigenvalues, info, active);
     status = cuda_status(cudaPeekAtLastError());
-  } else if (family == CudaEigensolverFamily::jacobi_batched) {
-    const cusolverStatus_t status = cusolverDnDsyevjBatched(
-        resources.solver_, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER, nbf, matrices, nbf,
-        eigenvalues, static_cast<double*>(resources.solver_workspace_), lwork, info,
-        resources.jacobi_, batch_size);
-    if (status != CUSOLVER_STATUS_SUCCESS) {
-      return solver_status(status);
-    }
-  } else if (family == CudaEigensolverFamily::xsyev_batched) {
-    // The setup-time exact-stack probe has already captured, instantiated,
-    // host-replayed, and device-tail-replayed this signature.
-    const cusolverStatus_t status = cusolverDnXsyevBatched(
-        resources.solver_, resources.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
-        CUBLAS_FILL_MODE_LOWER, nbf, CUDA_R_64F, matrices, nbf, CUDA_R_64F, eigenvalues, CUDA_R_64F,
-        resources.solver_workspace_, resources.solver_workspace_bytes_,
-        resources.solver_host_workspace_, resources.solver_host_workspace_bytes_, info, batch_size);
-    if (status != CUSOLVER_STATUS_SUCCESS) {
-      return solver_status(status);
-    }
-  } else if (family == CudaEigensolverFamily::xsyevd) {
-    // GPU4PySCF uses the ordinary single-matrix Xsyevd/Sygvd family for
-    // large AO spaces.  Unlike XsyevBatched, this provider is intentionally
-    // kept outside CUDA Graph capture.  Calls are serialized on the owning
-    // stream and reuse one workspace, which also makes a multi-system bucket
-    // deterministic without requiring a pointer-array API.
-    const std::size_t matrix_elements =
-        static_cast<std::size_t>(nbf) * static_cast<std::size_t>(nbf);
-    for (int system = 0; system < batch_size; ++system) {
-      const cusolverStatus_t status = cusolverDnXsyevd(
-          resources.solver_, resources.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
-          CUBLAS_FILL_MODE_LOWER, static_cast<std::int64_t>(nbf), CUDA_R_64F,
-          matrices + static_cast<std::size_t>(system) * matrix_elements,
-          static_cast<std::int64_t>(nbf), CUDA_R_64F,
-          eigenvalues + static_cast<std::size_t>(system) * nbf, CUDA_R_64F,
-          resources.solver_workspace_, resources.solver_workspace_bytes_,
-          resources.solver_host_workspace_, resources.solver_host_workspace_bytes_, info + system);
-      if (status != CUSOLVER_STATUS_SUCCESS) {
-        return solver_status(status);
-      }
-    }
+  } else if (provider_invoked) {
+    const auto provider_family = family == CudaEigensolverFamily::jacobi_batched
+                                     ? eigen_provider::SymmetricEigenFamily::jacobi_batched
+                                 : family == CudaEigensolverFamily::xsyev_batched
+                                     ? eigen_provider::SymmetricEigenFamily::xsyev_batched
+                                     : eigen_provider::SymmetricEigenFamily::xsyevd;
+    const auto provider_status =
+        static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
+            {resources.solver_, resources.solver_parameters_, resources.jacobi_,
+             resources.solver_workspace_, resources.solver_workspace_bytes_,
+             resources.solver_host_workspace_, resources.solver_host_workspace_bytes_},
+            provider_family, {nbf, batch_size, eigen_provider::Eigenvectors::values_and_vectors},
+            matrices, eigenvalues, info, lwork));
+    if (provider_status != CUSOLVER_STATUS_SUCCESS) return solver_status(provider_status);
   } else {
     // API-ineligible or Graph-rejected signatures retain the unbounded native
     // implementation without treating a provider limitation as a calculation

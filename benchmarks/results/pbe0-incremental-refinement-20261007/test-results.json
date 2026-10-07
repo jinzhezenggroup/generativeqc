@@ -1,0 +1,32 @@
+{
+  "host": {
+    "passed": 79,
+    "failed": 0,
+    "seconds": 2.06,
+    "files": [
+      "tests/python/test_ks_incremental_controller.py",
+      "tests/python/test_ks_incremental_direct_jk_source_contract.py",
+      "tests/python/test_ks_incremental_resources.py"
+    ]
+  },
+  "native_gpu": {
+    "status": "pass",
+    "targets": [
+      "generativeqc_ks_cuda_tests --incremental",
+      "generativeqc_incremental_direct_jk_cuda_tests"
+    ],
+    "coverage": [
+      "CPU independently rebuilt RKS/UKS exact-exchange physical state",
+      "strict final-state export",
+      "fresh-solve reset",
+      "full/delta/final actual-build conservation"
+    ],
+    "scheduler": "Slurm srun, main, gpu:5090:1, node1, finite job time"
+  },
+  "monolithic_native_ks": {
+    "status": "baseline-failure",
+    "error": "invalid KS final-state identity, model, physical state or spin shape",
+    "reproduced_with_unpatched_library_sha256": "e9ce9b1a8838b8837247d852f730f6a5962bddb675185f00e3d23b741c0de93a",
+    "unrelated_to_incremental_repair": true
+  }
+}

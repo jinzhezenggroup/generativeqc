@@ -148,6 +148,7 @@ std::uint64_t requested_rys_mask=1;
 std::uint64_t prepare_direct_fock_rys_mask(bool exchange) {
   assert(!exchange); return requested_rys_mask;
 }
+std::uint64_t prepare_direct_fock_k_block_mask() { return 0; }
 bool make_bounded_stream_shell_pair_order(const HostBatch&, std::vector<std::uint32_t>& a,
                                         std::vector<std::uint32_t>& b) {
   a={0,1}; b={0,2}; return true;

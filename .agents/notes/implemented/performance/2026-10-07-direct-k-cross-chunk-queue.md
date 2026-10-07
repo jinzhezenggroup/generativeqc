@@ -73,8 +73,9 @@ claim barrier is necessary with empty/inactive rows.
 ### Frozen-density K wall evidence
 
 RTX 5090, SM120, CUDA 12.9.1, Release, FP64, def2-SVP spherical, screening 1e-12.
-Parent is `f05015e7c71809155b9be0aa69c3ff62d5d89e30`; the candidate is this
-uncommitted worktree. Timing includes density upload, transformation, K build,
+Parent is `f05015e7c71809155b9be0aa69c3ff62d5d89e30`; the candidate was the
+uncommitted queue source subsequently recorded as `7b6798407`. Timing includes
+density upload, transformation, K build,
 projection, export and synchronization, not owner preparation. Task counters and
 device-window samples are collected separately from clean wall samples.
 
@@ -150,3 +151,27 @@ verified symmetric-density triangular writer remain independent follow-ups;
 this change does not pretend to implement either. Keep #1892 open until its
 full value/derivative and complete E+F acceptance gates are met. Promote only a
 material reproducible complete cold gain, not a synthetic sparse-density win.
+
+## PR integration on 2026-10-07
+
+The PR integrates upstream `0ad23e791`, including #2065, #2066, #2069 and #2070.
+Both the prepared block-lowering mask and the queue selector are retained.
+Explicit Rys/block lowerings keep their own workers rather than claiming queue
+composition. The legacy artifact fixture is regenerated for the combined
+compiler: only four sm_120 shard hashes differ from this upstream baseline.
+The portable shards, registry, manifest and scientific shell catalog retain
+their upstream identities.
+
+Integrated host/codegen/profile/ABI qualification reports 163 passed and one
+skipped in 177.76 seconds. Compiler structure checks 488 modules with zero
+dependency errors; the CUDA ownership inventory checks 332 files. Ruff
+check/format and PR-scoped diff checks pass. No handwritten CUDA source changes
+are introduced relative to the integrated upstream baseline.
+
+The emitted queue workers, recurrence consumer and topology ABI are unchanged
+from the measured queue source. Nevertheless, the complete cold measurements
+above predate upstream integration, particularly the incremental-SCF changes
+in #2069. They are historical evidence against the frozen parent, not a measured
+speedup over current master or qualification of the integrated GPU binary.
+Repeat the integrated real-device numerical and complete-endpoint gates before
+promotion; qualify queue/block composition as a separate follow-up.

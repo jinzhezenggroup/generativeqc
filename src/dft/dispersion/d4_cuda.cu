@@ -454,9 +454,9 @@ cudaError_t launch_d4_fixed_charge_batched_cuda(const D4CudaBatch& batch,
       parameters.reference_model != tables.reference_model ||
       fabs(parameters.ga - tables.ga) > 1.0e-15 || fabs(parameters.gc - tables.gc) > 1.0e-15 ||
       tables.elements == nullptr || tables.references == nullptr ||
-      tables.reference_c6 == nullptr || tables.element_count != data::kElementCount ||
-      tables.reference_count != data::kReferenceCount ||
-      tables.reference_c6_count != data::kReferenceCount * (data::kReferenceCount + 1) / 2)
+      tables.reference_c6 == nullptr || tables.element_count != kD4TableElementCount ||
+      tables.reference_count != kD4TableReferenceCount ||
+      tables.reference_c6_count != kD4PackedReferenceC6Count)
     return cudaErrorInvalidValue;
   if (batch.total_atoms != 0 &&
       (batch.atomic_numbers == nullptr || batch.coordinates == nullptr ||

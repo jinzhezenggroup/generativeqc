@@ -81,6 +81,8 @@ existing selection. Recurrence selection remains independent. Screening scans
 the original Schwarz-ordered stream once; grouping never resorts unscreened
 inputs. Matrix semantics, precision policy, thresholds and nonsymmetric/spin
 contracts do not change, and no quartet-domain allocation is introduced.
+Explicit `rys` or `block` Fock lowerings retain their own workers; the queue
+control applies only to classes using the incumbent generated lowering.
 
 These are qualification controls, not promoted defaults. Compare fixed-density
 matrices/work counts and complete cold/warm/moved energy-plus-force endpoints,

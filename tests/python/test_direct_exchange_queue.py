@@ -295,7 +295,9 @@ def test_prepared_schedule_parser_is_explicit_and_fail_closed(tmp_path: Path) ->
         "#include <cstdint>\n"
         "namespace generativeqc::scf::generated {\n"
         "inline std::uint64_t enabled_rys_fock_shell_class_mask() { return 0; }\n"
+        "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 0; }\n"
         "inline void launch_shell_class_rys_streaming_fock() {}\n"
+        "inline void launch_shell_class_k_block_streaming_fock() {}\n"
         "inline void launch_shell_class_streaming_fock() {}\n}\n"
     )
     driver = tmp_path / "selection.cpp"
