@@ -262,6 +262,7 @@ def cuda_source() -> str:
     """Emit an optional matrix schedule and retain the original scalar fallback."""
     lines = [
         "#include <algorithm>",
+        '#include "tensor/cuda_reduction.cuh"',
         '#include "generated_df_ccsd_hoisted_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfhoist {",
     ]
@@ -283,6 +284,7 @@ def cuda_source() -> str:
                     output_fields=fields,
                     reset_error=False,
                     prepared_contractions=binding,
+                    parallel_scalar_reductions=name == "iteration",
                 )
             )
         if name == "auxiliary":
