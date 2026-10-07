@@ -24,6 +24,7 @@ from generativeqc_compiler.method.stationary_cuda import (
     emit_stationary_aot_cuda,
     emit_stationary_component_aot_wrapper_cuda,
     emit_stationary_profile_aot_cuda,
+    emit_stationary_profile_aot_wrapper_cuda,
     emit_stationary_profile_component_aot_wrapper_cuda,
     qualified_sp_requests,
 )
@@ -55,12 +56,51 @@ def main() -> None:
     parser.add_argument("--iterations", type=int, default=3)
     parser.add_argument("--component-domain", choices=("sp", "spd"), default="sp")
     parser.add_argument("--shard-index", type=int)
+    split = parser.add_mutually_exclusive_group()
+    split.add_argument(
+        "--primitive-only", action="store_true", help="Emit the shared s/p primitive TU"
+    )
+    split.add_argument(
+        "--wrapper-only", action="store_true", help="Emit an s/p profile wrapper only"
+    )
     parser.add_argument(
         "--all-shards",
         action="store_true",
         help="Emit all shared s/p/d primitive shards in one generation pass",
     )
     args = parser.parse_args()
+
+    if args.primitive_only or args.wrapper_only:
+        if (
+            args.component_domain != "sp"
+            or args.all_shards
+            or args.shard_index is not None
+        ):
+            parser.error("s/p split emission cannot be combined with component shards")
+        if args.primitive_only:
+            if (
+                args.profile is not None
+                or args.functional is not None
+                or args.spin is not None
+            ):
+                parser.error(
+                    "s/p primitives are shared across functionals/spins/profiles"
+                )
+            source = emit_first_derivative_cuda(qualified_sp_requests())
+        else:
+            if (
+                args.profile is None
+                or args.functional is not None
+                or args.spin is not None
+            ):
+                parser.error(
+                    "--wrapper-only requires --profile without --functional/--spin"
+                )
+            source = emit_stationary_profile_aot_wrapper_cuda(
+                args.profile, iterations=args.iterations
+            )
+        write_if_changed(args.output, source)
+        return
 
     if args.all_shards:
         if (

@@ -878,10 +878,15 @@ def _qualified_aot_profile(name: str) -> StationaryAotProfile:
     return matches[0]
 
 
-def _qualified_aot_profile_for_plan(
+def stationary_aot_profile_for_plan(
     functional: int, spin: str, plan: StationaryGradientPlan
-) -> StationaryAotProfile:
-    """Select a package profile by point program and exact plan, never method name."""
+) -> StationaryAotProfile | None:
+    """Find exact catalog coverage without loading or weakening package provenance.
+
+    Absence means that the caller may choose its bounded JIT path. Coverage is
+    not artifact availability: a missing, stale or corrupt declared package must
+    still fail in the loader, rather than silently triggering a compiler.
+    """
 
     if type(functional) is not int:
         raise TypeError("AOT stationary functional code must be an integer")
@@ -896,9 +901,19 @@ def _qualified_aot_profile_for_plan(
         and profile.spin == spin
         and profile.plan.identity == plan.identity
     )
-    if len(matches) != 1:
+    if len(matches) > 1:
+        raise ValueError("stationary CUDA AOT plan identity has duplicate profiles")
+    return matches[0] if matches else None
+
+
+def _qualified_aot_profile_for_plan(
+    functional: int, spin: str, plan: StationaryGradientPlan
+) -> StationaryAotProfile:
+    """Require exact catalog coverage for loading a declared package artifact."""
+    profile = stationary_aot_profile_for_plan(functional, spin, plan)
+    if profile is None:
         raise ValueError("stationary CUDA AOT plan identity is not packaged")
-    return matches[0]
+    return profile
 
 
 def _legacy_profile(functional: int, spin: str) -> StationaryAotProfile:
@@ -937,6 +952,35 @@ def stationary_aot_profile_plan_identity(profile: str) -> str:
     """Return the exact plan identity of one named build/package profile."""
 
     return _qualified_aot_profile(profile).plan.identity
+
+
+def stationary_aot_profile_weight_programs(profile: str) -> dict[str, str]:
+    """Generate weight provenance offline, never during package loading/execution."""
+    plan = _qualified_aot_profile(profile).plan
+    return {
+        source: plan.integral_block(source, terms=1).weights.logical_hash
+        for source in (*_FUSED_WEIGHT_SOURCES, "exact_exchange")
+        if source in stationary_runtime_sources(plan)
+    }
+
+
+def stationary_aot_manifest_integrity(metadata: typing.Mapping[str, object]) -> str:
+    """Bind every build-record field without reconstructing scientific IR.
+
+    This detects record corruption under the trusted-build-manifest model; it
+    is an integrity checksum, not an authenticity signature. Its own field is
+    excluded, so the writer and cold loader hash the same complete payload.
+    """
+    return canonical_hash(
+        {
+            "schema": "generativeqc.stationary-cuda-aot.manifest-integrity.v1",
+            "manifest": {
+                key: value
+                for key, value in metadata.items()
+                if key != "manifest_integrity_sha256"
+            },
+        }
+    )
 
 
 def stationary_aot_plan_identity(functional: int, *, spin: str) -> str:
@@ -986,6 +1030,28 @@ def emit_stationary_profile_component_aot_wrapper_cuda(
         iterations=iterations,
         primitive_shards=QUALIFIED_SPD_AOT_SHARDS,
         primitive_shard_width=QUALIFIED_SPD_AOT_SHARD_WIDTH,
+    )
+
+
+def emit_stationary_profile_aot_wrapper_cuda(
+    profile: str,
+    *,
+    iterations: int = QUALIFIED_PARTITION_ITERATIONS,
+) -> str:
+    """Emit an exact-plan s/p wrapper for the shared, separably compiled primitives.
+
+    Only compilation ownership changes; primitive dispatch, scientific weights
+    and the small-system integral fallback remain identical to the single TU.
+    """
+    if type(iterations) is not int or iterations != QUALIFIED_PARTITION_ITERATIONS:
+        raise ValueError(
+            "AOT stationary CUDA currently qualifies partition_iterations=3 only"
+        )
+    selected = _qualified_aot_profile(profile)
+    return emit_stationary_wrapper_cuda(
+        functional=selected.functional,
+        plan=selected.plan,
+        iterations=iterations,
     )
 
 
@@ -1083,10 +1149,10 @@ def _stationary_aot_contract_identity(
             "functional": profile.functional,
             "spin": profile.spin,
             "plan_identity": plan.identity,
-            "weight_programs": {
-                source: plan.integral_block(source, terms=1).weights.logical_hash
-                for source in weight_sources
-            },
+            # Source closure validation must not reconstruct TensorIR/AD just
+            # to load an already-generated artifact. Graph hashes live in its
+            # build-time manifest, bound to this exact compiler/plan contract.
+            "weight_sources": weight_sources,
             "partition_iterations": iterations,
             "requests": (
                 qualified_sp_requests()
@@ -1102,7 +1168,13 @@ def _stationary_aot_contract_identity(
                 Path(__file__).with_name("stationary_resources.py")
             ),
             "compiler_sources": source_hashes(
-                "common", "integral", "xc", "dft", assets=STATIONARY_AOT_ASSETS
+                "common",
+                "integral",
+                "xc",
+                "dft",
+                "method",
+                "tensor",
+                assets=STATIONARY_AOT_ASSETS,
             ),
         }
     )
@@ -1228,19 +1300,42 @@ def load_stationary_aot_artifact(
     )
     if not code_kinds:
         raise ValueError("stationary CUDA AOT target has no code object")
+    weight_programs = metadata.get("weight_programs")
+    expected_weights = tuple(
+        source
+        for source in (*_FUSED_WEIGHT_SOURCES, "exact_exchange")
+        if source in stationary_runtime_sources(plan)
+    )
+    if (
+        not isinstance(weight_programs, dict)
+        or set(weight_programs) != set(expected_weights)
+        or any(
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            for digest in weight_programs.values()
+        )
+    ):
+        raise ValueError("stationary CUDA AOT weight-program provenance mismatch")
     digest = file_hash(library)
     if (
         metadata.get("binary_sha256") != digest
         or metadata.get("binary_bytes") != library.stat().st_size
     ):
         raise ValueError("stationary CUDA AOT binary integrity mismatch")
+    if metadata.get("manifest_integrity_sha256") != stationary_aot_manifest_integrity(
+        metadata
+    ):
+        raise ValueError("stationary CUDA AOT manifest integrity mismatch")
     identity = {
         "schema": metadata["schema"],
+        "manifest_integrity_sha256": metadata["manifest_integrity_sha256"],
         "source": metadata["source_identity"],
         "contract": metadata["contract_identity"],
         "functional": functional,
         "spin": spin,
         "plan": plan.identity,
+        "weight_programs": weight_programs,
         "partition_iterations": iterations,
         **({"component_domain": list(domain)} if domain is not None else {}),
         "target": {"architecture": architecture, "code_kinds": code_kinds},

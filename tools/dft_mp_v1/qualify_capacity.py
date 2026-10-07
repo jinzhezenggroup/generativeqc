@@ -134,6 +134,7 @@ from generativeqc_compiler.method.stationary_cuda import (
     _stationary_aot_name,
     load_stationary_aot_artifact,
     stationary_aot_profile_contract_identity,
+    stationary_aot_profile_for_plan,
     stationary_runtime_sources,
 )
 from generativeqc_compiler.method.stationary_gradient import (
@@ -277,7 +278,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
+    "5b90912257e41d6817f30d9a5a67244b505e6aacea2d4bbd6e93e428123f2bfd"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -304,7 +305,7 @@ NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
 )
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "e24c54519459c88d7d66069761676d88816f1d19c605c667165384c61ceebaf5"
+    "e603c9db0e0fbe5d5963768bd8f8a6a553c11ee2b791a6a8cc806a9e3941e060"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -349,10 +350,12 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # complete reduction remain bound by the exact whole-owner source span.
 # The DF resident-one-electron metadata distinguishes device execution from
 # host fallback without changing admission or claiming DF-response coverage.
+# AOT uses the same coverage gate without generating reduction/weight IR;
+# its build-bound graph provenance is replayed from the admitted manifest.
 # Lazy source-product reuse changes only compilation preparation and telemetry;
 # native requirements, work windows, host reserves and reductions remain audited.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "a43077fab9b73dbe52beacf12442fb2cd1e104e0eff296718b7251ecb4c1b22c"
+    "c4d9a037cee42a996325d5c8b0e02ef1fe93c3682a56a610f4444d5e6ba06b53"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -2086,6 +2089,9 @@ def _admission_record(failures: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _source_package_inventory(repository: Path) -> dict[str, Any]:
     cmake = (repository / "cmake/GenerativeQCCuda.cmake").read_text(encoding="utf-8")
+    profile_policy = (
+        repository / "cmake/GenerativeQCStationaryProfiles.cmake"
+    ).read_text(encoding="utf-8")
     names = (
         "lda_rks",
         "lda_uks",
@@ -2101,21 +2107,27 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     required = (
         "generativeqc_stationary_spd_primitives",
         'OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd"',
-        *names,
+        "generativeqc_select_stationary_aot_profiles(_generativeqc_stationary_names)",
     )
     missing = [token for token in required if token not in cmake]
+    missing.extend(name for name in names if name not in profile_policy)
     if missing:
         raise RuntimeError(
             "stationary s/p/d package declaration is incomplete: " + ", ".join(missing)
         )
-    contract_digest = _source_span_sha256(
+    wiring_digest = _source_span_sha256(
         cmake,
-        begin=("    # Component-expanded s/p/d derivatives are shared compiler output"),
+        begin="    # The small-domain fallback primitives",
         end=(
             "  if(GENERATIVEQC_PYTHON_WHEEL)\n    generativeqc_attach_cuda_implib(${target})"
         ),
         label="stationary packaged-AOT CMake",
     )
+    # Include the deterministic subset/default policy, not just device-link
+    # wiring. The static inventory is not evidence that binaries are installed.
+    contract_digest = hashlib.sha256(
+        (wiring_digest + "\n" + profile_policy).encode()
+    ).hexdigest()
     if contract_digest != STATIONARY_AOT_CMAKE_CONTRACT_SHA256:
         raise RuntimeError("stationary packaged-AOT CMake contract changed")
     return {
@@ -2815,6 +2827,7 @@ def _build_report(
         functional = int(native_xc_functional_code(selector))
         method_key = f"{method}/{frozen_row['spin']}"
         plan = case_work[frozen_row["case"]]["plans"][method_key]
+        packaged = stationary_aot_profile_for_plan(functional, spin, plan) is not None
         aot_key = (functional, spin, plan.identity)
         if aot_key not in artifact_cache:
             artifact_cache[aot_key] = _artifact_verification(
@@ -2881,17 +2894,16 @@ def _build_report(
                     "selector_contract": selector_cache[selector],
                 },
                 "public_route": {
-                    "scientific_runtime_compilation_required": method
-                    not in SEMILOCAL_FUNCTIONALS,
+                    "scientific_runtime_compilation_required": not packaged,
                     "selection": (
                         "runtime-compiled stationary CUDA"
-                        if method not in SEMILOCAL_FUNCTIONALS
+                        if not packaged
                         else "all-electron packaged stationary CUDA"
                     ),
                     "owner": "python/generativeqc/batch.py::_public_dft_cuda_force",
                     "missing_aot_behavior": (
                         "not selected by this public route"
-                        if method not in SEMILOCAL_FUNCTIONALS
+                        if not packaged
                         else "fail closed; no NVCC fallback"
                     ),
                     "source_audited": True,
@@ -2905,7 +2917,7 @@ def _build_report(
                     ),
                     "architecture": "sm_120",
                     "source_package_declared": True,
-                    "selected_by_public_route": method in SEMILOCAL_FUNCTIONALS,
+                    "selected_by_public_route": packaged,
                     "scope": "package availability evidence only; not execution qualification",
                     "source_owner": "cmake/GenerativeQCCuda.cmake",
                     "contract_identity": stationary_aot_profile_contract_identity(

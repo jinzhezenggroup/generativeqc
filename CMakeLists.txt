@@ -28,6 +28,7 @@ option(GENERATIVEQC_ENABLE_AOT_SHELLS
        "Build generated shell kernels in addition to the generic CUDA path" ON)
 option(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT
        "Build packaged stationary CUDA force artifacts" ON)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
 option(GENERATIVEQC_BUILD_TESTS "Build native tests" ON)

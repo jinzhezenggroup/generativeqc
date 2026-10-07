@@ -315,6 +315,8 @@ def test_component_subset_loads_real_aot_contract_and_uses_packaged_kind_indices
         _qualified_aot_plan,
         load_stationary_aot_artifact,
         stationary_aot_contract_identity,
+        stationary_aot_manifest_integrity,
+        stationary_aot_profile_weight_programs,
     )
 
     plan = _qualified_aot_plan(0, "unpolarized")
@@ -325,6 +327,7 @@ def test_component_subset_loads_real_aot_contract_and_uses_packaged_kind_indices
         "functional": 0,
         "spin": "unpolarized",
         "plan_identity": plan.identity,
+        "weight_programs": stationary_aot_profile_weight_programs("lda_rks"),
         "partition_iterations": 3,
         "architectures": ["sm_120"],
         "code_objects": [{"architecture": "sm_120", "kind": "cubin"}],
@@ -339,6 +342,7 @@ def test_component_subset_loads_real_aot_contract_and_uses_packaged_kind_indices
         "binary_bytes": library.stat().st_size,
         "compile_contract": {"fp64": True, "fmad": False},
     }
+    metadata["manifest_integrity_sha256"] = stationary_aot_manifest_integrity(metadata)
     (tmp_path / "generativeqc_stationary_lda_rks_spd.json").write_text(
         json.dumps(metadata)
     )

@@ -1,0 +1,612 @@
+{
+  "advisory_only": true,
+  "counts": {
+    "unknown": 18
+  },
+  "findings": [
+    {
+      "allocation_expression": "posthf::checked_mul(posthf::checked_mul(di, dj), square(n))",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> second(posthf::checked_mul(posthf::checked_mul(di, dj), square(n)), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "conventional_derivative_accumulate",
+              "line": 212
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 68
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "second",
+      "classification": "unknown",
+      "function": "transform_remaining_shells",
+      "line": 68,
+      "path": "src/posthf/mp2_derivative_common.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> third(\r\n          posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "conventional_derivative_accumulate",
+              "line": 212
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 80
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "third",
+      "classification": "unknown",
+      "function": "transform_remaining_shells",
+      "line": 80,
+      "path": "src/posthf/mp2_derivative_common.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> local(\r\n            posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "conventional_derivative_accumulate",
+              "line": 212
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 93
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "local",
+      "classification": "unknown",
+      "function": "transform_remaining_shells",
+      "line": 93,
+      "path": "src/posthf/mp2_derivative_common.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "posthf::checked_mul(di, posthf::checked_mul(n, square(n)))",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> first(posthf::checked_mul(di, posthf::checked_mul(n, square(n))), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "conventional_derivative",
+              "line": 247
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 170
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "first",
+      "classification": "unknown",
+      "function": "conventional_derivative_accumulate",
+      "line": 170,
+      "path": "src/posthf/mp2_derivative_common.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "square(n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> result(square(n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "canonical_orbital_rhs",
+              "line": 333
+            },
+            {
+              "function": "canonical_orbital_rhs",
+              "line": 356
+            },
+            {
+              "function": "canonical_lagrangian_weights",
+              "line": 448
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 49
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result",
+      "classification": "unknown",
+      "function": "rotation_gradient",
+      "line": 49,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "square(n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> result(square(n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "canonical_orbital_rhs_streamed",
+              "line": 385
+            },
+            {
+              "function": "canonical_orbital_rhs_streamed",
+              "line": 410
+            },
+            {
+              "function": "canonical_lagrangian_weights_streamed",
+              "line": 492
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 130
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result",
+      "classification": "unknown",
+      "function": "rotation_gradient_streamed",
+      "line": 130,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "square(n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.one_electron.assign(square(n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "canonical_orbital_rhs",
+              "line": 331
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 182
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.one_electron",
+      "classification": "unknown",
+      "function": "initial_orbital_weights",
+      "line": 182,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "fourth_power(n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.two_electron.assign(fourth_power(n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "canonical_orbital_rhs",
+              "line": 331
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 183
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.two_electron",
+      "classification": "unknown",
+      "function": "initial_orbital_weights",
+      "line": 183,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "square(n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.one_electron.assign(square(n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "canonical_orbital_rhs_streamed",
+              "line": 382
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 206
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.one_electron",
+      "classification": "unknown",
+      "function": "initial_orbital_weights_streamed",
+      "line": 206,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "square(n)",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.fock_weights.assign(square(n), 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [
+            {
+              "function": "canonical_orbital_rhs_streamed",
+              "line": 382
+            }
+          ],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 207
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.fock_weights",
+      "classification": "unknown",
+      "function": "initial_orbital_weights_streamed",
+      "line": 207,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "expected",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.integrals_iajb.assign(expected, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 293
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.integrals_iajb",
+      "classification": "unknown",
+      "function": "canonical_energy_adjoint",
+      "line": 293,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "n",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.orbital_energies.assign(n, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 294
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.orbital_energies",
+      "classification": "unknown",
+      "function": "canonical_energy_adjoint",
+      "line": 294,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "three",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> bar_whitened(three, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 567
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "bar_whitened",
+      "classification": "unknown",
+      "function": "density_fitted_lagrangian_weights",
+      "line": 567,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "three",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> bar_transformed(three, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 602
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "bar_transformed",
+      "classification": "unknown",
+      "function": "density_fitted_lagrangian_weights",
+      "line": 602,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    },
+    {
+      "allocation_expression": "n2",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.overlap.assign(n2, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 613
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.overlap",
+      "classification": "unknown",
+      "function": "density_fitted_lagrangian_weights",
+      "line": 613,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "n2",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.one_electron.assign(n2, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 614
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.one_electron",
+      "classification": "unknown",
+      "function": "density_fitted_lagrangian_weights",
+      "line": 614,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "three",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "result.three_center.assign(three, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 615
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "result.three_center",
+      "classification": "unknown",
+      "function": "density_fitted_lagrangian_weights",
+      "line": 615,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "assign freshness/type or aggregate ABI not resolved"
+    },
+    {
+      "allocation_expression": "a2",
+      "barriers": {
+        "abi_layout": {
+          "evidence": "std::vector<double> bar_inverse_root(a2, 0.0);",
+          "status": "dense-vector-candidate"
+        },
+        "consumer": {
+          "reason": "Return/escape does not establish downstream layout requirements.",
+          "same_file_call_candidates": [],
+          "status": "not-analyzed"
+        },
+        "producer": {
+          "line": 629
+        },
+        "structured_ir": {
+          "reason": "No TensorIR integration in this standalone slice.",
+          "status": "not-analyzed"
+        }
+      },
+      "buffer": "bar_inverse_root",
+      "classification": "unknown",
+      "function": "density_fitted_lagrangian_weights",
+      "line": 629,
+      "path": "src/posthf/mp2_gradient.cpp",
+      "recommendation": null,
+      "unknown_reason": "only integral scalar parameters are certified"
+    }
+  ],
+  "limitations": [
+    "Closed lexical subset, not a C++ frontend or whole-program proof.",
+    "Unknown candidates carry no representation recommendation; absence is not proof.",
+    "Address domains describe possible writes, not measured or guaranteed numerical nonzeros.",
+    "No runtime bytes, timings, speedup, production role or dense-oracle size gate is inferred."
+  ],
+  "provenance": {
+    "alias_topology_unverified": false,
+    "commit": "e5d3573aa98f95f1b2fb8a5c4296095204136708",
+    "scanned_source_digest": "5880d2d5676b60af84e97d5601828ec15640a62f37b51d6722d7299e17a8b625",
+    "scanned_source_dirty": false,
+    "scanner_digest": "1e1f0cc1a2b8ed43453a5c99a817d23aaa582acd734c202139b12a1528c52959",
+    "scanner_hashes": {
+      "audit_native_complexity.py": "12c30a1446d106459326f23c46e26d68a66f20434e12b4cd7d73f4b7f725425b",
+      "audit_native_work.py": "d70ab323fbaab31ad9feef8941e28390edd1a84e622dedbe099f121a2f5cfb90",
+      "audit_structured_materialization.py": "23992890cf41bbe202dd6dc4f374f5024516d1db7bab3b6d4d4089b639b1ef7e"
+    },
+    "source_hashes": {
+      "src/posthf/mp2_derivative_common.cpp": "27eaade6f2d323082c641901196fb2ebbb1a233890a6e21a18a66485b758d3ae",
+      "src/posthf/mp2_force.cpp": "87bdefee0d50c8c312e853c53ea76f9eaf548c5dd43c93211cd85a6ddc5879e6",
+      "src/posthf/mp2_gradient.cpp": "78a0de50ff086e71628feada97fb792f977fe809128699a9a9698848765e2871",
+      "src/posthf/mp2_gradient.hpp": "af797217c4f9689c6995d2ce3af1414a334569cc743b5c5d58814718185329b4"
+    },
+    "source_roots": [
+      "src/posthf/mp2_gradient.cpp",
+      "src/posthf/mp2_gradient.hpp",
+      "src/posthf/mp2_force.cpp",
+      "src/posthf/mp2_derivative_common.cpp"
+    ],
+    "tree": "56b648a812a65d57a875bb30abbdd80c06754b1f",
+    "working_tree_dirty": true
+  },
+  "scanned_files": 4,
+  "schema": "generativeqc.native-structured-materialization.v1"
+}

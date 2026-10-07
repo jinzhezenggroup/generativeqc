@@ -26,6 +26,14 @@ def test_cuda_compile_pools_are_opt_in_and_aot_can_split() -> None:
     aot = cuda.split("if(GENERATIVEQC_ENABLE_AOT_SHELLS)", 1)[1]
     assert '"${_generativeqc_cuda_compile_pool}"' in native
     assert '"${_generativeqc_aot_compile_pool}"' in aot
+    assert "JOB_POOL_COMPILE generativeqc_cuda_compile" not in cuda
+    for target in (
+        "generativeqc_stationary_sp_primitives",
+        "generativeqc_stationary_spd_primitives",
+        "${_generativeqc_stationary_target}",
+        "${_generativeqc_stationary_spd_target}",
+    ):
+        assert f'{target} "${{_generativeqc_aot_compile_pool}}")' in aot
 
 
 def test_cuda_presets_follow_ninja_parallelism() -> None:
