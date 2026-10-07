@@ -1,6 +1,7 @@
 """Host-only checks of the single-variable complete-endpoint experiment."""
 
 import json
+import os
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -22,7 +23,11 @@ BUNDLE = (
 
 
 def run_fake_campaign(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: str | None = None
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mutation: str | None = None,
+    *,
+    point_batch_tiles: int | None = None,
 ) -> tuple[dict[str, Any], list[Any]]:
     """Exercise orchestration without a CUDA library, device or reference solve."""
     scientific = {
@@ -50,6 +55,8 @@ def run_fake_campaign(
     class Owner:
         def __init__(self, tile: int) -> None:
             self.tile = tile
+            self.batch_tiles = os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"]
+            self.batch_policies = []
             self._warm_updates = True
             self.closed = False
             self.calls = []
@@ -63,6 +70,7 @@ def run_fake_campaign(
         def execute(self, coords: Any, *, strict: bool, properties: Any) -> Any:
             assert strict is False and properties == ("energy", "forces")
             self.calls.append((coords, self._warm_updates))
+            self.batch_policies.append(os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"])
             forces, _ = self._public_dft_cuda_force()
             candidate = self.tile == 512
             replay = not self._warm_updates
@@ -148,11 +156,32 @@ def run_fake_campaign(
             str(output),
         ],
     )
+    if point_batch_tiles is not None:
+        sys.argv.extend(["--point-batch-tiles", str(point_batch_tiles)])
     try:
         benchmark.main()
     finally:
         assert all(owner.closed for owner in owners)
     return json.loads(output.read_text()), owners
+
+
+@pytest.mark.parametrize("point_batch_tiles", [None, 32])
+def test_batch_policy_overrides_default_during_owner_rebuilds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, point_batch_tiles: int | None
+) -> None:
+    """Promotion cannot contaminate baseline, moved owners or the caller's policy."""
+    monkeypatch.setenv("GENERATIVEQC_CUDA_XC_BATCH_TILES", "99")
+    record, owners = run_fake_campaign(
+        monkeypatch, tmp_path, point_batch_tiles=point_batch_tiles
+    )
+    assert record["stage"] == "complete"
+    assert os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"] == "99"
+    assert {owner.batch_tiles for owner in owners} == (
+        {"1", "32"} if point_batch_tiles else {"1"}
+    )
+    for owner in owners:
+        assert len(owner.batch_policies) == 14
+        assert set(owner.batch_policies) == {owner.batch_tiles}
 
 
 def test_tiles_force_policy_and_frozen_replays(

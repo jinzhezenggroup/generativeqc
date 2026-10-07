@@ -62,6 +62,10 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             spill_load_bytes=8 if spill else 0,
         ),
         resource(
+            "generativeqc::dft::cuda_xc_detail::evaluate_points<4, false, true>(double*)",
+            registers=80,
+        ),
+        resource(
             "generativeqc::dft::cuda_xc_detail::compact_potential_panels(double*)",
             registers=40,
         ),
@@ -109,6 +113,61 @@ def test_complete_region_selects_only_active_pbe_scopes() -> None:
     assert evidence.profitability.compiled_registers_per_thread < 200
 
 
+@pytest.mark.parametrize("npoint", [256, 512])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_automatic_point_resource_envelope_retains_fallback(
+    npoint: int, enabled: bool
+) -> None:
+    """The guarded default accounts batch pressure only when it is reachable."""
+    rows = tuple(
+        replace(row, registers=96, spill_store_bytes=32, spill_load_bytes=16)
+        if "false, true>" in row.function
+        else row
+        for row in pbe_resources()
+    )
+    evidence = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            ao_radial_reuse=True,
+            npoint=npoint,
+            tile_points=256,
+            nao=96,
+            spins=2,
+            point_batching=enabled,
+        ),
+        functional="PBE",
+        target=TARGET,
+        source_identity="guarded-point-default",
+    )
+    reachable = enabled and npoint > 256
+    points = dict(evidence.scopes)["xc_points"]
+    assert len(points) == (2 if reachable else 1)
+    assert "false, false>" in points[0].function
+    assert evidence.profitability.compiled_registers_per_thread == (
+        96 if reachable else 80
+    )
+    assert evidence.profitability.spill_bytes == (48 if reachable else 0)
+    with pytest.raises(ValueError, match="binding identity is stale"):
+        replace(evidence, shape=replace(evidence.shape, point_batching=not enabled))
+    with pytest.raises(TypeError, match="point-batching selector must be boolean"):
+        replace(evidence.shape, point_batching=1)
+
+
+def test_missing_reachable_batch_kernel_fails_closed() -> None:
+    """Serial evidence cannot hide missing compiled coverage of the new default."""
+    rows = tuple(row for row in pbe_resources() if "false, true>" not in row.function)
+    with pytest.raises(ValueError, match="missing functional-specific batched XC"):
+        native_grid_xc_compiled_region_evidence(
+            rows,
+            shape=GridXcCompiledResourceShape(
+                ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+            ),
+            functional="PBE",
+            target=TARGET,
+            source_identity="missing-default-batch",
+        )
+
+
 @pytest.mark.parametrize(
     "missing",
     (
@@ -144,6 +203,7 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
         resource("density_product<false>(double*)", registers=61),
         resource("density_features<false>(double*)", registers=62),
         resource("evaluate_points<4, false, false>(double*)", registers=63),
+        resource("evaluate_points<4, false, true>(double*)", registers=63),
         resource("assemble_potential(double*)", registers=64),
         resource("accumulate_totals(double*)", registers=8),
         resource("tiled_density_product<false>(double*)", registers=250),
@@ -216,7 +276,12 @@ def test_point_specialization_tracks_feature_width_not_functional_code(
     suffix: str, functional: str, feature_terms: int, registers: int, spill_bytes: int
 ) -> None:
     shape = GridXcCompiledResourceShape(
-        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+        ao_radial_reuse=True,
+        npoint=4096,
+        tile_points=256,
+        nao=96,
+        spins=2,
+        point_batching=False,
     )
     rows = (
         *(row for row in pbe_resources() if "evaluate_points" not in row.function),

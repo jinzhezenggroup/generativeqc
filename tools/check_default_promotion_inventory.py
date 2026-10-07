@@ -194,6 +194,20 @@ def _discover_force_active_ao(root: Path) -> dict[str, str]:
     return {"dft-policy:force-active-ao-auto": relative.as_posix()}
 
 
+def _discover_xc_point_batching(root: Path) -> dict[str, str]:
+    """Audit both limits of the promoted, resource-guarded native KS policy."""
+    relative = Path("src/dft/cuda_ks.cpp")
+    source = _read(root / relative)
+    if not re.search(
+        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_TILES",\s*32\)', source
+    ) or not re.search(
+        r'point_batch_size\("GENERATIVEQC_CUDA_XC_BATCH_BYTES",\s*32\s*\*\s*1024\s*\*\s*1024\)',
+        source,
+    ):
+        raise ValueError("XC point-batch default drifted from 32 tiles / 32 MiB")
+    return {"dft-policy:xc-point-batch-auto": relative.as_posix()}
+
+
 def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
 
@@ -295,6 +309,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
+        _discover_xc_point_batching(root),
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
         _discover_response_options(root),
