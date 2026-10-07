@@ -17,8 +17,7 @@ inline detail::GeneratedExchangeTaskSchedule prepare_direct_exchange_task_schedu
   if (value == nullptr || *value == '\0' || std::strcmp(value, "incumbent") == 0)
     return detail::GeneratedExchangeTaskSchedule::Incumbent;
   if (std::strcmp(value, "fill") == 0) return detail::GeneratedExchangeTaskSchedule::Fill;
-  if (std::strcmp(value, "primitive") == 0)
-    return detail::GeneratedExchangeTaskSchedule::Primitive;
+  if (std::strcmp(value, "primitive") == 0) return detail::GeneratedExchangeTaskSchedule::Primitive;
   throw std::invalid_argument("Direct K task schedule must be incumbent, fill or primitive");
 }
 
