@@ -89,8 +89,6 @@ the bounded scheduling route is now enabled by default. Additional devices,
 workload shapes and composition should refine the profitability/resource guard
 without removing fallback or weakening scientific gates.
 
-## References
-
 ## Promoted follow-up validation
 
 #2081's actual merge tree `c8d71bb2b` retained the earlier opt-in policy, despite
