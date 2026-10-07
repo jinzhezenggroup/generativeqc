@@ -44,14 +44,6 @@ void sample_scf_buffers(const PreparedFockPlan& plan, const Diis& diis,
       runtime::add_capacity(diis.numeric_capacity(), runtime::vector_capacities(vectors...))));
 }
 
-bool incremental_direct_jk_eligible(const ResolvedFockBuild& strategy) {
-  const auto exact = [](const FockTermSpec& term) {
-    return !term.present || term.approximation == FockApproximation::Exact;
-  };
-  return (strategy.spec.coulomb.present || strategy.spec.exchange.present) &&
-         exact(strategy.spec.coulomb) && exact(strategy.spec.exchange);
-}
-
 void add_jk_in_place(DirectJkMatrices& target, const DirectJkMatrices& base) {
   if (target.nbf != base.nbf) throw std::logic_error("incremental J/K AO dimension mismatch");
   const auto add = [](std::vector<double>& values, const std::vector<double>& anchor) {
@@ -68,26 +60,26 @@ void add_jk_in_place(DirectJkMatrices& target, const DirectJkMatrices& base) {
  *
  * Only the main SCF trajectory mutates the anchor. Proposal/audit builds and
  * final physical-state rebuilds use PreparedFockPlan directly, so a rejected
- * trial can never become the next anchor. This slice intentionally performs no
- * density-weighted quartet skipping yet: it establishes exact delta-D parity,
- * bounded periodic full refresh, and trustworthy work counters first.
+ * trial can never become the next anchor. This CPU lower declares exact-linear
+ * execution with no density-weighted quartet skipping; activation and refresh
+ * cadence come from the shared pre-lowering policy.
  */
 class ExactIncrementalDirectJk {
  public:
   ExactIncrementalDirectJk(const PreparedFockPlan& plan, const ScfOptions& options,
                            IncrementalDirectJkDiagnostic& diagnostic)
       : plan_(plan),
-        diagnostic_(diagnostic),
-        rebuild_interval_(options.incremental_direct_jk_rebuild_interval) {
-    diagnostic_.requested = options.incremental_direct_jk;
-    diagnostic_.active =
-        options.incremental_direct_jk && incremental_direct_jk_eligible(plan.strategy());
+        policy_(resolve_incremental_direct_jk_policy(
+            options, {direct_jk_incremental_exact_eligible(plan.strategy()), false, false})),
+        diagnostic_(diagnostic) {
+    diagnostic_.requested = policy_.requested;
+    diagnostic_.active = policy_.active;
   }
 
   DirectJkMatrices build(const Matrix& density, const Matrix& beta = {}) {
     if (!diagnostic_.active) return plan_.build(density, beta);
     const runtime::CpuRetainedCapacity anchor_capacity(numeric_capacity());
-    if (!anchored_ || (rebuild_interval_ != 0 && delta_updates_since_full_ >= rebuild_interval_)) {
+    if (direct_jk_incremental_requires_full_build(anchored_, delta_updates_since_full_, policy_)) {
       const bool refresh = anchored_;
       auto current = plan_.build(density, beta);
       anchor_density_ = density;
@@ -140,8 +132,8 @@ class ExactIncrementalDirectJk {
 
  private:
   const PreparedFockPlan& plan_;
+  IncrementalDirectJkPolicy policy_{};
   IncrementalDirectJkDiagnostic& diagnostic_;
-  unsigned rebuild_interval_{};
   bool anchored_{};
   unsigned delta_updates_since_full_{};
   Matrix anchor_density_;

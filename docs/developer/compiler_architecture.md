@@ -104,7 +104,9 @@ The implementation resides in `integral.lowering`:
 - `force_packed`, `force_rys_thread`, `force_rys_component`,
   `force_rys_uniform`, `force_resident` and `force_subgroup` own force schedules.
 - `dispatch` assembles the common kernel envelope and selects consumers;
-  `legacy` retains explicit compatibility entry points.
+  `legacy` retains only the still-used resident-PPPS compatibility adapter. Historical
+  DPPP convenience wrappers were retired after tests and production callers migrated
+  to the generic fused-shell APIs.
 
 Consumer modules depend on shared emission/algebra helpers. Shared helpers do
 not call back into dispatch. Recurrence mathematics is still represented by

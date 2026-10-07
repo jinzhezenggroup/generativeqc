@@ -1,5 +1,10 @@
 {
   "families": {
+    "pbe0-cuda-schedule-20261006": {
+      "owner": "ordinary CUDA force schedule qualification",
+      "reason": "Two separately authenticated frozen-source populations retain exact complete endpoint vectors, matched warm work, independent references, source/binary/cache/sanitizer receipts and rejected experiments. Each lossless bundle stays below 1 MiB and the complete publication below the unchanged 2 MiB review budget; no binaries, profiler traces, external archive or policy exception is introduced.",
+      "review_document": "benchmarks/results/pbe0-cuda-schedule-20261006/README.md"
+    },
     "pbe0-resident-tiles-20261003": {
       "owner": "ordinary resident-grid tile qualification",
       "reason": "Lossless consolidated 144 native and 72 independent reference endpoint records, including all cold/moved regressions, with exact source/binary/job and resource/work receipts. Consolidation avoids duplicate per-record metadata; no profiler trace, binary, or relaxed storage limit is included.",
@@ -187,6 +192,22 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
+      "family": "pbe0-cuda-schedule-20261006",
+      "bytes": 756252,
+      "sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact #2036-base endpoint/reference streams, resource analysis, frozen source restoration and negative trials; warm-only promotion, without cold or allocator/deployment claims."
+    },
+    {
+      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-bundle.json.xz",
+      "family": "pbe0-cuda-schedule-20261006",
+      "bytes": 612472,
+      "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
+    },
     {
       "path": "benchmarks/results/pbe0-resident-tiles-20261003/campaign.json.xz",
       "family": "pbe0-resident-tiles-20261003",

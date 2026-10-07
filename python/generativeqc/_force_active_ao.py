@@ -7,7 +7,7 @@ source/device workload evidence; every miss retains the dense AO domain.
 from __future__ import annotations
 
 import typing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 DEFAULT_FORCE_ACTIVE_AO_POLICY = "auto"
 _SUPPORTED_DERIVATIVE_ORDERS = frozenset((1, 2))
@@ -229,6 +229,24 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         producer="pre-ao-envelope-native-csr",
         max_active_fraction=0.8,
     ),
+)
+
+
+# Keep explicit 256-point callers and the same continuous producer crossover.
+# Automatic tiles are admitted by the shared complete-owner byte-budget planner;
+# do not let their policy label silently disable the existing indexed consumer.
+QUALIFIED_FORCE_ACTIVE_AO_PROFILES += tuple(
+    replace(
+        profile,
+        profile_id=f"{profile.profile_id}-budget-auto",
+        evidence=(
+            *profile.evidence,
+            ".agents/notes/implemented/performance/2026-10-06-pbe0-budget-admitted-cuda-schedule.md",
+        ),
+        tile_policy="budget-auto",
+        tile_points=None,
+    )
+    for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
 )
 
 

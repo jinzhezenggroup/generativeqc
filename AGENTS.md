@@ -21,26 +21,41 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 
 ## Compiler caching
 
-- Use `ccache` for local C++ and CUDA builds, including PR qualification builds.
-  Verify `ccache --version` before configuring; if it is unavailable, report the
-  missing prerequisite rather than silently starting an uncached full build.
-- Configure CMake with `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` and
-  `-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache`. Existing automatic cache selection is
-  acceptable only after verifying that the generated compiler commands actually
-  invoke `ccache`; the cache launcher may be a normal CMake variable rather than
-  a `CMakeCache.txt` entry.
+- Use a compiler cache for local C++ and CUDA builds, including PR qualification
+  builds and cache-miss runtime JIT compilation. Prefer `sccache`; fall back to
+  `ccache`. Runtime JIT requires sccache 0.16.0+ with per-invocation foreground
+  server/process-group ownership and local workers, preserving finite timeouts
+  without stopping the shared server or unrelated compilations. Its persistent
+  JIT cache slots require exclusive leases and must be outside the shared cache
+  tree, since sccache disk-LRU startup cleans temporary files recursively.
+- Verify the selected launcher with `--version` before configuring or starting a
+  cache-miss compile. If neither launcher is usable, report the missing prerequisite
+  rather than silently starting an uncached full build or JIT compile. Python/JIT
+  standard Python installations already declare the portable PyPI `sccache`
+  wheel as a base dependency; source/development environments must still verify
+  the executable rather than assuming dependency resolution succeeded.
+- Keep CMake and runtime JIT selection consistent: automatic selection is
+  `sccache` then `ccache`. Configure explicit CMake launchers with the selected
+  executable when reproducibility requires pinning the launcher. Verify generated
+  compiler commands actually invoke it; the launcher may be a normal CMake
+  variable rather than a `CMakeCache.txt` entry.
+- Runtime JIT artifact hits may replay without a compiler-cache executable because
+  they do not compile. On an artifact cache miss, the C++/CUDA compiler adapters
+  must wrap the actual compiler/link subprocess with the verified launcher. The
+  launcher is execution provenance, not scientific/generated-source identity, and
+  must not invalidate an otherwise identical JIT artifact key.
 - Reuse the existing cache across builds. Do not clear or disable it for ordinary
   validation. Do not weaken cache correctness with sloppiness settings or override
   build/source identities to obtain hits.
-- For isolated worktree builds, prefer matching in-tree build directory layouts
+- For `ccache` worktree builds, prefer matching in-tree build directory layouts
   and set `CCACHE_BASEDIR` to each checkout root, not just its build directory,
   so equivalent compiler input paths can reuse cached objects across worktrees.
   The automatic CMake ccache launcher overrides this environment value with
-  `CMAKE_BINARY_DIR`; use the explicit CXX and CUDA launcher settings above when
+  `CMAKE_BINARY_DIR`; use explicit CXX and CUDA launcher settings when
   checkout-root normalization is required.
-- Retain `ccache --show-stats` before and after substantial compilation so cache
-  use can be distinguished from cache hits. Compiler caching does not replace
-  clean source provenance or real-device execution evidence.
+- Retain the selected launcher's `--show-stats` output before and after substantial
+  compilation so cache use can be distinguished from cache hits. Compiler caching
+  does not replace clean source provenance or real-device execution evidence.
 
 ## Release authority
 

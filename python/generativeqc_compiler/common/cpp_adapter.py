@@ -10,7 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .backend import TargetInfo
-from .compiler_process import CompileResult, run_compiler
+from .compiler_cache import run_cached_compiler
+
+if typing.TYPE_CHECKING:
+    from .compiler_process import CompileResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +76,7 @@ class CppCompilerAdapter:
         sources = tuple(Path(source) for source in sources)
         if not sources:
             raise ValueError("shared-library compilation requires at least one source")
-        return run_compiler(
+        return run_cached_compiler(
             [
                 str(self.cxx),
                 "-std=c++17",

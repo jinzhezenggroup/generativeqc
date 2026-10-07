@@ -248,7 +248,7 @@ def test_explicit_cooperative_selection_keeps_point_lanes() -> None:
         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=True
     )
     assert generic.becke_threads_per_point == 1 and generic.becke_shared_bytes == 0
-    assert cooperative.becke_threads_per_point == 32
+    assert cooperative.becke_threads_per_point == 128
     assert cooperative.becke_shared_bytes == 16 + 66 * 64
     assert cooperative.geometry_lanes == generic.geometry_lanes
     assert cooperative.allocation_bytes == generic.allocation_bytes
@@ -268,7 +268,7 @@ def test_explicit_cooperative_selection_keeps_point_lanes() -> None:
         plan = plan_stationary_cuda_resources(
             **common, target=target, budget_bytes=1 << 30, cooperative_becke=True
         )
-        assert plan.becke_threads_per_point == 32
+        assert plan.becke_threads_per_point == 128
         assert plan.becke_shared_bytes == 16 + 64 * (4 * (2 * atoms - 5) // 2)
         assert plan.becke_shared_bytes <= 32 << 10
         assert plan.geometry_lanes == generic.geometry_lanes

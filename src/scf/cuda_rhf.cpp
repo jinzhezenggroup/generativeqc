@@ -690,11 +690,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const std::optional<double> requested_mixed_precision_fock_threshold =
       requested_precision_policy.threshold;
   const bool requested_mixed_precision_fock = requested_mixed_precision_fock_threshold.has_value();
-  // #990 currently owns an exact FP64 retained anchor. Mixed iterative Fock has
-  // a separate error/refinement contract and remains mutually exclusive until
-  // the two budgets are composed explicitly.
-  const bool requested_incremental_direct_jk =
-      options.incremental_direct_jk && requested_quartet_direct && !requested_mixed_precision_fock;
+  // #990 currently owns an exact FP64 retained anchor. Resolve its accepted-iterate
+  // policy before lowering so CPU/CUDA share activation and refresh semantics.
+  // The CUDA Direct lower advertises density-weighted screening; mixed iterative
+  // Fock remains mutually exclusive until the two numerical budgets are composed.
+  const auto incremental_direct_jk_policy = resolve_incremental_direct_jk_policy(
+      options, {requested_quartet_direct, true, requested_mixed_precision_fock});
+  const bool requested_incremental_direct_jk = incremental_direct_jk_policy.active;
   // A mixed item is promoted to exact FP64 by the target refinement before any
   // consumer runs, so the matrix it retains is target precision. The convergence
   // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
@@ -2975,12 +2977,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool incremental_iteration_enabled =
       incremental_direct_jk && !bounded_direct_count_diagnostic &&
       !bounded_direct_aot_only_diagnostic && !bounded_direct_fock_only_diagnostic;
-  // With density screening enabled, allow at most one approximate ΔD
-  // application before rebuilding from the full density. This prevents omitted
-  // update contributions from accumulating across an arbitrarily long anchor
-  // chain. Unscreened execution can use the caller's wider exact-linear interval.
+  // The shared SCF policy owns the conservative refresh rule for a lower that
+  // screens on delta-density magnitude. Device execution only consumes the
+  // already-resolved cadence.
   const std::uint32_t incremental_rebuild_interval =
-      options.screening_tolerance == 0.0 ? options.incremental_direct_jk_rebuild_interval : 1U;
+      static_cast<std::uint32_t>(incremental_direct_jk_policy.effective_rebuild_interval);
   if (incremental_direct_jk) {
     cuda_error = cudaMemsetAsync(incremental_delta_updates, 0xff,
                                  batch_size * sizeof(std::uint32_t), resources.stream_);
@@ -5114,7 +5115,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         precision_item_mixed ? host_mixed_item_census[system] : 0U;
     result.precision.final_residual_audits = audited_item ? 1U : 0U;
 
-    result.incremental_direct_jk.requested = options.incremental_direct_jk;
+    result.incremental_direct_jk.requested = incremental_direct_jk_policy.requested;
     result.incremental_direct_jk.active = incremental_iteration_enabled;
     if (incremental_iteration_enabled) {
       const std::uint64_t builds = host_iterations[system];

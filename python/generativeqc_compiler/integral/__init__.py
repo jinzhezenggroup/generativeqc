@@ -40,13 +40,7 @@ from .cache import NvrtcCacheSpec, integral_cache_key, nvrtc_cache_key
 from .capabilities import query_integral_capability
 from .cuda_emitter import emit_shell_class_fused_cuda
 from .cuda_lowering import (
-    DpppFusedPlan,
-    build_dppp_fused_plan,
-    dppp_components,
-    emit_dppp_fused_cuda,
-    emit_ppps_1110_resident_bra_cuda,
     emit_ppps_resident_bra_rys3_cuda,
-    evaluate_dppp_fused_component,
     supports_component_lane_rys,
 )
 from .cuda_schedule import (
@@ -233,7 +227,6 @@ __all__ = [
     "DeviceProbe",
     "DpppComponentKernel",
     "DpppContractionKernel",
-    "DpppFusedPlan",
     "FusedShellPlan",
     "FusedShellResult",
     "Gfn2SdqPrimitiveEvaluation",
@@ -287,7 +280,6 @@ __all__ = [
     "assemble_raw_block",
     "build_dppp_component_kernel",
     "build_dppp_contraction_kernel",
-    "build_dppp_fused_plan",
     "build_fused_shell_plan",
     "build_gfn2_sdq_primitive_kernel",
     "build_integral_ir",
@@ -305,9 +297,6 @@ __all__ = [
     "cuda_architecture",
     "cuda_target_info",
     "default_schedule",
-    "dppp_components",
-    "emit_dppp_fused_cuda",
-    "emit_ppps_1110_resident_bra_cuda",
     "emit_ppps_resident_bra_rys3_cuda",
     "emit_ppps_rys3_root_body_cuda",
     "emit_rys2_roots_cuda",
@@ -317,7 +306,6 @@ __all__ = [
     "emit_rys_force_root_body_cuda",
     "emit_shell_class_fused_cuda",
     "enumerate_fused_shell_specs",
-    "evaluate_dppp_fused_component",
     "evaluate_fused_shell_component",
     "evaluate_fused_shell_observables",
     "evaluate_fused_shell_value",

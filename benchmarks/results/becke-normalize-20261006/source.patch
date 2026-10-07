@@ -1,0 +1,961 @@
+diff --git a/docs/developer/index.md b/docs/developer/index.md
+index 36c4b0a67..011cdf68c 100644
+--- a/docs/developer/index.md
++++ b/docs/developer/index.md
+@@ -93,6 +93,7 @@ hf_force_finalization
+ :caption: DFT and XC
+ 
+ dft_grid
++becke_normalization
+ dft_d3
+ xc_expressions
+ xc_integration
+diff --git a/python/generativeqc/_stationary_cuda.py b/python/generativeqc/_stationary_cuda.py
+index 721eddfaf..da6809fdb 100644
+--- a/python/generativeqc/_stationary_cuda.py
++++ b/python/generativeqc/_stationary_cuda.py
+@@ -551,9 +551,12 @@ class _CudaSources:
+         cooperative_becke: bool | None = None,
+         phased_becke: bool | None = None,
+         becke_primitive: bool | None = None,
++        becke_normalize: bool | None = None,
+     ) -> None:
+         if type(integral_derivatives) is not bool:
+             raise TypeError("integral_derivatives must be boolean")
++        if becke_normalize is not None and type(becke_normalize) is not bool:
++            raise TypeError("Becke normalization selection must be boolean or None")
+         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
+         becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
+         self.source_names = source_names
+@@ -565,6 +568,11 @@ class _CudaSources:
+         self.profile_device = False
+         self.handle = ct.c_void_p()
+         self.library = lib = ct.CDLL(str(artifact.library))
++        configure_normalize = getattr(
++            lib, "stationary_configure_becke_normalize_v1", None
++        )
++        if becke_normalize is not None and configure_normalize is None:
++            raise ValueError("stationary artifact lacks normalization schedule control")
+         self.natom, self.nao, self.point_capacity = basis.natom, basis.nao, points
+         if spin_blocks not in (1, 2):
+             raise ValueError("stationary CUDA requires one or two density spin blocks")
+@@ -827,6 +835,16 @@ class _CudaSources:
+                 self.handle,
+                 int(becke_primitive),
+             )
++        # Qualification selects a schedule only during construction. Legacy
++        # artifacts keep their serial default; never reconfigure a live owner.
++        if becke_normalize is not None:
++            assert configure_normalize is not None
++            configure_normalize.argtypes = [ct.c_void_p, ct.c_int, *tail]
++            self._call(
++                "stationary_configure_becke_normalize_v1",
++                self.handle,
++                int(becke_normalize),
++            )
+         if profile_device:
+             self.enable_profile()
+         self._call(
+diff --git a/python/generativeqc_compiler/method/stationary_becke_phased.py b/python/generativeqc_compiler/method/stationary_becke_phased.py
+index 23954aa4c..846a943b7 100644
+--- a/python/generativeqc_compiler/method/stationary_becke_phased.py
++++ b/python/generativeqc_compiler/method/stationary_becke_phased.py
+@@ -99,13 +99,86 @@ __global__ void phased_becke_normalize(PhasedBeckeInput input) {
+   if (!generativeqc_grid_phased::point_normalize_phase(input.work, point,
+           input.owner(point), input.seeds[point], local_ratio)) atomicExch(input.error, 1);
+ }
++
++// Point lanes are contiguous in every global panel. Sixteen atom lanes share
++// only the frozen maximum, products and ratio AD result; no scientific sum is
++// reassociated and no point or atom scatter uses floating-point atomics.
++__device__ void normalize_cooperative(PhasedBeckeInput input) {
++  constexpr size_t point_lanes = stationary_becke_normalize_point_lanes;
++  constexpr size_t atom_lanes = 128 / point_lanes;
++  __shared__ double products[stationary_becke_normalize_max_atoms * point_lanes];
++  __shared__ double maxima[atom_lanes * point_lanes];
++  __shared__ double objectives[3 * point_lanes];
++  __shared__ bool active_points[point_lanes];
++  const size_t lane = threadIdx.x, atom_lane = threadIdx.y;
++  const size_t point = blockIdx.x * point_lanes + lane;
++  if (atom_lane == 0)
++    active_points[lane] = point < input.work.points && !input.failed();
++  __syncthreads();
++  const bool active = active_points[lane];
++  if (input.work.atoms > stationary_becke_normalize_max_atoms) {
++    if (active && atom_lane == 0 &&
++        !generativeqc_grid_phased::point_normalize_phase(input.work, point,
++            input.owner(point), input.seeds[point], local_ratio)) atomicExch(input.error, 1);
++    return;
++  }
++  using namespace generativeqc_grid_adjoint;
++  double maximum = -std::numeric_limits<double>::infinity();
++  if (active)
++    for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes)
++      if (!input.work.zero_counts(point)[atom])
++        maximum = std::max(maximum, input.work.field(4, point)[atom]);
++  maxima[atom_lane * point_lanes + lane] = maximum;
++  __syncthreads();
++  if (atom_lane == 0) {
++    for (size_t source = 1; source < atom_lanes; ++source)
++      maximum = std::max(maximum, maxima[source * point_lanes + lane]);
++    maxima[lane] = maximum;
++    if (active && (!std::isfinite(maximum) || input.owner(point) >= input.work.atoms ||
++                   !std::isfinite(input.seeds[point]))) {
++      active_points[lane] = false;
++      atomicExch(input.error, 1);
++    }
++    if (active_points[lane]) input.work.maximum[point] = maximum;
++  }
++  __syncthreads();
++  if (active_points[lane]) {
++    maximum = maxima[lane];
++    for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes) {
++      const double product = normalized_product_value(input.work.field(4, point)[atom],
++          input.work.zero_counts(point)[atom], maximum);
++      products[atom * point_lanes + lane] = product;
++      input.work.field(5, point)[atom] = product;
++    }
++  }
++  __syncthreads();
++  if (active_points[lane] && atom_lane == 0) {
++    const generativeqc_grid_phased::Strided<double> local_products{
++        products + lane, point_lanes};
++    const auto objective = normalized_product_objective(input.work.atoms,
++        input.owner(point), local_products, local_ratio);
++    for (size_t word = 0; word < 3; ++word)
++      objectives[word * point_lanes + lane] = objective[word];
++  }
++  __syncthreads();
++  if (active_points[lane]) {
++    const std::array<double, 3> objective{objectives[lane],
++        objectives[point_lanes + lane], objectives[2 * point_lanes + lane]};
++    for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes)
++      input.work.field(6, point)[atom] = normalized_product_bar(atom,
++          input.owner(point), input.seeds[point], objective);
++  }
++}
++__global__ void phased_becke_normalize_cooperative(PhasedBeckeInput input) {
++  normalize_cooperative(input);
++}
+ } // namespace generativeqc_stationary_cuda
+ """
+ 
+ 
+ @lru_cache(maxsize=4, typed=True)
+ def emit_stationary_phased_becke_cuda(
+-    atom_limit: int = 128, *, iterations: int = 3
++    atom_limit: int = 128, *, iterations: int = 3, cooperative_normalize: bool = True
+ ) -> str:
+     """Bind dynamic native kernels to an authenticated bounded AD composition.
+ 
+@@ -114,6 +187,8 @@ def emit_stationary_phased_becke_cuda(
+     neither selection constructs graphs or recognizes them at force execution.
+     The emitted bound is part of native admission, not just an annotation.
+     """
++    if type(cooperative_normalize) is not bool:
++        raise ValueError("cooperative normalization selection must be boolean")
+     operation = recognize_becke_partition_domain_graph(
+         grid_partition_domain_program(atom_limit, iterations),
+         atom_limit=atom_limit,
+@@ -125,6 +200,11 @@ def emit_stationary_phased_becke_cuda(
+         emit_becke_pair_coefficients(operation)
+         + "namespace generativeqc_stationary_cuda {\n"
+         + f"constexpr size_t stationary_becke_primitive_max_atoms = {atom_limit};\n"
++        + f"constexpr size_t stationary_becke_normalize_max_atoms = {min(atom_limit, 128)};\n"
++        + "constexpr size_t stationary_becke_normalize_point_lanes = 8;\n"
++        + "constexpr bool stationary_becke_cooperative_normalize = "
++        + str(cooperative_normalize).lower()
++        + ";\n"
+         + "}\n"
+         + _KERNELS
+     )
+diff --git a/python/generativeqc_compiler/xc/grid_native.py b/python/generativeqc_compiler/xc/grid_native.py
+index 5124b67e8..c517fa8fa 100644
+--- a/python/generativeqc_compiler/xc/grid_native.py
++++ b/python/generativeqc_compiler/xc/grid_native.py
+@@ -181,20 +181,37 @@ GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zer
+     if (!zeros[a]) maximum = std::max(maximum, logs[a]);
+   return maximum;
+ }
++GENERATIVEQC_GRID_HD inline double normalized_product_value(double logarithm,
++    size_t zeros, double maximum) {
++  return zeros ? 0 : portable_exp(logarithm - maximum);
++}
++template <class Products, class Ratio>
++GENERATIVEQC_GRID_HD auto normalized_product_objective(size_t na, size_t owner,
++    Products products, Ratio ratio) {
++  double total = 0;
++  // Preserve atom order even when the products were evaluated in parallel.
++  for (size_t atom = 0; atom < na; ++atom) total += products[atom];
++  return ratio(products[owner], total);
++}
++template <class Objective>
++GENERATIVEQC_GRID_HD inline double normalized_product_bar(size_t atom, size_t owner,
++    double seed, Objective objective) {
++  return seed * (objective[2] + (atom == owner ? objective[1] : 0));
++}
+ template <class Logs, class Products, class Bars, class Zeros, class Ratio>
+ GENERATIVEQC_GRID_HD double normalized_product_adjoint(size_t na, size_t owner, double seed,
+     Logs logs, Products products, Bars bar_product, Zeros zeros,
+     double maximum, Ratio ratio) {
+   double total = 0;
+   for (size_t a = 0; a < na; ++a) {
+-    products[a] = zeros[a] ? 0 : portable_exp(logs[a] - maximum);
++    products[a] = normalized_product_value(logs[a], zeros[a], maximum);
+     total += products[a];
+   }
+   // The selected objective uses the SAME ratio graph. A frozen log scale
+   // cancels between numerator and denominator.
+   const auto objective = ratio(products[owner], total);
+   for (size_t a = 0; a < na; ++a)
+-    bar_product[a] = seed * (objective[2] + (a == owner ? objective[1] : 0));
++    bar_product[a] = normalized_product_bar(a, owner, seed, objective);
+   // Indexed consumers broadcast this same denominator adjoint instead of
+   // materializing it for products whose first derivatives are annihilated.
+   // Preserve the dense branch's addition and multiplication order.
+diff --git a/src/dft/stationary_gradient_cuda.cuh b/src/dft/stationary_gradient_cuda.cuh
+index 90c44e26c..5ff105505 100644
+--- a/src/dft/stationary_gradient_cuda.cuh
++++ b/src/dft/stationary_gradient_cuda.cuh
+@@ -24,6 +24,8 @@ struct Owner {
+   bool profile = false, geometry_pending = false;
+   bool becke_primitive_requested = false, becke_primitive = false,
+        becke_primitive_configured = false;
++  bool becke_normalize_supported = false, becke_normalize_cooperative = false,
++       becke_normalize_configured = false;
+   cudaStream_t geometry_stream{};
+   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
+   cudaEvent_t becke_events[8]{};
+@@ -238,7 +240,18 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
+     profile_record(owner, owner.becke_events[2], stream);
+     phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
+     profile_record(owner, owner.becke_events[3], stream);
+-    phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
++    if constexpr (stationary_becke_cooperative_normalize) {
++      if (owner.becke_normalize_cooperative)
++        phased_becke_normalize_cooperative<<<blocks(view.npoint,
++                                                    stationary_becke_normalize_point_lanes),
++                                             dim3(stationary_becke_normalize_point_lanes,
++                                                  128 / stationary_becke_normalize_point_lanes),
++                                             0, stream>>>(phased);
++      else
++        phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
++    } else {
++      phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
++    }
+     profile_record(owner, owner.becke_events[4], stream);
+     if (owner.becke_primitive) {
+       phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
+@@ -427,6 +440,19 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
+     cuda_check(cudaStreamSynchronize(owner->context.stream));
+     owner->phased_bytes = bytes;
+     owner->bytes += bytes;
++    if constexpr (stationary_becke_cooperative_normalize) {
++      cudaDeviceProp property{};
++      cudaFuncAttributes attributes{};
++      cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
++      cuda_check(cudaFuncGetAttributes(&attributes, phased_becke_normalize_cooperative));
++      owner->becke_normalize_supported =
++          owner->atoms <= stationary_becke_normalize_max_atoms &&
++          size_t(property.maxThreadsDim[0]) >= stationary_becke_normalize_point_lanes &&
++          size_t(property.maxThreadsDim[1]) >= 128 / stationary_becke_normalize_point_lanes &&
++          property.maxThreadsPerBlock >= 128 && attributes.maxThreadsPerBlock >= 128 &&
++          attributes.sharedSizeBytes <= size_t(property.sharedMemPerBlock);
++      owner->becke_normalize_cooperative = owner->becke_normalize_supported;
++    }
+     ++owner->launches;
+     ++owner->synchronizations;
+   });
+@@ -438,6 +464,29 @@ int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t c
+   output[1] = owner->phased_batches;
+   return 0;
+ }
++// Qualification may compare the two schedules, but never mutate a live
++// topology/geometry owner. Both use the same reservation and canonical AD.
++int stationary_configure_becke_normalize_v1(void* pointer, int enabled, char* error, size_t size) {
++  using namespace generativeqc_stationary_cuda;
++  auto* owner = static_cast<Owner*>(pointer);
++  return guarded(owner, error, size, [&] {
++    if (!owner || owner->topology_ready || owner->becke_normalize_configured ||
++        (enabled != 0 && enabled != 1))
++      throw std::invalid_argument("Becke normalization must be configured once before topology");
++    owner->context.check_device();
++    owner->becke_normalize_configured = true;
++    owner->becke_normalize_cooperative = enabled && owner->becke_normalize_supported;
++  });
++}
++int stationary_becke_normalize_metrics_v1(void* pointer, uint64_t* output, size_t count) {
++  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
++  if (!owner || !output || count != 4) return 1;
++  output[0] = owner->becke_normalize_supported;
++  output[1] = owner->becke_normalize_cooperative;
++  output[2] = owner->phased_batches;
++  output[3] = owner->phased_points;
++  return 0;
++}
+ int stationary_configure_becke_primitive_v1(void* pointer, int enabled, char* error, size_t size) {
+   using namespace generativeqc_stationary_cuda;
+   auto* owner = static_cast<Owner*>(pointer);
+diff --git a/benchmarks/becke_normalize_pairs.py b/benchmarks/becke_normalize_pairs.py
+new file mode 100644
+index 000000000..d93ed1d04
+--- /dev/null
++++ b/benchmarks/becke_normalize_pairs.py
+@@ -0,0 +1,308 @@
++"""Same-binary, frozen-density complete E+F pairs for Becke normalization.
++
++The control changes only the native normalization schedule before topology.
++Whole gradient executors are replaced/primed outside timing; cold/moved setup
++is retained separately and is not evidence of a cold/moved performance win.
++"""
++
++from __future__ import annotations
++
++import argparse
++import ctypes as ct
++import hashlib
++import json
++import os
++from pathlib import Path
++from time import perf_counter
++from typing import Any
++from unittest.mock import patch
++
++import numpy as np
++from generativeqc import Calculator, GridSpec, KsOptions, _stationary_cuda
++from generativeqc_compiler.common.evidence import block_error, canonical_hash
++from generativeqc_compiler.common.performance import (
++    assess_comparison,
++    measure_interleaved,
++)
++from generativeqc_compiler.common.timing import interleaved_selection_order
++
++from benchmarks._support import (
++    cuda_accelerator_metadata,
++    environment_metadata,
++    raw_output_path,
++)
++from benchmarks.compare_gpu4pyscf_batch import (
++    native_build_metadata,
++    require_tuned_native_build,
++)
++from benchmarks.dft_force_components import normalize_force_work
++from benchmarks.readme_hf_scaling import scaling_cases
++from benchmarks.readme_omol25 import load_comparison_basis, protocol, source_hashes
++from benchmarks.readme_pbe0 import PBE0
++
++
++def main() -> None:
++    """Retain every prime, vector, actual solver history and selected schedule."""
++    import cupy as cp
++
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--atoms", type=int, choices=(48, 96), required=True)
++    parser.add_argument("--basis-file", type=Path, required=True)
++    parser.add_argument("--reference", type=Path, required=True)
++    parser.add_argument("--output", type=raw_output_path, required=True)
++    parser.add_argument("--repeats", type=int, default=5)
++    parser.add_argument("--feasibility", action="store_true")
++    parser.add_argument("--profile", action="store_true")
++    args = parser.parse_args()
++    if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
++        parser.error("real-GPU execution requires a finite Slurm allocation")
++    if args.repeats < 5 and not (args.feasibility and args.repeats == 1):
++        parser.error("at least five pairs required unless explicitly feasibility-only")
++    if args.profile and not args.feasibility:
++        parser.error("intrusive profiling is a separate feasibility-only campaign")
++    os.environ["GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE"] = "off"
++    case = scaling_cases()[f"water-{args.atoms}"]
++    basis, _ = load_comparison_basis(
++        args.basis_file, case, role="orbital", compute_forces=True
++    )
++    grid = GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32)
++    scientific = protocol(args.atoms, basis, grid, 5, benchmark=PBE0)
++    reference = json.loads(args.reference.read_text())
++    assert reference["protocol"] == scientific and reference["stage"] == "complete"
++    record = {
++        "schema": "generativeqc.becke-normalize-pairs.v1",
++        "protocol": scientific,
++        "source_file_sha256": source_hashes(),
++        "reference_sha256": hashlib.sha256(args.reference.read_bytes()).hexdigest(),
++        "environment": environment_metadata(accelerator=cuda_accelerator_metadata(cp)),
++        "slurm_job_id": os.environ["SLURM_JOB_ID"],
++        "feasibility": args.feasibility,
++        "profile_intrusive": args.profile,
++        "scope": "shared native post-solve snapshot, frozen using public warm-start API; primes/setup excluded and retained, not cold/moved acceleration; no opaque density byte digest",
++        "samples": [],
++        "priming": [],
++        "setup": [],
++        "assessments": {},
++    }
++    selection = "candidate"
++    sources = []
++    previous_counts: dict[int, tuple[int, int]] = {}
++    force_work = None
++    original_init = _stationary_cuda._CudaSources.__init__
++
++    def configured(source: Any, *values: Any, **options: Any) -> None:
++        options["becke_normalize"] = selection == "candidate"
++        options["profile_device"] = args.profile
++        original_init(source, *values, **options)
++        sources.append(source)
++        previous_counts[id(source)] = (0, 0)
++
++    def save(stage: str) -> None:
++        record["stage"] = stage
++        args.output.parent.mkdir(parents=True, exist_ok=True)
++        args.output.write_text(json.dumps(record, indent=2) + "\n")
++
++    def normalize_metrics() -> list[list[int]]:
++        metrics = []
++        for source in sources:
++            if not source.handle:
++                continue
++            function = source.library.stationary_becke_normalize_metrics_v1
++            function.argtypes = [ct.c_void_p, ct.POINTER(ct.c_uint64), ct.c_size_t]
++            output = (ct.c_uint64 * 4)()
++            assert function(source.handle, output, 4) == 0
++            assert output[0] == 1 and output[1] == int(selection == "candidate")
++            before = previous_counts[id(source)]
++            previous_counts[id(source)] = (output[2], output[3])
++            delta = [output[0], output[1], output[2] - before[0], output[3] - before[1]]
++            assert delta[3] == args.atoms * 48 * 16 * 32
++            metrics.append(delta)
++        assert metrics
++        return metrics
++
++    def diagnostics(
++        item: Any, geometry: int, metrics: list[list[int]], observed_work: Any
++    ) -> dict[str, Any]:
++        oracle = next(
++            row
++            for row in reference["records"]
++            if row["geometry"] == geometry and row["phase"] in ("cold", "moved")
++        )
++        errors = {
++            "energy": block_error([item.energy], [oracle["energy"]], atol=1e-8, rtol=0),
++            "forces": block_error(item.forces, oracle["forces"], atol=1e-7, rtol=0),
++        }
++        assert item.status == 0 and item.converged
++        assert all(error["passed"] for error in errors.values())
++        return {
++            "energy": item.energy,
++            "forces": item.forces.tolist(),
++            "errors": errors,
++            "iterations": item.iterations,
++            "fock_builds": item.fock_builds,
++            "warm_start_used": item.warm_start_used,
++            "warm_start_fallback": item.warm_start_fallback,
++            "native_ks_diagnostic": item.ks_diagnostic.to_payload(),
++            "native_force_components": normalize_force_work(observed_work),
++            "normalize_metrics": metrics,
++        }
++
++    with patch.object(_stationary_cuda._CudaSources, "__init__", configured):
++        calculator = Calculator(
++            method="pbe0-rks",
++            basis=basis,
++            device="cuda",
++            basis_representation="spherical",
++            ks_options=KsOptions(grid=grid),
++            energy_tolerance=1e-12,
++            density_tolerance=1e-10,
++            screening_tolerance=1e-12,
++            max_iterations=100,
++        )
++        record["native_build"] = native_build_metadata(calculator)
++        require_tuned_native_build(record["native_build"])
++        started = perf_counter()
++        owner = calculator.prepare_batch(
++            [scientific["geometries_bohr"][0]], warm_start=True
++        )
++        record["prepare_seconds"] = perf_counter() - started
++        original_force = owner._public_dft_cuda_force
++
++        def observed_force(*values: Any) -> Any:
++            nonlocal force_work
++            result = original_force(*values)
++            force_work = result[1]
++            return result
++
++        owner._public_dft_cuda_force = observed_force
++        try:
++            for geometry in (0, 1):
++                phase = "warm" if geometry == 0 else "moved-warm"
++                coords = (
++                    None
++                    if geometry == 0
++                    else [
++                        np.asarray([xyz for _, xyz in scientific["geometries_bohr"][1]])
++                    ]
++                )
++                owner.set_warm_start_updates(True)
++                cp.cuda.Stream.null.synchronize()
++                started = perf_counter()
++                item = owner.execute(
++                    coords, strict=False, properties=("energy", "forces")
++                ).items[0]
++                cp.cuda.Stream.null.synchronize()
++                record["setup"].append(
++                    {
++                        "geometry": geometry,
++                        "seconds": perf_counter() - started,
++                        "diagnostics": diagnostics(
++                            item, geometry, normalize_metrics(), force_work
++                        ),
++                    }
++                )
++                owner.set_warm_start_updates(False)
++                completed = []
++
++                def prepare(
++                    arm: str,
++                    *,
++                    replay_coords: Any = coords,
++                    replay_phase: str = phase,
++                    replay_geometry: int = geometry,
++                ) -> None:
++                    nonlocal selection
++                    selection = arm
++                    assert owner._warm_updates is False
++                    previous = owner._stationary_cuda_execution
++                    if previous is not None:
++                        previous.close()
++                    owner._stationary_cuda_execution = None
++                    sources.clear()
++                    previous_counts.clear()
++                    cp.cuda.Stream.null.synchronize()
++                    started = perf_counter()
++                    primed = owner.execute(
++                        replay_coords, strict=False, properties=("energy", "forces")
++                    ).items[0]
++                    cp.cuda.Stream.null.synchronize()
++                    record["priming"].append(
++                        {
++                            "phase": replay_phase,
++                            "selection": arm,
++                            "seconds": perf_counter() - started,
++                            "diagnostics": diagnostics(
++                                primed, replay_geometry, normalize_metrics(), force_work
++                            ),
++                        }
++                    )
++                    save(f"{replay_phase}/prime-{len(record['priming'])}")
++
++                def evaluate(
++                    arm: str,
++                    *,
++                    replay_coords: Any = coords,
++                    results: list[tuple[Any, Any, list[list[int]]]] = completed,
++                ) -> dict[str, int]:
++                    nonlocal force_work
++                    item = owner.execute(
++                        replay_coords, strict=False, properties=("energy", "forces")
++                    ).items[0]
++                    results.append((item, force_work, normalize_metrics()))
++                    return {"call_index": len(results) - 1}
++
++                inputs_hash = canonical_hash(
++                    {
++                        "protocol": scientific,
++                        "geometry": geometry,
++                        "density": "one publicly frozen native snapshot",
++                    }
++                )
++                if args.feasibility:
++                    samples = []
++                    for arm in interleaved_selection_order(1):
++                        prepare(arm)
++                        cp.cuda.Stream.null.synchronize()
++                        started = perf_counter()
++                        details = evaluate(arm)
++                        cp.cuda.Stream.null.synchronize()
++                        samples.append(
++                            {
++                                "selection": arm,
++                                "seconds": perf_counter() - started,
++                                "inputs_hash": inputs_hash,
++                                "workload": "energy-plus-force",
++                                "synchronized": True,
++                                "diagnostics": details,
++                            }
++                        )
++                else:
++                    samples = measure_interleaved(
++                        evaluate,
++                        cp.cuda.Stream.null.synchronize,
++                        workload="energy-plus-force",
++                        inputs_hash=inputs_hash,
++                        repeats=args.repeats,
++                        prepare=prepare,
++                    )
++                for sample in samples:
++                    selection = sample["selection"]
++                    item, sample_force_work, metrics = completed[
++                        sample["diagnostics"]["call_index"]
++                    ]
++                    sample["diagnostics"] = diagnostics(
++                        item, geometry, metrics, sample_force_work
++                    )
++                    assert item.iterations == item.fock_builds == 1
++                    assert item.warm_start_used and not item.warm_start_fallback
++                    sample["phase"] = phase
++                record["samples"].extend(samples)
++                record["assessments"][phase] = assess_comparison(samples)
++                save(phase)
++        finally:
++            owner.close()
++    save("complete")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/python/test_becke_normalize_cooperative.py b/tests/python/test_becke_normalize_cooperative.py
+new file mode 100644
+index 000000000..13e5536a4
+--- /dev/null
++++ b/tests/python/test_becke_normalize_cooperative.py
+@@ -0,0 +1,271 @@
++"""Serial AD, independent NumPy and cooperative CUDA normalization gates."""
++
++import os
++from pathlib import Path
++from types import SimpleNamespace
++from typing import Any
++
++import numpy as np
++import pytest
++from generativeqc_compiler.method.stationary_becke_phased import (
++    emit_stationary_phased_becke_cuda,
++)
++from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
++
++HARNESS = r"""
++extern "C" __global__ void normalize_test(size_t atoms, size_t points,
++    double* fields, size_t* zeros, double* maximum, const int64_t* owners,
++    double* seeds, int* error, int cooperative) {
++  using namespace generativeqc_stationary_cuda;
++  PhasedBeckeInput input{};
++  input.work = {atoms, points, nullptr, fields, zeros, maximum};
++  input.owners = owners;
++  input.seeds = seeds;
++  input.error = error;
++  if (cooperative) normalize_cooperative(input);
++  else {
++    const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++    if (point < points && !generativeqc_grid_phased::point_normalize_phase(
++            input.work, point, input.owner(point), seeds[point], local_ratio))
++      atomicExch(error, 1);
++  }
++}
++"""
++
++
++def test_normalize_emission_bounds_and_serial_control() -> None:
++    """Authenticated domains retain the constant shared-memory bound."""
++    source = emit_stationary_phased_becke_cuda(128)
++    assert "stationary_becke_normalize_max_atoms = 128;" in source
++    assert "stationary_becke_cooperative_normalize = true;" in source
++    control = emit_stationary_phased_becke_cuda(cooperative_normalize=False)
++    assert "stationary_becke_cooperative_normalize = false;" in control
++    with pytest.raises(ValueError, match="selection must be boolean"):
++        emit_stationary_phased_becke_cuda(cooperative_normalize=1)
++    with pytest.raises(ValueError, match="atom limit"):
++        emit_stationary_phased_becke_cuda(129)
++
++
++@pytest.mark.parametrize("selection", [0, 1, "on"])
++def test_normalize_control_rejects_non_boolean_before_allocation(
++    selection: Any,
++) -> None:
++    """A malformed qualification control cannot create a native owner."""
++    from generativeqc._stationary_cuda import _CudaSources
++
++    with pytest.raises(TypeError, match="normalization selection"):
++        _CudaSources(
++            None, None, None, None, None, None, None, becke_normalize=selection
++        )
++
++
++def test_normalize_explicit_control_requires_versioned_abi(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    """Legacy artifacts fail explicit requests before their allocation ABI."""
++    from generativeqc import _stationary_cuda as runtime
++
++    artifact = SimpleNamespace(
++        library=tmp_path / "legacy.so", metadata={"binary_sha256": "legacy"}
++    )
++    monkeypatch.setattr(runtime, "file_hash", lambda _path: "legacy")
++    monkeypatch.setattr(runtime.ct, "CDLL", lambda _path: SimpleNamespace())
++    with pytest.raises(ValueError, match="lacks normalization schedule control"):
++        runtime._CudaSources(
++            SimpleNamespace(natom=96),
++            artifact,
++            None,
++            None,
++            None,
++            None,
++            None,
++            becke_normalize=True,
++        )
++
++
++@pytest.fixture
++def physical_normalizer(monkeypatch: pytest.MonkeyPatch, request: Any) -> Any:
++    """Check both requests against the unchanged small-domain serial fallback.
++
++    These physical oracles have three atoms. The native phased reservation is
++    intentionally restricted to domains above 32 atoms, so this must not be
++    labeled physical qualification of cooperative normalization. The admitted
++    schedule is independently covered by CUDA and complete 48/96-atom gates.
++    """
++    if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
++        pytest.skip("real-GPU gates require a finite Slurm allocation")
++    import ctypes as ct
++
++    from generativeqc import _stationary_cuda as runtime
++    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
++    from generativeqc_compiler.common.cuda_target import cuda_target_info
++
++    original = runtime._CudaSources.__init__
++    selected = request.param
++    observed = []
++    if directory := os.environ.get("GENERATIVEQC_STATIONARY_EVIDENCE"):
++        monkeypatch.setenv(
++            "GENERATIVEQC_STATIONARY_EVIDENCE",
++            str(Path(directory) / ("candidate" if selected else "baseline")),
++        )
++
++    def initialize(source: Any, *values: Any, **options: Any) -> None:
++        options["phased_becke"] = True
++        options["becke_normalize"] = selected
++        original(source, *values, **options)
++        function = source.library.stationary_becke_normalize_metrics_v1
++        function.argtypes = [ct.c_void_p, ct.POINTER(ct.c_uint64), ct.c_size_t]
++        output = (ct.c_uint64 * 4)()
++        assert function(source.handle, output, 4) == 0
++        assert source.natom == 3 and source.resources.phased_becke_bytes == 0
++        assert tuple(output[:2]) == (0, 0)
++        observed.append(selected)
++
++    monkeypatch.setattr(runtime._CudaSources, "__init__", initialize)
++    yield CudaCompilerAdapter(
++        Path(os.environ["CUDACXX"]), cuda_target_info("sm_120"), compile_timeout=600
++    )
++    assert observed, "the physical gate must exercise the controlled native owner"
++
++
++@pytest.mark.parametrize("physical_normalizer", [False, True], indirect=True)
++@pytest.mark.parametrize("spin", ["rks", "uks"])
++def test_physical_normalize_fallback_independent_gradient(
++    physical_normalizer: Any, spin: str
++) -> None:
++    """Reuse analytic oracles, stale/replayed geometry and CPU-fallback guards."""
++    import test_dft_complete_cuda as complete
++
++    if spin == "rks":
++        complete.test_complete_cuda_independent_analytic(
++            "pbe-rks", "water", physical_normalizer
++        )
++    else:
++        complete.test_complete_cuda_open_shell_uks_independent_analytic(
++            "pbe-uks", physical_normalizer
++        )
++
++
++@pytest.mark.parametrize("physical_normalizer", [True], indirect=True)
++def test_physical_normalize_fallback_reconverged_finite_difference(
++    physical_normalizer: Any,
++) -> None:
++    """Check the three-step directional curve and reconverged replay contract."""
++    import test_dft_complete_cuda as complete
++
++    complete.test_cuda_reconverged_finite_differences_and_replay(
++        "pbe-rks", physical_normalizer
++    )
++
++
++@pytest.fixture(scope="module")
++def cuda_normalizer() -> tuple[Any, Any]:
++    """Compilation/execution requires scheduler-assigned device visibility."""
++    if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
++        pytest.skip("real-GPU gates require a finite Slurm allocation")
++    cupy = pytest.importorskip("cupy")
++    source = (
++        emit_grid_adjoint()
++        + emit_grid_partials(3, device=True)
++        + emit_stationary_phased_becke_cuda()
++        + HARNESS
++    )
++    module = cupy.RawModule(
++        code=source,
++        backend="nvcc",
++        options=("-std=c++17", "--expt-relaxed-constexpr", "--fmad=false"),
++    )
++    return cupy, module.get_function("normalize_test")
++
++
++@pytest.mark.parametrize("atoms", [1, 3, 33, 48, 96, 128, 129])
++@pytest.mark.parametrize("points", [1, 17, 32, 33, 257])
++def test_cuda_normalize_matches_serial_and_independent_formula(
++    cuda_normalizer: tuple[Any, Any], atoms: int, points: int
++) -> None:
++    """Cover partial blocks, exact-zero products/owners and dense fallback."""
++    cupy, kernel = cuda_normalizer
++    random = np.random.default_rng(1894 + atoms + points)
++    logs = random.uniform(-750, 20, (atoms, points))
++    zeros = random.integers(0, 3, (atoms, points), dtype=np.uint64)
++    zeros[0] = 0
++    owners = random.integers(0, atoms, points, dtype=np.int64)
++    seeds = random.normal(size=points)
++    maximum = np.max(np.where(zeros == 0, logs, -np.inf), axis=0)
++    products = np.exp(np.where(zeros == 0, logs - maximum, -np.inf))
++    total = np.zeros(points)
++    for row in products:
++        total += row
++    objective_owner = products[owners, np.arange(points)]
++    bars = np.broadcast_to(-objective_owner / (total * total), products.shape).copy()
++    bars[owners, np.arange(points)] += 1 / total
++    bars *= seeds
++    results = []
++    for cooperative in (0, 1):
++        fields = np.full((12, atoms, points), np.nan)
++        fields[4] = logs
++        device_fields = cupy.asarray(fields)
++        device_zeros = cupy.asarray(zeros)
++        device_maximum = cupy.full(points, cupy.nan)
++        device_owners = cupy.asarray(owners)
++        device_seeds = cupy.asarray(seeds)
++        error = cupy.zeros(1, dtype=cupy.int32)
++        width = 8 if cooperative else 128
++        kernel(
++            ((points + width - 1) // width,),
++            (8, 16) if cooperative else (128,),
++            (
++                np.uint64(atoms),
++                np.uint64(points),
++                device_fields,
++                device_zeros,
++                device_maximum,
++                device_owners,
++                device_seeds,
++                error,
++                np.int32(cooperative),
++            ),
++        )
++        assert int(error.get()[0]) == 0
++        result = device_fields.get()[5:7]
++        np.testing.assert_array_equal(device_maximum.get(), maximum)
++        np.testing.assert_allclose(result[0], products, rtol=3e-14, atol=1e-300)
++        np.testing.assert_allclose(result[1], bars, rtol=3e-14, atol=3e-14)
++        results.append(result)
++    np.testing.assert_array_equal(*results)
++
++
++@pytest.mark.parametrize("invalid", ["all-zero", "owner", "seed", "sticky"])
++def test_cuda_normalize_failure_is_sticky(
++    cuda_normalizer: tuple[Any, Any], invalid: str
++) -> None:
++    """No inactive point skips a block barrier or clears an existing error."""
++    cupy, kernel = cuda_normalizer
++    atoms, points = 96, 33
++    fields = cupy.zeros((12, atoms, points))
++    zeros = cupy.zeros((atoms, points), dtype=cupy.uint64)
++    owners = cupy.zeros(points, dtype=cupy.int64)
++    seeds = cupy.ones(points)
++    error = cupy.array([int(invalid == "sticky")], dtype=cupy.int32)
++    if invalid == "all-zero":
++        zeros[:, 0] = 1
++    elif invalid == "owner":
++        owners[0] = atoms
++    elif invalid == "seed":
++        seeds[0] = cupy.nan
++    kernel(
++        (5,),
++        (8, 16),
++        (
++            np.uint64(atoms),
++            np.uint64(points),
++            fields,
++            zeros,
++            cupy.zeros(points),
++            owners,
++            seeds,
++            error,
++            np.int32(1),
++        ),
++    )
++    assert int(error.get()[0]) == 1
+diff --git a/docs/developer/becke_normalization.md b/docs/developer/becke_normalization.md
+new file mode 100644
+index 000000000..fb034d660
+--- /dev/null
++++ b/docs/developer/becke_normalization.md
+@@ -0,0 +1,66 @@
++# Becke Normalization Scheduling
++
++The stationary Becke phase lowering uses the canonical grid-response ratio AD
++and normalized-product helpers in `generativeqc_compiler.xc.grid_native`.
++The cooperative normalization schedule changes execution, not the partition,
++screening thresholds, derivative formula, or atom domain.
++
++## Execution And Ordering
++
++An admitted block has eight contiguous point lanes and sixteen atom lanes,
++with 128 threads total. Atom lanes independently find partial log maxima,
++evaluate scaled products and write product adjoints. One lane per point retains
++the original atom-ordered denominator sum and invokes the same ratio AD used by
++serial normalization. The ratio result is shared with the atom lanes.
++
++Products and adjoints retain the existing global workspace layout. Exact-zero
++products are not exponentiated, and zero numerator owners retain their ratio
++adjoint. The maximum remains a frozen common scale, as in the canonical serial
++path. Pair primal, reverse, atom gather and point-motion phases are unchanged;
++the schedule does not reduce their pair visits or normalization atom entries.
++
++All block barriers execute for partial point blocks and failed points. Invalid
++owners, nonfinite seeds, absent finite maxima and previously set device errors
++retain the failure/publication contract. Floating-point atomics are not used.
++
++## Admission And Fallbacks
++
++The existing optional phased Becke reservation remains the prerequisite. There
++is no additional retained device allocation. Cooperative normalization supports
++at most 128 atoms and requires actual device/kernel thread and static shared
++memory limits to admit the block. Any miss retains the original serial
++normalization kernel; losing optional pair-coefficient experiments remain
++independent and default off. Generic geometry/AD fallbacks remain unchanged.
++
++The private `_CudaSources` construction argument `becke_normalize` allows
++qualification to select a serial or cooperative schedule before topology.
++`None` retains the artifact's default, including legacy serial artifacts;
++an explicit request requires the versioned configuration ABI. Neither a second
++configuration nor a live-topology configuration is allowed.
++
++`stationary_becke_normalize_metrics_v1` returns four cumulative owner words:
++supported, selected, phased batches and phased points. Difference counters across
++a complete force call; do not label cumulative replay totals as per-call work.
++
++## Qualification
++
++`tests/python/test_becke_normalize_cooperative.py` compares CUDA with the serial
++AD path and an independent NumPy expression, including tails, exact zeros,
++invalid input and the oversized-domain fallback. Real-device execution requires
++a finite Slurm GPU allocation and assigned visibility.
++
++The additional three-atom RKS/UKS analytic and reconverged finite-difference
++gates test the deliberately retained small-domain fallback under both schedule
++requests. Native phased reservation starts above 32 atoms; these are not
++physical tests of admitted cooperative normalization. Complete 48/96-atom RKS
++vectors independently qualify the admitted path.
++
++`benchmarks/becke_normalize_pairs.py` uses the ordinary PBE0/def2-SVP reference
++protocol and at least five interleaved complete energy-plus-force pairs. It
++freezes the public native warm snapshot, replaces and primes whole gradient owners
++outside timing, and retains every prime, setup call, force vector and actual SCF
++history. Setup is not a matched cold/moved performance comparison.
++
++`--profile --feasibility --repeats 1` produces a separate intrusive campaign
++using the existing seven Becke intervals. Never add those intervals to clean
++endpoint wall time or use feasibility-only observations to establish promotion.

@@ -183,7 +183,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
         ),
         "cuda_force_method_sha256": (
-            "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
+            "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
         ),
         "prepared_aot_selection_sha256": (
             "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
@@ -286,7 +286,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56",
+        "geometry_resources_sha256": "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811",
         "public_wrapper_sha256": (
             "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
         ),
@@ -303,7 +303,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "1889ebf22dff9d64f602f714ab5157e69b01bf122ba682f04cea04b2c232dba8"
         ),
         "initializer_sha256": (
-            "66e194029f680b9107882fa06df707d48efdb7aba8759707e7f538406168c689"
+            "312d4b7120a5af71cc7958aeaf2db1e7262550ed69b1931f8592b4511a436485"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -339,7 +339,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "9cd2aabf912ae2b93336cb856b8a51d906373a49172d8769f19d61b4898f9973"
+            "a4584a1183c7e70cdd971294b8774b535856331a720be61e019b377d7afedcc3"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -348,7 +348,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
         ),
         "native_owner_sha256": (
-            "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
+            "4f69d058f71826cd8a81ce74d4971a1249074447b5bbf6bcdc8e795c8fd535cb"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -378,7 +378,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
+            "ab6fbe1da74f53081a13afe0edb6f7c4bf1d65bb2594deb645d4c4e1f7244740"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -391,6 +391,18 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         ),
         "native_becke_primitive_metrics_sha256": (
             "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
+        ),
+        "native_phased_becke_allocation_sha256": (
+            "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
+        ),
+        "native_phased_becke_admission_sha256": (
+            "89c3159ed18cb971b9056aa0f30291539de95996a6e0d913d1c879e7efd23489"
+        ),
+        "native_becke_normalize_configuration_sha256": (
+            "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
+        ),
+        "native_becke_normalize_metrics_sha256": (
+            "0b9c9d546fff87884bd0279f6a39231a5821afeb5b1664cbfea1ef54abb3550b"
         ),
         "native_becke_phase_metrics_sha256": (
             "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
@@ -2409,8 +2421,8 @@ def test_snapshot_grid_cache_identity_and_cap_changes_fail_closed(
     ("old", "new"),
     [
         (
-            "GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20",
-            "GEOMETRY_MAX_SCRATCH_BYTES = 16 << 20",
+            "GEOMETRY_MAX_SCRATCH_BYTES = 16777216",
+            "GEOMETRY_MAX_SCRATCH_BYTES = 33554432",
         ),
         ("phased_becke: bool = False", "phased_becke: bool = True"),
     ],
@@ -2469,6 +2481,133 @@ def test_cooperative_native_schedule_contract_fails_closed(
         encoding="utf-8"
     )
     stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    position = native.index(old, native.index(marker))
+    target.write_text(
+        native[:position] + new + native[position + len(old) :], encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "if becke_normalize is not None and type(becke_normalize) is not bool:",
+            "if False:",
+        ),
+        (
+            "if becke_normalize is not None and configure_normalize is None:",
+            "if False:",
+        ),
+        ("                int(becke_normalize),", "                1,"),
+    ],
+)
+def test_normalize_constructor_contract_fails_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    """Qualification selection stays typed, explicit and legacy-ABI safe."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    assert source.count(old) == 1
+    (tmp_path / "python/generativeqc/_stationary_cuda.py").write_text(
+        source.replace(old, new, 1), encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="initializer page contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "marker,old,new,gate",
+    [
+        (
+            "size_t phased_allocation(",
+            "4 * pairs * points + (12 * atoms + 2) * points + pairs",
+            "4 * pairs * points + (11 * atoms + 2) * points + pairs",
+            "native_phased_becke_allocation_sha256",
+        ),
+        (
+            "int stationary_configure_phased_becke_v1(",
+            "bytes > owner->byte_budget - owner->bytes",
+            "false",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "int stationary_configure_phased_becke_v1(",
+            "(void)cudaGetLastError();\n      return;",
+            "throw;",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "int stationary_configure_phased_becke_v1(",
+            "owner->atoms <= stationary_becke_normalize_max_atoms",
+            "true",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "int stationary_configure_phased_becke_v1(",
+            "size_t(property.maxThreadsDim[1]) >= 128 / stationary_becke_normalize_point_lanes",
+            "true",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "int stationary_configure_phased_becke_v1(",
+            "attributes.maxThreadsPerBlock >= 128",
+            "true",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "int stationary_configure_phased_becke_v1(",
+            "attributes.sharedSizeBytes <= size_t(property.sharedMemPerBlock)",
+            "true",
+            "native_phased_becke_admission_sha256",
+        ),
+        (
+            "int stationary_configure_becke_normalize_v1(",
+            "owner->topology_ready || owner->becke_normalize_configured",
+            "false",
+            "native_becke_normalize_configuration_sha256",
+        ),
+        (
+            "int stationary_configure_becke_normalize_v1(",
+            "enabled && owner->becke_normalize_supported",
+            "enabled",
+            "native_becke_normalize_configuration_sha256",
+        ),
+        (
+            "int stationary_configure_becke_normalize_v1(",
+            "owner->becke_normalize_configured = true;",
+            "owner->becke_normalize_configured = true;\n    owner->phased_storage.allocate(owner->context.device, 8, owner->context.stream);",
+            "native_becke_normalize_configuration_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "if (owner.becke_normalize_cooperative)",
+            "if (true)",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "int stationary_becke_normalize_metrics_v1(",
+            "output[3] = owner->phased_points;",
+            "output[3] = 0;",
+            "native_becke_normalize_metrics_sha256",
+        ),
+    ],
+)
+def test_normalize_native_capacity_contract_fails_closed(
+    tmp_path: Path, marker: str, old: str, new: str, gate: str
+) -> None:
+    """Scheduling must retain reservation, actual caps, fallback and work counts."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
     position = native.index(old, native.index(marker))
@@ -2910,8 +3049,8 @@ def test_native_primitive_domain_capability_and_work_proofs_fail_closed(
             "source-resources definition changed",
         ),
         (
-            "tile_points=tile_points, admit=admit_tile",
-            "tile_points=256, admit=admit_tile",
+            "        tile_points=tile_points,\n        admit=admit_tile,",
+            "        tile_points=256,\n        admit=admit_tile,",
             "tile schedule binding changed",
         ),
         (

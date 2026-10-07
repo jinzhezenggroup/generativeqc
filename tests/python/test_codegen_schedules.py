@@ -46,10 +46,7 @@ from generativeqc_compiler.integral import (
     build_integral_ir,
     build_shell_class_contraction_kernel,
     cuda_target_info,
-    dppp_components,
-    emit_dppp_fused_cuda,
     emit_shell_class_fused_cuda,
-    evaluate_dppp_fused_component,
     evaluate_fused_shell_component,
     evaluate_fused_shell_value,
     schedule_candidates,
@@ -624,9 +621,9 @@ def test_generic_fused_schedule_preserves_every_component_gradient(
 
 def test_dppp_fused_schedule_preserves_all_component_gradients() -> None:
     values = factored_dppp_variables(sample_variables())
-    for component in dppp_components():
+    for component in DPPP_SPEC.components:
         direct = build_dppp_contraction_kernel(component[0], component[1:])
-        fused = evaluate_dppp_fused_component(component, values)
+        fused = evaluate_fused_shell_component(DPPP_SPEC, component, values)
         for center in range(4):
             for axis in range(3):
                 expected = direct.graph.evaluate(direct.gradients[center][axis], values)
@@ -635,7 +632,7 @@ def test_dppp_fused_schedule_preserves_all_component_gradients() -> None:
 
 
 def test_dppp_fused_cuda_emits_one_shared_shell_class_schedule() -> None:
-    source = emit_dppp_fused_cuda()
+    source = emit_shell_class_fused_cuda(DPPP_SPEC, target=TEST_CUDA_TARGET)
     assert "kGeneratedDpppComponentCount = 162U" in source
     assert "kGeneratedDpppCoulombStateCount = 84U" in source
     assert "kGeneratedDpppBlockThreads = 192U" in source

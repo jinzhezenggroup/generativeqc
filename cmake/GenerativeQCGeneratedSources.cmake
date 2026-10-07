@@ -1085,15 +1085,6 @@ macro(generativeqc_register_cuda_generated_sources target)
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
     ARGS --output "${GENERATIVEQC_GRID_SOURCE}")
 
-  set(GENERATIVEQC_XC_GRADIENT_SOURCE
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_xc_gradient.cu")
-  generativeqc_register_generated_sources(
-    TARGET ${target}
-    ADD_TO_TARGET
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_xc_gradient_cuda.py"
-    OUTPUTS "${GENERATIVEQC_XC_GRADIENT_SOURCE}"
-    ARGS --output "${GENERATIVEQC_XC_GRADIENT_SOURCE}")
-
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")
   generativeqc_register_generated_sources(

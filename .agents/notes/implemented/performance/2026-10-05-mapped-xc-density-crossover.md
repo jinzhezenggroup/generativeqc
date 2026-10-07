@@ -47,3 +47,9 @@ consumer's costs. Keep the generated fallback and scientific precision/domain
 unchanged while making these comparisons.
 
 References: #1876, #1886, #1958, #1959, #1960, #1961.
+
+## Follow-up: complete tile-control qualification
+
+The [complete SCF-tile qualification](2026-10-06-pbe0-scf-xc-tile-qualification.md)
+resolves the larger-tile endpoint question on a frozen RKS PBE0 cohort. It does
+not reverse the indexed-library rejection here or promote a global tile default.

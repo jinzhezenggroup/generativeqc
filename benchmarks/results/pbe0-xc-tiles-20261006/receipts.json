@@ -1,0 +1,68 @@
+{
+  "slurm_job_id": "2506",
+  "exit_status": 0,
+  "startup_scheduler_record": "JobId=2506 JobName=pbe0-xc-tile512 UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=4294901162 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:50:00 TimeMin=N/A SubmitTime=2026-10-06T22:36:30 EligibleTime=2026-10-06T22:36:30 AccrueTime=2026-10-06T22:36:30 StartTime=2026-10-06T22:36:30 EndTime=2026-10-06T23:26:30 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T22:36:30 Scheduler=Backfill Partition=main AllocNode:Sid=node2:313348 ReqNodeList=(null) ExcNodeList=(null) NodeList=node2 BatchHost=node2 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* TRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=.artifacts/run-pairs.sh WorkDir=/home/jzzeng/codes/qc-pbe0-xc-tile512-20261006 StdErr=/home/jzzeng/codes/qc-pbe0-xc-tile512-20261006/.artifacts/pairs-2506.log StdIn=/dev/null StdOut=/home/jzzeng/codes/qc-pbe0-xc-tile512-20261006/.artifacts/pairs-2506.log Power= TresPerNode=gres:gpu:pro6000:1 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+  "accounting": "",
+  "scheduler_visibility": "0 (from job log; never overwritten)",
+  "native_build": {
+    "library_path": "/home/jzzeng/codes/qc-pbe0-xc-tile512-20261006/build/cuda-release-sm120/libgenerativeqc.so.0.1.0",
+    "library_sha256": "20100959aa8c2643b1f341f9c140e4778d618e496dda8f216548c52676137931",
+    "probe": {
+      "source_identity": "b0e32abf342aa53877f2a350801a1dfdc1bc74d341df0cebe82a738d74429d2f",
+      "native_abi": 0,
+      "schema": 1,
+      "policy": {
+        "precision": "fp64",
+        "spin": [
+          "rhf",
+          "uhf"
+        ],
+        "consumers": [
+          "fock",
+          "force"
+        ]
+      },
+      "host": {
+        "system": "Linux",
+        "machine": "x86_64",
+        "libc": [
+          "glibc",
+          "2.35"
+        ]
+      },
+      "device": {
+        "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 188,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13020,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      }
+    }
+  },
+  "benchmark_sha256": "a9daea3760820549d02f06d634f1853d2e566322676439493acd411ee3673896",
+  "ccache_version": "ccache version 4.5.1\nFeatures: file-storage http-storage redis-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2021 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+  "core_build_seconds": 70.84,
+  "ccache_before_core": "Summary:\n  Hits:            21660 / 47208 (45.88 %)\n    Direct:        19179 / 47727 (40.18 %)\n    Preprocessed:   2481 / 28523 (8.70 %)\n  Misses:          25548\n    Direct:        28548\n    Preprocessed:  26042\n  Errors:            470\n  Uncacheable:      1501\nPrimary storage:\n  Hits:            45300 / 95429 (47.47 %)\n  Misses:          50129\n  Cache size (GB):  2.41 /  5.00 (48.29 %)\n  Cleanups:           74\n\nUse the -v/--verbose option for more details.\n",
+  "ccache_after_core": "Summary:\n  Hits:            22114 / 47670 (46.39 %)\n    Direct:        19633 / 48189 (40.74 %)\n    Preprocessed:   2481 / 28531 (8.70 %)\n  Misses:          25556\n    Direct:        28556\n    Preprocessed:  26050\n  Errors:            470\n  Uncacheable:      1501\nPrimary storage:\n  Hits:            46208 / 96353 (47.96 %)\n  Misses:          50145\n  Cache size (GB):  2.42 /  5.00 (48.32 %)\n  Cleanups:           74\n\nUse the -v/--verbose option for more details.\n",
+  "ccache_before_gpu": "Summary:\n  Hits:            22114 / 47670 (46.39 %)\n    Direct:        19633 / 48189 (40.74 %)\n    Preprocessed:   2481 / 28531 (8.70 %)\n  Misses:          25556\n    Direct:        28556\n    Preprocessed:  26050\n  Errors:            470\n  Uncacheable:      1501\nPrimary storage:\n  Hits:            46208 / 96353 (47.96 %)\n  Misses:          50145\n  Cache size (GB):  2.42 /  5.00 (48.32 %)\n  Cleanups:           74\n\nUse the -v/--verbose option for more details.\n",
+  "ccache_after_gpu": "Summary:\n  Hits:            22116 / 47672 (46.39 %)\n    Direct:        19635 / 48191 (40.74 %)\n    Preprocessed:   2481 / 28531 (8.70 %)\n  Misses:          25556\n    Direct:        28556\n    Preprocessed:  26050\n  Errors:            470\n  Uncacheable:      1516\nPrimary storage:\n  Hits:            46212 / 96357 (47.96 %)\n  Misses:          50145\n  Cache size (GB):  2.42 /  5.00 (48.32 %)\n  Cleanups:           74\n\nUse the -v/--verbose option for more details.\n",
+  "ccache_scope": "Shared cache diagnostics, not attributable per-owner hits or an uncached compilation claim.",
+  "accelerator_scope": "Environment metadata was captured before preparation. The helper static after-benchmark nvidia-smi label is not post-measurement clock evidence; no thermal/clock claim is made.",
+  "source_scope": "Frozen 83109befe5b97a5542b30e169da74c81d04719e6 plus source.patch and the checked benchmark source; raw archive null Git fields retained.",
+  "qualification": "Existing public tile control; no new production default, provider, IR layout or sanitizer campaign."
+}

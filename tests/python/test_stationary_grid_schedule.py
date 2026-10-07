@@ -159,6 +159,52 @@ def test_invalid_contract_fails_before_calling_any_owner(
         )
 
 
+@pytest.mark.parametrize("preference", [1, 32, 128, 512, 1024, 4096])
+def test_consumer_preference_keeps_budget_fallbacks_bounded(preference: int) -> None:
+    visited = []
+
+    def admit(points: int) -> int:
+        visited.append(points)
+        if points > 32:
+            raise ValueError("concurrent owners exceed budget")
+        return points
+
+    selected = plan_stationary_cuda_grid_schedule(
+        grid_points=10_000,
+        tile_points=None,
+        preferred_tile_points=preference,
+        admit=admit,
+    )
+    assert visited[0] == preference
+    assert selected == min(preference, 32)
+    assert all(points <= preference for points in visited)
+
+
+@pytest.mark.parametrize("preference", [0, 4097, True, None, 512.0])
+def test_invalid_consumer_preference_is_not_silently_ignored(
+    preference: int,
+) -> None:
+    with pytest.raises(ValueError, match="preferred_tile_points"):
+        plan_stationary_cuda_grid_schedule(
+            grid_points=1000,
+            tile_points=None,
+            preferred_tile_points=preference,
+            admit=lambda *_: pytest.fail("invalid preference reached admission"),
+        )
+
+
+def test_explicit_tiles_override_consumer_preference() -> None:
+    assert (
+        plan_stationary_cuda_grid_schedule(
+            grid_points=10,
+            tile_points=1024,
+            preferred_tile_points=512,
+            admit=lambda points: points,
+        )
+        == 1024
+    )
+
+
 def test_unexpected_owner_error_is_not_hidden_as_another_tile_rejection() -> None:
     def failed_owner(points: int) -> None:
         raise RuntimeError("not a capacity rejection")

@@ -277,7 +277,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
+    "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -309,8 +309,10 @@ STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
+# Normalization selection is constructor-only and leaves page/resource budgets
+# unchanged. Bind the full initializer, including legacy-artifact rejection.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "66e194029f680b9107882fa06df707d48efdb7aba8759707e7f538406168c689"
+    "312d4b7120a5af71cc7958aeaf2db1e7262550ed69b1931f8592b4511a436485"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -346,7 +348,7 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # four. The bounded v1 fallback, strict shape/finite checks, host reserve and
 # complete reduction remain bound by the exact whole-owner source span.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "9cd2aabf912ae2b93336cb856b8a51d906373a49172d8769f19d61b4898f9973"
+    "a4584a1183c7e70cdd971294b8774b535856331a720be61e019b377d7afedcc3"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -381,7 +383,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
+    "4f69d058f71826cd8a81ce74d4971a1249074447b5bbf6bcdc8e795c8fd535cb"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -415,7 +417,23 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
+    "ab6fbe1da74f53081a13afe0edb6f7c4bf1d65bb2594deb645d4c4e1f7244740"
+)
+# Ordered cooperative normalization reuses the existing phased reservation and
+# exact work counts. Audit allocation, actual-device/kernel admission, immutable
+# configuration and counters as well as the launch route; a digest refresh must
+# not leave the new schedule's capacity or fallback predicates unauthenticated.
+NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
+    "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
+)
+NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
+    "89c3159ed18cb971b9056aa0f30291539de95996a6e0d913d1c879e7efd23489"
+)
+NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256 = (
+    "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
+)
+NATIVE_BECKE_NORMALIZE_METRICS_CONTRACT_SHA256 = (
+    "0b9c9d546fff87884bd0279f6a39231a5821afeb5b1664cbfea1ef54abb3550b"
 )
 NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256 = (
     "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
@@ -478,7 +496,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56"
+    "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -1132,6 +1150,22 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "int stationary_becke_primitive_metrics_v1(",
             NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256,
         ),
+        "native_phased_becke_allocation_sha256": (
+            "size_t phased_allocation(",
+            NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256,
+        ),
+        "native_phased_becke_admission_sha256": (
+            "int stationary_configure_phased_becke_v1(",
+            NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256,
+        ),
+        "native_becke_normalize_configuration_sha256": (
+            "int stationary_configure_becke_normalize_v1(",
+            NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256,
+        ),
+        "native_becke_normalize_metrics_sha256": (
+            "int stationary_becke_normalize_metrics_v1(",
+            NATIVE_BECKE_NORMALIZE_METRICS_CONTRACT_SHA256,
+        ),
         "native_becke_phase_metrics_sha256": (
             "int stationary_becke_phase_metrics_v1(",
             NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256,
@@ -1321,7 +1355,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ]
     if len(selections) != 1 or ast.unparse(selections[0].value) != (
         "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
-        "tile_points=tile_points, admit=admit_tile)"
+        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=512)"
     ):
         raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (
