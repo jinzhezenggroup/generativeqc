@@ -795,8 +795,17 @@ def test_ppps_resident_option_keeps_ordinary_fock_force_fallback(
     registry_header = emit_registry_header(resolved.selections)
     registry_source = emit_registry_source(resolved.selections)
     assert "launch_ppps_resident" in registry_header
-    assert "generativeqc_launch_ppps_resident" in registry_source
-    assert "return cudaErrorNotSupported;" not in registry_source
+    resident_launcher = registry_source.split("\ncudaError_t launch_ppps_resident(", 1)[
+        1
+    ].split("\n}", 1)[0]
+    assert "return generativeqc_launch_ppps_resident(" in resident_launcher
+    assert "return cudaErrorNotSupported;" not in resident_launcher
+    # The independent optional K-block route must still fail closed in this
+    # legacy single-profile registry, even when a resident force route exists.
+    k_block_launcher = registry_source.split(
+        "\ncudaError_t launch_shell_class_k_block_streaming_fock(", 1
+    )[1].split("\n}", 1)[0]
+    assert "return cudaErrorNotSupported;" in k_block_launcher
 
 
 def test_ppps_resident_registry_falls_back_when_not_selected(
@@ -809,7 +818,11 @@ def test_ppps_resident_registry_falls_back_when_not_selected(
     resolved = resolve_production_profile(manifest, "sm_120")
     registry_source = emit_registry_source(resolved.selections)
     assert "launch_ppps_resident" in emit_registry_header(resolved.selections)
-    assert "return cudaErrorNotSupported;" in registry_source
+    resident_launcher = registry_source.split("\ncudaError_t launch_ppps_resident(", 1)[
+        1
+    ].split("\n}", 1)[0]
+    assert "return cudaErrorNotSupported;" in resident_launcher
+    assert "return generativeqc_launch_ppps_resident(" not in resident_launcher
 
 
 def test_multi_profile_resident_registry_tracks_each_profile(

@@ -377,6 +377,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
   plan->rys_fock_mask = prepare_direct_fock_rys_mask(true) & shared->value_class_mask;
+  plan->k_block_fock_mask = prepare_direct_fock_k_block_mask() & shared->value_class_mask;
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
   plan->angular_force_opt_in = angular_force;
@@ -611,7 +612,8 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       const auto cls = kernels[i].shell_class;
       if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
         continue;
-      error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
+      error = direct_fock_streaming_launcher(p.rys_fock_mask,
+                                             unrestricted ? 0U : p.k_block_fock_mask, cls)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,

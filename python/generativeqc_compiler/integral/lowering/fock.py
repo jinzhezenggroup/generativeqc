@@ -43,6 +43,7 @@ def _emit_shell_class_fock_cuda(
     *,
     honor_schedule_block_threads: bool = False,
     rys_support_integral: IntegralIR | None = None,
+    k_block: bool = False,
 ) -> str:
     """Emit coefficient-only Fock workers beside an accepted force kernel.
 
@@ -572,6 +573,7 @@ __device__ __forceinline__ void generated_dppp_shell_class_fock_task("""
             spec,
             plan,
             minimum_blocks_per_sm,
+            k_block=k_block,
         )
     elif plan.schedule.kind == ScheduleKind.SUBGROUP_TASKS:
         worker_marker = """template <bool Unrestricted>

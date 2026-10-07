@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..capabilities import CAPABILITY_MIXED_FOCK
+from ..capabilities import CAPABILITY_K_BLOCK_FOCK, CAPABILITY_MIXED_FOCK
 from ..cuda_schedule import (
     PairOrientation,
     PairStorage,
@@ -1255,7 +1255,10 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
             spec, plan.kernel.integral
         )
         source += _emit_shell_class_fock_cuda(
-            spec, value_plan, honor_schedule_block_threads=True
+            spec,
+            value_plan,
+            honor_schedule_block_threads=True,
+            k_block=CAPABILITY_K_BLOCK_FOCK in selected_capabilities,
         )
         if CAPABILITY_MIXED_FOCK in selected_capabilities:
             source += _emit_shell_class_mixed_fock_cuda(spec, value_plan)
@@ -1387,6 +1390,7 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
             fock_plan,
             honor_schedule_block_threads=fock_schedule is not None,
             rys_support_integral=rys_support_integral,
+            k_block=CAPABILITY_K_BLOCK_FOCK in selected_capabilities,
         )
         if CAPABILITY_MIXED_FOCK in selected_capabilities:
             source += _emit_shell_class_mixed_fock_cuda(
