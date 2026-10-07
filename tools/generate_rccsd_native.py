@@ -1444,7 +1444,7 @@ def _parallel_scalar_reduction_kernel(
 
     serial = "\n".join(contribution("      "))
     parallel = "\n".join(contribution("    "))
-    return f"""__global__ void {prefix}_node_{number}({','.join(arguments)}){{
+    return f"""__global__ void {prefix}_node_{number}({",".join(arguments)}){{
   __shared__ double partial[8];
   const std::size_t reduction_count={reduction_count};
   if(reduction_count<32){{

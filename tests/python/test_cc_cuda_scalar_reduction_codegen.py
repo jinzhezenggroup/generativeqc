@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from tools import generate_df_ccsd_core
-from tools import generate_df_ccsd_hoisted
+from tools import generate_df_ccsd_core, generate_df_ccsd_hoisted
 from tools import generate_rccsd_native as codegen
 
 
@@ -22,7 +21,9 @@ def _iteration_scalar_reductions() -> tuple[tuple[int, object], ...]:
     )
 
 
-def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback() -> None:
+def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback() -> (
+    None
+):
     reductions = _iteration_scalar_reductions()
     assert reductions
     for number, node in reductions:
@@ -38,16 +39,22 @@ def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback(
         assert "const std::size_t reduction_count=" in parallel
         assert "if(reduction_count<32)" in parallel
         assert "for(std::size_t r=0;r<reduction_count;++r)" in parallel
-        assert "for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x)" in parallel
+        assert (
+            "for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x)" in parallel
+        )
         assert "__shfl_down_sync(0xffffffffu,sum,offset)" in parallel
         assert "__shared__ double partial[8]" in parallel
         assert "__dadd_rn" in parallel
         assert "__shfl_down_sync" not in serial
 
 
-def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_serial() -> None:
+def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_serial() -> (
+    None
+):
     kernels = _kernels(codegen.cuda_source())
-    iteration = tuple(kernel for kernel in kernels if kernel.startswith("iteration_node_"))
+    iteration = tuple(
+        kernel for kernel in kernels if kernel.startswith("iteration_node_")
+    )
     replay = tuple(kernel for kernel in kernels if kernel.startswith("replay_"))
 
     assert iteration
