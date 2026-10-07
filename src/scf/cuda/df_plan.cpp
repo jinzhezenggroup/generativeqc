@@ -155,4 +155,13 @@ bool cuda_density_fitting_jk_plan_matches(const CudaDensityFittingJkPlan* plan, 
          plan->metric_relative_threshold == relative_threshold;
 }
 
+bool cuda_density_fitting_jk_plan_operator_matches(const CudaDensityFittingJkPlan* plan,
+                                                   FockOperator op, double omega) noexcept {
+  if (!plan) return false;
+  const auto range = op == FockOperator::FullRange    ? integrals::CoulombRange::Full
+                     : op == FockOperator::ShortRange ? integrals::CoulombRange::Short
+                                                       : integrals::CoulombRange::Long;
+  return plan->range == range && plan->omega == (range == integrals::CoulombRange::Full ? 0.0 : omega);
+}
+
 }  // namespace generativeqc::scf
