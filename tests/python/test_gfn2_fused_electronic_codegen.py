@@ -280,9 +280,11 @@ static void test_gemm(int layout, int ta, int tb, LapackInt m, LapackInt n, Lapa
 int check(int spins, double coefficient, double eigenvalue, int expected_calls, bool late_beta) {
   // Exercise actual native arithmetic/publication; only LAPACK/BLAS dispatch
   // is injected. No chemistry or external-provider qualification is claimed.
-  auto backend = CpuLinearAlgebraAccess::make(
+  auto backend = ::generativeqc::tensor::cpu::CpuLinearAlgebraAccess::make(
       {}, nullptr, nullptr, test_syevd, test_trsm, test_gemm, nullptr);
   EigensolverPlanData data;
+  if (!cpu_eigen::prepare_borrowed_symmetric_eigen(1, data.symmetric_eigen)) return 20;
+  std::array<LapackInt, 8> integer_work{};
   data.batch_size = 1;
   data.orbital_offsets = {0, 1};
   data.matrix_offsets = {0, 1};
@@ -310,6 +312,7 @@ int check(int spins, double coefficient, double eigenvalue, int expected_calls, 
   double* staged_thermo = thermo_arena.data() + 1;
   generativeqc_xtb_status_t staged_status = GENERATIVEQC_XTB_STATUS_SUCCESS;
   EigensolverWorkspace workspace;
+  workspace.lapack_integer_work = integer_work.data();
   workspace.coefficients = scratch;
   workspace.eigenvalues = scratch + 2;
   workspace.occupations = scratch + 4;
@@ -383,9 +386,11 @@ int check(int spins, double coefficient, double eigenvalue, int expected_calls, 
 }
 int check_success(LapackInt n, int spins) {
   const std::size_t matrix_count = static_cast<std::size_t>(n) * n;
-  auto backend = CpuLinearAlgebraAccess::make(
+  auto backend = ::generativeqc::tensor::cpu::CpuLinearAlgebraAccess::make(
       {}, nullptr, nullptr, test_syevd, test_trsm, test_gemm, nullptr);
   EigensolverPlanData data;
+  if (!cpu_eigen::prepare_borrowed_symmetric_eigen(n, data.symmetric_eigen)) return 20;
+  std::array<LapackInt, 28> integer_work{};
   data.batch_size = 1;
   data.orbital_offsets = {0, n};
   data.matrix_offsets = {0, static_cast<std::int64_t>(matrix_count)};
@@ -406,6 +411,7 @@ int check_success(LapackInt n, int spins) {
   staged_thermo.fill(guard);
   published_thermo.fill(guard);
   EigensolverWorkspace workspace;
+  workspace.lapack_integer_work = integer_work.data();
   workspace.coefficients = scratch.data() + 1;
   workspace.eigenvalues = workspace.coefficients + 2 * matrix_count;
   workspace.occupations = workspace.eigenvalues + 2 * n;
@@ -569,9 +575,38 @@ int main() {
         env={**os.environ, "CCACHE_BASEDIR": str(root)},
         timeout=60,
     )
+    provider_obj = tmp_path / "lp64_provider.o"
+    subprocess.run(
+        [
+            ccache,
+            compiler,
+            "-std=c++20",
+            "-O1",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-I",
+            str(root / "src"),
+            "-c",
+            str(root / "src/tensor/cpu/lp64_provider.cpp"),
+            "-o",
+            str(provider_obj),
+        ],
+        check=True,
+        capture_output=True,
+        env={**os.environ, "CCACHE_BASEDIR": str(root)},
+        timeout=60,
+    )
     binary = tmp_path / "failure_publication"
     subprocess.run(
-        [compiler, "-Wl,--gc-sections", str(obj), "-ldl", "-o", str(binary)],
+        [
+            compiler,
+            "-Wl,--gc-sections",
+            str(obj),
+            str(provider_obj),
+            "-ldl",
+            "-o",
+            str(binary),
+        ],
         check=True,
         capture_output=True,
         timeout=30,

@@ -12,123 +12,24 @@
 
 #include "model/gfn2/wavefunction.hpp"
 #include "runtime/types.hpp"
+#include "tensor/cpu/lp64_provider.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 
 inline constexpr std::size_t kEigensolverWorkspaceAlignment = 64u;
-using LapackInt = std::int32_t;
-
-using LapackDpotrfWork = LapackInt (*)(LapackInt matrix_layout, char uplo, LapackInt n,
-                                       double* matrix, LapackInt leading_dimension);
-using LapackDpoconWork = LapackInt (*)(LapackInt matrix_layout, char uplo, LapackInt n,
-                                       const double* factor, LapackInt leading_dimension,
-                                       double matrix_one_norm, double* reciprocal_condition,
-                                       double* work, LapackInt* integer_work);
-using LapackDsyevdWork = LapackInt (*)(LapackInt matrix_layout, char job_vectors, char uplo,
-                                       LapackInt n, double* matrix, LapackInt leading_dimension,
-                                       double* eigenvalues, double* work, LapackInt work_count,
-                                       LapackInt* integer_work, LapackInt integer_work_count);
-using CblasDtrsm = void (*)(int layout, int side, int triangle, int transpose, int diagonal,
-                            LapackInt rows, LapackInt columns, double alpha,
-                            const double* triangular_matrix, LapackInt leading_triangular,
-                            double* right_hand_side, LapackInt leading_rhs);
-using CblasDgemm = void (*)(int layout, int transpose_left, int transpose_right, LapackInt rows,
-                            LapackInt columns, LapackInt inner, double alpha, const double* left,
-                            LapackInt leading_left, const double* right, LapackInt leading_right,
-                            double beta, double* result, LapackInt leading_result);
-using BlasSetNumThreadsLocal = int (*)(int threads);
-using BlasThreadCleanup = void (*)();
-
-/*
- * Verified LP64 linear-algebra dispatch.
- *
- * Production code obtains this handle from make_mkl_rt_lp64_backend. The
- * factory loads and verifies all required symbols from a private bundled
- * OpenBLAS provider in native wheels, the configured native LP64 runtime, or
- * common system SONAMEs. System providers must expose local thread control so
- * xtbloom's outer batch workers can keep BLAS sequential. The macOS/Windows
- * wheel provider is a renamed private image instead: initialization fixes that
- * image globally to one thread once, without mutating an unrelated host BLAS.
- *
- * The MKL path is host-isolated. CMake builds a private shim with fixed
- * DT_NEEDED dependencies on
- * libmkl_intel_lp64, libmkl_sequential, and libmkl_core, and the factory loads
- * the adjacent shim with RTLD_LOCAL in a new glibc link-map namespace. The
- * namespace is required because RTLD_LOCAL alone still permits pre-existing
- * global host symbols to interpose on new dependencies. The components are
- * intrinsically LP64 and sequential, so xtbloom never loads libmkl_rt, calls
- * MKL_Set_Interface_Layer, reads MKL interface-layer state, or mutates an
- * embedding process's MKL state. A missing or invalid shim fails
- * deterministically; MKL never falls back to the base namespace. Plain LP64
- * Linux wheels apply the same namespace isolation to a hash-verified private
- * shim loaded by absolute sibling path. auditwheel vendors and collision-
- * renames the shim's scipy-openblas32 dependency closure. macOS and Windows
- * instead load a renamed provider by absolute sibling path; that is a private
- * payload boundary but not Linux-style link-map isolation. The upstream Python
- * distribution is a build input only and is never imported or required at
- * runtime. Pyodide wheels use the official content-pinned WebAssembly
- * OpenBLAS artifact and a narrow LAPACKE adapter. Because Emscripten has no
- * isolated namespace or deep binding, the Python loader supplies exact
- * installed paths and the adapter resolves raw functions only from that
- * provider handle, never through global SciPy/NumPy symbols. Native system
- * OpenBLAS remains a separate production provider. The testing factory is
- * kept in this internal namespace so tests can install
- * spies and deterministic LAPACK failures without making ABI claims on behalf
- * of an external provider.
- */
-class CpuLinearAlgebraBackend {
- public:
-  CpuLinearAlgebraBackend() noexcept = default;
-
-  [[nodiscard]] bool ready() const noexcept;
-  /* True for any verified lazily-loaded production backend (MKL or OpenBLAS). */
-  [[nodiscard]] bool production() const noexcept;
-  /* True only when the loaded production backend is the isolated MKL shim. */
-  [[nodiscard]] bool production_mkl() const noexcept;
-  /* True only for the host-isolated MKL shim provider, which never mutates the
-   * embedding process's MKL interface/threading state. */
-  [[nodiscard]] bool production_mkl_isolated() const noexcept;
-  /* True only for the private OpenBLAS cohort bundled in Linux wheels and
-   * loaded in its own glibc link-map namespace. Desktop private providers do
-   * not claim this stronger isolation property. */
-  [[nodiscard]] bool production_openblas_isolated() const noexcept;
-  /* Release provider-owned state for the calling thread. Only the isolated
-   * MKL backend supplies this hook; persistent runtime workers invoke it
-   * before pthread teardown so oneMKL never leaves cleanup to glibc TSD
-   * destruction after the worker has returned. */
-  void release_thread_resources() const noexcept;
-
- private:
-  enum class Origin : std::uint8_t {
-    kNone,
-    kMklShimLp64,
-    kOpenBlasIsolatedLp64,
-    kBundledOpenBlasLp64,
-    kOpenBlasLp64,
-    kInternalTestLp64,
-  };
-
-  Origin origin_ = Origin::kNone;
-  LapackDpotrfWork dpotrf_work_ = nullptr;
-  LapackDpoconWork dpocon_work_ = nullptr;
-  LapackDsyevdWork dsyevd_work_ = nullptr;
-  CblasDtrsm dtrsm_ = nullptr;
-  CblasDgemm dgemm_ = nullptr;
-  BlasSetNumThreadsLocal set_num_threads_local_ = nullptr;
-  BlasThreadCleanup thread_cleanup_ = nullptr;
-
-  friend generativeqc_xtb_status_t make_mkl_rt_lp64_backend(CpuLinearAlgebraBackend& backend,
-                                                   std::string& error);
-  friend generativeqc_xtb_status_t make_internal_test_lp64_backend(
-      LapackDpotrfWork dpotrf_work, LapackDpoconWork dpocon_work, LapackDsyevdWork dsyevd_work,
-      CblasDtrsm dtrsm, CblasDgemm dgemm, BlasSetNumThreadsLocal set_num_threads_local,
-      CpuLinearAlgebraBackend& backend, std::string& error, BlasThreadCleanup thread_cleanup);
-  friend struct CpuLinearAlgebraAccess;
-};
+using LapackInt = ::generativeqc::tensor::cpu::LapackInt;
+using LapackDpotrfWork = ::generativeqc::tensor::cpu::LapackDpotrfWork;
+using LapackDpoconWork = ::generativeqc::tensor::cpu::LapackDpoconWork;
+using LapackDsyevdWork = ::generativeqc::tensor::cpu::LapackDsyevdWork;
+using CblasDtrsm = ::generativeqc::tensor::cpu::CblasDtrsm;
+using CblasDgemm = ::generativeqc::tensor::cpu::CblasDgemm;
+using BlasSetNumThreadsLocal = ::generativeqc::tensor::cpu::BlasSetNumThreadsLocal;
+using BlasThreadCleanup = ::generativeqc::tensor::cpu::BlasThreadCleanup;
+using CpuLinearAlgebraBackend = ::generativeqc::tensor::cpu::CpuLinearAlgebraBackend;
 
 generativeqc_xtb_status_t make_mkl_rt_lp64_backend(CpuLinearAlgebraBackend& backend, std::string& error);
 
-/* Internal test-only dependency injection; production must use the runtime factory. */
+/* Compatibility adapter: test admission and preflight remain shared. */
 generativeqc_xtb_status_t make_internal_test_lp64_backend(
     LapackDpotrfWork dpotrf_work, LapackDpoconWork dpocon_work, LapackDsyevdWork dsyevd_work,
     CblasDtrsm dtrsm, CblasDgemm dgemm, BlasSetNumThreadsLocal set_num_threads_local,

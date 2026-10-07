@@ -28,7 +28,8 @@ function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
     src/runtime/context.cpp
     src/runtime/cuda_provider.cpp
-    src/tensor/cpu_linalg.cpp)
+    src/tensor/cpu_linalg.cpp
+    src/tensor/cpu/lp64_provider.cpp)
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       src/runtime/cuda_runtime.cu
