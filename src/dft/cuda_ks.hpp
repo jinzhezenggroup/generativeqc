@@ -82,7 +82,8 @@ struct CudaKsTransfers {
  * provider's actual host/device queries are checked before allocation. This
  * shape query performs no CUDA call and allocates no numeric buffers. */
 std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
-                                bool exact_exchange = false, bool range_correction = false);
+                                bool exact_exchange = false, bool range_correction = false,
+                                bool incremental_direct_jk = false);
 
 /** Borrowed exact occupied factor and fitted projection for a successful
  * restricted density-fitted hybrid final state. Both allocations stay owned by
