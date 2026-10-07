@@ -56,6 +56,9 @@ std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept;
 /** Optional value-only Rys inventory; unsupported classes keep exact incumbents. */
 std::uint64_t enabled_rys_fock_shell_class_mask() noexcept;
 
+/** Optional restricted raw-K shell-block inventory; incumbent remains default. */
+std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept;
+
 /**
  * Return generated mixed-Fock classes selected by
  * GENERATIVEQC_AOT_MIXED_FOCK_SHELL_CLASSES (default: all compiled classes).
@@ -105,6 +108,15 @@ cudaError_t launch_shell_class_streaming_fock(
  * Runtime launch failures propagate; they do not retry partially written output.
  */
 cudaError_t launch_shell_class_rys_streaming_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
+    const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
+    const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
+    const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
+    unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
+
+/** Launch the optional restricted raw-K block-contraction alternative. */
+cudaError_t launch_shell_class_k_block_streaming_fock(
     unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
     const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
