@@ -56,13 +56,20 @@ NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSou
       nbf_(reference.nbf),
       budget_(budget),
       source_bytes_(source.retained_numeric_bytes()),
-      reference_bytes_(
+      reference_bytes_(checked_add(
           checked_mul(8, checked_add(checked_mul(9, checked_mul(reference.nbf, reference.nbf)),
-                                     checked_mul(2, reference.nbf)))) {
+                                     checked_mul(2, reference.nbf))),
+          reference.source_identity ? reference.source_identity->storage_bytes() : 0)) {
   if (!source_.supports(integrals::ElectronInteractionOperator::eri) || !axis_tile ||
       nbf_ != source_.nbf() || reference_view_.spin_channels != 2 ||
       !core::electronic_reference_shape_valid(reference_view_))
     throw std::invalid_argument("native unrestricted MO provider/source mismatch");
+  const auto& system = source_.orbital();
+  if (!reference.source_identity || !reference.source_identity->matches(system) ||
+      reference.source_charge != system.charge ||
+      reference.source_electrons != system.electron_count ||
+      reference.source_multiplicity != system.multiplicity)
+    throw std::invalid_argument("native unrestricted MO provider/source identity mismatch");
   std::size_t largest_shell = 0;
   for (const auto& shell : source_.orbital().shells) {
     const auto l = shell.angular_momentum;

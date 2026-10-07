@@ -147,6 +147,14 @@ void source_and_slots() {
     rejected = std::string(error.what()).find("stale UMP2") != std::string::npos;
   }
   require(rejected && stale.reads == 0, "stale source read or accepted");
+  rejected = false;
+  try {
+    generativeqc::posthf::NativeBlockProvider stale_provider(stale, reference, 256ULL << 20, 1);
+    (void)stale_provider;
+  } catch (const std::invalid_argument& error) {
+    rejected = std::string(error.what()).find("identity mismatch") != std::string::npos;
+  }
+  require(rejected && stale.reads == 0, "spin-owned provider accepted a stale source");
 
   CountingSource near(system);
   rejected = false;
@@ -195,6 +203,8 @@ void source_and_slots() {
     reference.coefficients[1][row * 2 + 1] = -s * original[row * 2] + c * original[row * 2 + 1];
   }
   generativeqc::posthf::NativeBlockProvider provider(source, reference, 256ULL << 20, 1);
+  require(provider.reference_bytes() >= reference.source_identity->storage_bytes(),
+          "spin-owned provider omitted retained source identity capacity");
   const generativeqc::posthf::SpinMOSlots block{
       generativeqc::posthf::MOSlots{std::vector<std::size_t>{0}, std::vector<std::size_t>{1},
                                     std::vector<std::size_t>{0}, std::vector<std::size_t>{1}},

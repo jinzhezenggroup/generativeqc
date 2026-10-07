@@ -41,7 +41,8 @@ The UHF export preserves the final unshifted physical Fock and its validated
 canonical spin frames. Every AO-to-MO request records all four spin owners, and
 CPU correlation is conventional, all-electron, real FP64 and energy-only.
 Denominator extrema are finite and sufficiently negative before an AO read.
-Reference, source, transform and generated tile capacity are admitted within
+Reference, its exact source identity, the AO source, transform and generated
+tile capacity are admitted within
 the correlated-method numeric budget; this is numeric capacity, not measured
 allocator or whole-process peak. Failure clears the method's published
 diagnostic. A fresh prepared source is borrowed only within one execution.
@@ -53,9 +54,9 @@ execution; successful UMP2 publication still requires a new physical UHF solve.
 The clean fork-commit Release CPU build on 2026-10-08 used GCC 11.4,
 CMake 4.4.4, `sccache 0.16.0`, strict FP64 and the scalar CPU linear-algebra fallback.
 The compiled and checkout source identities both equalled
-`67005494682d3e9701d601f982c3e87f0a4adf7b5a2a00b512a35682254562f8`;
+`1817108a53abec0a0a1e7464c16d11a55ad596c56a3132e51f574c05d82ee7bb`;
 the native library SHA-256 was
-`6ad9ed523962ab4440c6d9af06f24424488ec20f2d550ab8b541ee9db18cfab8`.
+`7fc615fd912c513d4f41212ee13b6328dab8b7491c1d6c06aeb17ac15e455313`.
 
 The focused public/core/manifest suite reported 36 passed and four CUDA-only
 skips. `test_ump2_public.py` compares native Li to pinned PySCF 2.14.0 using
@@ -68,7 +69,8 @@ public warm-state ABI, then requires a fresh public UMP2 batch solve to match
 independent PySCF at `1e-8` Eh. The public restricted limit agrees with public
 MP2 energy and OS/SS components at `1e-9` Eh. Native UMP2, existing MP2, and
 existing UHF final-state CTest targets all passed; the UMP2 native target also
-checks stale geometry, near and overflowed far denominators before AO reads, four-slot spin
+checks stale geometry at both the UMP2 energy and direct spin-owned provider
+boundaries, near and overflowed far denominators before AO reads, four-slot spin
 coefficients, CUDA backend rejection, invalid reference tolerances, and
 unsupported preliminary/DF controls. Numeric capacity was admitted but no
 whole-process allocator peak or endpoint throughput claim was made.
