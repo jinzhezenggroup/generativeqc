@@ -163,6 +163,92 @@ def _factors(node: ast.expr) -> list[str]:
     raise Unsupported("allocation is not a symbolic monomial")
 
 
+def _resolve_scalars(
+    node: ast.expr, aliases: dict[str, ast.expr], depth: int = 0
+) -> ast.expr:
+    """Resolve immutable extent aliases under the mathematical-integer precondition."""
+    if depth > 32:
+        raise Unsupported("scalar alias expansion limit")
+    if isinstance(node, ast.Name) and node.id in aliases:
+        return _resolve_scalars(aliases[node.id], aliases, depth + 1)
+    if isinstance(node, ast.BinOp):
+        left = _resolve_scalars(node.left, aliases, depth + 1)
+        right = _resolve_scalars(node.right, aliases, depth + 1)
+        if isinstance(left, ast.Constant) and isinstance(right, ast.Constant):
+            if isinstance(node.op, ast.Add):
+                return ast.Constant(left.value + right.value)
+            if isinstance(node.op, ast.Sub):
+                return ast.Constant(left.value - right.value)
+            return ast.Constant(left.value * right.value)
+        if isinstance(node.op, ast.Sub) and _key(left) == _key(right):
+            return ast.Constant(0)
+        if (
+            isinstance(node.op, (ast.Add, ast.Sub))
+            and isinstance(right, ast.Constant)
+            and right.value == 0
+        ):
+            return left
+        if (
+            isinstance(node.op, ast.Add)
+            and isinstance(left, ast.Constant)
+            and left.value == 0
+        ):
+            return right
+        if isinstance(node.op, ast.Mult):
+            if any(
+                isinstance(part, ast.Constant) and part.value == 0
+                for part in (left, right)
+            ):
+                return ast.Constant(0)
+            if isinstance(left, ast.Constant) and left.value == 1:
+                return right
+            if isinstance(right, ast.Constant) and right.value == 1:
+                return left
+        return ast.BinOp(left, node.op, right)
+    return node
+
+
+def _polynomial(node: ast.expr, depth: int = 0) -> dict[tuple[str, ...], int]:
+    """Bounded integer polynomial normal form for extent equality and cancellation."""
+    if depth > 32:
+        raise Unsupported("extent polynomial expansion limit")
+    if isinstance(node, ast.Constant) and type(node.value) is int:
+        return {(): node.value} if node.value else {}
+    if isinstance(node, ast.Name):
+        return {(node.id,): 1}
+    if isinstance(node, ast.BinOp):
+        left, right = (
+            _polynomial(node.left, depth + 1),
+            _polynomial(node.right, depth + 1),
+        )
+        result: dict[tuple[str, ...], int] = {}
+        if isinstance(node.op, ast.Mult):
+            if len(left) * len(right) > 256:
+                raise Unsupported("extent polynomial term limit")
+            for first, first_value in left.items():
+                for second, second_value in right.items():
+                    powers = tuple(sorted(first + second))
+                    if len(powers) > 32:
+                        raise Unsupported("extent polynomial degree limit")
+                    result[powers] = result.get(powers, 0) + first_value * second_value
+        elif isinstance(node.op, (ast.Add, ast.Sub)):
+            result = left.copy()
+            sign = 1 if isinstance(node.op, ast.Add) else -1
+            for powers, value in right.items():
+                result[powers] = result.get(powers, 0) + sign * value
+        else:
+            raise Unsupported("unknown extent arithmetic")
+        result = {powers: value for powers, value in result.items() if value}
+        if len(result) > 256:
+            raise Unsupported("extent polynomial term limit")
+        return result
+    raise Unsupported("unknown extent polynomial")
+
+
+def _growth_degree(node: ast.expr) -> int:
+    return max((len(powers) for powers in _polynomial(node)), default=0)
+
+
 def _axes(node: ast.expr, dimension: str, rank: int) -> list[ast.expr]:
     if rank == 1:
         return [node]
@@ -224,6 +310,19 @@ def _certificate(
     if rank not in {2, 3, 4} or len(set(factors)) != 1 or factors[0] not in scalars:
         raise Unsupported("only homogeneous rank-2/3/4 symbolic shapes are certified")
     dimension = factors[0]
+    dense_extent = _resolve_scalars(ast.Name(dimension, ast.Load()), aliases)
+
+    def extent(expression: str) -> ast.expr:
+        return _resolve_scalars(_expr(expression), aliases)
+
+    def full_loop(loop: tuple[str, str, str]) -> bool:
+        lower, operator, upper = loop
+        return (
+            not _polynomial(extent(lower))
+            and operator == "<"
+            and _polynomial(extent(upper)) == _polynomial(dense_extent)
+        )
+
     support = []
     writes = []
     range_conditions: set[str] = set()
@@ -323,7 +422,7 @@ def _certificate(
                     lower not in scalars or upper != dimension or operator != "<"
                 ):
                     raise Unsupported("unproved axis bounds")
-                if lower == upper:
+                if _polynomial(extent(lower)) == _polynomial(extent(upper)):
                     raise Unsupported("degenerate empty loop domain")
                 if offset != "0":
                     range_conditions.add(f"0 <= {offset} <= {dimension}")
@@ -351,13 +450,13 @@ def _certificate(
                     or len(used) != 2
                     or len(triangle) != 1
                     or domain[0]["variable"] != used[0]
-                    or loops[used[0]] != ("0", "<", dimension)
+                    or not full_loop(loops[used[0]])
                     or loops[used[1]] != ("0", "<=", used[0])
                     or any(d["offset"] != "0" for d in domain)
                 ):
                     raise Unsupported("unsupported dependent domain")
                 term = f"{dimension}*({dimension}+1)/2"
-                kind, degree = "lower-triangle", 2
+                kind, degree = "lower-triangle", 2 * _growth_degree(dense_extent)
             else:
                 if any(loops[v][1] != "<" or loops[v][2] not in scalars for v in used):
                     raise Unsupported("unsupported dependent domain")
@@ -367,10 +466,13 @@ def _certificate(
                     else f"({loops[v][2]}-{loops[v][0]})"
                     for v in used
                 )
-                degree = len(used)
+                degree = sum(
+                    _growth_degree(extent(f"{loops[v][2]} - {loops[v][0]}"))
+                    for v in used
+                )
                 full = (
                     len(used) == rank
-                    and all(loops[v] == ("0", "<", dimension) for v in used)
+                    and all(full_loop(loops[v]) for v in used)
                     and all(d["offset"] == "0" for d in domain)
                 )
                 kind = "dense" if full else "cartesian-or-diagonal"
@@ -415,7 +517,11 @@ def _certificate(
         if dense
         else ("exact-structured-write-support" if single else "write-domain-union"),
         "dense_elements": "*".join(factors),
-        "dense_growth_degree": rank,
+        "dense_growth_degree": rank * _growth_degree(dense_extent),
+        "extent_aliases": {
+            key: ast.unparse(_resolve_scalars(value, aliases))
+            for key, value in aliases.items()
+        },
         "written_elements": bound,
         "written_count_kind": "exact-address-domain" if single else "union-upper-bound",
         "written_growth_degree": max(d["growth_degree"] for d in domains),
@@ -433,7 +539,7 @@ def _certificate(
         else "Review block/diagonal/packed storage and all consumers before changing the dense ABI.",
         "conditions": sorted(range_conditions)
         + [
-            "Integral dimensions and extents are nonnegative; index/allocation arithmetic does not overflow.",
+            "Integral dimensions and extents are nonnegative; scalar conversions preserve mathematical values and index/allocation arithmetic does not overflow.",
             "This certificate ends at the producer return; later mutation and numerical nonzeros are not inferred.",
         ],
     }

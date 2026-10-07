@@ -28,6 +28,11 @@ homogeneous rank-2/3/4 symbolic allocation products, canonical row-major index
 arithmetic, and canonical unit-stride `for` loops. Same-file, same-namespace,
 unambiguous arithmetic helpers must have integral parameters and a single return
 expression. Their bodies are expanded; helper names alone are never proofs.
+Immutable extent aliases are resolved for full-domain equality and symbolic
+growth, with their relationships retained as `extent_aliases`. For example,
+`all = n` does not hide a full dense write, while a fixed three-address domain
+has growth degree zero. Scalar conversions must preserve mathematical values;
+the scanner does not infer integer widths or prove that precondition.
 Writes have side-effect-free scalar arithmetic RHSs. Unknown calls, aliases,
 other mutations, lambdas, unsupported setup, preprocessor control and unparsed
 control flow fail closed. This lexical subset assumes ordinary C++ token meanings
@@ -36,7 +41,8 @@ and valid code; it cannot resolve rewriting macros supplied by included headers.
 Supported address domains include occupied/virtual Cartesian blocks, repeated
 indices (diagonals), and inclusive lower triangles. Offset virtual indices need
 an explicit `virtuals = n - occupied` relation. Certificates state nonnegative,
-in-range dimension and no-overflow preconditions. They describe addresses that
+in-range dimension, value-preserving scalar conversion and no-overflow
+preconditions. They describe addresses that
 the admitted loops can write, rather than guaranteed numerical nonzeros. Zero
 values outside these domains follow from initialization and the absence of any
 other admitted producer mutation. A certificate ends at the producer return.

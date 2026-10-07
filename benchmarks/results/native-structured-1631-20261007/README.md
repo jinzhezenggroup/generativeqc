@@ -1,9 +1,9 @@
 # Native structured materialization source receipt
 
-Source commit: `d2593148661f0b491b6254a59779017c21ac74f4`.
-Source tree: `00d3a5eeb26dd78bbb4d8e94f7eb645781dca7bb`.
-The scanned files are unchanged from that source commit. The scanner was new
-and uncommitted during receipt generation; `scan.json` binds its exact bytes
+Source commit: `a947a002f7fd5999dbe1c72cfc508ff24fa025ed`.
+Source tree: `d2d95b591b4292fe73bce525f6903d0edfb4863c`.
+The scanned files are unchanged from that source commit. The scanner correction
+was uncommitted during receipt generation; `scan.json` binds its exact bytes
 and both imported scanner modules with SHA-256. This is a local Windows source
 receipt, without native compilation or CPU/GPU execution.
 
@@ -41,11 +41,18 @@ These are manual source observations attached to exact file byte identities,
 not runtime reachability, memory counters, timings or scientific acceptance.
 The PR uses **Refs #1631** and leaves the parent issue open.
 
+This corrected receipt supersedes the initial scanner snapshot after repairing
+immutable extent alias/full-domain equality and constant-domain growth. The
+initial receipt is retained in commit `a947a002f`; its scientific-source commit
+was `d2593148661f0b491b6254a59779017c21ac74f4`. All four MP2 files are identical
+across those source commits; only a real scanner change caused regeneration.
+
 ## Local validation
 
 The focused suite plus consumed native-work/complexity/Python-audit regressions
-passed: **156 tests and 34 subtests**. The new tool has 16 unittest cases and
-can run without pytest or a native build. The default CLI also completed an
+initially passed: **156 tests and 34 subtests**. After the alias/growth correction,
+the same suite passed **159 tests and 40 subtests**. The new tool has 19 unittest
+cases and can run without pytest or a native build. The default CLI also completed an
 actual 606-file scan (123 unknown inventory candidates), retained as an ignored
 local qualification artifact rather than adding a second large tracked receipt.
 

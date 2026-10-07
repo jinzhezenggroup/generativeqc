@@ -89,6 +89,59 @@ class NativeStructuredMaterializationTests(unittest.TestCase):
             }
             self.assertEqual(addresses, set(range(n**4)))
 
+    def test_chained_immutable_extent_aliases_do_not_hide_dense_writes(self) -> None:
+        for setup in (
+            "const auto all = n;",
+            "const auto first = n; const auto all = first;",
+            "const auto all = n + 0;",
+            "const auto all = n * 1;",
+            "const auto all = n + n - n;",
+            "const auto all = 2*n - n;",
+        ):
+            with self.subTest(setup=setup):
+                finding = audit_native(producer(DENSE.replace("< n", "< all"), setup))[
+                    0
+                ]
+                self.assertEqual(finding["classification"], "dense-write-domain")
+                self.assertIn("all", finding["extent_aliases"])
+                self.assertIsNone(finding["recommendation"])
+
+    def test_fixed_extent_write_and_allocation_have_constant_growth(self) -> None:
+        source = producer(
+            "for (std::size_t i=0; i<small; ++i) weights[i*n+i] = 1;",
+            "const auto small = 3;",
+            shape="n*n",
+        )
+        finding = audit_native(source)[0]
+        self.assertEqual(finding["written_growth_degree"], 0)
+
+        cancelled = source.replace("small = 3", "small = n*n - n*n + 3")
+        finding = audit_native(cancelled)[0]
+        self.assertEqual(finding["written_growth_degree"], 0)
+        self.assertEqual(finding["dense_growth_degree"], 2)
+        self.assertEqual(finding["extent_aliases"], {"small": "3"})
+        for n in (3, 5, 11):
+            addresses = {i * n + i for i in range(3)}
+            self.assertEqual(len(addresses), 3)
+            self.assertTrue(all(0 <= index < n * n for index in addresses))
+        fixed = source.replace("n*n, 0.0", "small*small, 0.0").replace(
+            "i*n+i", "i*small+i"
+        )
+        finding = audit_native(fixed)[0]
+        self.assertEqual(finding["dense_growth_degree"], 0)
+        self.assertEqual(finding["written_growth_degree"], 0)
+
+    def test_triangle_bound_alias_preserves_count_and_quadratic_growth(self) -> None:
+        source = producer(
+            "for (std::size_t i=0; i<all; ++i) for (std::size_t j=0; j<=i; ++j) weights[i*n+j] = 1;",
+            "const auto all = n;",
+            shape="n*n",
+        )
+        finding = audit_native(source)[0]
+        self.assertEqual(finding["domains"][0]["kind"], "lower-triangle")
+        self.assertEqual(finding["written_elements"], "n*(n+1)/2")
+        self.assertEqual(finding["written_growth_degree"], 2)
+
     def test_lower_triangle_retains_quadratic_growth(self) -> None:
         source = producer(
             """
