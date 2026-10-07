@@ -875,13 +875,7 @@ def emit_native_xc_contraction_kernels(
         if not record["cuda_ks"]:
             continue
         code = _curated_cpp_code(record["code"])
-        terms = (
-            5
-            if record["symbol"] in ("R2scan", "Wb97mv")
-            else 1
-            if record["symbol"] == "Lda"
-            else 4
-        )
+        terms = 5 if record["requires_tau"] else 4 if record["requires_gradient"] else 1
         threads = 32 if record["symbol"] == "Pbe" else 128
         batch_dispatch.append(
             f"  if (functional == {code}) return &launch_point_batches<{terms}, {threads}>;"

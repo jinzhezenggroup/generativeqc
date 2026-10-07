@@ -162,8 +162,7 @@ fallback. Run real-device gates only under a finite Slurm allocation. For
 fixed-density XC work/memory census, `--point-batch-benchmark ORIGINAL MOVED`
 on the same native executable reports preparation and six interleaved E/V
 samples; those diagnostic densities do not qualify complete SCF/force timing.
-For
-complete interleaved warm and moved-warm PBE0 E+F populations, use
+For complete interleaved warm and moved-warm PBE0 E+F populations, use
 `python -m benchmarks.pbe0_xc_tile_pairs --point-batch-tiles 32` with the usual
 basis/reference/output arguments. This keeps both arms' SCF/force tiles at 256
 and reapplies the arm's policy when geometry rebuilds the owner. Cold fresh-
