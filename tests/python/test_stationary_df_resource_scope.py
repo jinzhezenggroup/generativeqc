@@ -254,12 +254,37 @@ def test_cuda_outward_record_discloses_unmeasured_df_transfers() -> None:
     work = {"transfer_work": {}, "host_scope": "snapshot validation"}
     FunctionType(
         code,
-        {"__builtins__": builtins.__dict__, "work": work, "use_fitted_integrals": True},
+        {
+            "__builtins__": builtins.__dict__,
+            "work": work,
+            "use_fitted_integrals": True,
+            "native_integral_resources": {
+                "density_fitted_one_electron_resident_cuda": 0
+            },
+        },
     )()
     assert work["density_fitted_response_resources_included"] is False
     assert work["transfer_work"]["density_fitted_response_included"] is False
     assert "excludes DF-provider" in work["additional_device_peak_bound_scope"]
+    assert work["native_integral_resource_scope"].endswith("host-one-electron-fallback")
     assert "H'/S'" in work["host_scope"]
+
+    resident = {"transfer_work": {}, "host_scope": "snapshot validation"}
+    FunctionType(
+        code,
+        {
+            "__builtins__": builtins.__dict__,
+            "work": resident,
+            "use_fitted_integrals": True,
+            "native_integral_resources": {
+                "density_fitted_one_electron_resident_cuda": 1
+            },
+        },
+    )()
+    assert resident["native_integral_resource_scope"].endswith(
+        "resident-cuda-one-electron"
+    )
+    assert "final D/W remain resident" in resident["host_scope"]
 
 
 def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(
