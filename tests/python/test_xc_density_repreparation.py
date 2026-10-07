@@ -163,6 +163,7 @@ void select_ao(const Layout& l, int, void*, const double*, std::size_t, double,
 struct CudaXcPlan {
   Layout layout_;
   bool evaluation_started_{};
+  double* point_batch_arena_{};
   int stream_{7};
   std::array<CudaXcDensityBinding, 2> strict_density_{}, admitted_density_{};
   std::unique_ptr<CudaXcDensityBinding> provider_density_binding_;
@@ -197,6 +198,7 @@ CASES = (
     "empty",
     "response",
     "discovery",
+    "batched",
 )
 
 TESTS = r"""
@@ -344,6 +346,24 @@ void discovery() {
     if (!empty_map) require(p.density_provider_->enabled(), "indexed preparation not enabled");
   }
 }
+void batched() {
+  CudaXcPlan p; p.prepare_density(strict, 3);
+  double retained_panel{}; p.point_batch_arena_ = &retained_panel;
+  const Snapshot before(p);
+  const auto old_bindings = binding_calls, old_providers = provider_calls;
+  const auto old_launchers = launcher_calls;
+  require(rejected([&]{ p.prepare_density(mixed, 4, budget); }),
+          "batched owner accepted mixed density arithmetic");
+  require(rejected([&]{ p.select_local_ao(1e-16, 64); }),
+          "batched owner accepted map discovery");
+  before.unchanged(p);
+  require(binding_calls == old_bindings && provider_calls == old_providers &&
+          launcher_calls == old_launchers && !p.layout_.local_ao,
+          "batched guard ran after binding or map preparation");
+  p.prepare_density(strict, 4);
+  require(p.admitted_density_[0].precision.arithmetic.is_strict_fp64() &&
+          p.point_batch_arena_ == &retained_panel, "strict rebind lost batched owner");
+}
 int main(int argc, char** argv) {
   try {
     require(argc == 2, "expected case name"); const std::string name = argv[1];
@@ -356,6 +376,7 @@ int main(int argc, char** argv) {
     else if (name == "empty") empty();
     else if (name == "response") response();
     else if (name == "discovery") discovery();
+    else if (name == "batched") batched();
     else throw std::runtime_error("unknown case");
     require(!live_contexts && !live_cache && !live_host, "owner teardown leaked resources");
     std::cout << name << " PASS\n";

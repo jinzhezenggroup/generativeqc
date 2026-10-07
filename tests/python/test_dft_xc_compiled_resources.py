@@ -56,7 +56,7 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             registers=56,
         ),
         resource(
-            "generativeqc::dft::cuda_xc_detail::evaluate_points<4, false>(double*)",
+            "generativeqc::dft::cuda_xc_detail::evaluate_points<4, false, false>(double*)",
             registers=80,
             spill_store_bytes=16 if spill else 0,
             spill_load_bytes=8 if spill else 0,
@@ -72,7 +72,7 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
         ),
         # Compiled but inactive variants must not contaminate the selected region.
         resource(
-            "generativeqc::dft::cuda_xc_detail::evaluate_points<5, false>(double*)",
+            "generativeqc::dft::cuda_xc_detail::evaluate_points<5, false, false>(double*)",
             registers=255,
             spill_store_bytes=128,
             spill_load_bytes=128,
@@ -143,7 +143,7 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
         resource("ao_radial_kernel_4(double*)"),
         resource("density_product<false>(double*)", registers=61),
         resource("density_features<false>(double*)", registers=62),
-        resource("evaluate_points<4, false>(double*)", registers=63),
+        resource("evaluate_points<4, false, false>(double*)", registers=63),
         resource("assemble_potential(double*)", registers=64),
         resource("accumulate_totals(double*)", registers=8),
         resource("tiled_density_product<false>(double*)", registers=250),
@@ -221,16 +221,18 @@ def test_point_specialization_tracks_feature_width_not_functional_code(
     rows = (
         *(row for row in pbe_resources() if "evaluate_points" not in row.function),
         resource("ao_kernel(double*)", registers=52),
-        resource(f"evaluate_points<1{suffix}, false>(double*)", registers=32),
+        resource(f"evaluate_points<1{suffix}, false, false>(double*)", registers=32),
         resource(
-            f"evaluate_points<4{suffix}, false>(double*)",
+            f"evaluate_points<4{suffix}, false, false>(double*)",
             registers=192,
             spill_store_bytes=64,
             spill_load_bytes=32,
         ),
-        resource(f"evaluate_points<5{suffix}, false>(double*)", registers=255),
-        resource(f"evaluate_points<4{suffix}, true>(double*)", registers=254),
-        resource(f"evaluate_points<40{suffix}, false>(double*)", registers=253),
+        resource(f"evaluate_points<5{suffix}, false, false>(double*)", registers=255),
+        resource(f"evaluate_points<4{suffix}, true, false>(double*)", registers=254),
+        resource(f"evaluate_points<40{suffix}, false, false>(double*)", registers=253),
+        resource(f"evaluate_points<1{suffix}, false, true>(double*)", registers=252),
+        resource(f"evaluate_points<4{suffix}, false, true>(double*)", registers=251),
     )
     evidence = native_grid_xc_compiled_region_evidence(
         rows,
@@ -240,13 +242,23 @@ def test_point_specialization_tracks_feature_width_not_functional_code(
         source_identity="native-feature-width",
     )
     assert tuple(row.function for row in dict(evidence.scopes)["xc_points"]) == (
-        f"evaluate_points<{feature_terms}{suffix}, false>(double*)",
+        f"evaluate_points<{feature_terms}{suffix}, false, false>(double*)",
     )
     assert evidence.profitability.compiled_registers_per_thread == registers
     assert evidence.profitability.spill_bytes == spill_bytes
 
 
-@pytest.mark.parametrize("inactive", ["1, false", "4, true", "40, false", "5, false"])
+@pytest.mark.parametrize(
+    "inactive",
+    [
+        "1, false, false",
+        "4, true, false",
+        "40, false, false",
+        "5, false, false",
+        "4, false, true",
+        "4, false",
+    ],
+)
 def test_missing_pbe_width_cannot_be_replaced_by_an_inactive_kernel(
     inactive: str,
 ) -> None:
