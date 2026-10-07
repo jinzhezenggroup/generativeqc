@@ -758,7 +758,10 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // This method owns an integer restricted determinant. Fixed-density Fock
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
-  if (execution_plan.spin_channels != 1 || execution_plan.range_exchange ||
+  // A range-separated composition may still reserve the ordinary full-range
+  // fitted primary. Its independent long-range Direct correction neither consumes
+  // nor mutates this occupied projection, so range_exchange is not itself a veto.
+  if (execution_plan.spin_channels != 1 ||
       strategy.backend != scf::FockBackend::Cuda || spec.spin != scf::FockSpin::Restricted ||
       spec.derivative_order != 0 || !spec.coulomb.present || !spec.exchange.present ||
       spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
