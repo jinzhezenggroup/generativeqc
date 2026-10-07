@@ -475,6 +475,70 @@ def test_packed_schedule_models_low_order_fock_workers(spec: typing.Any) -> None
     assert not schedule.shared_coulomb
 
 
+
+@pytest.mark.parametrize(
+    ("spec", "expected_doubles"),
+    (
+        (PSSS_SPEC, 16),
+        (PPSS_SPEC, 24),
+        (PSPS_SPEC, 32),
+        (FUSED_SHELL_SPEC_BY_NAME["dsss"], 28),
+    ),
+)
+def test_packed_restricted_raw_k_contracts_shell_blocks(
+    spec: typing.Any, expected_doubles: int
+) -> None:
+    """Coalesce low-footprint raw-K scatters without changing other consumers."""
+
+    integral = build_integral_ir(spec, consumers=(KernelConsumer.FOCK,))
+    packed = next(
+        item
+        for item in schedule_candidates(integral, target=TEST_CUDA_TARGET)
+        if item.kind == ScheduleKind.PACKED_TASKS
+    )
+    plan = build_fused_shell_plan(
+        spec,
+        integral=integral,
+        schedule=packed,
+        target=TEST_CUDA_TARGET,
+    )
+    source = emit_shell_class_fused_cuda(spec, plan)
+    class_name = spec.name[0].upper() + spec.name[1:]
+
+    assert f"double exchange_block[{expected_doubles}];" in source
+    assert "if constexpr (!Unrestricted)" in source
+    assert "const bool raw_exchange_only =" in source
+    assert f"kGenerated{class_name}ExchangeConsumerBit" in source
+    assert f"kGenerated{class_name}CoulombConsumerBit" in source
+    assert "swapped_pair_unique" in source
+    assert source.count("atomicAdd(\n              fock + task.density_offset") == 8
+    # UHF, HF-weighted K, J, and every unsupported runtime identity retain the
+    # incumbent canonical component scatter below the restricted raw-K return.
+    assert f"generated_{spec.name}_accumulate_fock<Unrestricted>" in source
+
+
+def test_packed_restricted_raw_k_block_storage_is_bounded() -> None:
+    """Large packed shell classes must keep the incumbent scatter footprint."""
+
+    integral = build_integral_ir(DPPP_SPEC, consumers=(KernelConsumer.FOCK,))
+    packed = next(
+        item
+        for item in schedule_candidates(integral, target=TEST_CUDA_TARGET)
+        if item.kind == ScheduleKind.PACKED_TASKS
+    )
+    plan = build_fused_shell_plan(
+        DPPP_SPEC,
+        integral=integral,
+        schedule=packed,
+        target=TEST_CUDA_TARGET,
+    )
+    source = emit_shell_class_fused_cuda(DPPP_SPEC, plan)
+
+    assert "double exchange_block[" not in source
+    assert "const bool raw_exchange_only =" not in source
+    assert "generated_dppp_accumulate_fock<Unrestricted>" in source
+
+
 def test_zero_order_pairs_lower_through_shell_task_schedule() -> None:
     """Generate low-order force/Fock code without handwritten psss algebra."""
 
