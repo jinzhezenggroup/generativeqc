@@ -262,7 +262,7 @@ def cuda_source() -> str:
     """Emit an optional matrix schedule and retain the original scalar fallback."""
     lines = [
         "#include <algorithm>",
-        "#include <cub/block/block_reduce.cuh>",
+        '#include "tensor/cuda_reduction.cuh"',
         '#include "generated_df_ccsd_hoisted_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfhoist {",
     ]
