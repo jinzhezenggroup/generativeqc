@@ -1208,10 +1208,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
 #endif
     try {
-      two = response_density
-                ? fock_.energy_derivative_components_with_cuda_df_state(
-                      density[0], empty, &*response_density,
-                      fitted_projection ? &*fitted_projection : nullptr)
+      two = response_density ? fock_.energy_derivative_components_with_cuda_df_state(
+                                   density[0], empty, &*response_density,
+                                   fitted_projection ? &*fitted_projection : nullptr)
             : fitted_projection
                 ? fock_.energy_derivative_components_with_fitted_projection(density[0], empty,
                                                                             *fitted_projection)

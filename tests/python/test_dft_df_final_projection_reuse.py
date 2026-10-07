@@ -65,11 +65,14 @@ def test_dft_coulomb_response_borrows_final_rks_density() -> None:
     assert "energy_derivative_components_with_cuda_df_state" in method
 
     body = prepared[
-        prepared.index("energy_derivative_components_with_cuda_df_state") :
-        prepared.index("PreparedFockPlan::retained_energy_derivative")
+        prepared.index(
+            "energy_derivative_components_with_cuda_df_state"
+        ) : prepared.index("PreparedFockPlan::retained_energy_derivative")
     ]
     assert "provider.derivative(exchange, density, beta, projection)" in body
-    assert "provider.derivative(coulomb, density, beta, nullptr, response_density)" in body
+    assert (
+        "provider.derivative(coulomb, density, beta, nullptr, response_density)" in body
+    )
     assert provider.count("borrowed_response_density") >= 2
     assert "select_borrowed_density" in lower
     assert "terms[0].exchange_coefficient != 0.0" in lower
@@ -85,7 +88,7 @@ def test_borrowed_coulomb_density_admission_is_j_only(tmp_path: Path) -> None:
         pytest.skip("requires a host C++ compiler")
     lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
     begin = lower.index("  const bool select_borrowed_density =")
-    end = lower.index('  const char* storage_control', begin)
+    end = lower.index("  const char* storage_control", begin)
     admission = lower[begin:end]
     source = tmp_path / "density_admission.cpp"
     source.write_text(

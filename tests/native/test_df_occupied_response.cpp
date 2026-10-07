@@ -143,8 +143,8 @@ void lifecycle(bool uhf) {
                 plan.get(), 0, orbital, auxiliary, raw_values, metric, terms, 0, 4U << 20, 0,
                 host_derivative, detail, &host_resources) == GENERATIVEQC_STATUS_SUCCESS,
             "host-density Coulomb response: " + detail);
-    CudaDfBorrowedResponseDensity borrowed{
-        plan->device_id, state->d_density, density.size(), reinterpret_cast<void*>(plan->stream)};
+    CudaDfBorrowedResponseDensity borrowed{plan->device_id, state->d_density, density.size(),
+                                           reinterpret_cast<void*>(plan->stream)};
     require(execute_cuda_density_fitting_generated_force_response(
                 plan.get(), 0, orbital, auxiliary, raw_values, metric, terms, 0, 4U << 20, 0,
                 resident_derivative, detail, &resident_resources, nullptr, nullptr,
