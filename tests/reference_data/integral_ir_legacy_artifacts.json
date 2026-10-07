@@ -507,16 +507,16 @@
     ]
   ],
   "artifacts": {
-    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "476444c10248078638ccc813f08e333906a7adeffc01229b1322d774cd801171",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "11506b9ee610383634abe7a7da961c4e9f26a71a7cefa8c9467401f49444d500",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "f2be8e4f37ddfa0e5897ad28fb3416e53fa3b818ba6764edcf254cb43c3bc21e",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "9de86b023a853e50946c9198d08e2f0c21c383a1ec27bb4fef5b123c6e99897d",
+    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
+    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
+    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
+    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "644416457271696d559cacf07cb10bcf6c1f584621938086765693c452390c98",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "8db2f663b16b02c0b4369b98dfa1f40281b12d55ce2ac5790c6351af4e592e92",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "bd359e51dd48388a9a5b17b1ae99e977910b716d6cb57c9857131b94b85605f4",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "b062143057bfe961d0841b7bbebf06ef59126308ebb1d9165903d35fca9d74c3",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
-    "generativeqc_generated_shell_registry.cu": "ed66611d109bc003e1baabc91c0e591664993b89966d98aa0032e9ee823e5fed"
+    "generativeqc_generated_shell_registry.cu": "b85e51c3080ebb4c62f090fcfaca4d8cd2a697d60a29f79b29c5d1914efd7ebc"
   },
   "artifact_corrections": [
     {
@@ -675,6 +675,23 @@
         "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 2065,
+      "source_revision": "72c3980fb4ea7914804209cf1e3d7b260333bcb1",
+      "integrated_base_revision": "652d1e98267fc9ef225ceb5c9bd868a03b8a84ce",
+      "reason": "Compile the explicit optional restricted raw-K shell-block owner beside incumbent and Rys variants. Its mathematical IR uses the same existing Fock specialization as the incumbent, including subset/Wick values beside mixed Rys force plans. Regenerated PR-base artifacts reproduce every previous fixture hash. Every new shard preserves the complete previous shard as an exact byte prefix and appends only its profile-scoped _k_block namespace; all four portable sm_90 appends and one sm_120 append contain no kernels. Registry-source changes add only the separate K-block inventory and dispatch; registry header, manifest and 55-entry catalog are unchanged. The entire incumbent sm_120 profile remains 15,252,708 bytes with SHA256 48a08c3fbed2a4c5a1ca26d1e9fc239cec6a5a59b8c4ed6ab13a51b222ad20a5. An independent dense distinct-ERI-orbit oracle passes 20,480 exact emitted-contraction comparisons across five classes, 640 shell assignments, 16 consumer/reversal masks and RHF/UHF, with maximum absolute error 6.94e-18 and ASan/UBSan clean. Full CUDA compilation, real-device matrix parity and complete-endpoint performance qualification remain separate unverified gates.",
+      "paths": [
+        "generativeqc_generated_shell_registry.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_0.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_3.cu"
       ]
     }
   ]

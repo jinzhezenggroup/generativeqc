@@ -8,6 +8,7 @@ from generativeqc_compiler.common.cuda_target import normalize_cuda_architecture
 
 from .production_cost import _partition_production_selections
 from .production_emission import emit_production_shard, emit_profile_shard
+from .production_k_block import direct_k_block_candidates
 from .production_profile import (
     _profile_identifier,
     load_production_kernel_selections,
@@ -79,20 +80,31 @@ def write_production_bundles(
         rys_by_name = {
             item.spec.name: item for item in direct_rys_value_candidates(profile)
         }
+        k_block_by_name = {
+            item.spec.name: item for item in direct_k_block_candidates(profile)
+        }
 
         def emit_unit(
             unit: tuple[KernelSelection, ...],
             profile: ResolvedProductionProfile = profile,
             rys_by_name: dict[str, KernelSelection] = rys_by_name,
+            k_block_by_name: dict[str, KernelSelection] = k_block_by_name,
         ) -> str:
             """Keep alternatives in the same stable build unit as their owner."""
-            alternatives = tuple(
+            rys_alternatives = tuple(
                 rys_by_name[item.spec.name]
                 for item in unit
                 if item.spec.name in rys_by_name
             )
-            return emit_profile_shard(profile, unit) + emit_profile_shard(
-                profile, alternatives, variant="_rys_value"
+            k_block_alternatives = tuple(
+                k_block_by_name[item.spec.name]
+                for item in unit
+                if item.spec.name in k_block_by_name
+            )
+            return (
+                emit_profile_shard(profile, unit)
+                + emit_profile_shard(profile, rys_alternatives, variant="_rys_value")
+                + emit_profile_shard(profile, k_block_alternatives, variant="_k_block")
             )
 
         identifier = _profile_identifier(profile.target.architecture)
