@@ -142,6 +142,7 @@ def cuda_source() -> str:
                 output,
                 input_overrides={key: f"s.{key}" for key in INPUTS},
                 reset_error=False,
+                parallel_scalar_reductions=name == "iteration",
             ),
             f"{output} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
         ]
