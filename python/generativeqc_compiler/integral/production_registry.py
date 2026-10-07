@@ -165,6 +165,9 @@ std::uint64_t enabled_shell_class_mask() noexcept;
 /** Return the Fock-class mask selected by GENERATIVEQC_AOT_FOCK_SHELL_CLASSES. */
 std::uint64_t enabled_fock_shell_class_mask() noexcept;
 
+/** Legacy single-profile bundles do not compile optional K-block alternatives. */
+std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept;
+
 /** Return the generated mixed-Fock capability mask. */
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept;
 
@@ -203,6 +206,18 @@ cudaError_t launch_shell_class_mixed_fock(
 
 /** Launch one fixed-storage resident-bra Fock stream by exact class. */
 cudaError_t launch_shell_class_streaming_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted,
+    unsigned worker_blocks, const void* shell_pair_stream,
+    const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
+    const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, bool mixed_precision_enabled,
+    double fp64_threshold, const double* schwarz_bounds,
+    const double* density, double* fock, std::uint32_t* bra_head,
+    unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
+
+/** Legacy single-profile bundles fail closed for the optional K-block route. */
+cudaError_t launch_shell_class_k_block_streaming_fock(
     unsigned shell_class, cudaStream_t stream, bool unrestricted,
     unsigned worker_blocks, const void* shell_pair_stream,
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
@@ -395,6 +410,8 @@ std::uint64_t enabled_fock_shell_class_mask() noexcept {{
   return mask;
 }}
 
+std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept {{ return 0; }}
+
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept {{
   const char* selection =
       std::getenv("GENERATIVEQC_AOT_MIXED_FOCK_SHELL_CLASSES");
@@ -469,6 +486,11 @@ cudaError_t launch_shell_class_streaming_fock(
 {streaming_fock_cases}
     default: return cudaErrorInvalidValue;
   }}
+}}
+
+cudaError_t launch_shell_class_k_block_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  return cudaErrorNotSupported;
 }}
 
 cudaError_t launch_ppps_resident(
