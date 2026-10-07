@@ -37,6 +37,7 @@ dft_mp_v1_contract
 hybrid_cuda_acceptance
 stationary_large_domain_qualification
 source_work_audit
+replay_allocation_receipts
 roadmap
 generated-files
 ```

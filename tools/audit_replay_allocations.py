@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Verify phase-separated allocation journals against a caller-pinned contract.
 
 This consumer installs no allocator or runtime hook. PASS applies only to the
