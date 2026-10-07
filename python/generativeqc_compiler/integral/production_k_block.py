@@ -6,9 +6,10 @@ from typing import TYPE_CHECKING
 
 from .capabilities import CAPABILITY_K_BLOCK_FOCK, CAPABILITY_STREAMING_FOCK
 from .cuda_schedule import ScheduleKind
-from .ir import KernelConsumer, build_integral_ir
+from .ir import KernelConsumer
 from .k_block import packed_restricted_k_block_eligible
-from .production_selection import KernelSelection
+from .production_selection import KernelSelection, _selection_integral
+from .specialize import specialize_fock_integral
 
 if TYPE_CHECKING:
     from .production_profile import ResolvedProductionProfile
@@ -32,11 +33,7 @@ def direct_k_block_candidates(
             or not packed_restricted_k_block_eligible(incumbent.spec)
         ):
             continue
-        integral = build_integral_ir(
-            incumbent.spec,
-            consumers=(KernelConsumer.FOCK,),
-            recurrence=incumbent.recurrence,
-        )
+        integral = specialize_fock_integral(_selection_integral(incumbent))
         candidates.append(
             KernelSelection(
                 architecture=profile.target.architecture,
