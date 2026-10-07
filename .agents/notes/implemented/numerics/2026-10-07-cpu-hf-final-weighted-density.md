@@ -1,51 +1,64 @@
-# Decision: bind CPU HF force weights to the final physical Fock
+# Decision: close CPU UHF force state before publication
 
 Status: implemented
 Date: 2026-10-07
 
 ## Problem
 
-Ordinary CPU RHF/UHF finalization diagonalized a physical Fock evaluated at the
+Ordinary CPU UHF finalization diagonalized a physical Fock evaluated at the
 converged density, projected a new determinant density from that frame, rebuilt
-the physical Fock at the projected density, and returned forces using a mixed
-state.  The density, final energy, and two-electron derivative used the projected
-D and rebuilt F[D], while the Pulay energy-weighted density still used the
-orbital energies from the preceding F[D_old].
+the physical Fock at the projected density, and immediately published a
+stationary analytic force.  Two distinct finite-convergence effects remained:
 
-Issue #1790 exposed this as a standard-control UHF H2O+ torque residual that
-shrinks under tighter SCF controls.  That behavior is consistent with a lagged
-final-state witness rather than a missing derivative term.
+1. the Pulay energy-weighted density used orbital energies from the preceding
+   F[D_old] while the other force inputs used the projected D and rebuilt F[D];
+2. even after replacing that lagged weight by D F[D] D, the projected
+   determinant was not necessarily a sufficiently stationary fixed point of its
+   rebuilt physical Fock.
+
+Issue #1790 exposes the second effect as a standard-control UHF H2O+ torque
+residual that shrinks under tighter SCF controls.
 
 ## Decision
 
-CPU HF force finalization constructs the energy-weighted density from the same
-returned determinant and physical Fock used by the remaining force inputs:
+CPU UHF force finalization reuses the shared bounded final-state selector after
+the ordinary converged solve.  The initial physical Fock is diagonalized and
+projected exactly as before; the selector then evaluates the physical Fock at
+that projected determinant and validates its commutator/fixed-point state under
+the caller's existing density and energy tolerances.  If necessary it performs a
+bounded physical correction and advances determinant generations.
+
+Only after that state is accepted is the Pulay weight formed from the same
+determinant and physical Fock:
 
 ```
-W = D F[D] D / spin_weight
+W_sigma = D_sigma F_sigma[D_alpha, D_beta] D_sigma
 ```
 
-The restricted spin weight is 2 and each unrestricted spin weight is 1.  This is
-the same physical-state ownership rule already used by the shared strict
-final-state selector.
+RHF keeps its existing finalization schedule but uses the same-generation
+`D F[D] D / 2` weight rather than lagged orbital energies.
 
 ## Rejected alternatives
 
-- Do not tighten the public SCF tolerances.  That reduces the lag numerically but
-  changes the requested solve and only masks the provenance mismatch.
-- Do not relax or project the torque acceptance gate.
-- Do not retain orbital-energy W after rebuilding F at a different density.
-- Do not add another post-SCF SCF loop solely for this correction; the existing
-  final physical Fock already supplies the consistent stationary weight.
+- Do not tighten the public SCF tolerances.  That can reduce the residual but
+  changes the requested solve and masks finalization semantics.
+- Do not relax, average, or project the torque gate.
+- Do not stop at the weighted-density provenance fix.  On CI that change alone
+  reduced the reference-route #1790 torque only to
+  2.5885168305900348e-9 Eh, still above the unchanged 1e-9 Eh gate.
+- Do not add a second unbounded SCF driver.  The shared final-state owner already
+  provides bounded correction, fixed-point checks, generation tracking, and
+  same-generation weighted densities.
 
 ## Invariants
 
-- Density, Fock, weighted density, and two-electron derivative supplied to one HF
-  force evaluation refer to the same returned determinant.
-- The existing SCF controls, iteration policy, and two post-SCF physical Fock
-  builds remain unchanged.
-- Reference and scalar CPU eigensolver routes share the same finalization
-  semantics.
+- Density, Fock, weighted density, and two-electron derivative supplied to one
+  accepted UHF force evaluation refer to the same returned determinant.
+- Public max-iteration, energy, density, and screening controls are not rewritten.
+- The correction is bounded and force-specific; energy-only UHF preserves the
+  existing finalization schedule.
+- Reference and scalar CPU eigensolver routes share the same final-state policy.
+- Post-SCF physical Fock work is reported in the existing Fock-build diagnostics.
 - No force or torque projection is applied after assembly.
 
 ## Evidence
@@ -57,20 +70,24 @@ It applies the unchanged max-absolute torque gate of 1e-9 Eh to both ordinary CP
 reference and scalar eigensolver routes.
 
 Historical #1790 evidence records approximately 2.664e-9 Eh torque at the
-standard controls and approximately 3e-11 Eh only after much tighter controls,
-which motivated checking final-state provenance instead of changing the gate.
+standard controls and approximately 3e-11 Eh only after much tighter controls.
+The first same-generation-W CI experiment still measured
+2.5885168305900348e-9 Eh on the reference route, distinguishing the dominant
+finite-stationarity closure from the smaller lagged-W contribution.
 
 ## Consequences
 
-The final determinant is unchanged and no additional Fock build is introduced.
-Only the Pulay weighted-density construction changes.  RHF receives the same
-correction because it had the identical generation mismatch.
+UHF force publication may perform additional bounded physical Fock/eigen work
+when the converged SCF iterate is not yet a valid final fixed point.  Energy-only
+UHF does not pay that correction cost.  The returned force state gains explicit
+physical-state validation rather than depending on accidental convergence
+tightness.
 
 ## Revisit when
 
-A future finalization path replaces the projected-density/rebuilt-Fock sequence
-with a validated final-state owner that directly provides a same-generation W,
-or when a non-idempotent mean-field state requires a different response contract.
+The ordinary CPU SCF solver itself returns an explicitly validated final-state
+owner with the same generation and fixed-point guarantees, allowing this
+post-convergence selection to become pure reuse.
 
 ## References
 
