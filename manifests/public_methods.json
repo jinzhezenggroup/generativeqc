@@ -53,6 +53,17 @@
       "supports_batch": true
     },
     {
+      "name": "ump2",
+      "symbol": "UMP2",
+      "abi_id": 20,
+      "family": "perturbation",
+      "provider": "ump2",
+      "properties": [
+        "energy"
+      ],
+      "supports_batch": true
+    },
+    {
       "name": "lda-rks",
       "symbol": "LDA_RKS",
       "abi_id": 6,

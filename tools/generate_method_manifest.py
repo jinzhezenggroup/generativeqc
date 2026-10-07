@@ -22,6 +22,7 @@ PROVIDERS = {
     "reserved": ("Reserved", False, False),
     "hf": ("Hf", True, True),
     "mp2": ("Mp2", True, True),
+    "ump2": ("Ump2", True, True),
     "rccsd": ("Rccsd", True, True),
     "rccsdt": ("Rccsdt", True, True),
     "df_rccsdt": ("DfRccsdt", True, False),
@@ -120,7 +121,7 @@ def load_manifest() -> list[dict]:
             )
         if method["provider"] == "hf" and method["family"] != "hartree_fock":
             raise ValueError(f"{name}: HF provider requires Hartree-Fock family")
-        if method["provider"] == "mp2" and method["family"] != "perturbation":
+        if method["provider"] in {"mp2", "ump2"} and method["family"] != "perturbation":
             raise ValueError(f"{name}: MP2 provider requires perturbation family")
         if (
             method["provider"] in {"rccsd", "rccsdt", "df_rccsdt"}
@@ -252,7 +253,7 @@ def emit_cpp(methods: list[dict]) -> str:
         "// clang-format off",
         "namespace generativeqc::methods::generated {",
         "",
-        "enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Rccsd, Rccsdt, DfRccsdt, Dft, Xtb };",
+        "enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Ump2, Rccsd, Rccsdt, DfRccsdt, Dft, Xtb };",
         "",
         "struct MethodManifestEntry {",
         "  std::string_view name;",

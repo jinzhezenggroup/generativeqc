@@ -36,6 +36,32 @@ A Python-free native SDK install has a separate `generativeqc methods` command.
 It reports the stable C/C++ ABI/provider registry and intentionally does not
 import the Python compiler catalog.
 
+## Conventional CPU UMP2 energy
+
+`ump2` evaluates canonical unrestricted MP2 energy from a converged, physically
+validated UHF reference. The initial public domain is all-electron, unscreened
+conventional Gaussian integrals on CPU with real FP64 arithmetic. The two spin
+occupations and orbital frames remain distinct, including for equal occupations.
+
+```python
+from generativeqc import Calculator
+
+calc = Calculator(method="ump2", basis="sto-3g", device="cpu")
+result = calc.singlepoint([("Li", (0.0, 0.0, 0.0))], multiplicity=2)
+print(result.energy)       # UHF reference plus UMP2 correlation, Hartree
+print(result.correlation)  # opposite-spin and combined same-spin contributions
+```
+
+The method provides energy only. Force, RI/DF, frozen-core, mixed-precision and
+CUDA requests fail explicitly. The native diagnostic groups alpha-alpha and
+beta-beta into `same_spin_energy` and reports alpha-beta as
+`opposite_spin_energy`; its equation hash identifies the complete three-channel
+compiler inventory. The public selector currently starts UHF from the ordinary
+core guess. `singlepoint` has no supplied-density option; a prepared UMP2
+batch can instead import a validated two-spin HF density through the existing
+public warm-state checkpoint/restore interface. The imported density is a
+proposal for a fresh UHF solve, not a substitute for final-state validation.
+
 ## Second-order derivatives
 
 The Python `Calculator` exposes analytic Cartesian Hessian-vector products and

@@ -392,6 +392,7 @@ class PreparedBatch:
                         if calculator._method
                         in (
                             _native.METHOD_MP2,
+                            _native.METHOD_UMP2,
                             _native.METHOD_RCCSD,
                             _native.METHOD_RCCSD_T,
                         )
@@ -1333,6 +1334,7 @@ class PreparedBatch:
             correlation = None
             if self._calculator._method in (
                 _native.METHOD_MP2,
+                _native.METHOD_UMP2,
                 _native.METHOD_RCCSD,
                 _native.METHOD_RCCSD_T,
             ):

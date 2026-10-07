@@ -91,6 +91,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/cc/triples_fock_response.cpp
     src/cc/rccsdt_force.cpp
     src/methods/mp2_method.cpp
+    src/methods/ump2_method.cpp
     src/methods/rccsd_method.cpp
     src/methods/rccsdt_method.cpp
     src/methods/df_rccsdt_method.cpp
@@ -100,6 +101,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/posthf/mp2_derivative_cpu.cpp
     src/posthf/mp2_derivative_cuda.cpp
     src/posthf/mp2_energy.cpp
+    src/posthf/ump2_energy.cpp
     src/posthf/mp2_force.cpp
     src/posthf/mp2_gradient.cpp
     src/posthf/native_provider.cpp

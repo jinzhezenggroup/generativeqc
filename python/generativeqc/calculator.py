@@ -50,7 +50,9 @@ _HF_METHODS = _method_manifest.HF_METHOD_IDS
 _COUPLED_CLUSTER_METHODS = frozenset(
     (_native.METHOD_RCCSD, _native.METHOD_RCCSD_T, _native.METHOD_DF_RCCSD_T)
 )
-_CORRELATED_METHODS = frozenset((_native.METHOD_MP2, *_COUPLED_CLUSTER_METHODS))
+_CORRELATED_METHODS = frozenset(
+    (_native.METHOD_MP2, _native.METHOD_UMP2, *_COUPLED_CLUSTER_METHODS)
+)
 
 
 def _automatic_libxc_transport(required_ingredients: tuple[str, ...], spin: str) -> str:
@@ -1412,7 +1414,7 @@ class Calculator:
                         "correlation_memory_budget_bytes": self._correlation_memory_budget_bytes,
                         "mp2_denominator_threshold": self._mp2_denominator_threshold,
                     }
-                    if self._method == _native.METHOD_MP2
+                    if self._method in {_native.METHOD_MP2, _native.METHOD_UMP2}
                     else {}
                 ),
                 **(
@@ -1816,7 +1818,7 @@ class Calculator:
                 library=self._library,
                 include_forces="forces" in planned,
             )
-        if self._method == _native.METHOD_MP2:
+        if self._method in {_native.METHOD_MP2, _native.METHOD_UMP2}:
             raise NotImplementedError(
                 "resource planning is not implemented for canonical MP2"
             )

@@ -7,6 +7,7 @@
 
 #include "core/types.hpp"
 #include "molecule/basis.hpp"
+#include "molecule/basis_geometry_identity.hpp"
 
 namespace generativeqc::posthf {
 inline std::size_t checked_add(std::size_t a, std::size_t b) {
@@ -60,6 +61,20 @@ inline std::size_t rhf_reference_capacity(const core::System& system, unsigned d
     bytes = checked_add(bytes, checked_mul(8, eri_elements));
   }
   return bytes;
+}
+
+/** Conservative two-spin CPU reference admission, including both final
+ * physical Fock/canonical frames and the existing direct-source allowance. */
+inline std::size_t uhf_reference_capacity(const core::System& system, unsigned diis_history,
+                                          bool include_dense_eri = false) {
+  const auto n = molecule::ao_count(system);
+  const auto matrix_elements = checked_mul(n, n);
+  const auto additional_spin = checked_mul(
+      8, checked_add(checked_mul(matrix_elements, checked_add(64, checked_mul(2, diis_history))),
+                     checked_mul(2, n)));
+  return checked_add(
+      checked_add(rhf_reference_capacity(system, diis_history, include_dense_eri), additional_spin),
+      molecule::BasisGeometryIdentity::required_storage_bytes(system));
 }
 
 /** Conservative peak for one energy-only RI-MP2 phase.
