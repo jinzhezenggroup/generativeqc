@@ -51,6 +51,7 @@ API_VERSION = 1
 float32 = np.dtype("float32")
 float64 = np.dtype("float64")
 
+
 def _symbolic(*values: object) -> bool:
     return any(isinstance(value, VibeArray) for value in values)
 
@@ -132,7 +133,9 @@ def broadcast_to(
     if isinstance(x, VibeArray):
         return _namespace.broadcast_to(x, shape, indices=indices, axes=axes)
     if indices is not None or axes is not None:
-        raise ValueError("explicit TensorIR broadcast metadata requires a symbolic array")
+        raise ValueError(
+            "explicit TensorIR broadcast metadata requires a symbolic array"
+        )
     return np.broadcast_to(x, shape)
 
 
@@ -171,7 +174,9 @@ def matrix_transpose(x: object) -> typing.Any:
         return _namespace.matrix_transpose(x)
     array = np.asarray(x)
     if array.ndim < 2:
-        raise ValueError("matrix_transpose requires an array with at least two dimensions")
+        raise ValueError(
+            "matrix_transpose requires an array with at least two dimensions"
+        )
     return np.swapaxes(array, -1, -2)
 
 
