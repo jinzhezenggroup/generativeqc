@@ -830,6 +830,7 @@ def summarize(
         failures.append("duplicate diagnostic profile arm")
     for arm in ("direct", "df-jk-occupied"):
         profile = profile_rows.get(arm)
+        native = next((row for row in records if row.get("arm") == arm), None)
         if (
             profile is None
             or profile.get("schema") != SCHEMA
@@ -839,9 +840,10 @@ def summarize(
             failures.append(f"{arm}: missing or failed diagnostic profile")
             continue
         if (
-            profile.get("source") != source
+            native is None
+            or profile.get("source") != source
             or profile.get("library", {}).get("sha256") != library
-            or not _same_problem(problem, profile.get("problem", {}))
+            or profile.get("problem") != native.get("problem")
         ):
             failures.append(f"{arm}: diagnostic source/problem mismatch")
         if (

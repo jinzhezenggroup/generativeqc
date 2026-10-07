@@ -27,7 +27,7 @@ def _records() -> tuple[list[dict], list[dict], list[dict]]:
         "method": "pbe0-rks",
         "geometry_bohr": [["H", [0, 0, 0]]],
         "auxiliary_basis": "def2-svp",
-        "df_memory_budget_bytes": 1024,
+        "df_memory_budget_bytes": 1 << 30,
     }
     source = {"revision": "a" * 40, "dirty": False}
     job_identity = {"scheduler": "inspire_job", "id": "i2054-test"}
@@ -167,6 +167,23 @@ def test_supported_arms_require_oracle_and_never_claim_full_crossover() -> None:
     assert summary["crossover_claim_eligible"] is False
     assert summarize(records, [oracles[0]], profiles)["status"] == "INCOMPLETE"
     assert summarize(records, oracles, [profiles[0]])["status"] == "INCOMPLETE"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("auxiliary_basis", "def2-tzvp"),
+        ("df_memory_budget_bytes", 1024),
+    ),
+)
+def test_profile_requires_same_arm_complete_problem_identity(
+    field: str, value: object
+) -> None:
+    records, oracles, profiles = _records()
+    profiles[1]["problem"][field] = value
+    result = summarize(records, oracles, profiles)
+    assert result["status"] == "INCOMPLETE"
+    assert "df-jk-occupied: diagnostic source/problem mismatch" in result["failures"]
 
 
 @pytest.mark.parametrize(
