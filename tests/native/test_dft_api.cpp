@@ -1233,14 +1233,36 @@ int main() {
                     std::abs(cuda_result.energy - cold.energy) < 1e-11,
                 "generic RSH compatible CUDA replay changed the endpoint");
 
-        auto df_method = method;
-        df_method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
-        generativeqc_calculation* rejected = nullptr;
-        require(
-            generativeqc_calculation_prepare(cuda_context, cuda_system, &df_method, &rejected) ==
-                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
-                rejected == nullptr,
-            "generic CUDA RSH silently admitted density fitting");
+        auto cpu_df_method = method;
+        cpu_df_method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+        auto cuda_df_method = method;
+        cuda_df_method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+        generativeqc_calculation *cpu_df = nullptr, *cuda_df = nullptr;
+        const auto cpu_df_prepare = generativeqc_calculation_prepare(
+            cpu_fixture.context, cpu_fixture.system, &cpu_df_method, &cpu_df);
+        const auto cuda_df_prepare =
+            generativeqc_calculation_prepare(cuda_context, cuda_system, &cuda_df_method, &cuda_df);
+        const char* cuda_df_detail = generativeqc_context_get_last_detail(cuda_context);
+        require(cpu_df_prepare == GENERATIVEQC_STATUS_SUCCESS &&
+                    cuda_df_prepare == GENERATIVEQC_STATUS_SUCCESS && cpu_df && cuda_df,
+                ("generic mixed-DF RSH preparation failed: carrier=" +
+                 std::to_string(endpoint.carrier) +
+                 " CUDA detail=" + (cuda_df_detail ? cuda_df_detail : ""))
+                    .c_str());
+        auto cpu_df_result = unconverged, cuda_df_result = unconverged;
+        const auto cpu_df_status = generativeqc_calculation_execute(cpu_df, &cpu_df_result);
+        const auto cuda_df_status = generativeqc_calculation_execute(cuda_df, &cuda_df_result);
+        cuda_df_detail = generativeqc_context_get_last_detail(cuda_context);
+        require(cpu_df_status == GENERATIVEQC_STATUS_SUCCESS &&
+                    cuda_df_status == GENERATIVEQC_STATUS_SUCCESS && cpu_df_result.converged &&
+                    cuda_df_result.converged &&
+                    std::abs(cuda_df_result.energy - cpu_df_result.energy) < 1e-10,
+                ("generic mixed-DF RSH CUDA endpoint differs from CPU: carrier=" +
+                 std::to_string(endpoint.carrier) +
+                 " detail=" + (cuda_df_detail ? cuda_df_detail : ""))
+                    .c_str());
+        generativeqc_calculation_destroy(cpu_df);
+        generativeqc_calculation_destroy(cuda_df);
 
         generativeqc_calculation_destroy(cpu_calculation);
         generativeqc_calculation_destroy(cuda_calculation);
