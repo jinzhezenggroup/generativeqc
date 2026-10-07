@@ -103,12 +103,8 @@ def write_production_bundles(
             )
             return (
                 emit_profile_shard(profile, unit)
-                + emit_profile_shard(
-                    profile, rys_alternatives, variant="_rys_value"
-                )
-                + emit_profile_shard(
-                    profile, k_block_alternatives, variant="_k_block"
-                )
+                + emit_profile_shard(profile, rys_alternatives, variant="_rys_value")
+                + emit_profile_shard(profile, k_block_alternatives, variant="_k_block")
             )
 
         identifier = _profile_identifier(profile.target.architecture)

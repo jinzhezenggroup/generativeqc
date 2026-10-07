@@ -16,7 +16,6 @@ from .cuda_schedule import ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer
 from .production_cost import shell_class_index
-from .production_k_block import direct_k_block_candidates
 from .production_profile import (
     ProfileMatch,
     ResolvedProductionProfile,
