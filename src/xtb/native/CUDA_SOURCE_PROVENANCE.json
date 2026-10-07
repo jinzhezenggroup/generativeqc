@@ -19,7 +19,11 @@
     "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
     "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership.",
     "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
-    "src/backends/cuda/gfn2_occupations.cu": "Consume compiler-owned exact restricted-spin task sharing after full native admission; copy identical occupation and diagnostic outputs while preserving independent open-shell/unrestricted solves and all binary64 root, reduction, degeneracy and publication policies."
+    "src/backends/cuda/gfn2_occupations.cu": "Consume compiler-owned exact restricted-spin task sharing after full native admission; copy identical occupation and diagnostic outputs while preserving independent open-shell/unrestricted solves and all binary64 root, reduction, degeneracy and publication policies.",
+    "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
+    "src/backends/cuda/gfn2_scc_setup_inputs.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
+    "src/backends/cuda/gfn2_scc_setup_topology.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
+    "src/runtime/gfn2_cuda_topology_staging.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -533,7 +537,7 @@
     "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": {
       "adapted": true,
       "upstream_sha256": "b53efa1527059556065800aa9c455a3ab361a3e0f639b24a201f9edae81e7f07",
-      "vendored_sha256": "bfc39fe191012208a1babdf6aa84d30432f93489cb9eda129069cf10edd1c371"
+      "vendored_sha256": "e44357e72042f01ca74da7cf1ef81bab81e33c8b94c7d80928e2e6921033f43f"
     },
     "src/backends/cuda/gfn2_scc_setup_eigensolver.cuh": {
       "adapted": true,
@@ -543,7 +547,7 @@
     "src/backends/cuda/gfn2_scc_setup_inputs.cu": {
       "adapted": true,
       "upstream_sha256": "6496a8dd876ff075b6f596afae85ffe2c28a6c98ac964e222bb321e892eb16b3",
-      "vendored_sha256": "dd5890a00c1f20b4c98ea3eeb30367e4919440b0b5943d61b272111feac08b17"
+      "vendored_sha256": "1ae6d7e6e40ac3ffd7d98ed177f5594c362b021d1d8643033d8f0069b1e1625d"
     },
     "src/backends/cuda/gfn2_scc_setup_inputs.cuh": {
       "adapted": true,
@@ -553,7 +557,7 @@
     "src/backends/cuda/gfn2_scc_setup_topology.cu": {
       "adapted": true,
       "upstream_sha256": "0b4113f1834be74fa929d46df3419aa1929f748d455e34b2fe4c03aa78c3f088",
-      "vendored_sha256": "7eea5397a2de8f7983321a839c5aaf912d9d0d083bd4d54d00c2a6513f92782a"
+      "vendored_sha256": "b01e6048a0d1fd111cb205cd7fcdefca71a55d4e53d3227f9c470cf3384806f8"
     },
     "src/backends/cuda/gfn2_scc_setup_topology.hpp": {
       "adapted": true,
@@ -618,7 +622,7 @@
     "src/runtime/gfn2_cuda_topology_staging.cu": {
       "adapted": true,
       "upstream_sha256": "78e6b96e8d3a0a67c73c1ab6871810bf9e020a053e82d036a92161de4ddc5e4a",
-      "vendored_sha256": "455c0077240b3990668cb535079dea229c00bab99930651cb66019aa79cddf7d"
+      "vendored_sha256": "f5984375035a83bc43ebcb7c3fbdcad93d1b33f423f60d953f03630f4e634d67"
     },
     "src/runtime/gfn2_cuda_topology_staging.hpp": {
       "adapted": true,

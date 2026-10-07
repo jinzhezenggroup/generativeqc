@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include <algorithm>
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -48,21 +50,9 @@ Gfn2SccSetupInputsDiagnostic arena_failure(Gfn2SccSetupInputsError error,
   return diagnostic;
 }
 
-bool checked_add(std::size_t first, std::size_t second, std::size_t& result) noexcept {
-  if (first > std::numeric_limits<std::size_t>::max() - second) {
-    return false;
-  }
-  result = first + second;
-  return true;
-}
+using ::generativeqc::runtime::checked_add;
 
-bool checked_multiply(std::size_t first, std::size_t second, std::size_t& result) noexcept {
-  if (first != 0u && second > std::numeric_limits<std::size_t>::max() / first) {
-    return false;
-  }
-  result = first * second;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 bool checked_multiply(std::int64_t first, std::int64_t second, std::int64_t& result) noexcept {
   if (first < 0 || second < 0 ||

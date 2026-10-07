@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include "model/gfn2/d4.hpp"
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -66,21 +68,9 @@ static_assert(!parameters::gfn2::kGlobal.dispersion_smooth,
               "the molecular GFN2 D4 cache assumes sharp pair-list cutoffs; periodic D4 uses an "
               "explicit smooth outer switch");
 
-bool checked_add_size(std::size_t first, std::size_t second, std::size_t& result) {
-  if (first > std::numeric_limits<std::size_t>::max() - second) {
-    return false;
-  }
-  result = first + second;
-  return true;
-}
+using ::generativeqc::runtime::checked_add;
 
-bool checked_multiply_size(std::size_t first, std::size_t second, std::size_t& result) {
-  if (first != 0u && second > std::numeric_limits<std::size_t>::max() / first) {
-    return false;
-  }
-  result = first * second;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 struct AddressRange {
   std::uintptr_t begin = 0u;
@@ -128,7 +118,7 @@ template <typename T>
 bool overlaps_vector(const AddressRange& active, const std::vector<T>& values) {
   std::size_t bytes = 0u;
   AddressRange storage;
-  return checked_multiply_size(values.capacity(), sizeof(T), bytes) &&
+  return checked_multiply(values.capacity(), sizeof(T), bytes) &&
          make_range(values.data(), bytes, storage) && ranges_overlap(active, storage);
 }
 
@@ -148,11 +138,11 @@ bool append_segment(std::size_t bytes, std::size_t& cursor, std::size_t& offset)
   if (!align_up(cursor, alignof(double), offset)) {
     return false;
   }
-  return checked_add_size(offset, bytes, cursor);
+  return checked_add(offset, bytes, cursor);
 }
 
 bool count_bytes(std::size_t elements, std::size_t& bytes) {
-  return checked_multiply_size(elements, sizeof(double), bytes);
+  return checked_multiply(elements, sizeof(double), bytes);
 }
 
 bool valid_count(std::int64_t value) {
@@ -583,9 +573,9 @@ generativeqc_xtb_status_t make_d4_plan(std::int64_t batch_size, std::int64_t tot
     std::size_t pair_elements = 0u;
     std::size_t weight_elements = 0u;
     std::size_t gradient_elements = 0u;
-    if (!checked_multiply_size(pair_count, kD4PairDataElements, pair_elements) ||
-        !checked_multiply_size(atom_count, kD4MaximumReferences, weight_elements) ||
-        !checked_multiply_size(atom_count, 3u, gradient_elements)) {
+    if (!checked_multiply(pair_count, kD4PairDataElements, pair_elements) ||
+        !checked_multiply(atom_count, kD4MaximumReferences, weight_elements) ||
+        !checked_multiply(atom_count, 3u, gradient_elements)) {
       error = "D4 workspace element count overflows";
       return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
@@ -595,7 +585,7 @@ generativeqc_xtb_status_t make_d4_plan(std::int64_t batch_size, std::int64_t tot
           std::max(maximum_atoms, static_cast<std::size_t>(created->atom_offsets[system + 1] -
                                                            created->atom_offsets[system]));
     }
-    if (!checked_multiply_size(maximum_atoms, 27u, created->shared_scratch_elements)) {
+    if (!checked_multiply(maximum_atoms, 27u, created->shared_scratch_elements)) {
       error = "shared D4 scratch extent overflows";
       return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
     }
@@ -703,9 +693,9 @@ generativeqc_xtb_status_t update_d4_geometry_cache_cpu(
   std::size_t coordination_bytes = 0u;
   std::array<AddressRange, 3> numerical{};
   std::array<AddressRange, 4> controls{};
-  if (!checked_multiply_size(atom_count * 3u, sizeof(double), position_bytes) ||
-      !checked_multiply_size(expected_pairs, sizeof(double), pair_bytes) ||
-      !checked_multiply_size(atom_count, sizeof(double), coordination_bytes) ||
+  if (!checked_multiply(atom_count * 3u, sizeof(double), position_bytes) ||
+      !checked_multiply(expected_pairs, sizeof(double), pair_bytes) ||
+      !checked_multiply(atom_count, sizeof(double), coordination_bytes) ||
       !make_range(positions, position_bytes, numerical[0]) ||
       !make_range(pair_storage, pair_bytes, numerical[1]) ||
       !make_range(coordination_storage, coordination_bytes, numerical[2]) ||
@@ -805,9 +795,9 @@ generativeqc_xtb_status_t evaluate_d4_two_body_cpu(const D4Plan& plan, const D4G
   std::size_t batch_bytes = 0u;
   std::array<AddressRange, 5> numerical{};
   std::array<AddressRange, 4> controls{};
-  if (!checked_multiply_size(pair_count, sizeof(double), pair_bytes) ||
-      !checked_multiply_size(atom_count, sizeof(double), atom_bytes) ||
-      !checked_multiply_size(batch_count, sizeof(double), batch_bytes) ||
+  if (!checked_multiply(pair_count, sizeof(double), pair_bytes) ||
+      !checked_multiply(atom_count, sizeof(double), atom_bytes) ||
+      !checked_multiply(batch_count, sizeof(double), batch_bytes) ||
       !make_range(cache.pair_data, pair_bytes, numerical[0]) ||
       !make_range(cache.coordination_numbers, atom_bytes, numerical[1]) ||
       !make_range(atomic_charges, atom_bytes, numerical[2]) ||
@@ -892,8 +882,8 @@ generativeqc_xtb_status_t evaluate_d4_two_body_system_cpu(
   std::size_t pair_bytes = 0u;
   std::array<AddressRange, 5> numerical{};
   std::array<AddressRange, 4> controls{};
-  if (!checked_multiply_size(atom_count, sizeof(double), atom_bytes) ||
-      !checked_multiply_size(pair_element_count, sizeof(double), pair_bytes) ||
+  if (!checked_multiply(atom_count, sizeof(double), atom_bytes) ||
+      !checked_multiply(pair_element_count, sizeof(double), pair_bytes) ||
       !make_range(cache.pair_data, pair_bytes, numerical[0]) ||
       !make_range(cache.coordination_numbers, atom_bytes, numerical[1]) ||
       !make_range(atomic_charges, atom_bytes, numerical[2]) ||

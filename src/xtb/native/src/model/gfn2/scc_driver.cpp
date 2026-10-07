@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include "model/gfn2/scc_driver.hpp"
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -111,21 +113,9 @@ struct AddressRange {
   std::uintptr_t end = 0u;
 };
 
-bool checked_add_size(std::size_t first, std::size_t second, std::size_t& result) {
-  if (first > std::numeric_limits<std::size_t>::max() - second) {
-    return false;
-  }
-  result = first + second;
-  return true;
-}
+using ::generativeqc::runtime::checked_add;
 
-bool checked_multiply_size(std::size_t first, std::size_t second, std::size_t& result) {
-  if (first != 0u && second > std::numeric_limits<std::size_t>::max() / first) {
-    return false;
-  }
-  result = first * second;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 bool align_up(std::size_t value, std::size_t alignment, std::size_t& result) {
   if (alignment == 0u || (alignment & (alignment - 1u)) != 0u) {
@@ -144,14 +134,14 @@ bool append_segment(std::size_t bytes, std::size_t alignment, std::size_t& curso
   if (!align_up(cursor, alignment, offset)) {
     return false;
   }
-  return checked_add_size(offset, bytes, cursor);
+  return checked_add(offset, bytes, cursor);
 }
 
 bool bytes_for(std::int64_t elements, std::size_t element_size, std::size_t& bytes) {
   return elements >= 0 &&
          static_cast<std::uint64_t>(elements) <=
              static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()) &&
-         checked_multiply_size(static_cast<std::size_t>(elements), element_size, bytes);
+         checked_multiply(static_cast<std::size_t>(elements), element_size, bytes);
 }
 
 bool make_range(const void* pointer, std::size_t bytes, AddressRange& range) {
@@ -182,7 +172,7 @@ template <typename T>
 bool overlaps_vector(const AddressRange& range, const std::vector<T>& values) {
   AddressRange storage;
   std::size_t bytes = 0u;
-  return checked_multiply_size(values.capacity(), sizeof(T), bytes) &&
+  return checked_multiply(values.capacity(), sizeof(T), bytes) &&
          make_range(values.data(), bytes, storage) && ranges_overlap(range, storage);
 }
 
@@ -1301,9 +1291,9 @@ generativeqc_xtb_status_t make_scc_driver_plan(
       !bytes_for(aes2.potential_scratch_elements(), sizeof(double), aes2_scratch_bytes) ||
       !bytes_for(periodic_embedding == nullptr ? 0 : periodic_embedding->maximum_atoms(),
                  sizeof(double), periodic_scratch_bytes) ||
-      !checked_multiply_size(batch_double_bytes, 2u, chemical_potential_bytes) ||
-      !checked_multiply_size(atom_bytes, 3u, atomic_dipole_bytes) ||
-      !checked_multiply_size(atom_bytes, 6u, atomic_quadrupole_bytes)) {
+      !checked_multiply(batch_double_bytes, 2u, chemical_potential_bytes) ||
+      !checked_multiply(atom_bytes, 3u, atomic_dipole_bytes) ||
+      !checked_multiply(atom_bytes, 6u, atomic_quadrupole_bytes)) {
     error = "SCC driver caller-owned storage exceeds addressable memory";
     return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
   }
@@ -2008,8 +1998,8 @@ generativeqc_xtb_status_t validate_iteration_bindings(
   std::size_t field_atomic_potential_bytes = 0u;
   std::size_t field_dipole_potential_bytes = 0u;
   if (!bytes_for(data.mulliken.matrix_elements(), sizeof(double), matrix_bytes) ||
-      !checked_multiply_size(matrix_bytes, 3u, dipole_integral_bytes) ||
-      !checked_multiply_size(matrix_bytes, 6u, quadrupole_integral_bytes) ||
+      !checked_multiply(matrix_bytes, 3u, dipole_integral_bytes) ||
+      !checked_multiply(matrix_bytes, 6u, quadrupole_integral_bytes) ||
       !bytes_for(data.es2.total_matrix_elements(), sizeof(double), es2_cache_bytes) ||
       !bytes_for(data.aes2.pair_data_elements(), sizeof(double), aes2_cache_bytes) ||
       !bytes_for(geometry.d4_cache.pair_data_elements, sizeof(double), d4_pair_cache_bytes) ||
