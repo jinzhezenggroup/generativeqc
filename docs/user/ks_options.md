@@ -89,6 +89,28 @@ for paired E+F validation and the limits of the retained configuration evidence.
 
 ## Prepared identity and ABI
 
+### Experimental incremental Direct-J/K and resource budgets
+
+The benchmark-only `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=1` (or `on`)
+selector is not supported by public KS resource planning. The current inventory
+does not account for its additional anchor/delta storage and final-closure
+history. `estimate_ks_resources` and `Calculator.estimate_resources` return an
+unsupported plan; `require_feasible()`, budgeted execution, and preparation with
+an ordinary precomputed plan reject it before native preparation. The legacy
+`GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK` selector has the same planning limit.
+Both switches must be unset, `0`, or `off` for ordinary resource planning;
+setting the generic switch to `off` does not override an enabled legacy switch.
+Other spellings are invalid, matching native validation.
+
+Explicit experimental execution without a `resource_budget` or `resource_plan`
+remains available under the native strict-FP64 exact-direct CUDA eligibility
+checks. It has no whole-calculation capacity guarantee. CPU, mixed-precision,
+and density-fitted execution remain excluded from incremental mode, and the
+legacy selector retains its PBE0 RKS restriction. No default or numerical/
+performance qualification changes with this planning guard.
+
+### Model binding
+
 The complete options are included in resource identity and Python prepared
 model identity. Resource estimates use the actual grid dimensions and tile,
 including native radius-table storage. A replaced functional/grid/tile model

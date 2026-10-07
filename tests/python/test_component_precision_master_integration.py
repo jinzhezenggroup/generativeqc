@@ -74,7 +74,7 @@ struct Owner {
   runtime::ExecutionPrecisionSchedule precision_schedule;
   struct { CudaXcFastPathCapabilities fast_paths; } xc_layout;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
-  bool device_nonlocal{};
+  bool device_nonlocal{}, incremental_direct_jk{};
   void* nonlocal_correlation{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   unsigned spins{1}, functional{semilocal_family_code(SemilocalFamily::Pbe)}, width{2};
@@ -108,6 +108,9 @@ int main() {
       p.options.semilocal_exchange_scale = hybrid ? 0.75 : 1.0;
       assert(p.chunk() == (!coulomb && !density));
       assert(p.replay() == (!coulomb && !density && !hybrid));
+      p.incremental_direct_jk = true;
+      assert(!p.chunk());
+      p.incremental_direct_jk = false;
       p.options.semilocal_exchange_scale = 0.73;
       assert(!p.chunk() && !p.replay());
     }
@@ -153,6 +156,9 @@ int main() {
     rsh.precision_schedule = test_precision_schedule(coulomb, density);
     assert(rsh.chunk() == (!coulomb && !density));
     assert(!rsh.replay());
+    rsh.incremental_direct_jk = true;
+    assert(!rsh.chunk());
+    rsh.incremental_direct_jk = false;
     rsh.nonlocal_correlation = &rsh;
     assert(!rsh.chunk());
     rsh.device_nonlocal = true;

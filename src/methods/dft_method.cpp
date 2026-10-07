@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <climits>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -205,6 +208,44 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
   if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
+}
+
+/** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
+ * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
+bool incremental_direct_jk_benchmark_requested(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
+    return false;
+  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
+  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    std::string(name) + " must be 0/off or 1/on");
+}
+
+std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) return std::nullopt;
+  if (*value < '0' || *value > '9')
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be an unsigned integer");
+  errno = 0;
+  char* end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 10);
+  if (errno == ERANGE || end == value || *end != '\0' || parsed > UINT_MAX)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be an unsigned integer");
+  return static_cast<unsigned>(parsed);
+}
+
+std::optional<double> incremental_direct_jk_benchmark_density_rms_threshold(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) return std::nullopt;
+  errno = 0;
+  char* end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  if (errno == ERANGE || end == value || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be finite and nonnegative");
+  return parsed;
 }
 
 scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
@@ -450,6 +491,42 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   options.resolved_fock_build = scf::resolve_fock_build(
       fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
       options.screening_tolerance, options.density_fitting_relative_threshold);
+  const bool generic_incremental_direct_jk =
+      incremental_direct_jk_benchmark_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
+  const bool legacy_pbe0_incremental_direct_jk =
+      incremental_direct_jk_benchmark_requested("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
+  if (generic_incremental_direct_jk || legacy_pbe0_incremental_direct_jk) {
+    const bool strict_exact_cuda_ks =
+        backend == GENERATIVEQC_BACKEND_CUDA &&
+        options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        options.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
+        scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
+    if (!strict_exact_cuda_ks)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "KS incremental Direct-J/K benchmark mode requires strict-FP64 "
+                        "exact-direct CUDA KS");
+    if (legacy_pbe0_incremental_direct_jk) {
+      const bool strict_exact_pbe0_rks =
+          cuda_curated_global_hybrid && fock.spin == scf::FockSpin::Restricted &&
+          execution_plan.semilocal_family == dft::SemilocalFamily::Pbe;
+      if (!strict_exact_pbe0_rks)
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "legacy PBE0 incremental Direct-J/K selector requires CUDA RKS PBE0");
+    }
+    options.incremental_direct_jk = true;
+    auto interval = incremental_direct_jk_benchmark_rebuild_interval(
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+    if (!interval)
+      interval = incremental_direct_jk_benchmark_rebuild_interval(
+          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+    if (interval) options.incremental_direct_jk_rebuild_interval = *interval;
+    auto threshold = incremental_direct_jk_benchmark_density_rms_threshold(
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+    if (!threshold)
+      threshold = incremental_direct_jk_benchmark_density_rms_threshold(
+          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+    if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
+  }
   if (semilocal_metadata.molecular_nonlocal_domain) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
@@ -531,6 +608,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.incremental_direct_jk = native.incremental_direct_jk;
   result.precision_work = std::move(native.precision_work);
   native.dft_diagnostic.fock_builds = native.fock_builds;
   native.dft_diagnostic.initial_density_used = native.initial_density_used;
@@ -2249,6 +2327,10 @@ class KsPreparedBatch final : public PreparedBatch {
 };
 
 }  // namespace
+
+Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend) {
+  return adapt_result(std::move(native), backend);
+}
 
 generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
                                           dft::CudaKsFinalStateToken& token, std::string& detail) {

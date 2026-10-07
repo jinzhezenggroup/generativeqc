@@ -170,6 +170,53 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
   generativeqc::scf::destroy_rhf_cuda_bucket_plan(plan);
 }
 
+void verify_density_rms_gate() {
+  const auto system = asymmetric_two_center(false);
+  generativeqc::scf::ScfOptions options;
+  options.max_iterations = 100;
+  options.energy_tolerance = 1.0e-12;
+  options.density_tolerance = 1.0e-10;
+  options.screening_tolerance = 1.0e-12;
+  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  options.compute_forces = true;
+  options.incremental_direct_jk = true;
+  options.incremental_direct_jk_rebuild_interval = 8;
+
+  generativeqc::scf::CudaRhfBucketPlan* plan = nullptr;
+  const auto cadence = run_cached(&plan, system, options, false);
+  require(cadence.status == GENERATIVEQC_STATUS_SUCCESS && cadence.scf.converged,
+          "cadence-only incremental CUDA fixture failed");
+  require(cadence.scf.incremental_direct_jk.delta_builds != 0U,
+          "cadence-only incremental CUDA fixture did not exercise a delta build");
+
+  auto adaptive_options = options;
+  adaptive_options.incremental_direct_jk_density_rms_threshold = 1.0e-14;
+  const auto adaptive = run_cached(&plan, system, adaptive_options, false);
+  require(adaptive.status == GENERATIVEQC_STATUS_SUCCESS && adaptive.scf.converged,
+          "density-gated incremental CUDA fixture failed");
+  compare_final_state(cadence.scf, adaptive.scf, 5.0e-8);
+
+  const auto& before = cadence.scf.incremental_direct_jk;
+  const auto& after = adaptive.scf.incremental_direct_jk;
+  require(after.anchor_full_builds + after.delta_builds == adaptive.scf.iterations,
+          "adaptive incremental CUDA build counters do not match SCF iterations");
+  require(after.anchor_full_builds > before.anchor_full_builds &&
+              after.delta_builds < before.delta_builds,
+          "late-SCF RMS gate did not replace an early delta build with a full build");
+
+  // Reusing the same plan pointer with a different threshold must rebuild the
+  // captured graph rather than retaining the prior gate scalar.
+  const auto cadence_again = run_cached(&plan, system, options, false);
+  require(cadence_again.status == GENERATIVEQC_STATUS_SUCCESS &&
+              cadence_again.scf.incremental_direct_jk.anchor_full_builds ==
+                  cadence.scf.incremental_direct_jk.anchor_full_builds &&
+              cadence_again.scf.incremental_direct_jk.delta_builds ==
+                  cadence.scf.incremental_direct_jk.delta_builds,
+          "cached CUDA plan leaked the adaptive RMS threshold");
+
+  generativeqc::scf::destroy_rhf_cuda_bucket_plan(plan);
+}
+
 }  // namespace
 
 int main() {
@@ -179,6 +226,7 @@ int main() {
     verify_case(true, 0.0, 0U);
     verify_case(false, 1.0e-12, 8U);
     verify_case(true, 1.0e-12, 8U);
+    verify_density_rms_gate();
     return EXIT_SUCCESS;
   } catch (const std::exception&) {
     return EXIT_FAILURE;

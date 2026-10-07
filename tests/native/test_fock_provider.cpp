@@ -229,6 +229,7 @@ void incremental_direct_jk_policy_resolution() {
   ScfOptions options;
   options.incremental_direct_jk = true;
   options.incremental_direct_jk_rebuild_interval = 8;
+  options.incremental_direct_jk_density_rms_threshold = 2.0e-3;
 
   const auto exact_linear = resolve_incremental_direct_jk_policy(options, {true, false, false});
   require(exact_linear.requested && exact_linear.active,
@@ -236,15 +237,21 @@ void incremental_direct_jk_policy_resolution() {
   require(
       exact_linear.requested_rebuild_interval == 8 && exact_linear.effective_rebuild_interval == 8,
       "exact-linear lower did not preserve requested incremental refresh cadence");
+  require(exact_linear.density_rms_threshold == 0.0,
+          "exact-linear lower unexpectedly inherited the screened RMS gate");
 
   const auto density_screened = resolve_incremental_direct_jk_policy(options, {true, true, false});
   require(density_screened.active && density_screened.effective_rebuild_interval == 1,
           "density-screened lower did not bound the delta anchor chain");
+  require(density_screened.density_rms_threshold == 2.0e-3,
+          "density-screened lower lost the late-SCF RMS gate");
 
   options.screening_tolerance = 0.0;
   const auto unscreened = resolve_incremental_direct_jk_policy(options, {true, true, false});
   require(unscreened.active && unscreened.effective_rebuild_interval == 8,
           "disabled screening did not restore exact-linear refresh cadence");
+  require(unscreened.density_rms_threshold == 0.0,
+          "disabled screening retained an adaptive RMS gate");
 
   const auto precision_conflict =
       resolve_incremental_direct_jk_policy(options, {true, false, true});
