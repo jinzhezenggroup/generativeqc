@@ -67,6 +67,34 @@ def test_public_preview_reuses_canonical_tensorir_identity_and_execution() -> No
     assert execution.outputs["out"] == 7.0
 
 
+def test_public_namespace_runs_eagerly_and_compiles_the_same_expression() -> None:
+    def expression(x: object, y: object) -> object:
+        return xp.sum(xp.sqrt((x + 0.5) * y))
+
+    x = xp.asarray([0.5, 1.5, 3.5], dtype=xp.float64)
+    y = xp.asarray([2.0, 3.0, 4.0], dtype=xp.float64)
+    eager = expression(x, y)
+    expected = np.sum(np.sqrt((x + 0.5) * y))
+    np.testing.assert_allclose(eager, expected)
+
+    compiled = xp.compile(expression)
+    np.testing.assert_allclose(compiled(x, y), eager)
+
+
+def test_eager_namespace_array_manipulation_matches_numpy() -> None:
+    matrix = xp.asarray([[1.0, 2.0], [3.0, 4.0]], dtype=xp.float64)
+    vector = xp.asarray([1.0, 2.0], dtype=xp.float64)
+
+    np.testing.assert_array_equal(xp.reshape(vector, (1, 2)), vector.reshape(1, 2))
+    np.testing.assert_array_equal(
+        xp.broadcast_to(vector, (3, 2)), np.broadcast_to(vector, (3, 2))
+    )
+    np.testing.assert_array_equal(xp.permute_dims(matrix, (1, 0)), matrix.T)
+    np.testing.assert_array_equal(xp.matrix_transpose(matrix), matrix.T)
+    np.testing.assert_array_equal(xp.matmul(matrix, vector), matrix @ vector)
+    np.testing.assert_array_equal(xp.take(matrix, (1, 0), axis=0), matrix[[1, 0]])
+
+
 def test_compiled_observable_uses_array_syntax_without_tensor_specs() -> None:
     @xp.compile
     def observable(C: object, occupation: object, O: object) -> object:
