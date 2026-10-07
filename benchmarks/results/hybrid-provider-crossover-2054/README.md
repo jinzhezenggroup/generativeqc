@@ -62,6 +62,11 @@ also completed, but the benchmark erroneously queried a DF-only metric on its
 exact provider and stopped before warm/moved timing. The runner now leaves
 that metric `null`; `retry-small-with-aot.sh` authenticates the unchanged
 scientific/build inputs and exact core/AOT hashes before the next clean retry.
+The first independent DF-JK PySCF check also rejected `moved-warm`: the runner
+omitted the displaced coordinates and replayed the original geometry. It now
+passes the moved coordinates on both changed and moved-warm calls. The two
+earlier complete DF-JK phases and the changed-geometry phase met their
+independent gates, while that moved-warm phase remains retained as a failure.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \

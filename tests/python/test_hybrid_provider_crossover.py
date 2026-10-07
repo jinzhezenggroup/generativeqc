@@ -34,13 +34,16 @@ def _records() -> tuple[list[dict], list[dict], list[dict]]:
     library = {"sha256": "b" * 64}
     attempts = []
     for phase in ("cold", "warm-0", "changed-geometry", "moved-warm"):
+        is_moved = phase in {"changed-geometry", "moved-warm"}
         attempts.append(
             {
                 "phase": phase,
                 "status": "PASS",
                 "seconds": 1.0,
-                "energy_hartree": -1.0,
-                "forces_hartree_per_bohr": [[0.0, 0.0, 0.0]],
+                "energy_hartree": -1.1 if is_moved else -1.0,
+                "forces_hartree_per_bohr": [[0.1, 0.0, 0.0]]
+                if is_moved
+                else [[0.0, 0.0, 0.0]],
                 "physical_residual_rms": 1e-10,
             }
         )
@@ -88,8 +91,10 @@ def _records() -> tuple[list[dict], list[dict], list[dict]]:
                     {
                         "geometry": label,
                         "status": "PASS",
-                        "energy_hartree": -1.0,
-                        "forces_hartree_per_bohr": [[0.0, 0.0, 0.0]],
+                        "energy_hartree": -1.1 if label == "moved" else -1.0,
+                        "forces_hartree_per_bohr": [[0.1, 0.0, 0.0]]
+                        if label == "moved"
+                        else [[0.0, 0.0, 0.0]],
                     }
                     for label in ("original", "moved")
                 ],
@@ -172,6 +177,7 @@ def test_supported_arms_require_oracle_and_never_claim_full_crossover() -> None:
         lambda rows, refs: rows[0]["attempts"][1].update(status="FAIL"),
         lambda rows, refs: rows[0]["attempts"][1].update(physical_residual_rms=1e-4),
         lambda rows, refs: refs[1]["samples"][0].update(energy_hartree=-0.9),
+        lambda rows, refs: rows[1]["attempts"][-1].update(energy_hartree=-1.0),
         lambda rows, refs: refs[0]["grid_exports"]["original"].update(sha256="wrong"),
     ],
 )

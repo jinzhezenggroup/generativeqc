@@ -18,7 +18,7 @@ shared_bin_2054=/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/v
 cache_tool_2054="$repo_root_2054/.artifacts/compiler-cache/extracted/usr/bin/ccache"
 cache_lib_2054="$repo_root_2054/.artifacts/compiler-cache/extracted/usr/lib/x86_64-linux-gnu"
 build_dir_2054="$repo_root_2054/.artifacts/build-hybrid-2054-sm90-cuda129"
-run_dir_2054="$repo_root_2054/.artifacts/benchmarks/hybrid-provider-2054/cuda129-metric-retry"
+run_dir_2054="$repo_root_2054/.artifacts/benchmarks/hybrid-provider-2054/cuda129-moved-warm-retry"
 mkdir -p "$run_dir_2054"
 export PATH="$(dirname "$cache_tool_2054"):$shared_bin_2054:$PATH"
 export LD_LIBRARY_PATH="$cache_lib_2054${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -79,5 +79,5 @@ for path in (root / "direct-profile.json", root / "df-profile.json"):
         statuses.append(("occupied-reuse", "FAIL"))
 print(statuses, flush=True)
 if not statuses or any(status not in {"MEASURED", "UNSUPPORTED"} for _, status in statuses):
-    raise SystemExit("#2054 Direct metric retry failed; inspect retained raw records")
+    raise SystemExit("#2054 moved-warm retry failed; inspect retained raw records")
 PY

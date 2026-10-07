@@ -451,7 +451,7 @@ def run_native(args: argparse.Namespace) -> None:
             )
             write(output, record)
             batch.set_warm_start_updates(False)
-            moved_warm = _sample(batch, moved(case), "moved-warm", coordinates=False)
+            moved_warm = _sample(batch, moved(case), "moved-warm", coordinates=True)
             record["attempts"].append(moved_warm)
             write(output, record)
             if moved_warm["status"] != "PASS":
