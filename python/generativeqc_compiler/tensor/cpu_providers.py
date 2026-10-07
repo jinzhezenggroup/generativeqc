@@ -62,6 +62,12 @@ def cpu_matrix_contraction(request: LoweringRequest) -> MatrixContraction:
     recipe = matrix_contraction(request)
     if recipe.batches != 1:
         raise ValueError("current CPU dense runtime does not expose batched GEMM")
+    for layout in recipe.layouts:
+        compact_leading_dimension = (
+            layout.columns if layout.order == "row" else layout.rows
+        )
+        if layout.leading_dimension != compact_leading_dimension:
+            raise ValueError("current CPU dense runtime requires compact matrix views")
     if recipe.layouts[2].order != "row":
         raise ValueError("current CPU dense runtime requires row-major output storage")
     return recipe
