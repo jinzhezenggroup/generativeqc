@@ -51,6 +51,7 @@ from generativeqc_compiler.integral import (
     evaluate_fused_shell_value,
     schedule_candidates,
 )
+from generativeqc_compiler.integral.capabilities import CAPABILITY_K_BLOCK_FOCK
 from generativeqc_compiler.integral.autotune import (
     _production_fock_schedule_index,
     _requested_schedule_kinds,
@@ -501,9 +502,13 @@ def test_packed_restricted_raw_k_contracts_shell_blocks(
         schedule=packed,
         target=TEST_CUDA_TARGET,
     )
-    source = emit_shell_class_fused_cuda(spec, plan)
+    incumbent = emit_shell_class_fused_cuda(spec, plan)
+    source = emit_shell_class_fused_cuda(
+        spec, plan, capabilities=(CAPABILITY_K_BLOCK_FOCK,)
+    )
     class_name = spec.name[0].upper() + spec.name[1:]
 
+    assert "double exchange_block[" not in incumbent
     assert f"double exchange_block[{expected_doubles}];" in source
     assert "if constexpr (!Unrestricted)" in source
     assert "const bool raw_exchange_only =" in source
@@ -531,7 +536,9 @@ def test_packed_restricted_raw_k_block_storage_is_bounded() -> None:
         schedule=packed,
         target=TEST_CUDA_TARGET,
     )
-    source = emit_shell_class_fused_cuda(DPPP_SPEC, plan)
+    source = emit_shell_class_fused_cuda(
+        DPPP_SPEC, plan, capabilities=(CAPABILITY_K_BLOCK_FOCK,)
+    )
 
     assert "double exchange_block[" not in source
     assert "const bool raw_exchange_only =" not in source
