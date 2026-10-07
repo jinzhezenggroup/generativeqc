@@ -444,7 +444,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
         ),
         "grid_cache_sha256": (
-            "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
+            "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (

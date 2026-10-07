@@ -103,6 +103,33 @@ See the [CUDA quadrature decision](../../.agents/notes/implemented/performance/2
 
 `grid.explicit(max_points=...)` is a guarded small-grid exporter. `ExplicitGrid`
 stores exact points, weights, owners, provenance and a verified content hash.
+The default `identity_version=1` and version-1 JSON import retain the historical
+canonical-JSON SHA256 contract. Opting into `identity_version=2` avoids expanding
+the quadrature into Python lists merely to establish internal identity. Native
+KS snapshot binding selects this typed version, including its zero-retention
+budget fallback. `record()` and `write()` still explicitly materialize JSON;
+`read()` verifies either version, without silently translating a saved identity.
+
+Version 2 normalizes finite inputs to immutable C-order FP64 arrays. Its SHA256
+input is the ASCII hexadecimal `canonical_hash` of the following metadata,
+followed by point, weight, and owner buffers in that order:
+
+- `schema="generativeqc.explicit-grid"`, `version=2`, and `order="C"`;
+- `points={"shape": [N, 3], "dtype": "<f8", "unit": "bohr"}`;
+- `weights={"shape": [N], "dtype": "<f8", "unit": "bohr^3"}`;
+- `owners={"shape": [N], "dtype": "<i4"}`; and
+- the frozen JSON `provenance` supplied at construction.
+
+Buffers use little-endian IEEE754 binary64 and signed 32-bit owner integers;
+owners must remain in `[0, 2**31-1]`. Construction hashes bounded chunks rather
+than another full-grid serialization. Input dtype, layout and endianness do not
+alter normalized identity; signed zero does. Identity version is an explicit
+compatibility domain: equivalent v1/v2 values have different hashes. A typed
+identity never substitutes for validating a current native snapshot. Retained
+snapshot reuse still compares every current coordinate, weight and owner, and
+native geometry, state epoch and derivative contracts remain independently
+checked.
+
 Independent tests pass identical unpartitioned atomic data to PySCF, compare
 its native partition weights, then compare every AO/feature on identical
 points. Separate refinement tests integrate known Gaussian/Slater functions
