@@ -16,6 +16,11 @@ from generativeqc_compiler.cc.occupied_triples_response import (
 from generativeqc_compiler.cc.triples import _LABELS, VP
 from generativeqc_compiler.tensor import execute
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from test_df_occupied_triples import case
+from test_df_occupied_triples_fock import (
+    native_combined_probe,  # noqa: F401 -- pytest fixture
+    run_combined,
+)
 
 
 def original_feed(feed: dict, coordinates: tuple[int, ...]) -> dict:
@@ -177,3 +182,34 @@ def test_native_scalar_fusion_preserves_fp64_gathers(
     expected = unfused(feed)
     for name, actual in zip(outputs, result, strict=True):
         np.testing.assert_allclose(actual, expected[name], atol=2e-14, rtol=2e-14)
+
+
+def test_fused_native_energy_tree_spans_multiple_ctas(
+    native_combined_probe: object,  # noqa: F811 -- imported pytest fixture
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise partial-block energy reduction and all occupied degeneracies."""
+    from generativeqc_compiler.cc.triples import triples_energy
+
+    inputs, _ = case(3, 9, 4)
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    status, legacy, values, legacy_counts, error = run_combined(
+        native_combined_probe, inputs
+    )
+    assert status == 0, error
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "1")
+    status, fused, fused_values, counts, error = run_combined(
+        native_combined_probe, inputs
+    )
+    assert status == 0, error
+    assert counts[15] == 1
+    points = int(counts[17]) * 9**3
+    partials = int(counts[22]) - 12 * points
+    assert partials > counts[17]
+    assert counts[1] == legacy_counts[1]
+    for actual, expected in zip(fused, legacy, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+    conventional = np.einsum("Qia,Qfb->iafb", inputs[0], inputs[1])
+    energy = triples_energy(3, 9, conventional, *inputs[2:])
+    np.testing.assert_allclose(fused_values[0], energy, atol=2e-12, rtol=0)
+    np.testing.assert_allclose(fused_values[0], values[0], atol=2e-12, rtol=0)

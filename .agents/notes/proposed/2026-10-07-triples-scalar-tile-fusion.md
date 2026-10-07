@@ -99,6 +99,31 @@ tighter reference solely to address the new trailing option. This benchmark
 fix does not change the already-qualified native scientific library. The
 stopped sample is not an endpoint timing or numerical rejection.
 
+Slurm job **2640** adds a 3-occupied/9-virtual native gate spanning multiple
+energy CTAs and all 6/2/1 occupied degeneracies: **1 passed**. All seven
+cotangents and full-Fock outputs agree with the retained unfused native owner;
+energy independently agrees with the original virtual-triangle triples
+inventory. The extra test source and library hashes are retained separately
+under `multi-cta-2640/`, without changing the running endpoint source snapshot.
+
+The first completed 28-AO ordered cold pair in job **2639** reports native
+E+F wall time **44.404422247 -> 44.121034643 s**, with triples composition
+**1.235489814 -> 1.069295430 s**. Total and triples energies are identical;
+maximum force difference is **4.884981308350689e-14**. Maximum independently
+reported Z residual is `2.8168603803345195e-13`, and stationarity is
+`3.8276044660168207e-13`. The scalar-region launch ledger is **12,320 -> 1,540**
+(1,540 triangles; 10,780 launches removed); seed workspace is
+**28,672 -> 49,152 bytes**. This one ordered pair is not a statistically
+qualified endpoint speedup and does not replace the 56/230-AO gates or a
+complete Nsight launch/transfer census.
+
+Offline `cuobjdump` inspection of the same native library reports **244
+registers/thread, 3,072 shared bytes, zero stack and zero local bytes** for
+the fused kernel. Register pressure is high despite the absence of spills;
+modeled arithmetic reduction must not be interpreted as a hardware throughput
+win. Retain the opt-in policy pending larger endpoint evidence rather than
+assuming a CTA/register-limit-only experiment will establish acceptance.
+
 Raw source/build/test/endpoint evidence stays ignored under
 `.artifacts/1763-tile-fusion/` and on n2 under
 `/data/jzzeng/triples-fusion1763-20261007/`. No Release or external backup is
