@@ -268,10 +268,11 @@ void launch_add_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, c
   add_matrix_kernel<<<grid, block, shared_bytes, stream>>>(elements, addend, destination);
 }
 
-void launch_prepare_incremental_density_kernel(
-    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::size_t elements,
-    const double* density, const double* anchor_density, double* delta_density,
-    double* max_abs_delta_density) {
+void launch_prepare_incremental_density_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
+                                               cudaStream_t stream, std::size_t elements,
+                                               const double* density, const double* anchor_density,
+                                               double* delta_density,
+                                               double* max_abs_delta_density) {
   prepare_incremental_density_kernel<<<grid, block, shared_bytes, stream>>>(
       elements, density, anchor_density, delta_density, max_abs_delta_density);
 }
