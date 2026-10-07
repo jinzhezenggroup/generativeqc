@@ -60,6 +60,9 @@ myst_heading_anchors = 3
 autosummary_generate = True
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
+# Public aliases can expose the same canonical object through several modules.
+# Keep annotation targets fully qualified so Sphinx resolves them deterministically.
+autodoc_typehints_format = "fully-qualified"
 # The API reference documents the optional PyTorch integration without making
 # the documentation environment install the large optional runtime.
 autodoc_mock_imports = ["torch"]
