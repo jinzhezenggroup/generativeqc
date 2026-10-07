@@ -39,7 +39,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
-        "descriptor.density_tolerance}; }\n"
+        "descriptor.density_tolerance,fused_triples_scalar_response}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -86,6 +86,7 @@ struct DFCCSDTResult {
   std::size_t batch_limit, ccsd_batch_limit;
   bool derived_denominators, packed_diis, parallel_gap, request_gap;
   double reference_energy_tolerance{}, reference_density_tolerance{};
+  bool fused_scalar{};
 };
 """
         + declaration
@@ -324,7 +325,23 @@ int main() {
                       "0","1",tolerance};
     try { (void)select(22,bad);return 38; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,23}) {
+  for(const char* fused : {"0", "1"}) for(const char* tolerance : {"auto", "1e-13"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0",tolerance,fused};
+    const auto result = select(23,selected);
+    if(result.fused_scalar != (fused[0]=='1') || select(22,selected).fused_scalar) return 39;
+    if(std::string(tolerance)=="auto" &&
+       (result.reference_energy_tolerance != 1e-12 || result.reference_density_tolerance != 1e-11))
+      return 40;
+  }
+  for(const char* token : {"", "2", "true", "1x"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0","1","auto",
+                      "1","0","auto",token};
+    try { (void)select(23,bad);return 41; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,24}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }
