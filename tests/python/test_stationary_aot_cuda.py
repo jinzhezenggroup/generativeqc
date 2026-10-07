@@ -37,14 +37,11 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
     assert os.environ.get("SLURM_JOB_ID"), (
         "real GPU tests require finite Slurm allocations"
     )
-    if basis_name == "def2-svp":
-        atoms = [("O", (0.02, -0.01, 0.0)), ("H", (0.04, 0.02, 1.81))]
-        if spin == "rks":
-            atoms.append(("H", (1.72, 0.01, -0.58)))
-    else:
-        atoms = [("H", (0.13, -0.21, -1.3)), ("H", (-0.08, 0.16, 0.24))]
-        if spin == "uks":
-            atoms.append(("H", (0.18, -0.04, 1.51)))
+    # Oxygen exercises p primitives even in the compact s/p artifact; the
+    # spherical def2-SVP cases additionally exercise the full d-shell domain.
+    atoms = [("O", (0.02, -0.01, 0.0)), ("H", (0.04, 0.02, 1.81))]
+    if spin == "rks":
+        atoms.append(("H", (1.72, 0.01, -0.58)))
     multiplicity = 2 if spin == "uks" else 1
     calculator = Calculator(
         method=f"{method}-{spin}",

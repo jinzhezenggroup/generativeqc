@@ -119,6 +119,17 @@ Use repeated `--profile` arguments to `tools/audit_stationary_aot_package.py`
 when auditing a deliberately restricted package; both domains remain mandatory
 for each declared profile, so missing files cannot silently reduce the audit.
 
+The explicit hardware gate is `tests/python/test_stationary_aot_cuda.py`.
+Set `GENERATIVEQC_STATIONARY_AOT_CUDA_TEST=1` inside a finite Slurm allocation
+and select the matching built native library through `GENERATIVEQC_LIBRARY`.
+It checks energy/analytic forces, prepared reuse and displacement for both
+hybrids/spins with sto-3g (including p shells) and spherical def2-SVP. It requires
+PySCF 2.14.0 / Libxc 7.0.0 only as an independent test oracle outside production
+execution. Optional `GENERATIVEQC_STATIONARY_AOT_EVIDENCE` retains endpoint
+timings, numerical errors, artifact provenance and semantic work records. This
+small-system gate does not substitute for the investigation-scale timing or
+catalog/resource qualification campaigns.
+
 ## Timeline fixture preparation
 
 The timeline benchmark prepares SCF states with density tolerance `1e-12`,
