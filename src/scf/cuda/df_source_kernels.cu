@@ -300,8 +300,8 @@ void launch_build_cuda_df_integrals_kernel(
     DeviceBatch batch, std::size_t orbital_count, std::size_t auxiliary_count,
     std::size_t dummy_index, std::size_t metric_elements, std::size_t three_center_elements,
     std::size_t system_base, std::size_t launch_batch_size, std::int64_t derivative_coordinate,
-    integrals::CoulombRange range, double omega, double* metric, double* three_center,
-    unsigned math, unsigned lanes) {
+    double* metric, double* three_center, unsigned math, unsigned lanes,
+    integrals::CoulombRange range, double omega) {
   if (derivative) {
     build_cuda_df_integrals_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch, orbital_count, auxiliary_count, dummy_index, metric_elements, three_center_elements,
@@ -355,7 +355,7 @@ void launch_build_cuda_df_metric_source_kernel(
     std::size_t public_naux, std::size_t dummy_index, std::size_t system,
     std::size_t auxiliary_row_begin, std::size_t auxiliary_row_count,
     std::int64_t derivative_coordinate, const DfPublicAoExpansion* auxiliary_to_cartesian,
-    integrals::CoulombRange range, double omega, double* output, unsigned mapping) {
+    double* output, unsigned mapping, integrals::CoulombRange range, double omega) {
   if (derivative) {
     build_cuda_df_metric_source_kernel<true><<<grid, block, shared_bytes, stream>>>(
         batch, cartesian_orbital_count, cartesian_auxiliary_count, public_naux, dummy_index, system,
@@ -377,8 +377,8 @@ void launch_build_cuda_df_transformed_tile_kernel(
     std::size_t auxiliary_count, std::int64_t derivative_coordinate,
     const DfPublicAoExpansion* orbital_to_cartesian,
     const DfPublicAoExpansion* auxiliary_to_cartesian, const double* inverse_square_root,
-    bool apply_metric_transform, integrals::CoulombRange range, double omega, double* output,
-    unsigned mapping, unsigned math, double* low_output) {
+    bool apply_metric_transform, double* output, unsigned mapping, unsigned math,
+    double* low_output, integrals::CoulombRange range, double omega) {
   if (low_output) {
     build_cuda_df_transformed_tile_kernel<false, 0, true><<<grid, block, shared_bytes, stream>>>(
         batch, cartesian_orbital_count, cartesian_auxiliary_count, public_nbf, public_naux,
