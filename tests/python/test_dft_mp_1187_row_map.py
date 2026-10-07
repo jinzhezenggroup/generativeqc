@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from test_dft_mp_v1_contract import _campaign, _file, _run_record
 
+from tools.dft_mp_v1 import map_1187_hybrid_rows as hybrid_rows
 from tools.dft_mp_v1 import validate
 from tools.dft_mp_v1.freeze_contract import canonical
 from tools.dft_mp_v1.map_1187_hybrid_rows import map_rows
@@ -122,6 +123,45 @@ def test_valid_row_import_and_invalid_row_isolation(tmp_path: Path) -> None:
     report = map_rows(receipts=(path,))
     assert report["passed_required_rows"] == 1
     assert ids[1] in report["receipt_audits"][str(path)]["rejected_rows"]
+
+
+@pytest.mark.parametrize("alias", ("repeated", "relative", "symlink"))
+def test_repeated_receipt_inputs_are_audited_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, alias: str
+) -> None:
+    first_id = "pbe0/rks/water/fp64_energy"
+    second_id = "pbe0/rks/water/fp64_energy_forces"
+    first = _receipt(tmp_path / "first", (first_id,))
+    second = _receipt(tmp_path / "second", (second_id,))
+    replacement = json.loads(second.read_bytes())
+    replacement["campaign"]["hardware"]["device_uuid"] = "another-device"
+    second.write_bytes(canonical(replacement))
+    assert hybrid_rows._accepted_rows(second, validate.manifest())[0] == {second_id}
+
+    repeated = first
+    if alias == "relative":
+        monkeypatch.chdir(tmp_path)
+        repeated = first.relative_to(tmp_path)
+    elif alias == "symlink":
+        repeated = tmp_path / "receipt-link.json"
+        repeated.symlink_to(first)
+
+    original = hybrid_rows._accepted_rows
+    audited = []
+
+    def replace_after_audit(path: Path, contract: dict) -> tuple:
+        result = original(path, contract)
+        audited.append(path)
+        first.write_bytes(second.read_bytes())
+        return result
+
+    monkeypatch.setattr(hybrid_rows, "_accepted_rows", replace_after_audit)
+    report = map_rows(receipts=(first, repeated))
+    assert len(audited) == 1
+    assert report["passed_required_rows"] == 1
+    assert report["aggregation_error"] is None
+    assert report["receipt_audits"][str(first)]["accepted_rows"] == [first_id]
+    assert len(report["receipt_audits"]) == 1
 
 
 @pytest.mark.parametrize("phase", ("audit", "row"))

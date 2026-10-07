@@ -34,6 +34,9 @@ library, AOT artifact, adapter, build record, conditions, and hardware identitie
 Paths may differ, but hashes must match. Incompatible identities clear aggregate
 coverage and remain visible in the individual audits. These row passes do not
 certify the overall performance gate or #1190's reviewed final acceptance.
+Receipt inputs are resolved and deduplicated before auditing, including relative
+and symlink aliases; the audit key retains the first supplied spelling. A producer
+replacing a repeated input between audits cannot hide a prior campaign identity.
 A campaign `RUNNING`, a static capacity result, or
 an unbound historical benchmark remains missing. No installed hybrid receipt
 was found in the checked-in evidence at this source revision.
@@ -45,8 +48,11 @@ receipts can qualify. That shared contract work is outside this issue-scoped
 mapper's ownership. The 20 GiB budget and all scientific gates remain intact.
 
 Validation used Python 3.11.16 in the exclusive qz CPU checkout at the base
-above. The mapper and shared contract suites reported 51 passed and 4 skipped
+above. After the repeated-input repair on 2026-10-07, the mapper and shared
+contract suites reported 54 passed and 4 skipped
 (the skipped input-generator checks require RDKit). Ruff check and format check
 and the evidence-retention check passed. Mapper, catalog, and test SHA-256 hashes
 matched the local files. This validation did not compile native/CUDA code or run
 a GPU qualification campaign.
+The three real-receipt repeated-path, relative-alias, and symlink-alias regressions
+failed before the repair and passed afterward.

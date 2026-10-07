@@ -167,8 +167,13 @@ def map_rows(catalog: Path = CATALOG, receipts: tuple[Path, ...] = ()) -> dict:
         )
     receipt_results = {}
     accepted = set()
+    # Freeze and deduplicate path identities before producers can replace receipts
+    # between audits. Keep the first supplied spelling for the public audit key.
+    receipt_paths = {}
     for path in receipts:
-        passing, rejected, identity, error = _accepted_rows(path, contract)
+        receipt_paths.setdefault(path.resolve(), path)
+    for resolved, path in receipt_paths.items():
+        passing, rejected, identity, error = _accepted_rows(resolved, contract)
         receipt_results[str(path)] = {
             "accepted_rows": sorted(passing),
             "rejected_rows": rejected,
