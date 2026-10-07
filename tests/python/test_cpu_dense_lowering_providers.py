@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.backend import TargetInfo
 from generativeqc_compiler.common.specialization import TargetCapabilities
@@ -24,6 +25,9 @@ from generativeqc_compiler.tensor.cuda_cutlass import CutlassAotProvider
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.matrix_view import matrix_contraction
 
+if TYPE_CHECKING:
+    from generativeqc_compiler.common.lowering_provider import LoweringRequest
+
 CPU_TARGET = TargetCapabilities(
     TargetInfo("cpu", "x86_64-generic", None, 1, None),
     features=(
@@ -37,7 +41,9 @@ CPU_TARGET = TargetCapabilities(
 )
 
 
-def _requests(equation: str = "mk,kn->mn", dtype: str = "float64"):
+def _requests(
+    equation: str = "mk,kn->mn", dtype: str = "float64"
+) -> tuple[LoweringRequest, LoweringRequest]:
     sizes = {"b": 2, "m": 3, "k": 5, "n": 7}
     axes = {
         label: Index(label, IndexSpace(label, "batch", size))
@@ -121,6 +127,13 @@ def test_current_cpu_runtime_limits_are_explicit_provider_rejections() -> None:
     offers = cpu_dense_provider_candidates(fp32, CPU_TARGET)
     assert {row.status for row in offers} == {"unsupported"}
     assert all(row.reason and "FP64" in row.reason for row in offers)
+
+    padded, _ = _requests()
+    a, b, output = padded.operands
+    padded = replace(padded, operands=(replace(a, strides=(6, 1)), b, output))
+    offers = cpu_dense_provider_candidates(padded, CPU_TARGET)
+    assert {row.status for row in offers} == {"unsupported"}
+    assert all(row.reason and "compact matrix views" in row.reason for row in offers)
 
 
 def test_cuda_matrix_providers_do_not_accept_cpu_requests_after_shared_proof() -> None:
