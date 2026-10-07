@@ -196,7 +196,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE]]]]]]]]]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1]]]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
@@ -230,9 +230,11 @@ not by itself block these defaults; its strict numerical gates remain unchanged.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
 
-Argument twenty-three opts into bounded primal/W/V scalar-tile fusion (`0` or
-`1`, default `0`), after the existing RHF tolerance arguments twenty-one and
-twenty-two. The internal complete-force owner forwards the same explicit
+Argument twenty-two opts into bounded primal/W/V scalar-tile fusion (`0` or
+`1`, default `0`), after the existing RHF tolerance argument twenty-one. Use
+`auto` at argument twenty-one to retain the ordinary `1e-12` energy / `1e-11`
+density criteria when selecting fusion. The internal complete-force owner
+forwards the same explicit
 `fused_triples_scalar_response` control to the joint triples response owner.
 It applies only when argument twenty is `0`: a fixed-canonical consumer asking
 for epsilon cotangents retains the all-output schedule. Public method defaults
@@ -258,7 +260,8 @@ hardware transactions or a complete-endpoint memory/launch census; both
 schedules write the same twelve W/V seed elements per virtual point.
 
 Argument twenty-one optionally sets both RHF energy and density tolerances to a
-finite positive value no larger than `1e-12`. Without it, the benchmark retains
+finite positive value no larger than `1e-12`. Without it or with `auto`, the
+benchmark retains
 its original `1e-12` energy and `1e-11` density tolerances. This benchmark-only
 control cannot loosen either criterion or change CC, Lambda, Z, stationarity,
 or paired-force acceptance gates. JSON records both requested tolerances and

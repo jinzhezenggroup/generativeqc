@@ -1,6 +1,6 @@
 # Proposal: fuse the occupied triples primal and W/V seed traversals
 
-Status: proposed, opt-in only; complete-endpoint qualification pending
+Status: proposed, opt-in only; native numerical gates passed, endpoint qualification pending
 Date: 2026-10-07
 Related: #1763, merged #1999, #2042, #2045; deferred repeatability issue #2019
 
@@ -77,6 +77,27 @@ Local CPU qualification: 38 passed, 86 skipped (real-GPU tests require a finite
 Slurm allocation). Compiler structure, CUDA ownership (333 files), vendor,
 electronic-structure, provider-selection, and default-promotion inventories
 were checked without errors. These CPU/structure results are not GPU gates.
+
+On October 7, n2 Slurm job **2637** qualifies the generated CUDA owner:
+**52 passed** across complete independent energy/force directions, original
+triples energy/cotangents, full-Fock parity, compiler scalar checks, and the
+fused/legacy exact-budget fallback tests. The validation adapter explicitly
+requires selection of fusion for gap-free complete force calls. Memcheck runs
+the two combined variants and admission/fallback case: **3 passed**, **0 errors**.
+The allocation retains Slurm's `CUDA_VISIBLE_DEVICES=1` on an RTX PRO 6000
+Blackwell (driver 595.91.07). Native library SHA256 is
+`07273d961d77c1cd2f42812882174db1a03f670275c230016a1d5d56bcf98f4d`.
+Whole-source verification and immutable receipts remain in
+`qualification-2637/`; this is real-device evidence, not a modeled gate.
+
+The first endpoint allocation (2638) stops at command-line validation before
+molecular/GPU execution because the existing argument-count ceiling did not
+include the new selector. The selector is appended at argument 22, its arity
+is covered by 17 compiled-executable CLI tests, and `auto` at argument 21
+retains the original RHF energy/density criteria rather than requiring a
+tighter reference solely to address the new trailing option. This benchmark
+fix does not change the already-qualified native scientific library. The
+stopped sample is not an endpoint timing or numerical rejection.
 
 Raw source/build/test/endpoint evidence stays ignored under
 `.artifacts/1763-tile-fusion/` and on n2 under
