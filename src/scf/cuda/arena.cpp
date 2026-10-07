@@ -292,6 +292,10 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
                                        made.incremental_delta_updates) ||
       !workspace.append<std::uint8_t>(incremental_direct_jk ? batch_size : 0,
                                       made.incremental_full_build) ||
+      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+                                            made.incremental_full_build_count) ||
+      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+                                            made.incremental_delta_build_count) ||
       !workspace.append<double>(incremental_direct_jk ? batch_size : 0,
                                 made.incremental_max_abs_delta_density) ||
       !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
