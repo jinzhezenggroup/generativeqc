@@ -396,7 +396,14 @@ def test_combined_response_reuses_one_input_upload(
     assert counts[4] <= 1 << 30 and counts[5] <= 1 << 30
     assert counts[5] >= standalone_counts[0]
 
-    exact_budget = int(max(counts[4], counts[5]))
+    status, minimal, _, minimal_counts, error = run_combined(
+        native_combined_probe, inputs, caller_bytes=caller, rows=1, panels=1
+    )
+    assert status == 0, error
+    for actual, expected in zip(minimal, combined, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    exact_budget = int(max(minimal_counts[4], minimal_counts[5]))
+
     status, exact, _, exact_counts, error = run_combined(
         native_combined_probe, inputs, budget=exact_budget, caller_bytes=caller
     )
