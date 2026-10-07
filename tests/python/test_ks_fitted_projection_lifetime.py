@@ -114,6 +114,8 @@ struct Owner {
   double *x=values, *warm_orbitals=values, *proposal=values;
   unsigned char enabled=1, *final_enabled=&enabled;
   struct { unsigned fitted_final_projection_leases=0; } movement;
+  void multiply_spin(unsigned, const double*, bool, bool, const double*, bool,
+                     const std::uint8_t*, double*) { ++launches; }
   CudaKsFinalStateToken token() const { return {1, final_generation}; }
 """
     unit += _definition(owner, "  void retain_final_fitted_projection()")
