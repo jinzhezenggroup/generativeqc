@@ -284,7 +284,7 @@ int main() {{
 
 
 def test_prepared_schedule_parser_is_explicit_and_fail_closed(tmp_path: Path) -> None:
-    """A frozen selection is unchanged by subsequent process-environment edits."""
+    """Default fill and explicit rollback freeze before later environment edits."""
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
@@ -309,14 +309,17 @@ int main() {
   using Schedule = generativeqc::scf::detail::GeneratedExchangeTaskSchedule;
   using generativeqc::scf::cuda_execution::prepare_direct_exchange_task_schedule;
   constexpr const char* variable = "GENERATIVEQC_DIRECT_K_TASK_SCHEDULE";
+  const generativeqc::scf::detail::GeneratedShellPairStream fallback_topology{};
+  assert(fallback_topology.exchange_task_schedule == Schedule::Incumbent);
   unsetenv(variable);
-  assert(prepare_direct_exchange_task_schedule() == Schedule::Incumbent);
-  for (const char* value : {"", "incumbent"}) {
-    setenv(variable, value, 1);
-    assert(prepare_direct_exchange_task_schedule() == Schedule::Incumbent);
-  }
-  setenv(variable, "fill", 1);
   const auto frozen = prepare_direct_exchange_task_schedule();
+  assert(frozen == Schedule::Fill);
+  for (const char* value : {"", "fill"}) {
+    setenv(variable, value, 1);
+    assert(prepare_direct_exchange_task_schedule() == Schedule::Fill);
+  }
+  setenv(variable, "incumbent", 1);
+  assert(prepare_direct_exchange_task_schedule() == Schedule::Incumbent);
   assert(frozen == Schedule::Fill);
   setenv(variable, "primitive", 1);
   assert(frozen == Schedule::Fill);

@@ -63,15 +63,17 @@ native unit J and absent K to the executable semilocal XC integrator; LDA and
 PBE retain independent fixed-density fixture and energy-variation checks.
 See [the public contract](fock_build.md) for ownership and output semantics.
 
-### Experimental prepared exact-K task scheduling
+### Prepared exact-K task scheduling
 
 The generated raw exact-K owner freezes
 `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive` at preparation.
-Unset, empty and `incumbent` retain per-original-chunk execution. `fill` holds
+Unset and empty select `fill` by default. Explicit `incumbent` retains
+per-original-chunk execution for rollback and comparisons. `fill` holds
 accepted identities and contribution bounds across chunks in a bounded 2W
 arena, consumes full W-task batches, and flushes the final partial batch.
-`primitive` additionally stably groups the admitted lookahead window by cached
-ket primitive-pair count; the bra and angular class are fixed within that queue.
+Experimental `primitive` additionally stably groups the admitted lookahead
+window by cached ket primitive-pair count; the bra and angular class are fixed
+within that queue.
 Unknown values fail at preparation. Change the setting before creating a new
 owner, not while replaying an existing one.
 
@@ -84,12 +86,13 @@ contracts do not change, and no quartet-domain allocation is introduced.
 Explicit `rys` or `block` Fock lowerings retain their own workers; the queue
 control applies only to classes using the incumbent generated lowering.
 
-These are qualification controls, not promoted defaults. Compare fixed-density
-matrices/work counts and complete cold/warm/moved energy-plus-force endpoints,
-including preparation and actual SCF trajectories. A sparse synthetic-density
+Cross-chunk filling is the default; primitive grouping remains opt-in. Compare
+fixed-density matrices/work counts and complete cold/warm/moved energy-plus-force
+endpoints, including preparation and actual SCF trajectories. A sparse synthetic-density
 win is not a complete cold-performance claim. Rationale and development evidence
 are retained in the
-[queue decision note](../../.agents/notes/implemented/performance/2026-10-07-direct-k-cross-chunk-queue.md).
+[queue decision note](../../.agents/notes/implemented/performance/2026-10-07-direct-k-cross-chunk-queue.md)
+and [default-selection decision](../../.agents/notes/implemented/performance/2026-10-07-direct-k-fill-default.md).
 
 The [production evidence](../../benchmarks/results/fock-strategies/README.md)
 compares 40 complete endpoints per backend against the audit baseline. Energies

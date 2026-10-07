@@ -4,6 +4,10 @@ Status: implemented, experimental; not promoted
 Date: 2026-10-07
 References: #1892, #2059, #2060, #2065
 
+The default-selection decision is superseded by
+[default exact-K filling](2026-10-07-direct-k-fill-default.md). The original
+opt-in decision and qualification record below are retained as historical evidence.
+
 ## Problem
 
 #2060 moves survivors into the first lanes/subgroups of each original candidate
