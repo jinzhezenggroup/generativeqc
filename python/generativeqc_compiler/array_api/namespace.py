@@ -8,7 +8,7 @@ from fractions import Fraction
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
-from generativeqc_compiler.tensor.types import Index, IndexSpace
+from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 
 from .array import ExactScalar, VibeArray
 
@@ -175,21 +175,50 @@ def _generic_binary(
     return _broadcast_generic(left, shape), _broadcast_generic(right, shape)
 
 
+def _generic_exact_scalar(value: object, *, dtype: str, name: str) -> VibeArray:
+    factor = _exact(value, name)
+    spec = TensorSpec(dtype=dtype, role="constant")
+    return VibeArray(tensor_ir.constant(factor, spec))
+
+
+def _generic_array_and_scalar(
+    array: VibeArray, scalar: object, *, name: str
+) -> tuple[VibeArray, VibeArray]:
+    if not _is_generic_array(array):
+        raise TypeError(f"{name} requires two symbolic arrays for scientific domains")
+    scalar_array = _generic_exact_scalar(scalar, dtype=array.dtype, name=f"{name} scalar")
+    return array, _broadcast_generic(scalar_array, array.shape)
+
+
 def add(x1: object, x2: object) -> VibeArray:
     """Elementwise add with standard broadcasting for generic public arrays."""
-    left, right = _binary_arrays(x1, x2, "add")
-    operands = _generic_binary(left, right)
-    if operands is not None:
-        left, right = operands
+    if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
+        left, right = x1, x2
+        operands = _generic_binary(left, right)
+        if operands is not None:
+            left, right = operands
+    elif isinstance(x1, VibeArray):
+        left, right = _generic_array_and_scalar(x1, x2, name="add")
+    elif isinstance(x2, VibeArray):
+        right, left = _generic_array_and_scalar(x2, x1, name="add")
+    else:
+        raise TypeError("add requires at least one symbolic VibeArray")
     return _canonical_generic(VibeArray(tensor_ir.add(left.node, right.node)))
 
 
 def subtract(x1: object, x2: object) -> VibeArray:
     """Elementwise subtraction with standard broadcasting for generic arrays."""
-    left, right = _binary_arrays(x1, x2, "subtract")
-    operands = _generic_binary(left, right)
-    if operands is not None:
-        left, right = operands
+    if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
+        left, right = x1, x2
+        operands = _generic_binary(left, right)
+        if operands is not None:
+            left, right = operands
+    elif isinstance(x1, VibeArray):
+        left, right = _generic_array_and_scalar(x1, x2, name="subtract")
+    elif isinstance(x2, VibeArray):
+        right, left = _generic_array_and_scalar(x2, x1, name="subtract")
+    else:
+        raise TypeError("subtract requires at least one symbolic VibeArray")
     return _canonical_generic(
         VibeArray(tensor_ir.add(left.node, right.node, coefficients=(1, -1)))
     )
@@ -224,10 +253,8 @@ def divide(x1: object, x2: object) -> VibeArray:
             tensor_ir.add(x1.node, coefficients=(Fraction(1, 1) / denominator,))
         )
     if isinstance(x2, VibeArray):
-        raise TypeError(
-            "scalar / VibeArray is not in the initial frontend subset because "
-            "it would require an explicit domain-shaped scalar broadcast"
-        )
+        right, left = _generic_array_and_scalar(x2, x1, name="divide")
+        return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
     raise TypeError("divide requires at least one symbolic VibeArray")
 
 
@@ -399,11 +426,6 @@ def _matmul_generic(left: VibeArray, right: VibeArray) -> VibeArray:
         f"{batch_labels}{m}{n}"
     )
     result = VibeArray(tensor_ir.einsum(equation, left_work.node, right_work.node))
-    output_shape = batch + (
-        (() if left_vector else (left_work.shape[-2]))
-        if False
-        else ()
-    )
     if left_vector and right_vector:
         final_shape: tuple[int, ...] = batch
     elif left_vector:
