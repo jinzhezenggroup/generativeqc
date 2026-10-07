@@ -644,10 +644,13 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
         )
         if local_lane_state:
             state_declarations = f"""
-  // This consumer is force-inlined; lane-private state can be scalarized into
-  // registers and avoids a 32-entry shared-memory arena for one warp.
+  // Keep recurrence/task state lane-private.  Exchange survivor compaction only
+  // shares pair identities and the already-computed contribution bound.
   Generated{class_name}ShellTask stream_task;
   Generated{class_name}PackedFockLaneStorage lane_storage;
+  __shared__ std::uint32_t compact_bra_pairs[32];
+  __shared__ std::uint32_t compact_ket_pairs[32];
+  __shared__ double compact_contribution_bounds[32];
 """
             task_reference = "stream_task"
             task_pointer = "&stream_task"
@@ -657,6 +660,9 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
             state_declarations = f"""
   __shared__ Generated{class_name}ShellTask stream_tasks[32];
   __shared__ Generated{class_name}PackedFockLaneStorage lane_storage[32];
+  __shared__ std::uint32_t compact_bra_pairs[32];
+  __shared__ std::uint32_t compact_ket_pairs[32];
+  __shared__ double compact_contribution_bounds[32];
 """
             task_reference = "stream_tasks[threadIdx.x]"
             task_pointer = "stream_tasks"
@@ -710,7 +716,61 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
             topology, bra_pair, ket_pair, screening_tolerance,
             &contribution_bound);
       }}
-      if (keep) {{
+      const bool compact_exchange =
+          topology.fock_consumer ==
+              generativeqc::scf::detail::GeneratedFockConsumer::Exchange ||
+          topology.fock_consumer ==
+              generativeqc::scf::detail::GeneratedFockConsumer::HartreeFockExchange;
+      if (compact_exchange) {{
+        // K screening can leave a sparse set of live lanes.  Pack only pair
+        // identities/bounds, then let lanes [0, survivor_count) perform the
+        // expensive recurrence.  J/HF retain their established lane mapping.
+        // The one-warp launch and uniform exits/chunk bounds keep all 32
+        // lanes participating, including rejected and tail candidates.  An
+        // instantaneous active mask can omit lanes after divergent screening.
+        constexpr unsigned full_warp_mask = 0xffffffffU;
+        const unsigned survivor_mask = __ballot_sync(full_warp_mask, keep);
+        const unsigned survivor_count = __popc(survivor_mask);
+        if (keep) {{
+          const unsigned lower_lane_mask = (1U << threadIdx.x) - 1U;
+          const unsigned survivor_rank =
+              __popc(survivor_mask & lower_lane_mask);
+          compact_bra_pairs[survivor_rank] = bra_pair;
+          compact_ket_pairs[survivor_rank] = ket_pair;
+          compact_contribution_bounds[survivor_rank] = contribution_bound;
+        }}
+        __syncwarp(full_warp_mask);
+        if (threadIdx.x < survivor_count) {{
+          const std::uint32_t selected_bra_pair =
+              compact_bra_pairs[threadIdx.x];
+          const std::uint32_t selected_ket_pair =
+              compact_ket_pairs[threadIdx.x];
+          const double contribution_bound =
+              compact_contribution_bounds[threadIdx.x];
+          const std::uint32_t precision_state = {retained_state};
+          {record_precision("precision_state")}
+          {prefix}_stream_populate_task(
+              topology, selected_bra_pair, selected_ket_pair, {task_reference});
+          if (precision_state == 3U) {{
+            {
+            f'''{prefix}_packed_mixed_fock_lane<Unrestricted>(
+                  {task_pointer}, primitive_pairs, primitive_pair_offsets,
+                  ao_coefficients, atom_positions, screening_tolerance,
+                  schwarz_bounds, density, fock,
+                  {task_index}, {storage_reference});'''
+            if supports_mixed_fock
+            else "/* This shell class has no generated mixed Fock helper. */"
+        }
+          }} else {{
+            {prefix}_packed_fock_lane<Unrestricted>(
+                {task_pointer}, primitive_pairs, primitive_pair_offsets,
+                ao_coefficients, atom_positions, screening_tolerance,
+                schwarz_bounds, density, fock,
+                {task_index}, {storage_reference});
+          }}
+        }}
+        __syncwarp(full_warp_mask);
+      }} else if (keep) {{
         const std::uint32_t precision_state = {retained_state};
         {record_precision("precision_state")}
         {prefix}_stream_populate_task(
@@ -763,6 +823,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
       subgroup_storage[{tasks_per_block}];'''
         }
   __shared__ std::uint32_t stream_keep[{tasks_per_block}];
+  __shared__ std::uint32_t exchange_survivor_count;
   __shared__ std::uint32_t bra_ordinal;
   const unsigned subgroup = threadIdx.x / {subgroup_lanes}U;
   const unsigned lane = threadIdx.x % {subgroup_lanes}U;
@@ -795,6 +856,15 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
         screening_tolerance);
     for (std::uint32_t ket_base = ket_begin; ket_base < coarse_ket_end;
          ket_base += {tasks_per_block}U) {{
+      const bool compact_exchange =
+          topology.fock_consumer ==
+              generativeqc::scf::detail::GeneratedFockConsumer::Exchange ||
+          topology.fock_consumer ==
+              generativeqc::scf::detail::GeneratedFockConsumer::HartreeFockExchange;
+      if (compact_exchange) {{
+        if (threadIdx.x == 0U) exchange_survivor_count = 0U;
+        __syncthreads();
+      }}
       if (lane == 0U) {{
         const std::uint32_t ket_ordinal = ket_base + subgroup;
         std::uint32_t state = 0U;
@@ -813,15 +883,24 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
           }}
           state = keep ? {retained_state} : 0U;
           if (keep) {{
+            const std::uint32_t target_subgroup =
+                compact_exchange ? atomicAdd(&exchange_survivor_count, 1U)
+                                 : subgroup;
             {record_precision("state")}
             {prefix}_stream_populate_task(
-                topology, bra_pair, ket_pair, stream_tasks[subgroup]);
+                topology, bra_pair, ket_pair, stream_tasks[target_subgroup]);
+            stream_keep[target_subgroup] = state;
+          }} else if (!compact_exchange) {{
+            stream_keep[subgroup] = 0U;
           }}
+        }} else if (!compact_exchange) {{
+          stream_keep[subgroup] = 0U;
         }}
-        stream_keep[subgroup] = state;
       }}
       __syncthreads();
-      if (stream_keep[subgroup] == 1U) {{
+      const bool scheduled_subgroup =
+          !compact_exchange || subgroup < exchange_survivor_count;
+      if (scheduled_subgroup && stream_keep[subgroup] == 1U) {{
         {prefix}_subgroup_fock_task<Unrestricted>(
             stream_tasks, primitive_pairs, primitive_pair_offsets,
             ao_coefficients, atom_positions, screening_tolerance,
@@ -831,7 +910,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
             lane, subgroup_mask);
       }}
       {
-            f'''if (stream_keep[subgroup] == 3U) {{
+            f'''if (scheduled_subgroup && stream_keep[subgroup] == 3U) {{
         {prefix}_mixed_subgroup_fock_task<Unrestricted>(
             stream_tasks, primitive_pairs, primitive_pair_offsets,
             ao_coefficients, atom_positions, screening_tolerance,
