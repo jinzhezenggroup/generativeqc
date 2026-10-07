@@ -149,9 +149,9 @@ struct PreparedInputs {
     storage_bytes = align256(cursor);
     generativeqc_tensor::cuda_check(cudaMalloc(reinterpret_cast<void**>(&base), storage_bytes));
     try {
-      const std::array<const double**, 9> fields{
-          &values.bov, &values.bvv, &values.ovoo, &values.ovov, &values.fov,
-          &values.t1,  &values.t2,  &values.eps_o, &values.eps_v};
+      const std::array<const double**, 9> fields{&values.bov,  &values.bvv,   &values.ovoo,
+                                                 &values.ovov, &values.fov,   &values.t1,
+                                                 &values.t2,   &values.eps_o, &values.eps_v};
       for (std::size_t x = 0; x < host.size(); ++x) {
         auto* destination = base + offsets[x];
         *fields[x] = reinterpret_cast<const double*>(destination);
@@ -227,8 +227,7 @@ struct FockLayout {
   std::size_t host_bytes{}, output_bytes{}, complete{};
 };
 FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t capacity,
-                       std::size_t panels, std::size_t caller_bytes,
-                       bool external_inputs = false) {
+                       std::size_t panels, std::size_t caller_bytes, bool external_inputs = false) {
   FockLayout r;
   r.value = layout(o, v, q, panels, 0, 0, provider_allowance, blas_workspace, external_inputs);
   auto& p = r.value;
@@ -542,16 +541,15 @@ static DFCudaResponseResult pullback_df_cuda_impl(
                                                      &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
     const std::array<double**, 9> output_fields{&out.bov, &out.bvv, &out.ovoo,  &out.ovov, &out.fov,
                                                 &out.t1,  &out.t2,  &out.eps_o, &out.eps_v};
-    const std::array<const double*, 9> prepared{
-        prepared_inputs ? prepared_inputs->bov : nullptr,
-        prepared_inputs ? prepared_inputs->bvv : nullptr,
-        prepared_inputs ? prepared_inputs->ovoo : nullptr,
-        prepared_inputs ? prepared_inputs->ovov : nullptr,
-        prepared_inputs ? prepared_inputs->fov : nullptr,
-        prepared_inputs ? prepared_inputs->t1 : nullptr,
-        prepared_inputs ? prepared_inputs->t2 : nullptr,
-        prepared_inputs ? prepared_inputs->eps_o : nullptr,
-        prepared_inputs ? prepared_inputs->eps_v : nullptr};
+    const std::array<const double*, 9> prepared{prepared_inputs ? prepared_inputs->bov : nullptr,
+                                                prepared_inputs ? prepared_inputs->bvv : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovoo : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovov : nullptr,
+                                                prepared_inputs ? prepared_inputs->fov : nullptr,
+                                                prepared_inputs ? prepared_inputs->t1 : nullptr,
+                                                prepared_inputs ? prepared_inputs->t2 : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_o : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_v : nullptr};
     auto pointer = [&](std::size_t offset) {
       return reinterpret_cast<double*>(context.arena + offset);
     };
@@ -748,14 +746,15 @@ static DFCudaResponseResult pullback_df_cuda_impl(
   return result;
 }
 
-DFCudaResponseResult pullback_df_cuda(
-    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
-    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
-    const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
-    std::size_t caller_bytes, std::size_t max_panel_buffers, bool parallel_gap_reduction,
-    bool include_gap_response) {
-  return pullback_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v,
-                               threshold, max_bytes, device, caller_bytes, max_panel_buffers,
+DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                      const double* bov, const double* bvv, const double* ovoo,
+                                      const double* ovov, const double* fov, const double* t1,
+                                      const double* t2, const double* eps_o, const double* eps_v,
+                                      double threshold, std::size_t max_bytes, int device,
+                                      std::size_t caller_bytes, std::size_t max_panel_buffers,
+                                      bool parallel_gap_reduction, bool include_gap_response) {
+  return pullback_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold,
+                               max_bytes, device, caller_bytes, max_panel_buffers,
                                parallel_gap_reduction, include_gap_response, nullptr);
 }
 
@@ -782,8 +781,7 @@ static DFCudaFockResult fock_response_df_cuda_impl(
     if (capacity == 1)
       throw std::length_error("DF triples Fock response exceeds complete numeric budget");
     --capacity;
-    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes,
-                    prepared_inputs != nullptr);
+    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes, prepared_inputs != nullptr);
   }
   const auto& p = r.value;
   const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
@@ -806,16 +804,15 @@ static DFCudaFockResult fock_response_df_cuda_impl(
     generated_df::Inputs in;
     const std::array<const double**, 9> fields{&in.bov, &in.bvv, &in.ovoo,  &in.ovov, &in.fov,
                                                &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
-    const std::array<const double*, 9> prepared{
-        prepared_inputs ? prepared_inputs->bov : nullptr,
-        prepared_inputs ? prepared_inputs->bvv : nullptr,
-        prepared_inputs ? prepared_inputs->ovoo : nullptr,
-        prepared_inputs ? prepared_inputs->ovov : nullptr,
-        prepared_inputs ? prepared_inputs->fov : nullptr,
-        prepared_inputs ? prepared_inputs->t1 : nullptr,
-        prepared_inputs ? prepared_inputs->t2 : nullptr,
-        prepared_inputs ? prepared_inputs->eps_o : nullptr,
-        prepared_inputs ? prepared_inputs->eps_v : nullptr};
+    const std::array<const double*, 9> prepared{prepared_inputs ? prepared_inputs->bov : nullptr,
+                                                prepared_inputs ? prepared_inputs->bvv : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovoo : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovov : nullptr,
+                                                prepared_inputs ? prepared_inputs->fov : nullptr,
+                                                prepared_inputs ? prepared_inputs->t1 : nullptr,
+                                                prepared_inputs ? prepared_inputs->t2 : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_o : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_v : nullptr};
     for (std::size_t x = 0; x < 9; ++x) {
       if (prepared_inputs) {
         *fields[x] = prepared[x];
@@ -991,8 +988,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
 
   const auto fock_caller = checked_add(prepared_caller, response_plan.output_bytes);
   auto page_capacity = max_page_rows ? std::min(o, max_page_rows) : o;
-  auto fock_plan =
-      fock_layout(o, v, q, page_capacity, max_panel_buffers, fock_caller, true);
+  auto fock_plan = fock_layout(o, v, q, page_capacity, max_panel_buffers, fock_caller, true);
   while (fock_plan.complete > max_bytes) {
     if (fock_plan.value.panel_capacity > 1) {
       fock_plan = fock_layout(o, v, q, page_capacity, 1, fock_caller, true);
@@ -1001,8 +997,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     if (page_capacity == 1)
       throw std::length_error("combined DF triples Fock response exceeds complete numeric budget");
     --page_capacity;
-    fock_plan =
-        fock_layout(o, v, q, page_capacity, max_panel_buffers, fock_caller, true);
+    fock_plan = fock_layout(o, v, q, page_capacity, max_panel_buffers, fock_caller, true);
   }
 
   runtime::CudaDeviceScope device_scope(device);
@@ -1011,17 +1006,17 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   DFCudaCombinedResponseResult result;
   result.shared_input_device_bytes = prepared.storage_bytes;
   result.shared_h2d_bytes = prepared.h2d_bytes;
-  result.pullback = pullback_df_cuda_impl(
-      o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold, max_bytes, device,
-      prepared_caller, response_plan.value.panel_capacity, parallel_gap_reduction,
-      include_gap_response, &prepared.values);
+  result.pullback =
+      pullback_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold,
+                            max_bytes, device, prepared_caller, response_plan.value.panel_capacity,
+                            parallel_gap_reduction, include_gap_response, &prepared.values);
   // Attribute the one shared upload to the first consumer so existing aggregate
   // diagnostics still report actual endpoint transfer bytes without double counting.
   result.pullback.diagnostic.h2d_bytes = prepared.h2d_bytes;
 
-  result.fock = fock_response_df_cuda_impl(
-      o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold, max_bytes, device,
-      fock_caller, page_capacity, fock_plan.value.panel_capacity, &prepared.values);
+  result.fock = fock_response_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v,
+                                           threshold, max_bytes, device, fock_caller, page_capacity,
+                                           fock_plan.value.panel_capacity, &prepared.values);
   result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
 }

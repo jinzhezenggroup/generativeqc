@@ -374,7 +374,16 @@ def test_combined_response_reuses_one_input_upload(
     o, v = inputs[5].shape
     ovvv = np.einsum("Qia,Qfb->iafb", inputs[0], inputs[1])
     expected_energy = triples_energy(
-        o, v, ovvv, inputs[2], inputs[3], inputs[4], inputs[5], inputs[6], inputs[7], inputs[8]
+        o,
+        v,
+        ovvv,
+        inputs[2],
+        inputs[3],
+        inputs[4],
+        inputs[5],
+        inputs[6],
+        inputs[7],
+        inputs[8],
     )
     np.testing.assert_allclose(values[0], expected_energy, atol=2e-12, rtol=0)
     assert values[1] > 0 and values[2] > 0
