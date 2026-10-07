@@ -352,8 +352,10 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # host fallback without changing admission or claiming DF-response coverage.
 # AOT uses the same coverage gate without generating reduction/weight IR;
 # its build-bound graph provenance is replayed from the admitted manifest.
+# Lazy source-product reuse changes only compilation preparation and telemetry;
+# native requirements, work windows, host reserves and reductions remain audited.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "a5759c161a2461143c871a632b7ea17513faa7eacc36fb63a621ec58e62f7dba"
+    "c4d9a037cee42a996325d5c8b0e02ef1fe93c3682a56a610f4444d5e6ba06b53"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -464,8 +466,10 @@ NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
+# The JIT side now defers integral source reuse; packaged selection and the
+# prepared request/geometry/resource contracts stay unchanged and fail closed.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
+    "1869293908a30ea3d85731aa3f938dad80c28fcfc337ac9909d96dfe43cfa70c"
 )
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
     "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"

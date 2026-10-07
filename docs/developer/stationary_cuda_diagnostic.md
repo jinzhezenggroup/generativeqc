@@ -38,6 +38,35 @@ the tau pullback through the same AO geometry path.
 The [global-hybrid force decision](../../.agents/notes/implemented/architecture/2026-09-26-generic-cuda-global-hybrid-forces.md)
 records the composition, ownership and qualification rationale.
 
+JIT stationary consumers also reuse generated primitive and wrapper sources
+across processes, before derivative emission or Becke primal/AD reconstruction.
+The integral owner keys exact ordered requests, component domain and shard ABI;
+the wrapper owner keys the method/point-program provenance, stationary plan,
+partition iterations and primitive shard layout. Both include logical generator
+dependency hashes, strict FP64 policy and target witnesses. Sources are bounded
+UTF-8 data with checked byte counts and SHA256 hashes, published as a complete
+atomic directory. Missing entries regenerate; corrupt or partial entries fail
+closed. Concurrent publishers verify that their source bytes agree.
+
+This is source reuse, not an alternative binary cache or an AOT qualification:
+the existing source/header/toolchain/flag/target/object/binary checks still run.
+Small-system integral fallback and mandatory native-integral demand projection
+remain unchanged. `GENERATIVEQC_STATIONARY_SOURCE_CACHE=0` disables persistent
+source reuse for diagnostics, retaining byte budgets and ordinary binary reuse.
+The default is `1`; other values are rejected. Entries live under
+`semantic-sources/` in `GENERATIVEQC_STATIONARY_CACHE`. A corrupt entry can be
+removed explicitly to regenerate; no damaged source is silently trusted.
+
+Force work records expose `stationary_source_cache`: primitive requests/units,
+source bytes, hit/miss, recipe verification, lookup, generation and publication
+host spans, and the wrapper's corresponding spans. `binary_cache_seconds` is an
+inclusive lookup/compile/link span, **not** compiler subprocess time, and cached
+artifact `compile_seconds` is historical build metadata, not current work.
+These records describe owner construction; a retained owner's later executions
+do not repeat that construction. Complete endpoint timers still include source
+preparation. See the
+[source-reuse decision](../../.agents/notes/implemented/performance/2026-10-07-stationary-semantic-source-cache.md).
+
 ## Execution and ownership
 
 CUDA snapshot wire v3 appends the actual owner's GridSpec, raw atomic measures

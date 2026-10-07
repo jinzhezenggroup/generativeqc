@@ -1381,6 +1381,110 @@ def cpu_header() -> str:
     )
 
 
+def _parallel_scalar_reduction_kernel(
+    node: typing.Any,
+    number: int,
+    prefix: str,
+    arguments: list[str],
+    *,
+    batch_dim: bool,
+) -> str | None:
+    """Emit a deterministic block-parallel FP64 scalar reduction.
+
+    The native RCCSD iteration used to assign a scalar output to one CUDA
+    thread, leaving millions of contraction terms serial.  This lowering
+    flattens the same lexicographic reduction domain across one 256-thread
+    block and delegates the deterministic block combine to the shared tensor provider.
+    Small domains and providers without block reduction keep the historical
+    source-major serial order. Callers must
+    opt in explicitly; independent physical replay therefore remains the
+    serial acceptance oracle.
+    """
+    if node.spec.indices or node.op not in ("reduce", "einsum"):
+        return None
+
+    decode: list[str] = []
+    if node.op == "reduce":
+        source = node.inputs[0]
+        axes = tuple(node.attrs["axes"])
+        if axes != tuple(range(len(source.spec.indices))):
+            return None
+        if any(_dim(index) == "q" for index in source.spec.indices) and not batch_dim:
+            return None
+        reduction_count = _device_size(source.spec)
+        term = "a0[r]"
+        result = "sum"
+    else:
+        if tuple(node.attrs["output"]):
+            return None
+        dims = _label_dims(node)
+        reduced = sorted(dims)
+        if not reduced or ("q" in (dims[label] for label in reduced) and not batch_dim):
+            return None
+        reduction_count = "*".join(dims[label] for label in reduced)
+        decode.append("std::size_t rem=r;")
+        for label in reversed(reduced):
+            dim = dims[label]
+            decode += [f"const std::size_t l{label}=rem%{dim};", f"rem/={dim};"]
+        factors = [
+            f"a{i}[{_flat_index(tuple(labels), source.spec)}]"
+            for i, (source, labels) in enumerate(
+                zip(node.inputs, node.attrs["labels"], strict=True)
+            )
+        ]
+        term = factors[0]
+        for factor in factors[1:]:
+            term = f"__dmul_rn({term},{factor})"
+        result = f"__dmul_rn({_fraction(node.attrs['coefficient'])},sum)"
+
+    def contribution(indent: str) -> list[str]:
+        return [
+            *(f"{indent}{line}" for line in decode),
+            f"{indent}sum=__dadd_rn(sum,{term});",
+        ]
+
+    serial = "\n".join(contribution("      "))
+    parallel = "\n".join(contribution("    "))
+    orbital_declaration = (
+        "  const std::size_t n=o+v;\n"
+        if any(
+            _dim(index) == "n"
+            for source in node.inputs
+            for index in source.spec.indices
+        )
+        else ""
+    )
+    return f"""__global__ void {prefix}_node_{number}({",".join(arguments)}){{
+{orbital_declaration}#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE
+  using BlockReduce = generativeqc::tensor::StrictFp64BlockReduce<256>;
+  __shared__ BlockReduce::TempStorage temp_storage;
+#endif
+  const std::size_t reduction_count={reduction_count};
+#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE
+  if(reduction_count<32)
+#endif
+  {{
+    if(threadIdx.x==0){{
+      double sum=0.0;
+      for(std::size_t r=0;r<reduction_count;++r){{
+{serial}
+      }}
+      out[0]=generativeqc_tensor::finite({result},error,{number});
+    }}
+    return;
+  }}
+#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE
+  double sum=0.0;
+  for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x){{
+{parallel}
+  }}
+  sum=BlockReduce::sum(sum,temp_storage);
+  if(threadIdx.x==0)
+    out[0]=generativeqc_tensor::finite({result},error,{number});
+#endif
+}}"""
+
+
 def _cuda_kernel(
     node: typing.Any,
     number: int,
@@ -1388,6 +1492,7 @@ def _cuda_kernel(
     names: dict[int, str],
     *,
     batch_dim: bool = False,
+    parallel_scalar_reductions: bool = False,
 ) -> str:
     size = _device_size(node.spec)
     arguments = [
@@ -1400,6 +1505,12 @@ def _cuda_kernel(
     if batch_dim:
         arguments.append("std::size_t q")
     arguments.append("int* error")
+    if parallel_scalar_reductions:
+        parallel = _parallel_scalar_reduction_kernel(
+            node, number, prefix, arguments, batch_dim=batch_dim
+        )
+        if parallel is not None:
+            return parallel
     uses_complete_orbital = any(
         _dim(index) == "n"
         for spec in (node.spec, *(source.spec for source in node.inputs))
@@ -1740,6 +1851,7 @@ def _cuda_program(
     prepared_contractions: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
+    parallel_scalar_reductions: bool = False,
     reuse_plan: IterationReusePlan | None = None,
     reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
 ) -> str:
@@ -1765,7 +1877,14 @@ def _cuda_program(
             )
         ):
             kernels.append(
-                _cuda_kernel(node, number, kernel_name, names, batch_dim=batch_dim)
+                _cuda_kernel(
+                    node,
+                    number,
+                    kernel_name,
+                    names,
+                    batch_dim=batch_dim,
+                    parallel_scalar_reductions=parallel_scalar_reductions,
+                )
             )
     uses_complete_orbital = any(
         _dim(index) == "n"
@@ -2059,10 +2178,16 @@ def cuda_source() -> str:
     return "\n".join(
         [
             "// Generated by tools/generate_rccsd_native.py from #148 TensorIR.",
+            '#include "tensor/cuda_reduction.cuh"',
             '#include "cc/cuda_solver_support.cuh"',
             '#include "generated_rccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated {",
-            _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
+            _cuda_program(
+                iteration,
+                "iteration",
+                "DeviceIterationOutputs",
+                parallel_scalar_reductions=True,
+            ),
             _cuda_program(
                 iteration,
                 "iteration_reuse_prepare",

@@ -14,6 +14,28 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _forbid_aot_generation(guard: pytest.MonkeyPatch, batch: object) -> None:
+    """Guard the lazy runtime boundary and the actual integral/method owners."""
+    from generativeqc import _stationary_cuda
+    from generativeqc_compiler.integral import first_derivative_schedule
+    from generativeqc_compiler.method import stationary_cuda
+    from generativeqc_compiler.method.stationary_gradient import StationaryGradientPlan
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail(
+            "public packaged endpoint invoked compiler discovery or IR/AD/source generation"
+        )
+
+    guard.setattr(batch, "_stationary_cuda_compiler", forbidden)
+    guard.setattr(_stationary_cuda, "compile_stationary_cuda", forbidden)
+    guard.setattr(_stationary_cuda, "cached_derivative_cuda_source", forbidden)
+    guard.setattr(first_derivative_schedule, "emit_first_derivative_cuda", forbidden)
+    guard.setattr(first_derivative_schedule, "derivative_cuda_sources", forbidden)
+    guard.setattr(stationary_cuda, "emit_stationary_wrapper_cuda", forbidden)
+    guard.setattr(StationaryGradientPlan, "integral_block", forbidden)
+    guard.setattr(StationaryGradientPlan, "reduction_program", forbidden)
+
+
 @pytest.mark.parametrize("method", ["pbe0", "b3lyp"])
 @pytest.mark.parametrize("spin", ["rks", "uks"])
 @pytest.mark.parametrize("basis_name", ["sto-3g", "def2-svp"])
@@ -22,11 +44,10 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
 ) -> None:
     """Time complete host-return endpoints, never moving preparation outside them."""
     import pyscf
-    from generativeqc import Calculator, GridSpec, KsOptions, _stationary_cuda
+    from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc_compiler.dft import NativeAO
     from generativeqc_compiler.method import stationary_cuda
-    from generativeqc_compiler.method.stationary_gradient import StationaryGradientPlan
     from pyscf.dft import libxc
     from test_dft_complete_cpu import independent_global_hybrid_gradient
     from test_dft_complete_cuda import no_cpu_derivatives
@@ -79,11 +100,6 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
 
         monkeypatch.setattr(batch, "_public_dft_cuda_force", observed_force)
 
-        def forbidden(*args: object, **kwargs: object) -> None:
-            pytest.fail(
-                "public packaged endpoint invoked compiler discovery or IR/AD/source generation"
-            )
-
         moved = np.asarray([position for _, position in atoms])
         moved[-1] += (0.02, -0.01, 0.03)
         prepared = None
@@ -96,15 +112,7 @@ def test_public_hybrid_aot_energy_force_reuse_and_displacement(
             # must not disguise AD/source generation in the loader.
             stationary_cuda.stationary_aot_profile_contract_identity.cache_clear()
             with monkeypatch.context() as guard, no_cpu_derivatives():
-                guard.setattr(batch, "_stationary_cuda_compiler", forbidden)
-                guard.setattr(_stationary_cuda, "compile_stationary_cuda", forbidden)
-                guard.setattr(_stationary_cuda, "emit_first_derivative_cuda", forbidden)
-                guard.setattr(_stationary_cuda, "derivative_cuda_sources", forbidden)
-                guard.setattr(
-                    stationary_cuda, "emit_stationary_wrapper_cuda", forbidden
-                )
-                guard.setattr(StationaryGradientPlan, "integral_block", forbidden)
-                guard.setattr(StationaryGradientPlan, "reduction_program", forbidden)
+                _forbid_aot_generation(guard, batch)
                 started = time.perf_counter()
                 result = batch.execute(
                     coordinates=None if coordinates is None else (coordinates,),

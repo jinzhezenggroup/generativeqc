@@ -116,6 +116,59 @@ its buffers to the retained launcher; graph replay retains that entry.
 Unsupported functional/response pairs fail during preparation. See the
 [consumer specialization decision](../../.agents/notes/implemented/performance/2026-09-23-xc-point-consumers.md).
 
+### Bounded independent point submissions
+
+`GENERATIVEQC_CUDA_XC_BATCH_TILES=N` explicitly requests the scheduling-only
+qualification route for ordinary native KS. The default is one tile; values zero
+or one retain that route. `GENERATIVEQC_CUDA_XC_BATCH_BYTES` caps the **additional**
+per-owner device allocation (default 32 MiB when batching is requested); zero
+retains the incumbent. These are experiments, not an automatically promoted
+endpoint policy or a method-qualified point-source specialization.
+
+The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
+the original tile domains and selected AO counts. Admission reduces the requested
+batch size until complete retained panels fit; tiny domains, response, mixed
+arithmetic, insufficient allowance, and device/global-ledger allocation rejection
+retain the one-tile executor. No device model or molecule-size whitelist is used.
+Prepare maps and arithmetic bindings first. Preparation is forbidden during
+capture or after evaluation; a retained batch also prevents later map discovery
+or a mixed-density rebind. Changed geometry creates and qualifies a new owner.
+
+Each group retains compact AO panels, but reuses the existing density-product
+and potential scratch. Features, coefficients and three-channel point totals
+have bounded tile-local channel-major slots, with a compact final partial tile.
+A single point launch spans all group points using the canonical FP64 consumer
+and the existing 32-thread physical-PBE or 128-thread other-consumer blocks.
+Empty/noncontiguous/full AO maps remain independent; no union restores dense AO
+work. No AO, jet, density or contraction arithmetic is repeated, and no point
+gathers, descriptor transfers or extra stream fences are added to evaluation.
+Vxc contractions/scatters and scalar reductions execute in the original tile
+order on the original stream, rather than using concurrent matrix atomics.
+
+For an admitted batch of `N` tiles, point submissions per Fock change from
+`ceil(npoint/tile_points)` to `ceil(npoint/(N*tile_points))`; AO, density and Vxc
+submission counts do not decrease. Record that distinction when interpreting
+profiles. Retained/peak device storage includes the original arena **plus** the
+optional AO and feature-slot allocation reported by `point_batch_plan()` and
+charged to the numeric resource ledger/KS XC resource diagnostic. Preparation
+includes planner traversal and allocation; there is no per-evaluation allocation
+or retained host descriptor vector. Memory boundedness alone is not evidence
+of endpoint profitability.
+
+`generativeqc_dft_cuda_tests --point-batches` compares independent CPU E/V
+references, both spins, ragged/empty/high-occupancy maps, tails, scaled PBE,
+bitwise ordered accumulation, captured changed densities and bounded-memory
+fallback. Run real-device gates only under a finite Slurm allocation. For
+fixed-density XC work/memory census, `--point-batch-benchmark ORIGINAL MOVED`
+on the same native executable reports preparation and six interleaved E/V
+samples; those diagnostic densities do not qualify complete SCF/force timing.
+For complete interleaved warm and moved-warm PBE0 E+F populations, use
+`python -m benchmarks.pbe0_xc_tile_pairs --point-batch-tiles 32` with the usual
+basis/reference/output arguments. This keeps both arms' SCF/force tiles at 256
+and reapplies the arm's policy when geometry rebuilds the owner. Cold fresh-
+process E+F and separate profiling are still required before default promotion;
+source-specialization/composed ablations belong to the independent #2072 arm.
+
 The resident contraction block is currently compiler-emitted maintained CUDA
 text, not a complete typed grid/XC IR lowering. The native header's runtime-only
 ownership classification does not remove this remaining scientific-text owner.

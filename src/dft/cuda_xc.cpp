@@ -11,6 +11,7 @@
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
+#include "runtime/resource_cuda.cuh"
 #include "tensor/cuda_error.hpp"
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
@@ -368,6 +369,35 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   prepare_potential();
 }
 
+void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget) {
+  check_device();
+  if (evaluation_started_ || point_batch_arena_)
+    throw std::logic_error("XC point batching requires an unused unbatched owner");
+  cudaStreamCaptureStatus capture{};
+  check(cudaStreamIsCapturing(stream_, &capture));
+  if (capture != cudaStreamCaptureStatusNone)
+    throw std::invalid_argument("XC point batch preparation cannot capture");
+  if (!admitted_density_[0].precision.arithmetic.is_strict_fp64()) return;
+  const auto plan = cuda_xc_detail::prepare_point_batch_plan(layout_, ao_offsets_, requested_tiles,
+                                                             device_budget);
+  if (plan.tiles == 1) return;
+  const auto launcher = cuda_xc_detail::resolve_point_batch_launcher(layout_.functional);
+  double* arena = nullptr;
+  bool host_oom = false;
+  const auto status = generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&arena),
+                                                                  plan.device_bytes, &host_oom);
+  if (status == cudaErrorMemoryAllocation) {
+    if (host_oom) throw std::bad_alloc();
+    const auto pending = cudaGetLastError();
+    if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+    return;
+  }
+  check(status);
+  point_batch_arena_ = arena;
+  point_batch_plan_ = plan;
+  point_batch_launcher_ = launcher;
+}
+
 void CudaXcPlan::prepare_potential(std::size_t provider_budget) {
   check_device();
   if (evaluation_started_)
@@ -397,6 +427,8 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
     throw std::invalid_argument("mixed density contraction is not qualified for this domain");
+  if (point_batch_arena_ && !admitted.is_strict_fp64())
+    throw std::invalid_argument("batched point scheduling requires strict density arithmetic");
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_capability_qualified(layout_.fast_paths.mixed_density_precision))
     throw std::invalid_argument(
@@ -458,7 +490,8 @@ const CudaXcDensityBinding& CudaXcPlan::density_binding(PrecisionPhase phase) co
 
 bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
   check_device();
-  if (evaluation_started_ || layout_.local_ao || !std::isfinite(cutoff) || cutoff <= 0)
+  if (evaluation_started_ || point_batch_arena_ || layout_.local_ao || !std::isfinite(cutoff) ||
+      cutoff <= 0)
     throw std::invalid_argument("AO discovery requires an unused dense plan and positive cutoff");
   if (!admitted_density_[0].precision.arithmetic.is_strict_fp64())
     throw std::invalid_argument("local AO discovery requires strict density binding");
@@ -545,6 +578,7 @@ CudaXcPlan::~CudaXcPlan() {
   cudaGetDevice(&previous);
   cudaSetDevice(device_);
   cudaStreamSynchronize(stream_);
+  if (point_batch_arena_) generativeqc::runtime::resource_cuda_free(point_batch_arena_);
   cudaSetDevice(previous);
 }
 
@@ -764,7 +798,8 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
         features_, coefficients_, point_totals_, potential_, totals_, error_,
         phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
         local_density_launchers_, direction, delta_features_, total_density, total_gradient,
-        ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get());
+        ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get(),
+        point_batch_plan_, point_batch_launcher_, point_batch_arena_);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     // The generated executor has a separate exception vocabulary. Translate at
     // this native owner boundary so both single-point and batch APIs preserve it.

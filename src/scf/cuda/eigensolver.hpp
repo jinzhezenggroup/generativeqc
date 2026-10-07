@@ -9,6 +9,7 @@
 #include "runtime/lowering_binding.hpp"
 #include "scf/cuda/eigensolver_types.hpp"
 #include "scf/cuda_batch.hpp"
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -95,6 +96,7 @@ class OrdinaryStreamEigensolver {
   int n_{}, device_{};
   CudaEigensolverFamily family_{};
   EigensolverResources resources_{};
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles handles_;
   std::vector<unsigned char> host_workspace_;
   std::array<char, 48> provider_version_{};
   OrdinaryEigensolverDiagnostic diagnostic_{};

@@ -70,7 +70,9 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
              const double* direction, double* delta_features, double* total_density,
              double* total_gradient, const std::vector<std::size_t>& ao_offsets,
              const std::size_t* ao_ids, const tensor::PreparedPanelProduct* density_provider,
-             const tensor::PreparedSymmetricProduct* potential_binding) {
+             const tensor::PreparedSymmetricProduct* potential_binding,
+             const CudaXcPointBatchPlan& point_batch_plan,
+             CudaXcPointBatchLauncher point_batch_launcher, double* point_batch_arena) {
   const I matrices = l.spins * l.nao * l.nao;
   if ((total_density == nullptr) != (total_gradient == nullptr))
     throw std::invalid_argument("CUDA XC total-density capture requires rho and gradient together");
@@ -97,62 +99,94 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
         density, l.nao, l.spins, density_provider->materialized_matrices(), error);
     cuda_check(cudaGetLastError());
   }
-  for (std::size_t begin = 0; begin < l.npoint; begin += l.tile_points) {
-    const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
-    const I count = block.npoint, active = block.nactive;
-    const auto* ids = block.ao_ids;
-    // Route B changes only AO arithmetic. The AO panel and all downstream
-    // density/XC reductions stay FP64 so this is a clean precision ablation.
-    if (active)
-      scheduled_ao(stream, basis, l.natom, l.nprimitive, active, points + 3 * begin, count, l.jets,
-                   ao, error, ids, l.ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage);
-    cuda_check(cudaGetLastError());
-    const auto density_launcher = l.local_ao
-                                      ? local_density_launchers[block.point_start / l.tile_points]
-                                      : density_bindings[count == l.tile_points ? 0 : 1].launch;
-    if (density_provider && active) {
-      if (l.local_ao) {
-        // Preserve the mapped scientific domain. Only its compact symmetric
-        // factor is packed; all tiles reuse the same bounded provider cache.
-        gather_density_factor<<<blocks(l.spins * active * active, 128), 128, 0, stream>>>(
-            density, l.nao, active, l.spins, ids, density_provider->materialized_matrices(), error);
-        cuda_check(cudaGetLastError());
-      }
-      density_provider->execute(stream, active, count * l.work_jets, ao, work, error);
-    } else
-      density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
-                       l.nao);
-    cuda_check(cudaGetLastError());
-    scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
-                               l.feature_terms, l.functional, features, error);
-    cuda_check(cudaGetLastError());
-    if (total_density) {
-      scheduled_total_density_features(stream, features, count, l.spins, l.feature_terms, begin,
-                                       total_density, total_gradient, error);
+  const auto batch_tiles = point_batch_plan.tiles;
+  auto* batch_ao = batch_tiles > 1 ? point_batch_arena : ao;
+  auto* batch_features = batch_tiles > 1 ? batch_ao + point_batch_plan.ao_elements : features;
+  auto* batch_coefficients =
+      batch_tiles > 1 ? batch_features + point_batch_plan.feature_elements : coefficients;
+  auto* batch_totals =
+      batch_tiles > 1 ? batch_coefficients + point_batch_plan.feature_elements : point_totals;
+  for (std::size_t batch_begin = 0; batch_begin < l.npoint;
+       batch_begin += batch_tiles * l.tile_points) {
+    const auto batch_count = std::min(batch_tiles * l.tile_points, l.npoint - batch_begin);
+    const auto batch_end = batch_begin + batch_count;
+    std::size_t ao_offset = 0;
+    // Retain only AO panels. Density scratch and optional provider factors are
+    // consumed immediately and reused; no AO/jet/density work is repeated.
+    for (std::size_t begin = batch_begin; begin < batch_end; begin += l.tile_points) {
+      const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
+      const I count = block.npoint, active = block.nactive;
+      const auto* ids = block.ao_ids;
+      auto* ao = batch_ao + ao_offset;
+      auto* features = batch_features + (begin - batch_begin) * l.spins * l.feature_terms;
+      // Route B changes only AO arithmetic. The AO panel and all downstream
+      // density/XC reductions stay FP64 so this is a clean precision ablation.
+      if (active)
+        scheduled_ao(stream, basis, l.natom, l.nprimitive, active, points + 3 * begin, count,
+                     l.jets, ao, error, ids,
+                     l.ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage);
       cuda_check(cudaGetLastError());
-    }
-    if (direction) {
-      // AO panels are shared; work is scratch and can be reused after the
-      // reference features are retained. No host AO/feature staging occurs.
-      density_launcher(stream, direction, ao, l.nao, count, l.spins, l.work_jets, work, error,
-                       nullptr, l.nao);
+      const auto density_launcher = l.local_ao
+                                        ? local_density_launchers[block.point_start / l.tile_points]
+                                        : density_bindings[count == l.tile_points ? 0 : 1].launch;
+      if (density_provider && active) {
+        if (l.local_ao) {
+          // Preserve the mapped scientific domain. Only its compact symmetric
+          // factor is packed; all tiles reuse the same bounded provider cache.
+          gather_density_factor<<<blocks(l.spins * active * active, 128), 128, 0, stream>>>(
+              density, l.nao, active, l.spins, ids, density_provider->materialized_matrices(),
+              error);
+          cuda_check(cudaGetLastError());
+        }
+        density_provider->execute(stream, active, count * l.work_jets, ao, work, error);
+      } else
+        density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
+                         l.nao);
       cuda_check(cudaGetLastError());
       scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
-                                 l.feature_terms, l.functional, delta_features, error);
+                                 l.feature_terms, l.functional, features, error);
       cuda_check(cudaGetLastError());
+      if (total_density) {
+        scheduled_total_density_features(stream, features, count, l.spins, l.feature_terms, begin,
+                                         total_density, total_gradient, error);
+        cuda_check(cudaGetLastError());
+      }
+      if (direction) {
+        // AO panels are shared; work is scratch and can be reused after the
+        // reference features are retained. No host AO/feature staging occurs.
+        density_launcher(stream, direction, ao, l.nao, count, l.spins, l.work_jets, work, error,
+                         nullptr, l.nao);
+        cuda_check(cudaGetLastError());
+        scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
+                                   l.feature_terms, l.functional, delta_features, error);
+        cuda_check(cudaGetLastError());
+      }
+      ao_offset += count * active * l.jets;
     }
-    point_launcher(stream, features, weights + begin, count, l.spins, coefficients, point_totals,
-                   error, l.functional, l.exchange_scale, l.correlation_scale, delta_features);
+    if (batch_tiles > 1)
+      point_batch_launcher(stream, batch_features, weights + batch_begin, batch_count, l.spins,
+                           batch_coefficients, batch_totals, error, l.functional, l.exchange_scale,
+                           l.correlation_scale, l.tile_points);
+    else
+      point_launcher(stream, batch_features, weights + batch_begin, batch_count, l.spins,
+                     batch_coefficients, batch_totals, error, l.functional, l.exchange_scale,
+                     l.correlation_scale, delta_features);
     cuda_check(cudaGetLastError());
-    // Feature/response consumers have finished reading work. The compiler may
-    // reuse those same panels for weighted symmetric potential assembly. The
-    // tiled schedule also folds the deterministic three-channel total reduction
-    // into this launch; its scalar fallback retains the historical reducer.
-    // The first point tile initializes its outputs directly; later tiles accumulate.
-    scheduled_potential(stream, ao, coefficients, weights + begin, active, count, l.spins,
-                        l.feature_terms, l.work_jets, work, point_totals, potential, totals,
-                        begin != 0 || l.local_ao, error, ids, l.nao, potential_binding);
-    cuda_check(cudaGetLastError());
+    ao_offset = 0;
+    // Contractions and scatters retain their historical stream/tile order.
+    // In particular overlapping indexed matrix entries never race, and each
+    // point-total reduction sees exactly its original compact tile channels.
+    for (std::size_t begin = batch_begin; begin < batch_end; begin += l.tile_points) {
+      const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
+      const I count = block.npoint, active = block.nactive;
+      const auto feature_offset = (begin - batch_begin) * l.spins * l.feature_terms;
+      scheduled_potential(stream, batch_ao + ao_offset, batch_coefficients + feature_offset,
+                          weights + begin, active, count, l.spins, l.feature_terms, l.work_jets,
+                          work, batch_totals + 3 * (begin - batch_begin), potential, totals,
+                          begin != 0 || l.local_ao, error, block.ao_ids, l.nao, potential_binding);
+      cuda_check(cudaGetLastError());
+      ao_offset += count * active * l.jets;
+    }
   }
 }
 

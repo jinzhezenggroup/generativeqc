@@ -36,6 +36,31 @@ def _evaluate_selector(node: ast.expr, values: dict[str, object]) -> object:
     raise AssertionError(f"unsupported selector expression: {ast.dump(node)}")
 
 
+def test_gpu_qualification_guards_bind_current_source_owners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Check hardware-gate instrumentation even when the GPU cases are skipped."""
+    from generativeqc_compiler.integral import first_derivative_schedule
+    from generativeqc_compiler.method import stationary_cuda
+    from generativeqc_compiler.method.stationary_gradient import StationaryGradientPlan
+    from test_stationary_aot_cuda import _forbid_aot_generation
+
+    batch = SimpleNamespace(_stationary_cuda_compiler=lambda: None)
+    _forbid_aot_generation(monkeypatch, batch)
+    for guarded in (
+        batch._stationary_cuda_compiler,
+        _stationary_cuda.compile_stationary_cuda,
+        _stationary_cuda.cached_derivative_cuda_source,
+        first_derivative_schedule.emit_first_derivative_cuda,
+        first_derivative_schedule.derivative_cuda_sources,
+        stationary_cuda.emit_stationary_wrapper_cuda,
+        StationaryGradientPlan.integral_block,
+        StationaryGradientPlan.reduction_program,
+    ):
+        with pytest.raises(pytest.fail.Exception, match="IR/AD/source generation"):
+            guarded()
+
+
 def _artifact_selector(function_name: str, artifact_name: str) -> ast.IfExp:
     source = (
         Path(__file__).resolve().parents[2] / "python/generativeqc/_stationary_cuda.py"
@@ -91,12 +116,18 @@ def _artifact_selector(function_name: str, artifact_name: str) -> ast.IfExp:
         for node in ast.walk(selector.body.args[0])
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
-    assert {"derivative_cuda_sources", "emit_first_derivative_cuda"} <= source_calls
+    assert isinstance(selector.body.args[0], ast.Lambda)
+    assert "cached_derivative_cuda_source" in source_calls
+    assert not {"derivative_cuda_sources", "emit_first_derivative_cuda"} & source_calls
     assert not {
         node.func.id
         for node in ast.walk(selector.orelse)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    } & {"derivative_cuda_sources", "emit_first_derivative_cuda"}
+    } & {
+        "cached_derivative_cuda_source",
+        "derivative_cuda_sources",
+        "emit_first_derivative_cuda",
+    }
     return selector
 
 

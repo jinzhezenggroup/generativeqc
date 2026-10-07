@@ -638,14 +638,26 @@ __device__ inline DevicePointValue evaluate_semilocal_point(I functional, const 
 // The immutable plan's admitted consumer is a compile-time fact. Keep spin as
 // a layout argument to bound AOT growth while pruning unrelated point algebra
 // before register allocation. All variants reuse the canonical point source.
-template <I feature_terms, bool response>
-__global__ void evaluate_points(const double* features, const double* weights, I count, I spins,
-                                double* coefficients, double* point_totals, int* error,
+template <I feature_terms, bool response, bool batched = false>
+__global__ void evaluate_points(const double* input_features, const double* input_weights,
+                                I domain_count, I spins, double* output_coefficients,
+                                double* output_totals, int* error,
                                 I functional, double exchange_scale, double correlation_scale,
-                                const double* delta) {
+                                const double* delta, I tile_points = 0) {
   static_assert(feature_terms == 1 || feature_terms == 4 || feature_terms == 5);
   static_assert(!response || feature_terms < 5);
-  for (I p = I(blockIdx.x) * blockDim.x + threadIdx.x; p < count; p += I(blockDim.x) * gridDim.x) {
+  static_assert(!batched || !response);
+  for (I point = I(blockIdx.x) * blockDim.x + threadIdx.x; point < domain_count;
+       point += I(blockDim.x) * gridDim.x) {
+    // Compile-time scheduling only: the one-tile entry removes this mapping.
+    // Channel-major slots are compact even for the final partial grid tile.
+    const I begin = batched ? (point / tile_points) * tile_points : 0;
+    const I count = batched ? min(tile_points, domain_count - begin) : domain_count;
+    const I p = point - begin;
+    const double* features = input_features + begin * spins * feature_terms;
+    const double* weights = input_weights + begin;
+    double* coefficients = output_coefficients + begin * spins * feature_terms;
+    double* point_totals = output_totals + 3 * begin;
     double rho[2]{}, gradient[2][3]{}, tau[2]{};
     for (I s = 0; s < 2; ++s) {
       const I source = spins == 1 ? 0 : s;
@@ -719,6 +731,18 @@ void launch_split_hybrid_points(
       <<<generativeqc_tensor::blocks(count, 128), 128, 0, stream>>>(
           features, weights, count, spins, coefficients, point_totals, error, functional,
           exchange_scale, correlation_scale, delta);
+}
+
+template <I feature_terms, I threads>
+void launch_point_batches(cudaStream_t stream, const double* features, const double* weights,
+                          std::size_t count, std::size_t spins, double* coefficients,
+                          double* point_totals, int* error, std::uint32_t functional,
+                          double exchange_scale, double correlation_scale,
+                          std::size_t tile_points) {
+  evaluate_points<feature_terms, false, true>
+      <<<generativeqc_tensor::blocks(count, threads), threads, 0, stream>>>(
+          features, weights, count, spins, coefficients, point_totals, error, functional,
+          exchange_scale, correlation_scale, nullptr, tile_points);
 }
 
 __global__ void assemble_potential(const double* ao, const double* coefficients,
@@ -842,8 +866,37 @@ def emit_native_xc_contraction_kernels(
 
     if not isinstance(matrix_schedule, XcMatrixSchedule):
         raise TypeError("native XC contraction emission requires XcMatrixSchedule")
+    from .xc_point_batch_cuda import emit_native_xc_point_batch_plan
+
+    batch_dispatch = [
+        "CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional) {"
+    ]
+    for record in SEMILOCAL_FAMILIES:
+        if not record["cuda_ks"]:
+            continue
+        code = _curated_cpp_code(record["code"])
+        terms = 5 if record["requires_tau"] else 4 if record["requires_gradient"] else 1
+        threads = 32 if record["symbol"] == "Pbe" else 128
+        batch_dispatch.append(
+            f"  if (functional == {code}) return &launch_point_batches<{terms}, {threads}>;"
+        )
+    batch_dispatch.extend(
+        (
+            "  if (generated::split_hybrid_registered(functional))",
+            "    return generated::split_hybrid_is_mgga(functional)",
+            "               ? &launch_point_batches<5, 128>",
+            "               : &launch_point_batches<4, 128>;",
+            '  throw std::invalid_argument("unsupported CUDA XC point batch consumer");',
+            "}",
+        )
+    )
     return _NATIVE_XC_CONTRACTION_KERNELS.replace(
-        "@POINT_DISPATCH@", emit_native_xc_point_dispatch()
+        "@POINT_DISPATCH@",
+        emit_native_xc_point_dispatch()
+        + "\n"
+        + "\n".join(batch_dispatch)
+        + "\n"
+        + emit_native_xc_point_batch_plan(),
     ) + emit_native_xc_matrix_schedule(
         matrix_schedule, density_source=_NATIVE_XC_CONTRACTION_KERNELS
     )

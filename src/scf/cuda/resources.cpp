@@ -10,11 +10,7 @@ namespace generativeqc::scf::cuda_execution {
 CudaResources::~CudaResources() {
   std::lock_guard<std::mutex> allocation_lock(runtime::allocation_measurement_mutex);
   if (device_id_ >= 0) (void)cudaSetDevice(device_id_);
-  if (jacobi_ != nullptr) (void)cusolverDnDestroySyevjInfo(jacobi_);
-  if (solver_parameters_ != nullptr) {
-    (void)cusolverDnDestroyParams(solver_parameters_);
-  }
-  if (solver_ != nullptr) (void)cusolverDnDestroy(solver_);
+  eigen_handles_.reset();
   if (blas_ != nullptr) (void)cublasDestroy(blas_);
   if (stream_ != nullptr) {
     // Numeric allocations come from CUDA's stream-ordered device pool. Queue
@@ -38,9 +34,9 @@ CudaResources::~CudaResources() {
 
 EigensolverResources CudaResources::eigensolver_view() const {
   return {stream_,
-          solver_,
-          solver_parameters_,
-          jacobi_,
+          static_cast<cusolverDnHandle_t>(eigen_handles_.view().solver),
+          static_cast<cusolverDnParams_t>(eigen_handles_.view().parameters),
+          static_cast<syevjInfo_t>(eigen_handles_.view().jacobi),
           solver_workspace_,
           solver_workspace_bytes_,
           solver_host_workspace_,

@@ -16,26 +16,23 @@ from generativeqc_compiler.method.gfn2_electronic_contract import (
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_PAIR_VERSION,
     build_gfn2_core_energy_update_program,
-    build_gfn2_density_contribution_program,
-    build_gfn2_density_update_program,
-    build_gfn2_energy_weight_program,
     build_gfn2_population_update_program,
     build_gfn2_restricted_population_publish_program,
     build_gfn2_runtime_electronic_pair_primal,
     build_gfn2_runtime_electronic_pair_vjp,
     build_gfn2_runtime_overlap_vjp,
     build_gfn2_spin_population_publish_program,
-    build_gfn2_weighted_coefficient_program,
 )
 from generativeqc_compiler.method.gfn2_electronic_schedule import (
     emit_gfn2_electronic_schedule,
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
-from generativeqc_compiler.tensor.scf_cuda import (
+from generativeqc_compiler.tensor.weighted_gram import (
     density_template_hash,
     weighted_density_template_hash,
 )
+from generativeqc_compiler.tensor.weighted_gram_emit import emit_scalar_stages
 
 
 def _device(source: str, function_name: str) -> str:
@@ -139,6 +136,15 @@ def _cpp_output(name: str) -> str:
 def cuda_header() -> str:
     density_hash = density_template_hash()
     weighted_density_hash = weighted_density_template_hash()
+    density_sources = emit_scalar_stages(
+        "cuda",
+        {
+            "energy_weight": "gfn2_energy_weight_cuda_tensor",
+            "weighted_coefficient": "gfn2_weighted_coefficient_cuda_tensor",
+            "contribution": "gfn2_density_contribution_cuda_tensor",
+            "updated": "gfn2_density_update_cuda_tensor",
+        },
+    )
     primal = prepare_for_backend(
         build_gfn2_runtime_electronic_pair_primal(), backend="cuda"
     )
@@ -149,18 +155,6 @@ def cuda_header() -> str:
     )
     core_energy = prepare_for_backend(
         build_gfn2_core_energy_update_program(), backend="cuda"
-    )
-    energy_weight = prepare_for_backend(
-        build_gfn2_energy_weight_program(), backend="cuda"
-    )
-    weighted_coefficient = prepare_for_backend(
-        build_gfn2_weighted_coefficient_program(), backend="cuda"
-    )
-    density_contribution = prepare_for_backend(
-        build_gfn2_density_contribution_program(), backend="cuda"
-    )
-    density_update = prepare_for_backend(
-        build_gfn2_density_update_program(), backend="cuda"
     )
     restricted_publish = prepare_for_backend(
         build_gfn2_restricted_population_publish_program(), backend="cuda"
@@ -227,44 +221,10 @@ def cuda_header() -> str:
         ),
         "gfn2_core_energy_update_cuda_tensor",
     )
-    energy_weight_source = _device(
-        emit_scalar_cpp(
-            energy_weight,
-            function_name="gfn2_energy_weight_cuda_tensor",
-            input_order=("occupation", "eigenvalue"),
-            output_order=("energy_weight",),
-        ),
-        "gfn2_energy_weight_cuda_tensor",
-    )
-    weighted_coefficient_source = _device(
-        emit_scalar_cpp(
-            weighted_coefficient,
-            function_name="gfn2_weighted_coefficient_cuda_tensor",
-            input_order=("coefficient", "weight"),
-            output_order=("weighted_coefficient",),
-        ),
-        "gfn2_weighted_coefficient_cuda_tensor",
-    )
-    density_contribution_source = _device(
-        emit_scalar_cpp(
-            density_contribution,
-            function_name="gfn2_density_contribution_cuda_tensor",
-            input_order=("weighted_coefficient", "coefficient"),
-            output_order=("contribution",),
-        ),
-        "gfn2_density_contribution_cuda_tensor",
-    )
-    density_update_source = _device(
-        emit_scalar_cpp(
-            density_update,
-            function_name="gfn2_density_update_cuda_tensor",
-            input_order=("weighted_coefficient", "coefficient", "accumulator"),
-            output_order=("updated",),
-            fused_accumulation=True,
-            ordered_native_sums=True,
-        ),
-        "gfn2_density_update_cuda_tensor",
-    )
+    energy_weight_source = density_sources["energy_weight"]
+    weighted_coefficient_source = density_sources["weighted_coefficient"]
+    density_contribution_source = density_sources["contribution"]
+    density_update_source = density_sources["updated"]
     restricted_publish_source = _device(
         emit_scalar_cpp(
             restricted_publish,

@@ -18,6 +18,7 @@ from .cuda_schedule import ScheduleIR, ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer
 from .production_cost import _STABLE_AOT_SHARD_MAP_VERSION, shell_class_index
+from .production_exchange_queue import exchange_streaming_worker
 from .production_profile import _profile_identifier
 from .production_registry import _stable_selection_order
 from .production_selection import KernelSelection, _selection_integral
@@ -657,294 +658,26 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
 }}
 """
 
-    if schedule.kind == ScheduleKind.PACKED_TASKS:
-        local_lane_state = selection.has_capability(
-            CAPABILITY_LOCAL_PACKED_STREAMING_FOCK
+    if schedule.kind in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS):
+        packed = schedule.kind == ScheduleKind.PACKED_TASKS
+        worker = exchange_streaming_worker(
+            prefix=prefix,
+            class_name=class_name,
+            internal_parameters=internal_parameters,
+            shell_class=shell_class,
+            high_pair_class=high_pair_class,
+            low_pair_class=low_pair_class,
+            system_density_bound=system_density_bound,
+            block_threads=schedule.block_threads,
+            width=32 if packed else schedule.tasks_per_block,
+            packed=packed,
+            local_lane_state=selection.has_capability(
+                CAPABILITY_LOCAL_PACKED_STREAMING_FOCK
+            ),
+            supports_mixed_fock=supports_mixed_fock,
+            retained_state=retained_state,
+            record_precision=record_precision,
         )
-        if local_lane_state:
-            state_declarations = f"""
-  // Keep recurrence/task state lane-private.  Exchange survivor compaction only
-  // shares pair identities and the already-computed contribution bound.
-  Generated{class_name}ShellTask stream_task;
-  Generated{class_name}PackedFockLaneStorage lane_storage;
-  __shared__ std::uint32_t compact_bra_pairs[32];
-  __shared__ std::uint32_t compact_ket_pairs[32];
-  __shared__ double compact_contribution_bounds[32];
-"""
-            task_reference = "stream_task"
-            task_pointer = "&stream_task"
-            task_index = "0U"
-            storage_reference = "lane_storage"
-        else:
-            state_declarations = f"""
-  __shared__ Generated{class_name}ShellTask stream_tasks[32];
-  __shared__ Generated{class_name}PackedFockLaneStorage lane_storage[32];
-  __shared__ std::uint32_t compact_bra_pairs[32];
-  __shared__ std::uint32_t compact_ket_pairs[32];
-  __shared__ double compact_contribution_bounds[32];
-"""
-            task_reference = "stream_tasks[threadIdx.x]"
-            task_pointer = "stream_tasks"
-            task_index = "static_cast<std::size_t>(threadIdx.x)"
-            storage_reference = "lane_storage[threadIdx.x]"
-        worker = f"""
-template <bool Unrestricted>
-__device__ __forceinline__ void {prefix}_streaming_fock(
-{internal_parameters}) {{
-  static_assert(kGenerated{class_name}FockBlockThreads == 32U);
-{state_declarations}
-  __shared__ std::uint32_t bra_ordinal;
-  const auto& topology = *topology_pointer;
-  if (topology.generated_overflow != nullptr &&
-      topology.generated_overflow[{shell_class}U] == 0U) return;
-  const std::size_t stride = static_cast<std::size_t>(topology.batch_size) + 1U;
-  const std::uint32_t bra_begin = topology.pair_class_offsets[
-      {high_pair_class}U * stride];
-  const std::uint32_t bra_end = topology.pair_class_offsets[
-      {high_pair_class}U * stride + topology.batch_size];
-  while (true) {{
-    if (threadIdx.x == 0U) bra_ordinal = atomicAdd(bra_head, 1U);
-    __syncthreads();
-    if (bra_ordinal >= bra_end - bra_begin) return;
-    const std::uint32_t bra_pair =
-        topology.pair_order[bra_begin + bra_ordinal];
-    const std::int32_t system = topology.shell_pair_systems[bra_pair];
-    const std::uint32_t ket_begin = topology.pair_class_offsets[
-        {low_pair_class}U * stride + system];
-    const std::uint32_t ket_end = topology.pair_class_offsets[
-        {low_pair_class}U * stride + system + 1U];
-    const double system_density_bound = {system_density_bound};
-    const std::uint32_t coarse_ket_end = {prefix}_stream_coarse_ket_end(
-        topology, bra_pair, ket_begin, ket_end, system_density_bound,
-        screening_tolerance);
-    for (std::uint32_t ket_base = ket_begin; ket_base < coarse_ket_end;
-         ket_base += 32U) {{
-      const std::uint32_t ket_ordinal = ket_base + threadIdx.x;
-      const bool in_coarse_range = ket_ordinal < coarse_ket_end;
-      const std::uint32_t ket_pair =
-          in_coarse_range ? topology.pair_order[ket_ordinal] : 0U;
-      bool keep = in_coarse_range;
-      if (keep) {{
-        if constexpr ({str(high_pair_class == low_pair_class).lower()}) {{
-          keep = bra_pair >= ket_pair;
-        }}
-      }}
-      double contribution_bound = 0.0;
-      if (keep) {{
-        keep = {prefix}_stream_survives<Unrestricted>(
-            topology, bra_pair, ket_pair, screening_tolerance,
-            &contribution_bound);
-      }}
-      const bool compact_exchange =
-          topology.fock_consumer ==
-              generativeqc::scf::detail::GeneratedFockConsumer::Exchange ||
-          topology.fock_consumer ==
-              generativeqc::scf::detail::GeneratedFockConsumer::HartreeFockExchange;
-      if (compact_exchange) {{
-        // K screening can leave a sparse set of live lanes.  Pack only pair
-        // identities/bounds, then let lanes [0, survivor_count) perform the
-        // expensive recurrence.  J/HF retain their established lane mapping.
-        // The one-warp launch and uniform exits/chunk bounds keep all 32
-        // lanes participating, including rejected and tail candidates.  An
-        // instantaneous active mask can omit lanes after divergent screening.
-        constexpr unsigned full_warp_mask = 0xffffffffU;
-        const unsigned survivor_mask = __ballot_sync(full_warp_mask, keep);
-        const unsigned survivor_count = __popc(survivor_mask);
-        if (keep) {{
-          const unsigned lower_lane_mask = (1U << threadIdx.x) - 1U;
-          const unsigned survivor_rank =
-              __popc(survivor_mask & lower_lane_mask);
-          compact_bra_pairs[survivor_rank] = bra_pair;
-          compact_ket_pairs[survivor_rank] = ket_pair;
-          compact_contribution_bounds[survivor_rank] = contribution_bound;
-        }}
-        __syncwarp(full_warp_mask);
-        if (threadIdx.x < survivor_count) {{
-          const std::uint32_t selected_bra_pair =
-              compact_bra_pairs[threadIdx.x];
-          const std::uint32_t selected_ket_pair =
-              compact_ket_pairs[threadIdx.x];
-          const double contribution_bound =
-              compact_contribution_bounds[threadIdx.x];
-          const std::uint32_t precision_state = {retained_state};
-          {record_precision("precision_state")}
-          {prefix}_stream_populate_task(
-              topology, selected_bra_pair, selected_ket_pair, {task_reference});
-          if (precision_state == 3U) {{
-            {
-            f'''{prefix}_packed_mixed_fock_lane<Unrestricted>(
-                  {task_pointer}, primitive_pairs, primitive_pair_offsets,
-                  ao_coefficients, atom_positions, screening_tolerance,
-                  schwarz_bounds, density, fock,
-                  {task_index}, {storage_reference});'''
-            if supports_mixed_fock
-            else "/* This shell class has no generated mixed Fock helper. */"
-        }
-          }} else {{
-            {prefix}_packed_fock_lane<Unrestricted>(
-                {task_pointer}, primitive_pairs, primitive_pair_offsets,
-                ao_coefficients, atom_positions, screening_tolerance,
-                schwarz_bounds, density, fock,
-                {task_index}, {storage_reference});
-          }}
-        }}
-        __syncwarp(full_warp_mask);
-      }} else if (keep) {{
-        const std::uint32_t precision_state = {retained_state};
-        {record_precision("precision_state")}
-        {prefix}_stream_populate_task(
-            topology, bra_pair, ket_pair, {task_reference});
-        if (precision_state == 3U) {{
-          {
-            f'''{prefix}_packed_mixed_fock_lane<Unrestricted>(
-              {task_pointer}, primitive_pairs, primitive_pair_offsets,
-              ao_coefficients, atom_positions, screening_tolerance,
-              schwarz_bounds, density, fock,
-              {task_index}, {storage_reference});'''
-            if supports_mixed_fock
-            else "/* This shell class has no generated mixed Fock helper. */"
-        }
-        }} else {{
-          {prefix}_packed_fock_lane<Unrestricted>(
-              {task_pointer}, primitive_pairs, primitive_pair_offsets,
-              ao_coefficients, atom_positions, screening_tolerance,
-              schwarz_bounds, density, fock,
-              {task_index}, {storage_reference});
-        }}
-      }}
-      __syncthreads();
-    }}
-  }}
-}}
-"""
-    elif schedule.kind == ScheduleKind.SUBGROUP_TASKS:
-        tasks_per_block = schedule.tasks_per_block
-        subgroup_lanes = schedule.subgroup_lanes
-        subgroup_mask = (1 << subgroup_lanes) - 1
-        worker = f"""
-template <bool Unrestricted>
-__device__ __forceinline__ void {prefix}_streaming_fock(
-{internal_parameters}) {{
-  static_assert(kGenerated{class_name}FockBlockThreads == {schedule.block_threads}U);
-  __shared__ Generated{class_name}ShellTask stream_tasks[{tasks_per_block}];
-  {
-            f'''union Generated{class_name}StreamingSubgroupFockStorage {{
-    Generated{class_name}SubgroupFockStorage fp64;
-    Generated{class_name}MixedSubgroupFockStorage mixed;
-  }};
-  // Different subgroups can independently select FP64 or mixed work. A union
-  // reserves the larger scratch layout for each subgroup without summing both
-  // layouts and unnecessarily reducing streaming-kernel occupancy.
-  __shared__ Generated{class_name}StreamingSubgroupFockStorage
-      subgroup_storage[{tasks_per_block}];'''
-            if supports_mixed_fock
-            else f'''__shared__ Generated{class_name}SubgroupFockStorage
-      subgroup_storage[{tasks_per_block}];'''
-        }
-  __shared__ std::uint32_t stream_keep[{tasks_per_block}];
-  __shared__ std::uint32_t exchange_survivor_count;
-  __shared__ std::uint32_t bra_ordinal;
-  const unsigned subgroup = threadIdx.x / {subgroup_lanes}U;
-  const unsigned lane = threadIdx.x % {subgroup_lanes}U;
-  const unsigned subgroup_in_warp =
-      (threadIdx.x & 31U) / {subgroup_lanes}U;
-  const unsigned subgroup_mask =
-      0x{subgroup_mask:08x}U << (subgroup_in_warp * {subgroup_lanes}U);
-  const auto& topology = *topology_pointer;
-  if (topology.generated_overflow != nullptr &&
-      topology.generated_overflow[{shell_class}U] == 0U) return;
-  const std::size_t stride = static_cast<std::size_t>(topology.batch_size) + 1U;
-  const std::uint32_t bra_begin = topology.pair_class_offsets[
-      {high_pair_class}U * stride];
-  const std::uint32_t bra_end = topology.pair_class_offsets[
-      {high_pair_class}U * stride + topology.batch_size];
-  while (true) {{
-    if (threadIdx.x == 0U) bra_ordinal = atomicAdd(bra_head, 1U);
-    __syncthreads();
-    if (bra_ordinal >= bra_end - bra_begin) return;
-    const std::uint32_t bra_pair =
-        topology.pair_order[bra_begin + bra_ordinal];
-    const std::int32_t system = topology.shell_pair_systems[bra_pair];
-    const std::uint32_t ket_begin = topology.pair_class_offsets[
-        {low_pair_class}U * stride + system];
-    const std::uint32_t ket_end = topology.pair_class_offsets[
-        {low_pair_class}U * stride + system + 1U];
-    const double system_density_bound = {system_density_bound};
-    const std::uint32_t coarse_ket_end = {prefix}_stream_coarse_ket_end(
-        topology, bra_pair, ket_begin, ket_end, system_density_bound,
-        screening_tolerance);
-    for (std::uint32_t ket_base = ket_begin; ket_base < coarse_ket_end;
-         ket_base += {tasks_per_block}U) {{
-      const bool compact_exchange =
-          topology.fock_consumer ==
-              generativeqc::scf::detail::GeneratedFockConsumer::Exchange ||
-          topology.fock_consumer ==
-              generativeqc::scf::detail::GeneratedFockConsumer::HartreeFockExchange;
-      if (compact_exchange) {{
-        if (threadIdx.x == 0U) exchange_survivor_count = 0U;
-        __syncthreads();
-      }}
-      if (lane == 0U) {{
-        const std::uint32_t ket_ordinal = ket_base + subgroup;
-        std::uint32_t state = 0U;
-        if (ket_ordinal < coarse_ket_end) {{
-          const std::uint32_t ket_pair = topology.pair_order[ket_ordinal];
-          bool keep = true;
-          if (keep &&
-              {str(high_pair_class == low_pair_class).lower()}) {{
-            keep = bra_pair >= ket_pair;
-          }}
-          double contribution_bound = 0.0;
-          if (keep) {{
-            keep = {prefix}_stream_survives<Unrestricted>(
-                topology, bra_pair, ket_pair, screening_tolerance,
-                &contribution_bound);
-          }}
-          state = keep ? {retained_state} : 0U;
-          if (keep) {{
-            const std::uint32_t target_subgroup =
-                compact_exchange ? atomicAdd(&exchange_survivor_count, 1U)
-                                 : subgroup;
-            {record_precision("state")}
-            {prefix}_stream_populate_task(
-                topology, bra_pair, ket_pair, stream_tasks[target_subgroup]);
-            stream_keep[target_subgroup] = state;
-          }} else if (!compact_exchange) {{
-            stream_keep[subgroup] = 0U;
-          }}
-        }} else if (!compact_exchange) {{
-          stream_keep[subgroup] = 0U;
-        }}
-      }}
-      __syncthreads();
-      const bool scheduled_subgroup =
-          !compact_exchange || subgroup < exchange_survivor_count;
-      if (scheduled_subgroup && stream_keep[subgroup] == 1U) {{
-        {prefix}_subgroup_fock_task<Unrestricted>(
-            stream_tasks, primitive_pairs, primitive_pair_offsets,
-            ao_coefficients, atom_positions, screening_tolerance,
-            schwarz_bounds, density, fock,
-            static_cast<std::size_t>(subgroup),
-            subgroup_storage[subgroup]{".fp64" if supports_mixed_fock else ""},
-            lane, subgroup_mask);
-      }}
-      {
-            f'''if (scheduled_subgroup && stream_keep[subgroup] == 3U) {{
-        {prefix}_mixed_subgroup_fock_task<Unrestricted>(
-            stream_tasks, primitive_pairs, primitive_pair_offsets,
-            ao_coefficients, atom_positions, screening_tolerance,
-            schwarz_bounds, density, fock,
-            static_cast<std::size_t>(subgroup),
-            subgroup_storage[subgroup].mixed, lane, subgroup_mask);
-      }}'''
-            if supports_mixed_fock
-            else ""
-        }
-      __syncthreads();
-    }}
-  }}
-}}
-"""
     elif (
         schedule.kind == ScheduleKind.COMPONENT_LANES
         and high_pair_class != low_pair_class

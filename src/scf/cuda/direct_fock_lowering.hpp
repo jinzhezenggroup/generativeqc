@@ -5,8 +5,22 @@
 #include <stdexcept>
 
 #include "scf/aot_shell_registry.hpp"
+#include "scf/generated_shell_task.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+/** Freeze raw-K scheduling independently of recurrence selection.
+ * Cross-chunk filling is the default; incumbent is an explicit rollback.
+ * No environment reads occur during execution or after output accumulation.
+ */
+inline detail::GeneratedExchangeTaskSchedule prepare_direct_exchange_task_schedule() {
+  const char* value = std::getenv("GENERATIVEQC_DIRECT_K_TASK_SCHEDULE");
+  if (value == nullptr || *value == '\0' || std::strcmp(value, "fill") == 0)
+    return detail::GeneratedExchangeTaskSchedule::Fill;
+  if (std::strcmp(value, "incumbent") == 0) return detail::GeneratedExchangeTaskSchedule::Incumbent;
+  if (std::strcmp(value, "primitive") == 0) return detail::GeneratedExchangeTaskSchedule::Primitive;
+  throw std::invalid_argument("Direct K task schedule must be incumbent, fill or primitive");
+}
 
 /** Optional lowering is frozen by the prepared owner, independently for J/K.
  * Empty/incumbent retains the qualified default. Alternative requests intersect

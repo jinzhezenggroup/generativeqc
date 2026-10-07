@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,6 +22,7 @@ def _definition(source: str, marker: str) -> str:
 
 
 STUBS = r"""
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 #include <array>
 #include <cassert>
 #include <cstddef>
@@ -69,8 +71,6 @@ cudaError_t cudaStreamDestroy(cudaStream_t stream) {
   ++stream_destroys;
   return cudaSuccess;
 }
-void cusolverDnDestroyParams(void*) {}
-void cusolverDnDestroy(void*) {}
 void cublasDestroy(void*) {
   assert(current_device == owner_device && stream_alive && blas_alive);
   assert(binding_destroys == expected_binding_destroys);
@@ -246,6 +246,8 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         if field in owned_fields
         else f"std::array<std::unique_ptr<PreparedBinding>, 2> {field};\n"
         if field in array_fields
+        else "::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;\n"
+        if field == "eigen_handles"
         else f"void* {field}{{}};\n"
         for field in fields
     )
@@ -255,37 +257,45 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     unit += _definition(source, "struct PlanDelete") + ";\n"
     unit += _definition(source, "class DFSourceState") + ";\n}\n" + DRIVER
     directory = tmp_path_factory.mktemp("df-source-state-lifetime")
-    cpp, obj, executable = (
-        directory / "state.cpp",
-        directory / "state.o",
-        directory / "state",
+    (directory / "cuda_runtime_api.h").write_text(
+        "#pragma once\nusing cudaStream_t = void*;\n"
     )
+    eigen_units = empty_eigen_owner_units(directory)
+    cpp, executable = directory / "state.cpp", directory / "state"
     cpp.write_text(unit)
-    subprocess.run(
-        [
-            cache,
-            compiler,
-            "-std=c++17",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-c",
-            str(cpp),
-            "-o",
-            str(obj),
-        ],
-        check=True,
+    objects = []
+    for source_file in (cpp, *eigen_units):
+        obj = directory / (source_file.stem + ".o")
+        result = subprocess.run(
+            [
+                cache,
+                compiler,
+                "-std=c++17",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-I" + str(directory),
+                "-I" + str(ROOT / "src"),
+                "-c",
+                str(source_file),
+                "-o",
+                str(obj),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        objects.append(str(obj))
+    result = subprocess.run(
+        [compiler, *objects, "-o", str(executable)],
+        check=False,
         capture_output=True,
         text=True,
         timeout=30,
     )
-    subprocess.run(
-        [compiler, str(obj), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    assert result.returncode == 0, result.stdout + result.stderr
     return executable
 
 

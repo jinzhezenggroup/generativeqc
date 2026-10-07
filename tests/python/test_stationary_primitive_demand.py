@@ -95,15 +95,25 @@ def test_prepared_jit_emits_only_admitted_roots(
         assert domain == ("xx",)
         return ((requests, "component-shard"),)
 
-    def compile_source(source: object, **options: object) -> None:
+    def cached_source(selected: object, **options: object) -> tuple[object, dict]:
+        assert selected == requests
+        domain = options["component_domain"]
+        source = (
+            emit(selected)
+            if domain is None
+            else tuple(source for _, source in emit_shards(domain))
+        )
+        return source, {}
+
+    def compile_source(provider: object, **options: object) -> None:
+        source, _ = provider()
         assert source == ("nuclear-only" if pruned else ("component-shard",))
         assert options["primitive_shard_width"] == (
             None if pruned else runtime.CUDA_REQUESTS_PER_UNIT
         )
         raise CompilationReached
 
-    monkeypatch.setattr(runtime, "emit_first_derivative_cuda", emit)
-    monkeypatch.setattr(runtime, "derivative_cuda_sources", emit_shards)
+    monkeypatch.setattr(runtime, "cached_derivative_cuda_source", cached_source)
     monkeypatch.setattr(runtime, "compile_stationary_cuda", compile_source)
     with pytest.raises(CompilationReached):
         owner.ensure(

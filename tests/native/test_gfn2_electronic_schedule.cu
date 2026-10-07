@@ -115,7 +115,7 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
     check(cudaGraphInstantiate(&executable, graph, nullptr, nullptr, 0));
   }
   constexpr double sentinel = -973.375;
-  for (int scenario = 0; scenario < 3; ++scenario) {
+  for (int scenario = 0; scenario < 5; ++scenario) {
     for (double* p : {results.density, results.energy_weighted_density})
       std::fill(p, p + sm, sentinel);
     for (double* p : {results.band_energies, results.occupation_sums, results.density_traces,
@@ -126,20 +126,39 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
       std::fill(p, p + nc, sentinel);
     active[2] = scenario == 1 ? 0 : 1;
     const I bad = layout.spin_matrix_offsets[2] - 1;
-    const double saved = c[bad];
-    // All input entries stay finite; only a late matrix-pair contraction fails.
+    const I bad_eigen = layout.spin_orbital_offsets[2] - 1;
+    const I extent_bad = batch.orbital_offsets[2] - batch.orbital_offsets[1];
+    const I bad_alpha = 2 * batch.orbital_offsets[1] + extent_bad - 1;
+    const I bad_beta = bad_alpha + extent_bad;
+    const double saved = c[bad], saved_eigen = e[bad_eigen];
+    const double saved_alpha = occ[bad_alpha], saved_beta = occ[bad_beta];
+    // All input entries stay finite. Scenario 2 fails P; scenario 3 permits P
+    // but fails W in the late beta channel. Both physical channels must retain
+    // every published sentinel. Scenario 4 proves recovery on the same graph.
     if (scenario == 2) c[bad] = 1e200;
+    if (scenario == 3) {
+      c[bad] = 1e100;
+      e[bad_eigen] = 1e150;
+      occ[bad_alpha] = occ[bad_beta] = 0.5;
+    }
+    const bool failed = scenario == 2 || scenario == 3;
     if (capture)
       check(cudaGraphLaunch(executable, stream));
     else
       launch();
     check(cudaStreamSynchronize(stream));
-    if ((*error != 0) != (scenario == 2)) return 11;
+    if ((*error != 0) != failed) return 11;
+    if (failed &&
+        errors[1] != static_cast<std::uint32_t>(
+                         scenario == 2
+                             ? Gfn2DensityDeviceError::kNonfiniteDensityArithmetic
+                             : Gfn2DensityDeviceError::kNonfiniteWeightedDensityArithmetic))
+      return 16;
     for (I s = 0; s < systems; ++s) {
       const I extent = batch.orbital_offsets[s + 1] - batch.orbital_offsets[s];
       const I count = layout.spin_channels[s];
-      const bool suppressed = (!active[s] || (scenario == 2 && s == 1));
-      if ((errors[s] != 0) != (scenario == 2 && s == 1)) return 12;
+      const bool suppressed = (!active[s] || (failed && s == 1));
+      if ((errors[s] != 0) != (failed && s == 1)) return 12;
       long double system_p = 0, system_w = 0, system_band = 0, system_occ = 0;
       for (I channel = 0; channel < count; ++channel) {
         const I start = layout.spin_matrix_offsets[s] + channel * extent * extent;
@@ -203,7 +222,29 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
           return 15;
     }
     c[bad] = saved;
+    e[bad_eigen] = saved_eigen;
+    occ[bad_alpha] = saved_alpha;
+    occ[bad_beta] = saved_beta;
   }
+  // A pre-existing sequence error gates the complete method before either
+  // channel's scratch can be published. Deliberately do not call reset here.
+  std::fill(results.density, results.density + sm, sentinel);
+  std::fill(results.energy_weighted_density, results.energy_weighted_density + sm, sentinel);
+  std::fill(errors, errors + systems, 0);
+  *error = static_cast<std::uint32_t>(Gfn2DensityDeviceError::kNonfiniteDensityArithmetic);
+  if (spin)
+    check(evaluate_gfn2_spin_density_cuda(batch, layout, input, results, workspace, errors, error,
+                                          stream));
+  else
+    check(evaluate_gfn2_restricted_density_cuda(batch, input, results, workspace, errors, error,
+                                                stream));
+  check(cudaStreamSynchronize(stream));
+  for (I i = 0; i < sm; ++i)
+    if (results.density[i] != sentinel || results.energy_weighted_density[i] != sentinel) return 17;
+  if (*error != static_cast<std::uint32_t>(Gfn2DensityDeviceError::kNonfiniteDensityArithmetic))
+    return 18;
+  for (I s = 0; s < systems; ++s)
+    if (errors[s] != 0) return 19;
   if (executable) check(cudaGraphExecDestroy(executable));
   if (graph) check(cudaGraphDestroy(graph));
   check(cudaStreamDestroy(stream));

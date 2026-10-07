@@ -16,13 +16,17 @@ from math import prod
 if typing.TYPE_CHECKING:
     from collections.abc import Callable
 
-    from generativeqc_compiler.common.lowering_provider import LoweringRequest
+    from generativeqc_compiler.common.lowering_provider import (
+        LoweringCandidate,
+        LoweringRequest,
+    )
 
     from .checked_contraction_pair import CheckedTransposePair
     from .ir import Node
     from .lowering import TensorLoweringAdapter
     from .program import Program
     from .types import Index
+    from .weighted_gram import Schedule, WeightedGram
 
 
 def emit_contraction_region_portfolio(
@@ -467,4 +471,163 @@ def contraction_initializer(
         + (",true" if checked_right_symmetrization else "")
         + (f",false,{pair_role}" if pair_role else "")
         + "}"
+    )
+
+
+def weighted_gram_candidate(
+    region: WeightedGram, schedule: Schedule
+) -> LoweringCandidate:
+    """Select an incumbent implementation, including its actual emission policy.
+
+    Caller-owned tensor/panel/scratch storage is borrowed, not additional
+    provider allocation. No other provider is promoted by this ownership move.
+    """
+    from dataclasses import replace
+
+    from generativeqc_compiler.common.layout import DenseLayout
+    from generativeqc_compiler.common.lowering_contract import (
+        CandidateExecution,
+        LoweringConstraints,
+    )
+    from generativeqc_compiler.common.lowering_provider import (
+        LoweringCandidate,
+        ProviderDescriptor,
+    )
+    from generativeqc_compiler.common.schedule import ScheduleTopology
+
+    if schedule not in (
+        "occupied-cpu",
+        "occupied-cuda",
+        "column-scaled-cpu",
+        "checked-pair-cuda",
+    ):
+        raise ValueError("unqualified weighted Gram schedule")
+    backend = "cuda" if schedule.endswith("cuda") else "cpu"
+    if (
+        schedule in ("occupied-cuda", "column-scaled-cpu", "checked-pair-cuda")
+        and region.coefficients.spec.shape[-2] != region.coefficients.spec.shape[-1]
+    ):
+        raise ValueError("retained weighted Gram schedule requires square coefficients")
+    values = (*region.contraction.inputs, region.contraction)
+    # Explicit column-major coefficient views for CPU DGEMM and Gaussian CUDA;
+    # the original logical AO/orbital modes never change.
+    column_major = schedule in ("column-scaled-cpu", "occupied-cuda")
+    layouts = []
+    for position, value in enumerate(values):
+        shape = value.spec.shape
+        if position == 1 and schedule.startswith("occupied-"):
+            # The method binds an occupied prefix and a uniform scalar weight;
+            # W additionally borrows epsilon. There is no materialized f panel.
+            layout = None
+        elif position in (0, 2, 3) and column_major:
+            # Dense eigenframes are orbital-major within each state.
+            layout = DenseLayout(shape, order=(0, 1, 3, 2))
+        else:
+            layout = DenseLayout(shape)
+        layouts.append(layout)
+    request = region.adapter.request(
+        region.contraction, backend=backend, layouts=tuple(layouts)
+    )
+    if (
+        len(request.precisions) != 1
+        or not request.precisions[0].schedule.is_strict_fp64
+    ):
+        raise ValueError("weighted Gram requires its strict float64 arithmetic")
+    operands = tuple(
+        replace(op, alias_group="coefficients") if i in (0, 2) else op
+        for i, op in enumerate(request.operands)
+    )
+    checked = schedule in ("column-scaled-cpu", "checked-pair-cuda")
+    semantics = dict(request.semantics)
+    semantics.update(
+        weighted_gram=True,
+        occupation_node_hash=region.adapter.hashes[region.occupations],
+        coefficient_node_hash=region.adapter.hashes[region.coefficients],
+        weight_node_hash=region.adapter.hashes[region.contraction.inputs[1]],
+    )
+    # Materialized f*epsilon is still bound to its original multiply node.
+    # Occupied-prefix kernels compute the same weight inline, not in a new panel.
+    semantics["occupation_representation"] = (
+        "occupied-prefix-uniform-scalar"
+        if schedule == "occupied-cpu"
+        else "occupied-prefix-weight-1-or-2"
+        if schedule == "occupied-cuda"
+        else "explicit-fractional"
+    )
+    semantics["weight_source"] = (
+        "occupations-times-energies" if region.weighted else "occupations"
+    )
+    exact = schedule != "column-scaled-cpu"
+    request = replace(
+        request,
+        operands=operands,
+        semantics=tuple(semantics.items()),
+        effects=(
+            (
+                "output",
+                "caller-owned-scratch-method-commit"
+                if checked
+                else "caller-owned-output",
+            ),
+            (
+                "finite_checks",
+                "scale-product-FMA-each-step"
+                if schedule == "checked-pair-cuda"
+                else "column-scale-before-provider"
+                if checked
+                else "caller-owned",
+            ),
+            (
+                "weight_stage",
+                "checked-materialized-f-times-epsilon"
+                if checked and region.weighted
+                else "retained-input-specialization",
+            ),
+            (
+                "pair_store",
+                "both-after-success"
+                if schedule == "checked-pair-cuda"
+                else "single-channel",
+            ),
+        ),
+        constraints=LoweringConstraints(
+            determinism="exact-order" if exact else "reproducible"
+        ),
+    )
+    providers = [
+        ProviderDescriptor(
+            "generated." + backend, "generated", schedule, version="weighted-gram-v1"
+        )
+    ]
+    if schedule == "column-scaled-cpu":
+        providers.append(
+            ProviderDescriptor(
+                "cblas-lp64",
+                "library",
+                "column-major-N-T-alpha1-beta0",
+                version="existing-runtime-binding",
+            )
+        )
+    return LoweringCandidate(
+        request,
+        schedule,
+        tuple(providers),
+        "ready",
+        request.precisions[0].directive.math_mode,
+        execution=CandidateExecution(
+            request.precisions[0],
+            schedule,
+            request.operands,
+            ScheduleTopology(
+                fusion="paired-P-W"
+                if schedule == "checked-pair-cuda"
+                else "single-output",
+                materialization="borrowed-column-panel"
+                if schedule == "column-scaled-cpu"
+                else "borrowed-output",
+                reduction="increasing-orbital" if exact else "existing-LP64-provider",
+            ),
+            determinism="exact-order" if exact else "reproducible",
+            capture_safe=backend == "cuda",
+        ),
     )

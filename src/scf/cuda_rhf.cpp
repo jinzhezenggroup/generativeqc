@@ -89,6 +89,7 @@
 #include "scf/generated_shell_task.hpp"
 #include "scf/mean_field.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/symmetric_eigen_workspace.hpp"
 #include "solver/iteration_control.hpp"
 #include "tensor/metrics.hpp"
 
@@ -1195,27 +1196,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       }
     }
     if (use_cusolver) {
-      solver_error = cusolverDnCreate(&resources.solver_);
+      solver_error = static_cast<cusolverStatus_t>(resources.eigen_handles_.create());
       if (solver_error != CUSOLVER_STATUS_SUCCESS ||
-          (solver_error = cusolverDnSetStream(resources.solver_, resources.stream_)) !=
-              CUSOLVER_STATUS_SUCCESS) {
+          (solver_error = static_cast<cusolverStatus_t>(resources.eigen_handles_.bind_stream(
+               resources.stream_))) != CUSOLVER_STATUS_SUCCESS) {
         fill_global_failure(outputs, solver_status(solver_error));
         return outputs;
       }
       if (use_jacobi) {
-        if ((solver_error = cusolverDnCreateSyevjInfo(&resources.jacobi_)) !=
-                CUSOLVER_STATUS_SUCCESS ||
-            (solver_error = cusolverDnXsyevjSetTolerance(resources.jacobi_, 1.0e-13)) !=
-                CUSOLVER_STATUS_SUCCESS ||
-            (solver_error = cusolverDnXsyevjSetMaxSweeps(resources.jacobi_, 100)) !=
-                CUSOLVER_STATUS_SUCCESS ||
-            (solver_error = cusolverDnXsyevjSetSortEig(resources.jacobi_, 1)) !=
-                CUSOLVER_STATUS_SUCCESS) {
+        if ((solver_error = static_cast<cusolverStatus_t>(resources.eigen_handles_.configure_jacobi(
+                 1.0e-13, 100, 1))) != CUSOLVER_STATUS_SUCCESS) {
           fill_global_failure(outputs, solver_status(solver_error));
           return outputs;
         }
-      } else if ((solver_error = cusolverDnCreateParams(&resources.solver_parameters_)) !=
-                 CUSOLVER_STATUS_SUCCESS) {
+      } else if ((solver_error = static_cast<cusolverStatus_t>(
+                      resources.eigen_handles_.create_parameters())) != CUSOLVER_STATUS_SUCCESS) {
         fill_global_failure(outputs, solver_status(solver_error));
         return outputs;
       }
@@ -1830,54 +1825,36 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
 
   if (first_setup && use_cusolver) {
-    if (use_jacobi) {
-      eigen_provider::SymmetricEigenWorkspace queried{0, 0, plan.lwork};
-      solver_error = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-          {resources.solver_, nullptr, resources.jacobi_},
-          eigen_provider::SymmetricEigenFamily::jacobi_batched,
-          {static_cast<int>(nbf), static_cast<int>(spin_batch_size),
-           eigen_provider::Eigenvectors::values_and_vectors},
-          eigensystem, eigenvalues, queried));
-      plan.lwork = queried.jacobi_elements;
-      resources.solver_workspace_bytes_ = static_cast<std::size_t>(plan.lwork) * sizeof(double);
-    } else if (ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd) {
-      // Xsyevd is the non-batched counterpart used by GPU4PySCF for large
-      // matrices.  Its workspace is independent of the number of systems;
-      // launch_solver serializes one call per matrix on the ordinary stream.
-      eigen_provider::SymmetricEigenWorkspace queried;
-      solver_error = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-          {resources.solver_, resources.solver_parameters_},
-          eigen_provider::SymmetricEigenFamily::xsyevd,
-          {static_cast<std::int64_t>(nbf), 1, eigen_provider::Eigenvectors::values_and_vectors},
-          eigensystem, eigenvalues, queried));
-      resources.solver_workspace_bytes_ = queried.device_bytes;
-      resources.solver_host_workspace_bytes_ = queried.host_bytes;
-    } else {
-      // RHF submits batch_size matrices; UHF additionally submits the doubled
-      // spin batch. Query both actual capacities because cuSOLVER does not
-      // guarantee workspace sizes are monotonic in batch count.
-      const std::array<int, 2> capacities{static_cast<int>(batch_size),
-                                          static_cast<int>(spin_batch_size)};
-      for (const int capacity : capacities) {
-        eigen_provider::SymmetricEigenWorkspace queried;
-        solver_error = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-            {resources.solver_, resources.solver_parameters_},
-            eigen_provider::SymmetricEigenFamily::xsyev_batched,
-            {static_cast<int>(nbf), capacity, eigen_provider::Eigenvectors::values_and_vectors},
-            eigensystem, eigenvalues, queried));
-        if (solver_error != CUSOLVER_STATUS_SUCCESS) break;
-        resources.solver_workspace_bytes_ =
-            std::max(resources.solver_workspace_bytes_, queried.device_bytes);
-        resources.solver_host_workspace_bytes_ =
-            std::max(resources.solver_host_workspace_bytes_, queried.host_bytes);
-      }
-      plan.lwork = 0;
-    }
-    if (solver_error != CUSOLVER_STATUS_SUCCESS) {
-      fill_global_failure(outputs, solver_status(solver_error));
+    const auto family = use_jacobi ? eigen_provider::SymmetricEigenFamily::jacobi_batched
+                        : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
+                            ? eigen_provider::SymmetricEigenFamily::xsyevd
+                            : eigen_provider::SymmetricEigenFamily::xsyev_batched;
+    const bool serial = family == eigen_provider::SymmetricEigenFamily::xsyevd;
+    // UHF submits both capacities; RHF deliberately queries its duplicate
+    // capacity twice. Xsyevd workspace is independent of serialized batch size.
+    const std::int64_t first_capacity = use_jacobi ? spin_batch_size : serial ? 1 : batch_size;
+    const eigen_provider::SymmetricEigenQueryRange ranges[]{
+        {first_capacity, first_capacity, eigen_provider::Eigenvectors::values_and_vectors},
+        {static_cast<std::int64_t>(spin_batch_size), static_cast<std::int64_t>(spin_batch_size),
+         eigen_provider::Eigenvectors::values_and_vectors}};
+    eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+    const auto queried = eigen_provider::prepare_symmetric_eigen_workspace(
+        resources.eigen_handles_.view(),
+        {family, static_cast<std::int64_t>(nbf), ranges, use_jacobi || serial ? 1u : 2u},
+        eigensystem, eigenvalues, prepared);
+    if (!queried.success()) {
+      fill_global_failure(
+          outputs, queried.error == eigen_provider::EigenWorkspaceError::provider_failure
+                       ? solver_status(static_cast<cusolverStatus_t>(queried.provider_status))
+                       : GENERATIVEQC_STATUS_CUDA_ERROR);
       return outputs;
     }
-    if (plan.lwork < 0 || resources.solver_workspace_bytes_ == 0) {
+    resources.solver_workspace_bytes_ = prepared.required().device_bytes;
+    resources.solver_host_workspace_bytes_ = prepared.required().host_bytes;
+    plan.lwork = prepared.required().jacobi_elements;
+    eigen_provider::EigenWorkspaceLimits limits;
+    limits.require_device = true;
+    if (prepared.admit(limits) != eigen_provider::EigenWorkspaceAdmission::accepted) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_CUDA_ERROR);
       return outputs;
     }

@@ -14,6 +14,10 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/cusolver_compat.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_handles.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_handles.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_workspace.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_workspace.cpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda_eigensolver_policy.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver_kernels.cu"
@@ -294,6 +298,20 @@ macro(generativeqc_register_host_generated_sources target)
     COMPILE_OPTIONS "$<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-ffp-contract=off>"
     COMMENT "Generating automatic Libxc CPU semilocal registry")
 
+  generativeqc_register_generated_sources(
+    NAME generativeqc_weighted_gram_cpu_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_weighted_gram_native.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_weighted_gram_native.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/weighted_gram.hpp"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_weighted_gram_native.hpp"
+    COMMENT "Generating shared checked weighted-Gram scalar stages")
+
   set(GENERATIVEQC_SCF_ARRAY_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_array_native.hpp")
   generativeqc_register_generated_sources(
@@ -304,6 +322,9 @@ macro(generativeqc_register_host_generated_sources target)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/array_api/scf.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
     ARGS --output "${GENERATIVEQC_SCF_ARRAY_CPU_HEADER}"
     COMMENT "Generating Array frontend SCF CPU tensor helpers")
 
@@ -317,6 +338,9 @@ macro(generativeqc_register_host_generated_sources target)
       OUTPUTS "${GENERATIVEQC_SCF_DENSITY_CUDA_HEADER}"
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf_cuda.py"
       ARGS --output "${GENERATIVEQC_SCF_DENSITY_CUDA_HEADER}"
       COMMENT "Generating compiler-owned CUDA SCF density kernel")
@@ -479,6 +503,9 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf_cuda.py"
     ARGS --output "${GENERATIVEQC_GFN2_ELECTRONIC_CPU_HEADER}"
     COMMENT "Generating compiler-owned GFN2 CPU electronic kernels")
@@ -654,6 +681,9 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_scf_array_native.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/mean_field_setup_cuda.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
     ARGS --output "${GENERATIVEQC_MEAN_FIELD_SETUP_HEADER}"
     COMMENT "Generating shared CUDA mean-field setup projectors")
 

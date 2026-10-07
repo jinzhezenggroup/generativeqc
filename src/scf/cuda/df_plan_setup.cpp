@@ -24,6 +24,7 @@
 #include "scf/df_exchange_policy.hpp"
 #include "scf/df_projected_exchange_schedule.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/symmetric_eigen_workspace.hpp"
 
 namespace generativeqc::scf::cuda_df {
 namespace eigen_provider = ::generativeqc::solver::cuda;
@@ -507,12 +508,13 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
   }
-  cusolverStatus_t solver_status = cusolverDnCreate(&candidate->solver);
+  cusolverStatus_t solver_status = static_cast<cusolverStatus_t>(candidate->eigen_handles.create());
   if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-    solver_status = cusolverDnSetStream(candidate->solver, candidate->stream);
+    solver_status =
+        static_cast<cusolverStatus_t>(candidate->eigen_handles.bind_stream(candidate->stream));
   }
   if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-    solver_status = cusolverDnCreateParams(&candidate->solver_parameters);
+    solver_status = static_cast<cusolverStatus_t>(candidate->eigen_handles.create_parameters());
   }
   if (solver_status != CUSOLVER_STATUS_SUCCESS) {
     return fail_plan(candidate,
@@ -637,19 +639,27 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
 
   runtime::df_progress::Scope metric_progress("metric_factorization");
   runtime::df_progress::label("provider", "cusolverDnXsyevd");
-  eigen_provider::SymmetricEigenWorkspace queried;
-  solver_status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-      {candidate->solver, candidate->solver_parameters},
-      eigen_provider::SymmetricEigenFamily::xsyevd,
-      {static_cast<std::int64_t>(naux), 1, eigen_provider::Eigenvectors::values_and_vectors},
-      setup.metrics, setup.eigenvalues, queried));
-  const auto solver_device_workspace_bytes = queried.device_bytes;
-  const auto solver_host_workspace_bytes = queried.host_bytes;
-  if (solver_status != CUSOLVER_STATUS_SUCCESS) {
-    return fail_plan(candidate,
-                     solver_failure(solver_status, "size CUDA DF metric eigensolver", detail));
+  const eigen_provider::SymmetricEigenQueryRange metric_range{
+      1, 1, eigen_provider::Eigenvectors::values_and_vectors};
+  eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+  const auto queried = eigen_provider::prepare_symmetric_eigen_workspace(
+      candidate->eigen_handles.view(),
+      {eigen_provider::SymmetricEigenFamily::xsyevd, static_cast<std::int64_t>(naux), &metric_range,
+       1},
+      setup.metrics, setup.eigenvalues, prepared);
+  if (!queried.success()) {
+    return fail_plan(
+        candidate,
+        solver_failure(queried.error == eigen_provider::EigenWorkspaceError::provider_failure
+                           ? static_cast<cusolverStatus_t>(queried.provider_status)
+                           : CUSOLVER_STATUS_INTERNAL_ERROR,
+                       "size CUDA DF metric eigensolver", detail));
   }
-  if (solver_device_workspace_bytes > df_eigen_workspace_allowance(naux)) {
+  const auto solver_device_workspace_bytes = prepared.required().device_bytes;
+  const auto solver_host_workspace_bytes = prepared.required().host_bytes;
+  eigen_provider::EigenWorkspaceLimits limits;
+  limits.device_bytes = df_eigen_workspace_allowance(naux);
+  if (prepared.admit(limits) != eigen_provider::EigenWorkspaceAdmission::accepted) {
     detail = "CUDA DF metric eigensolver query exceeds its planned workspace";
     return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
@@ -664,13 +674,20 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
     detail = "host allocation for CUDA DF metric solver workspace failed";
     return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
   }
+  eigen_provider::SymmetricEigenWorkspaceBinding binding;
+  if (!eigen_provider::bind_symmetric_eigen_workspace(
+          {candidate->eigen_handles.view().solver, candidate->eigen_handles.view().parameters,
+           nullptr, setup.solver_workspace, solver_device_workspace_bytes,
+           setup.solver_host_workspace.empty() ? nullptr : setup.solver_host_workspace.data(),
+           solver_host_workspace_bytes},
+          prepared.required(), eigen_provider::SymmetricEigenFamily::xsyevd,
+          eigen_provider::JacobiWorkspaceExtent::queried_elements, binding)) {
+    detail = "invalid CUDA DF metric eigensolver workspace binding";
+    return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+  }
   for (std::size_t system = 0; system < batch_size; ++system) {
     solver_status = static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
-        {candidate->solver, candidate->solver_parameters, nullptr, setup.solver_workspace,
-         solver_device_workspace_bytes,
-         setup.solver_host_workspace.empty() ? nullptr : setup.solver_host_workspace.data(),
-         solver_host_workspace_bytes},
-        eigen_provider::SymmetricEigenFamily::xsyevd,
+        binding.resources, eigen_provider::SymmetricEigenFamily::xsyevd,
         {static_cast<std::int64_t>(naux), 1, eigen_provider::Eigenvectors::values_and_vectors},
         setup.metrics + system * metric_elements, setup.eigenvalues + system * naux,
         setup.solver_info + system, 0));

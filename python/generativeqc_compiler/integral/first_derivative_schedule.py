@@ -5,9 +5,16 @@ once, and derivative center/axis slots are restored before physical scattering.
 The existing first-derivative graphs remain the sole mathematical lowering.
 """
 
-from dataclasses import dataclass
+import typing
+from dataclasses import asdict, dataclass
 from functools import lru_cache
 from itertools import permutations, product
+from pathlib import Path
+from time import perf_counter
+
+from generativeqc_compiler.common.cuda_target import CudaTargetInfo
+from generativeqc_compiler.common.paths import source_hashes
+from generativeqc_compiler.common.semantic_source_cache import cached_sources
 
 from .eri_weights import eri_weight_orbit
 from .first_derivative_native import (
@@ -193,3 +200,71 @@ def derivative_dispatch_table(domain: tuple[str, ...]) -> tuple[tuple[int, ...],
                 *binding.axes,
             )
     return tuple(table)
+
+
+def cached_derivative_cuda_source(
+    requests: tuple[DerivativeRequest, ...],
+    *,
+    cache: Path,
+    target: CudaTargetInfo,
+    component_domain: tuple[str, ...] | None = None,
+    enabled: bool = True,
+) -> tuple[str | tuple[str, ...], dict[str, typing.Any]]:
+    """Reuse exact ordered primitive lowering without changing fallback demand.
+
+    Demand projection stays with the qualified runtime capability owner. This
+    provider only caches the existing full bounded or nuclear-only recipe and
+    returns sources for the unchanged source/header/toolchain binary cache.
+    """
+    started = perf_counter()
+    if type(enabled) is not bool:
+        raise TypeError("stationary source cache selection must be boolean")
+    requests = tuple(requests)
+    if not requests or len(requests) != len(set(requests)):
+        raise ValueError("stationary CUDA requires unique nonempty primitive requests")
+    if component_domain is not None and requests != derivative_requests(
+        component_domain
+    ):
+        raise ValueError(
+            "stationary CUDA component domain differs from primitive demand"
+        )
+    recipe = {
+        "product": "first-derivative-cuda.v1",
+        "dependencies": source_hashes(
+            "common",
+            "integral",
+            assets=(
+                "src/integrals/eri_geometry.hpp",
+                "src/integrals/range_moments.hpp",
+            ),
+        ),
+        "target": asdict(target),
+        "precision": "FP64/strict/no-fmad",
+        "requests": requests,
+        "component_domain": component_domain,
+        "shard_width": CUDA_REQUESTS_PER_UNIT if component_domain is not None else None,
+    }
+    recipe_seconds = perf_counter() - started
+
+    def produce() -> tuple[str, ...]:
+        if component_domain is not None:
+            return tuple(
+                source for _, source in derivative_cuda_sources(component_domain)
+            )
+        return (emit_first_derivative_cuda(requests),)
+
+    sources, work = cached_sources(
+        cache if enabled else None,
+        recipe,
+        produce,
+        max_unit_bytes=MAX_UNIT_BYTES
+        if component_domain is not None
+        else MAX_PROGRAM_BYTES,
+        max_total_bytes=MAX_PROGRAM_BYTES,
+        expected_units=(len(requests) + CUDA_REQUESTS_PER_UNIT - 1)
+        // CUDA_REQUESTS_PER_UNIT
+        if component_domain is not None
+        else 1,
+    )
+    work.update(requests=len(requests), recipe_seconds=recipe_seconds)
+    return (sources if component_domain is not None else sources[0]), work

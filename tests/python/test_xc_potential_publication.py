@@ -74,6 +74,15 @@ namespace tensor {
 struct PreparedPanelProduct { bool enabled() const { return true; } };
 }
 const void *expected_density_provider{}, *expected_potential_binding{};
+struct CudaXcPointBatchPlan {
+  std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};
+  bool operator==(const CudaXcPointBatchPlan&) const = default;
+};
+using CudaXcPointBatchLauncher = void (*)();
+void batch_launcher() {}
+CudaXcPointBatchPlan expected_batch_plan;
+CudaXcPointBatchLauncher expected_batch_launcher{};
+double* expected_batch_arena{};
 struct Layout {
   std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2};
   bool local_ao{}, response{};
@@ -84,8 +93,11 @@ Capabilities cuda_xc_execution_capabilities(const Layout&) { return {}; }
 namespace cuda_xc_detail {
 template <class... T> void enqueue(T... args) {
   auto values = std::tie(args...);
-  assert(std::get<sizeof...(T)-2>(values) == expected_density_provider);
-  assert(std::get<sizeof...(T)-1>(values) == expected_potential_binding);
+  assert(std::get<sizeof...(T)-5>(values) == expected_density_provider);
+  assert(std::get<sizeof...(T)-4>(values) == expected_potential_binding);
+  assert(std::get<sizeof...(T)-3>(values) == expected_batch_plan);
+  assert(std::get<sizeof...(T)-2>(values) == expected_batch_launcher);
+  assert(std::get<sizeof...(T)-1>(values) == expected_batch_arena);
   ++bodies;
 }
 }
@@ -96,6 +108,9 @@ struct CudaXcPlan {
   cudaStream_t stream_{7};
   int device_{2}, point_launcher_{};
   bool evaluation_started_{};
+  CudaXcPointBatchPlan point_batch_plan_;
+  CudaXcPointBatchLauncher point_batch_launcher_{};
+  double* point_batch_arena_{};
   double *basis_{}, *points_{}, *weights_{}, *ao_{}, *work_{}, *features_{};
   double *coefficients_{}, *point_totals_{}, *potential_{}, *totals_{}, *delta_features_{};
   void* arena_{};
@@ -118,10 +133,19 @@ struct CudaXcPlan {
 """
     driver = r"""
 int main(int argc, char** argv) {
-  assert(argc == 6);
+  assert(argc == 7);
   const bool replay = std::atoi(argv[1]), local = std::atoi(argv[2]);
   const int mode = std::atoi(argv[3]);
   CudaXcPlan plan;
+  double retained_panel{};
+  if (std::atoi(argv[6])) {
+    plan.point_batch_plan_ = {4, 19, 23, 29, 752};
+    plan.point_batch_launcher_ = &batch_launcher;
+    plan.point_batch_arena_ = &retained_panel;
+  }
+  expected_batch_plan = plan.point_batch_plan_;
+  expected_batch_launcher = plan.point_batch_launcher_;
+  expected_batch_arena = plan.point_batch_arena_;
   plan.layout_.spins = std::atoi(argv[4]);
   plan.layout_.local_ao = local;
   for (auto* table : {&plan.strict_density_, &plan.admitted_density_})
@@ -174,6 +198,7 @@ int main(int argc, char** argv) {
     return binary
 
 
+@pytest.mark.parametrize("batched", (False, True))
 @pytest.mark.parametrize("density_provider", (False, True))
 @pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize(
@@ -188,6 +213,7 @@ def test_publication_is_atomic_and_counts_only_submitted_products(
     mode: int,
     spins: int,
     density_provider: bool,
+    batched: bool,
 ) -> None:
     result = subprocess.run(
         [
@@ -197,6 +223,7 @@ def test_publication_is_atomic_and_counts_only_submitted_products(
             str(mode),
             str(spins),
             str(int(density_provider)),
+            str(int(batched)),
         ],
         capture_output=True,
         text=True,

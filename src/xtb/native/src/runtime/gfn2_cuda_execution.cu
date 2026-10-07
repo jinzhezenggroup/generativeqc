@@ -57,6 +57,7 @@
 #include "runtime/gfn2_cuda_topology_staging.hpp"
 #include "runtime/molecular_request.hpp"
 #include "runtime/nvidia_host_api.h"
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace generativeqc::xtb::detail {
 namespace {
@@ -2206,9 +2207,7 @@ struct Gfn2CudaExecutionCache::Impl {
     }
 
     if (blas != nullptr) (void)cublasDestroy(blas);
-    if (solver_jacobi != nullptr) (void)cusolverDnDestroySyevjInfo(solver_jacobi);
-    if (solver_parameters != nullptr) (void)cusolverDnDestroyParams(solver_parameters);
-    if (solver != nullptr) (void)cusolverDnDestroy(solver);
+    eigen_handles.reset();
     if (restore_caller_device) (void)cudaSetDevice(caller_device);
   }
 
@@ -2232,39 +2231,26 @@ struct Gfn2CudaExecutionCache::Impl {
 
     /* Publish context handles only after the entire construction succeeds.
      * This keeps retries leak-free after a partial provider failure. */
-    cusolverDnHandle_t candidate_solver = nullptr;
-    cusolverDnParams_t candidate_parameters = nullptr;
-    syevjInfo_t candidate_jacobi = nullptr;
+    ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles candidate_solver;
     cublasHandle_t candidate_blas = nullptr;
     const auto destroy_candidate = [&]() noexcept {
       if (candidate_blas != nullptr) (void)cublasDestroy(candidate_blas);
-      if (candidate_jacobi != nullptr) (void)cusolverDnDestroySyevjInfo(candidate_jacobi);
-      if (candidate_parameters != nullptr) (void)cusolverDnDestroyParams(candidate_parameters);
-      if (candidate_solver != nullptr) (void)cusolverDnDestroy(candidate_solver);
+      candidate_solver.reset();
     };
 
-    cusolverStatus_t solver_status = cusolverDnCreate(&candidate_solver);
+    cusolverStatus_t solver_status = candidate_solver.create();
     if (solver_status != CUSOLVER_STATUS_SUCCESS) {
       error = "cusolverDnCreate failed";
       return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     }
-    solver_status = cusolverDnCreateParams(&candidate_parameters);
+    solver_status = candidate_solver.create_parameters();
     if (solver_status != CUSOLVER_STATUS_SUCCESS) {
       destroy_candidate();
       error = "cusolverDnCreateParams failed";
       return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     }
-    solver_status = cusolverDnCreateSyevjInfo(&candidate_jacobi);
-    if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-      solver_status =
-          cusolverDnXsyevjSetTolerance(candidate_jacobi, std::numeric_limits<double>::epsilon());
-    }
-    if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-      solver_status = cusolverDnXsyevjSetMaxSweeps(candidate_jacobi, 100);
-    }
-    if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-      solver_status = cusolverDnXsyevjSetSortEig(candidate_jacobi, 1);
-    }
+    solver_status = candidate_solver.configure_jacobi(std::numeric_limits<double>::epsilon(),
+                                                       100, 1);
     if (solver_status != CUSOLVER_STATUS_SUCCESS) {
       destroy_candidate();
       error = "failed to configure the CUDA small-matrix Jacobi eigensolver";
@@ -2276,16 +2262,14 @@ struct Gfn2CudaExecutionCache::Impl {
       error = "cublasCreate failed";
       return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     }
-    solver_status = cusolverDnSetStream(candidate_solver, stream);
+    solver_status = candidate_solver.bind_stream(stream);
     blas_status = cublasSetStream(candidate_blas, stream);
     if (solver_status != CUSOLVER_STATUS_SUCCESS || blas_status != CUBLAS_STATUS_SUCCESS) {
       destroy_candidate();
       error = "failed to bind CUDA linear-algebra handles to the context stream";
       return GENERATIVEQC_XTB_STATUS_BACKEND_UNAVAILABLE;
     }
-    solver = candidate_solver;
-    solver_parameters = candidate_parameters;
-    solver_jacobi = candidate_jacobi;
+    eigen_handles = std::move(candidate_solver);
     blas = candidate_blas;
     handles_created = true;
     return GENERATIVEQC_XTB_STATUS_SUCCESS;
@@ -5053,11 +5037,13 @@ struct Gfn2CudaExecutionCache::Impl {
     };
 
     Gfn2EigensolverOptions eigensolver_options = candidate->plan_seed.eigensolver_options;
-    eigensolver_options.jacobi = solver_jacobi;
+    eigensolver_options.jacobi = static_cast<syevjInfo_t>(eigen_handles.view().jacobi);
     auto eigensolver_diagnostic = Gfn2SccSetupEigensolver::create(
         candidate->topology_owner, candidate->host.overlap.data(),
         static_cast<std::int64_t>(candidate->host.overlap.size()),
-        candidate->host.geometry_generation, token, solver, solver_parameters, blas,
+        candidate->host.geometry_generation, token,
+        static_cast<cusolverDnHandle_t>(eigen_handles.view().solver),
+        static_cast<cusolverDnParams_t>(eigen_handles.view().parameters), blas,
         eigensolver_options, candidate->eigensolver_owner);
     if (!eigensolver_diagnostic.success()) {
       error = setup_error_message(
@@ -6401,9 +6387,7 @@ struct Gfn2CudaExecutionCache::Impl {
   std::int32_t device_id = -1;
   cudaStream_t stream = nullptr;
   Gfn2CudaTopologyStaging topology_staging;
-  cusolverDnHandle_t solver = nullptr;
-  cusolverDnParams_t solver_parameters = nullptr;
-  syevjInfo_t solver_jacobi = nullptr;
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;
   cublasHandle_t blas = nullptr;
   bool handles_created = false;
   std::uint64_t next_plan_token = 1u;

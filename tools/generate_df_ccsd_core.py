@@ -127,6 +127,7 @@ DeviceReplayOutputs run_replay_cuda(CudaState& state);
 def cuda_source() -> str:
     """Preserve errors from all preceding auxiliary actions until host acceptance."""
     lines = [
+        '#include "tensor/cuda_reduction.cuh"',
         '#include "generated_df_ccsd_core_cpu.hpp"',
         '#include "generated_df_ccsd_core_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfcore {",
@@ -142,6 +143,7 @@ def cuda_source() -> str:
                 output,
                 input_overrides={key: f"s.{key}" for key in INPUTS},
                 reset_error=False,
+                parallel_scalar_reductions=name == "iteration",
             ),
             f"{output} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
         ]

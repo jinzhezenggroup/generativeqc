@@ -68,3 +68,11 @@ Refs #2015, #2020, #2059, #2060.
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
+
+## Storage-policy follow-up
+
+The original candidate's blanket shared placement also dropped the incumbent
+`psss`/`psps` lane-private streaming policy. The
+[storage-policy correction](../implemented/performance/2026-10-07-k-block-lane-private-storage.md)
+preserves that explicit incumbent capability without changing the contraction
+algorithm or promoting the optional candidate to the default.
