@@ -43,6 +43,8 @@ struct CudaDensityFittingJkPlan {
   unsigned scf_diis_history{};
   int device_id{-1};
   double metric_relative_threshold{};
+  integrals::CoulombRange range{integrals::CoulombRange::Full};
+  double omega{};
   std::size_t batch_size{};
   std::size_t nbf{};
   std::size_t naux{};
