@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -80,6 +81,40 @@ void unsupported_backend() {
     rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   require(rejected, "native UMP2 silently admitted CUDA backend");
+
+  context.requested_backend = GENERATIVEQC_BACKEND_CPU_REFERENCE;
+  descriptor.energy_tolerance = std::numeric_limits<double>::quiet_NaN();
+  rejected = false;
+  try {
+    (void)generativeqc::methods::detail::prepare_ump2_calculation(capabilities, context, h2(),
+                                                                  descriptor);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "native UMP2 silently reset a nonfinite SCF tolerance");
+
+  descriptor = {};
+  generativeqc_initial_guess_options preliminary{};
+  descriptor.initial_guess = &preliminary;
+  rejected = false;
+  try {
+    (void)generativeqc::methods::detail::prepare_ump2_calculation(capabilities, context, h2(),
+                                                                  descriptor);
+  } catch (const generativeqc::methods::MethodError& error) {
+    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(rejected, "native UMP2 silently ignored an initial-guess request");
+
+  descriptor = {};
+  descriptor.density_fitting_memory_budget_bytes = 1024;
+  rejected = false;
+  try {
+    (void)generativeqc::methods::detail::prepare_ump2_calculation(capabilities, context, h2(),
+                                                                  descriptor);
+  } catch (const generativeqc::methods::MethodError& error) {
+    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(rejected, "native UMP2 silently ignored a DF memory request");
 }
 
 void source_and_slots() {

@@ -317,8 +317,11 @@ std::unique_ptr<PreparedCalculation> prepare_ump2_calculation(
   if (context.requested_backend != GENERATIVEQC_BACKEND_CPU_REFERENCE)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "UMP2 requires the CPU backend");
   if (descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
-      descriptor.density_fitting_auxiliary_basis)
+      descriptor.density_fitting_auxiliary_basis || descriptor.density_fitting_memory_budget_bytes)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "UMP2 RI/DF is unavailable");
+  if (descriptor.ks_options || descriptor.initial_guess)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "UMP2 KS/preliminary initial-guess controls are unavailable");
   if (descriptor.ccsd_frozen_core)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "UMP2 frozen core is unavailable");
   if (descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64)
@@ -335,6 +338,9 @@ std::unique_ptr<PreparedCalculation> prepare_ump2_calculation(
       descriptor.mp2_denominator_threshold != 0 ? descriptor.mp2_denominator_threshold : 1e-10;
   if (!std::isfinite(threshold) || threshold <= 0)
     throw std::invalid_argument("invalid UMP2 denominator threshold");
+  if (!std::isfinite(descriptor.energy_tolerance) || descriptor.energy_tolerance < 0 ||
+      !std::isfinite(descriptor.density_tolerance) || descriptor.density_tolerance < 0)
+    throw std::invalid_argument("invalid UMP2 reference convergence threshold");
   scf::ScfOptions options;
   options.max_iterations = descriptor.max_iterations ? descriptor.max_iterations : 100;
   options.diis_history = descriptor.diis_history ? descriptor.diis_history : 8;

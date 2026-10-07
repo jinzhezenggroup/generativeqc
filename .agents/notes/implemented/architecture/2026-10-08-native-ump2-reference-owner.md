@@ -53,9 +53,9 @@ execution; successful UMP2 publication still requires a new physical UHF solve.
 The clean fork-commit Release CPU build on 2026-10-08 used GCC 11.4,
 CMake 4.4.4, `sccache 0.16.0`, strict FP64 and the scalar CPU linear-algebra fallback.
 The compiled and checkout source identities both equalled
-`3216231aade22e4c2bd22173969e568d2a9936d665c7193f7161a12fff64957c`;
+`67005494682d3e9701d601f982c3e87f0a4adf7b5a2a00b512a35682254562f8`;
 the native library SHA-256 was
-`434c0fce3d17a59e71ab20a7bb48f2b0aaea0a65fd8a8377030db506934c2fd7`.
+`6ad9ed523962ab4440c6d9af06f24424488ec20f2d550ab8b541ee9db18cfab8`.
 
 The focused public/core/manifest suite reported 36 passed and four CUDA-only
 skips. `test_ump2_public.py` compares native Li to pinned PySCF 2.14.0 using
@@ -69,7 +69,8 @@ independent PySCF at `1e-8` Eh. The public restricted limit agrees with public
 MP2 energy and OS/SS components at `1e-9` Eh. Native UMP2, existing MP2, and
 existing UHF final-state CTest targets all passed; the UMP2 native target also
 checks stale geometry, near and overflowed far denominators before AO reads, four-slot spin
-coefficients and CUDA backend rejection. Numeric capacity was admitted but no
+coefficients, CUDA backend rejection, invalid reference tolerances, and
+unsupported preliminary/DF controls. Numeric capacity was admitted but no
 whole-process allocator peak or endpoint throughput claim was made.
 
 The core-level independent Li and stretched-H2 oracles remain in
