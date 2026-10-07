@@ -923,7 +923,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     std::size_t maximum_auxiliary_tile, std::vector<double>& gradient, std::string& detail,
     DfGradientResources* resources, const CudaDfMetricView* device_metric, void* blas_handle,
     const CudaDfResponseBuffers* borrowed, const CudaDfPackedRawTensorView* packed_raw,
-    const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied) {
+    const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
+    const CudaDfBorrowedResponseDensity* borrowed_density) {
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
@@ -964,6 +965,15 @@ generativeqc_status execute_cuda_df_hf_gradient(
       terms.empty() || !std::isfinite(relative_threshold) || relative_threshold <= 0 ||
       relative_threshold >= 1) {
     detail = "invalid generated DF-HF response dimensions or budget";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (borrowed_density &&
+      (!*borrowed_density || borrowed_density->device_id != device ||
+       borrowed_density->stream != stream_handle ||
+       borrowed_density->matrix_elements != n * n || terms.size() != 1 ||
+       terms[0].density.size() != n * n || terms[0].coulomb_coefficient == 0.0 ||
+       terms[0].exchange_coefficient != 0.0)) {
+    detail = "borrowed DF response density is incompatible with the Coulomb response";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto metric_matches = [&](const CudaDfMetricView& view) {
@@ -1424,13 +1434,24 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                borrowed->exchange_capacity() / (n * n),
                                maximum_auxiliary_tile ? maximum_auxiliary_tile : a})
                    : tile;
-      auto* densities = static_cast<double*>(arena.allocate(terms.size() * n * n * sizeof(double)));
-      for (std::size_t t = 0; t < terms.size(); ++t) {
-        check(cudaMemcpyAsync(densities + t * n * n, terms[t].density.data(),
-                              n * n * sizeof(double), cudaMemcpyHostToDevice, arena.stream));
-        arena.stats.host_to_device_bytes += n * n * sizeof(double);
-        arena.stats.density_host_to_device_bytes += n * n * sizeof(double);
-        ++arena.stats.uploads;
+      const double* densities = nullptr;
+      if (borrowed_density) {
+        densities = borrowed_density->density;
+        const auto bytes = n * n * sizeof(double);
+        arena.stats.borrowed_device_bytes += bytes;
+        runtime::cuda_trace::trace_counter("response_borrowed_density_bytes", bytes);
+        runtime::cuda_trace::trace_counter("response_borrowed_density", 1);
+      } else {
+        auto* owned_densities =
+            static_cast<double*>(arena.allocate(terms.size() * n * n * sizeof(double)));
+        densities = owned_densities;
+        for (std::size_t t = 0; t < terms.size(); ++t) {
+          check(cudaMemcpyAsync(owned_densities + t * n * n, terms[t].density.data(),
+                                n * n * sizeof(double), cudaMemcpyHostToDevice, arena.stream));
+          arena.stats.host_to_device_bytes += n * n * sizeof(double);
+          arena.stats.density_host_to_device_bytes += n * n * sizeof(double);
+          ++arena.stats.uploads;
+        }
       }
       const auto workspace_elements =
           cuda_df_response_workspace_elements(
@@ -1455,7 +1476,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.occupied_response = true;
         owned_buffers.fitted_occupied_source = whitened;
         owned_buffers.final_fitted_occupied_projection = occupied->final_fitted_occupied_projection;
-        arena.stats.borrowed_device_bytes = occupied_coefficients * sizeof(double);
+        arena.stats.borrowed_device_bytes += occupied_coefficients * sizeof(double);
         runtime::cuda_trace::trace_counter("response_borrowed_occupied_factor_bytes",
                                            arena.stats.borrowed_device_bytes);
         if (whitened) {
@@ -1482,7 +1503,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // These allocations remain owned and charged by the value plan. Keep
         // their capacity visible without double-counting it as new response
         // scratch or silently widening the caller's private force allowance.
-        arena.stats.borrowed_device_bytes =
+        arena.stats.borrowed_device_bytes +=
             (borrowed->staging_capacity() + borrowed->raw_capacity() +
              borrowed->exchange_capacity()) *
             sizeof(double);
