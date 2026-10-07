@@ -10,6 +10,7 @@ scientific operation.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.lowering_contract import (
     CandidateExecution,
@@ -22,9 +23,13 @@ from generativeqc_compiler.common.lowering_provider import (
     collect_lowering_candidates,
 )
 from generativeqc_compiler.common.precision import STRICT_MATH_MODE
-from generativeqc_compiler.common.specialization import TargetCapabilities
 
-from .matrix_view import MatrixContraction, matrix_contraction
+from .matrix_view import matrix_contraction
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.common.specialization import TargetCapabilities
+
+    from .matrix_view import MatrixContraction
 
 CPU_SCALAR_PROVIDER = ProviderDescriptor(
     name="generativeqc.cpu_linalg.scalar",
