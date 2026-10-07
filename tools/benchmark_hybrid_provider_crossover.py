@@ -357,7 +357,7 @@ def run_native(args: argparse.Namespace) -> None:
             if moved_warm["status"] != "PASS":
                 raise RuntimeError("moved-warm endpoint failed")
         record["status"] = "MEASURED"
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - persist every failed device attempt
         record.update(status="FAILED", error_type=type(error).__name__, error=str(error), traceback=traceback.format_exc())
     write(output, record)
 
@@ -444,7 +444,7 @@ def _run_profile_impl(args: argparse.Namespace, record: dict[str, Any], case: Ca
             record["executed_counters"] = None
             record["occupied_reuse_verified"] = False if args.arm == "df-jk-occupied" else None
         record["status"] = "MEASURED"
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - persist intrusive probe failures
         record.update(status="FAILED", error_type=type(error).__name__, error=str(error), traceback=traceback.format_exc())
     write(args.output, record)
 
@@ -497,7 +497,7 @@ def _run_reference_impl(args: argparse.Namespace, native: dict[str, Any], record
             record["samples"].append(sample)
             write(args.output, record)
         record["status"] = "MEASURED" if all(s["status"] == "PASS" for s in record["samples"]) else "FAILED"
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - persist independent oracle failures
         record.update(status="FAILED", error_type=type(error).__name__, error=str(error), traceback=traceback.format_exc())
     write(args.output, record)
 

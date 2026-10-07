@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import Callable
 
 import pytest
 
@@ -86,7 +87,9 @@ def test_supported_arms_require_oracle_and_never_claim_full_crossover() -> None:
     lambda rows, refs: refs[1]["samples"][0].update(energy_hartree=-0.9),
     lambda rows, refs: refs[0]["grid_exports"]["original"].update(sha256="wrong"),
 ])
-def test_mismatch_or_failure_cannot_pass(mutate) -> None:
+def test_mismatch_or_failure_cannot_pass(
+    mutate: Callable[[list[dict], list[dict]], None],
+) -> None:
     records, oracles, profiles = _records()
     mutate(records, oracles)
     assert summarize(records, oracles, profiles)["status"] == "INCOMPLETE"
