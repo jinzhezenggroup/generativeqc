@@ -516,21 +516,17 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                           "legacy PBE0 incremental Direct-J/K selector requires CUDA RKS PBE0");
     }
     options.incremental_direct_jk = true;
-    const auto interval =
-        incremental_direct_jk_benchmark_rebuild_interval(
-            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL")
-            .or_else([] {
-              return incremental_direct_jk_benchmark_rebuild_interval(
-                  "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
-            });
+    auto interval = incremental_direct_jk_benchmark_rebuild_interval(
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+    if (!interval)
+      interval = incremental_direct_jk_benchmark_rebuild_interval(
+          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
     if (interval) options.incremental_direct_jk_rebuild_interval = *interval;
-    const auto threshold =
-        incremental_direct_jk_benchmark_density_rms_threshold(
-            "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD")
-            .or_else([] {
-              return incremental_direct_jk_benchmark_density_rms_threshold(
-                  "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
-            });
+    auto threshold = incremental_direct_jk_benchmark_density_rms_threshold(
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+    if (!threshold)
+      threshold = incremental_direct_jk_benchmark_density_rms_threshold(
+          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
     if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
   }
   if (semilocal_metadata.molecular_nonlocal_domain) {
