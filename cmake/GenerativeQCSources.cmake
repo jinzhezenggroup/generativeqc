@@ -128,6 +128,7 @@ endfunction()
 function(generativeqc_add_integrals_scf_sources target)
   target_sources(${target} PRIVATE
     src/integrals/s_integrals.cpp
+    src/integrals/minao_basis.cpp
     src/integrals/density_fitting_metric.cpp
     src/integrals/generated_df_cpu.cpp
     src/integrals/ecp.cpp
@@ -155,6 +156,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/reference/linalg.cpp
     src/scf/reference/mean_field.cpp
     src/scf/initial_guess/density.cpp
+    src/scf/initial_guess/minao.cpp
     src/scf/preliminary_guess.cpp
     src/tensor/symmetric_matrix_function.cpp
     src/scf/cuda/df_source_domain.cpp
