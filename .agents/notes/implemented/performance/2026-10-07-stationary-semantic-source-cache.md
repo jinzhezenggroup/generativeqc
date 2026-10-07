@@ -69,6 +69,11 @@ scalar differentiation on a hit. They also cover recipe/method/target/dependency
 ABI/demand invalidation, damaged/partial entries, concurrent producers and
 nondeterministic publication, byte limits, disabled reuse, legacy explicit-source
 callers, retained fallback roots and mandatory-native failure boundaries.
+The source-only DFT-MP capacity qualifier's whole-endpoint source fingerprint is
+re-audited for the lazy provider and new telemetry only. Its native requirements,
+resource bounds, work windows, reserves and reductions do not change; mutation
+regressions continue rejecting changes to those contracts. AOT branch tests now
+require the lazy cache provider to remain exclusively in the JIT branch.
 
 A separate CPU-only full-SPD source census has 362 requests, 23 primitive units
 and 23,002,437 primitive source bytes, matching the issue's source inventory.

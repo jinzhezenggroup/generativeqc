@@ -89,12 +89,18 @@ def _artifact_selector(function_name: str, artifact_name: str) -> ast.IfExp:
         for node in ast.walk(selector.body.args[0])
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
-    assert {"derivative_cuda_sources", "emit_first_derivative_cuda"} <= source_calls
+    assert isinstance(selector.body.args[0], ast.Lambda)
+    assert "cached_derivative_cuda_source" in source_calls
+    assert not {"derivative_cuda_sources", "emit_first_derivative_cuda"} & source_calls
     assert not {
         node.func.id
         for node in ast.walk(selector.orelse)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    } & {"derivative_cuda_sources", "emit_first_derivative_cuda"}
+    } & {
+        "cached_derivative_cuda_source",
+        "derivative_cuda_sources",
+        "emit_first_derivative_cuda",
+    }
     return selector
 
 

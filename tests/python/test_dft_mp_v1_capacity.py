@@ -186,7 +186,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
         ),
         "prepared_aot_selection_sha256": (
-            "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
+            "1869293908a30ea3d85731aa3f938dad80c28fcfc337ac9909d96dfe43cfa70c"
         ),
     }
 
@@ -339,7 +339,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "34b24d3895eed20d7846c81380dd040afbc6d9fadf423a1dbb27f0908f9c4c60"
+            "a43077fab9b73dbe52beacf12442fb2cd1e104e0eff296718b7251ecb4c1b22c"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
