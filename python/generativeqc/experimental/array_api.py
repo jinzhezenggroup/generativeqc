@@ -121,11 +121,12 @@ def asarray(
     return array
 
 
-def _generic_spec(array: np.ndarray) -> TensorSpec:
+def _generic_spec(array: np.ndarray, *, differentiable: bool) -> TensorSpec:
     return TensorSpec(
         _namespace._generic_indices(tuple(int(extent) for extent in array.shape)),
         dtype=array.dtype.name,
-        role="input",
+        role="parameter" if differentiable else "input",
+        differentiable=differentiable,
     )
 
 
@@ -137,7 +138,13 @@ class CompiledFunction:
     this first public path uses the independent NumPy TensorIR interpreter.
     """
 
-    def __init__(self, function: typing.Callable[..., object], *, backend: str) -> None:
+    def __init__(
+        self,
+        function: typing.Callable[..., object],
+        *,
+        backend: str,
+        differentiable: tuple[str, ...],
+    ) -> None:
         if not callable(function):
             raise TypeError("compile requires a callable")
         if backend != "reference":
@@ -156,9 +163,20 @@ class CompiledFunction:
             raise TypeError(
                 "compiled array functions require named, non-variadic parameters"
             )
+        if not isinstance(differentiable, tuple) or any(
+            not isinstance(name, str) for name in differentiable
+        ):
+            raise TypeError("differentiable must be a tuple of parameter names")
+        if len(set(differentiable)) != len(differentiable):
+            raise ValueError("differentiable parameter names must be unique")
+        unknown = set(differentiable) - set(signature.parameters)
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(f"unknown differentiable parameter(s): {names}")
         self._function = function
         self._signature = signature
         self._backend = backend
+        self._differentiable = frozenset(differentiable)
         self._programs: dict[tuple[tuple[str, tuple[int, ...], str], ...], Program] = {}
         functools.update_wrapper(self, function)
 
@@ -176,7 +194,9 @@ class CompiledFunction:
                 raise TypeError("compiled runtime arguments must be concrete arrays")
             assert isinstance(array, np.ndarray)
             feeds[name] = array
-            specs[name] = _generic_spec(array)
+            specs[name] = _generic_spec(
+                array, differentiable=name in self._differentiable
+            )
             key_rows.append(
                 (name, tuple(int(x) for x in array.shape), array.dtype.name)
             )
@@ -212,6 +232,7 @@ def compile(
     function: typing.Callable[..., object],
     *,
     backend: str = "reference",
+    differentiable: tuple[str, ...] = (),
 ) -> CompiledFunction: ...
 
 
@@ -220,6 +241,7 @@ def compile(
     function: None = None,
     *,
     backend: str = "reference",
+    differentiable: tuple[str, ...] = (),
 ) -> typing.Callable[[typing.Callable[..., object]], CompiledFunction]: ...
 
 
@@ -227,11 +249,16 @@ def compile(
     function: typing.Callable[..., object] | None = None,
     *,
     backend: str = "reference",
+    differentiable: tuple[str, ...] = (),
 ) -> CompiledFunction | typing.Callable[[typing.Callable[..., object]], CompiledFunction]:
     """Capture a normal array function lazily from its first concrete signature."""
     if function is None:
-        return lambda target: CompiledFunction(target, backend=backend)
-    return CompiledFunction(function, backend=backend)
+        return lambda target: CompiledFunction(
+            target, backend=backend, differentiable=differentiable
+        )
+    return CompiledFunction(
+        function, backend=backend, differentiable=differentiable
+    )
 
 
 def capabilities() -> dict[str, object]:
