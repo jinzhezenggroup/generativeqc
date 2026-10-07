@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .capabilities import CAPABILITY_K_BLOCK_FOCK, CAPABILITY_STREAMING_FOCK
+from .capabilities import (
+    CAPABILITY_K_BLOCK_FOCK,
+    CAPABILITY_LOCAL_PACKED_STREAMING_FOCK,
+    CAPABILITY_STREAMING_FOCK,
+)
 from .cuda_schedule import ScheduleKind
 from .ir import KernelConsumer
 from .k_block import packed_restricted_k_block_eligible
@@ -18,7 +22,7 @@ if TYPE_CHECKING:
 def direct_k_block_candidates(
     profile: ResolvedProductionProfile,
 ) -> tuple[KernelSelection, ...]:
-    """Return bounded packed alternatives beside incumbent streaming K kernels."""
+    """Return bounded packed K alternatives with the incumbent lane storage policy."""
 
     candidates = []
     for incumbent in profile.selections:
@@ -34,6 +38,11 @@ def direct_k_block_candidates(
         ):
             continue
         integral = specialize_fock_integral(_selection_integral(incumbent))
+        capabilities = {CAPABILITY_STREAMING_FOCK, CAPABILITY_K_BLOCK_FOCK}
+        # Storage placement remains valid for the specialized value producer.
+        # Do not inherit unrelated consumer/precision capabilities with it.
+        if incumbent.has_capability(CAPABILITY_LOCAL_PACKED_STREAMING_FOCK):
+            capabilities.add(CAPABILITY_LOCAL_PACKED_STREAMING_FOCK)
         candidates.append(
             KernelSelection(
                 architecture=profile.target.architecture,
@@ -43,9 +52,7 @@ def direct_k_block_candidates(
                 recurrence=integral.recurrence,
                 integral=integral,
                 schedule=schedule,
-                capabilities=frozenset(
-                    (CAPABILITY_STREAMING_FOCK, CAPABILITY_K_BLOCK_FOCK)
-                ),
+                capabilities=frozenset(capabilities),
                 fock_route="streaming",
                 tuned=False,
             )
