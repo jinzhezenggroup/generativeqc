@@ -5160,8 +5160,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           host_incremental_max_abs_delta_density[system];
       result.incremental_direct_jk.bypass_full_builds = 0U;
       result.incremental_direct_jk.post_scf_full_builds = result.precision.post_scf_fock_builds;
+      const bool build_counts_valid = full_builds + delta_builds == builds;
       result.incremental_direct_jk.quartet_work_counters_valid =
-          !bounded_direct_streaming && host_failed[system] == 0U;
+          build_counts_valid && !bounded_direct_streaming && host_failed[system] == 0U;
       if (result.incremental_direct_jk.quartet_work_counters_valid) {
         const std::uint64_t candidate_shell_quartets =
             static_cast<std::uint64_t>(host.system_shell_quartet_offsets[system + 1] -
