@@ -13,7 +13,13 @@ GenerativeQC documentation is organized by **reader and task**, not by the inter
 
 ## Generated material
 
-The generated [public method table](public_methods.md), `codegen_capabilities.json`, the `cuda_ownership/` ledger, and the generated Libxc import/coverage reports remain at the docs root because repository tooling currently writes or consumes those paths. Guides should link to those sources rather than copying their contents.
+The [Python API reference](reference/api.md) is generated from the public Python
+exports, signatures, type annotations, and docstrings at Sphinx build time. The
+generated [public method table](public_methods.md), `codegen_capabilities.json`,
+the `cuda_ownership/` ledger, and the generated Libxc import/coverage reports
+remain at the docs root because repository tooling currently writes or consumes
+those paths. Guides should link to those sources rather than copying their
+contents.
 
 Historical rationale and discarded designs belong under `.agents/notes/`, not in current-state guides.
 Machine-readable checker inputs and repository inventories belong under `manifests/`, not in the documentation tree.
