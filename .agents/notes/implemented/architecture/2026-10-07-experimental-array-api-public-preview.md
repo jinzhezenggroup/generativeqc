@@ -18,13 +18,22 @@ Expose a curated facade at `generativeqc.experimental.array_api`.
 
 - Keep `generativeqc_compiler.array_api` as the sole implementation and semantic
   owner.
-- Re-export the canonical symbolic operations, tracing helpers, DLPack boundary,
-  and the minimal TensorIR type constructors needed to define symbolic inputs.
+- Make the ordinary public path shape/dtype based: `@array_api.compile`
+  specializes from concrete runtime arguments, so users do not need TensorIR
+  `IndexSpace`, `Index`, or `TensorSpec` declarations.
+- Re-export the canonical symbolic operations, tracing helpers and DLPack
+  boundary; retain the explicit TensorIR constructors only as an advanced
+  scientific-annotation path.
 - Mark the facade with its own experimental `API_VERSION` and capability fields.
 - Keep `VibeArray.__array_namespace__` absent and continue reporting no Array API
   version.
-- Return the canonical TensorIR `Program` from `trace`; do not introduce a public
-  wrapper IR or alternate program identity.
+- Return the canonical TensorIR `Program` from both explicit `trace` and the
+  inferred `CompiledFunction.lower(...)` path; do not introduce a public wrapper
+  IR or alternate program identity.
+- Generic public arrays use anonymous shape-based axis identities and standard
+  shape broadcasting/indexing/matmul semantics. Explicitly scientific arrays
+  retain strict QC domain identity and fail closed when shape-only operations
+  would erase that metadata.
 - Keep experimental package import lazy.
 
 ## Rejected alternatives
@@ -51,8 +60,10 @@ array consumers.
 
 - Public capture must lower to exactly the same TensorIR program identity as the
   canonical compiler frontend.
-- Unsupported broadcasting, dtype promotion, dynamic shapes, Python control
-  flow, and other undeclared behavior must fail closed.
+- Generic public arrays may use ordinary shape broadcasting. Scientifically
+  annotated arrays must not gain compatibility merely because extents match.
+- Unsupported dtype promotion, dynamic shapes, Python control flow, and other
+  undeclared behavior must fail closed.
 - Equal extents must not erase AO/occupied/virtual/auxiliary/spin/batch domain
   identity.
 - Public exposure must not move Python tracing into native SCF/CC steady-state
@@ -66,6 +77,9 @@ array consumers.
 
 - Public-facade tests compare the public trace logical hash with the internal
   compiler frontend for the same symbolic equation.
+- Inferred-call tests cover `(C * occupation) @ C.T`, generic broadcasting,
+  exact scalars, reshape/indexing/newaxis and batched matmul without any
+  TensorIR type declarations.
 - Import tests verify `generativeqc.experimental` does not eagerly activate the
   Array frontend.
 - Capability tests require the public report to remain explicitly experimental,
@@ -75,11 +89,12 @@ array consumers.
 
 ## Consequences
 
-Advanced users can now write symbolic tensor expressions without importing an
-internal compiler package, while the project can still evolve the preview
-surface before committing to standards compatibility. The facade adds a small
-public maintenance obligation: changes to the compiler subset must keep the
-public capability report and user documentation synchronized.
+Ordinary users can now write NumPy-like symbolic expressions without importing
+an internal compiler package or declaring TensorIR metadata. Advanced
+quantum-chemistry code can opt back into explicit AO/occupied/virtual/auxiliary
+spaces when those semantics matter. The facade still adds a public maintenance
+obligation: generic array behavior, strict scientific behavior, the capability
+report and user documentation must evolve together.
 
 ## Revisit when
 
