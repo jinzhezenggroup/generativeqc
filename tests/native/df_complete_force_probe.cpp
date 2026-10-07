@@ -51,9 +51,14 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     const bool parallel_gap = gap_selected && std::string(gap_selected) == "1";
     const auto* gap_omitted = std::getenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE");
     const bool include_gap = !(gap_omitted && std::string(gap_omitted) == "1");
+    const auto* scalar_selected = std::getenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS");
+    const bool scalar_fused = scalar_selected && std::string(scalar_selected) == "1";
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
-        8, options, true, packed, parallel_gap, include_gap);
+        8, options, true, packed, parallel_gap, include_gap, scalar_fused);
+    if (forces && triples && scalar_fused && !include_gap && !result.triples_scalar_fusion.selected)
+      throw std::runtime_error(
+          "fused scalar qualification did not exercise the requested schedule");
     if (forces && triples && !include_gap &&
         (result.triples_gap.requested || result.triples_gap.kernels))
       throw std::runtime_error("complete-force qualification did not omit unrequested gap outputs");

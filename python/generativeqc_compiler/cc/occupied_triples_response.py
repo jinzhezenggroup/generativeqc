@@ -8,10 +8,13 @@ local cotangent to the corresponding strided physical view.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from generativeqc_compiler.tensor import Node
 
 from generativeqc_compiler.tensor import (
     Index,
@@ -26,7 +29,13 @@ from generativeqc_compiler.tensor import (
     transpose_program,
 )
 
-from .occupied_triples import df_panel_program, energy_scalar_program, moment_program
+from .occupied_triples import (
+    df_panel_program,
+    energy_scalar_program,
+    inverse,
+    moment_program,
+)
+from .triples import _LABELS, VP
 
 
 def _pullback(primal: Program, inputs: Iterable[str] | None = None) -> Program:
@@ -73,6 +82,74 @@ def energy_scalar_vjp(inputs: Iterable[str] | None = None) -> Program:
     This scalar boundary alone is not a full same-space Fock response.
     """
     return _pullback(energy_scalar_program(), inputs)
+
+
+def fused_tile_program() -> Program:
+    """Share primal and gathered W/V seeds at one virtual-cube coordinate.
+
+    Derivatives come exclusively from the existing energy AD graph. Each W
+    cotangent gathers its six inverse-coordinate permutations before the native
+    packed reverse contractions. Renaming scalar boundary inputs makes common
+    subexpressions visible to ordinary TensorIR value numbering; it does not
+    rewrite the audited triples algebra or reassociate an individual derivative.
+
+    The six denominators remain distinct inputs: their mathematical symmetry
+    does not justify changing the ordered FP64 virtual-energy subtraction. V
+    inputs carry both occupied and virtual permutations for the same reason.
+    Epsilon outputs are deliberately absent; fixed-canonical consumers needing
+    them must retain the unfused all-output schedule.
+    """
+    primal = energy_scalar_program()
+    names = tuple(
+        node.attrs["name"]
+        for node in primal.live_nodes
+        if node.op == "input" and node.attrs["name"] != "denominator"
+    )
+    reverse = energy_scalar_vjp(names)
+    labels = {VP[label]: label for label in _LABELS}
+
+    def bind(program: Program, coordinates: tuple[int, ...]) -> dict[str, Node]:
+        replacements = {}
+        label = labels[coordinates]
+        for node in program.live_nodes:
+            if node.op == "input":
+                name = node.attrs["name"]
+                if name == "denominator":
+                    name += "_" + label
+                elif name.startswith("w_"):
+                    _, occupied, virtual = name.split("_")
+                    mapped = tuple(coordinates[axis] for axis in VP[virtual])
+                    virtual = labels[mapped]
+                    name = f"w_{occupied}_{virtual}"
+                elif name.startswith("v_"):
+                    name += "_" + label
+                replacements[node] = input_tensor(name, node.spec)
+            else:
+                replacements[node] = replace(
+                    node, inputs=tuple(replacements[child] for child in node.inputs)
+                )
+        return {name: replacements[node] for name, node in program.outputs.items()}
+
+    direct = bind(reverse, (0, 1, 2))
+    outputs = {"energy": bind(primal, (0, 1, 2))["energy"]}
+    gathered = {virtual: bind(reverse, inverse(VP[virtual])) for virtual in _LABELS}
+    for occupied in _LABELS:
+        outputs[f"bar_v_{occupied}"] = direct[f"bar_v_{occupied}"]
+        outputs[f"bar_w_{occupied}"] = add(
+            *(gathered[virtual][f"bar_w_{occupied}_{virtual}"] for virtual in _LABELS)
+        )
+    return optimize(
+        Program(
+            outputs,
+            provenance={
+                **primal.provenance,
+                "schedule": "occupied-tile-primal-w-v-scalar-fusion-v1",
+                "denominator_order": "separate-inverse-permutation-bindings",
+                "w_gather_order": _LABELS,
+                "gap_cotangents": "unrequested",
+            },
+        )
+    )
 
 
 def gap_vjp(virtuals: int) -> Program:

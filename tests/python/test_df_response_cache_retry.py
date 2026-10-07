@@ -154,7 +154,7 @@ int main() {
   auto call = [&] {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
                                true, 8, 8, opts, true, expected_packed,
-                               expected_parallel_gap, expected_gap_cotangents);
+                               expected_parallel_gap, expected_gap_cotangents, false);
   };
   for (bool selected_packed : {false, true})
   for (bool parallel_gap : {false, true})

@@ -287,11 +287,16 @@ struct JointResponseLayout {
 JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::size_t q,
                                           std::size_t capacity, std::size_t panels,
                                           std::size_t caller_bytes, bool parallel_gap_reduction,
-                                          bool include_gap_response) {
+                                          bool include_gap_response,
+                                          bool fused_scalar_response = false) {
   JointResponseLayout r;
   r.fock = fock_layout(o, v, q, capacity, panels, 0, true);
   auto& p = r.fock.value;
   validate_response_work(o, v, q, p, include_gap_response);
+  const auto scalar_points = checked_mul(p.tiles, p.v3);
+  (void)checked_mul(scalar_points, generated_df::scalar_unfused_arithmetic_ops);
+  (void)checked_mul(scalar_points, generated_df::scalar_unfused_value_reads);
+  (void)checked_add(checked_mul(12, scalar_points), checked_mul(p.tiles, p.blocks));
   // A pullback can regenerate up to three evicted panels per triangular tile.
   // Those products share the Fock ledger, including its right-page replay work.
   const auto regenerated_panel_work = checked_mul(checked_mul(3, p.tiles), checked_mul(q, p.v3));
@@ -304,7 +309,7 @@ JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::siz
     values = checked_add(values, p.sizes[x]);
   }
   r.bar_w = reserve(cursor, bytes(checked_mul(6, p.v3)));
-  r.bar_v = reserve(cursor, bytes(p.v3));
+  r.bar_v = reserve(cursor, bytes(checked_mul(fused_scalar_response ? 6 : 1, p.v3)));
   r.bar_panel = reserve(cursor, bytes(p.v3));
   r.packed = reserve(cursor, bytes(checked_mul(v, v)));
   if (include_gap_response)
@@ -1020,7 +1025,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
     const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
     std::size_t caller_bytes, std::size_t max_page_rows, std::size_t max_panel_buffers,
-    bool parallel_gap_reduction, bool include_gap_response) {
+    bool parallel_gap_reduction, bool include_gap_response, bool fused_scalar_response) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
@@ -1036,19 +1041,30 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   // Fock owner: preserve page rows, then give up extra cached integral panels,
   // then shrink the page. Complete work/capacity is proven before input access.
   auto page_capacity = max_page_rows ? std::min(o, max_page_rows) : o;
-  auto plan = joint_response_layout(o, v, q, page_capacity, max_panel_buffers, prepared_caller,
-                                    parallel_gap_reduction, include_gap_response);
+  bool fused_selected = fused_scalar_response && !include_gap_response;
+  auto admitted_layout = [&](std::size_t capacity, std::size_t panels) {
+    auto candidate =
+        joint_response_layout(o, v, q, capacity, panels, prepared_caller, parallel_gap_reduction,
+                              include_gap_response, fused_selected);
+    if (fused_selected && candidate.complete > max_bytes) {
+      // Never sacrifice a previously admitted page/panel policy for optional
+      // seed storage. The unchanged unfused schedule remains the bounded oracle.
+      fused_selected = false;
+      candidate = joint_response_layout(o, v, q, capacity, panels, prepared_caller,
+                                        parallel_gap_reduction, include_gap_response);
+    }
+    return candidate;
+  };
+  auto plan = admitted_layout(page_capacity, max_panel_buffers);
   while (plan.complete > max_bytes) {
     if (plan.fock.value.panel_capacity > 1) {
-      plan = joint_response_layout(o, v, q, page_capacity, 1, prepared_caller,
-                                   parallel_gap_reduction, include_gap_response);
+      plan = admitted_layout(page_capacity, 1);
       if (plan.complete <= max_bytes) break;
     }
     if (page_capacity == 1)
       throw std::length_error("joint DF triples response exceeds complete numeric budget");
     --page_capacity;
-    plan = joint_response_layout(o, v, q, page_capacity, max_panel_buffers, prepared_caller,
-                                 parallel_gap_reduction, include_gap_response);
+    plan = admitted_layout(page_capacity, max_panel_buffers);
   }
   const double minimum = validate_inputs(o, v, q, staging_layout, host, threshold);
 
@@ -1162,30 +1178,40 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       const auto tile = response_index(i, j, k);
       if (tile >= p.tiles) throw std::logic_error("joint triples response tile index overflow");
 
-      generated_df::energy_tile(o, v, i, j, k, multiplicity, threshold, in, moments, p.blocks,
-                                pointer(p.partials), context.error, context.stream);
+      if (fused_selected)
+        generated_df::fused_response_tile(o, v, i, j, k, multiplicity, threshold, in, moments,
+                                          p.blocks, bar_w, bar_v, pointer(p.partials),
+                                          context.error, context.stream);
+      else
+        generated_df::energy_tile(o, v, i, j, k, multiplicity, threshold, in, moments, p.blocks,
+                                  pointer(p.partials), context.error, context.stream);
       ++d.epilogue_kernels;
       reduce<<<1, 256, 0, context.stream>>>(pointer(p.partials), p.blocks,
                                             pointer(p.energies) + tile, context.error);
       generativeqc_tensor::cuda_check(cudaGetLastError());
       ++d.reduction_kernels;
 
-      generated_df::response_w_tile(o, v, i, j, k, multiplicity, threshold, in, moments, p.blocks,
-                                    bar_w, context.error, context.stream);
-      ++response.reverse_kernels;
+      if (!fused_selected) {
+        generated_df::response_w_tile(o, v, i, j, k, multiplicity, threshold, in, moments, p.blocks,
+                                      bar_w, context.error, context.stream);
+        ++response.reverse_kernels;
+      }
       for (unsigned perm = 0; perm < 6; ++perm) {
         const auto* order = generated_df::permutations[perm];
         const auto I = occupied[order[0]], J = occupied[order[1]], K = occupied[order[2]];
-        generated_df::response_v_tile(o, v, i, j, k, perm, multiplicity, threshold, in, moments,
-                                      p.blocks, bar_v, context.error, context.stream);
+        if (!fused_selected)
+          generated_df::response_v_tile(o, v, i, j, k, perm, multiplicity, threshold, in, moments,
+                                        p.blocks, bar_v, context.error, context.stream);
         ovov_view<false>
             <<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, in.ovov, packed, context.error);
         generativeqc_tensor::cuda_check(cudaGetLastError());
-        generated_df::pullback_v(o, v, I, J, K, in, packed, bar_v, packed, out, reverse_gemm);
+        generated_df::pullback_v(o, v, I, J, K, in, packed,
+                                 bar_v + (fused_selected ? perm * p.v3 : 0), packed, out,
+                                 reverse_gemm);
         ovov_view<true>
             <<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, packed, out.ovov, context.error);
         generativeqc_tensor::cuda_check(cudaGetLastError());
-        response.reverse_kernels += 3;
+        response.reverse_kernels += fused_selected ? 2 : 3;
       }
 
       if (include_gap_response) {
@@ -1288,6 +1314,23 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
 
     if (response_tiles != p.tiles)
       throw std::logic_error("joint DF triples pullback work mismatch");
+    auto& fusion = response.scalar_fusion;
+    fusion.requested = fused_scalar_response;
+    fusion.selected = fused_selected;
+    fusion.resource_fallback = fused_scalar_response && !include_gap_response && !fused_selected;
+    fusion.schedule = fused_selected ? generated_df::scalar_fusion_identity : "unfused-primal-w-v";
+    fusion.tiles = p.tiles;
+    fusion.kernels = checked_mul(fused_selected ? 1 : 8, p.tiles);
+    fusion.avoided_kernels = fused_selected ? checked_mul(7, p.tiles) : 0;
+    fusion.workspace_bytes = bytes(checked_mul(fused_selected ? 12 : 7, p.v3));
+    const auto points = checked_mul(p.tiles, p.v3);
+    fusion.value_reads =
+        checked_mul(points, fused_selected ? generated_df::scalar_fused_value_reads
+                                           : generated_df::scalar_unfused_value_reads);
+    fusion.arithmetic_ops =
+        checked_mul(points, fused_selected ? generated_df::scalar_fused_arithmetic_ops
+                                           : generated_df::scalar_unfused_arithmetic_ops);
+    fusion.value_writes = checked_add(checked_mul(12, points), checked_mul(p.tiles, p.blocks));
     if (fock.vector_cubes != plan.fock.cubes || fock.page_builds != plan.fock.page_builds)
       throw std::logic_error("joint DF triples Fock replay work mismatch");
 

@@ -230,6 +230,33 @@ not by itself block these defaults; its strict numerical gates remain unchanged.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
 
+Argument twenty-three opts into bounded primal/W/V scalar-tile fusion (`0` or
+`1`, default `0`), after the existing RHF tolerance arguments twenty-one and
+twenty-two. The internal complete-force owner forwards the same explicit
+`fused_triples_scalar_response` control to the joint triples response owner.
+It applies only when argument twenty is `0`: a fixed-canonical consumer asking
+for epsilon cotangents retains the all-output schedule. Public method defaults
+are unchanged.
+
+The fused region derives every derivative from the original energy TensorIR
+AD graph, gathers the six inverse virtual permutations in their original
+order, and shares producer expressions across energy and packed W/V seeds.
+Its six ordered denominator bindings remain separate; mathematical symmetry
+must not silently reassociate FP64 orbital-energy subtraction. It replaces
+eight scalar-region launches per occupied triangle by one, while retaining
+the energy reduction tree and all reverse BLAS contractions. Full T3 remains
+unmaterialized.
+
+Fusion retains six V seed cubes instead of reusing one. Complete preflight
+charges the extra five virtual cubes and falls back to the unfused schedule
+before reducing admitted page/panel residency. The standalone energy,
+pullback, and full-Fock APIs remain independent qualification controls.
+Endpoint JSON records requested/selected/fallback state, compiler schedule
+identity, actual scalar-region launches, seed workspace, modeled scalar input
+reads/writes and arithmetic. These are logical work receipts, not measured
+hardware transactions or a complete-endpoint memory/launch census; both
+schedules write the same twelve W/V seed elements per virtual point.
+
 Argument twenty-one optionally sets both RHF energy and density tolerances to a
 finite positive value no larger than `1e-12`. Without it, the benchmark retains
 its original `1e-12` energy and `1e-11` density tolerances. This benchmark-only

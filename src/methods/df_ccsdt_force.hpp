@@ -34,6 +34,7 @@ struct DFCCSDTResult {
   hf::RHFFrameResponseResult orbital;
   cc::triples::DFCudaResult triples;
   cc::triples::DFGapReductionDiagnostic triples_gap;
+  cc::triples::DFScalarFusionDiagnostic triples_scalar_fusion;
   cc::triples::DFCudaFockResult triples_fock;
 };
 
@@ -56,6 +57,9 @@ struct DFCCSDTResult {
  * reduction and omits diagonal gap cotangents because full-Fock response
  * replaces them. Serial/all-output execution remains available explicitly for
  * matched validation; neither selector weakens numerical acceptance gates.
+ * fused_triples_scalar_response is an opt-in generated primal/W/V region for
+ * gap-free force response. Optional seed storage is admitted before allocation;
+ * a tight budget retains the original schedule without changing output demand.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -64,7 +68,7 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
-    bool request_triples_gap_cotangents = false);
+    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

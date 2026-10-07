@@ -93,6 +93,7 @@ int main(int argc, char** argv) {
       frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
     const bool parallel_gap_reduction = argc <= 19 || selector(19);
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
+    const bool fused_triples_scalar_response = argc > 23 && selector(23);
     double reference_energy_tolerance = 1e-12, reference_density_tolerance = 1e-11;
     if (argc > 21) {
       const std::string token(argv[21]);
@@ -143,7 +144,7 @@ int main(int argc, char** argv) {
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
-          parallel_gap_reduction, request_triples_gap_cotangents);
+          parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -302,6 +303,22 @@ int main(int argc, char** argv) {
       work_field("triples_gap_value_reads", result.triples_gap.value_reads);
       work_field("triples_gap_value_writes", result.triples_gap.value_writes);
       work_field("triples_gap_reduction_summands", result.triples_gap.reduction_summands);
+      field("triples_scalar_fusion_requested", result.triples_scalar_fusion.requested);
+      field("triples_scalar_fusion_selected", result.triples_scalar_fusion.selected);
+      field("triples_scalar_fusion_resource_fallback",
+            result.triples_scalar_fusion.resource_fallback);
+      output << "  \"triples_scalar_fusion_schedule\": "
+             << std::quoted(result.triples_scalar_fusion.schedule) << ",\n";
+      work_field("triples_scalar_fusion_tiles", result.triples_scalar_fusion.tiles);
+      work_field("triples_scalar_fusion_kernels", result.triples_scalar_fusion.kernels);
+      work_field("triples_scalar_fusion_avoided_kernels",
+                 result.triples_scalar_fusion.avoided_kernels);
+      work_field("triples_scalar_fusion_workspace_bytes",
+                 result.triples_scalar_fusion.workspace_bytes);
+      work_field("triples_scalar_fusion_value_reads", result.triples_scalar_fusion.value_reads);
+      work_field("triples_scalar_fusion_value_writes", result.triples_scalar_fusion.value_writes);
+      work_field("triples_scalar_fusion_arithmetic_ops",
+                 result.triples_scalar_fusion.arithmetic_ops);
       work_field("fock_response_work", result.triples_fock.contraction_summands);
       work_field("lambda_work", result.lambda.df_contraction_terms);
       field("lambda_matrix_gemm", result.lambda.df_matrix_gemm);
