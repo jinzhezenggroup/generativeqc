@@ -34,7 +34,9 @@ different approximation.
 
 ## Reproduction
 
-Run only on a source-matched installed build in a finite Slurm GPU Job. Set
+Run only on a source-matched installed build in a finite Slurm or Inspire GPU
+Job. An Inspire submission sets `GENERATIVEQC_2054_FINITE_JOB` to its real Job
+name; verify that identity against platform status and events. Set
 `PYTHONPATH=python:.` and `GENERATIVEQC_LIBRARY` to the loaded library path.
 The output below is ignored working evidence; review and compact small records
 before adding any to Git.

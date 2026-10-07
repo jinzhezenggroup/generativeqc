@@ -4,8 +4,12 @@ set -euo pipefail
 
 repo_root_2054="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$repo_root_2054"
-: "${SLURM_JOB_ID:?finite GPU Job required}"
-: "${CUDA_VISIBLE_DEVICES:?Slurm device visibility required}"
+: "${GENERATIVEQC_2054_FINITE_JOB:?finite Inspire GPU Job name required}"
+visible_gpu_count_2054="$(nvidia-smi -L | grep -c '^GPU ')"
+test "$visible_gpu_count_2054" -eq 1 || {
+  echo "expected exactly one platform-visible GPU" >&2
+  exit 1
+}
 test -z "$(git status --porcelain)" || {
   echo "refusing dirty #2054 source checkout" >&2
   exit 1
@@ -29,7 +33,8 @@ mkdir -p "$run_root_2054" "$CCACHE_DIR"
 receipt_2054="$run_root_2054/build-receipt.txt"
 {
   date -u '+utc=%Y-%m-%dT%H:%M:%SZ'
-  printf 'slurm_job_id=%s\nsource_head=%s\n' "$SLURM_JOB_ID" "$(git rev-parse HEAD)"
+  printf 'inspire_job_name=%s\nsource_head=%s\n' "$GENERATIVEQC_2054_FINITE_JOB" "$(git rev-parse HEAD)"
+  printf 'cuda_visible_devices=%s\nvisible_gpu_count=%s\n' "${CUDA_VISIBLE_DEVICES:-unset}" "$visible_gpu_count_2054"
   git status --porcelain
   sha256sum tools/benchmark_hybrid_provider_crossover.py python/generativeqc/calculator.py src/dft/cuda_ks.cpp
   "$shared_python_2054" --version

@@ -102,6 +102,16 @@ def source_identity() -> dict[str, Any]:
     }
 
 
+def finite_job_identity() -> dict[str, str]:
+    slurm = os.environ.get("SLURM_JOB_ID")
+    inspire = os.environ.get("GENERATIVEQC_2054_FINITE_JOB")
+    if slurm and not inspire:
+        return {"scheduler": "slurm", "id": slurm}
+    if inspire and not slurm:
+        return {"scheduler": "inspire_job", "id": inspire}
+    raise RuntimeError("one finite Slurm or Inspire GPU Job identity is required")
+
+
 def frozen_problem(case: Case, *, auxiliary: str, budget: int) -> dict[str, Any]:
     from generativeqc_compiler.dft.grid import GridSpec
 
@@ -327,8 +337,7 @@ def run_native(args: argparse.Namespace) -> None:
     output = args.output
     if output.exists():
         raise FileExistsError(output)
-    if not os.environ.get("SLURM_JOB_ID"):
-        raise RuntimeError("finite Slurm GPU allocation required")
+    job_identity = finite_job_identity()
     if os.environ.get("GENERATIVEQC_DF_TRACE"):
         raise RuntimeError("clean endpoint timing refuses enabled DF trace")
     if args.arm == "df-jk-occupied":
@@ -342,7 +351,7 @@ def run_native(args: argparse.Namespace) -> None:
         "source": source_identity(),
         "python": sys.version,
         "platform": platform.platform(),
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "job_identity": job_identity,
         "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "attempts": [],
         "status": "RUNNING",
@@ -369,6 +378,10 @@ def run_native(args: argparse.Namespace) -> None:
     try:
         import cupy as cp
 
+        if cp.cuda.runtime.getDeviceCount() != 1:
+            raise RuntimeError(
+                "benchmark requires exactly one platform-visible CUDA device"
+            )
         calc = calculator(problem, args.arm)
         device_name = cp.cuda.runtime.getDeviceProperties(cp.cuda.runtime.getDevice())[
             "name"
@@ -481,8 +494,7 @@ def run_profile(args: argparse.Namespace) -> None:
     """Diagnostic pass; its trace and timings never enter clean statistics."""
     from benchmarks.df_component_ledger import read_trace
 
-    if not os.environ.get("SLURM_JOB_ID"):
-        raise RuntimeError("finite Slurm GPU allocation required")
+    job_identity = finite_job_identity()
     if args.output.exists() or args.trace.exists():
         raise FileExistsError("profile output/trace already exists")
     args.trace.parent.mkdir(parents=True, exist_ok=True)
@@ -501,6 +513,7 @@ def run_profile(args: argparse.Namespace) -> None:
         "case": args.case,
         "arm": args.arm,
         "source": source_identity(),
+        "job_identity": job_identity,
         "problem": problem,
         "status": "RUNNING",
         "trace": str(args.trace),
@@ -518,6 +531,12 @@ def _run_profile_impl(
     read_trace: Any,
 ) -> None:
     try:
+        import cupy as cp
+
+        if cp.cuda.runtime.getDeviceCount() != 1:
+            raise RuntimeError(
+                "profile requires exactly one platform-visible CUDA device"
+            )
         calc = calculator(problem, args.arm)
         library = Path(calc._library._name).resolve()
         record["library"] = {"path": str(library), "sha256": sha256(library)}
@@ -699,6 +718,7 @@ def summarize(
     if not records or any(row.get("schema") != SCHEMA for row in records):
         raise ValueError("missing or foreign crossover records")
     source = records[0].get("source")
+    job_identity = records[0].get("job_identity")
     problem = records[0].get("problem")
     library = records[0].get("library", {}).get("sha256")
     device = records[0].get("device")
@@ -719,6 +739,8 @@ def summarize(
             and row.get("status") != "UNSUPPORTED"
         ):
             failures.append(f"{arm}: source/library mismatch")
+        if row.get("job_identity") != job_identity:
+            failures.append(f"{arm}: finite Job identity mismatch")
         if row.get("status") != "UNSUPPORTED" and row.get("device") != device:
             failures.append(f"{arm}: device mismatch")
         if row.get("status") == "UNSUPPORTED":
@@ -790,6 +812,12 @@ def summarize(
         failures.append("clean frozen source revision required")
     if library is None:
         failures.append("loaded library hash required")
+    if (
+        not isinstance(job_identity, dict)
+        or job_identity.get("scheduler") not in {"slurm", "inspire_job"}
+        or not job_identity.get("id")
+    ):
+        failures.append("finite Job identity required")
     oracle_rows = {row.get("arm"): row for row in (oracles or [])}
     if len(oracle_rows) != len(oracles or []):
         failures.append("duplicate oracle arm")
@@ -916,8 +944,7 @@ def summarize(
 
 def run_campaign(args: argparse.Namespace) -> None:
     """Run ABBA as independent processes, retaining every losing attempt."""
-    if not os.environ.get("SLURM_JOB_ID"):
-        raise RuntimeError("finite Slurm GPU allocation required")
+    job_identity = finite_job_identity()
     if args.output.exists():
         raise FileExistsError(args.output)
     args.output.mkdir(parents=True)
@@ -925,7 +952,7 @@ def run_campaign(args: argparse.Namespace) -> None:
         "schema": SCHEMA,
         "kind": "native-campaign",
         "source": source_identity(),
-        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "job_identity": job_identity,
         "order": [],
         "status": "RUNNING",
     }

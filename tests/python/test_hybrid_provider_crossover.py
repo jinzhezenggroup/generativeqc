@@ -11,6 +11,7 @@ from tools.benchmark_hybrid_provider_crossover import (
     ARMS,
     SCHEMA,
     case_named,
+    finite_job_identity,
     frozen_problem,
     moved,
     summarize,
@@ -28,6 +29,7 @@ def _records() -> tuple[list[dict], list[dict], list[dict]]:
         "df_memory_budget_bytes": 1024,
     }
     source = {"revision": "a" * 40, "dirty": False}
+    job_identity = {"scheduler": "inspire_job", "id": "i2054-test"}
     library = {"sha256": "b" * 64}
     attempts = []
     for phase in ("cold", "warm-0", "changed-geometry", "moved-warm"):
@@ -53,6 +55,7 @@ def _records() -> tuple[list[dict], list[dict], list[dict]]:
                 "case": "water-3",
                 "arm": arm,
                 "source": deepcopy(source),
+                "job_identity": deepcopy(job_identity),
                 "library": deepcopy(library),
                 "device": {"name": "GPU"},
                 "problem": deepcopy(problem),
@@ -113,6 +116,7 @@ def _records() -> tuple[list[dict], list[dict], list[dict]]:
             "case": "water-3",
             "arm": "df-j-exact-k",
             "source": deepcopy(source),
+            "job_identity": deepcopy(job_identity),
             "problem": deepcopy(problem),
             "status": "UNSUPPORTED",
         }
@@ -127,6 +131,18 @@ def test_frozen_cases_preserve_large_basis_geometry() -> None:
     problem = frozen_problem(case, auxiliary="def2-svp", budget=1 << 30)
     assert problem["method"] == "pbe0-rks"
     assert problem["grid_spec"]["radial_points"] == 48
+
+
+def test_finite_job_identity_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("GENERATIVEQC_2054_FINITE_JOB", raising=False)
+    with pytest.raises(RuntimeError, match="one finite"):
+        finite_job_identity()
+    monkeypatch.setenv("GENERATIVEQC_2054_FINITE_JOB", "i2054-smoke")
+    assert finite_job_identity() == {"scheduler": "inspire_job", "id": "i2054-smoke"}
+    monkeypatch.setenv("SLURM_JOB_ID", "123")
+    with pytest.raises(RuntimeError, match="one finite"):
+        finite_job_identity()
 
 
 def test_supported_arms_require_oracle_and_never_claim_full_crossover() -> None:
