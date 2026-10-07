@@ -127,7 +127,7 @@ DeviceReplayOutputs run_replay_cuda(CudaState& state);
 def cuda_source() -> str:
     """Preserve errors from all preceding auxiliary actions until host acceptance."""
     lines = [
-        "#include <cub/block/block_reduce.cuh>",
+        '#include "tensor/cuda_reduction.cuh"',
         '#include "generated_df_ccsd_core_cpu.hpp"',
         '#include "generated_df_ccsd_core_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfcore {",
