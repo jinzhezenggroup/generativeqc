@@ -3,6 +3,7 @@
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>
 
+#include <cstddef>
 #include <cstdint>
 
 #include "generativeqc/generativeqc.h"
