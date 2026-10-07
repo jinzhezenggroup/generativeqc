@@ -15,9 +15,8 @@ using minao_data::kPrimitives;
 using minao_data::kShells;
 
 void validate_domain(const core::System& system) {
-  if (!system.ecp_terms.empty() ||
-      std::any_of(system.atoms.begin(), system.atoms.end(),
-                  [](const auto& atom) { return atom.ecp_core != 0; }))
+  if (!system.ecp_terms.empty() || std::any_of(system.atoms.begin(), system.atoms.end(),
+                                               [](const auto& atom) { return atom.ecp_core != 0; }))
     throw std::invalid_argument("MINAO initial guess is qualified only for all-electron systems");
   for (const auto& atom : system.atoms)
     if (atom.atomic_number < 1 || atom.atomic_number > 18)
