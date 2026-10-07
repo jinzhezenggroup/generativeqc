@@ -1112,10 +1112,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
 
     std::vector<double> hcore, pulay;
-    scf::OneElectronGradientResources one_electron;
+    std::size_t one_electron_device_bytes = 0;
+    std::size_t one_electron_h2d_bytes = 0;
+    std::size_t one_electron_d2h_bytes = 0;
     bool resident_one_electron = false;
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
+      scf::OneElectronGradientResources one_electron;
       dft::CudaKsResidentStationaryWeightsBinding resident_weights;
       const auto resident_status =
           cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
@@ -1130,6 +1133,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
             &one_electron, resident_weights.density, resident_weights.weighted_density);
         if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
           resident_one_electron = true;
+          one_electron_device_bytes = one_electron.device_bytes;
+          one_electron_h2d_bytes = one_electron.host_to_device_bytes;
+          one_electron_d2h_bytes = one_electron.device_to_host_bytes;
         } else if (one_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
                    one_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
           return one_status;
@@ -1227,10 +1233,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // DF response has separate scratch/transfers which this compact publication
     // bridge does not measure. Do not invent those counts from spin dimensions.
     work[0] = fock_.diagnostic().device_bytes;
-    work[2] = one_electron.device_bytes;
+    work[2] = one_electron_device_bytes;
     work[3] = publication_peak_bytes;
-    work[4] = one_electron.host_to_device_bytes;
-    work[5] = one_electron.device_to_host_bytes;
+    work[4] = one_electron_h2d_bytes;
+    work[5] = one_electron_d2h_bytes;
     output = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
