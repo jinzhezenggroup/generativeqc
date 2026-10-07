@@ -74,10 +74,6 @@ jobs:
       GENERATIVEQC_BUILD: ${{ github.workspace }}/build-cumetal
       CCACHE_DIR: /tmp/generativeqc-ccache
       CCACHE_MAXSIZE: 2G
-      # Keep compiler identity stable across ephemeral runners without weakening
-      # ccache correctness, and normalize source paths to the checkout root.
-      CCACHE_BASEDIR: ${{ github.workspace }}
-      CCACHE_COMPILERCHECK: content
       # CuMetal's registration JIT validates PTX/toolchain/lib identity internally.
       # Persist that artifact cache separately from the compiler-object cache.
       CUMETAL_QC_JIT_CACHE_DIR: /tmp/cumetal-qc-jit
@@ -144,13 +140,10 @@ jobs:
           # Include every family that can alter generated/native compilation.
           # The previous key omitted compiler/CMake inputs, so an immutable
           # exact cache could stay permanently half-stale after codegen changes.
-          # v4 changes ccache path/compiler identity policy. Never exact-hit a v3
-          # archive and then discard the newly generated v4 objects on save.
-          key: ccache-cumetal-v4-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
-          # Older ccache entries remain safe fallback inputs because ccache
-          # validates compiler/flags/headers before reusing an object.
+          key: ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          # ccache validates compiler/flags/headers when reusing older entries;
+          # unlike the immutable toolchain directory, these are safe fallbacks.
           restore-keys: |
-            ccache-cumetal-v4-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
@@ -276,9 +269,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER="$(brew --prefix llvm)/bin/clang" \
             -DCMAKE_CXX_COMPILER="$(brew --prefix llvm)/bin/clang++" \
-            -DCMAKE_C_COMPILER_LAUNCHER="$(command -v ccache)" \
-            -DCMAKE_CXX_COMPILER_LAUNCHER="$(command -v ccache)" \
-            -DCMAKE_CUDA_COMPILER_LAUNCHER="$(command -v ccache)" \
             -DCMAKE_CUDA_COMPILER="$FAKE_CUDA/bin/nvcc" \
             -DCMAKE_CUDA_COMPILER_LIBRARY_ROOT="$FAKE_CUDA" \
             -DCUDAToolkit_ROOT="$FAKE_CUDA" \

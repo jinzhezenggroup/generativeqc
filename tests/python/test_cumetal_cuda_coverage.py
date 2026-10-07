@@ -258,30 +258,11 @@ def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
             )
 
 
-def test_cumetal_workflow_reuses_compilation_caches_across_runs() -> None:
+def test_cumetal_workflow_persists_qc_jit_cache_across_runs() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     runtime_job = workflow.split("\n  cuda-tests:", 1)[1].split(
         "\n  cumetal-benchmark:", 1
     )[0]
-    assert "CCACHE_BASEDIR: ${{ github.workspace }}" in runtime_job
-    assert "CCACHE_COMPILERCHECK: content" in runtime_job
-
-    compiler_cache = runtime_job.split("- name: Restore GenerativeQC ccache", 1)[
-        1
-    ].split("\n      - name:", 1)[0]
-    assert "key: ccache-cumetal-v4-" in compiler_cache
-    assert "ccache-cumetal-v4-" in compiler_cache
-    assert "ccache-cumetal-v3-" in compiler_cache
-
-    configure = runtime_job.split(
-        "- name: Configure GenerativeQC with CUDA tests enabled", 1
-    )[1].split("\n      - name:", 1)[0]
-    for launcher in (
-        '-DCMAKE_C_COMPILER_LAUNCHER="$(command -v ccache)"',
-        '-DCMAKE_CXX_COMPILER_LAUNCHER="$(command -v ccache)"',
-        '-DCMAKE_CUDA_COMPILER_LAUNCHER="$(command -v ccache)"',
-    ):
-        assert launcher in configure
 
     restore = runtime_job.split("- name: Restore CuMetal QC JIT cache", 1)[1].split(
         "\n      - name:", 1
