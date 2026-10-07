@@ -248,9 +248,7 @@ def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
         if name in {"Cache CuMetal toolchain", "Restore CuMetal toolchain"}:
             assert "restore-keys:" not in step
         if name.startswith("Run bounded CuMetal QC"):
-            assert (
-                "CUMETAL_CACHE_DIR: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}" in step
-            )
+            assert "CUMETAL_CACHE_DIR: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}" in step
             assert "CUMETAL_PTX_BACKEND: cumetal-ir" in step
             assert "CUMETAL_FP64_MODE: fast48" in step
             command = step.split("        run:", 1)[1].strip()
@@ -294,9 +292,7 @@ def test_cumetal_workflow_reuses_compilation_caches_across_runs() -> None:
     assert "steps.cumetal_qc_jit_cache.outputs.cache-hit != 'true'" in save
     assert "steps.qc_gate.outcome == 'success'" in save
     assert "steps.qc_qualification.outcome == 'success'" in save
-    assert (
-        "key: ${{ steps.cumetal_qc_jit_cache.outputs.cache-primary-key }}" in save
-    )
+    assert "key: ${{ steps.cumetal_qc_jit_cache.outputs.cache-primary-key }}" in save
 
 
 def test_cumetal_runner_preserves_selected_backend_and_precision(
