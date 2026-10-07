@@ -278,6 +278,7 @@ def capabilities() -> dict[str, object]:
             "broadcast_requires_explicit_indices_and_axes": False,
             "scientific_metadata_requires_explicit_indices": True,
             "compiled_call": "shape-dtype-specialized-tensorir-reference",
+            "compiled_differentiability": "explicit-parameter-names",
             "runtime_array": "numpy-host-float32-float64",
         }
     )
