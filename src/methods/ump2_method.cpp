@@ -17,6 +17,13 @@
 #include "scf/mean_field.hpp"
 
 namespace generativeqc::methods::detail {
+
+scf::FockBuildSpec ump2_reference_fock_spec() {
+  auto spec = scf::make_hf_fock_spec(scf::FockSpin::Unrestricted);
+  spec.derivative_order = 0;
+  return spec;
+}
+
 namespace {
 
 class Ump2Prepared final : public PreparedCalculation {
@@ -60,8 +67,8 @@ class Ump2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                           "UMP2 warm state and UHF reference exceed numeric memory budget");
       const auto phase_budget = budget_ - warm_capacity;
-      const auto strategy = scf::resolve_fock_build(
-          scf::make_hf_fock_spec(scf::FockSpin::Unrestricted), scf::FockBackend::Cpu, 0);
+      const auto strategy =
+          scf::resolve_fock_build(ump2_reference_fock_spec(), scf::FockBackend::Cpu, 0);
       scf::PreparedFockPlan reference_plan(system_, nullptr, strategy);
       auto execution = options_;
       execution.resolved_fock_build = reference_plan.strategy();

@@ -1,8 +1,10 @@
 #pragma once
 
 #include "methods/method.hpp"
+#include "scf/fock_build.hpp"
 
 namespace generativeqc::methods::detail {
+scf::FockBuildSpec ump2_reference_fock_spec();
 generativeqc_status validate_ump2_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_ump2_calculation(
     const Capabilities&, core::ContextState&, const core::System&,

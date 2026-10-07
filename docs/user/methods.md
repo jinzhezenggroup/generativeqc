@@ -61,6 +61,10 @@ core guess. `singlepoint` has no supplied-density option; a prepared UMP2
 batch can instead import a validated two-spin HF density through the existing
 public warm-state checkpoint/restore interface. The imported density is a
 proposal for a fresh UHF solve, not a substitute for final-state validation.
+`resolved_model()` records `ump2` and the requested spin multiplicity, while a
+checkpoint stores separate alpha and beta density blocks even for a singlet.
+`save_checkpoint()` and `load_checkpoint()` preserve that identity and require
+the restored batch to reconverge before returning an energy.
 
 ## Second-order derivatives
 

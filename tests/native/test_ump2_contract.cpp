@@ -10,10 +10,12 @@
 #include "api/handles.hpp"
 #include "methods/ump2_method.hpp"
 #include "molecule/basis.hpp"
+#include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "posthf/ump2_cpu_generated.hpp"
 #include "posthf/ump2_energy.hpp"
+#include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
 
 namespace {
@@ -33,6 +35,37 @@ generativeqc::core::System h2() {
       generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
       "H2 setup failed");
   return system;
+}
+
+generativeqc::core::System h14() {
+  generativeqc::core::System system;
+  const std::vector<generativeqc::core::Primitive> primitives{
+      {3.42525091, 0.1543289673}, {0.62391373, 0.5353281423}, {0.1688554, 0.4446345422}};
+  for (unsigned atom = 0; atom < 14; ++atom) {
+    system.atoms.push_back({1, {3.0 * atom, 0, 0}});
+    system.shells.push_back({atom, 0, primitives});
+  }
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "14-H resource fixture setup failed");
+  return system;
+}
+
+void energy_only_reference_admission() {
+  const auto system = h14();
+  const auto spec = generativeqc::methods::detail::ump2_reference_fock_spec();
+  const auto strategy =
+      generativeqc::scf::resolve_fock_build(spec, generativeqc::scf::FockBackend::Cpu, 0);
+  const generativeqc::scf::PreparedFockPlan plan(system, nullptr, strategy);
+  const auto budget = generativeqc::posthf::uhf_reference_capacity(system, 8, true);
+  if (plan.cpu_observation_capacity() > budget)
+    throw std::runtime_error("UMP2 energy-only Fock plan exceeds admitted reference budget: " +
+                             std::to_string(plan.cpu_observation_capacity()) + " > " +
+                             std::to_string(budget));
+  std::cout << "14-H energy-only Fock capacity " << plan.cpu_observation_capacity()
+            << " <= admitted " << budget << '\n';
+  require(spec.derivative_order == 0, "UMP2 energy-only reference retained derivative order");
 }
 
 class CountingSource final : public generativeqc::integrals::ElectronInteractionSource {
@@ -256,6 +289,7 @@ void source_and_slots() {
 int main() {
   try {
     native_equations();
+    energy_only_reference_admission();
     unsupported_requests();
     source_and_slots();
     std::cout << "native UMP2 contract passed\n";

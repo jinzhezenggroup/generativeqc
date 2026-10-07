@@ -311,7 +311,7 @@ def _parse_manifest(
                 "seed",
             )
             n = _integer(seed["nbf"], "AO dimension", math.isqrt(max_bytes // 8), 1)
-            spins = 2 if model.method == "uhf" else 1
+            spins = 2 if model.method in ("uhf", "ump2") else 1
             if (model.electron_count + model.multiplicity - 1) // 2 > n:
                 raise CheckpointError("spin population exceeds AO dimension")
             _integer(seed["iterations"], "source iterations", 2**31 - 1)
@@ -513,7 +513,7 @@ def save_checkpoint(
                 charge=batch.charges[index],
                 multiplicity=batch.multiplicities[index],
             )
-            spins = 2 if model.method == "uhf" else 1
+            spins = 2 if model.method in ("uhf", "ump2") else 1
             n = math.isqrt(density.size // spins)
             density = density.reshape(spins, n, n)
             item.update(model=model.to_dict(), provider=_provider(model))

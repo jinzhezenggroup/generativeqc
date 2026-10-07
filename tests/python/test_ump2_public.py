@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import ctypes
 import json
+import typing
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, _native, method_capabilities
+from generativeqc import Calculator, ResolvedModel, _native, method_capabilities
+from generativeqc.checkpoint import inspect_checkpoint
 from generativeqc.fock import FockBuildSpec, FockPlan
 from generativeqc_compiler.dft import NativeAO
 
@@ -47,6 +50,66 @@ def test_native_ump2_cpu_header_matches_compiler_equations() -> None:
         return "".join(re.sub(r"//[^\n]*", "", value).split())
 
     assert tokens(actual) == tokens(expected)
+
+
+@pytest.mark.parametrize(
+    "atoms,multiplicity",
+    [
+        ([("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))], 1),
+        ([("Li", (0.0, 0.0, 0.0))], 2),
+    ],
+)
+def test_ump2_public_model_preserves_two_spin_identity(
+    atoms: typing.Any, multiplicity: int
+) -> None:
+    options = {"basis": "sto-3g", "device": "cpu", "initial_guess": None}
+    model = Calculator(method="ump2", **options).resolved_model(
+        atoms, multiplicity=multiplicity
+    )
+    assert model.method == "ump2" and model.multiplicity == multiplicity
+    assert model.approximation == "conventional"
+    assert ResolvedModel.from_dict(model.to_dict()) == model
+    restricted_or_uhf = Calculator(method="uhf", **options).resolved_model(
+        atoms, multiplicity=multiplicity
+    )
+    assert model.identity != restricted_or_uhf.identity
+    with pytest.raises(ValueError, match="UMP2 model requires conventional"):
+        replace(
+            model,
+            approximation="density_fitting",
+            auxiliary_basis_hash="aux",
+            metric_relative_threshold=1e-10,
+        )
+
+
+@pytest.mark.parametrize(
+    "atoms,multiplicity",
+    [
+        ([("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))], 1),
+        ([("Li", (0.0, 0.0, 0.0))], 2),
+    ],
+)
+def test_ump2_public_checkpoint_round_trip_keeps_two_spin_state(
+    tmp_path: Path, atoms: typing.Any, multiplicity: int
+) -> None:
+    calc = Calculator(method="ump2", basis="sto-3g", device="cpu", initial_guess=None)
+    path = tmp_path / "ump2.vqcp"
+    with calc.prepare_batch([atoms], multiplicities=[multiplicity]) as source:
+        first = source.execute(strict=True).items[0]
+        source.save_checkpoint(path)
+    saved = inspect_checkpoint(path).to_dict()
+    item = saved["items"][0]
+    assert item["model"]["method"] == "ump2"
+    assert item["model"]["multiplicity"] == multiplicity
+    density = next(blob for blob in saved["blobs"] if blob["name"] == "density_0")
+    assert density["shape"] == [2, item["seed"]["nbf"], item["seed"]["nbf"]]
+    with calc.prepare_batch([atoms], multiplicities=[multiplicity]) as target:
+        report = target.load_checkpoint(path)
+        assert report["items"][0]["compatibility"] == "exact_restart"
+        resumed = target.execute(strict=True).items[0]
+    assert resumed.warm_start_used and resumed.converged
+    assert resumed.restart_origin == "persistent_restart"
+    assert abs(resumed.energy - first.energy) <= 1e-9
 
 
 def test_public_ump2_li_matches_independent_pyscf_214() -> None:
