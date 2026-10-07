@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cerrno>
 #include <climits>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -931,6 +932,32 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  std::optional<std::vector<double>> prepare_cold_initial_guess(
+      scf::initial_guess::PreliminaryDiagnostic& diagnostic) const {
+    if (!options_.preliminary_guess) return std::nullopt;
+    scf::initial_guess::validate_preliminary_target(system_, fock_.strategy(), options_);
+    diagnostic.requested_kind =
+        static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+    diagnostic.target_attempts = 1;
+    const auto started = std::chrono::steady_clock::now();
+    try {
+      runtime::CpuRetainedCapacity retained(host_numeric_capacity());
+      auto density = scf::initial_guess::prepare_preliminary_density(
+          fock_, *options_.preliminary_guess, diagnostic);
+      diagnostic.preparation_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return density;
+    } catch (const std::bad_alloc&) {
+      throw;
+    } catch (const std::exception&) {
+      diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::PreparationFailed;
+      diagnostic.work_counters_complete = false;
+      diagnostic.preparation_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return std::nullopt;
+    }
+  }
+
   void invalidate_result() override { invalidate_final_state(); }
 
   void invalidate_final_state() noexcept {
@@ -1611,7 +1638,35 @@ class KsPreparedCalculation final : public PreparedCalculation {
       // Native iterations read only scalar diagnostics. The public energy
       // result does not require a final AO matrix download; warm D stays resident.
       cuda_->set_warm_start_updates(update_warm);
-      auto native = cuda_->run(initial_density, reuse_warm, false);
+      scf::initial_guess::PreliminaryDiagnostic diagnostic;
+      std::optional<std::vector<double>> prepared;
+      const bool policy = allow_preliminary && options_.preliminary_guess.has_value();
+      const bool existing = initial_density != nullptr || reuse_warm;
+      if (policy) {
+        diagnostic.requested_kind =
+            static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+        diagnostic.target_attempts = 1;
+        if (existing) {
+          diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
+        } else {
+          prepared = prepare_cold_initial_guess(diagnostic);
+        }
+      }
+      const auto* seed = initial_density ? initial_density : (prepared ? &*prepared : nullptr);
+      auto native = cuda_->run(seed, reuse_warm && !prepared, false);
+      if (policy) native.preliminary_guess = diagnostic;
+      if (cuda_->failed())
+        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                          "CUDA KS physical evaluation failed");
+      if (!prepared || native.converged) return native;
+
+      diagnostic.discarded_target_iterations = native.iterations;
+      diagnostic.discarded_target_fock_builds = native.fock_builds;
+      diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
+      diagnostic.target_attempts = 2;
+      prepared.reset();
+      native = cuda_->run(nullptr, false, false);
+      native.preliminary_guess = diagnostic;
       if (cuda_->failed())
         throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                           "CUDA KS physical evaluation failed");
@@ -1909,6 +1964,9 @@ class KsPreparedBatch final : public PreparedBatch {
       throw std::invalid_argument("KS batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
     std::vector<bool> ready(size(), false);
+    std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
+    std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
+    std::vector<bool> preliminary_requested(size(), false);
     // Allocate source-geometry metadata before launching any item. The success
     // path can then publish its last-good identity without a coordinate copy.
     std::vector<scf::HfWarmState> candidates(size());
@@ -1939,6 +1997,20 @@ class KsPreparedBatch final : public PreparedBatch {
           item.plan = make_plan(target);
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
+#if GENERATIVEQC_HAS_CUDA
+        if (item.plan->cuda_plan() && options_.preliminary_guess) {
+          auto& diagnostic = preliminary_diagnostics[i];
+          preliminary_requested[i] = true;
+          diagnostic.requested_kind =
+              static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+          diagnostic.target_attempts = 1;
+          if (result.warm_start_used) {
+            diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
+          } else {
+            preliminary_seeds[i] = item.plan->prepare_cold_initial_guess(diagnostic);
+          }
+        }
+#endif
         ready[i] = true;
       } catch (...) {
         result.status = item_exception_status();
@@ -1947,6 +2019,8 @@ class KsPreparedBatch final : public PreparedBatch {
 
     const auto finish = [&](std::size_t i, scf::ScfResult native) {
       auto& result = results[i];
+      if (preliminary_requested[i] && !native.preliminary_guess.requested_kind)
+        native.preliminary_guess = preliminary_diagnostics[i];
       result.calculation = adapt_result(std::move(native), backend_);
       items_[i].plan->apply_d4(result.calculation);
       const auto& calculation = result.calculation;
@@ -1974,21 +2048,37 @@ class KsPreparedBatch final : public PreparedBatch {
         const bool seed_failure = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
                                   result.status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE ||
                                   result.status == GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-        if (!ready[i] || (attempt && (!result.warm_start_used || !seed_failure))) continue;
+        const bool preliminary_seeded = preliminary_seeds[i].has_value();
+        const bool first_seeded = result.warm_start_used || preliminary_seeded;
+        if (!ready[i] || (attempt && (!first_seeded || !seed_failure))) continue;
         if (attempt) {
           result.warm_start_fallback = true;
           // Release the failed attempt's exported history before starting another
           // solve, preserving the two-history resource bound.
           result.calculation.ks_diagnostic.reset();
+          if (preliminary_requested[i]) {
+            auto& diagnostic = preliminary_diagnostics[i];
+            diagnostic.target_attempts = 2;
+            diagnostic.discarded_target_iterations = result.calculation.convergence.iterations;
+            diagnostic.discarded_target_fock_builds = result.calculation.fock_builds;
+            diagnostic.work_counters_complete =
+                result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
+            if (preliminary_seeded)
+              diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
+          }
+          preliminary_seeds[i].reset();
         }
         auto& item = items_[i];
         const bool reuse = !attempt && result.warm_start_used;
-        const auto* seed = reuse && !item.resident_warm ? &item.warm->density : nullptr;
+        const auto* seed =
+            reuse && !item.resident_warm
+                ? &item.warm->density
+                : (!attempt && preliminary_seeds[i] ? &*preliminary_seeds[i] : nullptr);
         try {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm);
+            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i]);
             running[i] = true;
             continue;
           }
