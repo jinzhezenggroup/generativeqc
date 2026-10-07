@@ -761,9 +761,9 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // A range-separated composition may still reserve the ordinary full-range
   // fitted primary. Its independent long-range Direct correction neither consumes
   // nor mutates this occupied projection, so range_exchange is not itself a veto.
-  if (execution_plan.spin_channels != 1 ||
-      strategy.backend != scf::FockBackend::Cuda || spec.spin != scf::FockSpin::Restricted ||
-      spec.derivative_order != 0 || !spec.coulomb.present || !spec.exchange.present ||
+  if (execution_plan.spin_channels != 1 || strategy.backend != scf::FockBackend::Cuda ||
+      spec.spin != scf::FockSpin::Restricted || spec.derivative_order != 0 ||
+      !spec.coulomb.present || !spec.exchange.present ||
       spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
       spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
       spec.exchange.op != scf::FockOperator::FullRange)
