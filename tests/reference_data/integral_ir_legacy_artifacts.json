@@ -511,10 +511,10 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "1eb667a185e07b79d6a5ee7bd03f94f014756bc29278d9314701f1447db963f4",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "8e065e83021e82131b6bf068b1f091b82efe40e91d85544b1f91b003240beba7",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "573a56a754b9f38eb56a513867cec228836a7db453bb8cb107ca1c7158058b5c",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "688207cc0d4fa84fceb5d6ffc53e876900239300e6a32e6d1d9462c15e7d2cb8",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "476444c10248078638ccc813f08e333906a7adeffc01229b1322d774cd801171",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "11506b9ee610383634abe7a7da961c4e9f26a71a7cefa8c9467401f49444d500",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "f2be8e4f37ddfa0e5897ad28fb3416e53fa3b818ba6764edcf254cb43c3bc21e",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "9de86b023a853e50946c9198d08e2f0c21c383a1ec27bb4fef5b123c6e99897d",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
     "generativeqc_generated_shell_registry.cu": "ed66611d109bc003e1baabc91c0e591664993b89966d98aa0032e9ee823e5fed"
   },
@@ -647,6 +647,29 @@
       "issue": 2050,
       "source_revision": "0659f65921e9297108780414815716cc9fb6924e",
       "reason": "Density-screen generated Coulomb J with the existing Direct tolerance: exact admission uses the larger bra/ket Coulomb density bound, and coarse tails use their pair-class maxima. Optional/manual topologies without density metadata retain Schwarz-only admission. Regeneration from the PR base exactly reproduces the previous fixture; all 117 changed hunks in the four tuned sm_120 shards are the intended screening updates across 39 streaming class instances. All four portable sm_90 shards, both registry artifacts, the manifest and shell catalog remain byte-identical. Real-device numerical and complete-endpoint performance qualification remain separate gates.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 2060,
+      "source_revision": "c3d695525ad095df21e4eee23648c081c4c72d70",
+      "reason": "Compact accepted Exchange/HartreeFockExchange tasks before packed-lane or subgroup recurrence. Packed consumers use the full 32-lane membership for ballot and queue fences, including rejected and tail candidates. Audited generated sources against base ea8c294e94d3423360bfa3a8886637a271b56268: replacing only the emitted streaming functions restores every previous artifact byte. Only four sm_120 shard hashes change; registry, portable sm_90 shards, manifest and catalog remain byte-identical. Screening thresholds, recurrence and scientific gates are unchanged.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 2050,
+      "source_revision": "c7f5c64f4773eef31dee714342ab3c2117e1ffe0",
+      "integrated_base_revision": "a760eb0f18eb2de60e34ca71b8b845a5524ac398",
+      "reason": "Combine reviewed generated-J density screening with landed #2060 full-warp/subgroup K survivor compaction. Regenerated base, J head and master each reproduce their existing fixtures. Applying only the three intended Coulomb transformations to master reconstructs every combined byte: 39 exact predicates, 39 density-load relocations and 39 coarse bounds. Independently applying the 60 generated K delta hunks to the J output with zero fuzz yields the same combined bytes. Only four sm_120 hashes change; portable sm_90 shards, both registries, manifest and 55-entry catalog remain unchanged. Both preceding audit records retain their original source provenance. Earlier GPU timings and numerical results qualify their recorded revisions, not this integrated tree; combined-tree GPU numerical, sanitizer and complete-endpoint performance qualification remains unverified.",
       "paths": [
         "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",

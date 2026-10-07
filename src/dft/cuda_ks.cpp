@@ -24,6 +24,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "runtime/solver_region_cuda.cuh"
 #include "scf/cuda/eigensolver.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/mean_field_setup.hpp"
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
@@ -196,11 +197,15 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
 
 struct CudaKsPlan::Impl : KsStateStorage {
   const scf::PreparedFockPlan& provider;
+  const scf::PreparedFockPlan* range_provider{};
   const AoBasis& basis;
   const MolecularGrid& grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
+  scf::PreparedCudaFockBinding range_fock_binding{};
   scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
+  MatrixLibraryOwner matrix_products;
+  runtime::OwnedCudaEvent range_input_ready, range_output_ready;
   cudaStream_t stream{};
   int device{};
   std::size_t n{}, matrix{}, elements{};
@@ -255,6 +260,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
 
+  void multiply_matrix(const double* left, bool transpose_left, const double* right,
+                       const std::uint8_t* active, double* output) {
+    check(
+        launch_matrix_product(matrix_products.view(), 1, static_cast<int>(n), left, transpose_left,
+                              right, active, output, matrix_products.library_enabled(), 1.0),
+        "CUDA KS matrix product failed");
+  }
+
+  void multiply_spin(unsigned spin_count, const double* left, bool left_is_spin,
+                     bool transpose_left, const double* right, bool right_is_spin,
+                     const std::uint8_t* active, double* output) {
+    check(launch_spin_matrix_product(matrix_products.view(), 1, static_cast<int>(spin_count),
+                                     static_cast<int>(n), left, left_is_spin, transpose_left, right,
+                                     right_is_spin, active, output,
+                                     matrix_products.library_enabled()),
+          "CUDA KS spin matrix product failed");
+  }
+
   void retain_final_fitted_projection() {
     final_fitted_projection_ready = false;
     if (!pending_fitted_occupied || spins != 1 || !warm_orbitals_ready || !occupations[0]) return;
@@ -268,10 +291,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // warm_orbitals is the orthonormal-basis C that generated the exact current
     // density consumed by the final K. Preserve its AO representation in the
     // now-dead proposal slot; final-state canonicalization uses separate storage.
-    const auto blocks = static_cast<unsigned>((matrix + 127) / 128);
-    launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, 1, n, x, false, false,
-                                      warm_orbitals, true, final_enabled, proposal);
-    check(cudaGetLastError());
+    multiply_spin(1, x, false, false, warm_orbitals, true, final_enabled, proposal);
     final_fitted_projection_scratch_generation = projection.scratch_generation;
     final_fitted_projection_ready = true;
     ++movement.fitted_final_projection_leases;
@@ -540,14 +560,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * reference eigen fallback. */
   void prepare_initial_state() {
     runtime::host_trace::Region trace("cuda_ks_initial_state", n);
-    const auto matrix_blocks = (matrix + 127) / 128;
-    if (matrix_blocks > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-      throw std::invalid_argument("CUDA KS setup matrix launch exceeds the device grid domain");
-    const auto blocks = static_cast<unsigned>(matrix_blocks);
     const auto multiply = [&](const double* a, bool transpose, const double* b, double* c) {
-      launch_matrix_product_kernel(blocks, 128, 0, stream, 1, n, a, transpose, b, final_enabled, c,
-                                   1.0);
-      check(cudaGetLastError());
+      multiply_matrix(a, transpose, b, final_enabled, c);
     };
     const auto solve = [&] {
       check(eigensolver->launch(1, tmp2, effective, eigenvalues, solver_info, final_enabled),
@@ -609,8 +623,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   Impl(const scf::PreparedFockPlan& plan, const AoBasis& basis, const MolecularGrid& grid,
        const scf::ScfOptions& control, std::uint32_t functional, std::size_t tile,
        const scf::ResolvedFockBuild* range, nlc::Vv10Plan* nonlocal, nlc::Vv10DensityDomain domain,
-       CudaXcPreparationBudget xc_budget)
+       CudaXcPreparationBudget xc_budget, const scf::PreparedFockPlan* separate_range_provider)
       : provider(plan),
+        range_provider(separate_range_provider),
         basis(basis),
         grid(grid),
         options(control),
@@ -649,13 +664,31 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (has_range_correction) {
       const auto& correction = *range_correction;
       const auto& spec = correction.spec;
-      if (fitted_coulomb || !fock_binding || correction.backend != scf::FockBackend::Cuda ||
-          spec.spin != strategy.spec.spin || spec.derivative_order != 0 || spec.coulomb.present ||
-          !spec.exchange.present || spec.exchange.approximation != scf::FockApproximation::Exact ||
-          spec.exchange.op != scf::FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
-          correction.screening_tolerance != strategy.screening_tolerance)
+      const bool correction_identity =
+          fock_binding && correction.backend == scf::FockBackend::Cuda &&
+          spec.spin == strategy.spec.spin && spec.derivative_order == 0 && !spec.coulomb.present &&
+          spec.exchange.present && spec.exchange.approximation == scf::FockApproximation::Exact &&
+          spec.exchange.op == scf::FockOperator::LongRange && spec.exchange.omega > 0.0 &&
+          correction.screening_tolerance == strategy.screening_tolerance;
+      if (!correction_identity)
         throw std::invalid_argument(
             "CUDA KS range correction must be one compatible exact long-range exchange term");
+      if (fitted_coulomb) {
+        if (!range_provider || range_provider->strategy() != correction ||
+            !range_provider->matches_system(provider.system()))
+          throw std::invalid_argument(
+              "fitted CUDA RSH requires a separate prepared Direct range provider");
+        range_fock_binding = scf::prepared_cuda_fock_binding(*range_provider);
+        if (!range_fock_binding || range_fock_binding.device_id != fock_binding.device_id ||
+            range_fock_binding.nbf != fock_binding.nbf)
+          throw std::invalid_argument(
+              "fitted CUDA RSH range provider is incompatible with the primary DF owner");
+      } else if (range_provider) {
+        throw std::invalid_argument(
+            "Direct CUDA RSH must reuse its primary provider for the range correction");
+      }
+    } else if (range_provider) {
+      throw std::invalid_argument("CUDA KS received an unused prepared range provider");
     }
     if (options.compute_forces || options.hooks || options.export_physical_reference ||
         options.xc_density_route != XcDensityRoute::DensityMatrix ||
@@ -673,7 +706,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                        : nlc::Vv10DensityDomain::StrictPositive;
       if (device_nonlocal &&
           (!family->cuda_nonlocal_correlation || nonlocal_domain != expected_domain ||
-           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10 || fitted_coulomb))
+           nonlocal_correlation->parameters().variant != nlc::Vv10Variant::vv10))
         throw std::invalid_argument(
             "device-resident CUDA nonlocal KS lacks a qualified family/domain capability");
       if (!device_nonlocal &&
@@ -711,6 +744,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     history = std::max(1U, options.diis_history);
     device = fock_binding.device_id;
     stream = fock_binding.stream;
+    if (range_provider) {
+      range_input_ready.create(device, cudaEventDisableTiming);
+      range_output_ready.create(device, cudaEventDisableTiming);
+    }
     if (nonlocal_correlation &&
         (nonlocal_correlation->backend() != GENERATIVEQC_BACKEND_CUDA ||
          nonlocal_correlation->device_id() != device ||
@@ -786,6 +823,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
     resource.grid_device_bytes = borrow_resident_grid ? resident_grid.device_bytes : 0;
     resource.provider_device_bytes = provider.diagnostic().device_bytes;
+    if (range_provider)
+      resource.provider_device_bytes =
+          sum(resource.provider_device_bytes, range_provider->diagnostic().device_bytes);
     const auto diagnostic_iterations =
         precision_schedule.any_lower_precision()
             ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
@@ -817,6 +857,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
+      check(matrix_products.prepare(stream, static_cast<int>(n)),
+            "CUDA KS matrix provider preparation failed");
+      if (matrix_products.library_enabled())
+        resource.provider_device_bytes =
+            sum(resource.provider_device_bytes, MatrixLibraryOwner::kProviderAllowance);
       eigensolver = std::make_unique<OrdinaryStreamEigensolver>(stream, n, tmp2, eigenvalues);
       resource.state_device_bytes = sum(resource.state_device_bytes, eigensolver->device_bytes());
       resource.retained_host_numeric_bytes =
@@ -906,8 +951,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     cudaGetDevice(&previous);
     cudaSetDevice(device);
     if (stream) cudaStreamSynchronize(stream);
+    if (range_fock_binding.stream && range_fock_binding.stream != stream)
+      cudaStreamSynchronize(range_fock_binding.stream);
     xc.reset();
     eigensolver.reset();
+    matrix_products.reset();
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
@@ -1179,9 +1227,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto blocks = static_cast<unsigned>((elements + 127) / 128);
     const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                               bool b_spin, const std::uint8_t* mask, double* c) {
-      launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                        b, b_spin, mask, c);
-      check(cudaGetLastError());
+      multiply_spin(spins, a, a_spin, transpose, b, b_spin, mask, c);
     };
     multiply(fock, true, false, density, true, enabled, tmp1);
     multiply(tmp1, true, false, overlap, false, enabled, residual);
@@ -1358,6 +1404,39 @@ struct CudaKsPlan::Impl : KsStateStorage {
       pending_fitted_occupied = false;
       final_fitted_projection_ready = false;
       invalidate_warm_orbitals();
+      throw;
+    }
+  }
+
+  void enqueue_range_correction(const double* alpha_density, const double* beta_density,
+                                std::string& detail) {
+    if (!has_range_correction || !range_correction)
+      throw std::logic_error("CUDA KS range correction is unavailable");
+    if (!range_provider) {
+      check(scf::enqueue_prepared_cuda_exchange_correction(
+                provider, *range_correction, alpha_density, beta_density, matrix, range_exchange,
+                spins == 2 ? range_exchange + matrix : nullptr, range_jk_error, detail),
+            detail);
+      return;
+    }
+
+    const auto correction_stream = range_fock_binding.stream;
+    bool submitted = false;
+    try {
+      range_input_ready.record(stream);
+      check(cudaStreamWaitEvent(correction_stream, range_input_ready.get(), 0));
+      submitted = true;
+      const auto status = scf::enqueue_prepared_cuda_fock(
+          *range_provider, alpha_density, beta_density, matrix, nullptr, range_exchange,
+          spins == 2 ? range_exchange + matrix : nullptr, range_jk_error, false, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        (void)cudaStreamSynchronize(correction_stream);
+        check(status, detail);
+      }
+      range_output_ready.record(correction_stream);
+      check(cudaStreamWaitEvent(stream, range_output_ready.get(), 0));
+    } catch (...) {
+      if (submitted) (void)cudaStreamSynchronize(correction_stream);
       throw;
     }
   }
@@ -1557,11 +1636,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
           ++movement.fitted_dense_exchange_builds;
       }
       if (has_range_correction && !fused_rsh_values)
-        check(scf::enqueue_prepared_cuda_exchange_correction(
-                  provider, *range_correction, density, spins == 2 ? density + matrix : nullptr,
-                  matrix, range_exchange, spins == 2 ? range_exchange + matrix : nullptr,
-                  range_jk_error, detail),
-              detail);
+        enqueue_range_correction(density, spins == 2 ? density + matrix : nullptr, detail);
       mixed_precision_executed =
           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
       const auto potential = stage_xc(++generation, density_phase);
@@ -1575,9 +1650,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
-        launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                          b, b_spin, enabled, c);
-        check(cudaGetLastError());
+        multiply_spin(spins, a, a_spin, transpose, b, b_spin, enabled, c);
       };
       // Physical residual is FDS-SDF, using the unchanged CURRENT density.
       multiply(fock, true, false, density, true, tmp1);
@@ -1895,12 +1968,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
           "CUDA KS final-state read requires an ordinary noncapturing stream");
 
     if (!final_frame_ready) {
-      const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
-        launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                          b, b_spin, final_enabled, c);
-        check(cudaGetLastError());
+        multiply_spin(spins, a, a_spin, transpose, b, b_spin, final_enabled, c);
       };
       multiply(fock, true, false, x, false, tmp1);
       multiply(x, false, true, tmp1, true, tmp2);
@@ -2038,19 +2108,22 @@ CudaKsPlan::CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis,
                        std::uint32_t functional_code, std::size_t tile_points,
                        const scf::ResolvedFockBuild* range_correction,
                        nlc::Vv10Plan* nonlocal_correlation, nlc::Vv10DensityDomain nonlocal_domain,
-                       CudaXcPreparationBudget xc_budget)
+                       CudaXcPreparationBudget xc_budget,
+                       const scf::PreparedFockPlan* range_provider)
     : impl_(std::make_unique<Impl>(fock, basis, grid, options, functional_code, tile_points,
                                    range_correction, nonlocal_correlation, nonlocal_domain,
-                                   xc_budget)) {}
+                                   xc_budget, range_provider)) {}
 
 CudaKsPlan::CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis,
                        const MolecularGrid& grid, const scf::ScfOptions& options,
                        SemilocalFamily functional, std::size_t tile_points,
                        const scf::ResolvedFockBuild* range_correction,
                        nlc::Vv10Plan* nonlocal_correlation, nlc::Vv10DensityDomain nonlocal_domain,
-                       CudaXcPreparationBudget xc_budget)
+                       CudaXcPreparationBudget xc_budget,
+                       const scf::PreparedFockPlan* range_provider)
     : CudaKsPlan(fock, basis, grid, options, semilocal_family_code(functional), tile_points,
-                 range_correction, nonlocal_correlation, nonlocal_domain, xc_budget) {}
+                 range_correction, nonlocal_correlation, nonlocal_domain, xc_budget,
+                 range_provider) {}
 CudaKsPlan::~CudaKsPlan() = default;
 void CudaKsPlan::begin(const std::vector<double>* seed, bool reuse_warm) {
   impl_->begin(seed, reuse_warm);
@@ -2350,14 +2423,8 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
     profile_primary(false, true, 1);
 
     if (impl_->has_range_correction) {
-      profile.milliseconds[2] = timed([&] {
-        check(scf::enqueue_prepared_cuda_exchange_correction(
-                  impl_->provider, *impl_->range_correction, impl_->density, beta, impl_->matrix,
-                  impl_->range_exchange,
-                  impl_->spins == 2 ? impl_->range_exchange + impl_->matrix : nullptr,
-                  impl_->range_jk_error, detail),
-              detail);
-      });
+      profile.milliseconds[2] =
+          timed([&] { impl_->enqueue_range_correction(impl_->density, beta, detail); });
       read_error(impl_->range_jk_error, "fixed-density range K");
       profile.present_mask |= (1U << 2);
     }

@@ -120,6 +120,13 @@ class PreparedFockPlan {
   FockEnergyDerivativeComponents energy_derivative_components_with_fitted_projection(
       const std::vector<double>& density, const std::vector<double>& beta,
       const CudaDfBorrowedFittedProjection& projection) const;
+  /** CUDA-DF final-state response. Coulomb may consume the exact resident
+   * restricted density while exchange optionally consumes the exact final-K
+   * fitted projection. Host density remains the validation/scientific witness. */
+  FockEnergyDerivativeComponents energy_derivative_components_with_cuda_df_state(
+      const std::vector<double>& density, const std::vector<double>& beta,
+      const CudaDfBorrowedResponseDensity* response_density,
+      const CudaDfBorrowedFittedProjection* projection = nullptr) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */

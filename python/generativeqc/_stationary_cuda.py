@@ -3723,14 +3723,25 @@ def _complete_rks_cuda_gradient_diagnostic(
     )
     if use_fitted_integrals:
         work["density_fitted_response_resources_included"] = False
+        resident_df_one_electron = bool(
+            native_integral_resources.get(
+                "density_fitted_one_electron_resident_cuda", 0
+            )
+        )
         work["native_integral_resource_scope"] = (
-            "compact-publication-and-host-one-electron-only"
+            "compact-publication-and-resident-cuda-one-electron"
+            if resident_df_one_electron
+            else "compact-publication-and-host-one-electron-fallback"
         )
         work["additional_device_peak_bound_scope"] = (
             "stationary-consumer-only; excludes DF-provider response scratch"
         )
         work["transfer_work"]["density_fitted_response_included"] = False
-        work["host_scope"] += "; retained H'/S' source contraction"
+        work["host_scope"] += (
+            "; final D/W remain resident for H'/S' contraction"
+            if resident_df_one_electron
+            else "; retained H'/S' source contraction fallback"
+        )
     timeline_record = timeline.finish()
     work.update(
         endpoint_seconds=timeline_record["endpoint_seconds"],

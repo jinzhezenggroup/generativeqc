@@ -451,9 +451,17 @@ FockEnergyDerivativeComponents
 PreparedFockPlan::energy_derivative_components_with_fitted_projection(
     const std::vector<double>& density, const std::vector<double>& beta,
     const CudaDfBorrowedFittedProjection& projection) const {
-  if (!projection || !impl_->cuda_view || !impl_->cuda_df || !impl_->fitted)
+  return energy_derivative_components_with_cuda_df_state(density, beta, nullptr, &projection);
+}
+
+FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components_with_cuda_df_state(
+    const std::vector<double>& density, const std::vector<double>& beta,
+    const CudaDfBorrowedResponseDensity* response_density,
+    const CudaDfBorrowedFittedProjection* projection) const {
+  if ((!response_density && !projection) || (response_density && !*response_density) ||
+      (projection && !*projection) || !impl_->cuda_view || !impl_->cuda_df || !impl_->fitted)
     throw std::invalid_argument(
-        "final fitted projection response requires the prepared CUDA DF provider");
+        "final CUDA DF response requires a prepared provider and valid borrowed state");
 
   auto derivative_spec = impl_->diagnostic.strategy.spec;
   derivative_spec.derivative_order = 1;
@@ -467,16 +475,17 @@ PreparedFockPlan::energy_derivative_components_with_fitted_projection(
   FockEnergyDerivativeComponents result{std::vector<double>(impl_->diagnostic.ncoord),
                                         std::vector<double>(impl_->diagnostic.ncoord)};
   // U aliases provider projection scratch and is a one-shot lease. Consume K
-  // before the ordinary J response is allowed to reuse that scratch.
+  // before the ordinary J response is allowed to reuse that scratch. The
+  // resident density is intentionally J-only in this first integration.
   if (derivative_spec.exchange.present) {
     auto exchange = derivative_spec;
     exchange.coulomb.present = false;
-    result.exchange = provider.derivative(exchange, density, beta, &projection);
+    result.exchange = provider.derivative(exchange, density, beta, projection);
   }
   if (derivative_spec.coulomb.present) {
     auto coulomb = derivative_spec;
     coulomb.exchange.present = false;
-    result.coulomb = provider.derivative(coulomb, density, beta);
+    result.coulomb = provider.derivative(coulomb, density, beta, nullptr, response_density);
   }
   return result;
 }

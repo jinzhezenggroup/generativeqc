@@ -125,8 +125,13 @@ def _library(quadrature_status: int = 0) -> SimpleNamespace:
         output._obj.value = 320 << 20
         return quadrature_status
 
+    def matrix_provider(nao: int, output: typing.Any) -> int:
+        output._obj.value = (96 << 20) if nao >= 17 else 0
+        return 0
+
     return SimpleNamespace(
         generativeqc_resource_ks_cuda_v1=query,
+        generativeqc_resource_ks_matrix_provider_cuda_v1=matrix_provider,
         generativeqc_resource_quadrature_cuda_v1=quadrature,
     )
 

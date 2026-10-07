@@ -65,7 +65,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::span<const double>, const std::vector<double>&,
     std::span<const DensityFittingDensityResponse>, unsigned, std::size_t, std::size_t,
     std::vector<double>&, std::string& detail, DfGradientResources*, const CudaDfFinalStateToken*,
-    const CudaDfBorrowedFittedProjection*) {
+    const CudaDfBorrowedFittedProjection*, const CudaDfBorrowedResponseDensity*) {
   detail = "CUDA DF generated response is unavailable in this build";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }

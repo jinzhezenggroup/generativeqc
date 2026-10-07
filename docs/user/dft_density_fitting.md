@@ -10,11 +10,20 @@ choose an appropriate fitting basis for scientific production calculations.
 CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
-trajectory optimization. Analytic forces differentiate the same auxiliary
-basis and Coulomb metric used by the energy, including auxiliary-center and
-metric response. Range-separated/nonlocal DF compositions, ECP DF and
-automatic mixed precision remain rejected. This interface does not change the
-selected functional or grid.
+trajectory optimization. FP64 range-separated energies may use a mixed
+composition: the ordinary full-range J/K primary is density fitted, while the
+omega-dependent long-range exchange correction remains an exact Direct
+provider. CUDA orders the independent provider streams with device events; it
+does not add a successful-path host fence. WB97M-V energy composes this mixed
+J/K owner with the existing self-consistent VV10 path.
+
+This mixed composition is not range-separated RI-K: there are still no
+omega-dependent DF metric/three-center integrals. Analytic forces for
+range-separated or nonlocal DF compositions therefore remain rejected; so do
+ECP DF and automatic mixed precision. Full-range DF forces continue to
+differentiate the same auxiliary basis and Coulomb metric used by the energy,
+including auxiliary-center and metric response. This interface does not change
+the selected functional or grid.
 
 ```python
 from generativeqc import Calculator
@@ -45,15 +54,26 @@ prepared DF response provider. The CPU diagnostic requires `execution="native"`
 for a fitted state; the Direct-only reference derivative path is rejected rather
 than differentiating a different Hamiltonian.
 
-This bridge contracts retained host H'/S' derivatives for the one-electron and
-Pulay sources on both backends. The CUDA DF J/K response remains in the existing
-CUDA provider and can upload density terms and other response buffers. It is
-not a zero-upload resident whole-force path. Its resource metadata covers the
-compact source publication and the host one-electron contraction only;
-`density_fitted_response_resources_included=0` explicitly excludes unmeasured
-DF-provider scratch and transfers. These partial diagnostics cannot establish a
-whole-force memory or transport bound. Full DF resource-plan admission remains
-unqualified.
+The CPU bridge contracts retained host H'/S' derivatives for the one-electron
+and Pulay sources. CUDA first borrows the token-checked final stationary D/W
+already retained by the KS owner and runs the bounded paired one-electron
+consumer without uploading those AO matrices again. If that optional device
+consumer cannot be admitted under the caller's budget, the exact host
+contraction remains the bounded fallback.
+
+For restricted CUDA DF response, the Coulomb J' component also borrows the exact
+final resident density under the same live KS token. The detached host density
+remains the finite/symmetric scientific witness, but the response bridge reads
+the device matrix directly and therefore reports zero density H2D bytes for
+that J-only call. Exchange K' deliberately keeps its existing density/projection
+path in this change, and unrestricted/multi-term response retains the ordinary
+upload path. This is therefore not a zero-upload resident whole-force path.
+
+Resource metadata distinguishes the resident one-electron path from its host
+fallback; `density_fitted_response_resources_included=0` still explicitly
+excludes unmeasured DF-provider scratch and transfers. These partial diagnostics
+cannot establish a whole-force memory or transport bound. Full DF resource-plan
+admission remains unqualified.
 
 `tests/python/test_dft_df_public.py` compares independently converged PySCF
 energies and analytic gradients with copied orbital/auxiliary primitives and

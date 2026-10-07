@@ -41,6 +41,8 @@ CUBLASLT_PROVIDER = ProviderDescriptor(
 
 def cublaslt_matmul(request: LoweringRequest) -> MatrixContraction:
     """Project the shared affine proof; preserve provider-specific diagnostics."""
+    if request.backend != "cuda":
+        raise ValueError("cuBLASLt requires the canonical CUDA einsum request")
     try:
         return matrix_contraction(request)
     except ValueError as error:
