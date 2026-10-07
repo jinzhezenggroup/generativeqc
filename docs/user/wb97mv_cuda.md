@@ -50,9 +50,13 @@ The complete Python force consumer admits built-in STO-3G, def2-SVP and
 def2-TZVP, or explicit/local all-electron bases through f angular momentum, in
 Cartesian or spherical representation. A basis such as def2-TZVPD is not
 bundled and must be supplied as a local basis record. ECPs and density fitting
-remain outside this force contract. Component-wise `precision="auto"` is an SCF
-policy only; it does not lower stationary force arithmetic or expand the basis,
-ECP or resource domain.
+remain outside this **force** contract. FP64 energy calculations may select
+density fitting for the full-range J/K primary; the omega-dependent long-range
+exchange correction remains exact Direct, and VV10 remains the existing
+grid/nonlocal consumer. This is a mixed provider composition, not
+range-separated RI-K. Component-wise `precision="auto"` is an SCF policy only;
+it does not lower stationary force arithmetic or expand the basis, ECP or
+resource domain.
 
 For the H/O-only benchmark snapshot in a repository checkout, load the exact
 diffuse basis rather than substituting the bundled def2-TZVP name:
