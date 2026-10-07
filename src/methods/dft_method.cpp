@@ -239,16 +239,15 @@ std::optional<unsigned> pbe0_incremental_direct_jk_benchmark_rebuild_interval() 
 }
 
 std::optional<double> pbe0_incremental_direct_jk_benchmark_density_rms_threshold() {
-  const char* value =
-      std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+  const char* value = std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
   if (value == nullptr) return std::nullopt;
   errno = 0;
   char* end = nullptr;
   const double parsed = std::strtod(value, &end);
   if (errno == ERANGE || end == value || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0)
-    throw MethodError(
-        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD must be finite and nonnegative");
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD must be "
+                      "finite and nonnegative");
   return parsed;
 }
 
@@ -504,9 +503,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
         options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
         options.precision_mode == GENERATIVEQC_PRECISION_FP64;
     if (!strict_exact_pbe0_rks)
-      throw MethodError(
-          GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-          "PBE0 incremental Direct-J/K benchmark mode requires strict-FP64 exact-direct CUDA RKS PBE0");
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "PBE0 incremental Direct-J/K benchmark mode requires strict-FP64 "
+                        "exact-direct CUDA RKS PBE0");
     options.incremental_direct_jk = true;
     if (const auto interval = pbe0_incremental_direct_jk_benchmark_rebuild_interval())
       options.incremental_direct_jk_rebuild_interval = *interval;

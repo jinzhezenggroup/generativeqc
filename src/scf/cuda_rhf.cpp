@@ -1457,9 +1457,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           ? arena_pointer<std::uint8_t>(resources.arena_, layout.incremental_full_build)
           : nullptr;
   unsigned long long* incremental_full_build_count =
-      incremental_direct_jk ? arena_pointer<unsigned long long>(
-                                  resources.arena_, layout.incremental_full_build_count)
-                            : nullptr;
+      incremental_direct_jk
+          ? arena_pointer<unsigned long long>(resources.arena_, layout.incremental_full_build_count)
+          : nullptr;
   unsigned long long* incremental_delta_build_count =
       incremental_direct_jk ? arena_pointer<unsigned long long>(
                                   resources.arena_, layout.incremental_delta_build_count)

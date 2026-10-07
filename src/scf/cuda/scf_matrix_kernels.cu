@@ -171,11 +171,10 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
 __global__ void prepare_incremental_direct_jk_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
     std::uint32_t rebuild_interval, double density_rms_threshold, const double* density_rms,
-    const double* density, const double* hcore, const std::uint8_t* active,
-    double* anchor_density, double* anchor_fock, double* delta_density,
-    std::uint32_t* delta_updates, std::uint8_t* full_build,
-    unsigned long long* full_build_count, unsigned long long* delta_build_count,
-    double* max_abs_delta_density) {
+    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
+    std::uint8_t* full_build, unsigned long long* full_build_count,
+    unsigned long long* delta_build_count, double* max_abs_delta_density) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
