@@ -100,7 +100,7 @@ generativeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   eigen_provider::SymmetricEigenWorkspace queried;
   const auto sized = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-      {plan.solver, plan.solver_parameters}, eigen_provider::SymmetricEigenFamily::xsyevd,
+      plan.eigen_handles.view(), eigen_provider::SymmetricEigenFamily::xsyevd,
       {static_cast<std::int64_t>(n), 1, eigen_provider::Eigenvectors::values_and_vectors},
       candidate->matrix, candidate->values, queried));
   candidate->workspace_bytes = queried.device_bytes;
@@ -216,8 +216,8 @@ generativeqc_status solve_cuda_density_fitting_eigen(
     }
     const cuda_execution::EigensolverResources resources{
         plan->stream,
-        plan->solver,
-        plan->solver_parameters,
+        static_cast<cusolverDnHandle_t>(plan->eigen_handles.view().solver),
+        static_cast<cusolverDnParams_t>(plan->eigen_handles.view().parameters),
         nullptr,
         state->workspace,
         state->workspace_bytes,

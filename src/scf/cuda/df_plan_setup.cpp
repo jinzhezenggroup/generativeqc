@@ -507,12 +507,13 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
       return fail_plan(candidate, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     }
   }
-  cusolverStatus_t solver_status = cusolverDnCreate(&candidate->solver);
+  cusolverStatus_t solver_status = static_cast<cusolverStatus_t>(candidate->eigen_handles.create());
   if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-    solver_status = cusolverDnSetStream(candidate->solver, candidate->stream);
+    solver_status =
+        static_cast<cusolverStatus_t>(candidate->eigen_handles.bind_stream(candidate->stream));
   }
   if (solver_status == CUSOLVER_STATUS_SUCCESS) {
-    solver_status = cusolverDnCreateParams(&candidate->solver_parameters);
+    solver_status = static_cast<cusolverStatus_t>(candidate->eigen_handles.create_parameters());
   }
   if (solver_status != CUSOLVER_STATUS_SUCCESS) {
     return fail_plan(candidate,
@@ -639,8 +640,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   runtime::df_progress::label("provider", "cusolverDnXsyevd");
   eigen_provider::SymmetricEigenWorkspace queried;
   solver_status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-      {candidate->solver, candidate->solver_parameters},
-      eigen_provider::SymmetricEigenFamily::xsyevd,
+      candidate->eigen_handles.view(), eigen_provider::SymmetricEigenFamily::xsyevd,
       {static_cast<std::int64_t>(naux), 1, eigen_provider::Eigenvectors::values_and_vectors},
       setup.metrics, setup.eigenvalues, queried));
   const auto solver_device_workspace_bytes = queried.device_bytes;
@@ -666,8 +666,8 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   }
   for (std::size_t system = 0; system < batch_size; ++system) {
     solver_status = static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
-        {candidate->solver, candidate->solver_parameters, nullptr, setup.solver_workspace,
-         solver_device_workspace_bytes,
+        {candidate->eigen_handles.view().solver, candidate->eigen_handles.view().parameters,
+         nullptr, setup.solver_workspace, solver_device_workspace_bytes,
          setup.solver_host_workspace.empty() ? nullptr : setup.solver_host_workspace.data(),
          solver_host_workspace_bytes},
         eigen_provider::SymmetricEigenFamily::xsyevd,

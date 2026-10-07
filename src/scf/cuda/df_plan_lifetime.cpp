@@ -59,10 +59,7 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   (void)runtime::resource_cuda_free(plan.exchange_contributions);
   (void)runtime::resource_cuda_free(plan.exchange_tile_output);
   (void)runtime::resource_cuda_free(plan.exchange_density_column_major);
-  if (plan.solver_parameters != nullptr) {
-    (void)cusolverDnDestroyParams(plan.solver_parameters);
-  }
-  if (plan.solver != nullptr) (void)cusolverDnDestroy(plan.solver);
+  plan.eigen_handles.reset();
   if (plan.blas != nullptr) (void)cublasDestroy(plan.blas);
   if (plan.stream != nullptr) (void)cudaStreamDestroy(plan.stream);
   plan = {};
