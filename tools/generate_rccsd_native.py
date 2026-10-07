@@ -1444,8 +1444,17 @@ def _parallel_scalar_reduction_kernel(
 
     serial = "\n".join(contribution("      "))
     parallel = "\n".join(contribution("    "))
+    orbital_declaration = (
+        "  const std::size_t n=o+v;\n"
+        if any(
+            _dim(index) == "n"
+            for source in node.inputs
+            for index in source.spec.indices
+        )
+        else ""
+    )
     return f"""__global__ void {prefix}_node_{number}({",".join(arguments)}){{
-  __shared__ double partial[8];
+{orbital_declaration}  __shared__ double partial[8];
   const std::size_t reduction_count={reduction_count};
   if(reduction_count<32){{
     if(threadIdx.x==0){{

@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+import subprocess
+from typing import TYPE_CHECKING
+
+import pytest
+from generativeqc_compiler.tensor.ir import einsum, input_tensor, reduce_sum
+from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
+
 from tools import generate_df_ccsd_core, generate_df_ccsd_hoisted
 from tools import generate_rccsd_native as codegen
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from conftest import NativeCxx
 
 
 def _kernels(source: str) -> tuple[str, ...]:
@@ -79,3 +91,64 @@ def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
         kernel.startswith("iteration_scalar_node_") and "__shfl_down_sync" in kernel
         for kernel in hoisted
     )
+
+
+@pytest.mark.parametrize("operation", ("reduce", "einsum"))
+def test_complete_orbital_scalar_kernel_declares_runtime_extent(
+    tmp_path: Path, native_cxx: NativeCxx, operation: str
+) -> None:
+    """Compile with host syntax shims and execute only the real serial fallback."""
+    space = IndexSpace("complete", "orbital", codegen.REPRESENTATIVE_ORBITALS)
+    source = input_tensor("x", TensorSpec((Index("p", space),), role="input"))
+    node = (
+        reduce_sum(source, (0,))
+        if operation == "reduce"
+        else einsum("p,p->", source, source)
+    )
+    kernel = codegen._cuda_kernel(
+        node, 0, "complete", {}, parallel_scalar_reductions=True
+    )
+    arguments = ",".join([*("values" for _ in node.inputs), "&out", "o", "v", "&error"])
+    unit = tmp_path / "complete.cpp"
+    unit.write_text(
+        """
+#include <cassert>
+#include <cstddef>
+#define __global__
+#define __shared__
+struct Dim { unsigned x; };
+Dim threadIdx{0}, blockDim{256};
+double __dadd_rn(double a, double b) { return a+b; }
+double __dmul_rn(double a, double b) { return a*b; }
+double __shfl_down_sync(unsigned, double value, int) { return value; }
+void __syncthreads() {}
+namespace generativeqc_tensor {
+double finite(double value, int*, int) { return value; }
+}
+"""
+        + kernel
+        + f"""
+int main() {{
+  const double values[]={{1,2,3,4,5}};
+  for (std::size_t o=0;o<=2;++o) {{
+    for (std::size_t v=0;v<=3;++v) {{
+      const auto n=o+v;
+      assert(n<32); // Execute only the actual serial fallback, not mocked shuffles.
+      double expected=0.0;
+      for (std::size_t i=0;i<n;++i)
+        expected += {"values[i]" if operation == "reduce" else "values[i]*values[i]"};
+      double out=-1.0;
+      int error=0;
+      complete_node_0({arguments});
+      assert(error==0 && out==expected);
+    }}
+  }}
+}}
+"""
+    )
+    executable = native_cxx.build_executable(
+        [unit],
+        tmp_path / "complete",
+        compile_args=("-std=c++17", "-Wall", "-Wextra", "-Werror"),
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
