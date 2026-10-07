@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import sys
@@ -21,7 +22,12 @@ SUPPORTED = ("direct", "df-jk-occupied")
 
 
 def read(path: Path) -> dict:
-    return json.loads(path.read_text())
+    raw = (
+        gzip.decompress(path.read_bytes())
+        if path.suffix == ".gz"
+        else path.read_bytes()
+    )
+    return json.loads(raw)
 
 
 def digest(path: Path) -> str:
@@ -35,13 +41,13 @@ def digest(path: Path) -> str:
 def required_paths() -> set[str]:
     paths = {"platform/job-metrics.json"}
     for case in CASES:
-        paths.add(f"native/{case}-df-j-exact-k.json")
+        paths.add(f"native/{case}-df-j-exact-k.json.gz")
         for arm in SUPPORTED:
-            paths.add(f"profiles/{case}-{arm}-profile.json")
+            paths.add(f"profiles/{case}-{arm}-profile.json.gz")
             for repeat in (0, 1):
-                paths.add(f"native/{case}-{arm}-{repeat}.json")
+                paths.add(f"native/{case}-{arm}-{repeat}.json.gz")
                 if case != "water-48" or arm != "direct":
-                    paths.add(f"oracles/{case}-{arm}-{repeat}.json")
+                    paths.add(f"oracles/{case}-{arm}-{repeat}.json.gz")
         for repeat in (0, 1):
             paths.add(f"summaries/{case}-pair{repeat}.json")
     return paths
@@ -66,6 +72,12 @@ def verify() -> dict:
             raise ValueError(f"unsafe or missing #2054 evidence path: {relative}")
         if path.stat().st_size != row["bytes"] or digest(path) != row["sha256"]:
             raise ValueError(f"#2054 evidence checksum mismatch: {relative}")
+        if path.suffix == ".gz":
+            content = gzip.decompress(path.read_bytes())
+            if len(content) != row.get("content_bytes") or hashlib.sha256(
+                content
+            ).hexdigest() != row.get("content_sha256"):
+                raise ValueError(f"#2054 decompressed evidence mismatch: {relative}")
 
     metrics = read(EVIDENCE / "platform/job-metrics.json")
     if (
@@ -84,7 +96,7 @@ def verify() -> dict:
     for case in CASES:
         for repeat in (0, 1):
             native = [
-                read(EVIDENCE / f"native/{case}-{arm}-{repeat}.json")
+                read(EVIDENCE / f"native/{case}-{arm}-{repeat}.json.gz")
                 for arm in SUPPORTED
             ]
             for record in native:
@@ -98,18 +110,24 @@ def verify() -> dict:
                     raise ValueError(
                         f"#2054 {case} pair{repeat} source/binary mismatch"
                     )
-            native.append(read(EVIDENCE / f"native/{case}-df-j-exact-k.json"))
+            native.append(read(EVIDENCE / f"native/{case}-df-j-exact-k.json.gz"))
             oracles = [
-                read(EVIDENCE / f"oracles/{case}-{arm}-{repeat}.json")
+                read(EVIDENCE / f"oracles/{case}-{arm}-{repeat}.json.gz")
                 for arm in SUPPORTED
-                if (EVIDENCE / f"oracles/{case}-{arm}-{repeat}.json").is_file()
+                if (EVIDENCE / f"oracles/{case}-{arm}-{repeat}.json.gz").is_file()
             ]
             for oracle in oracles:
-                native_path = EVIDENCE / f"native/{case}-{oracle['arm']}-{repeat}.json"
-                if oracle.get("native_record_sha256") != digest(native_path):
+                native_path = (
+                    EVIDENCE / f"native/{case}-{oracle['arm']}-{repeat}.json.gz"
+                )
+                native_raw = gzip.decompress(native_path.read_bytes())
+                if (
+                    oracle.get("native_record_sha256")
+                    != hashlib.sha256(native_raw).hexdigest()
+                ):
                     raise ValueError(f"#2054 {case} pair{repeat} oracle/raw mismatch")
             profiles = [
-                read(EVIDENCE / f"profiles/{case}-{arm}-profile.json")
+                read(EVIDENCE / f"profiles/{case}-{arm}-profile.json.gz")
                 for arm in SUPPORTED
             ]
             recomputed = summarize(native, oracles, profiles)

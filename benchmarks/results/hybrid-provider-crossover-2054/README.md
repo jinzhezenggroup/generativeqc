@@ -124,9 +124,10 @@ fail-closed pair summaries are required afterward.
 fresh bounded CPU process, writes `NOT_RUN` for failed Direct 48 attempts,
 retains timeouts/crashes and all per-pair `INCOMPLETE` or accepted summaries,
 and never converts a platform `SUCCEEDED` state into scientific acceptance.
-The small retained JSON records under `evidence/` keep LF bytes and their
-original SHA-256; grid NPZ exports and full trace streams stay in the ignored
-task-owned qz experiment directory.
+The small retained evidence under `evidence/` preserves the raw JSON byte count
+and SHA-256. Native/oracle/profile records use deterministic gzip; summaries
+remain readable JSON. Grid NPZ exports and full trace streams stay in the
+ignored task-owned qz experiment directory.
 GitHub may collapse these generated JSON diffs; expand an individual record or
 run `verify_evidence.py` to inspect/check every full-precision value.
 `evidence/platform/job-metrics.json` retains the platform's one-minute Pod
@@ -162,7 +163,8 @@ endpoint, 96-atom coverage, measured memory/work decomposition and reviewed
 source-matched crossover evidence before any policy discussion.
 
 Grid NPZ exports and full trace streams remain in task-owned shared storage.
-Small raw attempt and independent-oracle JSONs are retained in `evidence/`.
+Small raw attempt and independent-oracle JSONs are retained as deterministic
+gzip members in `evidence/`.
 Provider metric records describe allocations and planned peaks; they are not
 measured device peak memory. Missing work counters stay absent. Diagnostic
 traces and profiles must be collected in a separate pass and never mixed with
