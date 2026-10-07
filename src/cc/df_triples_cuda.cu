@@ -62,7 +62,7 @@ struct Layout {
 Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
               std::size_t execution_bytes = 0, std::size_t host_binding_bytes = 0,
               std::size_t execution_provider_bytes = provider_allowance,
-              std::size_t library_bytes = blas_workspace) {
+              std::size_t library_bytes = blas_workspace, bool external_inputs = false) {
   const auto oo = checked_mul(o, o), vv = checked_mul(v, v), ov = checked_mul(o, v);
   const auto ovv = checked_mul(o, vv);
   // Check every dimension and physical leading dimension before reading inputs
@@ -90,7 +90,9 @@ Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
       checked_mul(checked_mul(6, p.tiles), checked_add(checked_mul(p.v3, v), checked_mul(p.v3, o)));
   (void)checked_add(moment_terms, checked_mul(checked_mul(3, p.tiles), checked_mul(q, p.v3)));
   std::size_t cursor = 0;
-  for (std::size_t x = 0; x < p.sizes.size(); ++x) p.inputs[x] = reserve(cursor, bytes(p.sizes[x]));
+  if (!external_inputs)
+    for (std::size_t x = 0; x < p.sizes.size(); ++x)
+      p.inputs[x] = reserve(cursor, bytes(p.sizes[x]));
   p.panels = reserve(cursor, bytes(checked_mul(p.panel_capacity, p.v3)));
   p.moments = reserve(cursor, bytes(checked_mul(6, p.v3)));
   p.execution_storage = reserve(cursor, execution_bytes);
@@ -128,6 +130,43 @@ double validate_inputs(std::size_t o, std::size_t v, std::size_t q, const Layout
   return minimum;
 }
 
+struct PreparedInputs {
+  unsigned char* base{};
+  std::size_t storage_bytes{}, h2d_bytes{};
+  generated_df::Inputs values;
+
+  PreparedInputs(const Layout& p, const std::array<const double*, 9>& host) {
+    std::size_t cursor = 0;
+    std::array<std::size_t, 9> offsets{};
+    for (std::size_t x = 0; x < p.sizes.size(); ++x)
+      offsets[x] = reserve(cursor, bytes(p.sizes[x]));
+    storage_bytes = align256(cursor);
+    generativeqc_tensor::cuda_check(cudaMalloc(reinterpret_cast<void**>(&base), storage_bytes));
+    try {
+      const std::array<const double**, 9> fields{
+          &values.bov, &values.bvv, &values.ovoo, &values.ovov, &values.fov,
+          &values.t1,  &values.t2,  &values.eps_o, &values.eps_v};
+      for (std::size_t x = 0; x < host.size(); ++x) {
+        auto* destination = base + offsets[x];
+        *fields[x] = reinterpret_cast<const double*>(destination);
+        generativeqc_tensor::cuda_check(
+            cudaMemcpy(destination, host[x], bytes(p.sizes[x]), cudaMemcpyHostToDevice));
+        h2d_bytes = checked_add(h2d_bytes, bytes(p.sizes[x]));
+      }
+    } catch (...) {
+      cudaFree(base);
+      base = nullptr;
+      throw;
+    }
+  }
+
+  PreparedInputs(const PreparedInputs&) = delete;
+  PreparedInputs& operator=(const PreparedInputs&) = delete;
+  ~PreparedInputs() {
+    if (base) cudaFree(base);
+  }
+};
+
 struct ResponseLayout {
   Layout value;
   std::array<std::size_t, 9> outputs{};
@@ -136,9 +175,9 @@ struct ResponseLayout {
 };
 ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
                                std::size_t caller_bytes, bool parallel_gap_reduction,
-                               bool include_gap_response) {
+                               bool include_gap_response, bool external_inputs = false) {
   ResponseLayout p;
-  p.value = layout(o, v, q, panels);
+  p.value = layout(o, v, q, panels, 0, 0, provider_allowance, blas_workspace, external_inputs);
   auto cursor = p.value.arena;
   std::size_t values = 0;
   for (std::size_t x = 0; x < p.outputs.size(); ++x) {
@@ -182,9 +221,10 @@ struct FockLayout {
   std::size_t host_bytes{}, output_bytes{}, complete{};
 };
 FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t capacity,
-                       std::size_t panels, std::size_t caller_bytes) {
+                       std::size_t panels, std::size_t caller_bytes,
+                       bool external_inputs = false) {
   FockLayout r;
-  r.value = layout(o, v, q, panels);
+  r.value = layout(o, v, q, panels, 0, 0, provider_allowance, blas_workspace, external_inputs);
   auto& p = r.value;
   // Cross-page oo contracts a flattened complete virtual cube as BLAS k.
   if (p.v3 > static_cast<std::size_t>(std::numeric_limits<int>::max()))
