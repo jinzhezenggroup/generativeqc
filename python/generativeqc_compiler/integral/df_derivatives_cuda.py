@@ -71,6 +71,28 @@ def emit_df_geometry_cuda(
     return source
 
 
+def emit_df_range_geometry_cuda() -> str:
+    """Prepare the same Gaussian-product geometry with a range moment ladder."""
+    return r"""__device__ __forceinline__ bool prepare_range_geometry(
+    double alpha,Vec3 A,double beta,Vec3 B,double gamma,Vec3 C,unsigned total,
+    generativeqc::integrals::CoulombRange range,double omega,Geometry& g) {
+  const double p=alpha+beta,q=gamma,rho=p*q/(p+q);
+  g.sx=q/(p+q);g.sy=p/(p+q);g.ip=0.5/p;g.iq=0.5/q;
+  double distance=0,ab2=0;
+  for(unsigned axis=0;axis<3;++axis) {
+    const double ab=component(A,axis)-component(B,axis);
+    g.pa[axis]=-beta/p*ab;g.pb[axis]=alpha/p*ab;
+    g.dx[axis]=component(A,axis)-component(C,axis)+g.pa[axis];
+    distance+=g.dx[axis]*g.dx[axis];ab2+=ab*ab;
+  }
+  if(!generativeqc::integrals::range_moments(
+         total+1,rho*distance,rho,range,omega,g.f)) return false;
+  g.prefactor=34.986836655249725694/(p*q*sqrt(p+q))*exp(-alpha*beta/p*ab2);
+  return true;
+}
+"""
+
+
 def emit_df_boys_cuda(*, compensated: bool = False) -> str:
     """Emit the shared FP64 positive-series/downward Boys evaluation.
 
@@ -151,6 +173,7 @@ def emit_df_derivatives_cuda(*, auxiliary_g: bool = False) -> typing.Any:
 #define GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH
 #include <cuda_runtime.h>
 #include <cmath>
+#include "integrals/range_moments.hpp"
 namespace generativeqc::scf::generated_df_derivatives {
 struct Vec3 { double x,y,z; };
 struct Angular { unsigned x,y,z; };
@@ -237,6 +260,65 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
     double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
   return evaluate(false,alpha,A,a,beta,B,b,gamma,C,c);
 }
+__DF_RANGE_GEOMETRY__
+__device__ __noinline__ Response range_evaluate(
+    bool metric,double alpha,Vec3 A,Angular a,double beta,Vec3 B,Angular b,
+    double gamma,Vec3 C,Angular c,generativeqc::integrals::CoulombRange range,double omega) {
+  const double invalid=NAN;
+  if (range==generativeqc::integrals::CoulombRange::Full || !(omega>0) ||
+      order(a)>3 || order(b)>3 || order(c)>3 || !(alpha>0) || !(gamma>0) ||
+      (!metric && !(beta>0)))
+    return {invalid,{invalid,invalid,invalid},{invalid,invalid,invalid},{invalid,invalid,invalid}};
+  Geometry geometry;
+  const unsigned total=order(a)+order(b)+order(c);
+  if(!prepare_range_geometry(alpha,A,beta,B,gamma,C,total,range,omega,geometry))
+    return {invalid,{invalid,invalid,invalid},{invalid,invalid,invalid},{invalid,invalid,invalid}};
+  const auto& pa=geometry.pa;const auto& pb=geometry.pb;const auto& dx=geometry.dx;
+  const auto& f=geometry.f;
+  const double sx=geometry.sx,sy=geometry.sy,ip=geometry.ip,iq=geometry.iq;
+  const double prefactor=geometry.prefactor;
+  double base[3][11];
+  unsigned degree[3];
+  for(unsigned axis=0;axis<3;++axis) {
+    degree[axis]=power(a,axis)+power(b,axis)+power(c,axis);
+    axis_polynomial(power(a,axis),power(b,axis),power(c,axis),
+                    pa[axis],pb[axis],dx[axis],sx,sy,ip,iq,base[axis]);
+  }
+  Response result{};
+  result.value=prefactor*dot(degree[0],base[0],degree[1],base[1],degree[2],base[2],f);
+  double first[3]{},second[3]{};
+  for(unsigned axis=0;axis<3;++axis) {
+    const unsigned other=(axis+1)%3,last=(axis+2)%3;
+    const unsigned na=power(a,axis),nb=power(b,axis),nc=power(c,axis),d=degree[axis];
+    double raised[11],lowered[11];
+    for(unsigned center=0;center<(metric?1U:2U);++center) {
+      const unsigned n=center==0?na:nb;
+      axis_polynomial(na+(center==0),nb+(center==1),nc,
+                      pa[axis],pb[axis],dx[axis],sx,sy,ip,iq,raised);
+      if(n) axis_polynomial(na-(center==0),nb-(center==1),nc,
+                            pa[axis],pb[axis],dx[axis],sx,sy,ip,iq,lowered);
+      for(unsigned i=0;i<=d+1;++i)
+        raised[i]=2*(center==0?alpha:beta)*raised[i]-(n && i<d ? n*lowered[i] : 0.0);
+      const double response=prefactor*dot(
+          d+1,raised,degree[other],base[other],degree[last],base[last],f);
+      if(center==0) first[axis]=response; else second[axis]=response;
+    }
+  }
+  result.first={first[0],first[1],first[2]};
+  result.second={second[0],second[1],second[2]};
+  result.third={-first[0]-second[0],-first[1]-second[1],-first[2]-second[2]};
+  return result;
+}
+__device__ __forceinline__ Response range_metric(
+    double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c,
+    generativeqc::integrals::CoulombRange range,double omega) {
+  return range_evaluate(true,alpha,A,a,0.0,A,{0,0,0},gamma,C,c,range,omega);
+}
+__device__ __forceinline__ Response range_three_center(
+    double alpha,Vec3 A,Angular a,double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c,
+    generativeqc::integrals::CoulombRange range,double omega) {
+  return range_evaluate(false,alpha,A,a,beta,B,b,gamma,C,c,range,omega);
+}
 } // namespace generativeqc::scf::generated_df_derivatives
 #endif
 """,
@@ -247,6 +329,7 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
         "\n".join(lines)
         .replace("__DF_POLYNOMIAL_DOT__", emit_df_polynomial_dot_cuda())
         .replace("__DF_GEOMETRY_PREPARATION__", emit_df_geometry_cuda())
+        .replace("__DF_RANGE_GEOMETRY__", emit_df_range_geometry_cuda())
         .replace("__device__", "static __device__")
     )
     if auxiliary_g:
