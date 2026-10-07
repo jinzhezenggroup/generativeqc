@@ -266,6 +266,13 @@ def test_cumetal_workflow_reuses_compilation_caches_across_runs() -> None:
     assert "CCACHE_BASEDIR: ${{ github.workspace }}" in runtime_job
     assert "CCACHE_COMPILERCHECK: content" in runtime_job
 
+    compiler_cache = runtime_job.split(
+        "- name: Restore GenerativeQC ccache", 1
+    )[1].split("\n      - name:", 1)[0]
+    assert "key: ccache-cumetal-v4-" in compiler_cache
+    assert "ccache-cumetal-v4-" in compiler_cache
+    assert "ccache-cumetal-v3-" in compiler_cache
+
     configure = runtime_job.split(
         "- name: Configure GenerativeQC with CUDA tests enabled", 1
     )[1].split("\n      - name:", 1)[0]
