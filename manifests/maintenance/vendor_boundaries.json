@@ -340,9 +340,9 @@
         "cublasDgemm": 2,
         "cublasDgemmStridedBatched": 2,
         "cublasSetMathMode": 1,
-        "cublasSetPointerMode_v2": 1,
-        "cublasSetStream_v2": 1,
-        "cublasSetWorkspace_v2": 1
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cublasSetWorkspace": 1
       }
     },
     "src/scf/cuda/resources.cpp": {
