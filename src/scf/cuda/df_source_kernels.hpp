@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "integrals/range_moments.hpp"
 #include "molecule/basis.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
@@ -39,7 +40,8 @@ void launch_build_cuda_df_integrals_kernel(
     DeviceBatch batch, std::size_t orbital_count, std::size_t auxiliary_count,
     std::size_t dummy_index, std::size_t metric_elements, std::size_t three_center_elements,
     std::size_t system_base, std::size_t launch_batch_size, std::int64_t derivative_coordinate,
-    double* metric, double* three_center, unsigned math = 0U, unsigned lanes = 1U);
+    double* metric, double* three_center, unsigned math = 0U, unsigned lanes = 1U,
+    integrals::CoulombRange range = integrals::CoulombRange::Full, double omega = 0.0);
 
 /** Submit the selected value/coordinate-response specialization with the caller's launch geometry.
  */
@@ -49,7 +51,8 @@ void launch_build_cuda_df_metric_source_kernel(
     std::size_t public_naux, std::size_t dummy_index, std::size_t system,
     std::size_t auxiliary_row_begin, std::size_t auxiliary_row_count,
     std::int64_t derivative_coordinate, const DfPublicAoExpansion* auxiliary_to_cartesian,
-    double* output, unsigned mapping = 0U);
+    double* output, unsigned mapping = 0U,
+    integrals::CoulombRange range = integrals::CoulombRange::Full, double omega = 0.0);
 
 /** Submit the selected value/coordinate-response specialization with the caller's launch geometry.
  */
@@ -62,6 +65,7 @@ void launch_build_cuda_df_transformed_tile_kernel(
     const DfPublicAoExpansion* orbital_to_cartesian,
     const DfPublicAoExpansion* auxiliary_to_cartesian, const double* inverse_square_root,
     bool apply_metric_transform, double* output, unsigned mapping = 0U, unsigned math = 0U,
-    double* low_output = nullptr);
+    double* low_output = nullptr,
+    integrals::CoulombRange range = integrals::CoulombRange::Full, double omega = 0.0);
 
 }  // namespace generativeqc::scf::cuda_execution
