@@ -753,30 +753,31 @@ DFCudaResponseResult pullback_df_cuda(
                                parallel_gap_reduction, include_gap_response, nullptr);
 }
 
-DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t q,
-                                       const double* bov, const double* bvv, const double* ovoo,
-                                       const double* ovov, const double* fov, const double* t1,
-                                       const double* t2, const double* eps_o, const double* eps_v,
-                                       double threshold, std::size_t max_bytes, int device,
-                                       std::size_t caller_bytes, std::size_t max_page_rows,
-                                       std::size_t max_panel_buffers) {
+static DFCudaFockResult fock_response_df_cuda_impl(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
+    std::size_t caller_bytes, std::size_t max_page_rows, std::size_t max_panel_buffers,
+    const generated_df::Inputs* prepared_inputs) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
     throw std::invalid_argument("invalid DF triples Fock dimensions, threshold or panel limit");
   auto capacity = max_page_rows ? std::min(o, max_page_rows) : o;
-  auto r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes);
+  auto r =
+      fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes, prepared_inputs != nullptr);
   while (r.complete > max_bytes) {
     // Prefer retaining more resolvent rows over extra cached integral panels:
     // a full page eliminates every cross-occupied recomputation.
     if (r.value.panel_capacity > 1) {
-      r = fock_layout(o, v, q, capacity, 1, caller_bytes);
+      r = fock_layout(o, v, q, capacity, 1, caller_bytes, prepared_inputs != nullptr);
       if (r.complete <= max_bytes) break;
     }
     if (capacity == 1)
       throw std::length_error("DF triples Fock response exceeds complete numeric budget");
     --capacity;
-    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes);
+    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes,
+                    prepared_inputs != nullptr);
   }
   const auto& p = r.value;
   const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
@@ -799,11 +800,25 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
     generated_df::Inputs in;
     const std::array<const double**, 9> fields{&in.bov, &in.bvv, &in.ovoo,  &in.ovov, &in.fov,
                                                &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
+    const std::array<const double*, 9> prepared{
+        prepared_inputs ? prepared_inputs->bov : nullptr,
+        prepared_inputs ? prepared_inputs->bvv : nullptr,
+        prepared_inputs ? prepared_inputs->ovoo : nullptr,
+        prepared_inputs ? prepared_inputs->ovov : nullptr,
+        prepared_inputs ? prepared_inputs->fov : nullptr,
+        prepared_inputs ? prepared_inputs->t1 : nullptr,
+        prepared_inputs ? prepared_inputs->t2 : nullptr,
+        prepared_inputs ? prepared_inputs->eps_o : nullptr,
+        prepared_inputs ? prepared_inputs->eps_v : nullptr};
     for (std::size_t x = 0; x < 9; ++x) {
-      *fields[x] = pointer(p.inputs[x]);
-      generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
-                                                      bytes(p.sizes[x]), cudaMemcpyHostToDevice,
-                                                      context.stream));
+      if (prepared_inputs) {
+        *fields[x] = prepared[x];
+      } else {
+        *fields[x] = pointer(p.inputs[x]);
+        generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
+                                                        bytes(p.sizes[x]), cudaMemcpyHostToDevice,
+                                                        context.stream));
+      }
     }
     generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
     generativeqc_tensor::cuda_check(
@@ -923,9 +938,21 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
   result.occupied_pairs = r.pairs;
   result.unique_vector_cubes = checked_mul(r.pairs, o);
   result.scalar_evaluations = checked_mul(r.cubes, p.v3);
-  result.h2d_bytes = r.host_bytes;
+  result.h2d_bytes = prepared_inputs ? 0 : r.host_bytes;
   result.d2h_bytes = checked_add(r.output_bytes, sizeof(int));
   result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
+}
+
+DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                       const double* bov, const double* bvv, const double* ovoo,
+                                       const double* ovov, const double* fov, const double* t1,
+                                       const double* t2, const double* eps_o, const double* eps_v,
+                                       double threshold, std::size_t max_bytes, int device,
+                                       std::size_t caller_bytes, std::size_t max_page_rows,
+                                       std::size_t max_panel_buffers) {
+  return fock_response_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v,
+                                    threshold, max_bytes, device, caller_bytes, max_page_rows,
+                                    max_panel_buffers, nullptr);
 }
 }  // namespace generativeqc::cc::triples
