@@ -39,6 +39,7 @@ stationary_large_domain_qualification
 source_work_audit
 replay_allocation_receipts
 native_structured_materialization
+residency_receipts
 roadmap
 generated-files
 ```
