@@ -441,11 +441,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO || execution_plan.range_exchange ||
-        execution_plan.nonlocal_correlation)
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "DFT density fitting requires FP64 full-range local/semilocal or global-hybrid KS");
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "DFT density fitting requires FP64 execution");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
     if (fock.exchange.present) fock.exchange.approximation = scf::FockApproximation::DensityFitted;
   }
@@ -697,30 +695,50 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
 
 #if GENERATIVEQC_HAS_CUDA
 bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
-                                  const scf::ResolvedFockBuild& correction) noexcept {
+                                  const scf::ResolvedFockBuild& correction,
+                                  const scf::PreparedFockPlan* range_provider) noexcept {
   const auto& primary = provider.strategy();
   const auto& primary_spec = primary.spec;
   const auto& correction_spec = correction.spec;
-  const auto direct_binding = scf::prepared_cuda_fock_binding(provider);
-  const bool primary_exchange_compatible =
-      !primary_spec.exchange.present ||
-      (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
-       primary_spec.exchange.op == scf::FockOperator::FullRange &&
-       primary_spec.exchange.omega == 0.0);
-  return direct_binding && primary.backend == scf::FockBackend::Cuda &&
-         primary_spec.derivative_order == 0 && primary_spec.coulomb.present &&
-         primary_spec.coulomb.coefficient == 1.0 &&
-         primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
-         primary_spec.coulomb.op == scf::FockOperator::FullRange &&
-         primary_spec.coulomb.omega == 0.0 && primary_exchange_compatible &&
-         correction.backend == scf::FockBackend::Cuda &&
-         correction_spec.spin == primary_spec.spin && correction_spec.derivative_order == 0 &&
-         !correction_spec.coulomb.present && correction_spec.exchange.present &&
-         correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
-         correction_spec.exchange.op == scf::FockOperator::LongRange &&
-         std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
-         std::isfinite(correction_spec.exchange.coefficient) &&
-         correction.screening_tolerance == primary.screening_tolerance;
+  const auto primary_binding = scf::prepared_cuda_fock_binding(provider);
+  const bool correction_compatible =
+      correction.backend == scf::FockBackend::Cuda && correction_spec.spin == primary_spec.spin &&
+      correction_spec.derivative_order == 0 && !correction_spec.coulomb.present &&
+      correction_spec.exchange.present &&
+      correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
+      correction_spec.exchange.op == scf::FockOperator::LongRange &&
+      std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
+      std::isfinite(correction_spec.exchange.coefficient) &&
+      correction.screening_tolerance == primary.screening_tolerance;
+  if (!primary_binding || primary.backend != scf::FockBackend::Cuda ||
+      primary_spec.derivative_order != 0 || !primary_spec.coulomb.present ||
+      primary_spec.coulomb.coefficient != 1.0 ||
+      primary_spec.coulomb.op != scf::FockOperator::FullRange ||
+      primary_spec.coulomb.omega != 0.0 || !correction_compatible)
+    return false;
+
+  const bool fitted_primary =
+      primary_spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+      (!primary_spec.exchange.present ||
+       (primary_spec.exchange.approximation == scf::FockApproximation::DensityFitted &&
+        primary_spec.exchange.op == scf::FockOperator::FullRange &&
+        primary_spec.exchange.omega == 0.0));
+  if (fitted_primary) {
+    if (!range_provider || range_provider->strategy() != correction ||
+        !range_provider->matches_system(provider.system()))
+      return false;
+    const auto range_binding = scf::prepared_cuda_fock_binding(*range_provider);
+    return range_binding && range_binding.device_id == primary_binding.device_id &&
+           range_binding.nbf == primary_binding.nbf;
+  }
+
+  const bool exact_primary =
+      primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+      (!primary_spec.exchange.present ||
+       (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        primary_spec.exchange.op == scf::FockOperator::FullRange &&
+        primary_spec.exchange.omega == 0.0));
+  return exact_primary && range_provider == nullptr;
 }
 #endif
 
@@ -755,10 +773,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
-        (!range_strategy_ || !cuda_rsh_provider_compatible(fock_, *range_strategy_)))
+        (!range_strategy_ ||
+         !cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())))
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "CUDA range-separated KS requires a compatible prepared Direct SR/LR exchange provider");
+          "CUDA range-separated KS requires compatible primary and Direct LR providers");
 #endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
 #if GENERATIVEQC_HAS_CUDA
@@ -774,7 +793,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
       cuda_ = std::make_unique<dft::CudaKsPlan>(
           fock_, basis_, grid_, options_, xc_functional_code(execution_plan_),
-          options_.xc_tile_points, range, nonlocal_.get(), domain);
+          options_.xc_tile_points, range, nonlocal_.get(), domain, dft::CudaXcPreparationBudget{},
+          range_correction_.get());
     }
 #endif
     if (execution_plan_.d4_correction) prepare_d4(device);
@@ -1111,15 +1131,58 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
 
-    std::vector<double> hcore(coordinates), pulay(coordinates);
-    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
-      const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
-      const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
-      for (unsigned spin = 0; spin < spins; ++spin)
-        for (std::size_t item = 0; item < matrix_elements; ++item) {
-          hcore[coordinate] += density[spin][item] * dh[item];
-          pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+    std::vector<double> hcore, pulay;
+    std::size_t one_electron_device_bytes = 0;
+    std::size_t one_electron_h2d_bytes = 0;
+    std::size_t one_electron_d2h_bytes = 0;
+    bool resident_one_electron = false;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      scf::OneElectronGradientResources one_electron;
+      dft::CudaKsResidentStationaryWeightsBinding resident_weights;
+      const auto resident_status =
+          cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
+      if (resident_status == GENERATIVEQC_STATUS_SUCCESS) {
+        if (!resident_weights || resident_weights.device_id != expected.identity.model.device ||
+            resident_weights.matrix_elements != matrix_elements ||
+            resident_weights.spins != spins) {
+          detail = "CUDA DF stationary D/W binding is incompatible with the final KS state";
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
+        const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
+            resident_weights.device_id, system_, {}, {}, 0, maximum_bytes, hcore, pulay, detail,
+            &one_electron, resident_weights.density, resident_weights.weighted_density);
+        if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
+          resident_one_electron = true;
+          one_electron_device_bytes = one_electron.device_bytes;
+          one_electron_h2d_bytes = one_electron.host_to_device_bytes;
+          one_electron_d2h_bytes = one_electron.device_to_host_bytes;
+        } else if (one_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                   one_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+          return one_status;
+        }
+      } else if (resident_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        return resident_status;
+      }
+    }
+#endif
+    if (!resident_one_electron) {
+      // CPU and bounded CUDA fallback preserve the established exact host
+      // contraction. CUDA only reaches this branch when the optional resident
+      // one-electron consumer cannot be admitted; J/K response ownership is
+      // unaffected.
+      hcore.assign(coordinates, 0.0);
+      pulay.assign(coordinates, 0.0);
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+        const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
+        const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
+        for (unsigned spin = 0; spin < spins; ++spin)
+          for (std::size_t item = 0; item < matrix_elements; ++item) {
+            hcore[coordinate] += density[spin][item] * dh[item];
+            pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+          }
+      }
+      detail.clear();
     }
 
     const std::vector<double> empty;
@@ -1185,12 +1248,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "density-fitted stationary derivative source is nonfinite";
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
-    // H'/S' were exported during provider preparation; their contractions here
-    // are host work and perform no force-time one-electron CUDA transfers.
-    // DF response has separate scratch/transfers which this compact publication
-    // bridge does not measure. Do not invent those counts from spin dimensions.
+    // H'/S' derivative tensors remain retained host provider data. CUDA may
+    // instead contract the exact final resident D/W with the paired device
+    // consumer; slots 2/4/5 report that consumer's device peak and actual
+    // metadata/output movement. DF J/K response scratch/transfers remain
+    // separate and are not inferred from spin dimensions.
     work[0] = fock_.diagnostic().device_bytes;
+    work[2] = one_electron_device_bytes;
     work[3] = publication_peak_bytes;
+    work[4] = one_electron_h2d_bytes;
+    work[5] = one_electron_d2h_bytes;
     output = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1584,9 +1651,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
                                            execution_plan_.long_range_exchange,
                                            execution_plan_.range_omega),
         fock_backend, options_.screening_tolerance);
-    if (fock_backend == scf::FockBackend::Cpu)
-      range_correction_ =
-          std::make_unique<scf::PreparedFockPlan>(system_, nullptr, *range_strategy_, device);
+    const bool fitted_primary =
+        fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+    if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
+      const auto budget =
+          fock_backend == scf::FockBackend::Cuda ? ks_provider_bytes(system_, backend_, 0U) : 0U;
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr,
+                                                                  *range_strategy_, device, budget);
+    }
   }
 
   void prepare_nonlocal(int device) {

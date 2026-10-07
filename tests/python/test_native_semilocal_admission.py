@@ -120,6 +120,13 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
         "FockOperator::LongRange",
         "correction_spec.spin == primary_spec.spin",
         "correction.screening_tolerance == primary.screening_tolerance",
+        "FockApproximation::DensityFitted",
+        "range_provider->strategy() != correction",
+        "range_provider->matches_system(provider.system())",
+        "prepared_cuda_fock_binding(*range_provider)",
+        "range_binding.device_id == primary_binding.device_id",
+        "range_binding.nbf == primary_binding.nbf",
+        "exact_primary && range_provider == nullptr",
     ):
         assert fact in helper
     assert "Wb97mv" not in helper
@@ -128,7 +135,10 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
     constructor_begin = source.index("KsPreparedCalculation(")
     constructor_end = source.index("std::size_t atom_count()", constructor_begin)
     constructor = source[constructor_begin:constructor_end]
-    assert "cuda_rsh_provider_compatible(fock_, *range_strategy_)" in constructor
+    assert (
+        "cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())"
+        in constructor
+    )
 
 
 @pytest.mark.parametrize(

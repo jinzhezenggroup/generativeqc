@@ -121,6 +121,14 @@ RshStrategies rsh_strategies(bool restricted, scf::FockBackend backend) {
               backend, 1e-12)};
 }
 
+RshStrategies density_fitted_primary(RshStrategies model, scf::FockBackend backend) {
+  auto spec = model.primary.spec;
+  spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  if (spec.exchange.present) spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+  model.primary = scf::resolve_fock_build(spec, backend, model.primary.screening_tolerance, 1e-10);
+  return model;
+}
+
 void prepared_cuda_fock_seam() {
   const auto system = hydrogens(2, true);
   const scf::PreparedFockPlan cpu(system, nullptr, strategy(true, scf::FockBackend::Cpu));
@@ -518,6 +526,57 @@ void run_range_exchange_case(bool restricted) {
           "changed-geometry CUDA range-separated warm seed changed the physical endpoint");
 }
 
+void run_density_fitted_range_exchange_case(bool restricted) {
+  const auto system = hydrogens(restricted ? 2U : 3U, restricted);
+  const dft::AoBasis basis(system);
+  const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
+  const dft::MolecularGrid grid(system, grid_spec);
+  const auto cpu_model = density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cpu),
+                                                scf::FockBackend::Cpu);
+  const auto gpu_model = density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cuda),
+                                                scf::FockBackend::Cuda);
+  const scf::PreparedFockPlan cpu_primary(system, &system, cpu_model.primary);
+  const scf::PreparedFockPlan cpu_correction(system, nullptr, cpu_model.correction);
+  const scf::PreparedFockPlan gpu_primary(system, &system, gpu_model.primary, 0);
+  const scf::PreparedFockPlan gpu_correction(system, nullptr, gpu_model.correction, 0);
+
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.max_iterations = 200;
+
+  dft::CudaKsPlan plan(gpu_primary, basis, grid, options, dft::SemilocalFamily::Pbe, 257,
+                       &gpu_model.correction, nullptr, dft::nlc::Vv10DensityDomain::StrictPositive,
+                       {}, &gpu_correction);
+  const auto result = plan.run(nullptr, false);
+  const auto reference =
+      restricted ? scf::run_pbe_rsh_rks(cpu_primary, cpu_correction, basis, grid, options)
+                 : scf::run_pbe_rsh_uks(cpu_primary, cpu_correction, basis, grid, options);
+  require(result.converged && reference.converged && !plan.failed() &&
+              std::abs(reference.energy - result.energy) < 1e-10,
+          "mixed DF/Direct CUDA range-separated endpoint disagrees with CPU");
+  require(std::abs(result.dft_diagnostic.components.exact_exchange -
+                   reference.dft_diagnostic.components.exact_exchange) < 1e-10,
+          "mixed DF/Direct range-separated exact exchange disagrees with CPU");
+  const auto movement = plan.transfers();
+  require(movement.iteration_synchronizations == movement.iterations &&
+              movement.execution_region_bindings == 0,
+          "mixed DF/Direct RSH entered the unqualified device-chunk path");
+
+  dft::CudaKsFinalStateToken token;
+  std::string detail;
+  require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  dft::VerifiedKsFinalState snapshot;
+  require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  require(snapshot.identity.determinant.model == gpu_model.primary &&
+              snapshot.identity.model.range_correction &&
+              *snapshot.identity.model.range_correction == gpu_model.correction &&
+              std::abs(snapshot.components.total() - result.energy) < 1e-10,
+          "mixed DF/Direct RSH final state lost provider identity");
+}
+
 RshStrategies wb97mv_rsh_strategies(bool restricted, scf::FockBackend backend) {
   const auto spin = restricted ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted;
   constexpr double short_exchange = 0.15;
@@ -589,18 +648,26 @@ std::unique_ptr<dft::nlc::Vv10Plan> prepare_wb97mv_nonlocal(generativeqc_backend
   return plan;
 }
 
-void run_wb97mv_nonlocal_composition_case(bool restricted) {
+void run_wb97mv_nonlocal_composition_case(bool restricted, bool fitted = false) {
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 12, 4, 8, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
   constexpr std::size_t tile_points = 64;
 
-  const auto cpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cpu);
-  const auto gpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cuda);
-  const scf::PreparedFockPlan cpu_primary(system, nullptr, cpu_model.primary);
+  auto cpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cpu);
+  auto gpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cuda);
+  if (fitted) {
+    cpu_model = density_fitted_primary(std::move(cpu_model), scf::FockBackend::Cpu);
+    gpu_model = density_fitted_primary(std::move(gpu_model), scf::FockBackend::Cuda);
+  }
+  const scf::PreparedFockPlan cpu_primary(system, fitted ? &system : nullptr, cpu_model.primary);
   const scf::PreparedFockPlan cpu_correction(system, nullptr, cpu_model.correction);
-  const scf::PreparedFockPlan gpu_primary(system, nullptr, gpu_model.primary, 0);
+  const scf::PreparedFockPlan gpu_primary(system, fitted ? &system : nullptr, gpu_model.primary, 0);
+  std::unique_ptr<scf::PreparedFockPlan> gpu_correction;
+  if (fitted)
+    gpu_correction =
+        std::make_unique<scf::PreparedFockPlan>(system, nullptr, gpu_model.correction, 0);
   auto cpu_nonlocal = prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
                                               grid.point_count(), tile_points);
   auto gpu_nonlocal =
@@ -630,7 +697,7 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
     configured.xc_execution_schedule = schedule;
     dft::CudaKsPlan plan(gpu_primary, basis, grid, configured, dft::SemilocalFamily::Wb97mv,
                          tile_points, &gpu_model.correction, gpu_nonlocal.get(),
-                         dft::nlc::Vv10DensityDomain::MolecularV1);
+                         dft::nlc::Vv10DensityDomain::MolecularV1, {}, gpu_correction.get());
     auto result = plan.run(nullptr, false);
     require(result.converged && !plan.failed(),
             "CUDA WB97M-V nonlocal composition did not converge");
@@ -674,7 +741,8 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
   const auto device = solve(scf::ScfOptions::XcExecutionSchedule::DeviceFused);
   for (const auto* endpoint : {&host, &device}) {
     require(std::abs(reference.energy - endpoint->result.energy) < 2e-8,
-            "CUDA WB97M-V complete composition endpoint disagrees with CPU");
+            fitted ? "mixed DF/Direct CUDA WB97M-V endpoint disagrees with CPU"
+                   : "CUDA WB97M-V complete composition endpoint disagrees with CPU");
     require(endpoint->result.dft_diagnostic.scf_domain_version ==
                     dft::semilocal_family_domain_version(dft::SemilocalFamily::Wb97mv) &&
                 std::abs(reference.dft_diagnostic.components.xc -
@@ -2011,10 +2079,14 @@ int main(int argc, char** argv) {
     run_density_fitted_exchange_case(false);
     run_range_exchange_case(true);
     run_range_exchange_case(false);
+    run_density_fitted_range_exchange_case(true);
+    run_density_fitted_range_exchange_case(false);
     run_wb97mv_semilocal_rsh_case(true);
     run_wb97mv_semilocal_rsh_case(false);
     run_wb97mv_nonlocal_composition_case(true);
     run_wb97mv_nonlocal_composition_case(false);
+    run_wb97mv_nonlocal_composition_case(true, true);
+    run_wb97mv_nonlocal_composition_case(false, true);
     for (bool pbe : {false, true}) {
       run_case(2, true, pbe);
       run_hydroxyl(pbe);

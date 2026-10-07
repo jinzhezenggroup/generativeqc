@@ -77,6 +77,8 @@ struct DFCudaCombinedResponseResult {
   DFCudaResponseResult pullback;
   DFCudaFockResult fock;
   std::size_t shared_input_device_bytes{}, shared_h2d_bytes{};
+  /** Triangular pullback cubes whose already-built W moments also feed Fock response. */
+  std::size_t shared_response_cubes{}, avoided_w_gemms{};
   double seconds{};
 };
 

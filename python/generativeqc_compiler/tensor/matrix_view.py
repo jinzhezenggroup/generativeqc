@@ -106,8 +106,8 @@ def matrix_contraction(request: LoweringRequest) -> MatrixContraction:
     strides prove a matrix view without packing. One-sided reductions,
     diagonals, broadcast and scientific symmetry remain explicit rejections.
     """
-    if request.backend != "cuda" or request.operation != "einsum":
-        raise ValueError("matrix view requires the canonical CUDA einsum request")
+    if request.operation != "einsum":
+        raise ValueError("matrix view requires a canonical einsum request")
     if request.scientific_identity is None or len(request.operands) != 3:
         raise ValueError(
             "matrix view requires two inputs, one output and scientific identity"
