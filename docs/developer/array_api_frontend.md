@@ -67,7 +67,7 @@ compatible.
 | `take` | Static integer gather along one axis |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
 | `asarray` | CPU/NumPy float32/float64 host values; no silent external-device transfer |
-| `compile` | Shape/dtype-specialized public TensorIR capture with reference execution |
+| `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
 | dtype promotion | Not yet supported |
 | dynamic Python control flow | Not supported |
@@ -108,9 +108,12 @@ program = observable.lower(C, occupation, O)
 No TensorIR type declarations are needed on this ordinary path. The concrete
 shape/dtype signature constructs a cached generic TensorIR specialization.
 `lower` exposes the ordinary compiler-owned `Program`; there is still no
-frontend-only runtime node or second mathematical IR. The first compiled-call
-backend is the independent NumPy TensorIR reference interpreter. Native CPU/CUDA
-execution remains a separate explicit lowering/qualification step.
+frontend-only runtime node or second mathematical IR. Inferred inputs are
+non-differentiable by default; `@xp.compile(differentiable=("x", ...))` promotes
+only the named inputs to differentiable TensorIR parameters for JVP/VJP use. The
+first compiled-call backend is the independent NumPy TensorIR reference
+interpreter. Native CPU/CUDA execution remains a separate explicit
+lowering/qualification step.
 
 ## Native SCF adoption
 
