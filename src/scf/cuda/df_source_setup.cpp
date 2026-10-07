@@ -57,7 +57,8 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems,
     CudaDensityFittingIntegralSourceImpl** source, std::vector<double>& metrics, std::size_t& nbf,
-    std::size_t& naux, std::string& detail, const CudaDfSourcePolicy& policy) {
+    std::size_t& naux, std::string& detail, const CudaDfSourcePolicy& policy,
+    integrals::CoulombRange range, double omega) {
   detail.clear();
   metrics.clear();
   nbf = 0U;
@@ -65,6 +66,12 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   if (source == nullptr || device_id < 0 || orbital_systems.empty() ||
       orbital_systems.size() != auxiliary_systems.size()) {
     detail = "bounded DF source dimensions are invalid";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const bool full_range = range == integrals::CoulombRange::Full;
+  if ((full_range && omega != 0.0) ||
+      (!full_range && (!std::isfinite(omega) || !(omega > 0.0)))) {
+    detail = "bounded DF source range/omega identity is invalid";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *source = nullptr;
@@ -178,6 +185,8 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   candidate->value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, true);
   candidate->raw_value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, false);
   candidate->value_math = policy.value_math;
+  candidate->range = range;
+  candidate->omega = omega;
   // Freeze the angular domain with this immutable basis owner. Auxiliary g
   // retains its explicit value lowering and the separate F11 response policy.
   for (const auto& auxiliary : auxiliary_systems)
@@ -355,7 +364,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
                               metric_outputs_per_block),
         128U, 0, stream, candidate->batch, cartesian_nbf, cartesian_naux, public_naux,
         candidate->dummy_index, system, 0, public_naux, -1, candidate->auxiliary_to_cartesian,
-        metric_device, candidate->value_mapping);
+        metric_device, candidate->value_mapping, range, omega);
     cuda_error = cudaGetLastError();
     if (cuda_error == cudaSuccess) cuda_error = cudaStreamSynchronize(stream);
     if (cuda_error == cudaSuccess) {
