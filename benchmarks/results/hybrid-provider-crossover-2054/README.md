@@ -75,6 +75,11 @@ PBE0 RKS stationary profile, an official CMake-installed native prefix, actual
 CXX/CUDA cache-launcher commands, and a new independent three-atom acceptance
 check before the 48-atom and non-water workloads. The prefix identity is
 recorded separately from the earlier source-tree core/AOT binaries.
+`run-installed-48-holdout.sh` pins that installed prefix and exact measured
+source, runs Direct/DF-JK ABBA processes for 48-atom water and formaldehyde,
+and collects separate intrusive profiles. Its terminal `NATIVE_RECORDED` is
+only a work-completeness statement; independent PySCF E+force oracles and
+fail-closed pair summaries are required afterward.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
