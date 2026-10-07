@@ -962,6 +962,25 @@ def stationary_aot_profile_weight_programs(profile: str) -> dict[str, str]:
     }
 
 
+def stationary_aot_manifest_integrity(metadata: typing.Mapping[str, object]) -> str:
+    """Bind every build-record field without reconstructing scientific IR.
+
+    This detects record corruption under the trusted-build-manifest model; it
+    is an integrity checksum, not an authenticity signature. Its own field is
+    excluded, so the writer and cold loader hash the same complete payload.
+    """
+    return canonical_hash(
+        {
+            "schema": "generativeqc.stationary-cuda-aot.manifest-integrity.v1",
+            "manifest": {
+                key: value
+                for key, value in metadata.items()
+                if key != "manifest_integrity_sha256"
+            },
+        }
+    )
+
+
 def stationary_aot_plan_identity(functional: int, *, spin: str) -> str:
     """Return the legacy semilocal generated-plan identity."""
 
@@ -1302,8 +1321,13 @@ def load_stationary_aot_artifact(
         or metadata.get("binary_bytes") != library.stat().st_size
     ):
         raise ValueError("stationary CUDA AOT binary integrity mismatch")
+    if metadata.get("manifest_integrity_sha256") != stationary_aot_manifest_integrity(
+        metadata
+    ):
+        raise ValueError("stationary CUDA AOT manifest integrity mismatch")
     identity = {
         "schema": metadata["schema"],
+        "manifest_integrity_sha256": metadata["manifest_integrity_sha256"],
         "source": metadata["source_identity"],
         "contract": metadata["contract_identity"],
         "functional": functional,

@@ -32,6 +32,7 @@ from generativeqc_compiler.method.stationary_cuda import (
     emit_stationary_profile_component_aot_wrapper_cuda,
     qualified_sp_requests,
     stationary_aot_contract_identity,
+    stationary_aot_manifest_integrity,
     stationary_aot_plan_identity,
     stationary_aot_profile_contract_identity,
     stationary_aot_profile_plan_identity,
@@ -233,6 +234,7 @@ def main() -> None:
             "relaxed_constexpr": True,
         },
     }
+    payload["manifest_integrity_sha256"] = stationary_aot_manifest_integrity(payload)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, sort_keys=True, indent=2) + "\n"
     if not args.output.exists() or args.output.read_text() != text:

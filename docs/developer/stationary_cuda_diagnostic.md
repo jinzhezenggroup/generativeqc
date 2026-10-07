@@ -115,6 +115,14 @@ Integral-weight graph hashes are generated offline into the manifest. Cold
 loading checks the complete method/TensorIR compiler-source closure rather than
 regenerating AD; endpoint source coverage is validated without constructing a
 new reduction program. Runtime work records reuse the admitted weight hashes.
+The manifest writer seals the complete build record, including these graph
+hashes, source/compiler/plan identities, binary checksum, primitive domain and
+target/precision fields, with a versioned canonical integrity checksum. Loading
+rejects a missing or inconsistent seal before returning an artifact, without
+regenerating IR/AD. This detects record corruption under the trusted-build
+model; it is not an authenticity signature. The changed compiler contract and
+required seal deliberately invalidate older unsealed manifests without changing
+the CUDA ABI or generated scientific source.
 Use repeated `--profile` arguments to `tools/audit_stationary_aot_package.py`
 when auditing a deliberately restricted package; both domains remain mandatory
 for each declared profile, so missing files cannot silently reduce the audit.

@@ -188,6 +188,70 @@ def test_shared_sp_manifest_checks_both_source_halves(
         assert metadata["primitive_source_sha256"] == [
             manifest_writer.file_hash(primitive)
         ]
+        # Independently reconstruct the complete seal, rather than testing the
+        # writer against the same helper the writer just called.
+        import hashlib
+
+        seal = metadata.pop("manifest_integrity_sha256")
+        expected = hashlib.sha256(
+            json.dumps(
+                {
+                    "schema": "generativeqc.stationary-cuda-aot.manifest-integrity.v1",
+                    "manifest": metadata,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode()
+        ).hexdigest()
+        assert seal == expected
+
+
+def test_manifest_integrity_covers_every_payload_field() -> None:
+    """No partial allowlist can leave new build-record fields unbound."""
+    metadata = {
+        "schema": "generativeqc.stationary-cuda-aot.v3",
+        "functional": 1,
+        "spin": "polarized",
+        "profile": "pbe0_uks",
+        "plan_identity": "plan",
+        "partition_iterations": 3,
+        "weight_programs": {"exact_exchange": "a" * 64},
+        "component_domain": ["", "x", "xx"],
+        "primitive_shard_width": 16,
+        "primitive_shards": 23,
+        "primitive_source_sha256": ["primitives"],
+        "architectures": ["sm_120"],
+        "compile_architectures": ["120-real"],
+        "code_objects": [{"architecture": "sm_120", "kind": "cubin"}],
+        "source_identity": "source",
+        "source_sha256": "wrapper",
+        "contract_identity": "compiler-contract",
+        "binary_sha256": "binary",
+        "binary_bytes": 123,
+        "compile_contract": {"fp64": True, "fmad": False},
+        "future_build_field": "also bound",
+    }
+    identity = stationary_cuda.stationary_aot_manifest_integrity(metadata)
+    for field in metadata:
+        assert (
+            stationary_cuda.stationary_aot_manifest_integrity(
+                {**metadata, field: "changed"}
+            )
+            != identity
+        ), field
+    assert (
+        stationary_cuda.stationary_aot_manifest_integrity(
+            {**metadata, "manifest_integrity_sha256": identity}
+        )
+        == identity
+    )
+    assert (
+        stationary_cuda.stationary_aot_manifest_integrity(
+            dict(reversed(tuple(metadata.items())))
+        )
+        == identity
+    )
 
 
 @pytest.mark.parametrize(

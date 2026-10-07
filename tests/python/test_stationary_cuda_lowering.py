@@ -244,6 +244,7 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
     from generativeqc_compiler.method.stationary_cuda import (
         load_stationary_aot_artifact,
         stationary_aot_contract_identity,
+        stationary_aot_manifest_integrity,
         stationary_aot_plan_identity,
     )
     from generativeqc_compiler.method.stationary_gradient import (
@@ -282,6 +283,7 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
         "binary_bytes": library.stat().st_size,
         "compile_contract": {"fp64": True, "fmad": False},
     }
+    payload["manifest_integrity_sha256"] = stationary_aot_manifest_integrity(payload)
     manifest.write_text(json.dumps(payload))
 
     artifact = load_stationary_aot_artifact(
@@ -444,6 +446,7 @@ def test_global_hybrid_stationary_aot_loader_uses_profile_plan_identity(
     from generativeqc_compiler.method.stationary_cuda import (
         _qualified_aot_profile,
         load_stationary_aot_artifact,
+        stationary_aot_manifest_integrity,
         stationary_aot_profile_contract_identity,
     )
 
@@ -485,6 +488,9 @@ def test_global_hybrid_stationary_aot_loader_uses_profile_plan_identity(
         )
     )
 
+    metadata = json.loads(manifest.read_text())
+    metadata["manifest_integrity_sha256"] = stationary_aot_manifest_integrity(metadata)
+    manifest.write_text(json.dumps(metadata))
     artifact = load_stationary_aot_artifact(
         tmp_path,
         functional=profile.functional,

@@ -106,6 +106,21 @@ without clearing compiler caches or editing expected identities to obtain hits.
 
 ## Consequences and revisit conditions
 
+Review of the initial implementation found that checking only the weight map's
+keys and hex spelling accepted a B3LYP graph hash in a PBE0 build record, or a
+single changed hex digit. Seal the entire manifest payload at build time with a
+versioned canonical checksum and verify that seal before cold-loader publication.
+This binds weights to the same source, compiler/plan, binary, precision, target
+and primitive-domain record without runtime AD. It protects against record
+corruption under the existing trusted-build model, not malicious rewriting of
+both a record and its checksum; authenticity signatures are outside that model.
+An independently maintained frozen graph catalog was rejected as unnecessary
+duplicate scientific provenance for this bounded integrity repair. Old compiler
+contracts and unsealed manifests intentionally fail closed. Generated scientific
+source and CUDA ABI are unchanged. Regression controls cover cross-profile,
+cross-spin and single-hex substitutions, missing/bad seals, and every top-level
+payload field, with an independent checksum reconstruction for writer output.
+
 For N packaged profiles, the s/p primitive compile count becomes one instead of
 N, alongside the unchanged shared 23-shard s/p/d inventory. Wrappers and device
 links remain proportional to selected profiles. Further sharing of AO/grid/

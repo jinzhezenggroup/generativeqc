@@ -75,6 +75,12 @@ def test_altered_semilocal_composition_does_not_alias_a_packaged_plan() -> None:
         "target",
         "binary",
         "weights",
+        "weight_hex",
+        "weight_profile",
+        "weight_spin",
+        "missing_integrity",
+        "integrity",
+        "source",
         "domain",
         "iterations",
     ],
@@ -118,6 +124,9 @@ def test_hybrid_aot_admission_without_generation(
             primitive_shard_width=stationary_cuda.QUALIFIED_SPD_AOT_SHARD_WIDTH,
             primitive_shards=stationary_cuda.QUALIFIED_SPD_AOT_SHARDS,
         )
+    metadata["manifest_integrity_sha256"] = (
+        stationary_cuda.stationary_aot_manifest_integrity(metadata)
+    )
     if failure == "plan":
         metadata["plan_identity"] = "wrong plan"
     elif failure == "contract":
@@ -128,6 +137,30 @@ def test_hybrid_aot_admission_without_generation(
         library.write_bytes(b"replaced binary")
     elif failure == "weights":
         metadata["weight_programs"] = {}
+    elif failure == "weight_hex":
+        original = metadata["weight_programs"]["exact_exchange"]
+        metadata["weight_programs"]["exact_exchange"] = (
+            "0" if original[0] != "0" else "1"
+        ) + original[1:]
+    elif failure in {"weight_profile", "weight_spin"}:
+        other = (
+            profile_name.replace("pbe0", "b3lyp")
+            if profile_name.startswith("pbe0")
+            else profile_name.replace("b3lyp", "pbe0")
+        )
+        if failure == "weight_spin":
+            other = profile_name[:-3] + (
+                "uks" if profile_name.endswith("rks") else "rks"
+            )
+        replacement = stationary_cuda.stationary_aot_profile_weight_programs(other)
+        assert replacement != metadata["weight_programs"]
+        metadata["weight_programs"] = replacement
+    elif failure == "missing_integrity":
+        del metadata["manifest_integrity_sha256"]
+    elif failure == "integrity":
+        metadata["manifest_integrity_sha256"] = "0" * 64
+    elif failure == "source":
+        metadata["source_identity"] = "different-build-source"
     manifest.write_text("{" if failure == "json" else json.dumps(metadata))
     if failure == "missing":
         manifest.unlink()
@@ -163,6 +196,17 @@ def test_hybrid_aot_admission_without_generation(
             "target": (NotImplementedError, "sm_80"),
             "binary": (ValueError, "binary integrity"),
             "weights": (ValueError, "weight-program provenance"),
+            **{
+                name: (ValueError, "manifest integrity")
+                for name in (
+                    "weight_hex",
+                    "weight_profile",
+                    "weight_spin",
+                    "missing_integrity",
+                    "integrity",
+                    "source",
+                )
+            },
             "domain": (NotImplementedError, "s/p/d domain"),
             "iterations": (NotImplementedError, "partition_iterations"),
         }

@@ -158,6 +158,7 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
 
     from generativeqc_compiler.common.provenance import file_hash
     from generativeqc_compiler.method.stationary_cuda import (
+        stationary_aot_manifest_integrity,
         stationary_aot_profile_contract_identity,
     )
 
@@ -207,6 +208,9 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
                     "primitive_shards": 23,
                 }
             )
+        metadata["manifest_integrity_sha256"] = stationary_aot_manifest_integrity(
+            metadata
+        )
         (root / f"generativeqc_stationary_{name}.json").write_text(json.dumps(metadata))
     result = audit.audit_stationary_aot_directory(root, architecture="sm_120")
     assert len(result.artifacts) == 20
