@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <climits>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -205,6 +208,48 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
   if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
+}
+
+/** Benchmark-only PBE0 cold-SCF selector. It never changes the public method ABI. */
+bool pbe0_incremental_direct_jk_benchmark_requested() {
+  const char* value = std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
+  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0) {
+    return false;
+  }
+  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
+  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK must be 0/off or 1/on");
+}
+
+std::optional<unsigned> pbe0_incremental_direct_jk_benchmark_rebuild_interval() {
+  const char* value = std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+  if (value == nullptr) return std::nullopt;
+  if (*value < '0' || *value > '9')
+    throw MethodError(
+        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL must be an unsigned integer");
+  errno = 0;
+  char* end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 10);
+  if (errno == ERANGE || end == value || *end != '\0' || parsed > UINT_MAX)
+    throw MethodError(
+        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL must be an unsigned integer");
+  return static_cast<unsigned>(parsed);
+}
+
+std::optional<double> pbe0_incremental_direct_jk_benchmark_density_rms_threshold() {
+  const char* value =
+      std::getenv("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+  if (value == nullptr) return std::nullopt;
+  errno = 0;
+  char* end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  if (errno == ERANGE || end == value || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0)
+    throw MethodError(
+        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD must be finite and nonnegative");
+  return parsed;
 }
 
 scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
@@ -452,6 +497,22 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   options.resolved_fock_build = scf::resolve_fock_build(
       fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
       options.screening_tolerance, options.density_fitting_relative_threshold);
+  if (pbe0_incremental_direct_jk_benchmark_requested()) {
+    const bool strict_exact_pbe0_rks =
+        cuda_curated_global_hybrid && fock.spin == scf::FockSpin::Restricted &&
+        execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
+        options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        options.precision_mode == GENERATIVEQC_PRECISION_FP64;
+    if (!strict_exact_pbe0_rks)
+      throw MethodError(
+          GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "PBE0 incremental Direct-J/K benchmark mode requires strict-FP64 exact-direct CUDA RKS PBE0");
+    options.incremental_direct_jk = true;
+    if (const auto interval = pbe0_incremental_direct_jk_benchmark_rebuild_interval())
+      options.incremental_direct_jk_rebuild_interval = *interval;
+    if (const auto threshold = pbe0_incremental_direct_jk_benchmark_density_rms_threshold())
+      options.incremental_direct_jk_density_rms_threshold = *threshold;
+  }
   if (semilocal_metadata.molecular_nonlocal_domain) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
