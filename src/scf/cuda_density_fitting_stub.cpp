@@ -87,6 +87,28 @@ generativeqc_status create_cuda_density_fitting_integral_source(
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status create_cuda_range_density_fitting_integral_source(
+    int, const std::vector<core::System>&, const std::vector<core::System>&,
+    integrals::CoulombRange, double, CudaDensityFittingIntegralSource** source,
+    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy*) {
+  if (source != nullptr) *source = nullptr;
+  metrics.clear();
+  nbf = 0;
+  naux = 0;
+  detail = "CUDA density-fitting support is unavailable in this build";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+integrals::CoulombRange cuda_density_fitting_integral_source_range(
+    const CudaDensityFittingIntegralSource*) noexcept {
+  return integrals::CoulombRange::Full;
+}
+double cuda_density_fitting_integral_source_omega(
+    const CudaDensityFittingIntegralSource*) noexcept {
+  return 0.0;
+}
+
 void destroy_cuda_density_fitting_integral_source(CudaDensityFittingIntegralSource*) noexcept {}
 
 std::size_t cuda_density_fitting_integral_source_device_bytes(
@@ -216,6 +238,10 @@ DfPairStorage cuda_density_fitting_pair_storage(const CudaDensityFittingJkPlan*)
 }
 bool cuda_density_fitting_jk_plan_matches(const CudaDensityFittingJkPlan*, std::size_t, std::size_t,
                                           std::size_t, double) noexcept {
+  return false;
+}
+bool cuda_density_fitting_jk_plan_operator_matches(const CudaDensityFittingJkPlan*, FockOperator,
+                                                   double) noexcept {
   return false;
 }
 
