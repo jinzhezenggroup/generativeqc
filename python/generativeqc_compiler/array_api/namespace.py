@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
+from math import isfinite
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
@@ -173,8 +174,16 @@ def _generic_binary(
     return _broadcast_generic(left, shape), _broadcast_generic(right, shape)
 
 
+def _generic_scalar(value: object, name: str) -> Fraction:
+    if type(value) is float:
+        if not isfinite(value):
+            raise ValueError(f"{name} must be finite")
+        return Fraction.from_float(value)
+    return _exact(value, name)
+
+
 def _generic_exact_scalar(value: object, *, dtype: str, name: str) -> VibeArray:
-    factor = _exact(value, name)
+    factor = _generic_scalar(value, name)
     spec = TensorSpec(dtype=dtype, role="constant")
     return VibeArray(tensor_ir.constant(factor, spec))
 
@@ -231,10 +240,18 @@ def multiply(x1: object, x2: object) -> VibeArray:
         left, right = operands if operands is not None else (x1, x2)
         return _canonical_generic(VibeArray(tensor_ir.multiply(left.node, right.node)))
     if isinstance(x1, VibeArray):
-        factor = _exact(x2)
+        factor = (
+            _generic_scalar(x2, "multiply scalar")
+            if _is_generic_array(x1)
+            else _exact(x2)
+        )
         return VibeArray(tensor_ir.add(x1.node, coefficients=(factor,)))
     if isinstance(x2, VibeArray):
-        factor = _exact(x1)
+        factor = (
+            _generic_scalar(x1, "multiply scalar")
+            if _is_generic_array(x2)
+            else _exact(x1)
+        )
         return VibeArray(tensor_ir.add(x2.node, coefficients=(factor,)))
     raise TypeError("multiply requires at least one symbolic VibeArray")
 
@@ -246,7 +263,11 @@ def divide(x1: object, x2: object) -> VibeArray:
         left, right = operands if operands is not None else (x1, x2)
         return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
     if isinstance(x1, VibeArray):
-        denominator = _exact(x2, "divisor")
+        denominator = (
+            _generic_scalar(x2, "divisor")
+            if _is_generic_array(x1)
+            else _exact(x2, "divisor")
+        )
         if denominator == 0:
             raise ZeroDivisionError("exact scalar divisor cannot be zero")
         return VibeArray(
@@ -265,7 +286,12 @@ def negative(x: object) -> VibeArray:
 
 def pow(x: object, exponent: object) -> VibeArray:
     value = _array(x)
-    return VibeArray(tensor_ir.power(value.node, _exact(exponent, "exponent")))
+    factor = (
+        _generic_scalar(exponent, "exponent")
+        if _is_generic_array(value)
+        else _exact(exponent, "exponent")
+    )
+    return VibeArray(tensor_ir.power(value.node, factor))
 
 
 def exp(x: object) -> VibeArray:
