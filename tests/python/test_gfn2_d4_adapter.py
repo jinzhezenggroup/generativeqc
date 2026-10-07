@@ -33,6 +33,7 @@ def adapter(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Pat
         [
             ROOT / "tests/native/test_gfn2_d4_adapter.cpp",
             runtime / "src/model/gfn2/d4.cpp",
+            ROOT / "src/dft/dispersion/d4_table_data.cpp",
         ],
         output,
         compile_args=(
