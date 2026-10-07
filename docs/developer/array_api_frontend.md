@@ -77,7 +77,21 @@ Scientifically annotated arrays keep the exact scalar spelling contract:
 `int`, `Fraction`, or a rational string. Generic public arrays additionally
 accept finite Python float literals; capture converts each literal to the exact
 binary rational represented by that Python float so eager/compiled array syntax
-does not require special coefficient spelling.
+does not require special coefficient spelling. Negative-zero float literals
+fail closed because the exact rational constant representation cannot preserve
+their sign.
+
+The eager namespace admits operands through the same CPU/NumPy float32/float64
+boundary as `asarray`, before calling NumPy or a foreign array hook. This guard
+also checks nested containers and advertised DLPack/CUDA array protocols. Exact scalar
+literals are materialized in the array operand dtype, and mixed array dtypes
+are rejected. Eager reductions and static selection retain the same bounded
+controls as capture: no reduction dtype/keepdims extension, nonnegative
+in-bounds `take` indices, and one valid half-open `slice` range per axis.
+Real-valued eager execution rejects nonfinite inputs/results and enforces the
+TensorIR `log`/`pow` positive-input and `sqrt` nonnegative-input domains. Eager
+`einsum` validates its equation and label extents through the canonical frontend,
+retaining explicit outputs, no ellipses, and no implicit label broadcasting.
 
 Generic public inputs are assigned compiler-owned anonymous array dimensions
 whose identity is intentionally shape-based. This lets ordinary broadcasting,

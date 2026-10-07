@@ -56,58 +56,143 @@ def _symbolic(*values: object) -> bool:
     return any(isinstance(value, VibeArray) for value in values)
 
 
+def _check_host_values(value: object) -> None:
+    pending = [value]
+    seen: set[int] = set()
+    while pending:
+        item = pending.pop()
+        if isinstance(item, np.ndarray):
+            if not item.dtype.hasobject:
+                continue
+            children = item.flat
+        else:
+            if callable(getattr(item, "__dlpack_device__", None)) or (
+                inspect.getattr_static(item, "__cuda_array_interface__", None)
+                is not None
+            ):
+                raise TypeError(
+                    "asarray does not perform implicit external-device transfer; "
+                    "use import_dlpack for an explicit handoff"
+                )
+            if not isinstance(item, (list, tuple)):
+                continue
+            children = item
+        identity = id(item)
+        if identity not in seen:
+            seen.add(identity)
+            pending.extend(children)
+
+
+def _eager_array(value: object) -> np.ndarray:
+    # Reuse the public host boundary before NumPy can invoke foreign array hooks.
+    array = asarray(value)
+    assert isinstance(array, np.ndarray)
+    return _finite_eager(array)
+
+
+def _finite_eager(value: typing.Any) -> typing.Any:
+    if not np.all(np.isfinite(value)):
+        raise ValueError("eager TensorIR reference values must be finite")
+    return value
+
+
+def _eager_compute(
+    operation: typing.Callable[..., typing.Any],
+    *operands: object,
+    **kwargs: typing.Any,
+) -> typing.Any:
+    with np.errstate(all="ignore"):
+        result = operation(*operands, **kwargs)
+    return _finite_eager(result)
+
+
+def _eager_scalar(value: object, dtype: np.dtype, name: str) -> np.ndarray:
+    factor = _namespace._generic_scalar(value, name)
+    with np.errstate(all="ignore"):
+        return _finite_eager(np.asarray(float(factor), dtype=dtype))
+
+
+def _eager_operands(*values: object, scalars: bool = False) -> tuple[np.ndarray, ...]:
+    arrays = tuple(
+        None
+        if scalars and type(value) in (int, float, str, Fraction)
+        else _eager_array(value)
+        for value in values
+    )
+    dtype = next((array.dtype for array in arrays if array is not None), float64)
+    if any(array is not None and array.dtype != dtype for array in arrays):
+        raise ValueError("operand dtypes must agree; implicit promotion is unsupported")
+    return tuple(
+        _eager_scalar(value, dtype, "arithmetic scalar") if array is None else array
+        for value, array in zip(values, arrays, strict=True)
+    )
+
+
 def add(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.add(x1, x2)
-    return np.add(x1, x2)
+    return _eager_compute(np.add, *_eager_operands(x1, x2, scalars=True))
 
 
 def subtract(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.subtract(x1, x2)
-    return np.subtract(x1, x2)
+    return _eager_compute(np.subtract, *_eager_operands(x1, x2, scalars=True))
 
 
 def multiply(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.multiply(x1, x2)
-    return np.multiply(x1, x2)
+    return _eager_compute(np.multiply, *_eager_operands(x1, x2, scalars=True))
 
 
 def divide(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.divide(x1, x2)
-    return np.divide(x1, x2)
+    return _eager_compute(np.divide, *_eager_operands(x1, x2, scalars=True))
 
 
 def negative(x: object) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.negative(x)
-    return np.negative(x)
+    return _eager_compute(np.negative, _eager_array(x))
 
 
 def pow(x: object, exponent: object) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.pow(x, exponent)
-    return np.power(x, exponent)
+    array = _eager_array(x)
+    if np.any(array <= 0):
+        raise ValueError("tensor power domain requires strictly positive input")
+    factor = _namespace._generic_scalar(exponent, "exponent")
+    rounded = _eager_scalar(factor, array.dtype, "exponent")
+    if factor and rounded == 0:
+        raise ValueError("power exponent is not representable")
+    return _eager_compute(np.power, array, rounded)
 
 
 def exp(x: object) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.exp(x)
-    return np.exp(x)
+    return _eager_compute(np.exp, _eager_array(x))
 
 
 def log(x: object) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.log(x)
-    return np.log(x)
+    array = _eager_array(x)
+    if np.any(array <= 0):
+        raise ValueError("tensor log domain requires strictly positive input")
+    return _eager_compute(np.log, array)
 
 
 def sqrt(x: object) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.sqrt(x)
-    return np.sqrt(x)
+    array = _eager_array(x)
+    if np.any(array < 0):
+        raise ValueError("tensor sqrt domain requires nonnegative input")
+    return _eager_compute(np.sqrt, array)
 
 
 def reshape(
@@ -120,7 +205,8 @@ def reshape(
         return _namespace.reshape(x, shape, indices=indices)
     if indices is not None:
         raise ValueError("explicit TensorIR indices require a symbolic array")
-    return np.reshape(x, shape)
+    array = _eager_array(x)
+    return np.reshape(array, _namespace._reshape_shape(shape, array.size))
 
 
 def broadcast_to(
@@ -136,19 +222,42 @@ def broadcast_to(
         raise ValueError(
             "explicit TensorIR broadcast metadata requires a symbolic array"
         )
-    return np.broadcast_to(x, shape)
+    return np.broadcast_to(_eager_array(x), _namespace._shape(shape, "broadcast_to"))
 
 
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.slice(x, ranges)
-    return np.asarray(x)[tuple(builtins.slice(start, stop) for start, stop in ranges)]
+    array = _eager_array(x)
+    if not isinstance(ranges, tuple) or any(
+        not isinstance(bounds, tuple)
+        or len(bounds) != 2
+        or any(type(bound) is not int for bound in bounds)
+        for bounds in ranges
+    ):
+        raise TypeError("slice ranges must be a static tuple of (start, stop) pairs")
+    if len(ranges) != array.ndim:
+        raise ValueError("slice requires one half-open range per axis")
+    if any(
+        not 0 <= start <= stop <= extent
+        for (start, stop), extent in zip(ranges, array.shape, strict=True)
+    ):
+        raise ValueError("slice range is outside its input axis")
+    return array[tuple(builtins.slice(start, stop) for start, stop in ranges)]
 
 
 def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
-    return np.take(x, indices, axis=axis)
+    array = _eager_array(x)
+    normalized_axis = _namespace._axis(axis, array.ndim, "take")
+    if not isinstance(indices, tuple) or any(
+        type(index) is not int for index in indices
+    ):
+        raise TypeError("take indices must be a static tuple of integers")
+    if any(not 0 <= index < array.shape[normalized_axis] for index in indices):
+        raise ValueError("gather position is outside its input axis")
+    return np.take(array, indices, axis=normalized_axis)
 
 
 def sum(
@@ -160,19 +269,39 @@ def sum(
 ) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
-    return np.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
+    array = _eager_array(x)
+    if dtype is not None:
+        raise ValueError("frontend sum does not insert dtype conversions")
+    if type(keepdims) is not bool or keepdims:
+        raise ValueError("frontend sum currently requires keepdims=False")
+    if axis is None:
+        axes = tuple(range(array.ndim))
+    elif type(axis) is int:
+        axes = (_namespace._axis(axis, array.ndim, "sum"),)
+    elif isinstance(axis, tuple):
+        axes = tuple(_namespace._axis(item, array.ndim, "sum") for item in axis)
+    else:
+        raise TypeError("axis must be an int, tuple of ints, or None")
+    return _eager_compute(np.sum, array, axis=tuple(sorted(axes)))
 
 
 def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.permute_dims(x, axes)
-    return np.transpose(x, axes)
+    array = _eager_array(x)
+    if (
+        not isinstance(axes, tuple)
+        or any(type(axis) is not int for axis in axes)
+        or sorted(axes) != list(range(array.ndim))
+    ):
+        raise ValueError("permutation requires each nonnegative axis exactly once")
+    return np.transpose(array, axes)
 
 
 def matrix_transpose(x: object) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.matrix_transpose(x)
-    array = np.asarray(x)
+    array = _eager_array(x)
     if array.ndim < 2:
         raise ValueError(
             "matrix_transpose requires an array with at least two dimensions"
@@ -183,7 +312,7 @@ def matrix_transpose(x: object) -> typing.Any:
 def matmul(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.matmul(x1, x2)
-    return np.matmul(x1, x2)
+    return _eager_compute(np.matmul, *_eager_operands(x1, x2))
 
 
 def einsum(
@@ -193,8 +322,24 @@ def einsum(
 ) -> typing.Any:
     if _symbolic(*operands):
         return _namespace.einsum(equation, *operands, coefficient=coefficient)
-    result = np.einsum(equation, *operands, optimize=False)
-    return result * float(Fraction(coefficient))
+    arrays = _eager_operands(*operands)
+    # Validate notation and repeated-label extents through the canonical frontend.
+    # These inputs carry metadata only; eager numerical work still runs in NumPy.
+    _namespace.einsum(
+        equation,
+        *(
+            input_array(
+                f"operand_{position}", _generic_spec(array, differentiable=False)
+            )
+            for position, array in enumerate(arrays)
+        ),
+        coefficient=coefficient,
+    )
+    factor = _namespace._exact(coefficient, "einsum coefficient")
+    result = _eager_compute(np.einsum, equation, *arrays, optimize=False)
+    return _eager_compute(
+        np.multiply, result, _eager_scalar(factor, result.dtype, "einsum coefficient")
+    )
 
 
 def _dtype_name(dtype: object) -> str:
@@ -228,13 +373,7 @@ def asarray(
         if name == value.dtype:
             return value
         return VibeArray(_cast(value.node, name))
-    if not isinstance(value, np.ndarray) and callable(
-        getattr(value, "__dlpack_device__", None)
-    ):
-        raise TypeError(
-            "asarray does not perform implicit external-device transfer; "
-            "use import_dlpack for an explicit handoff"
-        )
+    _check_host_values(value)
     target = None if dtype is None else _dtype_name(dtype)
     if copy is True:
         array = np.array(value, dtype=target, copy=True)

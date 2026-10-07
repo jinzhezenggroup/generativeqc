@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
-from math import isfinite
+from math import copysign, isfinite
 from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
@@ -178,6 +178,8 @@ def _generic_scalar(value: object, name: str) -> Fraction:
     if type(value) is float:
         if not isfinite(value):
             raise ValueError(f"{name} must be finite")
+        if value == 0 and copysign(1.0, value) < 0:
+            raise ValueError(f"{name} cannot represent a negative-zero literal")
         return Fraction.from_float(value)
     return _exact(value, name)
 

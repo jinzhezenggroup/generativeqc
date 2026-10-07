@@ -8,6 +8,7 @@ import textwrap
 from fractions import Fraction
 
 import numpy as np
+import pytest
 from generativeqc.experimental import API_VERSION as EXPERIMENTAL_API_VERSION
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
@@ -257,3 +258,380 @@ def test_asarray_rejects_implicit_external_device_transfer() -> None:
 
     with np.testing.assert_raises_regex(TypeError, "explicit handoff"):
         xp.asarray(External())
+
+
+_EAGER_ARRAY_OPERATIONS = (
+    xp.negative,
+    xp.exp,
+    xp.log,
+    xp.sqrt,
+    lambda x: xp.pow(x, 2),
+    lambda x: xp.reshape(x, (4,)),
+    lambda x: xp.broadcast_to(x, (3, 2, 2)),
+    lambda x: xp.slice(x, ((0, 1), (0, 2))),
+    lambda x: xp.take(x, (1, 0), axis=0),
+    xp.sum,
+    lambda x: xp.permute_dims(x, (1, 0)),
+    xp.matrix_transpose,
+    lambda x: xp.add(x, 0.5),
+    lambda x: xp.subtract(0.5, x),
+    lambda x: xp.multiply(x, 0.5),
+    lambda x: xp.divide(0.5, x),
+    lambda x: xp.matmul(x, np.eye(2)),
+    lambda x: xp.matmul(np.eye(2), x),
+    lambda x: xp.einsum("ij,jk->ik", x, np.eye(2)),
+    lambda x: xp.einsum("ij,jk->ik", np.eye(2), x),
+)
+
+
+@pytest.mark.parametrize("operation", _EAGER_ARRAY_OPERATIONS)
+@pytest.mark.parametrize("device", (1, 2))
+def test_eager_namespace_rejects_foreign_arrays_before_conversion(
+    operation: object, device: int
+) -> None:
+    class External:
+        def __dlpack_device__(self) -> tuple[int, int]:
+            return device, 0
+
+        def __array__(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("foreign conversion must not be invoked")
+
+        def __array_ufunc__(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("foreign ufunc must not be invoked")
+
+        def __array_function__(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("foreign array function must not be invoked")
+
+    with pytest.raises(TypeError, match="explicit handoff"):
+        operation(External())
+
+
+@pytest.mark.parametrize("operation", _EAGER_ARRAY_OPERATIONS)
+@pytest.mark.parametrize("dtype", (np.int64, np.float16, np.complex64, object))
+def test_eager_namespace_rejects_unsupported_array_dtypes(
+    operation: object, dtype: object
+) -> None:
+    with pytest.raises(TypeError, match="float32 or float64"):
+        operation(np.ones((2, 2), dtype=dtype))
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize("scalar", (2, Fraction(1, 2), "1/2", 0.5))
+@pytest.mark.parametrize("operation", (xp.add, xp.subtract, xp.multiply, xp.divide))
+@pytest.mark.parametrize("reverse", (False, True))
+def test_eager_exact_scalar_arithmetic_matches_compiled_dtype_and_values(
+    dtype: object, scalar: object, operation: object, reverse: bool
+) -> None:
+    def expression(x: object) -> object:
+        return operation(scalar, x) if reverse else operation(x, scalar)
+
+    values = np.asarray([2.0, 8.0], dtype=dtype)
+    eager = expression(values)
+    compiled = xp.compile(expression)(values)
+    numeric = dtype(float(Fraction(scalar)))
+    numpy_operation = getattr(np, operation.__name__)
+    expected = (
+        numpy_operation(numeric, values)
+        if reverse
+        else numpy_operation(values, numeric)
+    )
+    assert eager.dtype == compiled.dtype == values.dtype
+    np.testing.assert_array_equal(eager, expected)
+    np.testing.assert_array_equal(compiled, expected)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize("exponent", (2, Fraction(1, 2), "1/2", 0.5))
+def test_eager_exact_scalar_power_matches_compiled(
+    dtype: object, exponent: object
+) -> None:
+    def expression(x: object) -> object:
+        return xp.pow(x, exponent)
+
+    values = np.asarray([2.0, 8.0], dtype=dtype)
+    eager = expression(values)
+    compiled = xp.compile(expression)(values)
+    expected = np.power(values, dtype(float(Fraction(exponent))))
+    assert eager.dtype == compiled.dtype == values.dtype
+    np.testing.assert_array_equal(eager, expected)
+    np.testing.assert_array_equal(compiled, expected)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+def test_eager_exact_scalar_composes_with_array_functions(dtype: object) -> None:
+    def expression(x: object) -> object:
+        return xp.sqrt(xp.multiply(x, Fraction(1, 2)))
+
+    values = np.asarray([2.0, 8.0], dtype=dtype)
+    expected = np.asarray([1.0, 2.0], dtype=dtype)
+    np.testing.assert_array_equal(expression(values), expected)
+    np.testing.assert_array_equal(xp.compile(expression)(values), expected)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    (
+        xp.add,
+        xp.subtract,
+        xp.multiply,
+        xp.divide,
+        xp.matmul,
+        lambda x, y: xp.einsum("ij,jk->ik", x, y),
+    ),
+)
+def test_eager_namespace_rejects_implicit_array_dtype_promotion(
+    operation: object,
+) -> None:
+    left = np.ones((2, 2), dtype=np.float32)
+    right = np.ones((2, 2), dtype=np.float64)
+    with pytest.raises(ValueError, match="dtype"):
+        operation(left, right)
+    with pytest.raises(ValueError, match="dtype"):
+        xp.compile(lambda x, y: operation(x, y))(left, right)
+
+
+@pytest.mark.parametrize("scalar", (float("nan"), float("inf"), -float("inf"), -0.0))
+@pytest.mark.parametrize(
+    "operation", (xp.add, xp.subtract, xp.multiply, xp.divide, xp.pow)
+)
+def test_eager_and_compiled_reject_unrepresentable_scalar_literals(
+    scalar: float, operation: object
+) -> None:
+    values = np.ones(2, dtype=np.float64)
+    match = "negative-zero" if scalar == 0 else "finite"
+    with pytest.raises(ValueError, match=match):
+        operation(values, scalar)
+    with pytest.raises(ValueError, match=match):
+        xp.compile(lambda x: operation(x, scalar)).lower(values)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> None:
+    def expression(x: object) -> object:
+        return xp.sum((x + 0.3) * 0.5 / 0.7)
+
+    values = np.asarray([0.2, 0.7, 2.1], dtype=dtype)
+    tangent = np.asarray([0.3, -0.4, 0.6], dtype=dtype)
+    program = xp.compile(expression, differentiable=("x",)).lower(values)
+    forward = tensor.jvp(program, {"x": values}, {"x": tangent})
+    reverse = tensor.vjp(
+        program,
+        {"x": values},
+        {"output": np.asarray(1.0, dtype=dtype)},
+    )
+    np.testing.assert_allclose(
+        forward.output_tangents["output"], np.sum(tangent * (0.5 / 0.7)), rtol=2e-6
+    )
+    np.testing.assert_allclose(
+        reverse.input_cotangents["x"], np.full_like(values, 0.5 / 0.7), rtol=2e-6
+    )
+    fixed = xp.compile(expression).lower(values)
+    assert all(
+        not node.spec.differentiable for node in fixed.nodes if node.op == "input"
+    )
+
+
+@pytest.mark.parametrize(
+    "operation",
+    (
+        lambda x: xp.sum(x, keepdims=True),
+        lambda x: xp.sum(x, keepdims=0),
+        lambda x: xp.sum(x, dtype=xp.float64),
+        lambda x: xp.sum(x, axis=[0]),
+        lambda x: xp.sum(x, axis=True),
+        lambda x: xp.sum(x, axis=(0, 0)),
+        lambda x: xp.take(x, (-1,), axis=0),
+        lambda x: xp.take(x, (2,), axis=0),
+        lambda x: xp.take(x, [0], axis=0),
+        lambda x: xp.take(x, (True,), axis=0),
+        lambda x: xp.take(x, (0,), axis=True),
+        lambda x: xp.slice(x, ((-1, 2), (0, 2))),
+        lambda x: xp.slice(x, ((1, 0), (0, 2))),
+        lambda x: xp.slice(x, ((0, 3), (0, 2))),
+        lambda x: xp.slice(x, ((0, 2),)),
+        lambda x: xp.slice(x, ([0, 2], [0, 2])),
+        lambda x: xp.reshape(x, [4]),
+        lambda x: xp.broadcast_to(x, [2, 2]),
+        lambda x: xp.permute_dims(x, (-1, -2)),
+    ),
+)
+def test_eager_and_compiled_reject_unsupported_static_controls(
+    operation: object,
+) -> None:
+    values = np.ones((2, 2), dtype=np.float64)
+    with pytest.raises((TypeError, ValueError)):
+        operation(values)
+    with pytest.raises((TypeError, ValueError)):
+        xp.compile(lambda x: operation(x)).lower(values)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize(
+    "operation",
+    (
+        lambda x: xp.sum(x, axis=-1),
+        lambda x: xp.sum(x, axis=()),
+        lambda x: xp.take(x, (), axis=-1),
+        lambda x: xp.take(x, (1, 0, 1), axis=-1),
+        lambda x: xp.slice(x, ((1, 1), (0, 2))),
+    ),
+)
+def test_eager_and_compiled_preserve_supported_static_controls(
+    operation: object, dtype: object
+) -> None:
+    values = np.arange(4.0, dtype=dtype).reshape(2, 2)
+    eager = operation(values)
+    compiled = xp.compile(lambda x: operation(x))(values)
+    assert eager.dtype == compiled.dtype == values.dtype
+    np.testing.assert_array_equal(eager, compiled)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize(
+    ("operation", "values"),
+    (
+        (lambda x: xp.pow(x, 2), [-2.0]),
+        (lambda x: xp.pow(x, 2), [0.0]),
+        (xp.log, [0.0]),
+        (xp.log, [-1.0]),
+        (xp.sqrt, [-1.0]),
+        (lambda x: xp.divide(x, 0), [1.0]),
+        (lambda x: xp.divide(1, x), [0.0]),
+        (xp.exp, [1000.0]),
+        (lambda x: xp.multiply(x, x), [1.0e30, 1.0e308]),
+        (xp.negative, [float("nan")]),
+        (xp.negative, [float("inf")]),
+    ),
+)
+def test_eager_and_compiled_reject_invalid_real_domains_and_nonfinite_results(
+    dtype: object, operation: object, values: object
+) -> None:
+    with np.errstate(all="ignore"):
+        array = np.asarray(values, dtype=dtype)
+        with pytest.raises(ValueError):
+            operation(array)
+        with pytest.raises(ValueError):
+            xp.compile(lambda x: operation(x))(array)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+def test_eager_einsum_exact_coefficient_matches_compiled(dtype: object) -> None:
+    def expression(x: object) -> object:
+        return xp.einsum("i,i->", x, x, coefficient="1/2")
+
+    values = np.asarray([1.0, 2.0], dtype=dtype)
+    eager = expression(values)
+    compiled = xp.compile(expression)(values)
+    assert eager.dtype == compiled.dtype == values.dtype
+    np.testing.assert_array_equal(eager, dtype(2.5))
+    np.testing.assert_array_equal(compiled, dtype(2.5))
+    with pytest.raises(TypeError, match="exact"):
+        xp.einsum("i->", values, coefficient=0.5)
+    with pytest.raises(TypeError, match="exact"):
+        xp.compile(lambda x: xp.einsum("i->", x, coefficient=0.5)).lower(values)
+
+
+@pytest.mark.parametrize("exponent", (1.0e-100, -1.0e-100, 1.0e100))
+def test_eager_and_compiled_reject_unrepresentable_float32_power_exponents(
+    exponent: float,
+) -> None:
+    values = np.asarray([2.0], dtype=np.float32)
+    with pytest.raises(ValueError):
+        xp.pow(values, exponent)
+    with pytest.raises(ValueError):
+        xp.compile(lambda x: xp.pow(x, exponent)).lower(values)
+
+
+@pytest.mark.parametrize("protocol", ("dlpack", "cuda_array_interface"))
+@pytest.mark.parametrize("container", ("list", "tuple", "nested", "object_array"))
+@pytest.mark.parametrize("mode", ("asarray", "eager", "compiled"))
+def test_nested_foreign_arrays_are_rejected_before_conversion(
+    protocol: str, container: str, mode: str
+) -> None:
+    class External:
+        def __array__(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("nested foreign conversion must not be invoked")
+
+    external = External()
+    if protocol == "dlpack":
+        external.__dlpack_device__ = lambda: (2, 0)
+    else:
+        external.__cuda_array_interface__ = {"version": 3}
+    if container == "list":
+        values = [external]
+    elif container == "tuple":
+        values = (external,)
+    elif container == "nested":
+        values = ([external],)
+    else:
+        values = np.empty(1, dtype=object)
+        values[0] = external
+    with pytest.raises(TypeError, match="explicit handoff"):
+        if mode == "asarray":
+            xp.asarray(values, dtype=xp.float64)
+        elif mode == "eager":
+            xp.negative(values)
+        else:
+            xp.compile(lambda x: -x)(values)
+
+
+@pytest.mark.parametrize("operation", _EAGER_ARRAY_OPERATIONS)
+def test_eager_namespace_rejects_cuda_array_interface_before_conversion(
+    operation: object,
+) -> None:
+    class External:
+        def __init__(self) -> None:
+            self.__cuda_array_interface__ = {"version": 3}
+
+        def __array__(self, *args: object, **kwargs: object) -> object:
+            raise AssertionError("foreign conversion must not be invoked")
+
+    with pytest.raises(TypeError, match="explicit handoff"):
+        operation(External())
+
+
+@pytest.mark.parametrize(
+    "operation",
+    (
+        lambda x, y: xp.einsum("i", x),
+        lambda x, y: xp.einsum("...->...", x),
+        lambda x, y: xp.einsum("i,i->i", x, y),
+        lambda x, y: xp.einsum("i,i->", x, y),
+    ),
+)
+def test_eager_einsum_rejects_notation_and_broadcasting_outside_tensorir(
+    operation: object,
+) -> None:
+    x = np.asarray([1.0, 2.0])
+    y = np.ones(1, dtype=np.float64)
+    with pytest.raises(ValueError):
+        operation(x, y)
+    with pytest.raises(ValueError):
+        xp.compile(lambda x, y: operation(x, y)).lower(x, y)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize("equation", ("ij->ji", "ii->i", "ii->", "ij->i"))
+def test_eager_einsum_preserves_explicit_diagonals_and_axis_labels(
+    dtype: object, equation: str
+) -> None:
+    values = np.arange(4.0, dtype=dtype).reshape(2, 2)
+    eager = xp.einsum(equation, values)
+    compiled = xp.compile(lambda x: xp.einsum(equation, x))(values)
+    expected = np.einsum(equation, values, optimize=False)
+    assert eager.dtype == compiled.dtype == values.dtype
+    np.testing.assert_array_equal(eager, expected)
+    np.testing.assert_array_equal(compiled, expected)
+
+
+def test_host_admission_preserves_nested_values_and_handles_cycles() -> None:
+    values = ([1.0, 2.0], [3.0, 4.0])
+    np.testing.assert_array_equal(xp.asarray(values), np.asarray(values))
+    objects = np.asarray(values, dtype=object)
+    np.testing.assert_array_equal(
+        xp.asarray(objects, dtype=xp.float64), np.asarray(values)
+    )
+    cyclic = []
+    cyclic.append(cyclic)
+    with pytest.raises(ValueError):
+        xp.asarray(cyclic)

@@ -60,8 +60,9 @@ dimension, and static indexing with integers, slices (including negative
 strides), `None`/newaxis, and ellipsis. Generic arrays accept finite Python
 float literals as ordinary scalar values, so expressions such as `x + 0.5`
 have eager/compiled parity. The compiler records the exact binary value of that
-Python float. Explicitly scientific arrays retain the stricter exact-scalar
-spelling rules.
+Python float. Negative-zero float literals are rejected because exact rational
+constants cannot preserve their sign. Explicitly scientific arrays retain the
+stricter exact-scalar spelling rules.
 
 ## Scientific metadata remains explicit
 
@@ -91,10 +92,24 @@ The eager namespace and reference compiled-call path currently accept CPU/NumPy
 `float32` and `float64` arrays. There is no implicit dtype promotion, dynamic Python control
 flow, or implicit external-device transfer. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
-same-device handoff.
+same-device handoff. Every eager namespace operation checks this host boundary
+before NumPy dispatch, including nested host containers and foreign DLPack/CUDA
+array protocols. Exact scalar literals (`int`, `Fraction`, or rational
+strings) and finite Python floats are converted to the array operand dtype;
+array operands of different dtypes are rejected.
+
+Eager functions retain the bounded compiled contract: `sum` requires
+`keepdims=False` and no `dtype` argument; `take` requires a static tuple of
+nonnegative in-bounds indices; `slice` requires one nonnegative in-bounds
+half-open range per axis. Normal `x[...]` indexing remains a separate path
+supporting negative indices and strides. Real-valued operations require finite
+inputs and results, strictly positive inputs for `log`/`pow`, and nonnegative
+inputs for `sqrt`.
 
 General `einsum` remains a GenerativeQC extension for high-rank scientific
-contractions. The goal is that common expressions use normal array syntax, while
+contractions, using explicit-output equations without ellipses or implicit
+singleton-label broadcasting. The eager path validates this subset through the
+canonical frontend. The goal is that common expressions use normal array syntax, while
 specialized quantum-chemistry algebra can still use `einsum` when it is the
 clearest representation.
 
