@@ -91,6 +91,59 @@ without removing fallback or weakening scientific gates.
 
 ## References
 
+## Promoted follow-up validation
+
+#2081's actual merge tree `c8d71bb2b` retained the earlier opt-in policy, despite
+its branch later advancing to a default-enablement commit. PR #2089 therefore
+applies the promotion separately on master `7dc9d7944`, together with the native
+density-provider ledger fixture repair. That fixture must measure incumbent-only
+storage: including optional default point panels in its baseline otherwise leaves
+headroom for the density cache whose allocation it intends to reject. A scoped
+zero-byte cap affects only baseline measurement and restores the caller's policy
+before every real default/admission/warm/moved/constrained-ledger case.
+
+The clean promoted source is
+`8dda81a75ed5b61192a79981c20ffb725f207c07`. It was rebuilt in Release for sm_120
+using verified ccache and tested through finite Slurm job 6437 on node1/n1,
+RTX 5090, preserving assigned `CUDA_VISIBLE_DEVICES=1`. Independent native point,
+local-AO and scaled-PBE E/V gates pass, as do all 28 default density-provider
+RKS/UKS/cold/warm/moved/resource cases. Compute Sanitizer reports zero errors and
+zero leaked bytes. Current host/compiler/default-policy/orchestration tests pass
+all 284 cases; compiler structure checks 493 modules and CUDA ownership 333 files.
+
+Native library SHA-256:
+`fd0169069726c44a47b2a5468e549b65f19ff6bd1535e10843c6b55c8aa92a1e`.
+Native KS test SHA-256:
+`aa157202887d256b779069d1139d7fd9d80a2f4fb86d019b64d15f869a95d2e6`.
+The XC test remains `a061e3906fe36a691ec6c0ab0db6ee59646618e5af6c0e225e63cfbf098feeaa`
+and generated grid source remains
+`6ec2fddb973af34294a3e7ec361b93e2b80f99a506b365d978522ad790f8b6a2`.
+Later evidence-only commits do not relabel these measured binaries.
+
+| Fresh-process smoke scope | Complete E+F s | Fock builds | Energy error Eh | Max force error Eh/bohr |
+| --- | ---: | ---: | ---: | ---: |
+| 12 atoms, unset batch controls | 44.830536 | 23 | 4.434e-12 | 3.003e-11 |
+| 12 atoms, zero-byte opt-out | 35.447133 | 23 | 4.320e-12 | 2.999e-11 |
+| 96 atoms, unset batch controls | 185.608714 | 25 | 7.685e-11 | 2.491e-11 |
+
+These three smokes all pass the independent complete E/F gates. They are **not**
+a new clean interleaved performance population: one observation per scope, no
+exclusive-node reservation, and compilation/source-cache history was not balanced.
+The 12-atom default observation is slower than its opt-out observation; do not
+hide that or interpret this single sequential pair as a profitability proof.
+Only the earlier explicitly enabled scheduling ablation supplies the retained
+performance evidence, with its original source and trajectory caveats.
+
+The broader KS executable stopped at its final-state-identity gate on earlier
+pinned builds. The same failure reproduces on the older tree with batching
+disabled and on the promoted tree with explicit opt-out; no full-suite pass or
+unrelated final-state fix is claimed here. The targeted default-policy cases and
+independent complete PBE0 endpoint smokes are recorded separately. Raw current
+results remain in `results/default-policy-current/` under the original local
+qualification root; earlier failures/pre-promotion runs are retained separately.
+
+## References
+
 - #2073; PR #2081; default-promotion owner #1598; source-specialization sibling #2072.
 - `2026-10-07-xc-point-batches.md`
 - `docs/developer/xc_native_cuda.md`
