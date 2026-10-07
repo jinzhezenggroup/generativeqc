@@ -16,7 +16,12 @@ def test_cuda_df_metric_uses_generic_cusolver_api() -> None:
     """Prevent the deprecated typed eigensolver from returning unnoticed."""
 
     source = _df_source("df_plan_setup.cpp", "df_setup_internal.hpp")
-    assert "cusolverDnCreateParams" in source
+    assert "eigen_handles.create_parameters()" in source
+    handles = (
+        REPOSITORY_ROOT / "src/solver/cuda/symmetric_eigen_handles.cpp"
+    ).read_text()
+    assert "cusolverDnCreateParams" in handles
+    assert "cusolverDnCreateParams" not in source
     assert "SymmetricEigenFamily::xsyevd" in source
     assert "query_symmetric_eigen(" in source
     assert "launch_symmetric_eigen(" in source
