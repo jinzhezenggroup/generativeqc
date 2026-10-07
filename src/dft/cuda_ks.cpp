@@ -1908,7 +1908,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
           "CUDA KS final-state read requires an ordinary noncapturing stream");
 
     if (!final_frame_ready) {
-      const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
         multiply_spin(spins, a, a_spin, transpose, b, b_spin, final_enabled, c);
