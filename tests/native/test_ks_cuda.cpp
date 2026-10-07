@@ -291,6 +291,10 @@ void run_exact_exchange_case(bool restricted) {
   const auto hybrid_bytes = dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history, true);
   require(hybrid_bytes == plain_bytes + spins * basis.nao * basis.nao * sizeof(double),
           "CUDA KS exact-exchange buffer is missing from state admission");
+  const auto incremental_hybrid_bytes =
+      dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history, true, false, true);
+  require(incremental_hybrid_bytes > hybrid_bytes,
+          "CUDA KS incremental Direct-J/K state is missing from resource admission");
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
   const auto result = plan.run(nullptr, false);
@@ -323,6 +327,44 @@ void run_exact_exchange_case(bool restricted) {
               std::abs(snapshot.components.exact_exchange -
                        result.dft_diagnostic.components.exact_exchange) < 1e-10,
           "CUDA exact-exchange final state lost the converged model or energy");
+
+  // The public KS owner must actually consume #990's controller: a permissive
+  // late-SCF gate executes delta builds, while a deliberately unreachable gate
+  // keeps the same trajectory on full builds. XC still sees full D in both.
+  auto incremental_options = options;
+  incremental_options.incremental_direct_jk = true;
+  incremental_options.incremental_direct_jk_rebuild_interval = 8;
+  incremental_options.incremental_direct_jk_density_rms_threshold = 0.0;
+  dft::CudaKsPlan incremental_plan(gpu, basis, grid, incremental_options,
+                                   dft::SemilocalFamily::Pbe, 257);
+  const auto incremental = incremental_plan.run(nullptr, false);
+  const auto& incremental_work = incremental.incremental_direct_jk;
+  require(incremental.converged && !incremental_plan.failed() &&
+              std::abs(incremental.energy - result.energy) < 1e-10 &&
+              incremental_work.requested && incremental_work.active &&
+              incremental_work.anchor_full_builds > 0 && incremental_work.delta_builds > 0 &&
+              incremental_work.anchor_updates == incremental_work.delta_builds &&
+              incremental_work.post_scf_full_builds > 0 &&
+              incremental_work.anchor_full_builds + incremental_work.delta_builds +
+                      incremental_work.post_scf_full_builds ==
+                  incremental.fock_builds,
+          "CUDA KS incremental Direct-J/K did not execute a guarded delta/full trajectory");
+  require(incremental_plan.transfers().execution_region_bindings == 0 &&
+              incremental_plan.transfers().iteration_synchronizations == incremental.iterations,
+          "CUDA KS incremental Direct-J/K entered an unqualified chunk/replay path");
+  physical_check(cpu, basis, grid, 1U, incremental);
+
+  auto gated_options = incremental_options;
+  gated_options.incremental_direct_jk_density_rms_threshold = 1e-30;
+  dft::CudaKsPlan gated_plan(gpu, basis, grid, gated_options, dft::SemilocalFamily::Pbe, 257);
+  const auto gated = gated_plan.run(nullptr, false);
+  const auto& gated_work = gated.incremental_direct_jk;
+  require(gated.converged && !gated_plan.failed() &&
+              std::abs(gated.energy - result.energy) < 1e-10 && gated_work.requested &&
+              gated_work.active && gated_work.delta_builds == 0 &&
+              gated_work.anchor_full_builds >= incremental_work.anchor_full_builds &&
+              gated_work.post_scf_full_builds > 0,
+          "CUDA KS density-RMS gate did not replace early delta J/K with full builds");
 }
 
 void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true) {
