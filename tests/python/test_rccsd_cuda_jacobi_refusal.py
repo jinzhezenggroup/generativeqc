@@ -41,6 +41,7 @@ def test_jacobi_refusal_continues_after_the_first_drained_trial(tmp_path: Path) 
 
 PREFIX = r"""
 #include "cc/solver.hpp"
+#include "cc/iteration_driver.hpp"
 #include "solver/diis_ring.hpp"
 #include <algorithm>
 #include <array>

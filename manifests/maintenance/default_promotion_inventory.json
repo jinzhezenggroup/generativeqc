@@ -654,6 +654,32 @@
       ]
     },
     {
+      "id": "cc.iteration-invariant-reuse",
+      "classification": "needs-qualification",
+      "controls": [
+        "cc-option:iteration_invariant_reuse"
+      ],
+      "owner_issues": [
+        933,
+        926,
+        1598
+      ],
+      "sources": [
+        "src/cc/solver.hpp",
+        "python/generativeqc_compiler/tensor/iteration_reuse.py",
+        "tools/benchmark_rccsd_iteration_reuse.py",
+        "docs/developer/iteration_reuse.md"
+      ],
+      "rationale": "The common TensorIR proof safely retains immutable reference transforms within one conventional CPU solve, with unchanged dynamic amplitudes and independent replay. A corrected matched-budget CPU solve probe did not reproduce the initial noisy slower sign, but this bounded synthetic result does not establish representative molecular or GPU benefit. The schedule remains internal and default-off.",
+      "revisit_condition": "Require representative complete molecular endpoint benefit, full retained-memory accounting, unchanged physical replay and convergence, and real-device CUDA owner validation before promoting a backend. Do not infer an unmeasured shape threshold from the initial bounded probe.",
+      "evidence": [
+        "issue:#933",
+        "issue:#926",
+        "issue:#1598",
+        "note:.agents/notes/implemented/architecture/2026-10-06-shared-iteration-invariants.md"
+      ]
+    },
+    {
       "id": "cc.packed-diis",
       "classification": "guarded-promotion-candidate",
       "controls": [

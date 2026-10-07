@@ -1,0 +1,122 @@
+{
+  "scope": "Retain cache-backed, interleaved full solve_cpu timings for opt-in reuse.\n\nThis constructs a synthetic dense Problem before timing. It measures every native\nsolver allocation, iteration, trial, DIIS step, independent replay and result\ncopy; it does not measure an SCF-to-correlated molecular endpoint or source setup.\n",
+  "fixed_work_control": false,
+  "fixed_work_scope": "Nine changing-amplitude evaluations; original full versus pinned reprepare every call versus pinned prepare once. Reprepare and reuse use identical buffer addresses. Allocation, input construction, reference construction and bytewise residual/trial checks are outside reported time. Energy values are exactly equal. No solver, DIIS or replay.",
+  "base_commit": "21f6314f5a812e9e83a41b3c9921549d6e944778",
+  "dirty_files_sha256": {
+    ".agents/notes/implemented/architecture/2026-10-06-shared-iteration-invariants.md": "6e837391fee6fd795d1b5bd61e131b897d9202033837c8470e7866010c6df4ea",
+    "benchmarks/rccsd_iteration_reuse.cpp": "4324a7abfa831b3ef8ea724824002c6106ec2d00f069099e3bd5c71fcce08b8d",
+    "docs/developer/index.md": "d144cde117df4ee247536fbaef09e4ae48acd91ce4ebff531a0767d9e544fa0a",
+    "docs/developer/iteration_reuse.md": "3a835c108a768ac85e215475b7bc94651130c2fd5b04266f11df8b341ac2fe40",
+    "manifests/maintenance/default_promotion_inventory.json": "01dc6aa850c6cac00f371ed6d499ac8196f655b79078187f7f98577a0c142c9f",
+    "python/generativeqc_compiler/tensor/iteration_reuse.py": "c9a76b209be2ffe28a293c03851ddc79eba514468d6831bea2d84be1ec4958c4",
+    "src/cc/cuda_solver_support.cuh": "f121623d0391302ecf14bb41c810501ef07d25fe57b74ecdb40628aebb4091d0",
+    "src/cc/solver.cpp": "4f861c20ed5b5d4bd09660355437705a177485baefdecbabca579c5507c073bf",
+    "src/cc/solver.hpp": "9e885012835e3b66980d788e980dff4b5e6cbd9c10a9005115268bc15ea06c47",
+    "tests/python/_cc_owner_test_support.py": "d67e6dcda3a95776bb1e4afbaf26226877d45e6b70507b0a523ae94a13d5e8c5",
+    "tests/python/test_rccsd_iteration_reuse.py": "006a28ed5a51e0e8cd19b9320a3db6a2f88a969b67db546d0953becc20eaa1a3",
+    "tests/python/test_tensor_iteration_reuse.py": "4d76c88fdb4604eb57b984580f1c2bfd92d37fb9a42d4cfd2b09c47f4d719199",
+    "tools/benchmark_rccsd_iteration_reuse.py": "9ac9fc3d56d8e1d012cb111899b0edd75187660919489d490ac4ee5eb3c5bd7b",
+    "tools/generate_rccsd_native.py": "097a50b3b5f2ed233e443e06ee9b1d81ef09c184025ef7508d61e477fe247881"
+  },
+  "working_tree_sha256": "4a68f583d0a41f1d06b25e3d9ab2087c445f2613f028ecdf3adb103fe3e2c4e6",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "machine": "x86_64",
+  "compiler": "c++ (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "launcher": "ccache version 4.14.1\nFeatures: avx2 crsh-storage file-storage http-storage redis+unix-storage redis-storage remote-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2026 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+  "compile_commands": [
+    [
+      "/workspace/scratch/1b7630fc9eb4/ccache_tool/ccache-4.14.1-linux-x86_64-musl-static/ccache",
+      "/usr/bin/c++",
+      "-std=c++20",
+      "-O3",
+      "-DNDEBUG",
+      "-DGENERATIVEQC_HAS_CUDA=0",
+      "-I/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/src",
+      "-I/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/include",
+      "-I/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final",
+      "-c",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/src/cc/solver.cpp",
+      "-o",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark-0.o"
+    ],
+    [
+      "/workspace/scratch/1b7630fc9eb4/ccache_tool/ccache-4.14.1-linux-x86_64-musl-static/ccache",
+      "/usr/bin/c++",
+      "-std=c++20",
+      "-O3",
+      "-DNDEBUG",
+      "-DGENERATIVEQC_HAS_CUDA=0",
+      "-I/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/src",
+      "-I/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/include",
+      "-I/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final",
+      "-c",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/benchmarks/rccsd_iteration_reuse.cpp",
+      "-o",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark-1.o"
+    ],
+    [
+      "/usr/bin/c++",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark-0.o",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark-1.o",
+      "-o",
+      "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark"
+    ]
+  ],
+  "run_command": [
+    "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark",
+    "9",
+    "6",
+    "2",
+    "4",
+    "4",
+    "8",
+    "6",
+    "12",
+    "8",
+    "16"
+  ],
+  "control_command": [
+    "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse/.artifacts/iteration-reuse-final/benchmark",
+    "--fixed-work-control",
+    "9",
+    "8",
+    "16"
+  ],
+  "control_raw_sha256": "d3cecf6933839682ac85295c015e9dc5bbfab21d52d90baec9724f409d2948cb",
+  "cache_environment": {
+    "CCACHE_DIR": "/workspace/scratch/1b7630fc9eb4/compiler_cache/ccache",
+    "CCACHE_BASEDIR": "/workspace/scratch/1b7630fc9eb4/shared_iteration_reuse"
+  },
+  "binary_sha256": "6ecd0e3bda75afaab57eee9688241776941b33007befc12bec1c1efbc7ad69bf",
+  "benchmark_source_sha256": "4324a7abfa831b3ef8ea724824002c6106ec2d00f069099e3bd5c71fcce08b8d",
+  "generated_headers_sha256": {
+    "generated_df_ccsd_core_cpu.hpp": "7d1cb5070b414cc8eef2e0376226a91aa1b6ae7366bebd00bdeb9a73182f8839",
+    "generated_df_ccsd_cpu.hpp": "5f5bbb36cfb13fec1ce2485e135fe069124297c45d4cde959db3bbcb45e16989",
+    "generated_df_ccsd_hoisted_cpu.hpp": "edb2ab7ddf724c4268627720a9b92959cede76776ccca72c0c719581af3edc93",
+    "generated_rccsd_cpu.hpp": "b60eb861a75fef8efd30d7aaf2022ef01623fac2d8b1dd03421eac20b7bc97b2"
+  },
+  "raw_sha256": "d35f5f83543ca54bd9826d96e5a2bab91ebfd09e4005cd92dda807d3d9409917",
+  "shapes": [
+    [
+      2,
+      4
+    ],
+    [
+      4,
+      8
+    ],
+    [
+      6,
+      12
+    ],
+    [
+      8,
+      16
+    ]
+  ],
+  "diis_size": 6,
+  "repeats": 9,
+  "cases": 4,
+  "retention_metadata_note": "Control scope was completed after the guarded run to correct combined-mode metadata. Raw timing vectors, compiler commands, binary and all numeric source/header hashes are unchanged; the retained driver change only populates the combined-mode scope field."
+}

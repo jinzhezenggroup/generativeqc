@@ -62,7 +62,7 @@ struct Layout {
 Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
               std::size_t execution_bytes = 0, std::size_t host_binding_bytes = 0,
               std::size_t execution_provider_bytes = provider_allowance,
-              std::size_t library_bytes = blas_workspace) {
+              std::size_t library_bytes = blas_workspace, bool external_inputs = false) {
   const auto oo = checked_mul(o, o), vv = checked_mul(v, v), ov = checked_mul(o, v);
   const auto ovv = checked_mul(o, vv);
   // Check every dimension and physical leading dimension before reading inputs
@@ -90,7 +90,9 @@ Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
       checked_mul(checked_mul(6, p.tiles), checked_add(checked_mul(p.v3, v), checked_mul(p.v3, o)));
   (void)checked_add(moment_terms, checked_mul(checked_mul(3, p.tiles), checked_mul(q, p.v3)));
   std::size_t cursor = 0;
-  for (std::size_t x = 0; x < p.sizes.size(); ++x) p.inputs[x] = reserve(cursor, bytes(p.sizes[x]));
+  if (!external_inputs)
+    for (std::size_t x = 0; x < p.sizes.size(); ++x)
+      p.inputs[x] = reserve(cursor, bytes(p.sizes[x]));
   p.panels = reserve(cursor, bytes(checked_mul(p.panel_capacity, p.v3)));
   p.moments = reserve(cursor, bytes(checked_mul(6, p.v3)));
   p.execution_storage = reserve(cursor, execution_bytes);
@@ -128,6 +130,65 @@ double validate_inputs(std::size_t o, std::size_t v, std::size_t q, const Layout
   return minimum;
 }
 
+std::size_t prepared_input_storage_bytes(const Layout& p) {
+  std::size_t cursor = 0;
+  for (const auto size : p.sizes) (void)reserve(cursor, bytes(size));
+  return align256(cursor);
+}
+
+struct PreparedInputs {
+  unsigned char* base{};
+  std::size_t storage_bytes{}, h2d_bytes{};
+  generated_df::Inputs values;
+
+  PreparedInputs(const Layout& p, const std::array<const double*, 9>& host) {
+    std::size_t cursor = 0;
+    std::array<std::size_t, 9> offsets{};
+    for (std::size_t x = 0; x < p.sizes.size(); ++x)
+      offsets[x] = reserve(cursor, bytes(p.sizes[x]));
+    storage_bytes = align256(cursor);
+    generativeqc_tensor::cuda_check(cudaMalloc(reinterpret_cast<void**>(&base), storage_bytes));
+    try {
+      const std::array<const double**, 9> fields{&values.bov,  &values.bvv,   &values.ovoo,
+                                                 &values.ovov, &values.fov,   &values.t1,
+                                                 &values.t2,   &values.eps_o, &values.eps_v};
+      for (std::size_t x = 0; x < host.size(); ++x) {
+        auto* destination = base + offsets[x];
+        *fields[x] = reinterpret_cast<const double*>(destination);
+        generativeqc_tensor::cuda_check(
+            cudaMemcpy(destination, host[x], bytes(p.sizes[x]), cudaMemcpyHostToDevice));
+        h2d_bytes = checked_add(h2d_bytes, bytes(p.sizes[x]));
+      }
+    } catch (...) {
+      cudaFree(base);
+      base = nullptr;
+      throw;
+    }
+  }
+
+  PreparedInputs(const PreparedInputs&) = delete;
+  PreparedInputs& operator=(const PreparedInputs&) = delete;
+  ~PreparedInputs() {
+    if (base) cudaFree(base);
+  }
+};
+
+void validate_response_work(std::size_t o, std::size_t v, std::size_t q, const Layout& p,
+                            bool include_gap_response) {
+  const auto scalar_outputs = include_gap_response
+                                  ? generated_df::response_scalar_outputs_with_gap
+                                  : generated_df::response_scalar_outputs_without_gap;
+  (void)checked_mul(scalar_outputs, checked_mul(p.tiles, p.v3));
+  // At most three forward and three reverse-regenerated panels per tile, plus
+  // two factor products per distinct occupied index. Charge complete work
+  // before input access even for logical shapes too large to execute.
+  const auto panel_work = checked_mul(checked_mul(12, p.tiles), checked_mul(q, p.v3));
+  const auto w_work = checked_mul(checked_mul(18, p.tiles),
+                                  checked_add(checked_mul(v, p.v3), checked_mul(o, p.v3)));
+  const auto v_work = checked_mul(checked_mul(24, p.tiles), p.v3);
+  (void)checked_add(panel_work, checked_add(w_work, v_work));
+}
+
 struct ResponseLayout {
   Layout value;
   std::array<std::size_t, 9> outputs{};
@@ -136,9 +197,9 @@ struct ResponseLayout {
 };
 ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
                                std::size_t caller_bytes, bool parallel_gap_reduction,
-                               bool include_gap_response) {
+                               bool include_gap_response, bool external_inputs = false) {
   ResponseLayout p;
-  p.value = layout(o, v, q, panels);
+  p.value = layout(o, v, q, panels, 0, 0, provider_allowance, blas_workspace, external_inputs);
   auto cursor = p.value.arena;
   std::size_t values = 0;
   for (std::size_t x = 0; x < p.outputs.size(); ++x) {
@@ -159,19 +220,7 @@ ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std:
   p.output_bytes = bytes(values);
   p.complete = checked_add(caller_bytes,
                            checked_add(p.value.total, checked_add(p.host_bytes, p.output_bytes)));
-  const auto scalar_outputs = include_gap_response
-                                  ? generated_df::response_scalar_outputs_with_gap
-                                  : generated_df::response_scalar_outputs_without_gap;
-  (void)checked_mul(scalar_outputs, checked_mul(p.value.tiles, p.value.v3));
-  // At most three forward and three reverse-regenerated panels per tile, plus
-  // two factor products per distinct occupied index. Charge complete work
-  // before input access even for logical shapes too large to execute.
-  const auto panel_work = checked_mul(checked_mul(12, p.value.tiles), checked_mul(q, p.value.v3));
-  const auto w_work =
-      checked_mul(checked_mul(18, p.value.tiles),
-                  checked_add(checked_mul(v, p.value.v3), checked_mul(o, p.value.v3)));
-  const auto v_work = checked_mul(checked_mul(24, p.value.tiles), p.value.v3);
-  (void)checked_add(panel_work, checked_add(w_work, v_work));
+  validate_response_work(o, v, q, p.value, include_gap_response);
   return p;
 }
 
@@ -179,12 +228,12 @@ struct FockLayout {
   Layout value;
   std::size_t foo{}, fvv{}, xl{}, yl{}, xr{}, yr{}, block{};
   std::size_t capacity{}, pages{}, pairs{}, cubes{}, page_builds{}, page_pairs{};
-  std::size_t host_bytes{}, output_bytes{}, complete{};
+  std::size_t host_bytes{}, output_bytes{}, complete{}, contraction_summands_bound{};
 };
 FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t capacity,
-                       std::size_t panels, std::size_t caller_bytes) {
+                       std::size_t panels, std::size_t caller_bytes, bool external_inputs = false) {
   FockLayout r;
-  r.value = layout(o, v, q, panels);
+  r.value = layout(o, v, q, panels, 0, 0, provider_allowance, blas_workspace, external_inputs);
   auto& p = r.value;
   // Cross-page oo contracts a flattened complete virtual cube as BLAS k.
   if (p.v3 > static_cast<std::size_t>(std::numeric_limits<int>::max()))
@@ -206,7 +255,8 @@ FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t 
   const auto vv_work = checked_mul(checked_mul(2, checked_mul(r.pairs, o)), checked_mul(v, p.v3));
   const auto oo_work = checked_mul(checked_mul(2, r.page_builds),
                                    checked_mul(checked_mul(capacity, capacity), p.v3));
-  (void)checked_add(checked_add(panel_work, w_work), checked_add(vv_work, oo_work));
+  r.contraction_summands_bound =
+      checked_add(checked_add(panel_work, w_work), checked_add(vv_work, oo_work));
   auto cursor = p.arena;
   r.foo = reserve(cursor, bytes(checked_mul(o, o)));
   r.fvv = reserve(cursor, bytes(checked_mul(v, v)));
@@ -224,6 +274,49 @@ FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t 
   r.output_bytes = bytes(checked_add(checked_mul(o, o), checked_mul(v, v)));
   r.complete =
       checked_add(caller_bytes, checked_add(p.total, checked_add(r.host_bytes, r.output_bytes)));
+  return r;
+}
+
+struct JointResponseLayout {
+  FockLayout fock;
+  std::array<std::size_t, 9> response_outputs{};
+  std::size_t bar_w{}, bar_v{}, bar_panel{}, packed{}, gap{};
+  std::size_t response_output_bytes{}, complete{};
+};
+
+JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::size_t q,
+                                          std::size_t capacity, std::size_t panels,
+                                          std::size_t caller_bytes, bool parallel_gap_reduction,
+                                          bool include_gap_response) {
+  JointResponseLayout r;
+  r.fock = fock_layout(o, v, q, capacity, panels, 0, true);
+  auto& p = r.fock.value;
+  validate_response_work(o, v, q, p, include_gap_response);
+  // A pullback can regenerate up to three evicted panels per triangular tile.
+  // Those products share the Fock ledger, including its right-page replay work.
+  const auto regenerated_panel_work = checked_mul(checked_mul(3, p.tiles), checked_mul(q, p.v3));
+  (void)checked_add(r.fock.contraction_summands_bound, regenerated_panel_work);
+  auto cursor = p.arena;
+  std::size_t values = 0;
+  const std::size_t requested_outputs = include_gap_response ? 9 : 7;
+  for (std::size_t x = 0; x < requested_outputs; ++x) {
+    r.response_outputs[x] = reserve(cursor, bytes(p.sizes[x]));
+    values = checked_add(values, p.sizes[x]);
+  }
+  r.bar_w = reserve(cursor, bytes(checked_mul(6, p.v3)));
+  r.bar_v = reserve(cursor, bytes(p.v3));
+  r.bar_panel = reserve(cursor, bytes(p.v3));
+  r.packed = reserve(cursor, bytes(checked_mul(v, v)));
+  if (include_gap_response)
+    r.gap = reserve(cursor,
+                    bytes(generated_df::gap_response_arena_elements(o, v, parallel_gap_reduction)));
+  p.arena = align256(cursor);
+  p.total = checked_add(p.arena, provider_allowance);
+  r.response_output_bytes = bytes(values);
+  r.complete = checked_add(
+      caller_bytes,
+      checked_add(p.total, checked_add(r.fock.host_bytes,
+                                       checked_add(r.fock.output_bytes, r.response_output_bytes))));
   return r;
 }
 
@@ -249,6 +342,22 @@ __global__ void audit_matrix(const double* c, std::size_t m, std::size_t n, std:
   for (std::size_t flat = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; flat < m * n;
        flat += std::size_t(blockDim.x) * gridDim.x)
     if (!isfinite(c[(flat % m) + (flat / m) * ldc])) atomicCAS(error, 0, 7);
+}
+
+/** Existing explicit-stride FP64 matrix product boundary.
+ *
+ * This centralizes the legacy method-local call while #1890 migrates the
+ * generated triples views to the shared provider-neutral contraction binding.
+ * Scientific callers still supply the compiler-derived transpose/stride data.
+ */
+inline void execute_strided_fp64_product(generativeqc_tensor::Context& context, char ta, char tb,
+                                         std::size_t m, std::size_t n, std::size_t k, double alpha,
+                                         const double* a, std::size_t lda, const double* b,
+                                         std::size_t ldb, double beta, double* c, std::size_t ldc) {
+  generativeqc_tensor::blas_check(cublasDgemm(
+      context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
+      static_cast<int>(m), static_cast<int>(n), static_cast<int>(k), &alpha, a,
+      static_cast<int>(lda), b, static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
 }
 
 // Pure view packing/scatter. The scientific V products stay compiler-owned.
@@ -454,21 +563,21 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
   result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
 }
-DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t q,
-                                      const double* bov, const double* bvv, const double* ovoo,
-                                      const double* ovov, const double* fov, const double* t1,
-                                      const double* t2, const double* eps_o, const double* eps_v,
-                                      double threshold, std::size_t max_bytes, int device,
-                                      std::size_t caller_bytes, std::size_t max_panel_buffers,
-                                      bool parallel_gap_reduction, bool include_gap_response) {
+static DFCudaResponseResult pullback_df_cuda_impl(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
+    std::size_t caller_bytes, std::size_t max_panel_buffers, bool parallel_gap_reduction,
+    bool include_gap_response, const generated_df::Inputs* prepared_inputs) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
     throw std::invalid_argument("invalid DF triples response dimensions, threshold or panel limit");
   auto r = response_layout(o, v, q, max_panel_buffers, caller_bytes, parallel_gap_reduction,
-                           include_gap_response);
+                           include_gap_response, prepared_inputs != nullptr);
   if (r.complete > max_bytes)
-    r = response_layout(o, v, q, 1, caller_bytes, parallel_gap_reduction, include_gap_response);
+    r = response_layout(o, v, q, 1, caller_bytes, parallel_gap_reduction, include_gap_response,
+                        prepared_inputs != nullptr);
   if (r.complete > max_bytes)
     throw std::length_error("DF triples response exceeds complete numeric budget");
   const auto& p = r.value;
@@ -496,19 +605,32 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
                                                      &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
     const std::array<double**, 9> output_fields{&out.bov, &out.bvv, &out.ovoo,  &out.ovov, &out.fov,
                                                 &out.t1,  &out.t2,  &out.eps_o, &out.eps_v};
+    const std::array<const double*, 9> prepared{prepared_inputs ? prepared_inputs->bov : nullptr,
+                                                prepared_inputs ? prepared_inputs->bvv : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovoo : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovov : nullptr,
+                                                prepared_inputs ? prepared_inputs->fov : nullptr,
+                                                prepared_inputs ? prepared_inputs->t1 : nullptr,
+                                                prepared_inputs ? prepared_inputs->t2 : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_o : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_v : nullptr};
     auto pointer = [&](std::size_t offset) {
       return reinterpret_cast<double*>(context.arena + offset);
     };
     for (std::size_t x = 0; x < 9; ++x) {
-      *input_fields[x] = pointer(p.inputs[x]);
+      if (prepared_inputs) {
+        *input_fields[x] = prepared[x];
+      } else {
+        *input_fields[x] = pointer(p.inputs[x]);
+        generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
+                                                        bytes(p.sizes[x]), cudaMemcpyHostToDevice,
+                                                        context.stream));
+        d.h2d_bytes = checked_add(d.h2d_bytes, bytes(p.sizes[x]));
+      }
       *output_fields[x] = x < requested_outputs ? pointer(r.outputs[x]) : nullptr;
-      generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
-                                                      bytes(p.sizes[x]), cudaMemcpyHostToDevice,
-                                                      context.stream));
       if (x < requested_outputs)
         generativeqc_tensor::cuda_check(
             cudaMemsetAsync(pointer(r.outputs[x]), 0, bytes(p.sizes[x]), context.stream));
-      d.h2d_bytes = checked_add(d.h2d_bytes, bytes(p.sizes[x]));
     }
     generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
     auto* panels = pointer(p.panels);
@@ -520,11 +642,7 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
     auto gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk, double alpha,
                     const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
                     double* c, std::size_t ldc) {
-      generativeqc_tensor::blas_check(
-          cublasDgemm(context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                      tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(m),
-                      static_cast<int>(n), static_cast<int>(kk), &alpha, a, static_cast<int>(lda),
-                      b, static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
       const auto count = checked_mul(m, n);
       const auto blocks =
           static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
@@ -687,30 +805,43 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
   d.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
 }
-DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t q,
-                                       const double* bov, const double* bvv, const double* ovoo,
-                                       const double* ovov, const double* fov, const double* t1,
-                                       const double* t2, const double* eps_o, const double* eps_v,
-                                       double threshold, std::size_t max_bytes, int device,
-                                       std::size_t caller_bytes, std::size_t max_page_rows,
-                                       std::size_t max_panel_buffers) {
+
+DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                      const double* bov, const double* bvv, const double* ovoo,
+                                      const double* ovov, const double* fov, const double* t1,
+                                      const double* t2, const double* eps_o, const double* eps_v,
+                                      double threshold, std::size_t max_bytes, int device,
+                                      std::size_t caller_bytes, std::size_t max_panel_buffers,
+                                      bool parallel_gap_reduction, bool include_gap_response) {
+  return pullback_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold,
+                               max_bytes, device, caller_bytes, max_panel_buffers,
+                               parallel_gap_reduction, include_gap_response, nullptr);
+}
+
+static DFCudaFockResult fock_response_df_cuda_impl(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
+    std::size_t caller_bytes, std::size_t max_page_rows, std::size_t max_panel_buffers,
+    const generated_df::Inputs* prepared_inputs) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
     throw std::invalid_argument("invalid DF triples Fock dimensions, threshold or panel limit");
   auto capacity = max_page_rows ? std::min(o, max_page_rows) : o;
-  auto r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes);
+  auto r =
+      fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes, prepared_inputs != nullptr);
   while (r.complete > max_bytes) {
     // Prefer retaining more resolvent rows over extra cached integral panels:
     // a full page eliminates every cross-occupied recomputation.
     if (r.value.panel_capacity > 1) {
-      r = fock_layout(o, v, q, capacity, 1, caller_bytes);
+      r = fock_layout(o, v, q, capacity, 1, caller_bytes, prepared_inputs != nullptr);
       if (r.complete <= max_bytes) break;
     }
     if (capacity == 1)
       throw std::length_error("DF triples Fock response exceeds complete numeric budget");
     --capacity;
-    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes);
+    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes, prepared_inputs != nullptr);
   }
   const auto& p = r.value;
   const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
@@ -733,11 +864,24 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
     generated_df::Inputs in;
     const std::array<const double**, 9> fields{&in.bov, &in.bvv, &in.ovoo,  &in.ovov, &in.fov,
                                                &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
+    const std::array<const double*, 9> prepared{prepared_inputs ? prepared_inputs->bov : nullptr,
+                                                prepared_inputs ? prepared_inputs->bvv : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovoo : nullptr,
+                                                prepared_inputs ? prepared_inputs->ovov : nullptr,
+                                                prepared_inputs ? prepared_inputs->fov : nullptr,
+                                                prepared_inputs ? prepared_inputs->t1 : nullptr,
+                                                prepared_inputs ? prepared_inputs->t2 : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_o : nullptr,
+                                                prepared_inputs ? prepared_inputs->eps_v : nullptr};
     for (std::size_t x = 0; x < 9; ++x) {
-      *fields[x] = pointer(p.inputs[x]);
-      generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
-                                                      bytes(p.sizes[x]), cudaMemcpyHostToDevice,
-                                                      context.stream));
+      if (prepared_inputs) {
+        *fields[x] = prepared[x];
+      } else {
+        *fields[x] = pointer(p.inputs[x]);
+        generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
+                                                        bytes(p.sizes[x]), cudaMemcpyHostToDevice,
+                                                        context.stream));
+      }
     }
     generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
     generativeqc_tensor::cuda_check(
@@ -747,11 +891,7 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
     auto gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk, double alpha,
                     const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
                     double* c, std::size_t ldc) {
-      generativeqc_tensor::blas_check(
-          cublasDgemm(context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                      tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(m),
-                      static_cast<int>(n), static_cast<int>(kk), &alpha, a, static_cast<int>(lda),
-                      b, static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
       const auto count = checked_mul(m, n);
       const auto blocks =
           static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
@@ -857,9 +997,386 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
   result.occupied_pairs = r.pairs;
   result.unique_vector_cubes = checked_mul(r.pairs, o);
   result.scalar_evaluations = checked_mul(r.cubes, p.v3);
-  result.h2d_bytes = r.host_bytes;
+  result.h2d_bytes = prepared_inputs ? 0 : r.host_bytes;
   result.d2h_bytes = checked_add(r.output_bytes, sizeof(int));
   result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
 }
+
+DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                       const double* bov, const double* bvv, const double* ovoo,
+                                       const double* ovov, const double* fov, const double* t1,
+                                       const double* t2, const double* eps_o, const double* eps_v,
+                                       double threshold, std::size_t max_bytes, int device,
+                                       std::size_t caller_bytes, std::size_t max_page_rows,
+                                       std::size_t max_panel_buffers) {
+  return fock_response_df_cuda_impl(o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v,
+                                    threshold, max_bytes, device, caller_bytes, max_page_rows,
+                                    max_panel_buffers, nullptr);
+}
+
+DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
+    std::size_t caller_bytes, std::size_t max_page_rows, std::size_t max_panel_buffers,
+    bool parallel_gap_reduction, bool include_gap_response) {
+  const auto started = Clock::now();
+  if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
+      !max_panel_buffers || max_panel_buffers > 3)
+    throw std::invalid_argument("invalid combined DF triples response dimensions or controls");
+
+  const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
+  const auto staging_layout = layout(o, v, q, 1);
+  const auto prepared_storage = prepared_input_storage_bytes(staging_layout);
+  const auto prepared_caller = checked_add(caller_bytes, prepared_storage);
+
+  // Joint execution keeps the complete Fock pages plus the pullback outputs and
+  // reverse scratch in one owner. Try the same resource order as the standalone
+  // Fock owner: preserve page rows, then give up extra cached integral panels,
+  // then shrink the page. Complete work/capacity is proven before input access.
+  auto page_capacity = max_page_rows ? std::min(o, max_page_rows) : o;
+  auto plan = joint_response_layout(o, v, q, page_capacity, max_panel_buffers, prepared_caller,
+                                    parallel_gap_reduction, include_gap_response);
+  while (plan.complete > max_bytes) {
+    if (plan.fock.value.panel_capacity > 1) {
+      plan = joint_response_layout(o, v, q, page_capacity, 1, prepared_caller,
+                                   parallel_gap_reduction, include_gap_response);
+      if (plan.complete <= max_bytes) break;
+    }
+    if (page_capacity == 1)
+      throw std::length_error("joint DF triples response exceeds complete numeric budget");
+    --page_capacity;
+    plan = joint_response_layout(o, v, q, page_capacity, max_panel_buffers, prepared_caller,
+                                 parallel_gap_reduction, include_gap_response);
+  }
+  const double minimum = validate_inputs(o, v, q, staging_layout, host, threshold);
+
+  runtime::CudaDeviceScope device_scope(device);
+  PreparedInputs prepared(staging_layout, host);
+
+  DFCudaCombinedResponseResult result;
+  auto& response = result.pullback;
+  auto& d = response.diagnostic;
+  auto& fock = result.fock;
+  auto& p = plan.fock.value;
+  const std::size_t requested_outputs = include_gap_response ? 9 : 7;
+  const std::array<std::vector<double>*, 9> response_outputs{
+      &response.bov, &response.bvv, &response.ovoo,  &response.ovov, &response.fov,
+      &response.t1,  &response.t2,  &response.eps_o, &response.eps_v};
+  for (std::size_t x = 0; x < requested_outputs; ++x) response_outputs[x]->resize(p.sizes[x]);
+  fock.foo.resize(checked_mul(o, o));
+  fock.fvv.resize(checked_mul(v, v));
+
+  int failed = 0;
+  std::size_t response_tiles = 0;
+  {
+    generativeqc_tensor::Context context;
+    cudaDeviceProp properties{};
+    generativeqc_tensor::cuda_check(cudaGetDeviceProperties(&properties, device));
+    context.prepare(device, properties.major, properties.minor, p.arena, p.error, p.library,
+                    blas_workspace, provider_allowance, true);
+    auto pointer = [&](std::size_t offset) {
+      return reinterpret_cast<double*>(context.arena + offset);
+    };
+
+    const generated_df::Inputs in = prepared.values;
+    generated_df::ResponseOutputs out;
+    const std::array<double**, 9> output_fields{&out.bov, &out.bvv, &out.ovoo,  &out.ovov, &out.fov,
+                                                &out.t1,  &out.t2,  &out.eps_o, &out.eps_v};
+    for (std::size_t x = 0; x < requested_outputs; ++x) {
+      *output_fields[x] = pointer(plan.response_outputs[x]);
+      generativeqc_tensor::cuda_check(
+          cudaMemsetAsync(pointer(plan.response_outputs[x]), 0, bytes(p.sizes[x]), context.stream));
+    }
+    generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
+    generativeqc_tensor::cuda_check(
+        cudaMemsetAsync(pointer(plan.fock.foo), 0, bytes(checked_mul(o, o)), context.stream));
+    generativeqc_tensor::cuda_check(
+        cudaMemsetAsync(pointer(plan.fock.fvv), 0, bytes(checked_mul(v, v)), context.stream));
+
+    auto* panels = pointer(p.panels);
+    auto* moments = pointer(p.moments);
+    auto* bar_w = pointer(plan.bar_w);
+    auto* bar_v = pointer(plan.bar_v);
+    auto* bar_panel = pointer(plan.bar_panel);
+    auto* packed = pointer(plan.packed);
+
+    // Shared forward panel/W contractions are charged once to the Fock work
+    // ledger. Pullback-only reverse contractions have a separate ledger below.
+    auto forward_gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk,
+                            double alpha, const double* a, std::size_t lda, const double* b,
+                            std::size_t ldb, double beta, double* c, std::size_t ldc) {
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
+      const auto count = checked_mul(m, n);
+      const auto blocks =
+          static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
+      audit_matrix<<<blocks, 256, 0, context.stream>>>(c, m, n, ldc, context.error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      ++fock.audit_kernels;
+      fock.contraction_summands = checked_add(fock.contraction_summands, checked_mul(count, kk));
+    };
+    auto reverse_gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk,
+                            double alpha, const double* a, std::size_t lda, const double* b,
+                            std::size_t ldb, double beta, double* c, std::size_t ldc) {
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
+      const auto count = checked_mul(m, n);
+      const auto blocks =
+          static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
+      audit_matrix<<<blocks, 256, 0, context.stream>>>(c, m, n, ldc, context.error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      ++response.audit_kernels;
+      ++response.reverse_gemms;
+      d.contraction_summands = checked_add(d.contraction_summands, checked_mul(count, kk));
+    };
+
+    std::array<std::size_t, 3> identities;
+    identities.fill(std::numeric_limits<std::size_t>::max());
+    std::array<std::size_t, 3> ages{};
+    std::size_t epoch = 0;
+    auto panel_for = [&](std::size_t occupied) {
+      std::size_t slot = 0;
+      for (; slot < p.panel_capacity; ++slot)
+        if (identities[slot] == occupied) break;
+      if (slot == p.panel_capacity) {
+        slot = static_cast<std::size_t>(
+            std::min_element(ages.begin(), ages.begin() + p.panel_capacity) - ages.begin());
+        generated_df::build_panel(o, v, q, occupied, in, panels + slot * p.v3, forward_gemm);
+        ++fock.panel_gemms;
+        identities[slot] = occupied;
+      }
+      ages[slot] = ++epoch;
+      return panels + slot * p.v3;
+    };
+
+    const auto small_blocks =
+        static_cast<unsigned>(std::min<std::size_t>(1 + (v * v - 1) / 256, 65535));
+    const auto response_index = [&](std::size_t i, std::size_t j, std::size_t k) {
+      const auto prefix = checked_mul(checked_mul(i, checked_add(i, 1)), checked_add(i, 2)) / 6;
+      const auto row = checked_mul(j, checked_add(j, 1)) / 2;
+      return checked_add(prefix, checked_add(row, k));
+    };
+    const auto run_pullback = [&](std::size_t i, std::size_t j, std::size_t k) {
+      const std::array<std::size_t, 3> occupied{i, j, k};
+      const double multiplicity = i == k ? 6.0 : (i == j || j == k ? 2.0 : 1.0);
+      const auto tile = response_index(i, j, k);
+      if (tile >= p.tiles) throw std::logic_error("joint triples response tile index overflow");
+
+      generated_df::energy_tile(o, v, i, j, k, multiplicity, threshold, in, moments, p.blocks,
+                                pointer(p.partials), context.error, context.stream);
+      ++d.epilogue_kernels;
+      reduce<<<1, 256, 0, context.stream>>>(pointer(p.partials), p.blocks,
+                                            pointer(p.energies) + tile, context.error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      ++d.reduction_kernels;
+
+      generated_df::response_w_tile(o, v, i, j, k, multiplicity, threshold, in, moments, p.blocks,
+                                    bar_w, context.error, context.stream);
+      ++response.reverse_kernels;
+      for (unsigned perm = 0; perm < 6; ++perm) {
+        const auto* order = generated_df::permutations[perm];
+        const auto I = occupied[order[0]], J = occupied[order[1]], K = occupied[order[2]];
+        generated_df::response_v_tile(o, v, i, j, k, perm, multiplicity, threshold, in, moments,
+                                      p.blocks, bar_v, context.error, context.stream);
+        ovov_view<false>
+            <<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, in.ovov, packed, context.error);
+        generativeqc_tensor::cuda_check(cudaGetLastError());
+        generated_df::pullback_v(o, v, I, J, K, in, packed, bar_v, packed, out, reverse_gemm);
+        ovov_view<true>
+            <<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, packed, out.ovov, context.error);
+        generativeqc_tensor::cuda_check(cudaGetLastError());
+        response.reverse_kernels += 3;
+      }
+
+      if (include_gap_response) {
+        generated_df::response_gap_tile(o, v, i, j, k, multiplicity, threshold, in, moments,
+                                        p.blocks, bar_v, context.error, context.stream);
+        generated_df::GapCudaState gap{
+            o, v, bar_v, pointer(plan.gap), context.error, context.stream, parallel_gap_reduction};
+        const auto gaps = generated_df::gap_response_cuda(gap);
+        scatter_gap<<<small_blocks, 256, 0, context.stream>>>(v, i, j, k, gaps, out.eps_o,
+                                                              out.eps_v, context.error);
+        generativeqc_tensor::cuda_check(cudaGetLastError());
+        const auto gap_kernels =
+            generated_df::gap_response_kernel_count(o, v, parallel_gap_reduction);
+        response.reverse_kernels += 2 + gap_kernels;
+        response.gap.kernels += gap_kernels;
+      }
+
+      for (std::size_t index = 0; index < 3; ++index) {
+        if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
+            occupied.begin() + index)
+          continue;
+        const auto I = occupied[index];
+        const auto* panel = panel_for(I);
+        generativeqc_tensor::cuda_check(cudaMemsetAsync(bar_panel, 0, bytes(p.v3), context.stream));
+        for (std::size_t perm = 0; perm < 6; ++perm) {
+          const auto* order = generated_df::permutations[perm];
+          if (occupied[order[0]] != I) continue;
+          generated_df::pullback_w(o, v, I, occupied[order[1]], occupied[order[2]], in, panel,
+                                   bar_w + perm * p.v3, bar_panel, out, reverse_gemm);
+        }
+        generated_df::pullback_panel(o, v, q, I, in, bar_panel, out, reverse_gemm);
+      }
+      ++response_tiles;
+    };
+
+    auto page = [&](std::size_t start, std::size_t j, std::size_t k, double* x, double* y,
+                    bool run_response) {
+      ++fock.page_builds;
+      const auto page_bytes = bytes(checked_mul(page_capacity, p.v3));
+      generativeqc_tensor::cuda_check(cudaMemsetAsync(x, 0, page_bytes, context.stream));
+      generativeqc_tensor::cuda_check(cudaMemsetAsync(y, 0, page_bytes, context.stream));
+      for (std::size_t lane = 0; lane < page_capacity && start + lane < o; ++lane) {
+        const auto i = start + lane;
+        const std::array<std::size_t, 3> occupied{i, j, k};
+        for (std::size_t index = 0; index < 3; ++index) {
+          if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
+              occupied.begin() + index)
+            continue;
+          const auto* panel = panel_for(occupied[index]);
+          for (std::size_t perm = 0; perm < 6; ++perm) {
+            const auto* order = generated_df::permutations[perm];
+            if (occupied[order[0]] != occupied[index]) continue;
+            generated_df::build_w(o, v, occupied[order[0]], occupied[order[1]], occupied[order[2]],
+                                  in, panel, moments + perm * p.v3, forward_gemm);
+            fock.w_gemms += 2;
+          }
+        }
+        generated_df::resolvent_tile(o, v, i, j, k, threshold, in, moments, p.blocks,
+                                     x + lane * p.v3, y + lane * p.v3, context.error,
+                                     context.stream);
+        ++fock.vector_cubes;
+        // k<=j is fixed by the outer traversal. i>=j selects every unordered
+        // occupied triple exactly once, so its W moments can serve pullback too.
+        if (run_response && i >= j) run_pullback(i, j, k);
+      }
+    };
+
+    const auto scatter_blocks = static_cast<unsigned>(
+        std::min<std::size_t>(1 + (page_capacity * page_capacity - 1) / 256, 65535));
+    for (std::size_t j = 0; j < o; ++j)
+      for (std::size_t k = 0; k <= j; ++k) {
+        const double weight = j == k ? 1.0 : 2.0;
+        for (std::size_t left = 0; left < o; left += page_capacity) {
+          // Every page becomes a left page exactly once. Run pullback only here;
+          // right-page replay below is purely a bounded Fock-storage fallback.
+          page(left, j, k, pointer(plan.fock.xl), pointer(plan.fock.yl), true);
+          for (std::size_t lane = 0; lane < page_capacity && left + lane < o; ++lane) {
+            generated_df::fock_vv(v, page_capacity, pointer(plan.fock.xl) + lane * p.v3,
+                                  pointer(plan.fock.yl) + lane * p.v3, weight,
+                                  pointer(plan.fock.fvv), forward_gemm);
+            fock.fock_gemms += 2;
+          }
+          for (std::size_t right = left; right < o; right += page_capacity) {
+            if (left != right)
+              page(right, j, k, pointer(plan.fock.xr), pointer(plan.fock.yr), false);
+            generated_df::fock_oo(v, page_capacity, pointer(plan.fock.xl),
+                                  pointer(left == right ? plan.fock.xl : plan.fock.xr),
+                                  pointer(plan.fock.yl),
+                                  pointer(left == right ? plan.fock.yl : plan.fock.yr), weight,
+                                  pointer(plan.fock.block), forward_gemm);
+            fock.fock_gemms += 2;
+            scatter_fock_block<<<scatter_blocks, 256, 0, context.stream>>>(
+                o, page_capacity, left, right, pointer(plan.fock.block), pointer(plan.fock.foo),
+                context.error);
+            generativeqc_tensor::cuda_check(cudaGetLastError());
+            ++fock.scatter_kernels;
+          }
+        }
+      }
+
+    if (response_tiles != p.tiles)
+      throw std::logic_error("joint DF triples pullback work mismatch");
+    if (fock.vector_cubes != plan.fock.cubes || fock.page_builds != plan.fock.page_builds)
+      throw std::logic_error("joint DF triples Fock replay work mismatch");
+
+    response.gap.requested = include_gap_response;
+    if (include_gap_response) {
+      response.gap.parallel =
+          generated_df::gap_response_parallel_selected(v, parallel_gap_reduction);
+      response.gap.schedule = response.gap.parallel
+                                  ? generated_df::gap_response_parallel_schedule_identity
+                                  : "serial-source-major";
+      response.gap.workspace_bytes =
+          bytes(generated_df::gap_response_arena_elements(o, v, parallel_gap_reduction));
+      response.gap.materialized_elements = checked_mul(
+          p.tiles, generated_df::gap_response_materialized_elements(o, v, parallel_gap_reduction));
+      response.gap.value_reads = checked_mul(
+          p.tiles, generated_df::gap_response_value_reads(o, v, parallel_gap_reduction));
+      response.gap.value_writes = checked_mul(
+          p.tiles, generated_df::gap_response_value_writes(o, v, parallel_gap_reduction));
+      response.gap.reduction_summands = checked_mul(
+          p.tiles, generated_df::gap_response_reduction_summands(o, v, parallel_gap_reduction));
+    } else {
+      response.gap.schedule = generated_df::response_without_gap_identity;
+    }
+
+    reduce<<<1, 256, 0, context.stream>>>(pointer(p.energies), p.tiles, pointer(p.energy),
+                                          context.error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+    ++d.reduction_kernels;
+    for (std::size_t x = 0; x < requested_outputs; ++x)
+      generativeqc_tensor::cuda_check(
+          cudaMemcpyAsync(response_outputs[x]->data(), pointer(plan.response_outputs[x]),
+                          bytes(p.sizes[x]), cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(&d.energy, pointer(p.energy), sizeof(double),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(fock.foo.data(), pointer(plan.fock.foo),
+                                                    bytes(checked_mul(o, o)),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(fock.fvv.data(), pointer(plan.fock.fvv),
+                                                    bytes(checked_mul(v, v)),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(&failed, context.error, sizeof(int),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    if (failed || !std::isfinite(d.energy))
+      throw std::runtime_error("nonfinite or unsafe joint DF triples response arithmetic");
+
+    d.minimum_absolute_denominator = minimum;
+    d.virtual_triples = checked_mul(checked_mul(v, checked_add(v, 1)), checked_add(v, 2)) / 6;
+    d.occupied_tiles = p.tiles;
+    d.epilogue_points = checked_mul(p.tiles, p.v3);
+    d.workspace_bytes = p.total;
+    d.arena_bytes = p.arena;
+    d.provider_retained_bytes = context.metrics.provider_retained_bytes;
+    d.panel_capacity = p.panel_capacity;
+    d.h2d_bytes = prepared.h2d_bytes;
+    d.d2h_bytes = checked_add(plan.response_output_bytes, sizeof(double) + sizeof(int));
+    response.borrowed_host_bytes = plan.fock.host_bytes;
+    response.numeric_capacity_bytes = plan.complete;
+    response.scalar_response_evaluations =
+        checked_mul(include_gap_response ? generated_df::response_scalar_outputs_with_gap
+                                         : generated_df::response_scalar_outputs_without_gap,
+                    d.epilogue_points);
+
+    fock.minimum_absolute_denominator = minimum;
+    fock.numeric_capacity_bytes = plan.complete;
+    fock.borrowed_host_bytes = plan.fock.host_bytes;
+    fock.workspace_bytes = p.total;
+    fock.arena_bytes = p.arena;
+    fock.provider_retained_bytes = context.metrics.provider_retained_bytes;
+    fock.page_capacity = page_capacity;
+    fock.page_count = plan.fock.pages;
+    fock.panel_capacity = p.panel_capacity;
+    fock.occupied_pairs = plan.fock.pairs;
+    fock.unique_vector_cubes = checked_mul(plan.fock.pairs, o);
+    fock.scalar_evaluations = checked_mul(plan.fock.cubes, p.v3);
+    fock.h2d_bytes = 0;
+    // The shared sticky status is attributed to pullback, so the Fock D2H count
+    // contains only its detached matrices.
+    fock.d2h_bytes = plan.fock.output_bytes;
+  }
+
+  result.shared_input_device_bytes = prepared.storage_bytes;
+  result.shared_h2d_bytes = prepared.h2d_bytes;
+  result.shared_response_cubes = response_tiles;
+  result.avoided_w_gemms = checked_mul(12, response_tiles);
+  result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
+  d.seconds = result.seconds;
+  fock.seconds = 0.0;
+  return result;
+}
+
 }  // namespace generativeqc::cc::triples

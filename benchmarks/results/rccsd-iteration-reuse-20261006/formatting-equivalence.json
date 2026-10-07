@@ -1,0 +1,19 @@
+{
+  "scope": "clang-format 23.1.2 only; apply patch to restore measured source bytes, preserving exact recorded provenance",
+  "files": [
+    {
+      "path": "src/cc/solver.cpp",
+      "measured_sha256": "4f861c20ed5b5d4bd09660355437705a177485baefdecbabca579c5507c073bf",
+      "formatted_sha256": "b9ca09b8af2bc75659e883f356f3236ebb95c7c126832471aa107c1f1cd0d7eb",
+      "non_whitespace_bytes_and_include_inventory_equal": true
+    },
+    {
+      "path": "benchmarks/rccsd_iteration_reuse.cpp",
+      "measured_sha256": "4324a7abfa831b3ef8ea724824002c6106ec2d00f069099e3bd5c71fcce08b8d",
+      "formatted_sha256": "671c617a0345f701325c45b6d106accbeba47776246499ec55c09bef9e590830",
+      "non_whitespace_bytes_and_include_inventory_equal": true
+    }
+  ],
+  "patch_sha256": "12c548cf0ab0d72f27d448e794f8bc5f67467ba98b06897115e1b954c8ff086e",
+  "restore_command": "git apply --unidiff-zero benchmarks/results/rccsd-iteration-reuse-20261006/restore-measured-format.patch"
+}

@@ -6,11 +6,14 @@ They do not qualify GPU numerics or CUDA event performance.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,10 +29,9 @@ def _definition(source: str, signature: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def profile_program(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def profile_program(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     methods = "\n".join(
         _definition(source, signature).replace("CudaKsPlan::", "")
@@ -42,6 +44,7 @@ def profile_program(tmp_path_factory: pytest.TempPathFactory) -> Path:
         (ROOT / "src/runtime/resource_cuda.cuh").read_text(),
         "template <class Cleanup>\nclass ResourceScopeExit",
     )
+    range_method = _definition(source, "  void enqueue_range_correction(")
     harness = r"""
 #include <algorithm>
 #include <array>
@@ -58,17 +61,42 @@ def profile_program(tmp_path_factory: pytest.TempPathFactory) -> Path:
 using cudaStream_t = int;
 using cudaStreamCaptureStatus = int;
 constexpr int cudaStreamCaptureStatusNone = 0, cudaMemcpyDeviceToHost = 1;
-static int mode{}, drains{}, submissions{}, records{}, synchronizations{}, reads{};
+static int mode{}, drains{}, range_drains{}, submissions{}, records{}, synchronizations{}, reads{};
 static bool timing{};
-static std::vector<std::function<void()>> pending;
-static std::vector<char> stages;
+static std::vector<std::function<void()>> pending, range_pending;
+static std::vector<char> stages, bridge;
 static std::function<void()> change_token;
+void flush_range() {
+  auto work = std::move(range_pending); range_pending.clear(); for (auto& f : work) f();
+}
 void flush() { auto work = std::move(pending); pending.clear(); for (auto& f : work) f(); }
 int cudaSetDevice(int device) { assert(device == 2); return 0; }
-int cudaStreamSynchronize(int stream) { assert(stream == 7); ++drains; flush(); return 0; }
+int cudaStreamSynchronize(int stream) {
+  assert(stream == 7 || stream == 11);
+  if (stream == 7) { assert(range_pending.empty()); ++drains; flush(); }
+  else { ++range_drains; flush_range(); }
+  return 0;
+}
+int cudaStreamWaitEvent(int stream, char event, unsigned flags) {
+  assert(flags == 0);
+  if (event == 'I') {
+    assert(stream == 11 && bridge.back() == 'I');
+    if (mode == 23) return GENERATIVEQC_STATUS_CUDA_ERROR;
+    bridge.push_back('i');
+  } else {
+    assert(event == 'O' && stream == 7 && bridge.back() == 'O');
+    if (mode == 27) return GENERATIVEQC_STATUS_CUDA_ERROR;
+    bridge.push_back('o');
+    // Only the output-event dependency lets the primary stream consume work
+    // submitted on the separately owned Direct LR stream.
+    pending.emplace_back(flush_range);
+  }
+  return 0;
+}
 int cudaStreamIsCapturing(int, int* capture) { *capture = mode == 6; return 0; }
 int cudaMemcpy(void* destination, const void* source, std::size_t bytes, int) {
-  assert(!timing && pending.empty()); ++reads; std::memcpy(destination, source, bytes); return 0;
+  assert(!timing && pending.empty() && range_pending.empty());
+  ++reads; std::memcpy(destination, source, bytes); return 0;
 }
 void check(int status, const std::string& detail = {}) {
   if (status) throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, detail);
@@ -94,13 +122,28 @@ class OwnedCudaEvent {
     flush();
   }
   float elapsed_since(const OwnedCudaEvent&) {
-    assert(pending.empty());
+    assert(pending.empty() && range_pending.empty());
     if (mode == 15) throw std::runtime_error("elapsed failed");
     return 2.0f;
   }
 };
 }
 namespace runtime = generativeqc::runtime;
+struct RangeEvent {
+  char id;
+  char get() const { return id; }
+  void record(int stream) {
+    assert(timing);
+    if (id == 'I') {
+      assert(stream == 7);
+      if (mode == 22) throw std::runtime_error("input record failed");
+    } else {
+      assert(id == 'O' && stream == 11 && bridge.back() == 'R');
+      if (mode == 26) throw std::runtime_error("output record failed");
+    }
+    bridge.push_back(id);
+  }
+};
 namespace scf {
 struct Term { bool present{true}; double coefficient{1.0}; };
 struct Spec { Term coulomb, exchange{true, -0.125}; };
@@ -108,12 +151,13 @@ struct Strategy { Spec spec; };
 struct Direct {};
 struct Fitted {};
 struct Provider {
+  bool is_range{};
   Strategy model;
   Direct direct;
   Fitted fitted;
   const Strategy& strategy() const { return model; }
-  Direct* cuda_direct_source() { return mode == 4 ? nullptr : &direct; }
-  Fitted* cuda_fitted_source() { return mode == 4 ? &fitted : nullptr; }
+  Direct* cuda_direct_source() { return mode == 4 || mode >= 21 ? nullptr : &direct; }
+  Fitted* cuda_fitted_source() { return mode == 4 || mode >= 21 ? &fitted : nullptr; }
 };
 struct JkTermSelection { bool coulomb, exchange; };
 enum class FockMatrixLayout { RowMajor };
@@ -127,11 +171,12 @@ int enqueue(char stage, const double* density, const double* beta, std::size_t m
   assert((stage == 'J') == bool(j));
   assert((stage != 'J') == bool(k));
   ++submissions; stages.push_back(stage);
-  pending.emplace_back([=] {
+  auto& work = stage == 'R' && mode >= 21 ? range_pending : pending;
+  work.emplace_back([=] {
     if (j) *j = 10;
     if (k) *k = 20;
     if (kb) *kb = 30;
-    if (error) *error = (mode == 10 && stage == 'R');
+    if (error) *error = ((mode == 10 || mode == 28) && stage == 'R');
   });
   if (mode == 8 && stage == 'J') throw std::bad_alloc();
   return mode == 9 && stage == 'K' ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;
@@ -154,11 +199,20 @@ int execute_cuda_density_fitting_rhf_jk_device(Fitted* p, const double* density,
   return execute_cuda_density_fitting_uhf_jk_device(p, density, nullptr, j, k, nullptr,
                                                    detail, terms, layout);
 }
-int enqueue_prepared_cuda_exchange_correction(Provider&, const Spec& spec,
+int enqueue_prepared_cuda_exchange_correction(Provider& provider, const Spec& spec,
     const double* density, const double* beta, std::size_t matrix, double* k,
     double* kb, int* error, std::string&) {
-  assert(spec.exchange.coefficient == -0.375);
+  assert(!provider.is_range && mode < 21 && spec.exchange.coefficient == -0.375);
   return enqueue('R', density, beta, matrix, nullptr, k, kb, error);
+}
+int enqueue_prepared_cuda_fock(Provider& provider, const double* density, const double* beta,
+    std::size_t matrix, double* j, double* k, double* kb, int* error,
+    bool synchronous, std::string&) {
+  assert(provider.is_range && mode >= 21 && !j && !synchronous && bridge.back() == 'i');
+  bridge.push_back('R');
+  const auto status = enqueue('R', density, beta, matrix, j, k, kb, error);
+  if (mode == 24) throw std::runtime_error("range provider failed after mutation");
+  return mode == 25 ? GENERATIVEQC_STATUS_CUDA_ERROR : status;
 }
 }
 struct CudaKsFinalStateToken {
@@ -200,6 +254,10 @@ struct Impl {
   scf::Spec correction;
   scf::Spec* range_correction{&correction};
   scf::Provider provider;
+  scf::Provider separate_range_provider;
+  scf::Provider* range_provider{};
+  struct { int stream{11}; } range_fock_binding;
+  RangeEvent range_input_ready{'I'}, range_output_ready{'O'};
   std::unique_ptr<Xc> xc{std::make_unique<Xc>()};
   void* nonlocal_correlation{};
   CudaKsFinalStateToken token() const {
@@ -208,6 +266,7 @@ struct Impl {
   }
   void current_device() const { check(cudaSetDevice(device)); }
   Impl() { correction.exchange.coefficient = -0.375; }
+RANGE_METHOD
 };
 struct Owner {
   std::unique_ptr<Impl> impl_{std::make_unique<Impl>()};
@@ -221,6 +280,10 @@ int main(int argc, char** argv) {
   if (mode == 3) p.nonlocal_correlation = &p;
   if (mode == 4) p.has_range_correction = false;
   if (mode == 17) p.xc.reset();
+  if (mode >= 21) {
+    p.separate_range_provider.is_range = true;
+    p.range_provider = &p.separate_range_provider;
+  }
   change_token = [&] { ++p.identity; };
   CudaKsFinalStateToken expected = p.token();
   if (mode == 5) ++expected.identity;
@@ -229,10 +292,14 @@ int main(int argc, char** argv) {
   auto run = [&] { return owner.profile_fixed_density_components(expected, profile, detail); };
   const auto status = run();
   const bool preflight_failure = mode == 5 || mode == 6 || mode == 7 || mode == 20;
-  const bool success = mode < 5 || mode == 17;
+  const bool success = mode < 5 || mode == 17 || mode == 21;
   assert((status == GENERATIVEQC_STATUS_SUCCESS) == success);
+  if (mode == 23 || mode == 25 || mode == 27)
+    assert(status == GENERATIVEQC_STATUS_CUDA_ERROR);
+  if (mode == 22 || mode == 24 || mode == 26 || mode == 28)
+    assert(status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE);
   for (int i = 0; i != 8; ++i) assert(p.density[i] == i + 1);
-  assert(pending.empty());
+  assert(pending.empty() && range_pending.empty());
   if (success) {
     const unsigned mask = mode == 2 ? 9 : mode == 3 || mode == 17 ? 7 : mode == 4 ? 11 : 15;
     assert(profile.present_mask == mask && p.token() == expected && drains == 0);
@@ -244,6 +311,11 @@ int main(int argc, char** argv) {
     assert(records == int(2 * count) && synchronizations == int(count));
     assert(run() == GENERATIVEQC_STATUS_SUCCESS && p.token() == expected);
     assert(stages.size() == 2 * count && drains == 0);
+    if (mode == 21) {
+      assert((bridge == std::vector<char>{'I','i','R','O','o','I','i','R','O','o'}));
+      assert(p.range_exchange[0] == 20);
+      if (p.spins == 2) assert(p.range_exchange[4] == 30);
+    }
   } else {
     assert(profile.present_mask == 0);
     for (auto value : profile.milliseconds) assert(value == 0);
@@ -259,37 +331,54 @@ int main(int argc, char** argv) {
       assert(run() == GENERATIVEQC_STATUS_INVALID_ARGUMENT && submissions == count);
     }
   }
+  // Submission failures must drain the correction stream before lease
+  // revocation. Pre-submission failures and successful event joins need none.
+  assert((range_drains > 0) == (mode >= 24 && mode <= 27));
+  if (mode < 21) assert(bridge.empty());
+  if (mode >= 22) {
+    const std::array<std::string, 7> expected_bridge{"", "I", "IiR", "IiR", "IiR", "IiRO", "IiROo"};
+    assert(std::string(bridge.begin(), bridge.end()) == expected_bridge[mode - 22]);
+  }
 }
 """
     directory = tmp_path_factory.mktemp("fixed-density-profile")
     cpp = directory / "profile.cpp"
     binary = directory / "profile"
-    cpp.write_text(harness.replace("GUARD", guard).replace("METHODS", methods))
-    cache = shutil.which("ccache")
-    compiled = subprocess.run(
-        [
-            *([cache] if cache else []),
-            compiler,
+    cpp.write_text(
+        harness.replace("GUARD", guard)
+        .replace("METHODS", methods)
+        .replace("RANGE_METHOD", range_method)
+    )
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=[
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I",
             str(ROOT / "include"),
-            str(cpp),
-            "-o",
-            str(binary),
         ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
+        compile_timeout=60,
     )
-    assert compiled.returncode == 0, compiled.stderr
     return binary
 
 
-@pytest.mark.parametrize("mode", range(21))
+@pytest.mark.parametrize(
+    "mode",
+    [
+        *range(21),
+        pytest.param(21, id="mixed-provider-stream-join"),
+        pytest.param(22, id="range-input-record-failure"),
+        pytest.param(23, id="range-input-wait-failure"),
+        pytest.param(24, id="range-provider-exception"),
+        pytest.param(25, id="range-provider-status-error"),
+        pytest.param(26, id="range-output-record-failure"),
+        pytest.param(27, id="range-output-wait-failure"),
+        pytest.param(28, id="range-device-error"),
+    ],
+)
 @pytest.mark.parametrize("spins", [1, 2])
 def test_fixed_density_profile_lease_and_routing(
     profile_program: Path, mode: int, spins: int

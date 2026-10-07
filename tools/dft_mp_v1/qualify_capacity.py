@@ -347,8 +347,10 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Audited full-range Combined output has three channels; Separate/DF retains
 # four. The bounded v1 fallback, strict shape/finite checks, host reserve and
 # complete reduction remain bound by the exact whole-owner source span.
+# The DF resident-one-electron metadata distinguishes device execution from
+# host fallback without changing admission or claiming DF-response coverage.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "a4584a1183c7e70cdd971294b8774b535856331a720be61e019b377d7afedcc3"
+    "34b24d3895eed20d7846c81380dd040afbc6d9fadf423a1dbb27f0908f9c4c60"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"

@@ -196,14 +196,16 @@ class CudaKsPlan {
              const scf::ResolvedFockBuild* range_correction = nullptr,
              nlc::Vv10Plan* nonlocal_correlation = nullptr,
              nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive,
-             CudaXcPreparationBudget xc_budget = {});
+             CudaXcPreparationBudget xc_budget = {},
+             const scf::PreparedFockPlan* range_provider = nullptr);
   CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis, const MolecularGrid& grid,
              const scf::ScfOptions& options, SemilocalFamily functional,
              std::size_t tile_points = 256,
              const scf::ResolvedFockBuild* range_correction = nullptr,
              nlc::Vv10Plan* nonlocal_correlation = nullptr,
              nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive,
-             CudaXcPreparationBudget xc_budget = {});
+             CudaXcPreparationBudget xc_budget = {},
+             const scf::PreparedFockPlan* range_provider = nullptr);
   ~CudaKsPlan();
   CudaKsPlan(const CudaKsPlan&) = delete;
   CudaKsPlan& operator=(const CudaKsPlan&) = delete;
