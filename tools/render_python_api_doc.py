@@ -155,8 +155,11 @@ def render_python_api_markdown(package: Path | None = None) -> str:
                 "   :show-inheritance:",
             ]
         )
-        if module.name != package.name:
-            lines.append("   :no-index:")
+        # This re-export already has its canonical target in the root facade.
+        # Suppress only that duplicate, preserving every unique module/member
+        # target for autosummary links, cross-references, and deep links.
+        if module.name == "generativeqc.extensions.xc":
+            lines.append("   :exclude-members: FunctionalSpec")
         lines.extend([fence, ""])
     return "\n".join(lines)
 

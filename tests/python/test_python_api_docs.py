@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +12,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 from tools import render_python_api_doc as renderer
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _write(path: Path, content: str) -> None:
@@ -43,6 +48,7 @@ class PythonApiDocumentationTests(unittest.TestCase):
             self.assertIn("generativeqc.nested.feature", rendered)
             self.assertNotIn("ordinary_internal", rendered)
             self.assertNotIn("_private", rendered)
+            self.assertNotIn(":no-index:", rendered)
 
     def test_nonliteral_public_all_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -87,6 +93,70 @@ class PythonApiDocumentationTests(unittest.TestCase):
                 renderer.render_python_api_source(app, "index", source)
             self.assertEqual(source, ["unrelated"])
             self.assertFalse(registered)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("sphinx"), "requires documentation dependencies"
+    )
+    def test_rendered_reference_preserves_module_and_member_targets(self) -> None:
+        from sphinx.util.inventory import InventoryFile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            docs = root / "docs"
+            output = root / "html"
+            _write(
+                docs / "conf.py",
+                "import sys\n"
+                f"sys.path[:0] = [{str(ROOT)!r}, {str(ROOT / 'python')!r}]\n"
+                "from tools.render_python_api_doc import render_python_api_source\n"
+                "extensions = ['myst_parser', 'sphinx.ext.autodoc', "
+                "'sphinx.ext.autosummary']\n"
+                "root_doc = 'index'\n"
+                "autodoc_mock_imports = ['torch']\n"
+                "autodoc_typehints_format = 'fully-qualified'\n"
+                "def setup(app):\n"
+                "    app.connect('source-read', render_python_api_source)\n",
+            )
+            _write(docs / "index.md", "# Test\n\n```{toctree}\nreference/api\n```\n")
+            _write(docs / "reference/api.md", "# Generated shell\n")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "sphinx",
+                    "-W",
+                    "--keep-going",
+                    "-b",
+                    "html",
+                    str(docs),
+                    str(output),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            html = (output / "reference/api.html").read_text(encoding="utf-8")
+            with (output / "objects.inv").open("rb") as stream:
+                inventory = InventoryFile.load(stream, "", lambda _, uri: uri)
+            for module in renderer.public_api_modules():
+                with self.subTest(module=module.name):
+                    self.assertIn(f'id="module-{module.name}"', html)
+                    self.assertIn(f'href="#module-{module.name}"', html)
+                    self.assertIn(module.name, inventory["py:module"])
+            for kind, name in (
+                ("class", "generativeqc.Calculator"),
+                ("class", "generativeqc.FunctionalSpec"),
+                ("class", "generativeqc.response_problem.ResponseProblem"),
+                ("function", "generativeqc.extensions.method.compose"),
+                ("function", "generativeqc.extensions.tensor.compile"),
+                ("function", "generativeqc.extensions.xc.named"),
+                ("function", "generativeqc.torch.energy"),
+            ):
+                with self.subTest(member=name):
+                    self.assertIn(f'id="{name}"', html)
+                    self.assertIn(name, inventory[f"py:{kind}"])
 
 
 if __name__ == "__main__":
