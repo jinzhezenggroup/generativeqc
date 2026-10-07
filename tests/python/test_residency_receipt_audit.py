@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from tools.audit_residency_receipts import audit, audit_df_trace
@@ -306,3 +309,56 @@ def test_historical_production_trace_is_source_matched_but_incomplete() -> None:
     assert result["diagnostic_final_waits"] == 8
     historical["identity"]["native_source"] = "3" * 64
     assert audit_df_trace(historical, trace, manifest)["status"] == "INCOMPLETE"
+
+
+def test_historical_trace_sha_tampering_and_empty_stream_are_incomplete(
+    tmp_path: Path,
+) -> None:
+    historical = json.loads((EVIDENCE / "historical-oh-df-contract.json").read_text())
+    manifest = json.loads((OLD / "manifest.json").read_text())
+    trace = OLD / "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto.jsonl"
+    altered = copy.deepcopy(manifest)
+    matching = next(
+        row
+        for row in altered["records"]
+        if row["retained"].endswith("oh-def2-svp-spherical-uhf-auto.jsonl")
+    )
+    matching["stored_sha256"] = "0" * 64
+    assert "SHA-256 mismatch" in audit_df_trace(historical, trace, altered)["reason"]
+
+    empty = tmp_path / "empty.jsonl"
+    empty.write_bytes(b"")
+    blank_hash = hashlib.sha256(b"").hexdigest()
+    altered["records"] = [
+        {
+            "retained": empty.as_posix(),
+            "stored_sha256": blank_hash,
+            "original_sha256": blank_hash,
+        }
+    ]
+    assert audit_df_trace(historical, empty, altered) == {
+        "status": "INCOMPLETE",
+        "reason": "empty DF trace",
+    }
+
+
+def test_cli_bad_json_reports_incomplete(tmp_path: Path) -> None:
+    expected = tmp_path / "contract.json"
+    observed = tmp_path / "receipt.json"
+    expected.write_text(json.dumps(contract()), encoding="utf-8")
+    observed.write_text("{bad", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/audit_residency_receipts.py"),
+            "--contract",
+            str(expected),
+            "--receipt",
+            str(observed),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["status"] == "INCOMPLETE"
