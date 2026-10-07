@@ -27,16 +27,20 @@ core::System water_cation() {
                   {1, {1.43233673, 0.0, 1.10715266}},
                   {1, {-1.43233673, 0.0, 1.10715266}}};
   system.shells = {
-      {0, 0, {{2266.1767785, -0.0053431809926},
-              {340.87010191, -0.03989003923},
-              {77.363135167, -0.17853911985},
-              {21.47964494, -0.46427684959},
-              {6.6589433124, -0.44309745172}}},
+      {0,
+       0,
+       {{2266.1767785, -0.0053431809926},
+        {340.87010191, -0.03989003923},
+        {77.363135167, -0.17853911985},
+        {21.47964494, -0.46427684959},
+        {6.6589433124, -0.44309745172}}},
       {0, 0, {{0.80975975668, 1.0}}},
       {0, 0, {{0.25530772234, 1.0}}},
-      {0, 1, {{17.721504317, 0.043394573193},
-              {3.863550544, 0.23094120765},
-              {1.0480920883, 0.51375311064}}},
+      {0,
+       1,
+       {{17.721504317, 0.043394573193},
+        {3.863550544, 0.23094120765},
+        {1.0480920883, 0.51375311064}}},
       {0, 1, {{0.27641544411, 1.0}}},
       {0, 2, {{1.2, 1.0}}},
       {1, 0, {{13.010701, 0.019682158}, {1.9622572, 0.13796524}, {0.44453796, 0.47831935}}},
@@ -86,9 +90,9 @@ double maximum_torque(const core::System& system, const std::vector<double>& for
 void check_route(const char* name, bool reference) {
   const auto system = water_cation();
   const auto options = controls();
-  const scf::ScfResult result =
-      reference ? scf::run_cpu_reference_fock_strategy(system, nullptr, options)
-                : scf::run_cpu_fock_strategy(system, nullptr, options);
+  const scf::ScfResult result = reference
+                                    ? scf::run_cpu_reference_fock_strategy(system, nullptr, options)
+                                    : scf::run_cpu_fock_strategy(system, nullptr, options);
   require(result.converged, std::string(name) + " route did not converge");
   require(result.forces.size() == 9, std::string(name) + " route did not publish forces");
   const double torque = maximum_torque(system, result.forces);
