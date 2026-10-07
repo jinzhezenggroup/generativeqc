@@ -174,10 +174,15 @@ def test_df_bridge_keeps_nine_slot_wire_and_marks_partial_scope() -> None:
 def test_cuda_df_one_electron_borrows_final_stationary_weights() -> None:
     source = (ROOT / "src/methods/dft_method.cpp").read_text()
     begin = source.index("  generativeqc_status density_fitted_integral_gradient(")
-    end = source.index("  generativeqc_status cuda_full_range_integral_derivatives(", begin)
+    end = source.index(
+        "  generativeqc_status cuda_full_range_integral_derivatives(", begin
+    )
     method = source[begin:end]
 
-    assert "resident_final_stationary_weights(expected, resident_weights, detail)" in method
+    assert (
+        "resident_final_stationary_weights(expected, resident_weights, detail)"
+        in method
+    )
     assert "execute_cuda_stationary_one_electron_pair(" in method
     assert "system_, {}, {}, 0, maximum_bytes" in method
     assert "resident_weights.density, resident_weights.weighted_density" in method
@@ -198,9 +203,9 @@ def test_df_python_metadata_distinguishes_resident_one_electron() -> None:
         slots: int,
     ) -> int:
         assert slots == 9 and count == 24
-        np.ctypeslib.as_array(
-            ct.cast(output, ct.POINTER(ct.c_double)), shape=(count,)
-        )[:] = 0
+        np.ctypeslib.as_array(ct.cast(output, ct.POINTER(ct.c_double)), shape=(count,))[
+            :
+        ] = 0
         values = np.ctypeslib.as_array(
             ct.cast(usage, ct.POINTER(ct.c_uint64)), shape=(slots,)
         )

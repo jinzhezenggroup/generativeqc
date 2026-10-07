@@ -1123,8 +1123,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const auto resident_status =
           cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
       if (resident_status == GENERATIVEQC_STATUS_SUCCESS) {
-        if (!resident_weights ||
-            resident_weights.device_id != expected.identity.model.device ||
+        if (!resident_weights || resident_weights.device_id != expected.identity.model.device ||
             resident_weights.matrix_elements != matrix_elements ||
             resident_weights.spins != spins) {
           detail = "CUDA DF stationary D/W binding is incompatible with the final KS state";

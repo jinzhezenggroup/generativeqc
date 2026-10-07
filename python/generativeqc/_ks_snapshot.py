@@ -618,9 +618,7 @@ class NativeKsSnapshot:
         work = dict(zip(names, map(int, usage), strict=True))
         work["density_fitted_provider"] = 1
         resident_one_electron = work["one_electron_d2h_bytes"] != 0
-        work["density_fitted_one_electron_resident_cuda"] = int(
-            resident_one_electron
-        )
+        work["density_fitted_one_electron_resident_cuda"] = int(resident_one_electron)
         work["density_fitted_one_electron_host_contraction"] = int(
             not resident_one_electron
         )
