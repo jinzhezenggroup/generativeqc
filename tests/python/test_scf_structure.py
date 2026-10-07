@@ -182,6 +182,24 @@ def test_matrix_library_cannot_acquire_bucket_resource_owner(
     assert len(audit_scf_structure(tmp_path)["errors"]) == 1
 
 
+def test_matrix_owner_can_share_only_allocation_measurement_mutex(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "runtime").mkdir()
+    (source / "runtime/allocation_measurement.hpp").write_text("// Neutral mutex\n")
+    owner = source / "scf/cuda/matrix_library.cpp"
+    owner.write_text('#include "runtime/allocation_measurement.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    for dependency in ("cuda_graph_region.cuh", "resource_ledger.hpp"):
+        (source / "runtime" / dependency).write_text("// Unrelated runtime state\n")
+        owner.write_text(f'#include "runtime/{dependency}"\n')
+        errors = audit_scf_structure(tmp_path)["errors"]
+        assert len(errors) == 1
+        assert "forbidden cuda_matrix_library dependency" in errors[0]
+
+
 @pytest.mark.parametrize(
     "owner", ["direct_bounded_tasks.cu", "direct_queue_scan.cu", "direct_screening.cuh"]
 )
