@@ -968,7 +968,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   if (borrowed_density &&
-      (!*borrowed_density || borrowed_density->device_id != device ||
+      (!device_metric || !*borrowed_density || borrowed_density->device_id != device ||
        borrowed_density->stream != stream_handle || borrowed_density->matrix_elements != n * n ||
        terms.size() != 1 || terms[0].density.size() != n * n ||
        terms[0].coulomb_coefficient == 0.0 || terms[0].exchange_coefficient != 0.0)) {
