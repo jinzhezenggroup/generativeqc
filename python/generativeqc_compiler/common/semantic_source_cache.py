@@ -7,6 +7,7 @@ consumers must still validate their usual source/header/toolchain identities.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -55,12 +56,19 @@ def cached_sources(
             raise ValueError("semantic source cache byte budget exceeded")
         return sizes
 
+    def snapshot(path: Path, limit: int) -> bytes:
+        if limit < 0:
+            raise ValueError("source byte budget exceeded")
+        with path.open("rb") as stream:
+            data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise ValueError("source byte budget exceeded")
+        return data
+
     def load(folder: Path) -> tuple[str, ...]:
         try:
             manifest = folder / "sources.json"
-            if manifest.stat().st_size > (1 << 20):
-                raise ValueError("oversized manifest")
-            metadata = json.loads(manifest.read_text(encoding="utf-8"))
+            metadata = json.loads(snapshot(manifest, 1 << 20).decode("utf-8"))
             if metadata["key"] != key or canonical_hash(metadata["identity"]) != key:
                 raise ValueError("recipe mismatch")
             records = metadata["sources"]
@@ -71,13 +79,15 @@ def cached_sources(
             sources, total = [], 0
             for index, record in enumerate(records):
                 path = folder / f"{index}.cu"
-                size = path.stat().st_size
+                data = snapshot(path, min(max_unit_bytes, max_total_bytes - total))
+                size = len(data)
                 total += size
-                if size > max_unit_bytes or total > max_total_bytes:
-                    raise ValueError("source byte budget exceeded")
-                if record["bytes"] != size or record["sha256"] != file_hash(path):
+                if (
+                    record["bytes"] != size
+                    or record["sha256"] != hashlib.sha256(data).hexdigest()
+                ):
                     raise ValueError("source hash mismatch")
-                sources.append(path.read_text(encoding="utf-8"))
+                sources.append(data.decode("utf-8"))
             result = tuple(sources)
             validate(result)
             return result

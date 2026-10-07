@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from generativeqc_compiler.common.semantic_source_cache import cached_sources
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from typing import Self
 
 
 def forbidden() -> tuple[str, ...]:
@@ -133,3 +134,85 @@ def test_concurrent_nondeterministic_producers_fail_closed(tmp_path: Path) -> No
         "published",
         "semantic source cache nondeterministic producer",
     ]
+
+
+def test_returned_source_is_the_verified_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Replacement after hashing cannot substitute unchecked scientific source."""
+    from generativeqc_compiler.common import semantic_source_cache as cache_module
+
+    original_source = "const int x=1;"
+    replacement = "const int x=2;"
+    _, work = cached_sources(tmp_path, {}, lambda: (original_source,))
+    unit = tmp_path / "semantic-sources" / work["key"] / "0.cu"
+    original_hash = cache_module.hashlib.sha256
+
+    def replace_after_hash(data: bytes = b"", **kwargs: Any) -> Any:
+        digest = original_hash(data, **kwargs)
+        if data == original_source.encode():
+            unit.write_text(replacement)
+        return digest
+
+    original_file_hash = cache_module.file_hash
+
+    def replace_after_file_hash(path: Path) -> str:
+        digest = original_file_hash(path)
+        if path == unit:
+            unit.write_text(replacement)
+        return digest
+
+    monkeypatch.setattr(cache_module.hashlib, "sha256", replace_after_hash)
+    monkeypatch.setattr(cache_module, "file_hash", replace_after_file_hash)
+    replay, hit = cached_sources(tmp_path, {}, forbidden)
+    assert hit["hit"] and replay == (original_source,)
+    assert unit.read_text() == replacement
+    with pytest.raises(ValueError, match="integrity"):
+        cached_sources(tmp_path, {}, forbidden)
+
+
+@pytest.mark.parametrize("damaged", ("manifest", "unit", "aggregate"))
+def test_load_uses_bounded_snapshots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damaged: str
+) -> None:
+    """No stat/read race can turn admitted metadata into an unbounded read."""
+    from pathlib import Path
+
+    sources = ("first", "second")
+    _, work = cached_sources(tmp_path, {}, lambda: sources)
+    folder = tmp_path / "semantic-sources" / work["key"]
+    target = folder / ("sources.json" if damaged == "manifest" else "1.cu")
+    limit = (1 << 20) if damaged == "manifest" else (6 if damaged == "unit" else 5)
+    target.write_bytes(b"x" * (limit + 10))
+    original_open = Path.open
+    reads = []
+
+    class BoundedReader:
+        def __init__(self, stream: Any) -> None:
+            self.stream = stream
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> bool | None:
+            return self.stream.__exit__(*args)
+
+        def read(self, size: int = -1) -> bytes:
+            reads.append(size)
+            assert size == limit + 1
+            return self.stream.read(size)
+
+    def checked_open(path: Path, *args: Any, **kwargs: Any) -> Any:
+        stream = original_open(path, *args, **kwargs)
+        return BoundedReader(stream) if path == target else stream
+
+    monkeypatch.setattr(Path, "open", checked_open)
+    with pytest.raises(ValueError, match="integrity"):
+        cached_sources(
+            tmp_path,
+            {},
+            forbidden,
+            max_unit_bytes=6,
+            max_total_bytes=10 if damaged == "aggregate" else 11,
+        )
+    assert reads == [limit + 1]
