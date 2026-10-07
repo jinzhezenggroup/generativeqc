@@ -8,7 +8,6 @@ import textwrap
 from fractions import Fraction
 
 import numpy as np
-
 from generativeqc.experimental import API_VERSION as EXPERIMENTAL_API_VERSION
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
