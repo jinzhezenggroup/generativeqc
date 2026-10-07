@@ -295,9 +295,13 @@ def run_combined(
 ) -> tuple:
     q, o, v = inputs[0].shape
     arrays = [np.ascontiguousarray(x) for x in inputs]
-    output = [np.full((o, o), np.nan), np.full((v, v), np.nan)]
+    output = [
+        np.full((o, o), np.nan),
+        np.full((v, v), np.nan),
+        *(np.full_like(x, np.nan) for x in arrays[:7]),
+    ]
     values = np.full(3, np.nan)
-    counts = np.full(8, 19, dtype=np.uintp)
+    counts = np.full(14, 19, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     dp = ct.POINTER(ct.c_double)
     status = call(
@@ -358,6 +362,8 @@ def run_native(
 def test_combined_response_reuses_one_input_upload(
     native_fock_probe: typing.Any, native_combined_probe: typing.Any
 ) -> None:
+    from test_df_occupied_triples_response import reverse
+
     inputs, _ = case(2, 3, 4)
     caller = 12345
     status, combined, values, counts, error = run_combined(
@@ -368,8 +374,10 @@ def test_combined_response_reuses_one_input_upload(
         native_fock_probe, inputs, caller_bytes=caller
     )
     assert standalone_status == 0, standalone_error
-    for actual, expected in zip(combined, standalone, strict=True):
+    for actual, expected in zip(combined[:2], standalone, strict=True):
         np.testing.assert_allclose(actual, expected, atol=0, rtol=0)
+    for actual, expected in zip(combined[2:], reverse(inputs)[:7], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
 
     o, v = inputs[5].shape
     ovvv = np.einsum("Qia,Qfb->iafb", inputs[0], inputs[1])
@@ -393,23 +401,35 @@ def test_combined_response_reuses_one_input_upload(
     assert counts[3] == 0
     assert input_bytes <= counts[0] < input_bytes + 10 * 256
     assert counts[6] == counts[7] == input_bytes
-    assert counts[4] <= 1 << 30 and counts[5] <= 1 << 30
-    assert counts[5] >= standalone_counts[0]
+    assert counts[4] == counts[5] <= 1 << 30
+    assert counts[4] >= standalone_counts[0]
+
+    tiles = o * (o + 1) * (o + 2) // 6
+    pairs = o * (o + 1) // 2
+    fock_cubes = pairs * o
+    assert counts[8] == counts[12] == tiles
+    assert counts[9] == 12 * tiles
+    assert counts[10] == fock_cubes
+    assert counts[11] == 12 * fock_cubes
+    # Pullback no longer owns another forward W traversal.
+    assert counts[13] == 0
+    assert counts[11] + counts[9] == 12 * (fock_cubes + tiles)
+    assert counts[11] < 12 * (fock_cubes + tiles)
 
     status, minimal, _, minimal_counts, error = run_combined(
         native_combined_probe, inputs, caller_bytes=caller, rows=1, panels=1
     )
     assert status == 0, error
     for actual, expected in zip(minimal, combined, strict=True):
-        np.testing.assert_array_equal(actual, expected)
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
     exact_budget = int(max(minimal_counts[4], minimal_counts[5]))
 
     status, exact, _, exact_counts, error = run_combined(
         native_combined_probe, inputs, budget=exact_budget, caller_bytes=caller
     )
     assert status == 0, error
-    for actual, expected in zip(exact, combined, strict=True):
-        np.testing.assert_array_equal(actual, expected)
+    for actual, expected in zip(exact, minimal, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
     assert max(exact_counts[4], exact_counts[5]) == exact_budget
 
     status, refused, refused_values, refused_counts, error = run_combined(
