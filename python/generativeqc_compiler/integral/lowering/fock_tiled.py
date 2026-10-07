@@ -15,6 +15,144 @@ if TYPE_CHECKING:
     )
 
 
+_PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES = 32
+
+
+def _packed_restricted_k_block(
+    spec: ShellClassSpec,
+    task_component_setup: str,
+    component_names: tuple[str, str, str, str],
+) -> tuple[str, str]:
+    """Emit one bounded restricted raw-K block contraction for packed workers.
+
+    The candidate keeps the incumbent ERI recurrence and screening.  It only
+    changes the final contraction granularity: canonical ERI components first
+    accumulate the eight symmetry-related K blocks in lane-local shared storage,
+    then each K element is published once.  Larger footprints retain the
+    incumbent component-by-component scatter so this qualification slice cannot
+    inflate every packed worker's shared-memory frame.
+    """
+
+    counts = tuple(map(len, spec.center_components))
+    first_count, second_count, third_count, fourth_count = counts
+    blocks = (
+        (0, 2, first_count, third_count),
+        (1, 2, second_count, third_count),
+        (0, 3, first_count, fourth_count),
+        (1, 3, second_count, fourth_count),
+        (2, 0, third_count, first_count),
+        (2, 1, third_count, second_count),
+        (3, 0, fourth_count, first_count),
+        (3, 1, fourth_count, second_count),
+    )
+    offsets: list[int] = []
+    total = 0
+    for _, _, rows, columns in blocks:
+        offsets.append(total)
+        total += rows * columns
+    if total > _PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES:
+        return "", ""
+
+    first, second, third, fourth = component_names
+    flushes = []
+    for offset, (row_center, column_center, rows, columns) in zip(
+        offsets, blocks, strict=True
+    ):
+        flushes.append(
+            f"""#pragma unroll
+      for (unsigned row = 0U; row < {rows}U; ++row) {{
+#pragma unroll
+        for (unsigned column = 0U; column < {columns}U; ++column) {{
+          const double value =
+              storage.exchange_block[{offset}U + row * {columns}U + column];
+          if (value == 0.0) continue;
+          const std::size_t output_row = task.ao_begin[{row_center}] + row;
+          const std::size_t output_column = task.ao_begin[{column_center}] + column;
+          atomicAdd(
+              fock + task.density_offset +
+                  generated_dppp_matrix_index(output_row, output_column, matrix_order),
+              value);
+        }}
+      }}"""
+        )
+    flush = "\n".join(flushes)
+
+    body = f"""  if constexpr (!Unrestricted) {{
+    const bool raw_exchange_only =
+        (task.reversed_shell_pair_mask & kGeneratedDpppExchangeConsumerBit) != 0U &&
+        (task.reversed_shell_pair_mask & kGeneratedDpppCoulombConsumerBit) == 0U;
+    if (raw_exchange_only) {{
+#pragma unroll
+      for (unsigned slot = 0U; slot < {total}U; ++slot) {{
+        storage.exchange_block[slot] = 0.0;
+      }}
+      const std::size_t matrix_order = static_cast<std::size_t>(task.matrix_order);
+#pragma unroll
+      for (unsigned component = 0U;
+           component < kGeneratedDpppComponentCount; ++component) {{
+        const double component_integral = component_integrals[component];
+        if (component_integral == 0.0) continue;
+{task_component_setup}
+        const bool first_pair_distinct = i != j;
+        const bool second_pair_distinct = k != l;
+        const bool swapped_pair_unique = i != k || j != l;
+
+        storage.exchange_block[{offsets[0]}U + {first} * {third_count}U + {third}] +=
+            density[task.density_offset +
+                    generated_dppp_matrix_index(j, l, matrix_order)] *
+            component_integral;
+        if (first_pair_distinct) {{
+          storage.exchange_block[{offsets[1]}U + {second} * {third_count}U + {third}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(i, l, matrix_order)] *
+              component_integral;
+        }}
+        if (second_pair_distinct) {{
+          storage.exchange_block[{offsets[2]}U + {first} * {fourth_count}U + {fourth}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(j, k, matrix_order)] *
+              component_integral;
+        }}
+        if (first_pair_distinct && second_pair_distinct) {{
+          storage.exchange_block[{offsets[3]}U + {second} * {fourth_count}U + {fourth}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(i, k, matrix_order)] *
+              component_integral;
+        }}
+        if (swapped_pair_unique) {{
+          storage.exchange_block[{offsets[4]}U + {third} * {first_count}U + {first}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(l, j, matrix_order)] *
+              component_integral;
+        }}
+        if (swapped_pair_unique && second_pair_distinct) {{
+          storage.exchange_block[{offsets[5]}U + {third} * {second_count}U + {second}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(l, i, matrix_order)] *
+              component_integral;
+        }}
+        if (swapped_pair_unique && first_pair_distinct) {{
+          storage.exchange_block[{offsets[6]}U + {fourth} * {first_count}U + {first}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(k, j, matrix_order)] *
+              component_integral;
+        }}
+        if (swapped_pair_unique && first_pair_distinct && second_pair_distinct) {{
+          storage.exchange_block[{offsets[7]}U + {fourth} * {second_count}U + {second}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(k, i, matrix_order)] *
+              component_integral;
+        }}
+      }}
+{flush}
+      return;
+    }}
+  }}
+"""
+
+    return f"  double exchange_block[{total}];\n", body
+
+
 def _emit_packed_fock_consumer_cuda(
     spec: ShellClassSpec,
     plan: FusedShellPlan,
@@ -31,10 +169,13 @@ def _emit_packed_fock_consumer_cuda(
         if plan.schedule.maximum_registers
         else f"__launch_bounds__(32, {minimum_blocks_per_sm})"
     )
+    exchange_block_storage, exchange_block_body = _packed_restricted_k_block(
+        spec, task_component_setup, component_names
+    )
     return f"""struct GeneratedDpppPackedFockLaneStorage {{
   GeneratedDpppVec3 positions[4];
   GeneratedDpppPrimitiveGeometry primitive;
-}};
+{exchange_block_storage}}};
 
 template <bool Unrestricted>
 __device__ __forceinline__ void generated_dppp_packed_fock_lane(
@@ -111,7 +252,7 @@ __device__ __forceinline__ void generated_dppp_packed_fock_lane(
       }}
     }}
   }}
-#pragma unroll
+{exchange_block_body}#pragma unroll
   for (unsigned component = 0U;
        component < kGeneratedDpppComponentCount; ++component) {{
     const double component_integral = component_integrals[component];
