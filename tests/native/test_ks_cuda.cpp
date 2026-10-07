@@ -125,8 +125,7 @@ RshStrategies density_fitted_primary(RshStrategies model, scf::FockBackend backe
   auto spec = model.primary.spec;
   spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
   if (spec.exchange.present) spec.exchange.approximation = scf::FockApproximation::DensityFitted;
-  model.primary =
-      scf::resolve_fock_build(spec, backend, model.primary.screening_tolerance, 1e-10);
+  model.primary = scf::resolve_fock_build(spec, backend, model.primary.screening_tolerance, 1e-10);
   return model;
 }
 
@@ -527,18 +526,15 @@ void run_range_exchange_case(bool restricted) {
           "changed-geometry CUDA range-separated warm seed changed the physical endpoint");
 }
 
-
 void run_density_fitted_range_exchange_case(bool restricted) {
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
-  const auto cpu_model =
-      density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cpu),
-                             scf::FockBackend::Cpu);
-  const auto gpu_model =
-      density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cuda),
-                             scf::FockBackend::Cuda);
+  const auto cpu_model = density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cpu),
+                                                scf::FockBackend::Cpu);
+  const auto gpu_model = density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cuda),
+                                                scf::FockBackend::Cuda);
   const scf::PreparedFockPlan cpu_primary(system, &system, cpu_model.primary);
   const scf::PreparedFockPlan cpu_correction(system, nullptr, cpu_model.correction);
   const scf::PreparedFockPlan gpu_primary(system, &system, gpu_model.primary, 0);
@@ -550,9 +546,9 @@ void run_density_fitted_range_exchange_case(bool restricted) {
   options.density_tolerance = 1e-10;
   options.max_iterations = 200;
 
-  dft::CudaKsPlan plan(
-      gpu_primary, basis, grid, options, dft::SemilocalFamily::Pbe, 257, &gpu_model.correction,
-      nullptr, dft::nlc::Vv10DensityDomain::StrictPositive, {}, &gpu_correction);
+  dft::CudaKsPlan plan(gpu_primary, basis, grid, options, dft::SemilocalFamily::Pbe, 257,
+                       &gpu_model.correction, nullptr, dft::nlc::Vv10DensityDomain::StrictPositive,
+                       {}, &gpu_correction);
   const auto result = plan.run(nullptr, false);
   const auto reference =
       restricted ? scf::run_pbe_rsh_rks(cpu_primary, cpu_correction, basis, grid, options)
@@ -699,10 +695,9 @@ void run_wb97mv_nonlocal_composition_case(bool restricted, bool fitted = false) 
   const auto solve = [&](scf::ScfOptions::XcExecutionSchedule schedule) {
     auto configured = options;
     configured.xc_execution_schedule = schedule;
-    dft::CudaKsPlan plan(
-        gpu_primary, basis, grid, configured, dft::SemilocalFamily::Wb97mv, tile_points,
-        &gpu_model.correction, gpu_nonlocal.get(), dft::nlc::Vv10DensityDomain::MolecularV1, {},
-        gpu_correction.get());
+    dft::CudaKsPlan plan(gpu_primary, basis, grid, configured, dft::SemilocalFamily::Wb97mv,
+                         tile_points, &gpu_model.correction, gpu_nonlocal.get(),
+                         dft::nlc::Vv10DensityDomain::MolecularV1, {}, gpu_correction.get());
     auto result = plan.run(nullptr, false);
     require(result.converged && !plan.failed(),
             "CUDA WB97M-V nonlocal composition did not converge");

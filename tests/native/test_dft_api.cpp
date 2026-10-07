@@ -1253,14 +1253,14 @@ int main() {
         const auto cpu_df_status = generativeqc_calculation_execute(cpu_df, &cpu_df_result);
         const auto cuda_df_status = generativeqc_calculation_execute(cuda_df, &cuda_df_result);
         cuda_df_detail = generativeqc_context_get_last_detail(cuda_context);
-        require(cpu_df_status == GENERATIVEQC_STATUS_SUCCESS &&
-                    cuda_df_status == GENERATIVEQC_STATUS_SUCCESS && cpu_df_result.converged &&
-                    cuda_df_result.converged &&
-                    std::abs(cuda_df_result.energy - cpu_df_result.energy) < 1e-10,
-                ("generic mixed-DF RSH CUDA endpoint differs from CPU: carrier=" +
-                 std::to_string(endpoint.carrier) +
-                 " detail=" + (cuda_df_detail ? cuda_df_detail : ""))
-                    .c_str());
+        require(
+            cpu_df_status == GENERATIVEQC_STATUS_SUCCESS &&
+                cuda_df_status == GENERATIVEQC_STATUS_SUCCESS && cpu_df_result.converged &&
+                cuda_df_result.converged &&
+                std::abs(cuda_df_result.energy - cpu_df_result.energy) < 1e-10,
+            ("generic mixed-DF RSH CUDA endpoint differs from CPU: carrier=" +
+             std::to_string(endpoint.carrier) + " detail=" + (cuda_df_detail ? cuda_df_detail : ""))
+                .c_str());
         generativeqc_calculation_destroy(cpu_df);
         generativeqc_calculation_destroy(cuda_df);
 

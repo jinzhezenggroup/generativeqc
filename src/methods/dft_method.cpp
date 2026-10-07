@@ -702,9 +702,9 @@ bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
   const auto& correction_spec = correction.spec;
   const auto primary_binding = scf::prepared_cuda_fock_binding(provider);
   const bool correction_compatible =
-      correction.backend == scf::FockBackend::Cuda &&
-      correction_spec.spin == primary_spec.spin && correction_spec.derivative_order == 0 &&
-      !correction_spec.coulomb.present && correction_spec.exchange.present &&
+      correction.backend == scf::FockBackend::Cuda && correction_spec.spin == primary_spec.spin &&
+      correction_spec.derivative_order == 0 && !correction_spec.coulomb.present &&
+      correction_spec.exchange.present &&
       correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
       correction_spec.exchange.op == scf::FockOperator::LongRange &&
       std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
@@ -1607,11 +1607,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const bool fitted_primary =
         fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
     if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
-      const auto budget = fock_backend == scf::FockBackend::Cuda
-                              ? ks_provider_bytes(system_, backend_, 0U)
-                              : 0U;
-      range_correction_ = std::make_unique<scf::PreparedFockPlan>(
-          system_, nullptr, *range_strategy_, device, budget);
+      const auto budget =
+          fock_backend == scf::FockBackend::Cuda ? ks_provider_bytes(system_, backend_, 0U) : 0U;
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr,
+                                                                  *range_strategy_, device, budget);
     }
   }
 
