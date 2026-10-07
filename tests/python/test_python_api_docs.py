@@ -63,11 +63,41 @@ class PythonApiDocumentationTests(unittest.TestCase):
         names = {module.name for module in renderer.public_api_modules()}
 
         self.assertIn("generativeqc", names)
+        self.assertIn("generativeqc.experimental", names)
+        self.assertIn("generativeqc.experimental.array_api", names)
         self.assertIn("generativeqc.torch", names)
         self.assertIn("generativeqc.extensions", names)
         self.assertIn("generativeqc.extensions.method", names)
         self.assertIn("generativeqc.extensions.tensor", names)
         self.assertIn("generativeqc.extensions.xc", names)
+
+    def test_shared_classes_link_to_public_targets_without_hiding_unique_members(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(package / "__init__.py", '__all__ = ["Root"]\n')
+            _write(
+                package / "experimental/array_api.py",
+                '__all__ = ["Index", "Program", "compile", "Unique"]\n',
+            )
+            _write(package / "extensions/tensor.py", '__all__ = ["Index", "Program"]\n')
+            rendered = renderer.render_python_api_markdown(package)
+            experimental = rendered.split(
+                "## `generativeqc.experimental.array_api`", 1
+            )[1].split("## `generativeqc.extensions.tensor`", 1)[0]
+            self.assertIn(":members: Index, Program, compile, Unique", experimental)
+            self.assertIn(":exclude-members: Index, Program\n", experimental)
+            for name in ("Index", "Program"):
+                self.assertIn(
+                    f"{{py:class}}`{name} <generativeqc.extensions.tensor.{name}>`",
+                    experimental,
+                )
+            self.assertNotIn(":no-index:", rendered)
+
+            _write(package / "extensions/tensor.py", '__all__ = ["Index"]\n')
+            with self.assertRaisesRegex(ValueError, "Program is not public"):
+                renderer.render_python_api_markdown(package)
 
     def test_sphinx_source_is_generated_and_tracks_package_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -142,7 +172,7 @@ class PythonApiDocumentationTests(unittest.TestCase):
                 inventory = InventoryFile.load(stream, "", lambda _, uri: uri)
             for module in renderer.public_api_modules():
                 with self.subTest(module=module.name):
-                    self.assertIn(f'id="module-{module.name}"', html)
+                    self.assertEqual(html.count(f'id="module-{module.name}"'), 1)
                     self.assertIn(f'href="#module-{module.name}"', html)
                     self.assertIn(module.name, inventory["py:module"])
             for kind, name in (
@@ -153,10 +183,38 @@ class PythonApiDocumentationTests(unittest.TestCase):
                 ("function", "generativeqc.extensions.tensor.compile"),
                 ("function", "generativeqc.extensions.xc.named"),
                 ("function", "generativeqc.torch.energy"),
+                ("class", "generativeqc.experimental.array_api.CompiledFunction"),
+                ("class", "generativeqc.experimental.array_api.VibeArray"),
+                ("function", "generativeqc.experimental.array_api.compile"),
+                ("function", "generativeqc.experimental.array_api.asarray"),
+                ("function", "generativeqc.experimental.array_api.add"),
+                ("function", "generativeqc.experimental.array_api.import_dlpack"),
             ):
                 with self.subTest(member=name):
-                    self.assertIn(f'id="{name}"', html)
+                    self.assertEqual(html.count(f'id="{name}"'), 1)
                     self.assertIn(name, inventory[f"py:{kind}"])
+            for name, implementation in (
+                ("Index", "generativeqc_compiler.tensor.types.Index"),
+                ("IndexSpace", "generativeqc_compiler.tensor.types.IndexSpace"),
+                ("Program", "generativeqc_compiler.tensor.program.Program"),
+                ("TensorSpec", "generativeqc_compiler.tensor.types.TensorSpec"),
+                ("FunctionalSpec", "generativeqc_compiler.xc.spec.FunctionalSpec"),
+            ):
+                facade = (
+                    "generativeqc"
+                    if name == "FunctionalSpec"
+                    else "generativeqc.extensions.tensor"
+                )
+                target = f"{facade}.{name}"
+                with self.subTest(shared_class=name):
+                    self.assertEqual(html.count(f'id="{target}"'), 1)
+                    self.assertIn(f'href="#{target}"', html)
+                    self.assertIn(target, inventory["py:class"])
+                    self.assertIn(implementation, inventory["py:class"])
+                    self.assertEqual(
+                        inventory["py:class"][implementation].uri,
+                        inventory["py:class"][target].uri,
+                    )
 
 
 if __name__ == "__main__":

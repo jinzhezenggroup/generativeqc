@@ -16,6 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "python/generativeqc"
 BT = chr(96)
 
+# Autodoc also registers imported classes under their implementation names.
+# Describe these shared types once at their established public facade, and link
+# the other re-exports there. Keep discovery static and all unique members indexed.
+_SHARED_CLASS_TARGETS = {
+    "generativeqc.experimental.array_api": {
+        name: f"generativeqc.extensions.tensor.{name}"
+        for name in ("Index", "IndexSpace", "Program", "TensorSpec")
+    },
+    "generativeqc.extensions.xc": {
+        "FunctionalSpec": "generativeqc.FunctionalSpec",
+    },
+}
+
 
 @dataclass(frozen=True)
 class PublicModule:
@@ -119,6 +132,9 @@ def render_python_api_markdown(package: Path | None = None) -> str:
     modules = public_api_modules(package)
     if not modules or modules[0].name != package.name:
         raise ValueError(f"{package}: package __init__.py must declare public __all__")
+    public_members = {
+        f"{module.name}.{name}" for module in modules for name in module.exports
+    }
 
     fence = BT * 3
     lines = [
@@ -143,6 +159,16 @@ def render_python_api_markdown(package: Path | None = None) -> str:
     lines.extend([fence, ""])
 
     for module in modules:
+        shared_types = {
+            name: target
+            for name, target in _SHARED_CLASS_TARGETS.get(module.name, {}).items()
+            if name in module.exports
+        }
+        for name, target in shared_types.items():
+            if target not in public_members:
+                raise ValueError(
+                    f"{module.name}.{name}: shared class target {target} is not public"
+                )
         lines.extend(
             [
                 f"## {BT}{module.name}{BT}",
@@ -155,12 +181,19 @@ def render_python_api_markdown(package: Path | None = None) -> str:
                 "   :show-inheritance:",
             ]
         )
-        # This re-export already has its canonical target in the root facade.
-        # Suppress only that duplicate, preserving every unique module/member
-        # target for autosummary links, cross-references, and deep links.
-        if module.name == "generativeqc.extensions.xc":
-            lines.append("   :exclude-members: FunctionalSpec")
+        if shared_types:
+            lines.append("   :exclude-members: " + ", ".join(shared_types))
         lines.extend([fence, ""])
+        if shared_types:
+            lines.append(
+                "Re-exported types (documented at their shared public target):"
+            )
+            lines.append("")
+            lines.extend(
+                f"- {{py:class}}{BT}{name} <{target}>{BT}"
+                for name, target in shared_types.items()
+            )
+            lines.append("")
     return "\n".join(lines)
 
 
