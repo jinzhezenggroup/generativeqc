@@ -207,11 +207,12 @@ def with_initial_guess_resources(
                 for z in numbers
             )
             seed = 8 * n * n
-            # Native capacity is X + output D + two n*ns projection buffers,
-            # occupations and source primitive pairs. Seventeen primitives per
-            # source AO is a conservative H-Ar upper bound.
+            # The retained seed is charged separately below. Workspace covers
+            # X + raw projected D + two n*ns projection buffers, occupations,
+            # source coordinates and source primitive storage. Seventeen
+            # primitives per source AO is a conservative H-Ar upper bound.
             workspace = (
-                8 * (2 * n * n + 2 * n * source_n + source_n)
+                8 * (2 * n * n + 2 * n * source_n + source_n + 3 * len(numbers))
                 + 32 * 17 * source_n
             )
             retained += seed
