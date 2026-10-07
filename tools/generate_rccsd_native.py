@@ -1453,8 +1453,16 @@ def _parallel_scalar_reduction_kernel(
         )
         else ""
     )
-    return f"""__global__ void {prefix}_node_{number}({",".join(arguments)}){{
-{orbital_declaration}  __shared__ double partial[8];
+    add_name = f"{prefix}_reduce_add_{number}"
+    return f"""struct {add_name} {{
+  __device__ __forceinline__ double operator()(double a,double b) const {{
+    return __dadd_rn(a,b);
+  }}
+}};
+__global__ void {prefix}_node_{number}({",".join(arguments)}){{
+{orbital_declaration}  using BlockReduce = cub::BlockReduce<
+      double, 256, cub::BLOCK_REDUCE_WARP_REDUCTIONS>;
+  __shared__ typename BlockReduce::TempStorage temp_storage;
   const std::size_t reduction_count={reduction_count};
   if(reduction_count<32){{
     if(threadIdx.x==0){{
@@ -1470,20 +1478,10 @@ def _parallel_scalar_reduction_kernel(
   for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x){{
 {parallel}
   }}
-  for(int offset=16;offset>0;offset>>=1)
-    sum=__dadd_rn(sum,__shfl_down_sync(0xffffffffu,sum,offset));
-  const int lane=int(threadIdx.x)&31;
-  const int warp=int(threadIdx.x)>>5;
-  if(lane==0) partial[warp]=sum;
-  __syncthreads();
-  if(warp==0){{
-    sum=lane<8 ? partial[lane] : 0.0;
-    for(int offset=16;offset>0;offset>>=1)
-      sum=__dadd_rn(sum,__shfl_down_sync(0xffffffffu,sum,offset));
-    if(lane==0) out[0]=generativeqc_tensor::finite({result},error,{number});
-  }}
+  sum=BlockReduce(temp_storage).Reduce(sum,{add_name}{{}});
+  if(threadIdx.x==0)
+    out[0]=generativeqc_tensor::finite({result},error,{number});
 }}"""
-
 
 def _cuda_kernel(
     node: typing.Any,
