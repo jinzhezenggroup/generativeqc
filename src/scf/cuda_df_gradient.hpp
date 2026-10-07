@@ -165,7 +165,7 @@ struct DfGradientResources {
   std::size_t tensor_host_to_device_bytes{}, tensor_device_to_host_bytes{};
   std::size_t response_host_to_device_bytes{}, density_host_to_device_bytes{};
   std::size_t recomputed_value_bytes{}, device_response_bytes{};
-  /** Already charged to the value plan, never added again to owned device_bytes. */
+  /** Already charged to a prepared owner, never added again to owned device_bytes. */
   std::size_t borrowed_device_bytes{};
   bool device_response{};
   /** True only after the owner validates and executes occupied response. */
