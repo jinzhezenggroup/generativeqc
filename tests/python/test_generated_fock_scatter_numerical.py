@@ -3,6 +3,7 @@
 import subprocess
 from pathlib import Path
 
+import pytest
 from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_fock_accumulation_header,
     emit_generated_shell_fock_accumulation,
