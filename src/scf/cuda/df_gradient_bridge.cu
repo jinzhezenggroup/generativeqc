@@ -1475,9 +1475,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.occupied_response = true;
         owned_buffers.fitted_occupied_source = whitened;
         owned_buffers.final_fitted_occupied_projection = occupied->final_fitted_occupied_projection;
-        arena.stats.borrowed_device_bytes += occupied_coefficients * sizeof(double);
+        const auto occupied_factor_bytes = occupied_coefficients * sizeof(double);
+        arena.stats.borrowed_device_bytes += occupied_factor_bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_occupied_factor_bytes",
-                                           arena.stats.borrowed_device_bytes);
+                                           occupied_factor_bytes);
         if (whitened) {
           const auto forward_bytes = whitened->pair_count * a * sizeof(double);
           arena.stats.borrowed_device_bytes += forward_bytes;
@@ -1502,12 +1503,12 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // These allocations remain owned and charged by the value plan. Keep
         // their capacity visible without double-counting it as new response
         // scratch or silently widening the caller's private force allowance.
-        arena.stats.borrowed_device_bytes +=
+        const auto jk_borrowed_bytes =
             (borrowed->staging_capacity() + borrowed->raw_capacity() +
              borrowed->exchange_capacity()) *
             sizeof(double);
-        runtime::cuda_trace::trace_counter("response_borrowed_jk_bytes",
-                                           arena.stats.borrowed_device_bytes);
+        arena.stats.borrowed_device_bytes += jk_borrowed_bytes;
+        runtime::cuda_trace::trace_counter("response_borrowed_jk_bytes", jk_borrowed_bytes);
         runtime::cuda_trace::trace_counter("response_resident_auxiliary_tile", consume_tile);
       }
       auto response_scratch_bytes = arena.stats.device_bytes;
