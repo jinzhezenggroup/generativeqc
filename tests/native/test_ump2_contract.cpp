@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "api/handles.hpp"
 #include "methods/ump2_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/native_provider.hpp"
@@ -67,7 +68,7 @@ void native_equations() {
   }
 }
 
-void unsupported_backend() {
+void unsupported_requests() {
   generativeqc::core::ContextState context;
   context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
   generativeqc::methods::Capabilities capabilities;
@@ -115,6 +116,31 @@ void unsupported_backend() {
     rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   require(rejected, "native UMP2 silently ignored a DF memory request");
+
+  descriptor = {};
+  generativeqc_system auxiliary{};
+  auxiliary.data = h2();
+  descriptor.method = GENERATIVEQC_METHOD_UMP2;
+  descriptor.density_fitting_auxiliary_basis = &auxiliary;
+  rejected = false;
+  try {
+    (void)generativeqc::methods::prepare_batch(context, {h2()}, descriptor, 0);
+  } catch (const generativeqc::methods::MethodError& error) {
+    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(rejected, "native UMP2 batch silently erased an auxiliary basis");
+
+  descriptor = {};
+  generativeqc_ks_options ks{};
+  descriptor.ks_options = &ks;
+  rejected = false;
+  try {
+    (void)generativeqc::methods::detail::prepare_ump2_batch(capabilities, context, {h2()},
+                                                            descriptor, 0);
+  } catch (const generativeqc::methods::MethodError& error) {
+    rejected = error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  require(rejected, "native UMP2 batch silently erased KS options");
 }
 
 void source_and_slots() {
@@ -230,7 +256,7 @@ void source_and_slots() {
 int main() {
   try {
     native_equations();
-    unsupported_backend();
+    unsupported_requests();
     source_and_slots();
     std::cout << "native UMP2 contract passed\n";
     return 0;

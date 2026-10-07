@@ -369,6 +369,11 @@ std::unique_ptr<PreparedBatch> prepare_ump2_batch(const Capabilities& capabiliti
   if (flags & ~GENERATIVEQC_BATCH_ENABLE_WARM_STARTS)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "UMP2 batch supports warm starts only; profiling is unavailable");
+  // The batch owner clears borrowed pointers before storing its descriptor.
+  // Reject their scientific requests first so they cannot become no-ops.
+  if (descriptor.density_fitting_auxiliary_basis || descriptor.ks_options)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "UMP2 batch rejects auxiliary-basis and KS options");
   return std::make_unique<Ump2PreparedBatch>(capabilities, context, std::move(systems), descriptor,
                                              (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0);
 }
