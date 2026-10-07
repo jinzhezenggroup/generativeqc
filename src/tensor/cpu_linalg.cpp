@@ -1,13 +1,13 @@
 #include "tensor/cpu_linalg.hpp"
 
-#include "solver/cpu/symmetric_eigen.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <mutex>
 #include <numeric>
 #include <stdexcept>
+
+#include "solver/cpu/symmetric_eigen.hpp"
 
 #ifndef GENERATIVEQC_HAS_OPENBLAS
 #define GENERATIVEQC_HAS_OPENBLAS 0
@@ -362,7 +362,6 @@ int scalar_cholesky_lower(double* matrix, std::size_t n) {
   }
   return 0;
 }
-
 
 #if GENERATIVEQC_HAS_OPENBLAS
 [[maybe_unused]] void openblas_set_local_threads(int threads) {
