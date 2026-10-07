@@ -173,6 +173,22 @@ struct PreparedInputs {
   }
 };
 
+void validate_response_work(std::size_t o, std::size_t v, std::size_t q, const Layout& p,
+                            bool include_gap_response) {
+  const auto scalar_outputs = include_gap_response
+                                  ? generated_df::response_scalar_outputs_with_gap
+                                  : generated_df::response_scalar_outputs_without_gap;
+  (void)checked_mul(scalar_outputs, checked_mul(p.tiles, p.v3));
+  // At most three forward and three reverse-regenerated panels per tile, plus
+  // two factor products per distinct occupied index. Charge complete work
+  // before input access even for logical shapes too large to execute.
+  const auto panel_work = checked_mul(checked_mul(12, p.tiles), checked_mul(q, p.v3));
+  const auto w_work = checked_mul(checked_mul(18, p.tiles),
+                                  checked_add(checked_mul(v, p.v3), checked_mul(o, p.v3)));
+  const auto v_work = checked_mul(checked_mul(24, p.tiles), p.v3);
+  (void)checked_add(panel_work, checked_add(w_work, v_work));
+}
+
 struct ResponseLayout {
   Layout value;
   std::array<std::size_t, 9> outputs{};
@@ -204,19 +220,7 @@ ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std:
   p.output_bytes = bytes(values);
   p.complete = checked_add(caller_bytes,
                            checked_add(p.value.total, checked_add(p.host_bytes, p.output_bytes)));
-  const auto scalar_outputs = include_gap_response
-                                  ? generated_df::response_scalar_outputs_with_gap
-                                  : generated_df::response_scalar_outputs_without_gap;
-  (void)checked_mul(scalar_outputs, checked_mul(p.value.tiles, p.value.v3));
-  // At most three forward and three reverse-regenerated panels per tile, plus
-  // two factor products per distinct occupied index. Charge complete work
-  // before input access even for logical shapes too large to execute.
-  const auto panel_work = checked_mul(checked_mul(12, p.value.tiles), checked_mul(q, p.value.v3));
-  const auto w_work =
-      checked_mul(checked_mul(18, p.value.tiles),
-                  checked_add(checked_mul(v, p.value.v3), checked_mul(o, p.value.v3)));
-  const auto v_work = checked_mul(checked_mul(24, p.value.tiles), p.value.v3);
-  (void)checked_add(panel_work, checked_add(w_work, v_work));
+  validate_response_work(o, v, q, p.value, include_gap_response);
   return p;
 }
 
@@ -224,7 +228,7 @@ struct FockLayout {
   Layout value;
   std::size_t foo{}, fvv{}, xl{}, yl{}, xr{}, yr{}, block{};
   std::size_t capacity{}, pages{}, pairs{}, cubes{}, page_builds{}, page_pairs{};
-  std::size_t host_bytes{}, output_bytes{}, complete{};
+  std::size_t host_bytes{}, output_bytes{}, complete{}, contraction_summands_bound{};
 };
 FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t capacity,
                        std::size_t panels, std::size_t caller_bytes, bool external_inputs = false) {
@@ -251,7 +255,8 @@ FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t 
   const auto vv_work = checked_mul(checked_mul(2, checked_mul(r.pairs, o)), checked_mul(v, p.v3));
   const auto oo_work = checked_mul(checked_mul(2, r.page_builds),
                                    checked_mul(checked_mul(capacity, capacity), p.v3));
-  (void)checked_add(checked_add(panel_work, w_work), checked_add(vv_work, oo_work));
+  r.contraction_summands_bound =
+      checked_add(checked_add(panel_work, w_work), checked_add(vv_work, oo_work));
   auto cursor = p.arena;
   r.foo = reserve(cursor, bytes(checked_mul(o, o)));
   r.fvv = reserve(cursor, bytes(checked_mul(v, v)));
@@ -286,6 +291,11 @@ JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::siz
   JointResponseLayout r;
   r.fock = fock_layout(o, v, q, capacity, panels, 0, true);
   auto& p = r.fock.value;
+  validate_response_work(o, v, q, p, include_gap_response);
+  // A pullback can regenerate up to three evicted panels per triangular tile.
+  // Those products share the Fock ledger, including its right-page replay work.
+  const auto regenerated_panel_work = checked_mul(checked_mul(3, p.tiles), checked_mul(q, p.v3));
+  (void)checked_add(r.fock.contraction_summands_bound, regenerated_panel_work);
   auto cursor = p.arena;
   std::size_t values = 0;
   const std::size_t requested_outputs = include_gap_response ? 9 : 7;
@@ -1059,6 +1069,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   fock.fvv.resize(checked_mul(v, v));
 
   int failed = 0;
+  std::size_t response_tiles = 0;
   {
     generativeqc_tensor::Context context;
     cudaDeviceProp properties{};
@@ -1140,7 +1151,6 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
 
     const auto small_blocks =
         static_cast<unsigned>(std::min<std::size_t>(1 + (v * v - 1) / 256, 65535));
-    std::size_t response_tiles = 0;
     const auto response_index = [&](std::size_t i, std::size_t j, std::size_t k) {
       const auto prefix = checked_mul(checked_mul(i, checked_add(i, 1)), checked_add(i, 2)) / 6;
       const auto row = checked_mul(j, checked_add(j, 1)) / 2;

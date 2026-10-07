@@ -314,13 +314,33 @@ def run_combined(
         caller_bytes,
         rows,
         panels,
-        (dp * 2)(*(x.ctypes.data_as(dp) for x in output)),
+        (dp * len(output))(*(x.ctypes.data_as(dp) for x in output)),
         values.ctypes.data_as(dp),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
         error,
         len(error),
     )
     return status, output, values, counts, error.value.decode()
+
+
+def test_combined_probe_output_pointer_capacity() -> None:
+    """Exercise all nine output slots without requiring a CUDA library/device."""
+    inputs, _ = case(2, 3, 4)
+    o, v = inputs[5].shape
+    shapes = [(o, o), (v, v), *(x.shape for x in inputs[:7])]
+
+    def probe(*args: typing.Any) -> int:
+        pointers = args[9]
+        assert len(pointers) == len(shapes) == 9
+        for index, shape in enumerate(shapes):
+            np.ctypeslib.as_array(pointers[index], shape=shape).fill(index + 1)
+        return 0
+
+    status, output, _, _, error = run_combined(probe, inputs)
+    assert status == 0, error
+    for index, (actual, shape) in enumerate(zip(output, shapes, strict=True)):
+        assert actual.shape == shape
+        np.testing.assert_array_equal(actual, np.full(shape, index + 1))
 
 
 def run_native(
@@ -643,3 +663,99 @@ def test_native_preflight_rejects_before_null_input_access(
     )
     assert np.isnan(values).all()
     np.testing.assert_array_equal(counts, 19)
+
+
+@pytest.mark.parametrize("q,rows,panels", ((5_000_000, 0, 3), (3_800_000, 50, 1)))
+def test_combined_reverse_work_preflight_precedes_null_input_access(
+    native_combined_probe: typing.Any,
+    q: int,
+    rows: int,
+    panels: int,
+) -> None:
+    # Fock work fits alone; reverse or aggregate regenerated-panel work overflows.
+    # Input arrays and the device must remain untouched for this logical shape.
+    dp = ct.POINTER(ct.c_double)
+    nulls = (dp * 9)()
+    values = np.full(3, np.nan)
+    counts = np.full(14, 19, dtype=np.uintp)
+    error = ct.create_string_buffer(2048)
+    status = native_combined_probe(
+        100,
+        100,
+        q,
+        nulls,
+        1e-10,
+        np.iinfo(np.uintp).max,
+        0,
+        rows,
+        panels,
+        nulls,
+        values.ctypes.data_as(dp),
+        counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        error,
+        len(error),
+    )
+    assert status != 0 and b"overflow" in error.value
+    assert np.isnan(values).all()
+    np.testing.assert_array_equal(counts, 19)
+
+
+def test_joint_complete_work_preflight_on_host(
+    native_cxx: typing.Any, tmp_path: Path
+) -> None:
+    """Compile the actual pure CUDA-owner admission code without CUDA/device use."""
+    from tools.generate_df_occupied_triples import header
+
+    root = Path(__file__).resolve().parents[2]
+    owner = (root / "src/cc/df_triples_cuda.cu").read_text()
+    layouts = owner[
+        owner.index("constexpr std::size_t provider_allowance") : owner.index(
+            "double validate_inputs("
+        )
+    ]
+    layouts += owner[
+        owner.index("void validate_response_work(") : owner.index(
+            "// A cross-page moment"
+        )
+    ]
+    (tmp_path / "generated.hpp").write_text(header())
+    source = tmp_path / "preflight.cpp"
+    source.write_text(
+        "#include <algorithm>\n#include <array>\n#include <limits>\n"
+        '#include "posthf/capacity.hpp"\n#include "generated.hpp"\n'
+        "namespace generativeqc::cc::triples {\n"
+        "using posthf::checked_add; using posthf::checked_mul;\n"
+        + layouts
+        + "}\n"
+        + r"""
+int main() {
+  using namespace generativeqc::cc::triples;
+  for (const auto controls : {std::array<std::size_t, 3>{5000000, 100, 3},
+                             std::array<std::size_t, 3>{3800000, 50, 1}}) {
+    const auto [q, rows, panels] = controls;
+    const auto fock = fock_layout(100, 100, q, rows, panels, 0, true);
+    // In the paged case, both separate ledgers fit, but their aggregate does not.
+    if (rows == 50) validate_response_work(100, 100, q, fock.value, false);
+    try {
+      (void)joint_response_layout(100, 100, q, rows, panels, 0, true, false);
+      return 1;
+    } catch (const std::overflow_error&) {
+    }
+  }
+  (void)joint_response_layout(2, 3, 4, 2, 3, 0, true, false);
+  (void)joint_response_layout(2, 3, 4, 1, 1, 0, true, true);
+}
+"""
+    )
+    executable = tmp_path / "preflight"
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-I" + str(root / "src"),
+            "-I" + str(root / "include"),
+        ),
+    )
+    subprocess.run([str(executable)], check=True, capture_output=True, timeout=30)
