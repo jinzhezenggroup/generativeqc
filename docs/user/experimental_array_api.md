@@ -15,6 +15,8 @@ semantics fail closed, and symbolic arrays deliberately do not implement
 ```python
 from fractions import Fraction
 
+import numpy as np
+
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
 
@@ -27,7 +29,8 @@ program = xp.trace(
     {"x": spec},
 )
 
-result = tensor.execute(program, {"x": [1.0, 2.0, 3.0]})
+values = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+result = tensor.execute(program, {"x": values})
 print(result.outputs["norm2"])
 ```
 
