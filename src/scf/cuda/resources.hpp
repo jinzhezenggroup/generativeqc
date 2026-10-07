@@ -42,6 +42,9 @@ class CudaResources {
   /** Optional unscreened reference ERIs; fallback arena remains available. */
   double* reference_eri_{};
   std::size_t reference_eri_bytes_{};
+  /** Required canonical correction plane for restricted quartet references. */
+  double* reference_fock_correction_{};
+  std::size_t reference_fock_correction_bytes_{};
   /** Numeric reference peak includes the observed provider allocations. */
   std::size_t reference_peak_bytes_{};
   std::size_t provider_retained_bytes_{};

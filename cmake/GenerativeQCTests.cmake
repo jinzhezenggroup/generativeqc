@@ -23,6 +23,8 @@ endfunction()
 macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
+    generativeqc_native_test(generativeqc_compensated_atomic_cuda_tests
+                       tests/native/test_compensated_atomic_cuda.cu LIBRARIES CUDA::cudart)
     if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND TARGET CUDA::cublasLt)
       generativeqc_native_test(generativeqc_native_cublaslt_tests
                          tests/native/test_native_cublaslt.cu NO_GENERATIVEQC

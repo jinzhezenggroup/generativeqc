@@ -122,6 +122,7 @@ class Owner {
     }
     stats.numeric_capacity_bytes -= resident_budget - stats.resident_jk_bytes;
     stats.linear_screening_available = scf::cuda_direct_jk_linear_available(direct.get());
+    compensation.allocate(device, scf::cuda_direct_jk_compensation_elements(direct.get()), stream);
     stats.applied_screening =
         stats.linear_screening_available ? options.orbital_screening_tolerance : 0.0;
     stats.requested_screening = options.orbital_screening_tolerance;
@@ -134,8 +135,8 @@ class Owner {
     storage.allocate(device, checked_add(checked_mul(14, nn), checked_add(arena_elements, 1)),
                      stream);
     error.allocate(device, 2, stream);
-    stats.owned_device_bytes =
-        bytes(storage.size()) + 2 * sizeof(int) + census.size() * sizeof(std::uint64_t);
+    stats.owned_device_bytes = bytes(storage.size()) + bytes(compensation.size()) +
+                               2 * sizeof(int) + census.size() * sizeof(std::uint64_t);
     state.o = o;
     state.v = v;
     state.stream = stream;
@@ -247,10 +248,15 @@ class Owner {
     const bool linear = stats.linear_screening_available && (uncached || threshold > 0);
     auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
     spec.derivative_order = 0;
-    const bool census_available =
-        linear || scf::cuda_direct_jk_value_census_available(direct.get(), spec);
+    const bool census_available = compensation.size() || linear ||
+                                  scf::cuda_direct_jk_value_census_available(direct.get(), spec);
     std::string detail;
-    if (linear)
+    if (compensation.size())
+      status(scf::enqueue_cuda_direct_jk_compensated_device(
+                 direct.get(), spec, d, nn, j, k, compensation.get(), compensation.size(),
+                 error.get() + 1, threshold, profile ? census.get() : nullptr, detail, !uncached),
+             detail);
+    else if (linear)
       status(scf::enqueue_cuda_direct_jk_linear_device(direct.get(), spec, d, nn, j, k,
                                                        error.get() + 1, threshold,
                                                        profile ? census.get() : nullptr, detail),
@@ -438,6 +444,7 @@ class Owner {
   tensor::CudaContractionContext contractions;
   std::array<tensor::PreparedContractions, maps::prepared_stages> contraction_tables;
   runtime::OwnedCudaBuffer<double> storage;
+  runtime::OwnedCudaBuffer<double> compensation;
   runtime::OwnedCudaBuffer<int> error;
   runtime::OwnedCudaBuffer<std::uint64_t> census;
   runtime::OwnedCudaEvent jk_start, jk_stop;
@@ -544,9 +551,13 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
       std::max({maps::primal_arena_elements(o, v), maps::potential_seed_arena_elements(o, v),
                 maps::weights_arena_elements(o, v), maps::density_direction_arena_elements(o, v),
                 maps::orbital_action_arena_elements(o, v)});
-  std::size_t primitives = 0;
-  for (const auto& shell : system.shells)
+  std::size_t primitives = 0, canonical_dimension = 0;
+  for (const auto& shell : system.shells) {
     primitives = checked_add(primitives, shell.primitives.size());
+    const auto angular = static_cast<std::size_t>(shell.angular_momentum);
+    canonical_dimension =
+        checked_add(canonical_dimension, checked_mul(angular + 1, angular + 2) / 2);
+  }
   const auto direct_bound = scf::cuda_direct_coulomb_device_bytes(
       1, n, system.atoms.size(), system.shells.size(), primitives, 1);
   const auto source = posthf::source_capacity(system);
@@ -555,6 +566,10 @@ static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
   // conservative matrix bound does not grow as (ov)^2 or N^4.
   auto total =
       checked_add(options.caller_bytes, bytes(checked_add(reference_values, checked_mul(66, nn))));
+  // Signed J/K scatter needs two canonical correction planes, not two public
+  // matrices: spherical projection can expand the source's Cartesian frame.
+  total = checked_add(total,
+                      bytes(checked_mul(2, checked_mul(canonical_dimension, canonical_dimension))));
   total = checked_add(total, checked_add(bytes(checked_add(arena, 1)), 8 * sizeof(int)));
   total = checked_add(total, checked_add(checked_mul(5, direct_bound), checked_mul(6, source)));
   const auto derivative_budget =

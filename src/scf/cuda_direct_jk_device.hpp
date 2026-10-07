@@ -95,6 +95,26 @@ generativeqc_status enqueue_cuda_direct_jk_linear_device(
     double* coulomb, double* exchange, int* numerical_error, double threshold,
     std::uint64_t* census, std::string& detail);
 
+/** Required caller-owned elements for two restricted canonical correction
+ * planes. The canonical Cartesian dimension may exceed the public AO count.
+ * Zero denotes unavailable canonical storage; no CUDA work or allocation. */
+std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan* plan);
+
+/** Accuracy-qualified restricted full-range fixed-mask action. Same stream,
+ * lifetime, census and finite-error contract as the linear action above.
+ * correction must have exactly cuda_direct_jk_compensation_elements(plan)
+ * doubles, disjoint from all inputs, outputs and diagnostic slots. It is reset
+ * per action and folded before canonical-to-public projection. A zero mask
+ * may reuse admitted resident values unless allow_resident is false (the
+ * independent exact-audit contract); no allocation or success-path fence.
+ * Unavailable canonical storage returns NOT_IMPLEMENTED without enqueueing.
+ */
+generativeqc_status enqueue_cuda_direct_jk_compensated_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, double* correction, std::size_t correction_elements,
+    int* numerical_error, double threshold, std::uint64_t* census, std::string& detail,
+    bool allow_resident = true);
+
 /** Eligibility for the explicitly requested canonical bilinear experiment.
  * Specialized SPD derivative leases retain the caller's bounded polarization
  * schedule until a measured crossover is qualified. This is not a default. */

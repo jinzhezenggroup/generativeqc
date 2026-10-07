@@ -17,10 +17,19 @@ def emit_fock_accumulation_cuda(
     restricted_exchange_scale: str,
     unrestricted_exchange_scale: str,
     unroll_permutations: bool = True,
+    polymorphic_output: bool = False,
 ) -> str:
-    """Emit one canonical-ERI scatter with shared J/K spin semantics."""
+    """Emit one canonical-ERI scatter with shared J/K spin semantics.
+
+    Direct response may supply a runtime-owned accumulation sink. Leave other
+    consumers' source/ABI unchanged; the sink does not own the contraction.
+    """
 
     unroll_directive = "#pragma unroll\n" if unroll_permutations else ""
+    output_template = ""
+    if polymorphic_output:
+        parameters = parameters.replace("double* fock", "Output fock")
+        output_template = ",\n          typename Output = double*"
     contribution_name = f"{function_name}_contribution"
     return f"""/** Scale one density-by-integral product into a Fock contribution.
  *
@@ -39,7 +48,7 @@ __device__ __forceinline__ double {contribution_name}(
 }}
 
 /** {description} */
-template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>
+template <bool Unrestricted, bool MixedProduct = false, typename Integral = double{output_template}>
 __device__ __forceinline__ void {function_name}(
 {parameters}) {{
 {setup}
@@ -272,6 +281,7 @@ def emit_direct_fock_accumulation_header() -> str:
             "Scatter one symmetry-canonical ERI into HF, Coulomb-only, or exchange-only matrices."
         ),
         unroll_permutations=False,
+        polymorphic_output=True,
     )
     return f"""#pragma once
 
