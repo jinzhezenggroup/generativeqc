@@ -7,6 +7,7 @@ import importlib.util
 from graphlib import TopologicalSorter
 from pathlib import Path
 
+import pytest
 from generativeqc_compiler.integral import (
     production,
     production_bundle,
@@ -21,6 +22,7 @@ PRODUCTION_MODULES = {
     "production_bundle",
     "production_cost",
     "production_emission",
+    "production_exchange_queue",
     "production_profile",
     "production_k_block",
     "production_registry",
@@ -37,6 +39,7 @@ EMISSION_IMPORTS = {
     "fused_schedule",
     "ir",
     "production_cost",
+    "production_exchange_queue",
     "production_profile",
     "production_registry",
     "production_selection",
@@ -46,6 +49,7 @@ EMISSION_IMPORTS = {
     "typing",
     "generativeqc_compiler.common.cuda_target",
 }
+EXCHANGE_QUEUE_IMPORTS = {"__future__", "collections.abc", "typing"}
 
 
 def _imports_from_source(source: str) -> set[str]:
@@ -147,7 +151,9 @@ def test_import_normalization_covers_equivalent_package_spellings() -> None:
         """
 from . import production_bundle
 from .production_registry import emit_registry_source
+from .production_exchange_queue import exchange_streaming_worker
 from generativeqc_compiler.integral import production
+from generativeqc_compiler.integral import production_exchange_queue
 from generativeqc_compiler.integral.production_selection import KernelSelection
 import generativeqc_compiler.integral.production_cost
 """
@@ -156,6 +162,7 @@ import generativeqc_compiler.integral.production_cost
         "production",
         "production_bundle",
         "production_cost",
+        "production_exchange_queue",
         "production_registry",
         "production_selection",
     }
@@ -169,12 +176,21 @@ def test_bundle_owner_does_not_import_cuda_emitters() -> None:
     assert not any("benchmark" in name or "cli" in name for name in imports)
 
 
-def test_emission_owner_does_not_import_bundle_or_filesystem_orchestration() -> None:
-    imports = _imports("production_emission")
+@pytest.mark.parametrize(
+    ("module", "allowed_imports"),
+    [
+        ("production_emission", EMISSION_IMPORTS),
+        ("production_exchange_queue", EXCHANGE_QUEUE_IMPORTS),
+    ],
+)
+def test_emission_owner_does_not_import_bundle_or_filesystem_orchestration(
+    module: str, allowed_imports: set[str]
+) -> None:
+    imports = _imports(module)
     assert not any("production_bundle" in name for name in imports)
     assert not any("benchmark" in name or "cli" in name for name in imports)
-    assert imports <= EMISSION_IMPORTS
-    assert not _calls("production_emission") & {
+    assert imports <= allowed_imports
+    assert not _calls(module) & {
         "makedirs",
         "mkdir",
         "open",
@@ -183,6 +199,13 @@ def test_emission_owner_does_not_import_bundle_or_filesystem_orchestration() -> 
         "write_bytes",
         "write_text",
     }
+
+
+def test_exchange_queue_is_a_registered_leaf_emitter() -> None:
+    """Queue scheduling borrows science callbacks without owning another backend."""
+    assert "production_exchange_queue" in PRODUCTION_MODULES
+    assert "production_exchange_queue" in _production_imports("production_emission")
+    assert not _production_imports("production_exchange_queue")
 
 
 def test_facade_is_narrow_and_contains_no_generation_implementation() -> None:
