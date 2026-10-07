@@ -155,9 +155,14 @@ def validate(receipt: Any) -> dict[str, Any]:
         _sha(proof, "reuse_proof_sha256")
     elif proof is not None:
         raise ReceiptError("reuse proof digest requires a proven dependency")
-    if evidence["kind"] not in {"schedule_census", "runtime_trace"}:
+    if _text(evidence["kind"], "kind") not in {"schedule_census", "runtime_trace"}:
         raise ReceiptError("unknown evidence kind")
-    if evidence["phase"] not in {"static", "stream", "graph_capture", "submitted"}:
+    if _text(evidence["phase"], "phase") not in {
+        "static",
+        "stream",
+        "graph_capture",
+        "submitted",
+    }:
         raise ReceiptError("unknown evidence phase")
     if evidence["kind"] == "schedule_census":
         if evidence["phase"] != "static" or evidence["execution_complete"]:
@@ -279,6 +284,7 @@ def schedule_receipt(
         ("dense_output_blocks", dense_output_blocks),
     ):
         _uint(value, label, positive=True)
+    _bool(triangular, "triangular")
     if capacity > UINT64_MAX // 8:
         raise ReceiptError("memory budget byte count overflows")
     source = source_digest(root / SCHEDULE_SOURCE)
@@ -352,11 +358,20 @@ def trace_receipt(
     tile_kind: str,
 ) -> dict[str, Any]:
     """Read existing trace_tile/counter output; submission is never completion proof."""
-    if trace.get("schema") != "generativeqc.df_trace" or trace.get("version") != 1:
+    if (
+        trace.get("schema") != "generativeqc.df_trace"
+        or type(trace.get("version")) is not int
+        or trace["version"] != 1
+    ):
         raise ReceiptError("unsupported production trace")
-    if tile_kind not in {"raw", "transformed", "derivative", "streamed_rows"}:
+    if _text(tile_kind, "tile_kind") not in {
+        "raw",
+        "transformed",
+        "derivative",
+        "streamed_rows",
+    }:
         raise ReceiptError("unknown tile kind")
-    if trace.get("execution") not in {"stream", "graph_capture"}:
+    if _text(trace.get("execution"), "execution") not in {"stream", "graph_capture"}:
         raise ReceiptError("unknown trace execution mode")
     for key in ("dropped_tiles", "dropped_regions", "cuda_error"):
         _uint(trace.get(key), key)
@@ -430,7 +445,7 @@ def trace_receipt(
                 )
             if (
                 type(tile["derivative_coordinate"]) is not int
-                or tile["derivative_coordinate"] < -1
+                or not -1 <= tile["derivative_coordinate"] <= (1 << 63) - 1
             ):
                 raise ReceiptError("invalid derivative coordinate")
             _bool(tile["transformed"], "transformed")

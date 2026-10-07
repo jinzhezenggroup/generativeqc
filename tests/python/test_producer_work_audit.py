@@ -151,6 +151,12 @@ def test_domain_owner_coverage_and_bad_fields_fail_closed() -> None:
     invalid["evidence"]["reusable_dependency_proven"] = True
     with pytest.raises(ReceiptError, match="reuse_proof_sha256"):
         validate(invalid)
+    invalid = copy.deepcopy(baseline)
+    invalid["evidence"]["phase"] = []
+    with pytest.raises(ReceiptError, match="phase"):
+        validate(invalid)
+    with pytest.raises(ReceiptError, match="triangular"):
+        schedule(triangular=1)
 
 
 def test_duplicate_json_keys_rejected(tmp_path: Path) -> None:
@@ -304,6 +310,10 @@ def test_trace_counter_duplicate_and_overflow_fail_closed() -> None:
                 row["valid"] = False
         with pytest.raises(ReceiptError):
             adapted_trace(row)
+    row = trace()
+    row["version"] = True
+    with pytest.raises(ReceiptError, match="unsupported production trace"):
+        adapted_trace(row)
 
 
 def test_exact_ratio_and_legitimate_recomputation() -> None:
