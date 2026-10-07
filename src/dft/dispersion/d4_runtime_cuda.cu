@@ -9,8 +9,6 @@
 #include <vector>
 
 #include "dft/dispersion/d4_cuda.hpp"
-#include "dft/dispersion/d4_eeq_data.hpp"
-#include "dft/dispersion/d4_eeq_r2scan3c_c6.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "generated_d4_derivative.hpp"
 
@@ -54,7 +52,7 @@ struct D4CudaOwner {
   data::D4ElementData* elements{};
   data::D4ReferenceData* references{};
   double* reference_c6{};
-  eeq_data::EEQChargeElementData* charge_elements{};
+  D4EEQChargeElementData* charge_elements{};
 };
 
 namespace {
@@ -238,7 +236,9 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
 
   const auto atoms = static_cast<std::size_t>(owner->atoms);
   const auto systems = static_cast<std::size_t>(owner->systems);
-  const auto c6_count = eeq_data::kReferenceC6Standard.size();
+  const auto host_eeq_tables = eeq2019_host_tables();
+  const auto host_d4_tables = eeq_d4_host_tables(profile);
+  const auto c6_count = host_d4_tables.reference_c6_count;
   if (!allocate(owner->offsets, offsets.size(), detail) ||
       !allocate(owner->atomic_numbers, atoms, detail) ||
       !allocate(owner->total_charges, systems, detail) ||
@@ -256,28 +256,26 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
       !allocate(owner->dqdr_workspace,
                 static_cast<std::size_t>(owner->workers) * owner->dqdr_stride, detail) ||
       !allocate(owner->fixed_workspace, d4_cuda_workspace_elements(atoms), detail) ||
-      !allocate(owner->elements, eeq_data::kElementCount, detail) ||
-      !allocate(owner->references, eeq_data::kReferenceCount, detail) ||
+      !allocate(owner->elements, host_d4_tables.element_count, detail) ||
+      !allocate(owner->references, host_d4_tables.reference_count, detail) ||
       !allocate(owner->reference_c6, c6_count, detail) ||
-      !allocate(owner->charge_elements, eeq_data::kElementCount, detail)) {
+      !allocate(owner->charge_elements, host_eeq_tables.element_count, detail)) {
     status = GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
 
-  const double* c6 = profile == D4EEQProfile::r2scan3c ? eeq_data::kReferenceC6R2SCAN3C.data()
-                                                       : eeq_data::kReferenceC6Standard.data();
   if (!upload(owner->stream, owner->offsets, offsets.data(), offsets.size(), detail) ||
       !upload(owner->stream, owner->atomic_numbers, atomic_numbers.data(), atoms, detail) ||
       !upload(owner->stream, owner->total_charges, total_charges.data(), systems, detail) ||
       !upload(owner->stream, owner->coordinates, default_coordinates.data(), 3 * atoms, detail) ||
-      !upload(owner->stream, owner->elements, eeq_data::kElements.data(), eeq_data::kElementCount,
-              detail) ||
-      !upload(owner->stream, owner->references, eeq_data::kReferences.data(),
-              eeq_data::kReferenceCount, detail) ||
-      !upload(owner->stream, owner->reference_c6, c6, c6_count, detail) ||
-      !upload(owner->stream, owner->charge_elements, eeq_data::kChargeElements.data(),
-              eeq_data::kElementCount, detail)) {
+      !upload(owner->stream, owner->elements, host_d4_tables.elements,
+              host_d4_tables.element_count, detail) ||
+      !upload(owner->stream, owner->references, host_d4_tables.references,
+              host_d4_tables.reference_count, detail) ||
+      !upload(owner->stream, owner->reference_c6, host_d4_tables.reference_c6, c6_count, detail) ||
+      !upload(owner->stream, owner->charge_elements, host_eeq_tables.charge_elements,
+              host_eeq_tables.element_count, detail)) {
     destroy_d4_cuda_owner(owner.release());
     return nullptr;
   }
@@ -388,7 +386,7 @@ generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& para
     if (error != cudaSuccess) return cuda_failure(error, "clear D4 CUDA publication", detail);
   }
 
-  const EEQTables eeq_tables{owner->elements, owner->charge_elements, eeq_data::kElementCount};
+  const EEQTables eeq_tables{owner->elements, owner->charge_elements, kD4TableElementCount};
   eeq_prepare_kernel<<<owner->workers, 1, 0, owner->stream>>>(
       owner->systems, owner->offsets, owner->atomic_numbers, owner->total_charges,
       owner->coordinates, owner->active, eeq_tables, owner->next_system, owner->eeq_workspace,
@@ -403,9 +401,9 @@ generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& para
                            owner->elements,
                            owner->references,
                            owner->reference_c6,
-                           eeq_data::kElementCount,
-                           eeq_data::kReferenceCount,
-                           eeq_data::kReferenceC6Standard.size(),
+                           kD4TableElementCount,
+                           kD4TableReferenceCount,
+                           kD4PackedReferenceC6Count,
                            r2scan ? 2.0 : 3.0,
                            r2scan ? 1.0 : 2.0};
   const D4CudaBatch batch{owner->systems,     static_cast<std::uint32_t>(owner->atoms),
