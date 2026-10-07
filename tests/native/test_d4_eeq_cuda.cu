@@ -92,9 +92,7 @@ struct GpuEval {
     c6_r2scan.upload(r2scan_tables.reference_c6, c6_r2scan.count);
   }
 
-  EEQTables eeq_tables() const {
-    return {elements.ptr, charge_elements.ptr, kD4TableElementCount};
-  }
+  EEQTables eeq_tables() const { return {elements.ptr, charge_elements.ptr, kD4TableElementCount}; }
   D4Tables d4_tables(D4EEQProfile profile) const {
     return {D4ReferenceModel::eeq,
             elements.ptr,

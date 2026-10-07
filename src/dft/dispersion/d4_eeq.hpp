@@ -340,12 +340,11 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_complete_d4_eeq_with_tables(
   }
   const void* table_ptrs[] = {d4_tables.elements, d4_tables.references, d4_tables.reference_c6,
                               eeq_tables.elements, eeq_tables.charge_elements};
-  const std::size_t table_bytes[] = {
-      d4_tables.element_count * sizeof(data::D4ElementData),
-      d4_tables.reference_count * sizeof(data::D4ReferenceData),
-      d4_tables.reference_c6_count * sizeof(double),
-      eeq_tables.element_count * sizeof(data::D4ElementData),
-      eeq_tables.element_count * sizeof(D4EEQChargeElementData)};
+  const std::size_t table_bytes[] = {d4_tables.element_count * sizeof(data::D4ElementData),
+                                     d4_tables.reference_count * sizeof(data::D4ReferenceData),
+                                     d4_tables.reference_c6_count * sizeof(double),
+                                     eeq_tables.element_count * sizeof(data::D4ElementData),
+                                     eeq_tables.element_count * sizeof(D4EEQChargeElementData)};
   for (int a = 0; a < 5; ++a) {
     d4_detail::Range table_range{};
     if (!d4_detail::range(table_ptrs[a], table_bytes[a], table_range) ||

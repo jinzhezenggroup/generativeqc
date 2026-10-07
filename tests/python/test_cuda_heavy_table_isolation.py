@@ -22,7 +22,10 @@ CUDA_SOURCE_ROOTS = (
 
 
 def _resolve_include(owner: Path, include: str) -> Path | None:
-    for candidate in (owner.parent / include, *(root / include for root in INCLUDE_ROOTS)):
+    for candidate in (
+        owner.parent / include,
+        *(root / include for root in INCLUDE_ROOTS),
+    ):
         if candidate.is_file():
             return candidate.resolve()
     return None
@@ -55,5 +58,7 @@ def test_cuda_translation_units_do_not_parse_large_immutable_d4_tables() -> None
         for source in root.rglob("*.cu"):
             chain = _heavy_chain(source)
             if chain is not None:
-                offenders.append(" -> ".join(path.relative_to(ROOT).as_posix() for path in chain))
+                offenders.append(
+                    " -> ".join(path.relative_to(ROOT).as_posix() for path in chain)
+                )
     assert offenders == []

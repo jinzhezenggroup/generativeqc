@@ -1,9 +1,8 @@
-#include "dft/dispersion/d4_eeq.hpp"
-
 #include <array>
 #include <cstddef>
 
 #include "dft/dispersion/d4_data.hpp"
+#include "dft/dispersion/d4_eeq.hpp"
 #include "dft/dispersion/d4_eeq_data.hpp"
 #include "dft/dispersion/d4_eeq_r2scan3c_c6.hpp"
 

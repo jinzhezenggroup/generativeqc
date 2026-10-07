@@ -269,8 +269,8 @@ D4CudaOwner* create_d4_cuda_owner(int device_id, std::span<const std::uint32_t> 
       !upload(owner->stream, owner->atomic_numbers, atomic_numbers.data(), atoms, detail) ||
       !upload(owner->stream, owner->total_charges, total_charges.data(), systems, detail) ||
       !upload(owner->stream, owner->coordinates, default_coordinates.data(), 3 * atoms, detail) ||
-      !upload(owner->stream, owner->elements, host_d4_tables.elements,
-              host_d4_tables.element_count, detail) ||
+      !upload(owner->stream, owner->elements, host_d4_tables.elements, host_d4_tables.element_count,
+              detail) ||
       !upload(owner->stream, owner->references, host_d4_tables.references,
               host_d4_tables.reference_count, detail) ||
       !upload(owner->stream, owner->reference_c6, host_d4_tables.reference_c6, c6_count, detail) ||
@@ -397,15 +397,9 @@ generativeqc_status execute_d4_cuda(D4CudaOwner* owner, const D4Parameters& para
   if (error != cudaSuccess) return cuda_failure(error, "launch D4 EEQ prepare kernel", detail);
 
   const bool r2scan = profile == D4EEQProfile::r2scan3c;
-  const D4Tables d4_tables{D4ReferenceModel::eeq,
-                           owner->elements,
-                           owner->references,
-                           owner->reference_c6,
-                           kD4TableElementCount,
-                           kD4TableReferenceCount,
-                           kD4PackedReferenceC6Count,
-                           r2scan ? 2.0 : 3.0,
-                           r2scan ? 1.0 : 2.0};
+  const D4Tables d4_tables{D4ReferenceModel::eeq,     owner->elements,      owner->references,
+                           owner->reference_c6,       kD4TableElementCount, kD4TableReferenceCount,
+                           kD4PackedReferenceC6Count, r2scan ? 2.0 : 3.0,   r2scan ? 1.0 : 2.0};
   const D4CudaBatch batch{owner->systems,     static_cast<std::uint32_t>(owner->atoms),
                           owner->offsets,     owner->atomic_numbers,
                           owner->coordinates, owner->charges,
