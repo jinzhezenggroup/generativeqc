@@ -385,21 +385,33 @@ def _streaming_fock_source(selection: KernelSelection) -> str:
             )
         )
     )
-    system_density_bound = (
-        "topology.system_pair_density_bounds["
-        "static_cast<std::size_t>(system) * 10U + "
-        f"{density_pair_classes[0]}U]"
-    )
-    for pair_class in density_pair_classes[1:]:
-        system_density_bound = (
-            f"fmax({system_density_bound}, "
+    def pair_class_density_bound(pair_classes: tuple[int, ...]) -> str:
+        bound = (
             "topology.system_pair_density_bounds["
             "static_cast<std::size_t>(system) * 10U + "
-            f"{pair_class}U])"
+            f"{pair_classes[0]}U]"
         )
+        for pair_class in pair_classes[1:]:
+            bound = (
+                f"fmax({bound}, "
+                "topology.system_pair_density_bounds["
+                "static_cast<std::size_t>(system) * 10U + "
+                f"{pair_class}U])"
+            )
+        return bound
+
+    system_density_bound = pair_class_density_bound(density_pair_classes)
+    coulomb_density_pair_classes = tuple(
+        dict.fromkeys((first_pair_class, second_pair_class))
+    )
+    coulomb_system_density_bound = pair_class_density_bound(
+        coulomb_density_pair_classes
+    )
     system_density_bound = (
-        "(topology.fock_consumer == generativeqc::scf::detail::GeneratedFockConsumer::Coulomb"
-        f" ? 1.0 : {system_density_bound})"
+        "(topology.system_pair_density_bounds == nullptr ? 1.0 : "
+        "(topology.fock_consumer == "
+        "generativeqc::scf::detail::GeneratedFockConsumer::Coulomb"
+        f" ? {coulomb_system_density_bound} : {system_density_bound}))"
     )
     prefix = f"generated_{spec.name}"
     supports_mixed_fock = selection.has_capability(CAPABILITY_MIXED_FOCK)
@@ -461,11 +473,19 @@ __device__ __forceinline__ bool {prefix}_stream_survives(
   if (quartet_bound < screening_tolerance) return false;
   const std::int32_t system = topology.shell_pair_systems[first_pair];
   if (topology.active != nullptr && topology.active[system] == 0U) return false;
-  // The public pure-J provider uses geometry-only screening. Its optional
-  // topology intentionally has no HF density-bound allocations.
-  if (topology.fock_consumer == generativeqc::scf::detail::GeneratedFockConsumer::Coulomb) {{
+  // Optional/manual topologies without density bounds retain the legacy
+  // Schwarz-only contract. Production generated-J owners publish these bounds.
+  if (topology.shell_pair_density_bounds == nullptr) {{
     if (contribution_bound != nullptr) *contribution_bound = quartet_bound;
     return true;
+  }}
+  const auto ab = topology.shell_pair_density_bounds[first_pair];
+  const auto cd = topology.shell_pair_density_bounds[second_pair];
+  if (topology.fock_consumer == generativeqc::scf::detail::GeneratedFockConsumer::Coulomb) {{
+    const double contribution =
+        quartet_bound * fmax(ab.coulomb, cd.coulomb);
+    if (contribution_bound != nullptr) *contribution_bound = contribution;
+    return contribution >= screening_tolerance;
   }}
   const std::int32_t first_shell = topology.shell_pair_first[first_pair];
   const std::int32_t second_shell = topology.shell_pair_second[first_pair];
@@ -479,8 +499,6 @@ __device__ __forceinline__ bool {prefix}_stream_survives(
       topology, system, second_shell, third_shell);
   const std::size_t bd_pair = {prefix}_stream_pair_index(
       topology, system, second_shell, fourth_shell);
-  const auto ab = topology.shell_pair_density_bounds[first_pair];
-  const auto cd = topology.shell_pair_density_bounds[second_pair];
   const auto ac = topology.shell_pair_density_bounds[ac_pair];
   const auto ad = topology.shell_pair_density_bounds[ad_pair];
   const auto bc = topology.shell_pair_density_bounds[bc_pair];

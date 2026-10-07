@@ -44,6 +44,8 @@ struct GeneratedCoulombPlan {
   double screening{};
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{},
       *shell_bounds{};
+  ShellPairDensityBounds* shell_pair_density_bounds{};
+  double *system_density_bounds{}, *system_pair_density_bounds{};
   std::uint8_t* active{};
   std::uint32_t* heads{};
   const std::uint32_t* pair_order{};
