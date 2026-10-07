@@ -11,8 +11,13 @@
 #include <memory>
 #include <stdexcept>
 
+#include "dft/cuda_xc.hpp"
 #include "dft/grid.hpp"
 #include "runtime/resource_ledger.hpp"
+
+extern "C" int generativeqc_resource_ks_cuda_v1(std::size_t, std::size_t, std::size_t, std::size_t,
+                                                std::size_t, std::size_t, std::size_t, std::size_t,
+                                                std::size_t, std::uint64_t*, std::size_t);
 
 namespace {
 using generativeqc::core::System;
@@ -74,6 +79,7 @@ void accounting(const System& system, GridSpec spec) {
   const auto retained = generativeqc::dft::cuda_resident_grid_bytes(points);
   auto ledger = std::make_shared<DeviceResourceLedger>(DeviceResourceLedger{expected, 0});
   active_device_resource_ledger = ledger;
+  generativeqc::dft::CudaMolecularGridView lease;
   {
     const auto grid = MolecularGrid::from_cuda(system, spec, 0);
     const auto view = grid.cuda_view();
@@ -81,6 +87,19 @@ void accounting(const System& system, GridSpec spec) {
             "CUDA quadrature did not publish its immutable resident grid");
     require(ledger->peak == expected && ledger->live == retained && ledger->allocations == 3,
             "quadrature resident/scratch inventory differs from actual allocations");
+    for (std::size_t spins : {1U, 2U}) {
+      for (std::size_t pbe : {0U, 1U}) {
+        std::uint64_t inventory[3]{};
+        require(generativeqc_resource_ks_cuda_v1(2, system.atoms.size(), 2, 6, points, 8, spins,
+                                                 pbe, 256, inventory, 3) == 0,
+                "KS CUDA inventory query failed");
+        const auto xc = generativeqc::dft::cuda_xc_layout_shape(
+            system.atoms.size(), 6, 2, points, pbe, spins == 2, 256, false,
+            generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+        require(inventory[1] == xc.device_bytes + ledger->live,
+                "KS XC inventory omitted or duplicated retained molecular-grid storage");
+      }
+    }
     std::vector<double> device_points(grid.points().size()), device_weights(grid.weights().size());
     std::vector<double> device_atomic_weights(grid.weights().size());
     require(
@@ -96,8 +115,11 @@ void accounting(const System& system, GridSpec spec) {
     close(device_weights, grid.weights(), 0, 0, "resident grid weight mismatch");
     close(device_atomic_weights, grid.atomic_weights(), 0, 0,
           "resident grid atomic-measure mismatch");
+    lease = grid.cuda_view();
   }
-  require(ledger->live == 0, "resident CUDA grid outlived its MolecularGrid owner");
+  require(ledger->live == retained, "borrowed grid lease lost its retained allocation");
+  lease = {};
+  require(ledger->live == 0, "resident CUDA grid outlived its final lease");
   ledger->limit = expected - 1;
   bool rejected = false;
   try {

@@ -23,6 +23,8 @@ from generativeqc_compiler.dft.xc_point_batch_cuda import (
 )
 from generativeqc_compiler.xc.quadrature_cuda import _LAYOUT
 
+from tools.generate_xc_split_hybrid_registry import emit_registry
+
 if TYPE_CHECKING:
     from conftest import NativeCxx
 
@@ -50,6 +52,8 @@ using cudaStream_t = void*;
 constexpr cudaError_t cudaSuccess=0, cudaErrorInvalidValue=1;
 constexpr cudaError_t cudaErrorMemoryAllocation=2, cudaErrorInvalidDevice=3;
 inline cudaError_t cudaGetDevice(int* d) { *d=0; return 0; }
+inline cudaError_t cudaSetDevice(int) { return 0; }
+inline const char* cudaGetErrorString(cudaError_t) { return "CUDA allocation double"; }
 inline cudaError_t cudaMalloc(void** p,std::size_t) {
   static std::uintptr_t next=4096;
   *p=reinterpret_cast<void*>(next+=4096); return 0;
@@ -67,6 +71,7 @@ def native_probe(
 ) -> Any:
     folder = tmp_path_factory.mktemp("ks-point-budget")
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
+    (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
     direct = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
@@ -83,10 +88,13 @@ def native_probe(
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_xc.hpp"
+#include "dft/semilocal_family.hpp"
+#include "generated_split_hybrid_registry.cuh"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/packed_basis.hpp"
@@ -115,19 +123,15 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
     )
     source += r"""
 namespace generativeqc::dft {
-namespace q = generated::quadrature;
+namespace q = generativeqc::generated::quadrature;
 using runtime::size_add;
 using runtime::size_mul;
 constexpr unsigned kCudaKsChunkCapacity=2, kSmallEigensolverLimit=16;
 std::size_t sum(std::size_t a,std::size_t b) { return size_add(a,b); }
 std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
-// This probe exercises only the actual PBE shape, without linking GPU programs.
-struct Program {
-  bool supported{true}, requires_gradient{true}, requires_tau{};
-  CudaXcFastPathCapabilities fast_paths{};
-};
-Program cuda_xc_program_traits(std::uint32_t functional) { assert(functional==1); return {}; }
 """
+    source += _definition(xc, "struct CudaXcProgramTraits") + ";\n"
+    source += _definition(xc, "CudaXcProgramTraits cuda_xc_program_traits(") + "\n"
     source += _definition(ks, "struct KsStateStorage") + ";\n"
     source += _definition(ks, "std::size_t cuda_ks_state_bytes(") + "\n"
     source += _definition(xc, "CudaXcLayout cuda_xc_layout_shape(") + "\n"
@@ -208,6 +212,61 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
 }
 """
     )
+    # Compile the allocation owner and quadrature retention block unchanged.
+    owned = (ROOT / "src/runtime/cuda_resources.cuh").read_text()
+    source += "namespace generativeqc::runtime {\n"
+    for signature in ("inline void cuda_resource_check(", "class CudaDeviceScope"):
+        source += _definition(owned, signature) + ";\n"
+    for signature in ("struct BorrowedCudaBuffer", "class OwnedCudaBuffer"):
+        source += "template<class T>\n" + _definition(owned, signature) + ";\n"
+    source += "}\n"
+    begin = quadrature.index(
+        "  std::shared_ptr<runtime::OwnedCudaBuffer<double>> resident;"
+    )
+    end = quadrature.index("  runtime::OwnedCudaBuffer<double> storage", begin)
+    source += (
+        r"""
+extern "C" void grid_lifetime(void* handle,std::size_t points,std::uint64_t* out) {
+  using namespace runtime;
+  assert(!active_device_resource_ledger);
+  auto ledger=*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
+  active_device_resource_ledger=ledger;
+  namespace q=generated::quadrature;
+  struct {std::size_t points;} l{points};
+  const bool retain_device=true;
+  const int device=0;
+"""
+        + quadrature[begin:end]
+        + r"""
+  assert(resident_points==resident->get());
+  assert(resident_weights==resident_points+3*points);
+  assert(resident_atomic_weights==resident_weights+points);
+  out[0]=ledger->live;
+  std::shared_ptr<const void> borrower=resident;
+  resident.reset();
+  out[1]=ledger->live;
+  borrower.reset();
+  out[2]=ledger->live;
+  active_device_resource_ledger.reset();
+}
+extern "C" int grid_shapes(std::size_t points,std::size_t spins,std::size_t functional,
+                           std::size_t tile,std::size_t response,std::size_t mixed,
+                           std::uint64_t* out) {
+  try {
+    const auto precision=mixed ? dft::CudaXcAoPrecision::Fp32ComputeFp64Storage
+                               : dft::CudaXcAoPrecision::Fp64;
+    const auto direct=dft::cuda_xc_layout_shape(2,6,2,points,functional,spins==2,
+                                               tile,response,precision);
+    const auto borrowed=dft::cuda_xc_layout_shape(2,6,2,points,functional,spins==2,
+                                                 tile,response,precision,1,1,true);
+    out[0]=direct.device_bytes;
+    out[1]=borrowed.device_bytes;
+    out[2]=dft::cuda_resident_grid_bytes(points);
+    return 0;
+  } catch (...) { return 1; }
+}
+"""
+    )
     unit = folder / "probe.cpp"
     unit.write_text(source)
     library = native_cxx.build_shared(
@@ -226,11 +285,21 @@ extern "C" void fleet(void* handle,std::size_t count,std::size_t mandatory,
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.fleet.restype = None
+    probe.grid_lifetime.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    probe.grid_lifetime.restype = None
+    probe.grid_shapes.argtypes = [ctypes.c_size_t] * 6 + [
+        ctypes.POINTER(ctypes.c_uint64)
+    ]
+    probe.grid_shapes.restype = ctypes.c_int
     return probe
 
 
 def _request(
-    native_probe: Any, monkeypatch: pytest.MonkeyPatch, count: int
+    native_probe: Any, monkeypatch: pytest.MonkeyPatch, count: int, **options: Any
 ) -> tuple[Any, Any]:
     monkeypatch.setattr(resources_ks, "_cuda_library_identity", lambda _: {})
 
@@ -259,7 +328,8 @@ def _request(
         [H2] * count,
         backend="cuda",
         library=library,
-        ks_options=KsOptions(grid=GridSpec()),
+        ks_options=options.pop("ks_options", KsOptions(grid=GridSpec())),
+        **options,
     )
     return request, library
 
@@ -282,13 +352,9 @@ def test_public_budget_preserves_fleet_and_later_workspace(
             [request], ResourceBudget(device_bytes=plan.peak_bytes["device"])
         )
     row = json.loads(dict(request.candidates[0].decisions)["item_device_inventory"])[0]
-    # Retained atomic weights add eight bytes/point beyond the legacy XC slot.
-    # This test isolates optional panels; it does not certify the legacy inventory.
-    mandatory = sum(row[key] for key in ("state", "xc", "coulomb")) + 8 * 49152
+    mandatory = sum(row[key] for key in ("state", "xc", "coulomb"))
     ledger = NativeDeviceLedger(library, plan, owner="ks")
     try:
-        if count == 1024:
-            assert ledger.limit == 2199167612
         assert count * mandatory + workspace <= ledger.limit
         result = (ctypes.c_uint64 * 5)()
         native_probe.fleet(ledger.handle, count, mandatory, workspace, result)

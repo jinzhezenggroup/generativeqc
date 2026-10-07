@@ -261,9 +261,9 @@ def _cuda_item_inventory(
         raise NotImplementedError("invalid CUDA quadrature resource shape/build")
     # Quadrature is built after the Coulomb provider. The native v1 query
     # includes bounded generation scratch plus the resident full-grid buffer.
-    # The legacy XC slot remains a combined persistent XC+grid reservation, so
-    # its unchanged byte count is intentional even though production XC borrows
-    # the grid and owns a correspondingly smaller private arena.
+    # The XC slot is the borrowed private arena plus the full shared grid owner,
+    # including atomic weights retained for force consumers. Charge that combined
+    # lifetime once per item; only setup excess is serialized across the fleet.
     setup = max(setup, checked_bytes(int(output[2]) + quadrature.value))
     provider_query = getattr(
         library, "generativeqc_resource_ks_matrix_provider_cuda_v1", None

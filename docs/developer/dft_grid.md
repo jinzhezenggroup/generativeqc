@@ -85,8 +85,8 @@ normalization and derivative exports share the same prescription.
 
 The native owner retains host coordinates, weights and owners for current export
 contracts. Device-fused KS additionally retains the exact CUDA-generated
-coordinates and weights in one immutable full-grid allocation. The generated
-quadrature still downloads the host export once, but XC borrows the resident
+coordinates, partition weights and atomic measures in one immutable full-grid
+allocation of five doubles per point. The generated quadrature still downloads the host export once, but XC borrows the resident
 device view directly: it neither uploads those host copies again nor reserves a
 second full-grid points/weights region in its private arena. Host-unfused KS does
 not retain the device view.
@@ -94,10 +94,12 @@ not retain the device view.
 The pure `generativeqc_resource_quadrature_cuda_v1` shape bridge reports the
 preparation peak: bounded quadrature scratch plus the resident full-grid
 allocation that coexists with it. The legacy KS resource ABI keeps its XC slot
-as the combined persistent XC+grid bound, preserving the established three-slot
-planner while the native owner reports private XC and resident-grid bytes
-separately. Unsupported inputs or failed normalization throw without a CPU
-partition fallback. The ordinary `MolecularGrid` constructor remains the
+as the borrowed private XC arena plus the complete retained grid owner, preserving
+the established three-slot planner without duplicating points/weights or omitting
+the atomic measures. Each retained KS item contributes this combined persistent
+bound; only setup excess is serialized. The native owner reports private XC and
+resident-grid bytes separately. Unsupported inputs or failed normalization throw
+without a CPU partition fallback. The ordinary `MolecularGrid` constructor remains the
 independent CPU reference.
 See the [CUDA quadrature decision](../../.agents/notes/implemented/performance/2026-09-23-cuda-molecular-quadrature.md).
 

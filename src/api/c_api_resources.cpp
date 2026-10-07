@@ -80,7 +80,8 @@ int generativeqc_ks_resource_inventory_version_v1() {
 }
 
 /** Pure shape bridge to allocator-owned KS/XC and common #202 direct-J
- * layouts. It never constructs a grid, density, integral or CUDA context. */
+ * layouts. The XC slot combines the borrowed-grid arena and its retained
+ * MolecularGrid owner. It never constructs a grid, density or CUDA context. */
 int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::size_t shells,
                                      std::size_t primitives, std::size_t points,
                                      std::size_t diis_history, std::size_t spins, std::size_t pbe,
@@ -90,12 +91,18 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
 #if GENERATIVEQC_HAS_CUDA
   try {
     const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
-    const auto xc = generativeqc::dft::cuda_xc_layout_shape(atoms, primitives, nao, points,
-                                                            pbe != 0, spins == 2, tile_points);
+    const auto xc = generativeqc::dft::cuda_xc_layout_shape(
+        atoms, primitives, nao, points, pbe != 0, spins == 2, tile_points, false,
+        generativeqc::dft::CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+    // The shared grid retains xyz, partition weights and atomic measures.
+    // A nonborrowed XC arena owns only the first four arrays and cannot stand
+    // in for this five-array lifetime, even when XC reads only points/weights.
+    const auto xc_and_grid = generativeqc::runtime::size_add(
+        xc.device_bytes, generativeqc::dft::cuda_resident_grid_bytes(points));
     const auto direct =
         generativeqc::scf::cuda_direct_coulomb_device_bytes(1, nao, atoms, shells, primitives);
     output[0] = state;
-    output[1] = xc.device_bytes;
+    output[1] = xc_and_grid;
     output[2] = direct;
     return 0;
   } catch (...) {
