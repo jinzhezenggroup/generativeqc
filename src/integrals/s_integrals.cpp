@@ -1198,10 +1198,15 @@ std::vector<double> contract_weighted_density_fitting_derivative(
   }
   return result;
 }
-DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
-                                                           const core::System& auxiliary_system,
-                                                           bool include_derivatives) {
+DensityFittingIntegralData build_density_fitting_integrals(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    bool include_derivatives, CoulombRange range, double omega) {
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
+  if ((range == CoulombRange::Full && omega != 0.0) ||
+      (range != CoulombRange::Full && (!std::isfinite(omega) || !(omega > 0.0))))
+    throw std::invalid_argument("DF range identity requires full/zero or positive short/long omega");
+  if (range != CoulombRange::Full && include_derivatives)
+    throw std::invalid_argument("range-separated DF materialized derivatives are not implemented");
 
   DensityFittingIntegralData cartesian;
   cartesian.nbf = molecule::cartesian_ao_count(orbital_system);
@@ -1217,7 +1222,74 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                   [](const AoView& ao) { return ao.shell->angular_momentum <= 3; });
   const bool generated_derivatives = include_derivatives && generated_supported;
   const bool generated_values = !include_derivatives && generated_supported;
-  if (generated_derivatives) {
+  if (range != CoulombRange::Full) {
+    std::vector<Vec3> atom_coordinates;
+    atom_coordinates.reserve(orbital_system.atoms.size());
+    for (const auto& atom : orbital_system.atoms)
+      atom_coordinates.push_back(
+          {Jet(atom.position[0], 0), Jet(atom.position[1], 0), Jet(atom.position[2], 0)});
+    const molecule::CartesianComponent zero_angular{0, 0, 0};
+
+    const std::size_t metric_size = cartesian.naux * cartesian.naux;
+    cartesian.metric.assign(metric_size, 0.0);
+    for (std::size_t p = 0; p < cartesian.naux; ++p) {
+      const AoView& first = auxiliary_aos[p];
+      const Vec3& first_center = atom_coordinates[first.shell->atom_index];
+      for (std::size_t q = 0; q < cartesian.naux; ++q) {
+        const AoView& second = auxiliary_aos[q];
+        const Vec3& second_center = atom_coordinates[second.shell->atom_index];
+        const std::size_t item = matrix_index(p, q, cartesian.naux);
+        const double component_factor =
+            first.component_normalization * second.component_normalization;
+        for (const auto& first_primitive : first.shell->primitives) {
+          for (const auto& second_primitive : second.shell->primitives) {
+            const double weight =
+                component_factor * first_primitive.coefficient * second_primitive.coefficient;
+            cartesian.metric[item] +=
+                weight * primitive_range_eri_cartesian(
+                             first_primitive.exponent, first_center, first.angular, 0.0,
+                             first_center, zero_angular, second_primitive.exponent, second_center,
+                             second.angular, 0.0, second_center, zero_angular, range, omega);
+          }
+        }
+      }
+    }
+
+    const std::size_t tensor_size = cartesian.nbf * cartesian.nbf * cartesian.naux;
+    cartesian.three_center.assign(tensor_size, 0.0);
+    for (std::size_t i = 0; i < cartesian.nbf; ++i) {
+      const AoView& first = orbital_aos[i];
+      const Vec3& first_center = atom_coordinates[first.shell->atom_index];
+      for (std::size_t j = 0; j < cartesian.nbf; ++j) {
+        const AoView& second = orbital_aos[j];
+        const Vec3& second_center = atom_coordinates[second.shell->atom_index];
+        for (std::size_t p = 0; p < cartesian.naux; ++p) {
+          const AoView& auxiliary = auxiliary_aos[p];
+          const Vec3& auxiliary_center = atom_coordinates[auxiliary.shell->atom_index];
+          const std::size_t item =
+              three_center_index(i, j, p, cartesian.nbf, cartesian.naux);
+          const double component_factor = first.component_normalization *
+                                          second.component_normalization *
+                                          auxiliary.component_normalization;
+          for (const auto& first_primitive : first.shell->primitives) {
+            for (const auto& second_primitive : second.shell->primitives) {
+              for (const auto& auxiliary_primitive : auxiliary.shell->primitives) {
+                const double weight = component_factor * first_primitive.coefficient *
+                                      second_primitive.coefficient *
+                                      auxiliary_primitive.coefficient;
+                cartesian.three_center[item] +=
+                    weight * primitive_range_eri_cartesian(
+                                 first_primitive.exponent, first_center, first.angular,
+                                 second_primitive.exponent, second_center, second.angular,
+                                 auxiliary_primitive.exponent, auxiliary_center, auxiliary.angular,
+                                 0.0, auxiliary_center, zero_angular, range, omega);
+              }
+            }
+          }
+        }
+      }
+    }
+  } else if (generated_derivatives) {
     using GeneratedAngular = generated_df_cpu::Angular;
     using GeneratedVec3 = generated_df_cpu::Vec3;
     auto center = [&](std::size_t atom) {
