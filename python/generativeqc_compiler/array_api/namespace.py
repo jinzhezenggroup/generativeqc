@@ -267,7 +267,9 @@ def divide(x1: object, x2: object) -> VibeArray:
     if isinstance(x1, VibeArray):
         if _is_generic_array(x1):
             left, right = _generic_array_and_scalar(x1, x2, name="divide")
-            return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
+            return _canonical_generic(
+                VibeArray(tensor_ir.divide(left.node, right.node))
+            )
         denominator = _exact(x2, "divisor")
         if denominator == 0:
             raise ZeroDivisionError("exact scalar divisor cannot be zero")
