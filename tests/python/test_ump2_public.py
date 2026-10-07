@@ -246,6 +246,8 @@ def test_public_ump2_unsupported_requests_fail_closed() -> None:
         calc.singlepoint(atoms, multiplicity=2, properties=("energy", "forces"))
     with pytest.raises(ValueError, match="fp64"):
         Calculator(method="ump2", precision="auto")
+    with pytest.raises(NotImplementedError, match="UMP2 frozen-core"):
+        Calculator(method="ump2", ccsd_frozen_core=1)
     with pytest.raises(Exception, match="RI/DF"):
         Calculator(
             method="ump2", density_fitting="cpu", initial_guess=None

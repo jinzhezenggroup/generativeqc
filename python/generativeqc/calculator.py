@@ -738,6 +738,13 @@ class Calculator:
                 raise NotImplementedError(
                     "native coupled-cluster frozen-core references are not implemented"
                 )
+        if self._method == _native.METHOD_UMP2:
+            if type(ccsd_frozen_core) is not int or ccsd_frozen_core < 0:
+                raise ValueError("ccsd_frozen_core must be a non-negative integer")
+            if ccsd_frozen_core:
+                raise NotImplementedError(
+                    "UMP2 frozen-core references are not implemented"
+                )
         self._correlation_memory_budget_bytes = correlation_memory_budget_bytes
         self._mp2_denominator_threshold = float(mp2_denominator_threshold)
         self._ccsd_max_iterations = int(ccsd_max_iterations)
