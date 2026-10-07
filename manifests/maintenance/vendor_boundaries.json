@@ -169,14 +169,6 @@
         "cusolverGetProperty": 1
       }
     },
-    "src/scf/cuda/df_eigensystem.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
-      "references": {
-        "cusolverDnXsyevd_bufferSize": 1
-      }
-    },
     "src/scf/cuda/df_exchange.cpp": {
       "classification": "migration",
       "contract": "#1890",
@@ -243,9 +235,7 @@
         "cublasSetStream": 1,
         "cusolverDnCreate": 1,
         "cusolverDnCreateParams": 1,
-        "cusolverDnSetStream": 1,
-        "cusolverDnXsyevd": 1,
-        "cusolverDnXsyevd_bufferSize": 1
+        "cusolverDnSetStream": 1
       }
     },
     "src/scf/cuda/df_response_weights.cu": {
@@ -276,11 +266,7 @@
         "cusolverDnCreate": 1,
         "cusolverDnCreateParams": 1,
         "cusolverDnCreateSyevjInfo": 1,
-        "cusolverDnDsyevjBatched": 1,
-        "cusolverDnDsyevjBatched_bufferSize": 1,
         "cusolverDnSetStream": 1,
-        "cusolverDnXsyevBatched": 1,
-        "cusolverDnXsyevBatched_bufferSize": 1,
         "cusolverDnXsyevjSetMaxSweeps": 1,
         "cusolverDnXsyevjSetSortEig": 1,
         "cusolverDnXsyevjSetTolerance": 1
@@ -322,11 +308,7 @@
         "cusolverDnCreateParams": 1,
         "cusolverDnDestroy": 1,
         "cusolverDnDestroyParams": 1,
-        "cusolverDnDsyevjBatched": 1,
         "cusolverDnSetStream": 1,
-        "cusolverDnXsyevBatched": 1,
-        "cusolverDnXsyevd": 1,
-        "cusolverDnXsyevd_bufferSize": 1,
         "cusolverGetProperty": 3
       }
     },
@@ -361,8 +343,8 @@
       "contract": "#1890",
       "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
       "references": {
-        "cusolverDnXsyevBatched": 3,
-        "cusolverDnXsyevBatched_bufferSize": 3
+        "cusolverDnXsyevBatched": 2,
+        "cusolverDnXsyevBatched_bufferSize": 2
       }
     },
     "src/scf/cuda_eigensolver_probe.cu": {
@@ -392,13 +374,30 @@
         "cusolverDnCreate": 1,
         "cusolverDnCreateParams": 1,
         "cusolverDnCreateSyevjInfo": 1,
-        "cusolverDnDsyevjBatched_bufferSize": 1,
         "cusolverDnSetStream": 1,
-        "cusolverDnXsyevBatched_bufferSize": 1,
-        "cusolverDnXsyevd_bufferSize": 1,
         "cusolverDnXsyevjSetMaxSweeps": 1,
         "cusolverDnXsyevjSetSortEig": 1,
         "cusolverDnXsyevjSetTolerance": 1
+      }
+    },
+    "src/solver/cuda/cusolver_compat.hpp": {
+      "classification": "provider",
+      "contract": "src/solver/cuda/symmetric_eigen_provider.hpp",
+      "reason": "Shared host API compatibility lowering for NVIDIA contiguous and CuMetal explicit-stride XsyevBatched signatures.",
+      "references": {
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1
+      }
+    },
+    "src/solver/cuda/symmetric_eigen_provider.cpp": {
+      "classification": "provider",
+      "contract": "src/solver/cuda/symmetric_eigen_provider.hpp",
+      "reason": "One shared FP64 symmetric provider query/submission implementation for GFN2, SCF and DF; borrowed resources and unchanged caller policy.",
+      "references": {
+        "cusolverDnDsyevjBatched": 1,
+        "cusolverDnDsyevjBatched_bufferSize": 1,
+        "cusolverDnXsyevd": 1,
+        "cusolverDnXsyevd_bufferSize": 1
       }
     },
     "src/tensor/cuda_reduction.cuh": {
@@ -553,14 +552,10 @@
         "cusolverDnDormtr": 1,
         "cusolverDnDormtr_bufferSize": 2,
         "cusolverDnDpotrfBatched": 1,
-        "cusolverDnDsyevjBatched": 1,
-        "cusolverDnDsyevjBatched_bufferSize": 1,
         "cusolverDnDsytrd": 1,
         "cusolverDnDsytrd_bufferSize": 2,
         "cusolverDnGetStream": 1,
-        "cusolverDnSetStream": 2,
-        "cusolverDnXsyevBatched": 1,
-        "cusolverDnXsyevBatched_bufferSize": 1
+        "cusolverDnSetStream": 2
       }
     },
     "src/xtb/native/src/backends/cuda/gfn2_scc_setup_eigensolver.cu": {

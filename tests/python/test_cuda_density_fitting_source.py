@@ -17,8 +17,15 @@ def test_cuda_df_metric_uses_generic_cusolver_api() -> None:
 
     source = _df_source("df_plan_setup.cpp", "df_setup_internal.hpp")
     assert "cusolverDnCreateParams" in source
-    assert "cusolverDnXsyevd_bufferSize" in source
-    assert "cusolverDnXsyevd(" in source
+    assert "SymmetricEigenFamily::xsyevd" in source
+    assert "query_symmetric_eigen(" in source
+    assert "launch_symmetric_eigen(" in source
+    provider = (
+        REPOSITORY_ROOT / "src/solver/cuda/symmetric_eigen_provider.cpp"
+    ).read_text()
+    assert "cusolverDnXsyevd_bufferSize" in provider
+    assert "cusolverDnXsyevd(" in provider
+    assert "cusolverDnDsyevd" not in provider
     assert "cusolverDnDsyevd" not in source
     assert "solver_host_workspace" in source
 

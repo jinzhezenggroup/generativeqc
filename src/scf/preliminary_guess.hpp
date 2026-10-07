@@ -26,6 +26,11 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
                                               std::vector<double> density);
 
+/** Prepare one bounded cold seed without executing the immutable target. */
+std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
+                                                               const PreliminaryOptions& policy,
+                                                               PreliminaryDiagnostic& diagnostic);
+
 using TargetSolve = std::function<ScfResult(const std::vector<double>*)>;
 /** The callback executes immutable target equations with fresh iterative state.
  * Existing explicit/imported/retained density is authoritative. A cold seed

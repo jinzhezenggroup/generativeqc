@@ -1,0 +1,920 @@
+diff --git a/python/generativeqc/resources_ks.py b/python/generativeqc/resources_ks.py
+index 6f8e16c2d..69f7c691c 100644
+--- a/python/generativeqc/resources_ks.py
++++ b/python/generativeqc/resources_ks.py
+@@ -39,6 +39,20 @@ from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
+ _CPU_AO_GRID_CACHE_CAP = 64 << 20
+ 
+ 
++def _incremental_direct_jk_controls() -> dict[str, bool]:
++    """Match both native benchmark selectors, including legacy OR semantics."""
++    controls = {}
++    for name in (
++        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK",
++        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
++    ):
++        value = os.environ.get(name)
++        if value not in (None, "0", "off", "1", "on"):
++            raise ValueError(f"{name} must be 0/off or 1/on")
++        controls[name] = value in ("1", "on")
++    return controls
++
++
+ def _item_host_inventory(
+     item: typing.Any,
+     *,
+@@ -329,6 +343,8 @@ def ks_resource_request(
+         raise NotImplementedError(
+             "CUDA KS planning does not claim scaled/global-hybrid execution"
+         )
++    incremental_controls = _incremental_direct_jk_controls()
++    incremental_requested = any(incremental_controls.values())
+     systems = tuple(tuple(Atom.from_value(a) for a in atoms) for atoms in systems)
+     if not systems or any(not atoms for atoms in systems):
+         raise ValueError("KS resource planning requires nonempty systems")
+@@ -429,6 +445,8 @@ def ks_resource_request(
+                 "GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"
+             ),
+         )
++    if incremental_requested:
++        controls["incremental_direct_jk"] = incremental_controls
+     # AUTO runs two separately bounded nonlinear stages. Reserve the native
+     # owner and exported history for both stages plus strict closure corrections.
+     history_iterations = max_iterations
+@@ -452,6 +470,23 @@ def ks_resource_request(
+         exclusions += (
+             "CUDA driver/context/modules, compiler-managed stacks and pool/page retention",
+         )
++    if incremental_requested:
++        # Inventory v1 has no incremental-mode input. Its ordinary device
++        # layout and strict host-history bound omit the anchor/delta buffers
++        # and final-closure records. Fail before querying/loading a library;
++        # never admit that experimental owner under an ordinary resource plan.
++        return ResourceRequest(
++            name,
++            identity,
++            (),
++            exclusions,
++            unsupported_reason=(
++                "KS resource planning does not support experimental incremental "
++                "Direct-J/K storage and closure history; unset "
++                "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK and "
++                "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK or set both to 0/off"
++            ),
++        )
+     host = [
+         _item_host_inventory(
+             item,
+diff --git a/src/dft/cuda_ks.cpp b/src/dft/cuda_ks.cpp
+index 6de227586..165f4867f 100644
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -108,7 +108,9 @@ struct KsStateStorage {
+   double *hcore{}, *overlap{}, *x{}, *j{}, *exchange{}, *range_exchange{}, *density{}, *proposal{},
+       *warm{}, *warm_orbitals{}, *fock{}, *residual{}, *tmp1{}, *tmp2{}, *effective{},
+       *fock_history{}, *residual_history{}, *gram{}, *weights{}, *eigenvalues{},
+-      *final_coefficients{}, *final_eigenvalues{}, *cold_seed{};
++      *final_coefficients{}, *final_eigenvalues{}, *cold_seed{}, *incremental_anchor_density{},
++      *incremental_delta_density{}, *incremental_anchor_j{}, *incremental_anchor_exchange{},
++      *incremental_anchor_range_exchange{}, *incremental_max_abs_delta_density{};
+   std::int32_t* occupied{};
+   std::uint8_t *enabled{}, *spin_enabled{};
+   std::uint32_t *history_count{}, *history_head{};
+@@ -120,7 +122,7 @@ struct KsStateStorage {
+   /** The dry run and actual partition share one checked, typed layout. All
+    * persistent and phase-local numeric buffers are explicitly charged. */
+   std::size_t partition(std::size_t n, unsigned spins, unsigned history, bool exact_exchange,
+-                        bool range_correction, void* storage) {
++                        bool range_correction, bool incremental_direct_jk, void* storage) {
+     const auto matrix = product(n, n), elements = product(spins, matrix);
+     std::size_t bytes = 0;
+     const auto reserve = [&](auto*& pointer, std::size_t count) {
+@@ -139,6 +141,24 @@ struct KsStateStorage {
+       reserve(range_exchange, elements);
+     else
+       range_exchange = nullptr;
++    if (incremental_direct_jk) {
++      reserve(incremental_anchor_density, elements);
++      reserve(incremental_delta_density, elements);
++      reserve(incremental_anchor_j, matrix);
++      if (exact_exchange)
++        reserve(incremental_anchor_exchange, elements);
++      else
++        incremental_anchor_exchange = nullptr;
++      if (range_correction)
++        reserve(incremental_anchor_range_exchange, elements);
++      else
++        incremental_anchor_range_exchange = nullptr;
++      reserve(incremental_max_abs_delta_density, 1);
++    } else {
++      incremental_anchor_density = incremental_delta_density = incremental_anchor_j = nullptr;
++      incremental_anchor_exchange = incremental_anchor_range_exchange = nullptr;
++      incremental_max_abs_delta_density = nullptr;
++    }
+     for (auto** pointer :
+          {&density, &proposal, &warm, &warm_orbitals, &fock, &residual, &tmp1, &tmp2, &effective})
+       reserve(*pointer, elements);
+@@ -185,14 +205,15 @@ std::uint64_t next_ks_owner() noexcept {
+ }  // namespace
+ 
+ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
+-                                bool exact_exchange, bool range_correction) {
++                                bool exact_exchange, bool range_correction,
++                                bool incremental_direct_jk) {
+   if (!n || n > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+       (spins != 1 && spins != 2) || history > 64)
+     throw std::invalid_argument("invalid CUDA KS resource shape");
+   KsStateStorage layout;
+-  return sum(
+-      layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction, nullptr),
+-      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
++  return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
++                              incremental_direct_jk, nullptr),
++             n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+ }
+ 
+ struct CudaKsPlan::Impl : KsStateStorage {
+@@ -242,6 +263,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
+   std::uint64_t pending_fitted_projection_scratch_generation{};
+   std::uint64_t final_fitted_projection_scratch_generation{};
+   runtime::ExecutionPrecisionSchedule precision_schedule{};
++  scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
++  bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{};
++  unsigned incremental_delta_updates{};
++  double host_incremental_max_abs_delta_density{};
+   bool strict_refinement{}, pending_mixed_coulomb{}, pending_mixed_density{},
+       mixed_precision_executed{}, device_nonlocal{};
+   double exchange_coefficient{}, range_exchange_coefficient{};
+@@ -764,6 +789,25 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     precision_schedule =
+         resolve_cuda_ks_precision_schedule(options.precision_mode, xc_layout.fast_paths,
+                                            fitted_coulomb, nonlocal_correlation != nullptr);
++    const bool range_incremental_eligible =
++        !has_range_correction ||
++        (range_correction->backend == scf::FockBackend::Cuda &&
++         !range_correction->spec.coulomb.present && range_correction->spec.exchange.present &&
++         range_correction->spec.exchange.approximation == scf::FockApproximation::Exact);
++    auto incremental_policy_options = options;
++    // The prepared provider owns the executed screening contract. Native callers
++    // may supply ScfOptions independently, so never let an options mismatch turn
++    // a screened lower into an unbounded exact-linear delta chain.
++    incremental_policy_options.screening_tolerance = strategy.screening_tolerance;
++    incremental_direct_jk_policy = scf::resolve_incremental_direct_jk_policy(
++        incremental_policy_options,
++        {static_cast<bool>(fock_binding) && !fitted_coulomb &&
++             scf::direct_jk_incremental_exact_eligible(strategy) && range_incremental_eligible,
++         true, precision_schedule.any_lower_precision()});
++    incremental_direct_jk = incremental_direct_jk_policy.active;
++    if (incremental_direct_jk_policy.requested && !incremental_direct_jk)
++      throw std::invalid_argument(
++          "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider");
+     const bool host_unfused =
+         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
+     // Automatic local-AO requests use the XC owner's execution capability.
+@@ -817,7 +861,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+         throw std::invalid_argument(
+             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
+     }
+-    ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction, nullptr);
++    ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
++                               incremental_direct_jk, nullptr);
+     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
+     resource.xc_device_bytes =
+         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
+@@ -829,7 +874,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     const auto diagnostic_iterations =
+         precision_schedule.any_lower_precision()
+             ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
+-            : options.max_iterations;
++            : (incremental_direct_jk ? sum(options.max_iterations, kMaximumFinalCorrections)
++                                     : options.max_iterations);
+     output.dft_diagnostic.history.reserve(diagnostic_iterations);
+     resource.retained_host_numeric_bytes =
+         (host_xc_density.capacity() + host_xc_alpha.capacity() + host_xc_beta.capacity() +
+@@ -849,7 +895,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+           sum(resource.retained_host_numeric_bytes, ao_selection_bound.host_peak_bytes);
+     try {
+       check(runtime::resource_cuda_malloc(&arena, ks_arena_bytes));
+-      partition(n, spins, history, has_exchange, has_range_correction, arena);
++      partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
++                arena);
+       if (nonlocal_arena_bytes) {
+         check(runtime::resource_cuda_malloc(&nonlocal_arena, nonlocal_arena_bytes));
+         partition_nonlocal(nonlocal_arena);
+@@ -1019,6 +1066,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
+             ? 4U
+             : semilocal_family_domain_version(semilocal_family_from_code(functional));
+     output.initial_density_used = input != nullptr || use_warm;
++    output.incremental_direct_jk.requested = incremental_direct_jk_policy.requested;
++    output.incremental_direct_jk.active = incremental_direct_jk;
++    incremental_anchored = false;
++    pending_incremental_delta = false;
++    incremental_delta_updates = 0;
++    host_incremental_max_abs_delta_density = 0.0;
+     is_active = false;
+     started = true;
+     is_failed = false;
+@@ -1077,7 +1130,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     device_chunk_mode =
+         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
+         !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
+-        !precision_schedule.any_lower_precision() && spins == 1 &&
++        !precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1 &&
+         (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
+         provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
+     if (device_chunk_mode) {
+@@ -1092,6 +1145,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     try {
+       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
+       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
++      if (incremental_direct_jk)
++        check(cudaMemsetAsync(incremental_max_abs_delta_density, 0, sizeof(double), stream));
+       cuda_ks_detail::reset_control(stream, spins, static_cast<int>(occupations[0]),
+                                     static_cast<int>(occupations[1]), control, enabled,
+                                     spin_enabled);
+@@ -1566,6 +1621,71 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     return {next_generation, n, spins, tmp1, staged_xc_totals, staged_xc_error, stream};
+   }
+ 
++  bool incremental_delta_admitted() const noexcept {
++    if (!incremental_direct_jk || !incremental_anchored || final_closure || strict_refinement)
++      return false;
++    if (incremental_direct_jk_policy.effective_rebuild_interval != 0U &&
++        incremental_delta_updates >= incremental_direct_jk_policy.effective_rebuild_interval)
++      return false;
++    if (incremental_direct_jk_policy.density_rms_threshold > 0.0 &&
++        (!output.iterations || !std::isfinite(output.density_rms) ||
++         output.density_rms > incremental_direct_jk_policy.density_rms_threshold))
++      return false;
++    return true;
++  }
++
++  const double* prepare_incremental_jk_density() {
++    pending_incremental_delta = false;
++    if (!incremental_direct_jk) return density;
++    pending_incremental_delta = incremental_delta_admitted();
++    if (!pending_incremental_delta) {
++      if (final_closure) {
++        ++output.incremental_direct_jk.post_scf_full_builds;
++      } else {
++        if (incremental_anchored) ++output.incremental_direct_jk.periodic_rebuilds;
++        ++output.incremental_direct_jk.anchor_full_builds;
++      }
++      return density;
++    }
++    const auto blocks = static_cast<unsigned>((elements + 127) / 128);
++    launch_prepare_incremental_density_kernel(blocks, 128, 0, stream, elements, density,
++                                              incremental_anchor_density, incremental_delta_density,
++                                              incremental_max_abs_delta_density);
++    check(cudaGetLastError());
++    ++output.incremental_direct_jk.delta_builds;
++    return incremental_delta_density;
++  }
++
++  void finalize_incremental_jk_components() {
++    if (!incremental_direct_jk || final_closure) return;
++    const auto matrix_blocks = static_cast<unsigned>((matrix + 127) / 128);
++    const auto element_blocks = static_cast<unsigned>((elements + 127) / 128);
++    if (pending_incremental_delta) {
++      launch_add_matrix_kernel(matrix_blocks, 128, 0, stream, matrix, incremental_anchor_j, j);
++      if (has_exchange)
++        launch_add_matrix_kernel(element_blocks, 128, 0, stream, elements,
++                                 incremental_anchor_exchange, exchange);
++      if (has_range_correction)
++        launch_add_matrix_kernel(element_blocks, 128, 0, stream, elements,
++                                 incremental_anchor_range_exchange, range_exchange);
++      check(cudaGetLastError());
++      ++incremental_delta_updates;
++    } else {
++      incremental_delta_updates = 0;
++    }
++    launch_copy_matrix_kernel(element_blocks, 128, 0, stream, elements, density,
++                              incremental_anchor_density);
++    launch_copy_matrix_kernel(matrix_blocks, 128, 0, stream, matrix, j, incremental_anchor_j);
++    if (has_exchange)
++      launch_copy_matrix_kernel(element_blocks, 128, 0, stream, elements, exchange,
++                                incremental_anchor_exchange);
++    if (has_range_correction)
++      launch_copy_matrix_kernel(element_blocks, 128, 0, stream, elements, range_exchange,
++                                incremental_anchor_range_exchange);
++    check(cudaGetLastError());
++    incremental_anchored = true;
++  }
++
+   void enqueue_legacy() {
+     current_device();
+     if (!is_active || is_pending) throw std::logic_error("CUDA KS iteration state is not ready");
+@@ -1593,13 +1713,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
+           fitted_exchange && occupied_fitted_factor_ready && occupied_fock_binding;
+       pending_fitted_occupied = use_occupied_fitted;
+       pending_fitted_projection_scratch_generation = 0;
++      const double* jk_density = prepare_incremental_jk_density();
+       generativeqc_status jk_status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+       bool fused_rsh_values = false;
+       if (has_range_correction && !pending_mixed_coulomb && !use_occupied_fitted) {
+         jk_status = scf::enqueue_prepared_cuda_rsh_values(
+-            provider, *range_correction, density, spins == 2 ? density + matrix : nullptr, matrix,
+-            j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr, range_exchange,
+-            spins == 2 ? range_exchange + matrix : nullptr, jk_error, range_jk_error, detail);
++            provider, *range_correction, jk_density, spins == 2 ? jk_density + matrix : nullptr,
++            matrix, j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr,
++            range_exchange, spins == 2 ? range_exchange + matrix : nullptr, jk_error,
++            range_jk_error, detail);
+         fused_rsh_values = jk_status == GENERATIVEQC_STATUS_SUCCESS;
+         if (!fused_rsh_values && jk_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+           check(jk_status, detail);
+@@ -1610,11 +1732,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
+               tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
+               spins == 2 ? occupations[1] : 0};
+           jk_status = scf::enqueue_prepared_cuda_occupied_fock(
+-              provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
++              provider, jk_density, spins == 2 ? jk_density + matrix : nullptr, matrix, occupied, j,
+               exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
+         } else {
+           jk_status = scf::enqueue_prepared_cuda_fock(
+-              provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
++              provider, jk_density, spins == 2 ? jk_density + matrix : nullptr, matrix, j, exchange,
+               has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error,
+               pending_mixed_coulomb, detail,
+               pending_mixed_coulomb ? mixed_coulomb_work_counter() : nullptr);
+@@ -1636,7 +1758,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+           ++movement.fitted_dense_exchange_builds;
+       }
+       if (has_range_correction && !fused_rsh_values)
+-        enqueue_range_correction(density, spins == 2 ? density + matrix : nullptr, detail);
++        enqueue_range_correction(jk_density, spins == 2 ? jk_density + matrix : nullptr, detail);
++      finalize_incremental_jk_components();
+       mixed_precision_executed =
+           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
+       const auto potential = stage_xc(++generation, density_phase);
+@@ -1722,6 +1845,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
+       if (pending_mixed_coulomb)
+         check(cudaMemcpyAsync(&mixed_coulomb_recurrences, mixed_coulomb_work_counter(),
+                               sizeof(mixed_coulomb_recurrences), cudaMemcpyDeviceToHost, stream));
++      if (incremental_direct_jk)
++        check(cudaMemcpyAsync(&host_incremental_max_abs_delta_density,
++                              incremental_max_abs_delta_density, sizeof(double),
++                              cudaMemcpyDeviceToHost, stream));
+       check(cudaStreamSynchronize(stream));
+     } catch (...) {
+       cudaStreamSynchronize(stream);
+@@ -1731,7 +1858,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
+       throw;
+     }
+     movement.scalar_d2h_bytes +=
+-        sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U);
++        sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U) +
++        (incremental_direct_jk ? sizeof(host_incremental_max_abs_delta_density) : 0U);
++    if (incremental_direct_jk)
++      output.incremental_direct_jk.max_abs_delta_density = host_incremental_max_abs_delta_density;
+     ++movement.synchronizations;
+     ++movement.iteration_synchronizations;
+     ++movement.iteration_chunks;
+@@ -1770,7 +1900,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     is_failed = physical.failure != 0 || !std::isfinite(output.energy);
+     for (unsigned s = 0; s < 2; ++s)
+       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
++    if (!is_failed && incremental_direct_jk && pending_incremental_delta)
++      ++output.incremental_direct_jk.anchor_updates;
+     if (is_failed) {
++      pending_incremental_delta = false;
+       if (pending_mixed_coulomb || pending_mixed_density) {
+         // Any failed low-precision attempt retries the same density with the
+         // strict target operator. Do not publish or cache the failed proposal.
+@@ -1809,7 +1942,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
+                            physical.maximum_residual < std::min(1e-9, options.density_tolerance);
+     // Keep the existing RMS diagnostic, but do not publish an energy-only state
+     // that the shared final-state validator will reject on the AO maximum norm.
+-    const bool strict_final_closure = spins == 2 || !provider.system().ecp_terms.empty();
++    const bool strict_final_closure =
++        incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();
+     const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
+     const bool enter_strict_refinement =
+         mixed_stage && (converged || output.iterations >= options.max_iterations);
+@@ -1892,6 +2026,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
+       final_fitted_projection_ready = false;
+       throw;
+     }
++    pending_incremental_delta = false;
+     previous_energy = output.energy;
+     try {
+       if (output.converged && complete_precision_inventory_domain()) {
+diff --git a/src/dft/cuda_ks.hpp b/src/dft/cuda_ks.hpp
+index e66e223c4..25d5fcefd 100644
+--- a/src/dft/cuda_ks.hpp
++++ b/src/dft/cuda_ks.hpp
+@@ -82,7 +82,8 @@ struct CudaKsTransfers {
+  * provider's actual host/device queries are checked before allocation. This
+  * shape query performs no CUDA call and allocates no numeric buffers. */
+ std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
+-                                bool exact_exchange = false, bool range_correction = false);
++                                bool exact_exchange = false, bool range_correction = false,
++                                bool incremental_direct_jk = false);
+ 
+ /** Borrowed exact occupied factor and fitted projection for a successful
+  * restricted density-fitted hybrid final state. Both allocations stay owned by
+diff --git a/src/methods/dft_method.cpp b/src/methods/dft_method.cpp
+index 53e7cdcca..b57aa5c6f 100644
+--- a/src/methods/dft_method.cpp
++++ b/src/methods/dft_method.cpp
+@@ -2,9 +2,12 @@
+ 
+ #include <algorithm>
+ #include <atomic>
++#include <cerrno>
+ #include <climits>
+ #include <cmath>
+ #include <cstddef>
++#include <cstdlib>
++#include <cstring>
+ #include <limits>
+ #include <memory>
+ #include <optional>
+@@ -207,6 +210,44 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
+   return dft::semilocal_family_scf_domain(plan.semilocal_family);
+ }
+ 
++/** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
++ * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
++bool incremental_direct_jk_benchmark_requested(const char* name) {
++  const char* value = std::getenv(name);
++  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
++    return false;
++  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
++  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
++                    std::string(name) + " must be 0/off or 1/on");
++}
++
++std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {
++  const char* value = std::getenv(name);
++  if (value == nullptr) return std::nullopt;
++  if (*value < '0' || *value > '9')
++    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
++                      std::string(name) + " must be an unsigned integer");
++  errno = 0;
++  char* end = nullptr;
++  const unsigned long parsed = std::strtoul(value, &end, 10);
++  if (errno == ERANGE || end == value || *end != '\0' || parsed > UINT_MAX)
++    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
++                      std::string(name) + " must be an unsigned integer");
++  return static_cast<unsigned>(parsed);
++}
++
++std::optional<double> incremental_direct_jk_benchmark_density_rms_threshold(const char* name) {
++  const char* value = std::getenv(name);
++  if (value == nullptr) return std::nullopt;
++  errno = 0;
++  char* end = nullptr;
++  const double parsed = std::strtod(value, &end);
++  if (errno == ERANGE || end == value || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0)
++    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
++                      std::string(name) + " must be finite and nonnegative");
++  return parsed;
++}
++
+ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
+                             generativeqc_backend backend, NativeKsExecutionPlan& execution_plan) {
+   if (!std::isfinite(descriptor.energy_tolerance) || !std::isfinite(descriptor.density_tolerance) ||
+@@ -450,6 +491,42 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
+   options.resolved_fock_build = scf::resolve_fock_build(
+       fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
+       options.screening_tolerance, options.density_fitting_relative_threshold);
++  const bool generic_incremental_direct_jk =
++      incremental_direct_jk_benchmark_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
++  const bool legacy_pbe0_incremental_direct_jk =
++      incremental_direct_jk_benchmark_requested("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
++  if (generic_incremental_direct_jk || legacy_pbe0_incremental_direct_jk) {
++    const bool strict_exact_cuda_ks =
++        backend == GENERATIVEQC_BACKEND_CUDA &&
++        options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
++        options.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
++        scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
++    if (!strict_exact_cuda_ks)
++      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
++                        "KS incremental Direct-J/K benchmark mode requires strict-FP64 "
++                        "exact-direct CUDA KS");
++    if (legacy_pbe0_incremental_direct_jk) {
++      const bool strict_exact_pbe0_rks =
++          cuda_curated_global_hybrid && fock.spin == scf::FockSpin::Restricted &&
++          execution_plan.semilocal_family == dft::SemilocalFamily::Pbe;
++      if (!strict_exact_pbe0_rks)
++        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
++                          "legacy PBE0 incremental Direct-J/K selector requires CUDA RKS PBE0");
++    }
++    options.incremental_direct_jk = true;
++    auto interval = incremental_direct_jk_benchmark_rebuild_interval(
++        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
++    if (!interval)
++      interval = incremental_direct_jk_benchmark_rebuild_interval(
++          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
++    if (interval) options.incremental_direct_jk_rebuild_interval = *interval;
++    auto threshold = incremental_direct_jk_benchmark_density_rms_threshold(
++        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
++    if (!threshold)
++      threshold = incremental_direct_jk_benchmark_density_rms_threshold(
++          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
++    if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
++  }
+   if (semilocal_metadata.molecular_nonlocal_domain) {
+     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
+       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+@@ -531,6 +608,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
+   result.executed_backend = backend;
+   result.fock_builds = native.fock_builds;
+   result.precision = native.precision;
++  result.incremental_direct_jk = native.incremental_direct_jk;
+   result.precision_work = std::move(native.precision_work);
+   native.dft_diagnostic.fock_builds = native.fock_builds;
+   native.dft_diagnostic.initial_density_used = native.initial_density_used;
+@@ -2250,6 +2328,10 @@ class KsPreparedBatch final : public PreparedBatch {
+ 
+ }  // namespace
+ 
++Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend) {
++  return adapt_result(std::move(native), backend);
++}
++
+ generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
+                                           dft::CudaKsFinalStateToken& token, std::string& detail) {
+   const auto* ks = dynamic_cast<const KsPreparedCalculation*>(&calculation);
+diff --git a/src/methods/dft_method.hpp b/src/methods/dft_method.hpp
+index cc0b24d9a..1e35badf2 100644
+--- a/src/methods/dft_method.hpp
++++ b/src/methods/dft_method.hpp
+@@ -105,6 +105,10 @@ generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, st
+ generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
+                                         std::string& detail);
+ 
++/** Convert one completed native KS solve into the method-neutral publication record.
++ * Kept in detail scope so adapter field coverage can be tested without a backend execution. */
++Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend);
++
+ /** Internal #163 handoff. These helpers accept prepared CPU RKS/CUDA KS owners;
+  * they do not extend public result layouts or authorize force execution. */
+ generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
+diff --git a/src/scf/cuda/arena.cpp b/src/scf/cuda/arena.cpp
+index 1c0fc08fc..e77fc6410 100644
+--- a/src/scf/cuda/arena.cpp
++++ b/src/scf/cuda/arena.cpp
+@@ -292,6 +292,10 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
+                                        made.incremental_delta_updates) ||
+       !workspace.append<std::uint8_t>(incremental_direct_jk ? batch_size : 0,
+                                       made.incremental_full_build) ||
++      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
++                                            made.incremental_full_build_count) ||
++      !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
++                                            made.incremental_delta_build_count) ||
+       !workspace.append<double>(incremental_direct_jk ? batch_size : 0,
+                                 made.incremental_max_abs_delta_density) ||
+       !workspace.append<unsigned long long>(incremental_direct_jk ? batch_size : 0,
+diff --git a/src/scf/cuda/arena.hpp b/src/scf/cuda/arena.hpp
+index 18763f538..6d756b75f 100644
+--- a/src/scf/cuda/arena.hpp
++++ b/src/scf/cuda/arena.hpp
+@@ -125,6 +125,8 @@ struct ArenaLayout {
+   std::size_t incremental_anchor_fock{};
+   std::size_t incremental_delta_updates{};
+   std::size_t incremental_full_build{};
++  std::size_t incremental_full_build_count{};
++  std::size_t incremental_delta_build_count{};
+   std::size_t incremental_max_abs_delta_density{};
+   std::size_t incremental_full_admitted_shell_quartets{};
+   std::size_t incremental_delta_admitted_shell_quartets{};
+diff --git a/src/scf/cuda/rhf_bucket_internal.hpp b/src/scf/cuda/rhf_bucket_internal.hpp
+index e92cb3fe7..83f1c035c 100644
+--- a/src/scf/cuda/rhf_bucket_internal.hpp
++++ b/src/scf/cuda/rhf_bucket_internal.hpp
+@@ -198,6 +198,8 @@ inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfO
+          first.incremental_direct_jk == second.incremental_direct_jk &&
+          first.incremental_direct_jk_rebuild_interval ==
+              second.incremental_direct_jk_rebuild_interval &&
++         first.incremental_direct_jk_density_rms_threshold ==
++             second.incremental_direct_jk_density_rms_threshold &&
+          first.resolved_fock_build == second.resolved_fock_build;
+ }
+ 
+diff --git a/src/scf/cuda/scf_matrix_kernels.cu b/src/scf/cuda/scf_matrix_kernels.cu
+index 366fa9bc2..5e64d6c28 100644
+--- a/src/scf/cuda/scf_matrix_kernels.cu
++++ b/src/scf/cuda/scf_matrix_kernels.cu
+@@ -13,6 +13,24 @@ __global__ void copy_matrix_kernel(std::size_t elements, const double* source,
+   if (element < elements) destination[element] = source[element];
+ }
+ 
++__global__ void add_matrix_kernel(std::size_t elements, const double* addend, double* destination) {
++  const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
++  if (element < elements) destination[element] += addend[element];
++}
++
++__global__ void prepare_incremental_density_kernel(std::size_t elements, const double* density,
++                                                   const double* anchor_density,
++                                                   double* delta_density,
++                                                   double* max_abs_delta_density) {
++  const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
++  if (element >= elements) return;
++  const double delta = density[element] - anchor_density[element];
++  delta_density[element] = delta;
++  const double magnitude = fabs(delta);
++  atomicMax(reinterpret_cast<unsigned long long*>(max_abs_delta_density),
++            static_cast<unsigned long long>(__double_as_longlong(magnitude)));
++}
++
+ /** Copy complete per-system matrices selected by a device-resident mask. */
+ __global__ void copy_selected_matrices_kernel(std::int32_t batch_size,
+                                               std::int32_t matrices_per_system, std::int32_t nbf,
+@@ -163,16 +181,18 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
+ 
+ /**
+  * Build ΔD against the last accepted exact-linear anchor. A 0xffffffff update
+- * count denotes the first build; later full rebuilds happen only after the
+- * configured number of delta applications. Resetting the Fock anchor to hcore
+- * makes the downstream builder usable for both cases: it always computes
+- * hcore + G(input).
++ * count denotes the first build. Later full rebuilds happen after the configured
++ * number of delta applications or while the previous accepted density RMS is
++ * still above the late-SCF gate. Resetting the Fock anchor to hcore makes the
++ * downstream builder usable for both cases: it always computes hcore + G(input).
+  */
+ __global__ void prepare_incremental_direct_jk_kernel(
+     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
+-    std::uint32_t rebuild_interval, const double* density, const double* hcore,
+-    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* delta_density,
+-    std::uint32_t* delta_updates, std::uint8_t* full_build, double* max_abs_delta_density) {
++    std::uint32_t rebuild_interval, double density_rms_threshold, const double* density_rms,
++    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
++    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
++    std::uint8_t* full_build, unsigned long long* full_build_count,
++    unsigned long long* delta_build_count, double* max_abs_delta_density) {
+   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
+   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
+   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
+@@ -183,9 +203,22 @@ __global__ void prepare_incremental_direct_jk_kernel(
+   const std::size_t local = element % vector_size;
+   const std::size_t physical_element = element % matrix_size;
+   const std::uint32_t updates = delta_updates[system];
+-  const bool rebuild =
+-      updates == 0xffffffffU || (rebuild_interval != 0U && updates >= rebuild_interval);
+-  if (local == 0U) full_build[system] = rebuild ? 1U : 0U;
++  const bool first_build = updates == 0xffffffffU;
++  const bool periodic_rebuild =
++      !first_build && rebuild_interval != 0U && updates >= rebuild_interval;
++  bool density_rebuild = false;
++  if (!first_build && density_rms_threshold > 0.0) {
++    const double previous_rms = density_rms[system];
++    density_rebuild = !isfinite(previous_rms) || previous_rms > density_rms_threshold;
++  }
++  const bool rebuild = first_build || periodic_rebuild || density_rebuild;
++  if (local == 0U) {
++    full_build[system] = rebuild ? 1U : 0U;
++    if (rebuild)
++      full_build_count[system] += 1ULL;
++    else
++      delta_build_count[system] += 1ULL;
++  }
+ 
+   const double current = density[element];
+   const double delta = rebuild ? current : current - anchor_density[element];
+@@ -230,6 +263,20 @@ void launch_copy_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
+   copy_matrix_kernel<<<grid, block, shared_bytes, stream>>>(elements, source, destination);
+ }
+ 
++void launch_add_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
++                              std::size_t elements, const double* addend, double* destination) {
++  add_matrix_kernel<<<grid, block, shared_bytes, stream>>>(elements, addend, destination);
++}
++
++void launch_prepare_incremental_density_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
++                                               cudaStream_t stream, std::size_t elements,
++                                               const double* density, const double* anchor_density,
++                                               double* delta_density,
++                                               double* max_abs_delta_density) {
++  prepare_incremental_density_kernel<<<grid, block, shared_bytes, stream>>>(
++      elements, density, anchor_density, delta_density, max_abs_delta_density);
++}
++
+ void launch_copy_selected_matrices_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
+                                           cudaStream_t stream, std::int32_t batch_size,
+                                           std::int32_t matrices_per_system, std::int32_t nbf,
+@@ -305,12 +352,15 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
+ void launch_prepare_incremental_direct_jk_kernel(
+     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
+     std::int32_t spin_count, std::int32_t nbf, std::uint32_t rebuild_interval,
+-    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+-    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
+-    std::uint8_t* full_build, double* max_abs_delta_density) {
++    double density_rms_threshold, const double* density_rms, const double* density,
++    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
++    double* delta_density, std::uint32_t* delta_updates, std::uint8_t* full_build,
++    unsigned long long* full_build_count, unsigned long long* delta_build_count,
++    double* max_abs_delta_density) {
+   prepare_incremental_direct_jk_kernel<<<grid, block, shared_bytes, stream>>>(
+-      batch_size, spin_count, nbf, rebuild_interval, density, hcore, active, anchor_density,
+-      anchor_fock, delta_density, delta_updates, full_build, max_abs_delta_density);
++      batch_size, spin_count, nbf, rebuild_interval, density_rms_threshold, density_rms, density,
++      hcore, active, anchor_density, anchor_fock, delta_density, delta_updates, full_build,
++      full_build_count, delta_build_count, max_abs_delta_density);
+ }
+ 
+ void launch_finalize_incremental_direct_jk_kernel(
+diff --git a/src/scf/cuda/scf_matrix_kernels.hpp b/src/scf/cuda/scf_matrix_kernels.hpp
+index 05405e98a..84e006a50 100644
+--- a/src/scf/cuda/scf_matrix_kernels.hpp
++++ b/src/scf/cuda/scf_matrix_kernels.hpp
+@@ -11,6 +11,17 @@ namespace generativeqc::scf::cuda_execution {
+ void launch_copy_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+                                std::size_t elements, const double* source, double* destination);
+ 
++/** Add one dense FP64 buffer into another without changing stream ownership. */
++void launch_add_matrix_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
++                              std::size_t elements, const double* addend, double* destination);
++
++/** Form an anchor-relative density delta and accumulate its maximum absolute entry. */
++void launch_prepare_incremental_density_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
++                                               cudaStream_t stream, std::size_t elements,
++                                               const double* density, const double* anchor_density,
++                                               double* delta_density,
++                                               double* max_abs_delta_density);
++
+ /** Preserve launch geometry, stream and per-item state routing. */
+ void launch_copy_selected_matrices_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
+                                           cudaStream_t stream, std::int32_t batch_size,
+@@ -66,13 +77,15 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
+                                            const double* subtract, const std::uint8_t* active,
+                                            double* minuend);
+ 
+-/** Prepare #990's device-resident ΔD build and periodic exact refresh independently per item. */
++/** Prepare #990's device-resident ΔD build and exact refresh independently per item. */
+ void launch_prepare_incremental_direct_jk_kernel(
+     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
+     std::int32_t spin_count, std::int32_t nbf, std::uint32_t rebuild_interval,
+-    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
+-    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
+-    std::uint8_t* full_build, double* max_abs_delta_density);
++    double density_rms_threshold, const double* density_rms, const double* density,
++    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
++    double* delta_density, std::uint32_t* delta_updates, std::uint8_t* full_build,
++    unsigned long long* full_build_count, unsigned long long* delta_build_count,
++    double* max_abs_delta_density);
+ 
+ /** Combine h+G(ΔD) with the retained full-Fock anchor, then advance the exact anchor. */
+ void launch_finalize_incremental_direct_jk_kernel(
+diff --git a/src/scf/cuda_rhf.cpp b/src/scf/cuda_rhf.cpp
+index 293d9f83f..3dc2a3da9 100644
+--- a/src/scf/cuda_rhf.cpp
++++ b/src/scf/cuda_rhf.cpp
+@@ -1456,6 +1456,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+       incremental_direct_jk
+           ? arena_pointer<std::uint8_t>(resources.arena_, layout.incremental_full_build)
+           : nullptr;
++  unsigned long long* incremental_full_build_count =
++      incremental_direct_jk
++          ? arena_pointer<unsigned long long>(resources.arena_, layout.incremental_full_build_count)
++          : nullptr;
++  unsigned long long* incremental_delta_build_count =
++      incremental_direct_jk ? arena_pointer<unsigned long long>(
++                                  resources.arena_, layout.incremental_delta_build_count)
++                            : nullptr;
+   double* incremental_max_abs_delta_density =
+       incremental_direct_jk
+           ? arena_pointer<double>(resources.arena_, layout.incremental_max_abs_delta_density)
+@@ -2985,6 +2993,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+   if (incremental_direct_jk) {
+     cuda_error = cudaMemsetAsync(incremental_delta_updates, 0xff,
+                                  batch_size * sizeof(std::uint32_t), resources.stream_);
++    if (cuda_error == cudaSuccess) {
++      cuda_error = cudaMemsetAsync(incremental_full_build_count, 0,
++                                   batch_size * sizeof(unsigned long long), resources.stream_);
++    }
++    if (cuda_error == cudaSuccess) {
++      cuda_error = cudaMemsetAsync(incremental_delta_build_count, 0,
++                                   batch_size * sizeof(unsigned long long), resources.stream_);
++    }
+     if (cuda_error == cudaSuccess) {
+       cuda_error = cudaMemsetAsync(incremental_max_abs_delta_density, 0,
+                                    batch_size * sizeof(double), resources.stream_);
+@@ -3021,9 +3037,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+     launch_prepare_incremental_direct_jk_kernel(
+         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
+         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
+-        static_cast<std::int32_t>(nbf), incremental_rebuild_interval, density_input, hcore, active,
+-        incremental_anchor_density, incremental_anchor_fock, next_density,
+-        incremental_delta_updates, incremental_full_build, incremental_max_abs_delta_density);
++        static_cast<std::int32_t>(nbf), incremental_rebuild_interval,
++        incremental_direct_jk_policy.density_rms_threshold, density_rms, density_input, hcore,
++        active, incremental_anchor_density, incremental_anchor_fock, next_density,
++        incremental_delta_updates, incremental_full_build, incremental_full_build_count,
++        incremental_delta_build_count, incremental_max_abs_delta_density);
+     cudaError_t error = cudaPeekAtLastError();
+     if (error != cudaSuccess) return error;
+     // Existing Direct-J/K shell-pair density bounds and quartet compaction now
+@@ -4838,6 +4856,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+   std::vector<std::uint8_t> host_failed(batch_size);
+   std::vector<std::uint32_t> host_iterations(batch_size);
+   std::vector<double> host_incremental_max_abs_delta_density(batch_size, 0.0);
++  std::vector<unsigned long long> host_incremental_full_build_count(batch_size, 0ULL);
++  std::vector<unsigned long long> host_incremental_delta_build_count(batch_size, 0ULL);
+   std::vector<unsigned long long> host_incremental_full_admitted_shell_quartets(batch_size, 0ULL);
+   std::vector<unsigned long long> host_incremental_delta_admitted_shell_quartets(batch_size, 0ULL);
+   std::vector<unsigned long long> host_incremental_full_admitted_quartet_tiles(batch_size, 0ULL);
+@@ -4871,6 +4891,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+       {host_incremental_max_abs_delta_density.data(),
+        incremental_direct_jk ? incremental_max_abs_delta_density : density,
+        incremental_direct_jk ? batch_size * sizeof(double) : 0U},
++      {host_incremental_full_build_count.data(),
++       incremental_direct_jk ? static_cast<const void*>(incremental_full_build_count)
++                             : static_cast<const void*>(iterations),
++       incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
++      {host_incremental_delta_build_count.data(),
++       incremental_direct_jk ? static_cast<const void*>(incremental_delta_build_count)
++                             : static_cast<const void*>(iterations),
++       incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
+       {host_incremental_full_admitted_shell_quartets.data(),
+        incremental_direct_jk ? static_cast<const void*>(incremental_full_admitted_shell_quartets)
+                              : static_cast<const void*>(iterations),
+@@ -5119,19 +5147,22 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+     result.incremental_direct_jk.active = incremental_iteration_enabled;
+     if (incremental_iteration_enabled) {
+       const std::uint64_t builds = host_iterations[system];
+-      const std::uint64_t interval = incremental_rebuild_interval;
+-      const std::uint64_t full_builds =
+-          builds == 0U ? 0U : (interval == 0U ? 1U : 1U + (builds - 1U) / (interval + 1U));
++      const std::uint64_t full_builds = host_incremental_full_build_count[system];
++      const std::uint64_t delta_builds = host_incremental_delta_build_count[system];
+       result.incremental_direct_jk.anchor_full_builds = full_builds;
+-      result.incremental_direct_jk.delta_builds = builds - full_builds;
++      result.incremental_direct_jk.delta_builds = delta_builds;
++      // The public ABI keeps the historical field name. It now counts every
++      // accepted full refresh after the first anchor, including density-RMS
++      // refreshes as well as cadence-driven refreshes.
+       result.incremental_direct_jk.periodic_rebuilds = full_builds == 0U ? 0U : full_builds - 1U;
+-      result.incremental_direct_jk.anchor_updates = result.incremental_direct_jk.delta_builds;
++      result.incremental_direct_jk.anchor_updates = delta_builds;
+       result.incremental_direct_jk.max_abs_delta_density =
+           host_incremental_max_abs_delta_density[system];
+       result.incremental_direct_jk.bypass_full_builds = 0U;
+       result.incremental_direct_jk.post_scf_full_builds = result.precision.post_scf_fock_builds;
++      const bool build_counts_valid = full_builds + delta_builds == builds;
+       result.incremental_direct_jk.quartet_work_counters_valid =
+-          !bounded_direct_streaming && host_failed[system] == 0U;
++          build_counts_valid && !bounded_direct_streaming && host_failed[system] == 0U;
+       if (result.incremental_direct_jk.quartet_work_counters_valid) {
+         const std::uint64_t candidate_shell_quartets =
+             static_cast<std::uint64_t>(host.system_shell_quartet_offsets[system + 1] -
+@@ -5146,7 +5177,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
+         result.incremental_direct_jk.full_admitted_quartet_tiles =
+             host_incremental_full_admitted_quartet_tiles[system];
+         result.incremental_direct_jk.delta_candidate_shell_quartets =
+-            result.incremental_direct_jk.delta_builds * candidate_shell_quartets;
++            delta_builds * candidate_shell_quartets;
+         result.incremental_direct_jk.delta_admitted_shell_quartets =
+             host_incremental_delta_admitted_shell_quartets[system];
+         result.incremental_direct_jk.delta_rejected_shell_quartets =
+diff --git a/src/scf/types.hpp b/src/scf/types.hpp
+index 82e01987c..98c24e168 100644
+--- a/src/scf/types.hpp
++++ b/src/scf/types.hpp
+@@ -32,7 +32,8 @@ struct IncrementalDirectJkDiagnostic {
+   std::uint64_t anchor_full_builds{};
+   /** Exact provider applications to delta-D for accepted SCF iterates. */
+   std::uint64_t delta_builds{};
+-  /** Periodic accepted-iterate rebuilds after an existing anchor. */
++  /** Accepted full refreshes after an existing anchor. The stable ABI field
++   * name is historical; this includes cadence- and density-RMS-driven rebuilds. */
+   std::uint64_t periodic_rebuilds{};
+   /** Full proposal/audit builds that never mutate the accepted anchor. */
+   std::uint64_t bypass_full_builds{};
+@@ -111,6 +112,10 @@ struct ScfOptions {
+   /** Accepted delta updates before refreshing the full anchor. Zero disables
+    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
+   unsigned incremental_direct_jk_rebuild_interval{8};
++  /** For screened CUDA lowers, require the previous accepted density RMS to be
++   * at or below this positive threshold before using a ΔD build. Zero preserves
++   * the cadence-only controller. */
++  double incremental_direct_jk_density_rms_threshold{};
+   /** Select the DF solver; direct four-center remains the default. */
+   generativeqc_density_fitting_mode density_fitting_mode{GENERATIVEQC_DENSITY_FITTING_NONE};
+   /** Relative cutoff used when factoring the auxiliary Coulomb metric. */
+@@ -187,6 +192,7 @@ struct IncrementalDirectJkPolicy {
+   bool active{};
+   unsigned requested_rebuild_interval{};
+   unsigned effective_rebuild_interval{};
++  double density_rms_threshold{};
+ };
+ 
+ inline bool direct_jk_incremental_exact_eligible(const ResolvedFockBuild& strategy) noexcept {
+@@ -209,10 +215,12 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
+   IncrementalDirectJkPolicy policy;
+   policy.requested = options.incremental_direct_jk;
+   policy.requested_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
++  const bool screened_lower =
++      capabilities.density_weighted_screening && options.screening_tolerance != 0.0;
++  policy.density_rms_threshold =
++      screened_lower ? options.incremental_direct_jk_density_rms_threshold : 0.0;
+   policy.effective_rebuild_interval =
+-      capabilities.density_weighted_screening && options.screening_tolerance != 0.0
+-          ? 1U
+-          : options.incremental_direct_jk_rebuild_interval;
++      screened_lower ? 1U : options.incremental_direct_jk_rebuild_interval;
+   policy.active = policy.requested && capabilities.provider_eligible &&
+                   !capabilities.conflicting_precision_policy;
+   return policy;

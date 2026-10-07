@@ -88,10 +88,12 @@
 #include "scf/direct_task_layout.hpp"
 #include "scf/generated_shell_task.hpp"
 #include "scf/mean_field.hpp"
+#include "solver/cuda/symmetric_eigen_provider.hpp"
 #include "solver/iteration_control.hpp"
 #include "tensor/metrics.hpp"
 
 namespace generativeqc::scf {
+namespace eigen_provider = ::generativeqc::solver::cuda;
 
 namespace {
 
@@ -1829,24 +1831,27 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
 
   if (first_setup && use_cusolver) {
     if (use_jacobi) {
-      solver_error = cusolverDnDsyevjBatched_bufferSize(
-          resources.solver_, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
-          static_cast<int>(nbf), eigensystem, static_cast<int>(nbf), eigenvalues, &plan.lwork,
-          resources.jacobi_, static_cast<int>(spin_batch_size));
+      eigen_provider::SymmetricEigenWorkspace queried{0, 0, plan.lwork};
+      solver_error = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
+          {resources.solver_, nullptr, resources.jacobi_},
+          eigen_provider::SymmetricEigenFamily::jacobi_batched,
+          {static_cast<int>(nbf), static_cast<int>(spin_batch_size),
+           eigen_provider::Eigenvectors::values_and_vectors},
+          eigensystem, eigenvalues, queried));
+      plan.lwork = queried.jacobi_elements;
       resources.solver_workspace_bytes_ = static_cast<std::size_t>(plan.lwork) * sizeof(double);
     } else if (ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd) {
       // Xsyevd is the non-batched counterpart used by GPU4PySCF for large
       // matrices.  Its workspace is independent of the number of systems;
       // launch_solver serializes one call per matrix on the ordinary stream.
-      std::size_t device_bytes = 0;
-      std::size_t host_bytes = 0;
-      solver_error = cusolverDnXsyevd_bufferSize(
-          resources.solver_, resources.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
-          CUBLAS_FILL_MODE_LOWER, static_cast<std::int64_t>(nbf), CUDA_R_64F, eigensystem,
-          static_cast<std::int64_t>(nbf), CUDA_R_64F, eigenvalues, CUDA_R_64F, &device_bytes,
-          &host_bytes);
-      resources.solver_workspace_bytes_ = device_bytes;
-      resources.solver_host_workspace_bytes_ = host_bytes;
+      eigen_provider::SymmetricEigenWorkspace queried;
+      solver_error = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
+          {resources.solver_, resources.solver_parameters_},
+          eigen_provider::SymmetricEigenFamily::xsyevd,
+          {static_cast<std::int64_t>(nbf), 1, eigen_provider::Eigenvectors::values_and_vectors},
+          eigensystem, eigenvalues, queried));
+      resources.solver_workspace_bytes_ = queried.device_bytes;
+      resources.solver_host_workspace_bytes_ = queried.host_bytes;
     } else {
       // RHF submits batch_size matrices; UHF additionally submits the doubled
       // spin batch. Query both actual capacities because cuSOLVER does not
@@ -1854,18 +1859,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       const std::array<int, 2> capacities{static_cast<int>(batch_size),
                                           static_cast<int>(spin_batch_size)};
       for (const int capacity : capacities) {
-        std::size_t device_bytes = 0;
-        std::size_t host_bytes = 0;
-        solver_error = cusolverDnXsyevBatched_bufferSize(
-            resources.solver_, resources.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
-            CUBLAS_FILL_MODE_LOWER, static_cast<int>(nbf), CUDA_R_64F, eigensystem,
-            static_cast<int>(nbf), CUDA_R_64F, eigenvalues, CUDA_R_64F, &device_bytes, &host_bytes,
-            capacity);
+        eigen_provider::SymmetricEigenWorkspace queried;
+        solver_error = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
+            {resources.solver_, resources.solver_parameters_},
+            eigen_provider::SymmetricEigenFamily::xsyev_batched,
+            {static_cast<int>(nbf), capacity, eigen_provider::Eigenvectors::values_and_vectors},
+            eigensystem, eigenvalues, queried));
         if (solver_error != CUSOLVER_STATUS_SUCCESS) break;
         resources.solver_workspace_bytes_ =
-            std::max(resources.solver_workspace_bytes_, device_bytes);
+            std::max(resources.solver_workspace_bytes_, queried.device_bytes);
         resources.solver_host_workspace_bytes_ =
-            std::max(resources.solver_host_workspace_bytes_, host_bytes);
+            std::max(resources.solver_host_workspace_bytes_, queried.host_bytes);
       }
       plan.lwork = 0;
     }

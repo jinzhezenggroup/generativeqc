@@ -349,9 +349,17 @@ void run_exact_exchange_case(bool restricted) {
   incremental_options.incremental_direct_jk = true;
   incremental_options.incremental_direct_jk_rebuild_interval = 8;
   incremental_options.incremental_direct_jk_density_rms_threshold = 0.0;
+  Matrix incremental_seed;
+  if (restricted) {
+    // Symmetric H2's core guess is already stationary. A valid localized
+    // two-electron seed exercises delta work before full-energy refinement.
+    incremental_seed.assign(basis.nao * basis.nao, 0.0);
+    incremental_seed[0] = 2.0;
+  }
+  const auto* incremental_input = restricted ? &incremental_seed : nullptr;
   dft::CudaKsPlan incremental_plan(gpu, basis, grid, incremental_options, dft::SemilocalFamily::Pbe,
                                    257);
-  const auto incremental = incremental_plan.run(nullptr, false);
+  const auto incremental = incremental_plan.run(incremental_input, false);
   const auto& incremental_work = incremental.incremental_direct_jk;
   require(incremental.converged && !incremental_plan.failed() &&
               std::abs(incremental.energy - result.energy) < 1e-10 && incremental_work.requested &&
@@ -368,10 +376,28 @@ void run_exact_exchange_case(bool restricted) {
           "CUDA KS incremental Direct-J/K entered an unqualified chunk/replay path");
   physical_check(cpu, basis, grid, 1U, incremental);
 
+  // Full-energy refinement must retain a state accepted by the independent
+  // unshifted F[D] export validator, not only by the iterative DIIS gates.
+  require(incremental_plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  require(incremental_plan.read_final_state(token, false, snapshot, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  require(snapshot.density.size() == spins && snapshot.fock.size() == spins &&
+              snapshot.identity.determinant.model == gpu.strategy() &&
+              std::abs(snapshot.components.total() - incremental.energy) < 1e-10,
+          "CUDA incremental KS full-energy audit did not preserve the physical final state");
+
+  const auto restarted = incremental_plan.run(incremental_input, false);
+  require(restarted.converged && restarted.incremental_direct_jk.delta_builds > 0 &&
+              restarted.incremental_direct_jk.post_scf_full_builds > 0 &&
+              std::abs(restarted.energy - result.energy) < 1e-10,
+          "fresh CUDA KS solve retained the previous solve's full-energy refinement state");
+  physical_check(cpu, basis, grid, 1U, restarted);
+
   auto gated_options = incremental_options;
   gated_options.incremental_direct_jk_density_rms_threshold = 1e-30;
   dft::CudaKsPlan gated_plan(gpu, basis, grid, gated_options, dft::SemilocalFamily::Pbe, 257);
-  const auto gated = gated_plan.run(nullptr, false);
+  const auto gated = gated_plan.run(incremental_input, false);
   const auto& gated_work = gated.incremental_direct_jk;
   require(gated.converged && !gated_plan.failed() &&
               std::abs(gated.energy - result.energy) < 1e-10 && gated_work.requested &&
@@ -386,11 +412,10 @@ void run_exact_exchange_case(bool restricted) {
     mismatched_options.incremental_direct_jk_rebuild_interval = 0;
     dft::CudaKsPlan mismatched_plan(gpu, basis, grid, mismatched_options, dft::SemilocalFamily::Pbe,
                                     257);
-    const auto mismatched = mismatched_plan.run(nullptr, false);
+    const auto mismatched = mismatched_plan.run(incremental_input, false);
     const auto& mismatched_work = mismatched.incremental_direct_jk;
-    // Symmetric H2 may converge after full + delta and then enter final closure,
-    // before any periodic refresh is due. Enforce the screened count bound here;
-    // the deterministic host controller probe also exercises the refresh branch.
+    // The prepared provider's screened cadence still applies when the caller
+    // requests unscreened SCF options; refinement adds only full-density work.
     require(mismatched.converged && !mismatched_plan.failed() &&
                 std::abs(mismatched.energy - result.energy) < 1e-10 &&
                 mismatched_work.delta_builds > 0 &&
@@ -1193,6 +1218,7 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   require(
       plan.final_state_token(unavailable, snapshot_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
       "fresh CUDA KS owner published a final-state token");
+  require(!plan.has_warm_start(), "fresh CUDA KS owner advertised a warm seed");
   plan.begin(nullptr, false);
   while (plan.active()) {
     plan.enqueue_iteration();
@@ -1364,7 +1390,13 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
                 plan.transfers().final_state_d2h_bytes == before_rejection.final_state_d2h_bytes,
             "stale CUDA KS token transferred or published state");
   }
+  const auto before_warm_query = plan.transfers();
+  require(plan.has_warm_start(), "converged CUDA KS owner did not advertise its warm seed");
+  require(plan.transfers().matrix_d2h_bytes == before_warm_query.matrix_d2h_bytes &&
+              plan.transfers().synchronizations == before_warm_query.synchronizations,
+          "CUDA warm availability query exported or synchronized density");
   plan.invalidate_final_state();
+  require(plan.has_warm_start(), "final-state revocation discarded the independent warm seed");
   require(
       plan.final_state_token(unavailable, snapshot_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
       "explicit result invalidation preserved CUDA KS eligibility");
@@ -1399,11 +1431,14 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   require(plan.warm_density() == frozen_density,
           "successful frozen solve replaced the resident last-good density");
   plan.clear_warm_start();
-  require(plan.warm_density().empty(), "cleared CUDA seed remains visible");
-  require(plan.run(nullptr, true, false).converged && plan.warm_density().empty(),
+  require(!plan.has_warm_start() && plan.warm_density().empty(),
+          "cleared CUDA seed remains visible");
+  require(plan.run(nullptr, true, false).converged && !plan.has_warm_start() &&
+              plan.warm_density().empty(),
           "frozen CUDA owner established a new seed");
   plan.set_warm_start_updates(true);
-  require(plan.run(nullptr, false, false).converged && !plan.warm_density().empty(),
+  require(plan.run(nullptr, false, false).converged && plan.has_warm_start() &&
+              !plan.warm_density().empty(),
           "unfrozen CUDA owner failed to establish a seed");
 
   if (atoms > 1) {
@@ -1453,7 +1488,8 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
                              dft::semilocal_family_from_code(functional));
   const auto limited = unfinished.run();
   require(!limited.converged && !unfinished.failed(), "iteration limit misreported its status");
-  require(unfinished.warm_density().empty(), "unfinished solve published a good warm state");
+  require(!unfinished.has_warm_start() && unfinished.warm_density().empty(),
+          "unfinished solve published a good warm state");
   require(unfinished.final_state_token(unavailable, snapshot_detail) ==
               GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "unfinished CUDA KS solve published a final-state token");
@@ -2113,6 +2149,12 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--incremental") {
+      run_exact_exchange_case(true);
+      run_exact_exchange_case(false);
+      std::cout << "Native CUDA incremental KS physical-state and fresh-solve gates passed\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--density-provider") {
       ks_density_provider_cases();
       return 0;

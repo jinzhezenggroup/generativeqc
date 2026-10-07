@@ -109,6 +109,16 @@ and density-fitted execution remain excluded from incremental mode, and the
 legacy selector retains its PBE0 RKS restriction. No default or numerical/
 performance qualification changes with this planning guard.
 
+Incremental solves return to full-density J/K builds once the density-change and
+physical-residual gates are satisfied, even if the energy-change gate is not yet
+satisfied. This full-density energy refinement keeps the original DIIS history
+and convergence tolerances; it prevents differing full/ΔD screening omissions
+from blocking the energy gate indefinitely. Strict full-density physical
+finalization remains mandatory. Energy convergence requires two consecutive
+full-density builds. For ordinary RKS, the qualifying full-density build is
+already the final physical audit; UKS and ECP retain their separate corrective
+closure. A fresh solve resets this refinement phase.
+
 ### Model binding
 
 The complete options are included in resource identity and Python prepared

@@ -1,4 +1,4 @@
-"""Explicit bounded preliminary SCF, separate from the immutable target model."""
+"""Explicit bounded cold-start densities, separate from the immutable target model."""
 
 from __future__ import annotations
 
@@ -15,9 +15,12 @@ from . import _native
 
 @dataclass(frozen=True)
 class InitialGuessSpec:
-    """An opt-in same-basis HF or coarse-LDA cold start.
+    """An opt-in HF, coarse-LDA, or projected MINAO cold start.
 
-    CPU FP64, all-electron restricted exact energy endpoints are admitted.
+    HF/LDA retain the CPU FP64 all-electron restricted exact energy domain.
+    MINAO is a zero-Fock occupied-ANO projection for all-electron H-Ar targets
+    followed by a bounded metric-occupation admission step, and additionally
+    admits CUDA restricted KS energy/force endpoints.
     Existing explicit/imported/retained densities take precedence. Preparation
     never changes the target basis, grid, functional, precision or tolerances.
     A failed preliminary solve or exhausted preparation budget keeps the core
@@ -37,8 +40,8 @@ class InitialGuessSpec:
     grid: GridSpec | None = None
 
     def __post_init__(self) -> None:
-        if self.kind not in ("hf", "lda"):
-            raise ValueError("initial guess kind must be 'hf' or 'lda'")
+        if self.kind not in ("hf", "lda", "minao"):
+            raise ValueError("initial guess kind must be 'hf', 'lda', or 'minao'")
         for name, low, high in (
             ("max_iterations", 1, 64),
             ("diis_history", 1, 16),
@@ -55,9 +58,9 @@ class InitialGuessSpec:
                 or value <= 0
             ):
                 raise ValueError(f"{name} must be finite and positive")
-        if self.kind == "hf":
+        if self.kind in ("hf", "minao"):
             if self.grid is not None:
-                raise ValueError("HF preliminary SCF does not use a grid")
+                raise ValueError("HF/MINAO initial guesses do not use a grid")
             return
         grid = GridSpec(8, 6, 12) if self.grid is None else self.grid
         if not isinstance(grid, GridSpec):
@@ -82,7 +85,7 @@ class InitialGuessSpec:
         return _native.InitialGuessOptionsDescriptor(
             ctypes.sizeof(_native.InitialGuessOptionsDescriptor),
             _native.ABI_VERSION,
-            1 if self.kind == "hf" else 2,
+            {"hf": 1, "lda": 2, "minao": 3}[self.kind],
             self.max_iterations,
             self.diis_history,
             self.energy_tolerance,
@@ -136,12 +139,12 @@ def read_initial_guess_diagnostic(
         "budget_skipped",
         "target_retried",
     )
-    if out.requested_kind not in (1, 2) or out.outcome >= len(outcomes):
-        raise RuntimeError("invalid preliminary SCF diagnostic")
+    if out.requested_kind not in (1, 2, 3) or out.outcome >= len(outcomes):
+        raise RuntimeError("invalid initial-guess diagnostic")
     if not math.isfinite(out.preparation_seconds) or out.preparation_seconds < 0:
         raise RuntimeError("invalid preliminary SCF preparation time")
     return {
-        "kind": "hf" if out.requested_kind == 1 else "lda",
+        "kind": {1: "hf", 2: "lda", 3: "minao"}[out.requested_kind],
         "outcome": outcomes[out.outcome],
         "work_counters_complete": bool(out.work_counters_complete),
         **{
@@ -157,6 +160,65 @@ def read_initial_guess_diagnostic(
             )
         },
     }
+
+
+# Exact occupied-ANO source primitive inventory for H-Ar (pinned MINAO table).
+_MINAO_PRIMITIVES = (
+    8,
+    9,
+    28,
+    28,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    63,
+    63,
+    75,
+    75,
+    75,
+    75,
+    75,
+    75,
+)
+
+
+def _minao_numeric_capacity(n: int, numbers: typing.Sequence[int]) -> int:
+    """Mirror native preliminary_numeric_capacity, including strict admission.
+
+    16 square matrices cover caller X/raw/output and validator/eigensolver
+    copies. The remaining terms conservatively sum projection buffers, linear
+    eigensolver arrays, AO/primitive/center inventories and bounded through-g
+    overlap scratch. This is an upper bound, not measured whole-process memory.
+    """
+    from generativeqc_compiler.common.resources import byte_product, checked_bytes
+
+    if type(n) is not int or n <= 0:
+        raise ValueError("invalid MINAO target AO topology")
+    if any(type(z) is not int or not 1 <= z <= 18 for z in numbers):
+        raise ValueError("MINAO initial guess is currently qualified for H-Ar")
+    source_n = checked_bytes(
+        sum(
+            1 if z <= 2 else 2 if z <= 4 else 5 if z <= 10 else 6 if z <= 12 else 9
+            for z in numbers
+        )
+    )
+    primitives = checked_bytes(sum(_MINAO_PRIMITIVES[z - 1] for z in numbers))
+    doubles = checked_bytes(
+        byte_product(16, n, n)
+        + byte_product(2, n, source_n)
+        + byte_product(8, n)
+        + source_n
+    )
+    return checked_bytes(
+        byte_product(8, doubles)
+        + byte_product(512, checked_bytes(n + source_n))
+        + byte_product(256, len(numbers))
+        + byte_product(16, primitives)
+        + 8192
+    )
 
 
 def with_initial_guess_resources(
@@ -180,6 +242,57 @@ def with_initial_guess_resources(
         "initial_guess": policy.to_payload(),
     }
     identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
+    if policy.kind == "minao":
+        from generativeqc_compiler.common.resources import ResourceEstimate
+
+        items = json.loads(request.identity.topology)["items"]
+        if len(items) != len(systems):
+            raise ValueError("MINAO topology does not match the batch")
+        retained = 0
+        largest_workspace = 0
+        for item in items:
+            numbers = item["electrons"]["atomic_numbers"]
+            if any(type(z) is not int or z < 1 or z > 18 for z in numbers):
+                return replace(
+                    request,
+                    identity=identity,
+                    candidates=(),
+                    unsupported_reason="MINAO initial guess is currently qualified for H-Ar",
+                )
+            n = item["orbital"]["nbf"]
+            if type(n) is not int or n <= 0:
+                raise ValueError("invalid MINAO target AO topology")
+            from generativeqc_compiler.common.resources import (
+                byte_product,
+                checked_bytes,
+            )
+
+            seed = byte_product(8, n, n)
+            # The same complete preparation bound is used by native admission.
+            # One output matrix is retained separately for every batch member;
+            # preparation is serialized, so only the largest remainder is live.
+            workspace = _minao_numeric_capacity(n, numbers) - seed
+            retained = checked_bytes(retained + seed)
+            largest_workspace = max(largest_workspace, workspace)
+        extra = (
+            ResourceEstimate(
+                "all retained MINAO cold seeds", retained, "pageable", 0, 0
+            ),
+            ResourceEstimate(
+                "largest serialized MINAO projection workspace",
+                largest_workspace,
+                "pageable",
+                0,
+                0,
+            ),
+        )
+        return replace(
+            request,
+            identity=identity,
+            candidates=tuple(
+                replace(c, estimates=(*c.estimates, *extra)) for c in request.candidates
+            ),
+        )
     if policy.kind == "lda":
         # The native provider declines >f before constructing a source owner.
         # Use the target's already validated, ordered topology rather than

@@ -70,7 +70,8 @@ void check(cudaError_t status) {
 }
 void check(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == GENERATIVEQC_STATUS_CUDA_ERROR) throw generativeqc::Error(status, detail);
+  if (status == GENERATIVEQC_STATUS_CUDA_ERROR || status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE)
+    throw generativeqc::Error(status, detail);
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
@@ -264,7 +265,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::uint64_t final_fitted_projection_scratch_generation{};
   runtime::ExecutionPrecisionSchedule precision_schedule{};
   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
-  bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{};
+  bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
+      incremental_energy_refinement{};
+  unsigned incremental_energy_full_builds{};
   unsigned incremental_delta_updates{};
   double host_incremental_max_abs_delta_density{};
   bool strict_refinement{}, pending_mixed_coulomb{}, pending_mixed_density{},
@@ -544,7 +547,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     movement.matrix_d2h_bytes += matrix * sizeof(double);
     movement.scalar_d2h_bytes += n * sizeof(double) + sizeof(info);
     ++movement.synchronizations;
-    if (info) throw std::runtime_error("CUDA KS seed eigensolver did not converge");
+    if (info < 0) throw std::invalid_argument("CUDA KS seed eigensolver rejected an argument");
+    if (info > 0)
+      throw generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                                "CUDA KS seed eigensolver did not converge");
     // The solver emits column-major orbitals; the common admission algebra
     // uses row-major C[ao, orbital]. Symmetric input needs no packing copy.
     for (std::size_t row = 0; row < n; ++row)
@@ -554,7 +560,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     std::string detail;
     if (!scf::solver::validate_eigen_frame(input, nullptr, frame.values, frame.vectors, n,
                                            diagnostic, detail))
-      throw std::runtime_error(detail);
+      throw generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, detail);
     return frame;
   }
 
@@ -1070,6 +1076,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.incremental_direct_jk.active = incremental_direct_jk;
     incremental_anchored = false;
     pending_incremental_delta = false;
+    incremental_energy_refinement = false;
+    incremental_energy_full_builds = 0;
     incremental_delta_updates = 0;
     host_incremental_max_abs_delta_density = 0.0;
     is_active = false;
@@ -1622,7 +1630,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   bool incremental_delta_admitted() const noexcept {
-    if (!incremental_direct_jk || !incremental_anchored || final_closure || strict_refinement)
+    if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
+        final_closure || strict_refinement)
       return false;
     if (incremental_direct_jk_policy.effective_rebuild_interval != 0U &&
         incremental_delta_updates >= incremental_direct_jk_policy.effective_rebuild_interval)
@@ -1634,11 +1643,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return true;
   }
 
+  /** Screened full and delta builds need not omit the same integrals. Their
+   * reconstructed energies can therefore alternate above the energy tolerance
+   * even after D and the physical residual are stationary. Finish energy
+   * convergence with the full target operator instead of waiting for that
+   * alternating energy gate before permitting a full-density audit. Keep DIIS
+   * and the original convergence tolerances; final physical qualification
+   * still requires consecutive full-density builds. */
+  void refine_incremental_energy(double density_change, double residual,
+                                 double maximum_residual) noexcept {
+    const double residual_tolerance = std::min(1e-9, options.density_tolerance);
+    if (incremental_direct_jk && density_change < options.density_tolerance &&
+        residual < residual_tolerance && maximum_residual < residual_tolerance)
+      incremental_energy_refinement = true;
+  }
+
   const double* prepare_incremental_jk_density() {
     pending_incremental_delta = false;
     if (!incremental_direct_jk) return density;
     pending_incremental_delta = incremental_delta_admitted();
     if (!pending_incremental_delta) {
+      if (incremental_energy_refinement && !final_closure) ++incremental_energy_full_builds;
       if (final_closure) {
         ++output.incremental_direct_jk.post_scf_full_builds;
       } else {
@@ -1654,6 +1679,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
     check(cudaGetLastError());
     ++output.incremental_direct_jk.delta_builds;
     return incremental_delta_density;
+  }
+
+  /** The qualifying RKS build already evaluates the full physical operator.
+   * Reclassify that actual build as final validation rather than launching a
+   * redundant correction and imposing a second noisy energy qualification. */
+  void account_incremental_full_energy_finalization() noexcept {
+    --output.incremental_direct_jk.anchor_full_builds;
+    --output.incremental_direct_jk.periodic_rebuilds;
+    ++output.incremental_direct_jk.post_scf_full_builds;
   }
 
   void finalize_incremental_jk_components() {
@@ -1936,7 +1970,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       stabilize_occupations = true;
     const bool has_energy_history =
         output.iterations > 1 || (output.iterations == 1 && warm_energy_baseline);
-    const bool converged = has_energy_history && output.energy_change < options.energy_tolerance &&
+    refine_incremental_energy(physical.density_change, physical.residual,
+                              physical.maximum_residual);
+    const bool full_energy_history = !incremental_direct_jk || incremental_energy_full_builds >= 2;
+    const bool converged = has_energy_history && full_energy_history &&
+                           output.energy_change < options.energy_tolerance &&
                            physical.density_change < options.density_tolerance &&
                            physical.residual < std::min(1e-9, options.density_tolerance) &&
                            physical.maximum_residual < std::min(1e-9, options.density_tolerance);
@@ -1958,6 +1996,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = true;
       check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
       check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
+    } else if (incremental_direct_jk && converged && !final_closure && spins == 1 &&
+               provider.system().ecp_terms.empty()) {
+      // Both energies now belong to consecutive full-density builds. The
+      // current F[D], density proposal and maximum residual pass the same
+      // gates as ordinary RKS, so this build is already the strict full audit.
+      // UKS/ECP retain their separate corrective-closure contract below.
+      account_incremental_full_energy_finalization();
+      final_closure = true;
+      output.converged = true;
+      is_active = false;
     } else if (strict_final_closure && converged && !final_closure) {
       // A DIIS proposal can satisfy the SCF gate before a fresh F[D] proposal
       // does. Preserve any established UKS occupation stabilization through
@@ -2287,6 +2335,7 @@ scf::ScfResult CudaKsPlan::run(const std::vector<double>* seed, bool reuse_warm,
   }
   return result(export_density);
 }
+bool CudaKsPlan::has_warm_start() const noexcept { return impl_->warm_ready; }
 std::vector<double> CudaKsPlan::warm_density() {
   if (impl_->is_pending)
     throw std::logic_error("cannot export warm state during a pending iteration");
