@@ -1,0 +1,146 @@
+{
+  "schema": "generativeqc.hybrid-provider-crossover.v1",
+  "kind": "diagnostic-profile",
+  "case": "formaldehyde",
+  "arm": "direct",
+  "source": {
+    "revision": "2952481fccec5efcf3f993605b23ccefe01e640a",
+    "dirty": false
+  },
+  "job_identity": {
+    "scheduler": "inspire_job",
+    "id": "i2054-h200-48-holdout"
+  },
+  "problem": {
+    "method": "pbe0-rks",
+    "geometry_bohr": [
+      [
+        "C",
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        "O",
+        [
+          0.0,
+          0.0,
+          2.28
+        ]
+      ],
+      [
+        "H",
+        [
+          1.75,
+          0.0,
+          -1.05
+        ]
+      ],
+      [
+        "H",
+        [
+          -1.75,
+          0.0,
+          -1.05
+        ]
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "orbital_basis": "def2-svp",
+    "representation": "spherical",
+    "grid_spec": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "precision": "fp64",
+    "screening_tolerance": 1e-12,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "max_iterations": 180,
+    "products": [
+      "energy",
+      "forces"
+    ],
+    "auxiliary_basis": "def2-svp",
+    "df_memory_budget_bytes": 1073741824
+  },
+  "status": "MEASURED",
+  "trace": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/benchmarks/hybrid-provider-2054/installed-48-holdout/formaldehyde-direct-trace.jsonl",
+  "df_controls": null,
+  "library": {
+    "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/install-hybrid-2054-sm90/lib/libgenerativeqc.so.0.1.0",
+    "sha256": "0f8fb7fc05befa133e1dbd44b9d725cfe6789adeb0db0e75f8a70f02ada088b2"
+  },
+  "endpoint": {
+    "succeeded": true,
+    "converged": true,
+    "energy_hartree": -114.28176959722316,
+    "physical_residual_rms": 6.599306460880142e-12,
+    "forces_hartree_per_bohr": [
+      [
+        1.9205906249535794e-14,
+        -6.890259384408628e-15,
+        0.04187965648938974
+      ],
+      [
+        5.204984091977415e-15,
+        -5.504805718961961e-16,
+        -0.009846364472847924
+      ],
+      [
+        0.01949243971811976,
+        3.57836884973146e-15,
+        -0.016016646008307545
+      ],
+      [
+        -0.01949243971815795,
+        3.632370989377267e-15,
+        -0.016016646008315538
+      ]
+    ]
+  },
+  "provider_proof": {
+    "coulomb": "exact",
+    "exchange": "exact",
+    "metric_relative_threshold": 0.0
+  },
+  "metric_diagnostics": null,
+  "resource_diagnostics": null,
+  "trace_sha256": "13b48b0098cedbe53837d77deaadc9b8e142002e45150a0df75c8605eaf48e9d",
+  "trace_rows": 2,
+  "executed_counters": [
+    {
+      "operation": "one_electron_stationary_pair_prepared",
+      "counters": {
+        "device_to_host_bytes": 192,
+        "host_to_device_bytes": 0,
+        "response_scratch_bytes": 0,
+        "stream_synchronizations": 1
+      }
+    },
+    {
+      "operation": "one_electron_stationary_pair_prepared",
+      "counters": {
+        "device_to_host_bytes": 192,
+        "host_to_device_bytes": 0,
+        "response_scratch_bytes": 0,
+        "stream_synchronizations": 1
+      }
+    }
+  ],
+  "occupied_reuse_verified": null
+}

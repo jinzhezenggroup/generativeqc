@@ -1,0 +1,96 @@
+{
+  "schema": "generativeqc.hybrid-provider-crossover.v1",
+  "kind": "native",
+  "case": "formaldehyde",
+  "arm": "df-j-exact-k",
+  "problem": {
+    "method": "pbe0-rks",
+    "geometry_bohr": [
+      [
+        "C",
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        "O",
+        [
+          0.0,
+          0.0,
+          2.28
+        ]
+      ],
+      [
+        "H",
+        [
+          1.75,
+          0.0,
+          -1.05
+        ]
+      ],
+      [
+        "H",
+        [
+          -1.75,
+          0.0,
+          -1.05
+        ]
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "orbital_basis": "def2-svp",
+    "representation": "spherical",
+    "grid_spec": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "precision": "fp64",
+    "screening_tolerance": 1e-12,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "max_iterations": 180,
+    "products": [
+      "energy",
+      "forces"
+    ],
+    "auxiliary_basis": "def2-svp",
+    "df_memory_budget_bytes": 1073741824
+  },
+  "source": {
+    "revision": "2952481fccec5efcf3f993605b23ccefe01e640a",
+    "dirty": false
+  },
+  "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+  "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.39",
+  "job_identity": {
+    "scheduler": "inspire_job",
+    "id": "i2054-h200-48-holdout"
+  },
+  "cuda_visible_devices": null,
+  "attempts": [],
+  "status": "UNSUPPORTED",
+  "df_controls": null,
+  "component_sha256": {
+    "tools/benchmark_hybrid_provider_crossover.py": "c38ea8a5a43742be1352926b1fe561ca1b4530dfe9cbd54879b1167116b196f9",
+    "python/generativeqc/calculator.py": "290337b2e256e88fa8b110c6591ffd2a182b82fc9ac17209a4c61708f4815fc3",
+    "python/generativeqc_compiler/dft/grid.py": "031ae05e23929d8e44932fb9f4a4f869a0e098a23bd5fd71a0f52d587b0b20d7",
+    "src/scf/cuda_fock_provider.cpp": "e29215db119a1a7684caeda9c1e1523caeb4632f94778ce4df5ec55f4021d848",
+    "src/dft/cuda_ks.cpp": "3870c5dfabf4c9866c613508f38112850ce89289d37e3ff6a03b271d4ec681ca"
+  },
+  "schema_sha256": "f11245d0f55424bc9d92cd2202341c47ea48a5c620a4e608bb78872449d38356",
+  "reason": "public KS has no DF-J plus exact-K selector"
+}

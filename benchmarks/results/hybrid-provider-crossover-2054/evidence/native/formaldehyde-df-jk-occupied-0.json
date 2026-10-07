@@ -1,0 +1,947 @@
+{
+  "schema": "generativeqc.hybrid-provider-crossover.v1",
+  "kind": "native",
+  "case": "formaldehyde",
+  "arm": "df-jk-occupied",
+  "problem": {
+    "method": "pbe0-rks",
+    "geometry_bohr": [
+      [
+        "C",
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        "O",
+        [
+          0.0,
+          0.0,
+          2.28
+        ]
+      ],
+      [
+        "H",
+        [
+          1.75,
+          0.0,
+          -1.05
+        ]
+      ],
+      [
+        "H",
+        [
+          -1.75,
+          0.0,
+          -1.05
+        ]
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "orbital_basis": "def2-svp",
+    "representation": "spherical",
+    "grid_spec": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "precision": "fp64",
+    "screening_tolerance": 1e-12,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "max_iterations": 180,
+    "products": [
+      "energy",
+      "forces"
+    ],
+    "auxiliary_basis": "def2-svp",
+    "df_memory_budget_bytes": 1073741824
+  },
+  "source": {
+    "revision": "2952481fccec5efcf3f993605b23ccefe01e640a",
+    "dirty": false
+  },
+  "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+  "platform": "Linux-5.15.0-119-generic-x86_64-with-glibc2.39",
+  "job_identity": {
+    "scheduler": "inspire_job",
+    "id": "i2054-h200-48-holdout"
+  },
+  "cuda_visible_devices": null,
+  "attempts": [
+    {
+      "phase": "cold",
+      "status": "PASS",
+      "seconds": 3.263442615047097,
+      "energy_hartree": -115.51529235531407,
+      "forces_hartree_per_bohr": [
+        [
+          5.942693220251025e-14,
+          6.816119379322595e-15,
+          0.006717057406345067
+        ],
+        [
+          -1.4280186258443285e-14,
+          1.8819021654947622e-16,
+          0.03094989626819139
+        ],
+        [
+          0.024591274768338972,
+          -1.538646619031896e-15,
+          -0.01883347683732091
+        ],
+        [
+          -0.024591274768370378,
+          -3.882431305091733e-15,
+          -0.018833476837345396
+        ]
+      ],
+      "converged": true,
+      "iterations": 17,
+      "status_message": "success",
+      "executed_backend": "cuda",
+      "physical_residual_rms": 1.927353754809804e-12,
+      "density_rms": 1.0193012201089748e-12,
+      "fock_builds": 17,
+      "warm_start_used": false,
+      "warm_start_fallback": false,
+      "ks_diagnostic": {
+        "occupations": [
+          8,
+          8
+        ],
+        "electrons": [
+          8.000000000000005,
+          8.000000000000005
+        ],
+        "grid_points": 98304,
+        "tile_points": 256,
+        "ao_order": 1,
+        "scf_domain": "semilocal-scaled-v1/pbe-spin-c2-1e-18",
+        "initial_density_used": false,
+        "fock_builds": 17,
+        "components": {
+          "nuclear": 31.471541171455648,
+          "one_electron": -217.09990774892503,
+          "hartree": 84.41557464401019,
+          "xc": -14.302500421854878
+        },
+        "density_change_max": 1.0193012201089748e-12,
+        "physical_residual_max": 1.927353754809804e-12,
+        "history": [
+          {
+            "iteration": 1,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -236.96860263369646,
+              "hartree": 121.67997441897408,
+              "xc": -18.05159695195335
+            },
+            "energy_change": null,
+            "density_change_max": 0.9110563700651584,
+            "physical_residual_max": 0.19138917972185848,
+            "electrons": [
+              8.000000000000004,
+              8.000000000000004
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 2,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -176.2776733211507,
+              "hartree": 60.327106075641346,
+              "xc": -12.322190288509198
+            },
+            "energy_change": 5.067467632657184,
+            "density_change_max": 0.8809877108339236,
+            "physical_residual_max": 0.2018149687045681,
+            "electrons": [
+              8.000000000000007,
+              8.000000000000007
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 3,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -220.745963492439,
+              "hartree": 89.11424664153027,
+              "xc": -14.738709458217915
+            },
+            "energy_change": 18.097668775108076,
+            "density_change_max": 0.0347618633249194,
+            "physical_residual_max": 0.07382664159518834,
+            "electrons": [
+              8.000000000000004,
+              8.000000000000004
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 4,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -219.37820140488324,
+              "hartree": 87.00855531543672,
+              "xc": -14.525667388498302
+            },
+            "energy_change": 0.5248871688181964,
+            "density_change_max": 0.01467709367571359,
+            "physical_residual_max": 0.030194799983506184,
+            "electrons": [
+              7.999999999999999,
+              7.999999999999999
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 5,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -219.6258459706141,
+              "hartree": 87.47832747029186,
+              "xc": -14.634203785778157
+            },
+            "energy_change": 0.11359119184442079,
+            "density_change_max": 0.004326200905978382,
+            "physical_residual_max": 0.04474444839057932,
+            "electrons": [
+              8.000000000000002,
+              8.000000000000002
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 6,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -219.17183407040486,
+              "hartree": 86.87087168616758,
+              "xc": -14.563775527252439
+            },
+            "energy_change": 0.08301562538930796,
+            "density_change_max": 0.010306032418534557,
+            "physical_residual_max": 0.034854011912582514,
+            "electrons": [
+              8.000000000000005,
+              8.000000000000005
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 7,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.8423966302117,
+              "hartree": 85.26638338417457,
+              "xc": -14.394809289794942
+            },
+            "energy_change": 0.10608462434237254,
+            "density_change_max": 0.006385869139517166,
+            "physical_residual_max": 0.012860781183927179,
+            "electrons": [
+              8.000000000000002,
+              8.000000000000002
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 8,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -216.99253137597927,
+              "hartree": 84.2961240804433,
+              "xc": -14.290168035988891
+            },
+            "energy_change": 0.015752795692762334,
+            "density_change_max": 0.000734498637776977,
+            "physical_residual_max": 0.0016630757790965878,
+            "electrons": [
+              8.000000000000002,
+              8.000000000000002
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 9,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09349819654693,
+              "hartree": 84.4083413141605,
+              "xc": -14.30167451107179
+            },
+            "energy_change": 0.000256061933384899,
+            "density_change_max": 4.5034227349737136e-05,
+            "physical_residual_max": 0.00015917430414821474,
+            "electrons": [
+              8.000000000000004,
+              8.000000000000004
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 10,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.0977732156283,
+              "hartree": 84.41318733382515,
+              "xc": -14.302247556378584
+            },
+            "energy_change": 2.044723515837177e-06,
+            "density_change_max": 1.3822772532412404e-05,
+            "physical_residual_max": 2.9697494908431033e-05,
+            "electrons": [
+              8.000000000000005,
+              8.000000000000005
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 11,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.0998310062728,
+              "hartree": 84.41548801961973,
+              "xc": -14.302490539310496
+            },
+            "energy_change": 8.778182802871015e-08,
+            "density_change_max": 1.3303592724257116e-06,
+            "physical_residual_max": 3.084571795425669e-06,
+            "electrons": [
+              8.000000000000004,
+              8.000000000000004
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 12,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09989483717928,
+              "hartree": 84.41556001734851,
+              "xc": -14.302498706932468
+            },
+            "energy_change": 7.99659005679132e-10,
+            "density_change_max": 1.2654610309140603e-07,
+            "physical_residual_max": 2.3294004164306774e-07,
+            "electrons": [
+              8.000000000000002,
+              8.000000000000002
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 13,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09990868388797,
+              "hartree": 84.41557569014098,
+              "xc": -14.302500533022688
+            },
+            "energy_change": 6.45172804070171e-12,
+            "density_change_max": 1.2734812373687434e-08,
+            "physical_residual_max": 1.93323728528111e-08,
+            "electrons": [
+              8.000000000000005,
+              8.000000000000005
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 14,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09990768738763,
+              "hartree": 84.4155745732732,
+              "xc": -14.302500412655275
+            },
+            "energy_change": 1.4210854715202004e-14,
+            "density_change_max": 1.680590162609569e-09,
+            "physical_residual_max": 2.6648867391750787e-09,
+            "electrons": [
+              8.000000000000004,
+              8.000000000000004
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 15,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.0999077489631,
+              "hartree": 84.41557464398808,
+              "xc": -14.302500421794674
+            },
+            "energy_change": 1.4210854715202004e-14,
+            "density_change_max": 1.8981942653975635e-10,
+            "physical_residual_max": 1.4065706687287247e-10,
+            "electrons": [
+              8.000000000000007,
+              8.000000000000007
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 16,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09990774951285,
+              "hartree": 84.41557464464273,
+              "xc": -14.302500421899554
+            },
+            "energy_change": 1.4210854715202004e-14,
+            "density_change_max": 1.9898961432886218e-11,
+            "physical_residual_max": 2.5361267940905482e-11,
+            "electrons": [
+              8.000000000000014,
+              8.000000000000014
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 17,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09990774892503,
+              "hartree": 84.41557464401019,
+              "xc": -14.302500421854878
+            },
+            "energy_change": 4.263256414560601e-14,
+            "density_change_max": 1.0193012201089748e-12,
+            "physical_residual_max": 1.927353754809804e-12,
+            "electrons": [
+              8.000000000000005,
+              8.000000000000005
+            ],
+            "occupation_stabilized": false
+          }
+        ]
+      },
+      "prepare_seconds": 0.23535192012786865
+    },
+    {
+      "phase": "warm-0",
+      "status": "PASS",
+      "seconds": 0.4543045228347182,
+      "energy_hartree": -115.51529235531407,
+      "forces_hartree_per_bohr": [
+        [
+          6.436124463746117e-14,
+          5.091841328384334e-15,
+          0.00671705740633724
+        ],
+        [
+          -1.5245226023735543e-14,
+          2.1015044421183226e-15,
+          0.030949896268229027
+        ],
+        [
+          0.024591274768340235,
+          -1.5686089007772166e-15,
+          -0.01883347683732281
+        ],
+        [
+          -0.024591274768374985,
+          -4.041505197975843e-15,
+          -0.018833476837344466
+        ]
+      ],
+      "converged": true,
+      "iterations": 1,
+      "status_message": "success",
+      "executed_backend": "cuda",
+      "physical_residual_rms": 1.9273547553303096e-12,
+      "density_rms": 1.503163139045307e-12,
+      "fock_builds": 1,
+      "warm_start_used": true,
+      "warm_start_fallback": false,
+      "ks_diagnostic": {
+        "occupations": [
+          8,
+          8
+        ],
+        "electrons": [
+          8.000000000000005,
+          8.000000000000005
+        ],
+        "grid_points": 98304,
+        "tile_points": 256,
+        "ao_order": 1,
+        "scf_domain": "semilocal-scaled-v1/pbe-spin-c2-1e-18",
+        "initial_density_used": true,
+        "fock_builds": 1,
+        "components": {
+          "nuclear": 31.471541171455648,
+          "one_electron": -217.09990774892503,
+          "hartree": 84.41557464401019,
+          "xc": -14.302500421854877
+        },
+        "density_change_max": 1.503163139045307e-12,
+        "physical_residual_max": 1.9273547553303096e-12,
+        "history": [
+          {
+            "iteration": 1,
+            "components": {
+              "nuclear": 31.471541171455648,
+              "one_electron": -217.09990774892503,
+              "hartree": 84.41557464401019,
+              "xc": -14.302500421854877
+            },
+            "energy_change": 0.0,
+            "density_change_max": 1.503163139045307e-12,
+            "physical_residual_max": 1.9273547553303096e-12,
+            "electrons": [
+              8.000000000000005,
+              8.000000000000005
+            ],
+            "occupation_stabilized": false
+          }
+        ]
+      }
+    },
+    {
+      "phase": "changed-geometry",
+      "status": "PASS",
+      "seconds": 1.6297346879728138,
+      "energy_hartree": -115.51526195882099,
+      "forces_hartree_per_bohr": [
+        [
+          0.00026065715286419463,
+          -2.101552474750098e-05,
+          0.006838338662957633
+        ],
+        [
+          -8.4862980632884e-06,
+          9.476572010234875e-06,
+          0.030978996998619696
+        ],
+        [
+          0.02460388792338089,
+          9.320051885681587e-06,
+          -0.018835260120129968
+        ],
+        [
+          -0.02485605877815368,
+          2.2189008518471946e-06,
+          -0.01898207554144859
+        ]
+      ],
+      "converged": true,
+      "iterations": 12,
+      "status_message": "success",
+      "executed_backend": "cuda",
+      "physical_residual_rms": 7.90340230557898e-12,
+      "density_rms": 4.527530844585045e-12,
+      "fock_builds": 12,
+      "warm_start_used": true,
+      "warm_start_fallback": false,
+      "ks_diagnostic": {
+        "occupations": [
+          8,
+          8
+        ],
+        "electrons": [
+          7.999999999999992,
+          7.999999999999992
+        ],
+        "grid_points": 98304,
+        "tile_points": 256,
+        "ao_order": 1,
+        "scf_domain": "semilocal-scaled-v1/pbe-spin-c2-1e-18",
+        "initial_density_used": true,
+        "fock_builds": 12,
+        "components": {
+          "nuclear": 31.473494199380653,
+          "one_electron": -217.10358392947347,
+          "hartree": 84.41754205043209,
+          "xc": -14.302714279160234
+        },
+        "density_change_max": 4.527530844585045e-12,
+        "physical_residual_max": 7.90340230557898e-12,
+        "history": [
+          {
+            "iteration": 1,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10184810355224,
+              "hartree": 84.41633288086459,
+              "xc": -14.302477277409574
+            },
+            "energy_change": null,
+            "density_change_max": 1.833508029109331e-05,
+            "physical_residual_max": 8.001308437540493e-05,
+            "electrons": [
+              7.999999999999999,
+              7.999999999999999
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 2,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10475138294416,
+              "hartree": 84.41884512309967,
+              "xc": -14.302849858136538
+            },
+            "energy_change": 0.0007636178837628904,
+            "density_change_max": 2.099349369866626e-05,
+            "physical_residual_max": 2.0599709037296717e-05,
+            "electrons": [
+              7.999999999999997,
+              7.999999999999997
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 3,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10208288173246,
+              "hartree": 84.41585323556497,
+              "xc": -14.302526425504439
+            },
+            "energy_change": 4.630909700154007e-08,
+            "density_change_max": 1.2511469981661027e-05,
+            "physical_residual_max": 3.097016751240141e-05,
+            "electrons": [
+              7.999999999999984,
+              7.999999999999984
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 4,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10353522244804,
+              "hartree": 84.41749074201368,
+              "xc": -14.302711677213125
+            },
+            "energy_change": 8.597558576184383e-08,
+            "density_change_max": 1.175039758520805e-06,
+            "physical_residual_max": 2.549822077763974e-06,
+            "electrons": [
+              7.999999999999989,
+              7.999999999999989
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 5,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10360861825941,
+              "hartree": 84.41756923794101,
+              "xc": -14.302716777863186
+            },
+            "energy_change": 5.340723419067217e-10,
+            "density_change_max": 2.529855453302149e-07,
+            "physical_residual_max": 3.5769974448665087e-07,
+            "electrons": [
+              7.999999999999996,
+              7.999999999999996
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 6,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10357807200822,
+              "hartree": 84.41753555597926,
+              "xc": -14.30271364216975
+            },
+            "energy_change": 1.7124079931818414e-11,
+            "density_change_max": 1.342369199273774e-07,
+            "physical_residual_max": 9.055650244653845e-08,
+            "electrons": [
+              7.999999999999996,
+              7.999999999999996
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 7,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.1035845496454,
+              "hartree": 84.41754272905622,
+              "xc": -14.302714337612215
+            },
+            "energy_change": 2.7142732506035827e-12,
+            "density_change_max": 3.4983736609033106e-08,
+            "physical_residual_max": 2.0802622388990084e-08,
+            "electrons": [
+              7.999999999999993,
+              7.999999999999993
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 8,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10358396101248,
+              "hartree": 84.41754208783543,
+              "xc": -14.302714285024656
+            },
+            "energy_change": 3.126388037344441e-13,
+            "density_change_max": 1.1560567105367445e-08,
+            "physical_residual_max": 5.002820001612273e-09,
+            "electrons": [
+              8.0,
+              8.0
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 9,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.1035839118839,
+              "hartree": 84.41754203129899,
+              "xc": -14.30271427761675
+            },
+            "energy_change": 4.263256414560601e-14,
+            "density_change_max": 6.464423620310122e-10,
+            "physical_residual_max": 6.187228773495106e-10,
+            "electrons": [
+              7.999999999999992,
+              7.999999999999992
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 10,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10358393063999,
+              "hartree": 84.41754205172784,
+              "xc": -14.302714279289589
+            },
+            "energy_change": 4.263256414560601e-14,
+            "density_change_max": 7.748849221002042e-11,
+            "physical_residual_max": 1.1104675950327115e-10,
+            "electrons": [
+              7.999999999999996,
+              7.999999999999996
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 11,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10358392899542,
+              "hartree": 84.41754204990241,
+              "xc": -14.302714279108683
+            },
+            "energy_change": 1.4210854715202004e-14,
+            "density_change_max": 1.8648413178747274e-11,
+            "physical_residual_max": 2.6361514628141123e-11,
+            "electrons": [
+              7.999999999999993,
+              7.999999999999993
+            ],
+            "occupation_stabilized": false
+          },
+          {
+            "iteration": 12,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10358392947347,
+              "hartree": 84.41754205043209,
+              "xc": -14.302714279160234
+            },
+            "energy_change": 7.105427357601002e-14,
+            "density_change_max": 4.527530844585045e-12,
+            "physical_residual_max": 7.90340230557898e-12,
+            "electrons": [
+              7.999999999999992,
+              7.999999999999992
+            ],
+            "occupation_stabilized": false
+          }
+        ]
+      }
+    },
+    {
+      "phase": "moved-warm",
+      "status": "PASS",
+      "seconds": 0.4500161330215633,
+      "energy_hartree": -115.51526195882099,
+      "forces_hartree_per_bohr": [
+        [
+          0.00026065715286124647,
+          -2.1015524747403822e-05,
+          0.006838338662935872
+        ],
+        [
+          -8.486298063378707e-06,
+          9.476572009951318e-06,
+          0.03097899699861853
+        ],
+        [
+          0.024603887923380988,
+          9.320051886416263e-06,
+          -0.01883526012012736
+        ],
+        [
+          -0.024856058778154125,
+          2.2189008512961963e-06,
+          -0.018982075541441816
+        ]
+      ],
+      "converged": true,
+      "iterations": 1,
+      "status_message": "success",
+      "executed_backend": "cuda",
+      "physical_residual_rms": 7.903416103174626e-12,
+      "density_rms": 7.93715314204313e-12,
+      "fock_builds": 1,
+      "warm_start_used": true,
+      "warm_start_fallback": false,
+      "ks_diagnostic": {
+        "occupations": [
+          8,
+          8
+        ],
+        "electrons": [
+          7.999999999999992,
+          7.999999999999992
+        ],
+        "grid_points": 98304,
+        "tile_points": 256,
+        "ao_order": 1,
+        "scf_domain": "semilocal-scaled-v1/pbe-spin-c2-1e-18",
+        "initial_density_used": true,
+        "fock_builds": 1,
+        "components": {
+          "nuclear": 31.473494199380653,
+          "one_electron": -217.10358392947347,
+          "hartree": 84.41754205043209,
+          "xc": -14.302714279160238
+        },
+        "density_change_max": 7.93715314204313e-12,
+        "physical_residual_max": 7.903416103174626e-12,
+        "history": [
+          {
+            "iteration": 1,
+            "components": {
+              "nuclear": 31.473494199380653,
+              "one_electron": -217.10358392947347,
+              "hartree": 84.41754205043209,
+              "xc": -14.302714279160238
+            },
+            "energy_change": 0.0,
+            "density_change_max": 7.93715314204313e-12,
+            "physical_residual_max": 7.903416103174626e-12,
+            "electrons": [
+              7.999999999999992,
+              7.999999999999992
+            ],
+            "occupation_stabilized": false
+          }
+        ]
+      }
+    }
+  ],
+  "status": "MEASURED",
+  "df_controls": {
+    "GENERATIVEQC_DF_EXCHANGE": "occupied",
+    "GENERATIVEQC_DF_RESIDENT_EXCHANGE": "full",
+    "GENERATIVEQC_DF_VALUE_STORAGE": "packed-single",
+    "GENERATIVEQC_DF_FINAL_PROJECTION": "auto",
+    "GENERATIVEQC_DF_RESPONSE_SPACE": "auto",
+    "GENERATIVEQC_DF_RESPONSE_STORAGE": "auto",
+    "GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE": "auto"
+  },
+  "component_sha256": {
+    "tools/benchmark_hybrid_provider_crossover.py": "c38ea8a5a43742be1352926b1fe561ca1b4530dfe9cbd54879b1167116b196f9",
+    "python/generativeqc/calculator.py": "290337b2e256e88fa8b110c6591ffd2a182b82fc9ac17209a4c61708f4815fc3",
+    "python/generativeqc_compiler/dft/grid.py": "031ae05e23929d8e44932fb9f4a4f869a0e098a23bd5fd71a0f52d587b0b20d7",
+    "src/scf/cuda_fock_provider.cpp": "e29215db119a1a7684caeda9c1e1523caeb4632f94778ce4df5ec55f4021d848",
+    "src/dft/cuda_ks.cpp": "3870c5dfabf4c9866c613508f38112850ce89289d37e3ff6a03b271d4ec681ca"
+  },
+  "schema_sha256": "f11245d0f55424bc9d92cd2202341c47ea48a5c620a4e608bb78872449d38356",
+  "device": {
+    "name": "NVIDIA H200",
+    "ordinal": 0
+  },
+  "library": {
+    "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/install-hybrid-2054-sm90/lib/libgenerativeqc.so.0.1.0",
+    "sha256": "0f8fb7fc05befa133e1dbd44b9d725cfe6789adeb0db0e75f8a70f02ada088b2"
+  },
+  "counts": {
+    "nao": 38,
+    "naux": 38,
+    "nocc": 8
+  },
+  "method_identity": "3518f66c4b2c529d2bc6b501b8b39e5dd83053618fa2d7bf2f493ca642b3f71d",
+  "ks_options_identity": "fc671a0c673b0100362bbe7d6ca8ac9824a4483cb9b367aaed7f8e975474d1f3",
+  "provider_proof": {
+    "coulomb": "density-fitted",
+    "exchange": "density-fitted",
+    "metric_relative_threshold": 1e-10
+  },
+  "oracle_grids": {
+    "original": {
+      "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/benchmarks/hybrid-provider-2054/installed-48-holdout/native/formaldehyde-df-jk-occupied-0.original-grid.npz",
+      "sha256": "e157a3edb666c9213aa705ef98ecc1e358968271b7b56ad7e48e255a01d82836",
+      "semantic_sha256": "4e0bcd2792bc919a85b4a692a3c40752fd76acf339a1580f72b62e1e6c68eebd",
+      "points": 98304
+    },
+    "moved": {
+      "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/benchmarks/hybrid-provider-2054/installed-48-holdout/native/formaldehyde-df-jk-occupied-0.moved-grid.npz",
+      "sha256": "33c456a79e1536f6e3f0ac6ee0d51742dd643119deb992e7d0ae2bfa81e823fd",
+      "semantic_sha256": "42f4d432b0e58328c5ccad5d4b05290431053c6edf0e6fcc5f358d43021b6dc5",
+      "points": 98304
+    }
+  },
+  "metric_diagnostics": [
+    {
+      "bucket_id": 0,
+      "system_index": 0,
+      "effective_rank": 38,
+      "absolute_threshold": 3.747154301209808e-08,
+      "condition_number": 4013.731272690863,
+      "solver_device_workspace_bytes": 793112,
+      "solver_host_workspace_bytes": 0,
+      "device_resident_bytes": 4559861,
+      "peak_device_bytes": 5364833,
+      "host_resident_bytes": 1243242,
+      "peak_host_bytes": 1291556,
+      "auxiliary_tile": 38,
+      "streamed": false
+    }
+  ],
+  "transport_diagnostics": [
+    {
+      "setup_h2d_bytes": 121071,
+      "density_h2d_bytes": 0,
+      "scalar_d2h_bytes": 2052,
+      "matrix_d2h_bytes": 103968,
+      "synchronizations": 408,
+      "iterations": 17,
+      "occupation_stabilized_proposals": 0
+    }
+  ],
+  "resource_diagnostics": null
+}

@@ -32,6 +32,46 @@ different approximation.
   `summarize` rejects absent or mismatched records. No tolerance is relaxed
   after seeing a result.
 
+## Installed H200 pilot disposition
+
+Frozen source `2952481fccec5efcf3f993605b23ccefe01e640a`, CMake-installed
+sm_90 portable core SHA-256
+`0f8fb7fc05befa133e1dbd44b9d725cfe6789adeb0db0e75f8a70f02ada088b2`,
+CUDA 12.9.86, driver 595.58.03 and PySCF 2.14.0 are bound in the
+[evidence manifest](evidence/manifest.json). Both CXX and CUDA commands used
+task-owned ccache 4.5.1; pre/post statistics show 482 hits in 974 requests
+for the installed build. The native Python interface came from the same clean
+checkout, with `GENERATIVEQC_LIBRARY` selecting the installed prefix.
+
+| Case | Exact Direct J/K | Full DF-JK, occupied reuse | Disposition |
+| --- | --- | --- | --- |
+| 3-atom water | two complete ABBA E+force runs passed independent PySCF | two complete runs passed independent PySCF | small pilot accepted; no crossover claim |
+| 48-atom water, 384 AO | both cold SCFs converged, but native derivative admission failed and forces are `null` | both four-phase E+force runs completed; independent PySCF maximum errors `6.14e-12` Eh / `1.97e-11` Eh/Bohr | both pair summaries `INCOMPLETE`; no Direct-versus-DF endpoint crossover |
+| formaldehyde, 38 AO | both four-phase runs passed independent PySCF | both four-phase runs passed independent PySCF; occupied reuse observed | both holdout pair summaries `PILOT_ACCEPTED`, each for its labeled approximation |
+
+The third DF-J/exact-K arm is `UNSUPPORTED` by the current public KS contract.
+The 48-atom Direct error is
+`prepared native integral derivatives are unavailable within the admitted
+budget; enlarged stationary CUDA domains cannot use AO-task fallback`.
+The ordinary public PBE0 force route fixes the stationary allowance at
+512 MiB device / 256 MiB host; no public `KsOptions` setting replaces it.
+This is an H200 sm_90 portable-build observation, not a general claim about
+all Direct devices. No 96-atom campaign ran after the failed 48-atom complete
+endpoint, and no production provider or AUTO selector changed.
+
+The [offline verifier](verify_evidence.py) authenticates every retained JSON
+member, recomputes all four pair summaries and enforces those exact acceptance
+limits without a GPU:
+
+```bash
+PYTHONPATH=python:. python benchmarks/results/hybrid-provider-crossover-2054/verify_evidence.py
+```
+
+The platform sampled 53 one-minute Pod observations with maximum GPU memory
+usage rate 5.51%. This is coarse whole-Pod usage, **not** measured process peak.
+DF metric records report a planned allocation peak, not achieved peak. Neither
+number is used to infer a crossover or relax the Direct force gate.
+
 ## Reproduction
 
 Run only on a source-matched installed build in a finite Slurm or Inspire GPU
@@ -69,8 +109,8 @@ earlier complete DF-JK phases and the changed-geometry phase met their
 independent gates, while that moved-warm phase remains retained as a failure.
 Both corrected ABBA pairs subsequently passed the independent PySCF 2.14.0
 energy and full-force gates on the H200 source-tree build; this remains only a
-three-atom pilot and has no crossover-claim eligibility. The next qualification
-uses `build-installed-pbe0.sh`: a new source-matched sm_90 build with only the
+three-atom pilot and has no crossover-claim eligibility. The installed qualification
+uses `build-installed-pbe0.sh`: a source-matched sm_90 build with only the
 PBE0 RKS stationary profile, an official CMake-installed native prefix, actual
 CXX/CUDA cache-launcher commands, and a new independent three-atom acceptance
 check before the 48-atom and non-water workloads. The prefix identity is
@@ -84,6 +124,12 @@ fail-closed pair summaries are required afterward.
 fresh bounded CPU process, writes `NOT_RUN` for failed Direct 48 attempts,
 retains timeouts/crashes and all per-pair `INCOMPLETE` or accepted summaries,
 and never converts a platform `SUCCEEDED` state into scientific acceptance.
+The small retained JSON records under `evidence/` keep LF bytes and their
+original SHA-256; grid NPZ exports and full trace streams stay in the ignored
+task-owned qz experiment directory.
+`evidence/platform/job-metrics.json` retains the platform's one-minute Pod
+samples, including GPU memory usage rate. Its sampled maximum is not a
+per-process measured peak and cannot replace the provider allocation ledger.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
@@ -108,12 +154,13 @@ DF-JK arm. Never add profile durations to clean ABBA timings.
 For each ABBA pair, pass its Direct, DF-JK and unsupported records, the
 matching two PySCF records via `--oracle`, and both diagnostic records via
 `--profile` to `summarize`. Review both pair summaries and every raw losing
-record. A passing pair is a **pilot** only;
-full #2054 still needs a supported third arm or explicit issue disposition,
-96-atom and holdout coverage, measured memory/work decomposition, and
-reviewed complete-endpoint crossover evidence before any policy discussion.
+record. A passing pair is a **pilot** only; full #2054 still needs a supported
+third arm or explicit issue disposition, a successful Direct48 complete
+endpoint, 96-atom coverage, measured memory/work decomposition and reviewed
+source-matched crossover evidence before any policy discussion.
 
-Grid NPZ exports and full raw attempts remain in task-owned shared storage.
+Grid NPZ exports and full trace streams remain in task-owned shared storage.
+Small raw attempt and independent-oracle JSONs are retained in `evidence/`.
 Provider metric records describe allocations and planned peaks; they are not
 measured device peak memory. Missing work counters stay absent. Diagnostic
 traces and profiles must be collected in a separate pass and never mixed with

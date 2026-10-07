@@ -1,0 +1,158 @@
+{
+  "schema": "generativeqc.hybrid-provider-evidence-manifest.v1",
+  "issue": 2054,
+  "source_revision": "2952481fccec5efcf3f993605b23ccefe01e640a",
+  "source_dirty": false,
+  "installed_library_sha256": "0f8fb7fc05befa133e1dbd44b9d725cfe6789adeb0db0e75f8a70f02ada088b2",
+  "stationary_aot_sha256": {
+    "pbe0_rks_library": "49d3c8d999ad8f00a99f6f2874ecd772ed8a01b74b7da53f4f5a11cd215e9044",
+    "pbe0_rks_spd_library": "fab751d7ad76012213ba64d56513f2693c74c6e9b3b54ac5bf88292ce548fbd0",
+    "pbe0_rks_manifest": "3a9dbe9fc6316811e4807e1115995d817067b146317f623146f546d766d9ecbb",
+    "pbe0_rks_spd_manifest": "866839a68779637ce658e5cff1cde873620016883af7fd5bb6e7eae6738b70c7"
+  },
+  "device": {
+    "name": "NVIDIA H200",
+    "driver": "595.58.03",
+    "cuda_toolkit": "12.9.86",
+    "cuda_architecture": "sm_90",
+    "build_profile": "portable"
+  },
+  "gates": {
+    "energy_abs_hartree": 1e-8,
+    "force_max_abs_hartree_per_bohr": 3e-7,
+    "physical_residual_rms": 1e-8
+  },
+  "decision": {
+    "status": "inconclusive",
+    "scope": "performance",
+    "reason": "Direct 48-atom complete E+force fails its admitted native derivative budget; mixed DF-J/exact-K is unsupported; 96 atoms were not run. The formaldehyde holdout passes separate independent provider oracles, and DF-JK 48-atom numerical parity passes, but no large-system crossover or default promotion is claimed."
+  },
+  "raw_task_directory": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/benchmarks/hybrid-provider-2054/installed-48-holdout",
+  "files": [
+    {
+      "path": "native/formaldehyde-df-j-exact-k.json",
+      "bytes": 2568,
+      "sha256": "fc0e885a83baba4c5d6be30253aab631dd84308ff22fb8b60571c2cd673fee2b"
+    },
+    {
+      "path": "native/formaldehyde-df-jk-occupied-0.json",
+      "bytes": 30486,
+      "sha256": "68d2eece0af96f1d35bc6e76e30cd6f5e5655b2cf65858c1a6f81cc6c1e1f268"
+    },
+    {
+      "path": "native/formaldehyde-df-jk-occupied-1.json",
+      "bytes": 30490,
+      "sha256": "ca5ce4c2a60354a7826f50d55a6ff3143e727e2ed94d59e1af30123923bad96f"
+    },
+    {
+      "path": "native/formaldehyde-direct-0.json",
+      "bytes": 26655,
+      "sha256": "7807797845fba41232a8eb16d991ae6520068ee050ae3f168955a54010c2ebf9"
+    },
+    {
+      "path": "native/formaldehyde-direct-1.json",
+      "bytes": 26697,
+      "sha256": "39028855b4a0cfb245a866c8004c6597aaf373385d356551c8a79f91b396330b"
+    },
+    {
+      "path": "native/water-48-df-j-exact-k.json",
+      "bytes": 8844,
+      "sha256": "9009c0f7e64ea430842a0aac83ac9bae8a56f77bf138fadd11f726655af0c10c"
+    },
+    {
+      "path": "native/water-48-df-jk-occupied-0.json",
+      "bytes": 60350,
+      "sha256": "f0395e86237f3d428905c01759a0339a65199304691994528228effbe95b3415"
+    },
+    {
+      "path": "native/water-48-df-jk-occupied-1.json",
+      "bytes": 60345,
+      "sha256": "782caead3e5f280401b5de1dd5af00d563ba054fbeb34fb7d62e26f16fe7d4c3"
+    },
+    {
+      "path": "native/water-48-direct-0.json",
+      "bytes": 22404,
+      "sha256": "fbb8edca4fba8fb79bdd0882727da0285cc441bc1b21fc7923a316ede7ef761a"
+    },
+    {
+      "path": "native/water-48-direct-1.json",
+      "bytes": 22434,
+      "sha256": "573d4e7a826a8bf64e08805c781c1f0401140041590996c6291c4242c658d245"
+    },
+    {
+      "path": "oracles/formaldehyde-df-jk-occupied-0.json",
+      "bytes": 4310,
+      "sha256": "70b4b3821d934c6cb63152df79968e0cf932592cb1d84b21772615301043c5de"
+    },
+    {
+      "path": "oracles/formaldehyde-df-jk-occupied-1.json",
+      "bytes": 4309,
+      "sha256": "5104cd676350a4267bfcf0c12f2466921e7b95e719e5f3dbc8764182eb6e9b80"
+    },
+    {
+      "path": "oracles/formaldehyde-direct-0.json",
+      "bytes": 4285,
+      "sha256": "0329e229d0521a06e10aba7d610504d6732683fc76d7874ab7f749bae41adb0b"
+    },
+    {
+      "path": "oracles/formaldehyde-direct-1.json",
+      "bytes": 4284,
+      "sha256": "604050650a11e410d9cb9319f853fc5a9fc3d48e20d01d3f7a84fd7275e37aef"
+    },
+    {
+      "path": "oracles/water-48-df-jk-occupied-0.json",
+      "bytes": 20916,
+      "sha256": "5e0e173842c2689e7a76d2b2d1b22daf3284d18139eb0db1ef96fcc8f63205a6"
+    },
+    {
+      "path": "oracles/water-48-df-jk-occupied-1.json",
+      "bytes": 20915,
+      "sha256": "9ff729b1d23f0b29ea695d64635db2e615d912a081d9deda34e61383c3a30a93"
+    },
+    {
+      "path": "platform/job-metrics.json",
+      "bytes": 1265,
+      "sha256": "d1a8955502b9f3720948967f308d4df9f15bfd69775901ca589d5db2c57efcee"
+    },
+    {
+      "path": "profiles/formaldehyde-df-jk-occupied-profile.json",
+      "bytes": 24205,
+      "sha256": "26026772d7dd7e2617316af0e4987dc49b5eec0a9ef5313e25bb7fd5d4d56447"
+    },
+    {
+      "path": "profiles/formaldehyde-direct-profile.json",
+      "bytes": 3616,
+      "sha256": "6c25b67f2d02f0647134ab9600e335fc35dbcb88e2cb57e568e1b1ed49780005"
+    },
+    {
+      "path": "profiles/water-48-df-jk-occupied-profile.json",
+      "bytes": 40425,
+      "sha256": "f4c5e46387f01f24e892de466e752e8c6a2d3636a7cabcd20899a158f711ffd4"
+    },
+    {
+      "path": "profiles/water-48-direct-profile.json",
+      "bytes": 9022,
+      "sha256": "f0b0ef69f5ab21123d991e1b468377f91ecbfd8aaa5ab967949e8ad2f3f11ec5"
+    },
+    {
+      "path": "summaries/formaldehyde-pair0.json",
+      "bytes": 26675,
+      "sha256": "f3af657f54244ba972bb74d208ee5634cebe0e4db40396b9fd1b883675eec932"
+    },
+    {
+      "path": "summaries/formaldehyde-pair1.json",
+      "bytes": 26680,
+      "sha256": "5947c4748e64333f1d64be7aba93ab852af9ce7556ca4b8aa903008dc0b8fe48"
+    },
+    {
+      "path": "summaries/water-48-pair0.json",
+      "bytes": 31416,
+      "sha256": "6d971f2cbc6af6d5419b56d3c779d3713d661176662f49c287f40543c6bb4fe4"
+    },
+    {
+      "path": "summaries/water-48-pair1.json",
+      "bytes": 31412,
+      "sha256": "018ad33f0a1ef078e85cf99e04879a4906a5742091bf0740b7df73873f1de88b"
+    }
+  ]
+}

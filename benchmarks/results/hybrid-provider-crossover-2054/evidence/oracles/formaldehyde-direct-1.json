@@ -1,0 +1,160 @@
+{
+  "schema": "generativeqc.hybrid-provider-crossover.v1",
+  "kind": "pyscf-oracle",
+  "case": "formaldehyde",
+  "arm": "direct",
+  "native_record_sha256": "39028855b4a0cfb245a866c8004c6597aaf373385d356551c8a79f91b396330b",
+  "source": {
+    "revision": "2952481fccec5efcf3f993605b23ccefe01e640a",
+    "dirty": false
+  },
+  "library": {
+    "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/install-hybrid-2054-sm90/lib/libgenerativeqc.so.0.1.0",
+    "sha256": "0f8fb7fc05befa133e1dbd44b9d725cfe6789adeb0db0e75f8a70f02ada088b2"
+  },
+  "problem": {
+    "method": "pbe0-rks",
+    "geometry_bohr": [
+      [
+        "C",
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      [
+        "O",
+        [
+          0.0,
+          0.0,
+          2.28
+        ]
+      ],
+      [
+        "H",
+        [
+          1.75,
+          0.0,
+          -1.05
+        ]
+      ],
+      [
+        "H",
+        [
+          -1.75,
+          0.0,
+          -1.05
+        ]
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 1,
+    "orbital_basis": "def2-svp",
+    "representation": "spherical",
+    "grid_spec": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "precision": "fp64",
+    "screening_tolerance": 1e-12,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "max_iterations": 180,
+    "products": [
+      "energy",
+      "forces"
+    ],
+    "auxiliary_basis": "def2-svp",
+    "df_memory_budget_bytes": 1073741824
+  },
+  "grid_exports": {
+    "original": {
+      "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/benchmarks/hybrid-provider-2054/installed-48-holdout/native/formaldehyde-direct-1.original-grid.npz",
+      "sha256": "e157a3edb666c9213aa705ef98ecc1e358968271b7b56ad7e48e255a01d82836",
+      "semantic_sha256": "4e0bcd2792bc919a85b4a692a3c40752fd76acf339a1580f72b62e1e6c68eebd",
+      "points": 98304
+    },
+    "moved": {
+      "path": "/inspire/qb-ilm/project/chemicalreaction/czxs25220150/projects/issue-2054-crossover-20261008/.artifacts/benchmarks/hybrid-provider-2054/installed-48-holdout/native/formaldehyde-direct-1.moved-grid.npz",
+      "sha256": "33c456a79e1536f6e3f0ac6ee0d51742dd643119deb992e7d0ae2bfa81e823fd",
+      "semantic_sha256": "42f4d432b0e58328c5ccad5d4b05290431053c6edf0e6fcc5f358d43021b6dc5",
+      "points": 98304
+    }
+  },
+  "status": "MEASURED",
+  "samples": [
+    {
+      "geometry": "original",
+      "seconds": 13.63834673166275,
+      "energy_hartree": -114.2817695972227,
+      "forces_hartree_per_bohr": [
+        [
+          1.5160864087333754e-15,
+          -1.7089445671990027e-17,
+          0.0418796565339461
+        ],
+        [
+          6.044596703740798e-17,
+          -1.410164004033522e-17,
+          -0.00984636450912646
+        ],
+        [
+          0.01949243970724468,
+          -3.322587439981171e-16,
+          -0.01601664601241115
+        ],
+        [
+          -0.019492439707247122,
+          3.6261220063525434e-16,
+          -0.016016646012410263
+        ]
+      ],
+      "converged": true,
+      "nao": 38,
+      "status": "PASS"
+    },
+    {
+      "geometry": "moved",
+      "seconds": 17.121671736240387,
+      "energy_hartree": -114.2817450982714,
+      "forces_hartree_per_bohr": [
+        [
+          0.0003396023813989218,
+          -2.4920091088329857e-05,
+          0.04202883752173747
+        ],
+        [
+          -6.526981564928114e-06,
+          1.0290088175598155e-05,
+          -0.009817652076529626
+        ],
+        [
+          0.019504075936812137,
+          1.0147408153647186e-05,
+          -0.01600699790199145
+        ],
+        [
+          -0.019837151336648207,
+          4.482594759082142e-06,
+          -0.016204187543172877
+        ]
+      ],
+      "converged": true,
+      "nao": 38,
+      "status": "PASS"
+    }
+  ],
+  "pyscf_version": "2.14.0"
+}

@@ -1,0 +1,867 @@
+{
+  "schema": "generativeqc.hybrid-provider-crossover.v1",
+  "case": "water-48",
+  "status": "INCOMPLETE",
+  "failures": [
+    "direct: incomplete or failed endpoint",
+    "direct/cold: invalid physical or timed endpoint",
+    "direct: provider proof mismatch",
+    "direct: missing or failed diagnostic profile",
+    "direct: missing native or independent oracle"
+  ],
+  "arms": {
+    "direct": {
+      "status": "FAILED",
+      "times": {
+        "warm-0": [],
+        "moved-warm": [],
+        "cold": [
+          58.15432367566973
+        ],
+        "changed-geometry": []
+      },
+      "warm_median_seconds": null
+    },
+    "df-jk-occupied": {
+      "status": "MEASURED",
+      "times": {
+        "warm-0": [
+          198.2010795143433
+        ],
+        "moved-warm": [
+          198.22539638821036
+        ],
+        "cold": [
+          218.5173827051185
+        ],
+        "changed-geometry": [
+          212.49841204378754
+        ]
+      },
+      "warm_median_seconds": 198.2010795143433
+    },
+    "df-j-exact-k": {
+      "status": "UNSUPPORTED"
+    }
+  },
+  "independent_oracle_errors": {
+    "df-jk-occupied": [
+      {
+        "phase": "cold",
+        "energy_error": 1.8189894035458565e-12,
+        "force_max_abs_error": 1.966542206854882e-11
+      },
+      {
+        "phase": "warm-0",
+        "energy_error": 1.8189894035458565e-12,
+        "force_max_abs_error": 1.9694551545157424e-11
+      },
+      {
+        "phase": "changed-geometry",
+        "energy_error": 5.9117155615240335e-12,
+        "force_max_abs_error": 1.727694376452149e-11
+      },
+      {
+        "phase": "moved-warm",
+        "energy_error": 6.139089236967266e-12,
+        "force_max_abs_error": 1.727117060479344e-11
+      }
+    ]
+  },
+  "gates": {
+    "energy_hartree": 1e-08,
+    "force_max_abs_hartree_per_bohr": 3e-07,
+    "physical_residual_rms": 1e-08
+  },
+  "diagnostic_work": {
+    "direct": {
+      "executed_counters": null,
+      "metric_diagnostics": null,
+      "resource_diagnostics": null,
+      "occupied_reuse_verified": null
+    },
+    "df-jk-occupied": {
+      "executed_counters": [
+        {
+          "operation": "one_electron_derivative_export",
+          "counters": {
+            "atom_coordinates": 144,
+            "device_to_host_bytes": 368641152
+          }
+        },
+        {
+          "operation": "resident_three_center_materialization",
+          "counters": {
+            "packed_raw_generation_calls": 384,
+            "raw_tile_productions": 384,
+            "raw_value_bytes": 227082240,
+            "resident_raw_bytes": 0,
+            "resident_transformed_bytes": 227082240,
+            "resident_whitening_factor_flops": 43599790080,
+            "resident_whitening_factor_gemms": 768,
+            "resident_whitening_factor_panels": 384,
+            "resident_whitening_projection_elements": 28385280,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k",
+          "counters": {
+            "dense_exchange_auxiliary_tile": 128,
+            "packed_unpack_elements": 56623104
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_j",
+          "counters": {
+            "coulomb_contraction_flops": 113541120,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "ri_k_occupied",
+          "counters": {
+            "occupied_exchange_flops": 9059696640,
+            "occupied_exchange_k": 30720,
+            "occupied_exchange_m": 384,
+            "occupied_exchange_n": 384,
+            "occupied_exchange_products": 1,
+            "occupied_exchange_triangular": 0,
+            "occupied_factor_bytes": 245760,
+            "occupied_intermediate_bytes": 94371840,
+            "occupied_projection_batch": 384,
+            "occupied_projection_flops": 9059696640,
+            "occupied_projection_k": 384,
+            "occupied_projection_m": 384,
+            "occupied_projection_n": 80,
+            "occupied_projection_products": 384,
+            "occupied_rank": 80,
+            "packed_projection_launches": 1,
+            "value_packed_pairs": 73920
+          }
+        },
+        {
+          "operation": "one_electron_stationary_pair",
+          "counters": {
+            "atom_coordinates": 144,
+            "device_to_host_bytes": 2304,
+            "host_to_device_bytes": 616800,
+            "response_scratch_bytes": 619104,
+            "stream_synchronizations": 1,
+            "synchronous_uploads": 0
+          }
+        },
+        {
+          "operation": "force_response",
+          "counters": {
+            "atom_coordinates": 144,
+            "density_upload_bytes": 1179648,
+            "device_to_host_bytes": 1152,
+            "host_to_device_bytes": 1225872,
+            "metric_derivative_weight_bytes": 1179648,
+            "metric_derivative_weights": 147456,
+            "response_auxiliary_blocks": 6,
+            "response_borrowed_final_fitted_projection_bytes": 94371840,
+            "response_borrowed_occupied_factor_bytes": 245760,
+            "response_borrowed_whitened_bytes": 227082240,
+            "response_dense_weight_panel_elements": 9437184,
+            "response_derivative_profile_promoted": 0,
+            "response_derivative_shell_execution": 0,
+            "response_final_fitted_potential_reused": 1,
+            "response_final_fitted_potential_trace_elements": 30720,
+            "response_final_fitted_projection_bytes": 94371840,
+            "response_final_fitted_projection_reused": 1,
+            "response_fitted_occupied_metric_root_gemms": 1,
+            "response_full_packed_weight_tensor_elements": 0,
+            "response_full_rank_occupied_factor_first": 1,
+            "response_full_weight_tensor_elements": 0,
+            "response_host_to_device_bytes": 0,
+            "response_occupied_charge_inverse_gemms_avoided": 2,
+            "response_occupied_charge_scale_elements_avoided": 384,
+            "response_occupied_inverse_flops": 955514880,
+            "response_occupied_inverse_gemms": 1,
+            "response_occupied_metric_flops": 479001600,
+            "response_occupied_metric_products": 2,
+            "response_occupied_projected_bytes": 19660800,
+            "response_occupied_projected_elements": 2457600,
+            "response_occupied_projection_blas_calls": 1,
+            "response_occupied_projection_flops": 1887436800,
+            "response_occupied_projection_products": 384,
+            "response_occupied_rank": 80,
+            "response_occupied_root_elements": 1244160,
+            "response_owned_occupied_projection_bytes": 95158272,
+            "response_packed_pairs": 0,
+            "response_probe_total_device_bytes": 104648976,
+            "response_pseudo_density_block_peak_elements": 0,
+            "response_pseudo_density_block_rows": 0,
+            "response_pseudo_density_capacity_elements": 9437184,
+            "response_pseudo_density_flops": 10947133440,
+            "response_pseudo_density_peak_bytes": 75497472,
+            "response_pseudo_density_peak_elements": 9437184,
+            "response_pseudo_density_products": 768,
+            "response_pseudo_density_rectangular_elements": 56623104,
+            "response_retained_fitted_charge_source_elements_avoided": 28385280,
+            "response_retained_fitted_charge_unpack_elements_avoided": 56623104,
+            "response_retained_fitted_occupied_bytes": 227082240,
+            "response_retained_fitted_occupied_factor_first": 1,
+            "response_retained_metric_root": 1,
+            "response_scratch_bytes": 104648976,
+            "response_source_derivative_qualification_requested": 0,
+            "response_symmetric_expansion_copy_bytes": 19660800,
+            "response_symmetric_occupied_pairs": 1,
+            "shell_primitive_signature_policy": 0,
+            "stream_synchronizations": 1,
+            "tensor_host_to_device_bytes": 0,
+            "three_center_derivative_weight_bytes": 452984832,
+            "three_center_derivative_weights": 56623104
+          }
+        },
+        {
+          "operation": "force_response",
+          "counters": {
+            "atom_coordinates": 144,
+            "density_upload_bytes": 0,
+            "device_to_host_bytes": 1152,
+            "host_to_device_bytes": 46224,
+            "metric_derivative_weight_bytes": 1179648,
+            "metric_derivative_weights": 147456,
+            "response_auxiliary_blocks": 4,
+            "response_borrowed_density": 1,
+            "response_borrowed_density_bytes": 1179648,
+            "response_borrowed_whitened_bytes": 227082240,
+            "response_charge_blas_dots": 384,
+            "response_charge_dot_elements": 56623104,
+            "response_derivative_profile_promoted": 0,
+            "response_derivative_shell_execution": 0,
+            "response_fitted_panel_calls": 16,
+            "response_fitted_panel_gemms": 16,
+            "response_fitted_projection_flops": 87199580160,
+            "response_fitted_unpack_staging_bytes": 908328960,
+            "response_fitted_unpack_staging_copies": 1536,
+            "response_full_rank_bounded_factor_first": 1,
+            "response_host_to_device_bytes": 0,
+            "response_inverse_applied_factor_elements": 226492416,
+            "response_metric_blas_dots": 147456,
+            "response_metric_blas_gemms": 16,
+            "response_probe_total_device_bytes": 234803472,
+            "response_scratch_bytes": 234803472,
+            "response_source_derivative_qualification_requested": 0,
+            "shell_primitive_signature_policy": 0,
+            "stream_synchronizations": 1,
+            "tensor_host_to_device_bytes": 0,
+            "three_center_derivative_weight_bytes": 452984832,
+            "three_center_derivative_weights": 56623104
+          }
+        }
+      ],
+      "metric_diagnostics": [
+        {
+          "bucket_id": 0,
+          "system_index": 0,
+          "effective_rank": 384,
+          "absolute_threshold": 1.6990971217214661e-07,
+          "condition_number": 18132.170221839202,
+          "solver_device_workspace_bytes": 6423192,
+          "solver_host_workspace_bytes": 0,
+          "device_resident_bytes": 774372577,
+          "peak_device_bytes": 781978493,
+          "host_resident_bytes": 19954826,
+          "peak_host_bytes": 22560544,
+          "auxiliary_tile": 128,
+          "streamed": false
+        }
+      ],
+      "resource_diagnostics": null,
+      "occupied_reuse_verified": true
+    }
+  },
+  "crossover_claim_eligible": false,
+  "reason": "DF-J plus exact K is unsupported; one case does not cover 48/96 atom and non-water crossover requirements"
+}
