@@ -254,10 +254,16 @@ CUDA_ALLOWED["cuda_direct_queues"] = tuple(
     "scf/cuda/packed_basis.",
     "scf/cuda/device_timer.",
 )
-# The prepared lowering adapter reads the optional compiler inventory only.
-# Keep it separate from provider lifetime and retained device recurrences.
+# Prepared lowering reads the optional compiler inventory and freezes a schedule
+# enum from the shared POD task ABI. That leaf header owns no provider lifetime,
+# queue implementation, or retained device recurrence; those remain forbidden.
 CUDA_MODULES["cuda_direct_fock_lowering"] = ("direct_fock_lowering.hpp",)
 CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
+# This new leaf allowance is an exact path, not a module-name prefix: a file
+# such as generated_shell_task.hpp.cuh must not acquire device implementation.
+CUDA_EXACT_ALLOWED = {
+    "cuda_direct_fock_lowering": ("scf/generated_shell_task.hpp",),
+}
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (
@@ -682,7 +688,9 @@ def audit_scf_structure(root: Path = ROOT) -> dict:
                 except ValueError:
                     continue
                 edges.append({"from": relative, "to": target})
-                if not target.startswith(allowed):
+                if target not in CUDA_EXACT_ALLOWED.get(
+                    owner, ()
+                ) and not target.startswith(allowed):
                     line = text.count("\n", 0, match.start()) + 1
                     errors.append(
                         f"{relative}:{line}: forbidden {owner} dependency on {target}"

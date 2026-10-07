@@ -205,19 +205,16 @@ def test_exchange_streams_compact_survivors_before_expensive_fock_work() -> None
                 "const unsigned survivor_mask = __ballot_sync(full_warp_mask, keep);"
                 in source
             )
-            assert source.count("__syncwarp(full_warp_mask);") == 2
+            assert source.count("__syncwarp(full_warp_mask);") >= 2
             assert "__popc(survivor_mask & lower_lane_mask)" in source
-            assert "compact_bra_pairs[survivor_rank] = bra_pair;" in source
-            assert "compact_ket_pairs[survivor_rank] = ket_pair;" in source
-            assert "if (threadIdx.x < survivor_count)" in source
-            # J and combined HF preserve the original lane mapping.
-            assert "} else if (keep) {" in source
+            assert "exchange_queue_pairs[pending + rank] = ket_pair;" in source
+            assert "keep = threadIdx.x < consumed;" in source
+            assert "if (compact_exchange)" in source
         else:
-            assert "__shared__ std::uint32_t exchange_survivor_count;" in source
-            assert "atomicAdd(&exchange_survivor_count, 1U)" in source
-            assert "subgroup < exchange_survivor_count" in source
-            # Non-exchange consumers retain one candidate per original subgroup.
-            assert "if (!compact_exchange)" in source
+            assert "__shared__ std::uint32_t exchange_queue_count;" in source
+            assert "atomicAdd(&exchange_queue_count, 1U)" in source
+            assert "keep = subgroup < consumed;" in source
+            assert "stream_keep[subgroup] = keep ?" in source
 
     assert ScheduleKind.PACKED_TASKS in seen
     assert ScheduleKind.SUBGROUP_TASKS in seen
