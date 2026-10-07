@@ -36,8 +36,7 @@
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
-#include "tensor/cuda_contraction.cuh"
-#include "tensor/cuda_runtime.cuh"
+#include "scf/cuda/matrix_library.hpp"
 #include "xc_cpu_generated.hpp"
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
@@ -54,10 +53,6 @@ namespace {
 using namespace scf::cuda_execution;
 constexpr unsigned kMaximumFinalCorrections = 4;
 constexpr unsigned kCudaKsChunkCapacity = 2;
-// Preserve the already-qualified SCF matrix crossover while routing execution
-// through the shared TensorIR CUDA matrix adapter. Small AO spaces retain the
-// launch-light generated kernel; larger spaces borrow one prepared BLAS owner.
-constexpr std::size_t kCudaKsMatrixLibraryAoThreshold = 17;
 
 constexpr bool curated_cuda_ks_functional(std::uint32_t functional) noexcept {
   const auto* metadata = semilocal_family_metadata_from_code(functional);
@@ -207,7 +202,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
   scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
-  tensor::CudaContractionContext matrix_contractions;
+  MatrixLibraryOwner matrix_products;
   cudaStream_t stream{};
   int device{};
   std::size_t n{}, matrix{}, elements{};
@@ -237,7 +232,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::unique_ptr<OrdinaryStreamEigensolver> eigensolver;
   scf::ScfResult output;
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
-  bool warm_updates{true}, device_chunk_mode{}, matrix_library{};
+  bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
   bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
   bool pending_fitted_occupied{}, final_fitted_projection_ready{};
@@ -264,45 +259,20 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
                        const std::uint8_t* active, double* output) {
-    if (!matrix_library) {
-      const auto blocks = static_cast<unsigned>((matrix + 127) / 128);
-      launch_matrix_product_kernel(blocks, 128, 0, stream, 1, n, left, transpose_left, right,
-                                   active, output, 1.0);
-      check(cudaGetLastError());
-      return;
-    }
-    (void)active;
-    const auto order = static_cast<int>(n);
-    const auto stride = static_cast<generativeqc_tensor::I>(matrix);
-    generativeqc_tensor::gemm(matrix_contractions.handle(), transpose_left ? 'T' : 'N', 'N', order,
-                              order, order, left, right, output, stride, stride, stride, 1, 1.0,
-                              0.0);
+    check(launch_matrix_product(matrix_products.view(), 1, static_cast<int>(n), left,
+                                transpose_left, right, active, output,
+                                matrix_products.library_enabled(), 1.0),
+          "CUDA KS matrix product failed");
   }
 
   void multiply_spin(unsigned spin_count, const double* left, bool left_is_spin,
                      bool transpose_left, const double* right, bool right_is_spin,
                      const std::uint8_t* active, double* output) {
-    if (!matrix_library) {
-      const auto count = product(static_cast<std::size_t>(spin_count), matrix);
-      const auto blocks = static_cast<unsigned>((count + 127) / 128);
-      launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1,
-                                        static_cast<std::int32_t>(spin_count), n, left,
-                                        left_is_spin, transpose_left, right, right_is_spin, active,
-                                        output);
-      check(cudaGetLastError());
-      return;
-    }
-    (void)active;
-    const auto order = static_cast<int>(n);
-    const auto stride = static_cast<generativeqc_tensor::I>(matrix);
-    for (unsigned spin = 0; spin < spin_count; ++spin) {
-      const auto offset = static_cast<std::size_t>(spin) * matrix;
-      const double* spin_left = left + (left_is_spin ? offset : 0);
-      const double* spin_right = right + (right_is_spin ? offset : 0);
-      generativeqc_tensor::gemm(matrix_contractions.handle(), transpose_left ? 'T' : 'N', 'N',
-                                order, order, order, spin_left, spin_right, output + offset, stride,
-                                stride, stride, 1, 1.0, 0.0);
-    }
+    check(launch_spin_matrix_product(
+              matrix_products.view(), 1, static_cast<int>(spin_count), static_cast<int>(n), left,
+              left_is_spin, transpose_left, right, right_is_spin, active, output,
+              matrix_products.library_enabled()),
+          "CUDA KS spin matrix product failed");
   }
 
   void retain_final_fitted_projection() {
@@ -858,13 +828,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
-      if (n >= kCudaKsMatrixLibraryAoThreshold && matrix_contractions.prepare(stream)) {
-        matrix_library = true;
+      check(matrix_products.prepare(stream, static_cast<int>(n)),
+            "CUDA KS matrix provider preparation failed");
+      if (matrix_products.library_enabled())
         resource.provider_device_bytes =
-            sum(resource.provider_device_bytes, tensor::CudaContractionContext::kProviderAllowance);
-      } else {
-        matrix_contractions.prepare_generated(stream);
-      }
+            sum(resource.provider_device_bytes, MatrixLibraryOwner::kProviderAllowance);
       eigensolver = std::make_unique<OrdinaryStreamEigensolver>(stream, n, tmp2, eigenvalues);
       resource.state_device_bytes = sum(resource.state_device_bytes, eigensolver->device_bytes());
       resource.retained_host_numeric_bytes =
@@ -956,8 +924,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (stream) cudaStreamSynchronize(stream);
     xc.reset();
     eigensolver.reset();
-    matrix_contractions.reset();
-    matrix_library = false;
+    matrix_products.reset();
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
