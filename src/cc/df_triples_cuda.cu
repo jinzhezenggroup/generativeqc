@@ -272,6 +272,47 @@ FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t 
   return r;
 }
 
+
+struct JointResponseLayout {
+  FockLayout fock;
+  std::array<std::size_t, 9> response_outputs{};
+  std::size_t bar_w{}, bar_v{}, bar_panel{}, packed{}, gap{};
+  std::size_t response_output_bytes{}, complete{};
+};
+
+JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::size_t q,
+                                          std::size_t capacity, std::size_t panels,
+                                          std::size_t caller_bytes,
+                                          bool parallel_gap_reduction,
+                                          bool include_gap_response) {
+  JointResponseLayout r;
+  r.fock = fock_layout(o, v, q, capacity, panels, 0, true);
+  auto& p = r.fock.value;
+  auto cursor = p.arena;
+  std::size_t values = 0;
+  const std::size_t requested_outputs = include_gap_response ? 9 : 7;
+  for (std::size_t x = 0; x < requested_outputs; ++x) {
+    r.response_outputs[x] = reserve(cursor, bytes(p.sizes[x]));
+    values = checked_add(values, p.sizes[x]);
+  }
+  r.bar_w = reserve(cursor, bytes(checked_mul(6, p.v3)));
+  r.bar_v = reserve(cursor, bytes(p.v3));
+  r.bar_panel = reserve(cursor, bytes(p.v3));
+  r.packed = reserve(cursor, bytes(checked_mul(v, v)));
+  if (include_gap_response)
+    r.gap = reserve(cursor,
+                    bytes(generated_df::gap_response_arena_elements(o, v, parallel_gap_reduction)));
+  p.arena = align256(cursor);
+  p.total = checked_add(p.arena, provider_allowance);
+  r.response_output_bytes = bytes(values);
+  r.complete = checked_add(
+      caller_bytes,
+      checked_add(p.total,
+                  checked_add(r.fock.host_bytes,
+                              checked_add(r.fock.output_bytes, r.response_output_bytes))));
+  return r;
+}
+
 // A cross-page moment is already symmetric in its two factors. Scatter each
 // matrix block once and mirror only off-diagonal page pairs; discard padded rows.
 __global__ void scatter_fock_block(std::size_t o, std::size_t capacity, std::size_t left,
