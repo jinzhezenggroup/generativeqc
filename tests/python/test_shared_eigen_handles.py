@@ -248,3 +248,92 @@ def test_all_migrated_consumers_delete_raw_lifecycle_calls(consumer: str) -> Non
 )
 def test_all_prepared_owners_use_the_shared_resource(owner: str) -> None:
     assert "PreparedSymmetricEigenHandles" in (ROOT / owner).read_text()
+
+
+@pytest.mark.parametrize(
+    "header,owner,member",
+    (
+        (
+            "scf/cuda/eigensolver.hpp",
+            "generativeqc::scf::cuda_execution::OrdinaryStreamEigensolver",
+            None,
+        ),
+        (
+            "scf/cuda/resources.hpp",
+            "generativeqc::scf::cuda_execution::CudaResources",
+            "eigen_handles_",
+        ),
+        (
+            "scf/cuda/df_scf_state.hpp",
+            "generativeqc::scf::cuda_df::DeviceSolver",
+            "handles",
+        ),
+        (
+            "scf/cuda/df_plan_internal.hpp",
+            "generativeqc::scf::CudaDensityFittingJkPlan",
+            "eigen_handles",
+        ),
+    ),
+)
+def test_real_owner_headers_after_method_solver_namespace(
+    header: str,
+    owner: str,
+    member: str | None,
+    tmp_path: Path,
+    required_native_cxx: NativeCxx,
+) -> None:
+    """Compile real headers when method-local solver already exists (CI order).
+
+    Only vendor declarations are stubbed. No SCF or shared-owner declaration is
+    extracted or replaced, so namespace lookup sees the real nested scopes.
+    """
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\n#include <cstddef>\n"
+        "struct cudaStream; using cudaStream_t = cudaStream*;\n"
+        "struct cudaGraph; using cudaGraph_t = cudaGraph*;\n"
+        "struct cudaGraphExec; using cudaGraphExec_t = cudaGraphExec*;\n"
+        "enum cudaError_t { cudaSuccess = 0, cudaErrorInvalidValue = 1, "
+        "cudaErrorMemoryAllocation = 2, cudaErrorInvalidDevice = 101 };\n"
+        "cudaError_t cudaGetDevice(int*); cudaError_t cudaSetDevice(int);\n"
+        "cudaError_t cudaMalloc(void**, std::size_t);\n"
+        "cudaError_t cudaFree(void*);\n"
+        "cudaError_t cudaMallocAsync(void**, std::size_t, cudaStream_t);\n"
+        "cudaError_t cudaFreeAsync(void*, cudaStream_t);\n"
+        "cudaError_t cudaStreamSynchronize(cudaStream_t);\n"
+        "cudaError_t cudaGraphDestroy(cudaGraph_t);\n"
+        "cudaError_t cudaGraphExecDestroy(cudaGraphExec_t);\n"
+    )
+    (tmp_path / "cuda_runtime.h").write_text('#include "cuda_runtime_api.h"\n')
+    (tmp_path / "cublas_v2.h").write_text(
+        "#pragma once\nstruct cublasContext; using cublasHandle_t = cublasContext*;\n"
+    )
+    source = tmp_path / "owner_include_order.cpp"
+    source.write_text(
+        "namespace generativeqc::scf::solver {}\n"
+        '#include "' + header + '"\n'
+        "#include <type_traits>\n#include <utility>\n"
+        "using Shared = ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles;\n"
+        "using Owner = ::" + owner + ";\n"
+        "static_assert(sizeof(Owner) >= sizeof(Shared));\n"
+        + (
+            "static_assert(std::is_same_v<decltype(std::declval<Owner>()."
+            + member
+            + "), Shared>);\n"
+            if member
+            else "static_assert(!std::is_copy_constructible_v<Owner>);\n"
+        )
+    )
+    required_native_cxx.compile_object(
+        source,
+        tmp_path / "owner_include_order.o",
+        args=(
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I" + str(STUBS),
+            "-I" + str(tmp_path),
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
+        ),
+    )

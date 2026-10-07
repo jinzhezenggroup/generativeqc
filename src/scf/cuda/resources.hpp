@@ -32,7 +32,7 @@ class CudaResources {
   int device_id_{-1};
   cudaStream_t stream_{};
   cublasHandle_t blas_{};
-  solver::cuda::PreparedSymmetricEigenHandles eigen_handles_;
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles_;
   void* arena_{};
   DirectTileValidationRecord* direct_tile_validation_{};
   void* solver_workspace_{};

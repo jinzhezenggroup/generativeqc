@@ -31,7 +31,7 @@ struct RhfWarmState {
  * incompatible topology/options require rebuilding. Teardown selects its device.
  */
 struct DeviceSolver {
-  solver::cuda::PreparedSymmetricEigenHandles handles;
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles handles;
   double* workspace{};
   void* host_workspace{};
   std::size_t workspace_bytes{};

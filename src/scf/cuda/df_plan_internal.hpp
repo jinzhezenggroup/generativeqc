@@ -74,7 +74,7 @@ struct CudaDensityFittingJkPlan {
       count += bool(metric_charge[i]) + bool(metric_potential[i]);
     return count * sizeof(tensor::CudaVectorContraction);
   }
-  solver::cuda::PreparedSymmetricEigenHandles eigen_handles;
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;
   double* three_center{};
   double* primary_density{};
   double* secondary_density{};

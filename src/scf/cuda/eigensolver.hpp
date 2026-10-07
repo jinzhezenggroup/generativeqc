@@ -96,7 +96,7 @@ class OrdinaryStreamEigensolver {
   int n_{}, device_{};
   CudaEigensolverFamily family_{};
   EigensolverResources resources_{};
-  solver::cuda::PreparedSymmetricEigenHandles handles_;
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles handles_;
   std::vector<unsigned char> host_workspace_;
   std::array<char, 48> provider_version_{};
   OrdinaryEigensolverDiagnostic diagnostic_{};
