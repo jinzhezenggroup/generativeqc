@@ -12,14 +12,17 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(scope="module")
 def density_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("a C++ compiler is required")
-    source = (ROOT / "tools/generate_scf_array_native.py").read_text()
+    cache = shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("a C++ compiler and compiler cache are required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True, timeout=10)
+    from tools.generate_scf_array_native import native_header
+
+    source = native_header()
     begin = source.index("inline void density_from_orbitals(")
     end = source.index("inline void weighted_density_from_orbitals(", begin)
-    # This function is a literal f-string section. IR/topology validation stays
-    # covered by the existing generator suite; here execute its exact C++ body.
-    body = source[begin:end].replace("{{", "{").replace("}}", "}")
+    # Execute the actual common-lowered body, not a duplicate source literal.
+    body = source[begin:end]
     directory = tmp_path_factory.mktemp("scf-density-weight")
     cpp, executable = directory / "probe.cpp", directory / "probe"
     cpp.write_text(
@@ -62,6 +65,7 @@ int main(int argc, char** argv) {
     )
     subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O2",
