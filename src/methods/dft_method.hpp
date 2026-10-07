@@ -105,6 +105,10 @@ generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, st
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
                                         std::string& detail);
 
+/** Convert one completed native KS solve into the method-neutral publication record.
+ * Kept in detail scope so adapter field coverage can be tested without a backend execution. */
+Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend);
+
 /** Internal #163 handoff. These helpers accept prepared CPU RKS/CUDA KS owners;
  * they do not extend public result layouts or authorize force execution. */
 generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
