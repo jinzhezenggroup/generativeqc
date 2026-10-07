@@ -4,8 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "dft/dispersion/d4_eeq_data.hpp"
-#include "dft/dispersion/d4_eeq_r2scan3c_c6.hpp"
 #include "dft/dispersion/d4_reference.hpp"
 
 #if defined(__CUDACC__)
@@ -18,31 +16,24 @@ namespace generativeqc::dft::dispersion {
 
 enum class D4EEQProfile : int { standard = 1, r2scan3c = 2 };
 
+struct D4EEQChargeElementData {
+  double chi;
+  double eta;
+  double kcnchi;
+  double radius;
+};
+
 struct EEQTables {
   const data::D4ElementData* elements;
-  const eeq_data::EEQChargeElementData* charge_elements;
+  const D4EEQChargeElementData* charge_elements;
   std::size_t element_count;
 };
 
-inline EEQTables eeq2019_host_tables() {
-  return {eeq_data::kElements.data(), eeq_data::kChargeElements.data(), eeq_data::kElementCount};
-}
-
-inline D4Tables eeq_d4_host_tables(D4EEQProfile profile) {
-  const double* c6 = profile == D4EEQProfile::r2scan3c ? eeq_data::kReferenceC6R2SCAN3C.data()
-                                                       : eeq_data::kReferenceC6Standard.data();
-  const bool r2scan = profile == D4EEQProfile::r2scan3c;
-  const auto r2scan_parameters = ::generativeqc::generated::method_parameters::r2scan3cD4();
-  return {D4ReferenceModel::eeq,
-          eeq_data::kElements.data(),
-          eeq_data::kReferences.data(),
-          c6,
-          eeq_data::kElementCount,
-          eeq_data::kReferenceCount,
-          eeq_data::kReferenceC6Standard.size(),
-          r2scan ? r2scan_parameters.ga : 3.0,
-          r2scan ? r2scan_parameters.gc : 2.0};
-}
+// Host views are implemented in d4_table_data.cpp. Keeping the generated
+// 700+ KiB EEQ/C6 arrays out of this CUDA-visible header prevents every D4
+// device translation unit from reparsing immutable host setup data.
+EEQTables eeq2019_host_tables();
+D4Tables eeq_d4_host_tables(D4EEQProfile profile);
 
 inline D4Parameters r2scan3c_d4_parameters() {
   const auto p = ::generativeqc::generated::method_parameters::r2scan3cD4();
@@ -157,7 +148,7 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
     return D4Status::invalid_argument;
   if (n == 0) return total_charge == 0.0 ? D4Status::success : D4Status::invalid_argument;
   if (!z || !xyz || !workspace || !charges || !dqdr) return D4Status::invalid_argument;
-  if (!t.elements || !t.charge_elements || t.element_count != eeq_data::kElementCount)
+  if (!t.elements || !t.charge_elements || t.element_count != kD4TableElementCount)
     return D4Status::unsupported;
   const std::size_t count = static_cast<std::size_t>(n);
   const std::size_t used_workspace = eeq2019_workspace_elements(n);
@@ -169,7 +160,7 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_eeq2019_with_tables(
       count * sizeof(double),
       3 * count * count * sizeof(double),
       t.element_count * sizeof(data::D4ElementData),
-      t.element_count * sizeof(eeq_data::EEQChargeElementData),
+      t.element_count * sizeof(D4EEQChargeElementData),
   };
   d4_detail::Range ranges[7];
   for (int a = 0; a < 7; ++a) {
@@ -354,7 +345,7 @@ GENERATIVEQC_D4_EEQ_HD inline D4Status evaluate_complete_d4_eeq_with_tables(
       d4_tables.reference_count * sizeof(data::D4ReferenceData),
       d4_tables.reference_c6_count * sizeof(double),
       eeq_tables.element_count * sizeof(data::D4ElementData),
-      eeq_tables.element_count * sizeof(eeq_data::EEQChargeElementData)};
+      eeq_tables.element_count * sizeof(D4EEQChargeElementData)};
   for (int a = 0; a < 5; ++a) {
     d4_detail::Range table_range{};
     if (!d4_detail::range(table_ptrs[a], table_bytes[a], table_range) ||
