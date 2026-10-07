@@ -113,6 +113,44 @@ def test_generic_indexing_reshape_and_batched_matmul_match_numpy() -> None:
     np.testing.assert_allclose(batched(left, right), left @ right)
 
 
+def test_generic_empty_slices_match_numpy() -> None:
+    @xp.compile
+    def empty_slice(x: object) -> object:
+        return x[2:1]
+
+    values = np.arange(3.0, dtype=np.float64)
+    np.testing.assert_array_equal(empty_slice(values), values[2:1])
+
+    @xp.compile
+    def empty_multiaxis(x: object) -> object:
+        return x[1:1, ::-1]
+
+    matrix = np.arange(12.0, dtype=np.float64).reshape(3, 4)
+    np.testing.assert_array_equal(empty_multiaxis(matrix), matrix[1:1, ::-1])
+
+
+def test_compiled_lower_supports_explicit_differentiable_inputs() -> None:
+    @xp.compile(differentiable=("x",))
+    def norm2(x: object) -> object:
+        return xp.sum(x * x)
+
+    values = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    program = norm2.lower(values)
+    assert program.inputs["x"].spec.differentiable is True
+    result = tensor.jvp(
+        program,
+        {"x": values},
+        {"x": np.ones_like(values)},
+    )
+    assert result.output_tangents["output"] == 12.0
+
+    @xp.compile
+    def fixed(x: object) -> object:
+        return xp.sum(x * x)
+
+    assert fixed.lower(values).inputs["x"].spec.differentiable is False
+
+
 def test_generic_broadcasting_and_exact_scalar_operators_match_numpy() -> None:
     @xp.compile
     def expression(matrix: object, vector: object) -> object:
