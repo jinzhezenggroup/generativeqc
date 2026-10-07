@@ -402,6 +402,7 @@ def capabilities() -> dict[str, object]:
             "scientific_metadata_requires_explicit_indices": True,
             "compiled_call": "shape-dtype-specialized-tensorir-reference",
             "compiled_differentiability": "explicit-parameter-names",
+            "namespace_dispatch": "numpy-eager-or-symbolic-tensorir",
             "runtime_array": "numpy-host-float32-float64",
         }
     )
