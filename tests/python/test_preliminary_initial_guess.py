@@ -364,7 +364,7 @@ def test_charged_and_polarization_basis_endpoints(
         "device": "cpu",
         "ks_options": KsOptions(grid=GridSpec(16, 8, 16)),
     }
-    baseline = Calculator(**settings).singlepoint(
+    baseline = Calculator(**settings, initial_guess=None).singlepoint(
         atoms, charge=charge, properties=("energy",)
     )
     actual = Calculator(**settings, initial_guess=InitialGuessSpec(kind)).singlepoint(

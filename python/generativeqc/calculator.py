@@ -188,7 +188,7 @@ class Calculator:
         target_accuracy: TargetAccuracy | None = None,
         resource_budget: typing.Any = None,
         ks_options: typing.Any = None,
-        initial_guess: InitialGuessSpec | None = None,
+        initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto",
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
@@ -205,6 +205,11 @@ class Calculator:
         iteration convergence. Until an explicit audit/estimator is attached,
         successful results report ``unverified`` and numerical defaults remain
         unchanged. It never certifies an error from ``energy_tolerance``.
+
+        ``initial_guess="auto"`` selects MINAO for FP64 all-electron H-Ar
+        restricted exact CPU HF/KS and CUDA KS cold starts. Other domains retain
+        Hcore, as does a batch containing an unsupported element. Explicit
+        ``None`` disables preparation; existing densities always take precedence.
 
         ``method`` may be a native selector string, any compiler MethodIR
         name exposed as ``<name>-rks`` / ``<name>-uks`` when its native
@@ -235,11 +240,16 @@ class Calculator:
             if not isinstance(resource_budget, ResourceBudget):
                 raise TypeError("resource_budget must be a ResourceBudget")
         self._resource_budget = resource_budget
-        if initial_guess is not None and not isinstance(
-            initial_guess, InitialGuessSpec
+        self._automatic_initial_guess = (
+            isinstance(initial_guess, str) and initial_guess == "auto"
+        )
+        if (
+            not self._automatic_initial_guess
+            and initial_guess is not None
+            and not isinstance(initial_guess, InitialGuessSpec)
         ):
-            raise TypeError("initial_guess must be an InitialGuessSpec or None")
-        self._initial_guess = initial_guess
+            raise TypeError("initial_guess must be 'auto', an InitialGuessSpec or None")
+        self._initial_guess = None if self._automatic_initial_guess else initial_guess
         if (
             type(dispersion_memory_budget_bytes) is not int
             or not 0 < dispersion_memory_budget_bytes < 2**64
@@ -1013,13 +1023,27 @@ class Calculator:
                     "DFT accuracy-model identities are not implemented yet"
                 )
 
+        restricted = self._method == _native.METHOD_RHF or (
+            self._ks_options is not None
+            and self._ks_options.method_ir.spin == "unpolarized"
+        )
+        if (
+            self._automatic_initial_guess
+            and (
+                self._device_name == "cpu"
+                or self._capabilities.family == "density_functional"
+            )
+            and self._precision_mode == _native.PRECISION_FP64
+            and self._density_fitting_mode == _native.DENSITY_FITTING_NONE
+            and restricted
+            and not basis_has_ecp
+            and self._capabilities.family in ("hartree_fock", "density_functional")
+        ):
+            self._initial_guess = InitialGuessSpec("minao")
+
         if self._initial_guess is not None:
             from .initial_guess import require_initial_guess_library
 
-            restricted = self._method == _native.METHOD_RHF or (
-                self._ks_options is not None
-                and self._ks_options.method_ir.spin == "unpolarized"
-            )
             minao = self._initial_guess.kind == "minao"
             backend_ok = self._device_name == "cpu" or (
                 minao
@@ -1048,7 +1072,11 @@ class Calculator:
                     if minao
                     else frozenset({"energy"})
                 ),
-                supported_second_order=frozenset(),
+                supported_second_order=(
+                    self._capabilities.supported_second_order
+                    if self._automatic_initial_guess
+                    else frozenset()
+                ),
             )
 
     def _default_properties(self, *, batch: bool = False) -> frozenset[str]:
@@ -1085,7 +1113,7 @@ class Calculator:
 
     @property
     def initial_guess(self) -> InitialGuessSpec | None:
-        """Immutable execution-only cold-start policy; None preserves core guessing."""
+        """Resolved cold-start candidate; automatic MINAO also checks batch elements."""
         return self._initial_guess
 
     @property
@@ -1144,6 +1172,7 @@ class Calculator:
         *,
         resource_plan: typing.Any = None,
         ks_options: typing.Any = None,
+        systems: typing.Any = None,
     ) -> _native.MethodDescriptor:
         df_budget = self._density_fitting_memory_budget_bytes
         if resource_plan is not None and self._method in _HF_METHODS:
@@ -1186,8 +1215,11 @@ class Calculator:
             descriptor.ccsd_damping = self._ccsd_damping
             descriptor.ccsd_level_shift = self._ccsd_level_shift
             descriptor.ccsd_frozen_core = self._ccsd_frozen_core
-        if self._initial_guess is not None:
-            descriptor.initial_guess = ctypes.pointer(self._initial_guess.native())
+        from .initial_guess import initial_guess_for_systems
+
+        policy = initial_guess_for_systems(self, systems)
+        if policy is not None:
+            descriptor.initial_guess = ctypes.pointer(policy.native())
         return descriptor
 
     def _precision_provenance(
@@ -2335,6 +2367,7 @@ class Calculator:
                 auxiliary_system if auxiliary_system.value else None,
                 resource_plan=resource_plan,
                 ks_options=effective_ks_options,
+                systems=(native_atoms,),
             )
 
             def prepare() -> typing.Any:

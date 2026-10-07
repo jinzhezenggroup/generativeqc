@@ -564,16 +564,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return frame;
   }
 
-  std::vector<double> seed(const std::vector<double>* input) const {
+  std::vector<double> seed(const std::vector<double>* input) {
     using namespace scf::reference;
     if (!input) throw std::logic_error("CUDA cold guesses must use resident setup state");
     const auto& ints = provider.one_electron();
     if (options.strict_initial_density && input) {
       const std::vector<unsigned> counts =
-          spins == 2 ? std::vector<unsigned>{static_cast<unsigned>(occupations[0]),
-                                             static_cast<unsigned>(occupations[1])}
-                     : std::vector<unsigned>{static_cast<unsigned>(occupations[0])};
-      scf::solver::validate_seed(ints.overlap, *input, n, counts, spins == 2 ? 1.0 : 2.0);
+          spins == 2
+              ? std::vector<unsigned>{static_cast<unsigned>(occupations[0]),
+                                      static_cast<unsigned>(occupations[1])}
+              : std::vector<unsigned>{static_cast<unsigned>(provider.system().electron_count)};
+      // RKS stores the spin-summed density, not the number of occupied orbitals.
+      // begin() has not submitted an iteration yet. Strict seeded admission
+      // uses the same charged GPU solver as checkpoint and MINAO construction.
+      const scf::initial_guess::EigenOperation eigen = [this](const auto& matrix, const auto*,
+                                                              const auto*, std::size_t dimension) {
+        return seed_eigen(matrix, dimension);
+      };
+      scf::solver::validate_seed(ints.overlap, *input, n, counts, spins == 2 ? 1.0 : 2.0, eigen);
       return *input;
     }
     if (spins == 2) {

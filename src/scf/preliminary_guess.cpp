@@ -13,6 +13,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/minao.hpp"
+#include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/reference/linalg.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -26,7 +27,8 @@ double elapsed(Clock::time_point start) {
 
 std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
                                                 const PreliminaryOptions& policy,
-                                                PreliminaryDiagnostic& diagnostic) {
+                                                PreliminaryDiagnostic& diagnostic,
+                                                const EigenOperation& eigen) {
   const auto& system = target.system();
   // The CPU integral provider admits g, but the LDA AO-grid primitive only
   // admits through f. Decline before building an unusable extra integral owner.
@@ -43,12 +45,12 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
   }
   if (policy.kind == PreliminaryKind::Minao) {
     const auto& ints = target.one_electron();
-    const auto x = reference::symmetric_orthogonalizer(ints.overlap, ints.nbf);
+    const auto x = symmetric_overlap(ints.overlap, ints.nbf, eigen);
     auto projected = minao_density(system, ints, x);
-    auto density = admissible_minao_density(system, ints, x, projected.density);
+    auto density = admissible_minao_density(system, ints, x, projected.density, eigen);
     diagnostic.preliminary_iterations = 0;
     diagnostic.preliminary_fock_builds = 0;
-    density = admit_preliminary_density(target, std::move(density));
+    density = admit_preliminary_density(target, std::move(density), eigen);
     diagnostic.outcome = PreliminaryOutcome::Used;
     return density;
   }
@@ -92,14 +94,16 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
 
 std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
                                                                const PreliminaryOptions& policy,
-                                                               PreliminaryDiagnostic& diagnostic) {
-  return prepare_impl(target, policy, diagnostic);
+                                                               PreliminaryDiagnostic& diagnostic,
+                                                               const EigenOperation& eigen) {
+  return prepare_impl(target, policy, diagnostic, eigen);
 }
 
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
-                                              std::vector<double> density) {
+                                              std::vector<double> density,
+                                              const EigenOperation& eigen) {
   solver::validate_seed(target.one_electron().overlap, density, target.one_electron().nbf,
-                        {static_cast<unsigned>(target.system().electron_count)}, 2.0);
+                        {static_cast<unsigned>(target.system().electron_count)}, 2.0, eigen);
   return density;
 }
 

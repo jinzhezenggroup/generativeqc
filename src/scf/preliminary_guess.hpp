@@ -4,6 +4,7 @@
 #include <functional>
 #include <optional>
 
+#include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::scf {
@@ -24,12 +25,18 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
 /** Strict same-basis admission. No symmetry/trace repair or metric transport.
  * Ownership moves only after the raw candidate passes the existing ensemble gate. */
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
-                                              std::vector<double> density);
+                                              std::vector<double> density,
+                                              const EigenOperation& eigen = {});
 
-/** Prepare one bounded cold seed without executing the immutable target. */
+/** Prepare one bounded cold seed without executing the immutable target.
+ * MINAO borrows the target's idle eigen operation for overlap, occupation
+ * construction and strict admission. CPU callers retain the reference default;
+ * a failing supplied operation never silently retries on the reference backend.
+ */
 std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
                                                                const PreliminaryOptions& policy,
-                                                               PreliminaryDiagnostic& diagnostic);
+                                                               PreliminaryDiagnostic& diagnostic,
+                                                               const EigenOperation& eigen = {});
 
 using TargetSolve = std::function<ScfResult(const std::vector<double>*)>;
 /** The callback executes immutable target equations with fresh iterative state.

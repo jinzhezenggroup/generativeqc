@@ -25,7 +25,9 @@
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/reference/observation.hpp"
 
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
@@ -2142,6 +2144,78 @@ void rejected_api_requests_revoke_tokens() {
               "rejected C batch request retained a previous token");
   }
 }
+std::size_t minao_reference_solves = 0;
+std::size_t observe_minao_reference(const char* name, std::size_t) noexcept {
+  if (std::strcmp(name, "reference_eigensolve") == 0) ++minao_reference_solves;
+  return 0;
+}
+void finish_minao_reference(std::size_t, int) noexcept {}
+
+void minao_gpu_case() {
+  using namespace scf::initial_guess;
+  const auto system = water();
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, {1, 16, 8, 16, 3, 1e-12});
+  const scf::PreparedFockPlan cpu(system, nullptr,
+                                  exact_exchange_strategy(true, scf::FockBackend::Cpu));
+  const scf::PreparedFockPlan gpu(system, nullptr,
+                                  exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.strict_initial_density = true;
+  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  options.semilocal_exchange_scale = .75;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.max_iterations = 100;
+  dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
+  const auto eigen = plan.seed_eigen_operation();
+  PreliminaryOptions policy;
+  policy.kind = PreliminaryKind::Minao;
+  PreliminaryDiagnostic diagnostic;
+  const auto initial_movement = plan.transfers();
+  scf::reference::observation::Observer observer{observe_minao_reference, finish_minao_reference};
+  const auto* previous_observer = scf::reference::observation::active;
+  scf::reference::observation::active = &observer;
+  std::optional<std::vector<double>> density;
+  try {
+    density = prepare_preliminary_density(gpu, policy, diagnostic, eigen);
+    require(density && diagnostic.outcome == PreliminaryOutcome::Used &&
+                diagnostic.preliminary_fock_builds == 0 && minao_reference_solves == 0,
+            "CUDA MINAO preparation fell back to CPU reference diagonalization");
+    const auto movement = plan.transfers();
+    require(movement.setup_h2d_bytes - initial_movement.setup_h2d_bytes ==
+                4 * basis.nao * basis.nao * sizeof(double),
+            "CUDA MINAO preparation did not execute its four GPU decompositions");
+    plan.begin(&*density, false);
+    require(minao_reference_solves == 0,
+            "strict CUDA MINAO upload revalidated its density on the CPU");
+  } catch (...) {
+    scf::reference::observation::active = previous_observer;
+    throw;
+  }
+  scf::reference::observation::active = previous_observer;
+  while (plan.active()) {
+    plan.enqueue_iteration();
+    plan.finish_iteration();
+  }
+  const auto seeded = plan.result();
+  const auto reference = scf::run_pbe_rks(cpu, basis, grid, options);
+  require(seeded.converged && reference.converged &&
+              std::abs(seeded.energy - reference.energy) < 1e-8 &&
+              seeded.density.size() == reference.density.size(),
+          "GPU MINAO target failed its independent CPU endpoint gate");
+  for (std::size_t index = 0; index < seeded.density.size(); ++index)
+    require(std::abs(seeded.density[index] - reference.density[index]) < 1e-7,
+            "GPU MINAO changed the final target density");
+  policy.maximum_numeric_bytes = preliminary_numeric_capacity(system, policy) - 1;
+  diagnostic = {};
+  require(!prepare_preliminary_density(gpu, policy, diagnostic, eigen) &&
+              diagnostic.outcome == PreliminaryOutcome::BudgetSkipped,
+          "GPU MINAO did not preserve its preflight numeric cap");
+  std::cout << "CUDA MINAO GPU preparation and strict seed gates passed\n";
+}
+
 #include "ks_density_provider_cases.hpp"
 }  // namespace
 
@@ -2149,6 +2223,10 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--minao") {
+      minao_gpu_case();
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--incremental") {
       run_exact_exchange_case(true);
       run_exact_exchange_case(false);
@@ -2159,6 +2237,7 @@ int main(int argc, char** argv) {
       ks_density_provider_cases();
       return 0;
     }
+    minao_gpu_case();
     ks_density_provider_cases();
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
