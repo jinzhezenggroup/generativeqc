@@ -49,6 +49,13 @@ task-owned wheel/cache overlay lives under `.artifacts/` and is not a
 production dependency.
 The first CUDA 12.8 attempt stopped at the repository's CUDA >=12.9 configure
 gate; its raw log remains separate from the CUDA 12.9 build directory.
+The first CUDA 12.9 source-matched core build completed, but its E+force
+attempts failed closed because the public PBE0/def2-SVP force route requires
+the packaged `pbe0_rks_spd` stationary artifact. That build had omitted AOT
+shell bundles and had not built the separate stationary manifest targets.
+`complete-aot-and-smoke.sh` pins the exact unchanged core SHA and frozen source,
+builds both PBE0 RKS stationary domains with the task-owned cache, and writes
+new raw attempts without overwriting that negative result.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
