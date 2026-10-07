@@ -1590,9 +1590,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
-        launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                          b, b_spin, enabled, c);
-        check(cudaGetLastError());
+        multiply_spin(spins, a, a_spin, transpose, b, b_spin, enabled, c);
       };
       // Physical residual is FDS-SDF, using the unchanged CURRENT density.
       multiply(fock, true, false, density, true, tmp1);
@@ -1913,9 +1911,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
-        launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                          b, b_spin, final_enabled, c);
-        check(cudaGetLastError());
+        multiply_spin(spins, a, a_spin, transpose, b, b_spin, final_enabled, c);
       };
       multiply(fock, true, false, x, false, tmp1);
       multiply(x, false, true, tmp1, true, tmp2);
