@@ -494,20 +494,17 @@ class StationaryGradientPlan:
             source, self.identity, objective, weights, contraction
         )
 
-    def reduction_program(
+    def validate_source_coverage(
         self,
         *,
-        atoms: typing.Any,
         sources: typing.Any = None,
         combined_two_electron: bool = False,
-    ) -> typing.Any:
-        """Generate one complete component sum with an explicit coverage gate.
+    ) -> tuple[str, ...]:
+        """Validate complete source coverage without constructing reduction IR.
 
-        Inputs are already atom-scattered gradients from each named source.
-        XC includes the MethodIR coefficients upstream: reweighting it here
-        would double count. No partial sum is silently padded with zero sources.
+        Native/AOT reductions need the same fail-closed coverage gate as the
+        generated TensorIR sum, but do not need to regenerate that program.
         """
-        _positive(atoms, "atoms")
         if type(combined_two_electron) is not bool:
             raise TypeError("combined_two_electron must be bool")
         if combined_two_electron and self.range_exchange_sources:
@@ -533,6 +530,24 @@ class StationaryGradientPlan:
             raise ValueError("duplicate gradient source")
         if set(sources) != set(expected):
             raise ValueError("incomplete or unknown gradient source coverage")
+        return expected
+
+    def reduction_program(
+        self,
+        *,
+        atoms: typing.Any,
+        sources: typing.Any = None,
+        combined_two_electron: bool = False,
+    ) -> typing.Any:
+        """Generate a complete unit-weight sum after validating source coverage.
+
+        Inputs are already atom-scattered gradients, including MethodIR XC
+        coefficients. Reweighting them here would double count those terms.
+        """
+        _positive(atoms, "atoms")
+        expected = self.validate_source_coverage(
+            sources=sources, combined_two_electron=combined_two_electron
+        )
         a = Index("a", IndexSpace("atoms", "batch", atoms))
         x = Index("x", IndexSpace("cartesian", "batch", 3))
         # Canonical source order is independent of provider completion order.

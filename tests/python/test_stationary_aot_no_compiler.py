@@ -1,6 +1,8 @@
 """A packaged all-electron force request must not discover an NVCC compiler."""
 
 import ast
+from dataclasses import replace
+from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -133,9 +135,15 @@ def test_stationary_artifact_selector_keeps_source_emission_in_jit_branch(
     assert bool(_evaluate_selector(selector.test, values)) is expected_jit
 
 
+@pytest.mark.parametrize("method", ("PBE", "PBE0", "B3LYP"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("missing_artifact", (False, True))
 def test_public_aot_force_does_not_probe_nvcc(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, missing_artifact: bool
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    missing_artifact: bool,
+    method: str,
+    spin: str,
 ) -> None:
     class Basis:
         shells = ()
@@ -151,14 +159,15 @@ def test_public_aot_force_does_not_probe_nvcc(
     source = SimpleNamespace(
         backend="cuda",
         hamiltonian="all-electron",
-        method_ir=resolve_method("PBE"),
+        method_ir=resolve_method(method, spin=spin),
+        metadata=(0, 0, 0, 0, 0, 0, 3 if method == "B3LYP" else 1),
         close=Mock(),
     )
     # Supply the force-policy workload metadata used before AOT admission;
     # compiler discovery remains forbidden by the explicit failing callback.
     state = SimpleNamespace(
         _source=source,
-        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin="unpolarized"),
+        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin=spin),
         grid=SimpleNamespace(points=np.zeros((1, 3))),
     )
     monkeypatch.setattr(
@@ -206,8 +215,10 @@ def test_public_aot_force_does_not_probe_nvcc(
     assert isinstance(batch._snapshot_grid_cache, SnapshotGridCache)
 
 
+@pytest.mark.parametrize("method", ("PBE", "PBE0", "B3LYP"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 def test_public_d_shell_force_uses_component_aot_without_nvcc(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, method: str, spin: str
 ) -> None:
     class Basis:
         shells = (SimpleNamespace(angular_momentum=2),)
@@ -223,12 +234,13 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
     source = SimpleNamespace(
         backend="cuda",
         hamiltonian="all-electron",
-        method_ir=resolve_method("PBE"),
+        method_ir=resolve_method(method, spin=spin),
+        metadata=(0, 0, 0, 0, 0, 0, 3 if method == "B3LYP" else 1),
         close=Mock(),
     )
     state = SimpleNamespace(
         _source=source,
-        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin="unpolarized"),
+        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin=spin),
         grid=SimpleNamespace(points=np.zeros((1, 3))),
     )
     monkeypatch.setattr(
@@ -270,3 +282,80 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
     assert work["tensor_executions"] == 0
     source.close.assert_called_once()
     assert isinstance(batch._snapshot_grid_cache, SnapshotGridCache)
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("changed_weight", (False, True))
+def test_public_hybrid_route_preserves_composition_not_method_label(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, spin: str, changed_weight: bool
+) -> None:
+    """An alias reuses AOT; a different exchange fraction has bounded JIT only."""
+    method = replace(resolve_method("PBE0", spin=spin), identifier="custom-pbe0")
+    if changed_weight:
+        method = replace(
+            method,
+            primitives=tuple(
+                replace(node, coefficient=Fraction(3, 7))
+                if node.kind == "exact_exchange"
+                else node
+                for node in method.primitives
+            ),
+        )
+
+    class Basis:
+        shells = (SimpleNamespace(angular_momentum=2),)
+        natom, nao = 2, 5
+
+        def __enter__(self) -> object:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            pass
+
+    monkeypatch.setattr(dft, "NativeAO", lambda *args, **kwargs: Basis())
+    source = SimpleNamespace(
+        backend="cuda",
+        hamiltonian="all-electron",
+        method_ir=method,
+        metadata=(0, 0, 0, 0, 0, 0, 1),
+        close=Mock(),
+    )
+    state = SimpleNamespace(
+        _source=source,
+        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin=spin),
+        grid=SimpleNamespace(points=np.zeros((1, 3))),
+    )
+    monkeypatch.setattr(
+        _dft_gradient.StationaryKsState, "from_native", lambda *args, **kwargs: state
+    )
+    compiler = object()
+    discover = Mock(return_value=compiler)
+
+    def calculate(*args: object, **kwargs: object) -> SimpleNamespace:
+        assert kwargs["compiler"] is (compiler if changed_weight else None)
+        assert kwargs["aot_directory"] == (None if changed_weight else tmp_path)
+        assert state._source.method_ir is method
+        return SimpleNamespace(gradient=np.ones((2, 3)), work={})
+
+    monkeypatch.setattr(
+        _stationary_cuda, "complete_rks_cuda_gradient_diagnostic", calculate
+    )
+    batch = SimpleNamespace(
+        _calculator=SimpleNamespace(
+            _basis=object(),
+            _representation_name="spherical",
+            _density_fitting_mode=_native.DENSITY_FITTING_NONE,
+            _capabilities=SimpleNamespace(supported_properties={"energy", "forces"}),
+        ),
+        _stationary_cuda_execution=None,
+        _snapshot_grid_cache=None,
+        _charges=[0],
+        _multiplicities=[1],
+        _library=SimpleNamespace(_name=str(tmp_path / "libgenerativeqc.so")),
+        _stationary_cuda_compiler=discover,
+        _stationary_cuda_target=lambda: cuda_target_info("sm_120"),
+    )
+    force, _ = PreparedBatch._public_dft_cuda_force(batch, 0, ())
+    np.testing.assert_array_equal(force, -np.ones((2, 3)))
+    assert discover.call_count == int(changed_weight)
+    source.close.assert_called_once()

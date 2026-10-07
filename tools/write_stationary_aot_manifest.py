@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.integral.first_derivative_native import (
+    emit_first_derivative_cuda,
+)
 from generativeqc_compiler.integral.first_derivative_schedule import (
     CUDA_REQUESTS_PER_UNIT,
     derivative_cuda_sources,
@@ -21,13 +24,18 @@ from generativeqc_compiler.method.stationary_cuda import (
     QUALIFIED_SPD_AOT_SHARDS,
     QUALIFIED_SPD_COMPONENTS,
     QUALIFIED_STATIONARY_AOT_PROFILE_NAMES,
+    _legacy_profile,
+    _profile_stem,
     _qualified_aot_profile,
     emit_stationary_component_aot_wrapper_cuda,
+    emit_stationary_profile_aot_wrapper_cuda,
     emit_stationary_profile_component_aot_wrapper_cuda,
+    qualified_sp_requests,
     stationary_aot_contract_identity,
     stationary_aot_plan_identity,
     stationary_aot_profile_contract_identity,
     stationary_aot_profile_plan_identity,
+    stationary_aot_profile_weight_programs,
 )
 
 
@@ -154,7 +162,32 @@ def main() -> None:
             ],
         }
     elif args.primitive_source:
-        raise ValueError("--primitive-source requires --component-domain spd")
+        if len(args.primitive_source) != 1 or profile is None:
+            raise ValueError(
+                "shared s/p AOT requires one primitive source and --profile"
+            )
+        # Verify both halves at build time; runtime loading must never regenerate
+        # primitives or XC/AD just to validate a packaged binary.
+        actual = {
+            "wrapper": source_identity,
+            "primitives": (canonical_hash(args.primitive_source[0].read_text()),),
+        }
+        expected = {
+            "wrapper": canonical_hash(
+                emit_stationary_profile_aot_wrapper_cuda(
+                    profile, iterations=args.iterations
+                )
+            ),
+            "primitives": (
+                canonical_hash(emit_first_derivative_cuda(qualified_sp_requests())),
+            ),
+        }
+        source_identity = canonical_hash(expected)
+        if canonical_hash(actual) != source_identity:
+            raise ValueError("stationary s/p generated source identity mismatch")
+        component_payload = {
+            "primitive_source_sha256": [file_hash(args.primitive_source[0])],
+        }
 
     payload = {
         "schema": schema,
@@ -167,6 +200,11 @@ def main() -> None:
             else stationary_aot_plan_identity(functional, spin=spin)
         ),
         "partition_iterations": args.iterations,
+        "weight_programs": stationary_aot_profile_weight_programs(
+            profile
+            if profile is not None
+            else _profile_stem(_legacy_profile(functional, spin))
+        ),
         **component_payload,
         "architectures": architectures,
         "compile_architectures": sorted(set(args.compile_architecture)),

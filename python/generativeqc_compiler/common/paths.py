@@ -48,7 +48,7 @@ def source_hashes(*families: str, assets: tuple[str, ...] = ()) -> dict[str, str
     """
     paths = {PACKAGE / "__init__.py"}
     for family in families:
-        if family not in {"common", "integral", "tensor", "xc", "dft"}:
+        if family not in {"common", "integral", "tensor", "xc", "dft", "method"}:
             raise ValueError(f"unknown compiler subsystem: {family}")
         paths.update((PACKAGE / family).rglob("*.py"))
         paths.update((PACKAGE / family).rglob("*.json"))

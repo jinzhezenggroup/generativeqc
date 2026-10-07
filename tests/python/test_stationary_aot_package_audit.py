@@ -75,6 +75,23 @@ def test_package_audit_reports_complete_legacy_and_component_footprint(
     assert not any(item.driver_ptx_jit_required for item in result.artifacts)
 
 
+def test_package_audit_checks_both_domains_of_a_declared_subset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "subset"
+    _layout(root)
+    monkeypatch.setattr(audit, "load_stationary_aot_artifact", _fake_loader)
+    result = audit.audit_stationary_aot_directory(
+        root, architecture="sm_120", profiles=("pbe0_rks", "pbe0_rks")
+    )
+    assert {item.name for item in result.artifacts} == {"pbe0_rks", "pbe0_rks_spd"}
+    assert len(result.artifacts) == 2
+    with pytest.raises(ValueError, match="unknown stationary AOT profile"):
+        audit.audit_stationary_aot_directory(
+            root, architecture="sm_120", profiles=("unknown_rks",)
+        )
+
+
 def test_checkout_and_installed_identity_must_match(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -162,6 +179,15 @@ def test_package_audit_rejects_real_loader_integrity_failures(tmp_path: Path) ->
             "functional": functional,
             "spin": spin,
             "plan_identity": plan.identity,
+            "weight_programs": {
+                name: "0" * 64
+                for name in (
+                    "one_electron",
+                    "coulomb",
+                    "overlap_pulay",
+                    *(("exact_exchange",) if plan.exchange is not None else ()),
+                )
+            },
             "partition_iterations": 3,
             "architectures": ["sm_120"],
             "code_objects": [{"architecture": "sm_120", "kind": "cubin"}],

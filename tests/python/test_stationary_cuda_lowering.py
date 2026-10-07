@@ -261,6 +261,9 @@ def test_stationary_aot_loader_checks_plan_target_and_binary_identity(
     manifest = tmp_path / "generativeqc_stationary_pbe_rks.json"
     payload = {
         "schema": "generativeqc.stationary-cuda-aot.v2",
+        "weight_programs": {
+            name: "0" * 64 for name in ("one_electron", "coulomb", "overlap_pulay")
+        },
         "functional": 1,
         "spin": spin,
         "plan_identity": stationary_aot_plan_identity(1, spin=spin),
@@ -453,6 +456,15 @@ def test_global_hybrid_stationary_aot_loader_uses_profile_plan_identity(
         json.dumps(
             {
                 "schema": "generativeqc.stationary-cuda-aot.v2",
+                "weight_programs": {
+                    name: "0" * 64
+                    for name in (
+                        "one_electron",
+                        "coulomb",
+                        "overlap_pulay",
+                        "exact_exchange",
+                    )
+                },
                 "functional": profile.functional,
                 "spin": profile.spin,
                 "profile": profile_name,
