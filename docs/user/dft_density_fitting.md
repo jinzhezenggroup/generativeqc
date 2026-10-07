@@ -45,15 +45,19 @@ prepared DF response provider. The CPU diagnostic requires `execution="native"`
 for a fitted state; the Direct-only reference derivative path is rejected rather
 than differentiating a different Hamiltonian.
 
-This bridge contracts retained host H'/S' derivatives for the one-electron and
-Pulay sources on both backends. The CUDA DF J/K response remains in the existing
-CUDA provider and can upload density terms and other response buffers. It is
-not a zero-upload resident whole-force path. Its resource metadata covers the
-compact source publication and the host one-electron contraction only;
-`density_fitted_response_resources_included=0` explicitly excludes unmeasured
-DF-provider scratch and transfers. These partial diagnostics cannot establish a
-whole-force memory or transport bound. Full DF resource-plan admission remains
-unqualified.
+The CPU bridge contracts retained host H'/S' derivatives for the one-electron
+and Pulay sources. CUDA first borrows the token-checked final stationary D/W
+already retained by the KS owner and runs the bounded paired one-electron
+consumer without uploading those AO matrices again. If that optional device
+consumer cannot be admitted under the caller's budget, the exact host
+contraction remains the bounded fallback. The CUDA DF J/K response remains in
+the existing CUDA provider and can still upload density terms and other response
+buffers, so this is not a zero-upload resident whole-force path. Resource
+metadata distinguishes the resident one-electron path from its host fallback;
+`density_fitted_response_resources_included=0` still explicitly excludes
+unmeasured DF-provider scratch and transfers. These partial diagnostics cannot
+establish a whole-force memory or transport bound. Full DF resource-plan
+admission remains unqualified.
 
 `tests/python/test_dft_df_public.py` compares independently converged PySCF
 energies and analytic gradients with copied orbital/auxiliary primitives and
