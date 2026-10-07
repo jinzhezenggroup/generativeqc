@@ -331,5 +331,6 @@ def test_capability_report_does_not_claim_full_conformance() -> None:
         == "scientific-arrays-only"
     )
     assert report["take_indices"] == "static-int-tuple"
-    assert report["slice_ranges"] == "static-half-open-unit-step"
+    assert report["generic_slice_steps"] == "static-nonzero"
+    assert report["scientific_slice_ranges"] == "static-half-open-unit-step"
     assert "einsum_extension" in report["functions"]
