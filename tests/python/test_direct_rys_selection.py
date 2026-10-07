@@ -106,6 +106,7 @@ def test_k_block_streaming_preserves_incumbent_lane_storage(name: str) -> None:
         local_lane_state
     )
     source = _streaming_fock_source(candidate)
+    source_lines = {line.strip() for line in source.splitlines()}
     class_name = name[0].upper() + name[1:]
     private_task = f"Generated{class_name}ShellTask stream_task;"
     private_storage = f"Generated{class_name}PackedFockLaneStorage lane_storage;"
@@ -113,12 +114,48 @@ def test_k_block_streaming_preserves_incumbent_lane_storage(name: str) -> None:
     shared_storage = (
         f"__shared__ Generated{class_name}PackedFockLaneStorage lane_storage[32];"
     )
-    assert (private_task in source) == local_lane_state
-    assert (private_storage in source) == local_lane_state
-    assert (shared_tasks in source) != local_lane_state
-    assert (shared_storage in source) != local_lane_state
-    assert "__shared__ std::uint32_t compact_bra_pairs[32];" in source
-    assert "__shared__ double compact_contribution_bounds[32];" in source
+    assert (private_task in source_lines) == local_lane_state
+    assert (private_storage in source_lines) == local_lane_state
+    assert (shared_tasks in source_lines) != local_lane_state
+    assert (shared_storage in source_lines) != local_lane_state
+    task_pointer = "&stream_task" if local_lane_state else "stream_tasks"
+    task_index = "0U" if local_lane_state else "static_cast<std::size_t>(threadIdx.x)"
+    storage_reference = (
+        "lane_storage" if local_lane_state else "lane_storage[threadIdx.x]"
+    )
+    helper_call = (
+        f"generated_{name}_packed_fock_lane<Unrestricted>( "
+        f"{task_pointer}, primitive_pairs, primitive_pair_offsets, "
+        "ao_coefficients, atom_positions, screening_tolerance, "
+        f"schwarz_bounds, density, fock, {task_index}, {storage_reference});"
+    )
+    normalized_source = " ".join(source.split())
+    helper_name = f"generated_{name}_packed_fock_lane<Unrestricted>("
+    helper_count = normalized_source.count(helper_name)
+    assert helper_count > 0
+    assert normalized_source.count(helper_call) == helper_count
+
+    # Both the per-chunk compactor and cross-chunk queue share only survivor
+    # identities/bounds; their names and capacities differ, not lane ownership.
+    shared_survivor_storage = (
+        (
+            "__shared__ std::uint32_t compact_bra_pairs[32];",
+            "__shared__ std::uint32_t compact_ket_pairs[32];",
+            "__shared__ double compact_contribution_bounds[32];",
+        ),
+        (
+            "__shared__ std::uint32_t exchange_queue_pairs[64];",
+            "__shared__ double exchange_queue_bounds[64];",
+            "__shared__ std::uint32_t exchange_queue_count;",
+        ),
+    )
+    assert (
+        sum(
+            all(declaration in source_lines for declaration in declarations)
+            for declarations in shared_survivor_storage
+        )
+        == 1
+    )
 
 
 @pytest.mark.parametrize("name", ("psss", "ppss"))
