@@ -214,11 +214,12 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
   IncrementalDirectJkPolicy policy;
   policy.requested = options.incremental_direct_jk;
   policy.requested_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
-  policy.density_rms_threshold = options.incremental_direct_jk_density_rms_threshold;
+  const bool screened_lower =
+      capabilities.density_weighted_screening && options.screening_tolerance != 0.0;
+  policy.density_rms_threshold =
+      screened_lower ? options.incremental_direct_jk_density_rms_threshold : 0.0;
   policy.effective_rebuild_interval =
-      capabilities.density_weighted_screening && options.screening_tolerance != 0.0
-          ? 1U
-          : options.incremental_direct_jk_rebuild_interval;
+      screened_lower ? 1U : options.incremental_direct_jk_rebuild_interval;
   policy.active = policy.requested && capabilities.provider_eligible &&
                   !capabilities.conflicting_precision_policy;
   return policy;
