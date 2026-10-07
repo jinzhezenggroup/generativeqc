@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <new>
 #include <stdexcept>
 
 #include "cc/df_plan.hpp"
@@ -260,11 +261,12 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
                   : DFIterationPlan{};
   const auto replay_elements = p.naux ? generated::dfcore::replay_arena_elements(p.nocc, p.nvir)
                                       : generated::replay_arena_elements(p.nocc, p.nvir);
-  auto capacity_for = [&](const DFIterationPlan& choice) {
+  const auto uncached_elements =
+      p.naux ? std::size_t{0} : generated::iteration_arena_elements(p.nocc, p.nvir);
+  auto conventional_elements = uncached_elements;
+  auto capacity_for = [&](const DFIterationPlan& choice, std::size_t dense_elements) {
     std::size_t capacity = checked_add(p.reference_retained_bytes, problem_host_bytes(p));
-    capacity = checked_add(
-        capacity,
-        bytes(p.naux ? choice.iteration : generated::iteration_arena_elements(p.nocc, p.nvir)));
+    capacity = checked_add(capacity, bytes(p.naux ? choice.iteration : dense_elements));
     capacity = checked_add(capacity, bytes(replay_elements));
     capacity = checked_add(capacity, bytes(choice.auxiliary));
     capacity = checked_add(capacity, bytes(choice.preparation));
@@ -283,15 +285,47 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     }
     return capacity;
   };
-  if (plan.hoisted && capacity_for(plan) > options.max_bytes)
+  if (plan.hoisted && capacity_for(plan, conventional_elements) > options.max_bytes)
     plan = df_iteration_plan(p.nocc, p.nvir, p.naux, false, false);
-  const auto capacity = capacity_for(plan);
+  auto capacity = capacity_for(plan, conventional_elements);
   if (capacity > options.max_bytes)
     throw std::length_error("RCCSD CPU solve exceeds correlation memory budget");
 
-  std::vector<double> iteration_arena(p.naux ? plan.iteration
-                                             : generated::iteration_arena_elements(p.nocc, p.nvir)),
-      replay_arena(replay_elements);
+  bool reuse_invariants = false;
+  if (options.iteration_invariant_reuse && !p.naux &&
+      generated::iteration_invariant_operation_count) {
+    // Charge the complete endpoint, including pinned reference intermediates,
+    // before selecting reuse. Overflow in optional storage is also a fallback.
+    try {
+      const auto retained = generated::iteration_reuse_arena_elements(p.nocc, p.nvir);
+      const auto retained_capacity = capacity_for(plan, retained);
+      if (retained_capacity <= options.max_bytes) {
+        conventional_elements = retained;
+        capacity = retained_capacity;
+        reuse_invariants = true;
+      }
+    } catch (const std::length_error&) {
+    }
+  }
+
+  std::vector<double> iteration_arena;
+  if (reuse_invariants) {
+    try {
+      iteration_arena.resize(conventional_elements);
+    } catch (const std::bad_alloc&) {
+      reuse_invariants = false;
+    } catch (const std::length_error&) {
+      reuse_invariants = false;
+    }
+    if (!reuse_invariants) {
+      // Failed vector growth leaves the empty vector unchanged: the retry
+      // never holds both optional and baseline numeric arenas simultaneously.
+      conventional_elements = uncached_elements;
+      capacity = capacity_for(plan, conventional_elements);
+    }
+  }
+  if (!reuse_invariants) iteration_arena.resize(p.naux ? plan.iteration : conventional_elements);
+  std::vector<double> replay_arena(replay_elements);
   std::vector<double> virtual_arena(plan.auxiliary), virtual_sum(plan.accumulation),
       prepare_arena(plan.preparation);
   std::vector<double> current;
@@ -305,6 +339,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   SolverResult result;
   result.diagnostic.denominator_identity = denominator_identity(p);
   result.diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, capacity);
+  result.diagnostic.iteration_reuse = reuse_invariants;
   result.reason = "maximum RCCSD iterations reached";
   const auto solve_started = std::chrono::steady_clock::now();
 
@@ -346,10 +381,42 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
                                      in.canonical_eps,
                                      in.canonical_level_shift};
   };
+  // This epoch is exactly this synchronous solve on const Problem&. Its owned
+  // reference vectors cannot change during the call; current/trial amplitudes
+  // are separate dynamic inputs. No state or retained value survives return,
+  // so a new reference/geometry/basis/method or solve always prepares anew.
+  bool invariants_prepared = false;
   auto run_iteration = [&](const generated::Inputs& in) -> generated::IterationOutputs {
-    if (!p.naux)
-      return generated::run_iteration_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
-                                          iteration_arena.size());
+    if (!p.naux && reuse_invariants) {
+      const bool had_prepared = invariants_prepared;
+      if (!invariants_prepared) {
+        generated::run_iteration_reuse_prepare_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
+                                                   iteration_arena.size());
+        // A throwing/partially written preparation is never published as ready.
+        invariants_prepared = true;
+        ++result.diagnostic.iteration_invariant_preparations;
+        result.diagnostic.iteration_invariant_operations +=
+            generated::iteration_invariant_operation_count;
+      }
+      const auto out = generated::run_iteration_reused_cpu(
+          p.nocc, p.nvir, in, iteration_arena.data(), iteration_arena.size());
+      ++result.diagnostic.iteration_reused_evaluations;
+      result.diagnostic.iteration_dynamic_operations +=
+          generated::iteration_dynamic_operation_count;
+      if (had_prepared)
+        result.diagnostic.iteration_invariant_operations_saved +=
+            generated::iteration_invariant_operation_count;
+      return out;
+    }
+    if (!p.naux) {
+      const auto out = generated::run_iteration_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
+                                                    iteration_arena.size());
+      result.diagnostic.iteration_invariant_operations +=
+          generated::iteration_invariant_operation_count;
+      result.diagnostic.iteration_dynamic_operations +=
+          generated::iteration_dynamic_operation_count;
+      return out;
+    }
     if (plan.hoisted) {
       generated::dfhoist::Inputs fast{};
       // The first two sums preserve the old singles/ladder layout so expanded
