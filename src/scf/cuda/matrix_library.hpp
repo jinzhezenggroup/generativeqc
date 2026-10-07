@@ -26,6 +26,11 @@ struct MatrixLibraryResources {
 class MatrixLibraryOwner {
  public:
   static constexpr std::size_t kProviderAllowance = 96ULL << 20;
+  // One shape-only policy serves preparation and the public resource inventory.
+  // Preserve the qualified small-SCF crossover until #1890 replaces it.
+  static constexpr std::size_t provider_allowance(int nbf) noexcept {
+    return nbf >= 17 ? kProviderAllowance : 0;
+  }
 
   MatrixLibraryOwner() = default;
   ~MatrixLibraryOwner();

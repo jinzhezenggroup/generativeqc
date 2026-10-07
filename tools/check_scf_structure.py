@@ -217,6 +217,9 @@ CUDA_ALLOWED["cuda_resources"] = (
 )
 CUDA_MODULES["cuda_matrix_library"] = ("matrix_library", "runtime_support")
 CUDA_ALLOWED["cuda_matrix_library"] = (
+    # Prepared matrix handles share only the neutral allocation-measurement
+    # mutex; bucket/graph state and unrelated runtime ownership stay forbidden.
+    "runtime/allocation_measurement.hpp",
     "scf/cuda/matrix_library.",
     "scf/cuda/runtime_support.",
     "scf/cuda/scf_matrix_kernels.",

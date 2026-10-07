@@ -9,14 +9,6 @@
 #include "scf/cuda/scf_matrix_kernels.hpp"
 
 namespace generativeqc::scf::cuda_execution {
-namespace {
-
-// Preserve the currently qualified SCF crossover while moving ownership and
-// dispatch out of method code. Device-calibrated replacement belongs in #1890.
-constexpr int kFallbackLibraryAoThreshold = 17;
-
-}  // namespace
-
 MatrixLibraryOwner::~MatrixLibraryOwner() { reset(); }
 
 generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf) {
@@ -32,7 +24,7 @@ generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf) {
   stream_ = stream;
   prepared_ = true;
 
-  if (nbf < kFallbackLibraryAoThreshold) return GENERATIVEQC_STATUS_SUCCESS;
+  if (!provider_allowance(nbf)) return GENERATIVEQC_STATUS_SUCCESS;
 
   std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
   std::size_t before{}, after{}, total{};
@@ -51,7 +43,8 @@ generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf) {
   }
 
   const auto reject = [&](generativeqc_status status) {
-    (void)cublasDestroy(blas_);
+    const auto cleanup_status = cublasDestroy(blas_);
+    if (cleanup_status != CUBLAS_STATUS_SUCCESS) return blas_status(cleanup_status);
     blas_ = nullptr;
     retained_bytes_ = 0;
     return status;
@@ -71,7 +64,10 @@ generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf) {
   if (retained_bytes_ > kProviderAllowance) {
     // An unexpectedly large provider footprint is a resource miss, not a
     // scientific failure. Retain the generated implementation for this owner.
-    (void)cublasDestroy(blas_);
+    // Live fallback must not hide a driver failure or lose a retained handle.
+    // On failure the caller aborts preparation and reset() retries cleanup.
+    blas_error = cublasDestroy(blas_);
+    if (blas_error != CUBLAS_STATUS_SUCCESS) return blas_status(blas_error);
     blas_ = nullptr;
     retained_bytes_ = 0;
   }
