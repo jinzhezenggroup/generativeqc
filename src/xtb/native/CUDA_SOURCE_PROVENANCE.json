@@ -23,7 +23,8 @@
     "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/backends/cuda/gfn2_scc_setup_inputs.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/backends/cuda/gfn2_scc_setup_topology.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
-    "src/runtime/gfn2_cuda_topology_staging.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy."
+    "src/runtime/gfn2_cuda_topology_staging.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
+    "src/backends/cuda/gfn2_eigensolver.cu": "Consume the shared method-neutral symmetric-eigen provider query/submission lowerer; preserve value/vector modes, exact-capacity query order, workspace maxima, caller-owned validation, tridiagonal path and every CUDA kernel byte."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -142,7 +143,7 @@
     "src/backends/cuda/gfn2_eigensolver.cu": {
       "adapted": true,
       "upstream_sha256": "c4bef7285e6afd0b880a060da005799aa65371135d14e5ad846d4e172b357c54",
-      "vendored_sha256": "1ae9af5a2bb247cc469763f9f3013a1483abf612df67a68dc5e145dfbe10ba72"
+      "vendored_sha256": "7e16a6482b2e7432e061f9c98881fd2acf0ce378e84e56ccd5d450d139b98d69"
     },
     "src/backends/cuda/gfn2_eigensolver.cuh": {
       "adapted": true,
