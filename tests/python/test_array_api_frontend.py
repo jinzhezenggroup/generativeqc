@@ -165,7 +165,7 @@ def test_preview_unsupported_conveniences_fail_closed() -> None:
         xp.sum(vector, axis=[0])
     with pytest.raises(ValueError, match="rank-2"):
         xp.matmul(vector, vector)
-    with pytest.raises(TypeError, match="add left operand"):
+    with pytest.raises(TypeError, match="scientific domains"):
         xp.add(1, matrix)
 
 
