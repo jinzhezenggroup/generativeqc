@@ -293,15 +293,10 @@ int run_r2scan3c_fixed_charge_profile() {
   d_references.upload(host_tables.references, d_references.count);
   d_c6.upload(host_tables.reference_c6, d_c6.count);
 
-  const D4Tables tables{D4ReferenceModel::eeq,
-                        d_elements.ptr,
-                        d_references.ptr,
-                        d_c6.ptr,
-                        kD4TableElementCount,
-                        kD4TableReferenceCount,
-                        kD4PackedReferenceC6Count,
-                        parameters.ga,
-                        parameters.gc};
+  const D4Tables tables{
+      D4ReferenceModel::eeq, d_elements.ptr,         d_references.ptr,          d_c6.ptr,
+      kD4TableElementCount,  kD4TableReferenceCount, kD4PackedReferenceC6Count, parameters.ga,
+      parameters.gc};
   const D4CudaBatch batch{
       1u, static_cast<std::uint32_t>(atoms), d_offsets.ptr, d_z.ptr, d_xyz.ptr, d_q.ptr, nullptr};
   const D4CudaResult output{d_status.ptr, d_energy.ptr, d_gradient.ptr, d_dedq.ptr};
