@@ -23,6 +23,12 @@ footprint is at most 32 doubles accumulate the eight exact symmetry channels in
 lane-local shared storage and publish each K block element once after all Cartesian
 components have been contracted.
 
+The candidate is compiled as a separate profile-scoped `_k_block` lowering beside the
+incumbent and existing `_rys_value` alternatives. The prepared exchange owner freezes
+`GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent|rys|block`; the default remains
+`incumbent`. Coulomb J has no block selector, and the incumbent generated source does
+not reserve the block buffer.
+
 The first bounded domain covers the low-order packed classes whose footprint satisfies
 that limit (including psss, ppss, psps, and dsss under the current shell catalog).
 
@@ -34,6 +40,8 @@ Preserved behavior:
   pair-swapped duplicate suppression;
 - unrestricted K, Coulomb J, combined/HF-weighted K, and larger packed classes retain
   the incumbent component scatter;
+- incumbent J/K/HF generated kernels retain their original shared-memory footprint;
+  only the separately selected K-block variant carries the bounded block buffer;
 - no new threshold, approximation, precision mode, persistent allocation, or public API.
 
 The additional shared storage is statically bounded to 32 doubles per packed lane.
