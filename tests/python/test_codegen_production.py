@@ -1270,11 +1270,12 @@ def test_generated_coulomb_streaming_uses_density_bounds() -> None:
     assert "quartet_bound * fmax(ab.coulomb, cd.coulomb)" in survives
     assert "coulomb_system_density_bound" in generator
 
-    owner = (
-        REPOSITORY_ROOT / "src" / "scf" / "cuda" / "direct_coulomb.cpp"
-    ).read_text(encoding="utf-8")
+    owner = (REPOSITORY_ROOT / "src" / "scf" / "cuda" / "direct_coulomb.cpp").read_text(
+        encoding="utf-8"
+    )
     enqueue = owner.split(
-        "cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p", maxsplit=1
+        "cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p",
+        maxsplit=1,
     )[1].split("cudaError_t project_generated_coulomb", maxsplit=1)[0]
     assert "launch_reduce_shell_pair_density_bounds_kernel(" in enqueue
     assert "launch_reduce_bounded_system_density_bounds_kernel(" in enqueue

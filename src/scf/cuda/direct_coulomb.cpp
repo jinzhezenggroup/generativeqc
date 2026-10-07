@@ -233,28 +233,28 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     plan->pair_order = device_order;
     plan->pair_class_offsets = device_offsets;
     const auto& b = plan->batch;
-    const GeneratedShellPairStream topology{b.batch_size,
-                                            static_cast<std::uint32_t>(b.direct_nbf),
-                                            b.system_shell_offsets,
-                                            b.system_shell_pair_offsets,
-                                            b.shell_atoms,
-                                            b.shell_angular,
-                                            b.shell_direct_ao_offsets,
-                                            b.shell_primitive_offsets,
-                                            b.shell_pair_systems,
-                                            b.shell_pair_first,
-                                            b.shell_pair_second,
-                                            plan->pair_order,
-                                            plan->pair_class_offsets,
-                                            plan->shell_bounds,
-                                            reinterpret_cast<
-                                                const detail::GeneratedShellPairDensityBounds*>(
-                                                plan->shell_pair_density_bounds),
-                                            plan->system_density_bounds,
-                                            plan->system_pair_density_bounds,
-                                            nullptr,
-                                            plan->active,
-                                            detail::GeneratedFockConsumer::Coulomb};
+    const GeneratedShellPairStream topology{
+        b.batch_size,
+        static_cast<std::uint32_t>(b.direct_nbf),
+        b.system_shell_offsets,
+        b.system_shell_pair_offsets,
+        b.shell_atoms,
+        b.shell_angular,
+        b.shell_direct_ao_offsets,
+        b.shell_primitive_offsets,
+        b.shell_pair_systems,
+        b.shell_pair_first,
+        b.shell_pair_second,
+        plan->pair_order,
+        plan->pair_class_offsets,
+        plan->shell_bounds,
+        reinterpret_cast<const detail::GeneratedShellPairDensityBounds*>(
+            plan->shell_pair_density_bounds),
+        plan->system_density_bounds,
+        plan->system_pair_density_bounds,
+        nullptr,
+        plan->active,
+        detail::GeneratedFockConsumer::Coulomb};
     plan->topology =
         static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
     check(cudaStreamSynchronize(stream));
@@ -946,10 +946,10 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
   // shell-pair reduction so screening is density-conditioned without adding a
   // second threshold or a J-specific notion of density magnitude.
   constexpr unsigned density_threads = 128U;
-  launch_reduce_shell_pair_density_bounds_kernel(
-      false, static_cast<unsigned>(b.total_shell_pairs), density_threads,
-      3U * density_threads * sizeof(double), p.stream, b, p.density, p.active,
-      p.shell_pair_density_bounds);
+  launch_reduce_shell_pair_density_bounds_kernel(false, static_cast<unsigned>(b.total_shell_pairs),
+                                                 density_threads,
+                                                 3U * density_threads * sizeof(double), p.stream, b,
+                                                 p.density, p.active, p.shell_pair_density_bounds);
   launch_reduce_bounded_system_density_bounds_kernel(
       static_cast<unsigned>(b.batch_size), density_threads,
       detail::kDirectShellPairClassCount * density_threads * sizeof(double), p.stream, b,

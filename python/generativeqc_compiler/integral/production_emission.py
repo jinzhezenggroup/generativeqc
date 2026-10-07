@@ -385,6 +385,7 @@ def _streaming_fock_source(selection: KernelSelection) -> str:
             )
         )
     )
+
     def pair_class_density_bound(pair_classes: tuple[int, ...]) -> str:
         bound = (
             "topology.system_pair_density_bounds["
