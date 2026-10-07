@@ -46,9 +46,10 @@ A `VibeArray` wraps an ordinary TensorIR node. Therefore capture preserves:
 - input/parameter role and differentiability;
 - TensorIR logical identity, serialization, optimization and JVP/VJP behavior.
 
-The public facade has two deliberately different modes. Generic arrays created by
-the inferred public `compile` path use ordinary shape semantics, including
-broadcasting. Scientifically annotated arrays keep TensorIR domain identity:
+The public facade has two deliberately different scientific modes and two
+execution modes. Generic arrays use ordinary shape semantics, including
+broadcasting, whether evaluated eagerly through the NumPy reference namespace or
+captured by `compile`. Scientifically annotated arrays keep TensorIR domain identity:
 equal numerical shapes do not make AO/occupied/virtual/auxiliary domains
 compatible.
 
@@ -66,15 +67,17 @@ compatible.
 | indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
 | `take` | Static integer gather along one axis |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
-| `asarray` | CPU/NumPy float32/float64 host values; no silent external-device transfer |
+| `asarray` | CPU/NumPy float32/float64 eager arrays; no silent external-device transfer |
 | `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
 | dtype promotion | Not yet supported |
 | dynamic Python control flow | Not supported |
 
-Exact scalar spelling accepts `int`, `Fraction`, or a rational string.
-Python floating-point spellings such as `0.5` are deliberately rejected so a
-frontend convenience cannot weaken TensorIR scientific identity.
+Scientifically annotated arrays keep the exact scalar spelling contract:
+`int`, `Fraction`, or a rational string. Generic public arrays additionally
+accept finite Python float literals; capture converts each literal to the exact
+binary rational represented by that Python float so eager/compiled array syntax
+does not require special coefficient spelling.
 
 Generic public inputs are assigned compiler-owned anonymous array dimensions
 whose identity is intentionally shape-based. This lets ordinary broadcasting,
@@ -105,7 +108,9 @@ value = observable(C, occupation, O)
 program = observable.lower(C, occupation, O)
 ```
 
-No TensorIR type declarations are needed on this ordinary path. The concrete
+No TensorIR type declarations are needed on this ordinary path. The same
+namespace functions execute eagerly when given NumPy-backed arrays and lower to
+symbolic TensorIR when `compile` supplies `VibeArray` inputs. The concrete
 shape/dtype signature constructs a cached generic TensorIR specialization.
 `lower` exposes the ordinary compiler-owned `Program`; there is still no
 frontend-only runtime node or second mathematical IR. Inferred inputs are
