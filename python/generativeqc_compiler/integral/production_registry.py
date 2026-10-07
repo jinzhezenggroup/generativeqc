@@ -1034,6 +1034,13 @@ std::uint64_t enabled_rys_fock_shell_class_mask() noexcept {{
   return kernels == nullptr ? 0 : kernels->rys_fock_mask & enabled_fock_shell_class_mask();
 }}
 
+std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr
+             ? 0
+             : kernels->k_block_fock_mask & enabled_fock_shell_class_mask();
+}}
+
 std::uint64_t enabled_shell_class_mask() noexcept {{
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? 0 : environment_mask(
@@ -1088,6 +1095,14 @@ cudaError_t launch_shell_class_rys_streaming_fock(
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? cudaErrorNotSupported
                             : kernels->launch_rys_streaming_fock(
+      shell_class, {streaming_fock_arguments});
+}}
+
+cudaError_t launch_shell_class_k_block_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? cudaErrorNotSupported
+                            : kernels->launch_k_block_streaming_fock(
       shell_class, {streaming_fock_arguments});
 }}
 
