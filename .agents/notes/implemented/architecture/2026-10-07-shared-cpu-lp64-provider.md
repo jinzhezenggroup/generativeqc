@@ -147,4 +147,3 @@ embedded runtime. No CUDA/device, performance, wheel-distribution or inactive
 platform qualification is claimed. Durable guards use checked-in fixtures and
 do not require an unpublished/transient Git ancestor. Publication authority and
 the Johnson full-file approval boundary remain separate.
-

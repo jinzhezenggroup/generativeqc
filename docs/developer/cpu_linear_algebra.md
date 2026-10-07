@@ -121,4 +121,3 @@ An intentional change to a protected region requires reviewing its numerical
 or policy effect and updating that explicit fixture. The existing GFN
 molecular, runtime-retention, canonical eigenframe and native CTest gates
 remain separate integration requirements.
-
