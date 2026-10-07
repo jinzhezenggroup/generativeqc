@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
 from generativeqc_compiler.integral.production_emission import _streaming_fock_source
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
@@ -165,3 +166,45 @@ def test_row_streaming_binary_searches_monotonic_coarse_tail(name: str) -> None:
         in worker
     )
     assert "ket_base < coarse_ket_end" in worker
+
+
+def test_exchange_streams_compact_survivors_before_expensive_fock_work() -> None:
+    """Only density-screened K streams should densify sparse execution slots."""
+
+    root = Path(__file__).resolve().parents[2]
+    profile = resolve_production_profile(
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_120",
+    )
+
+    seen: set[ScheduleKind] = set()
+    for selection in profile.selections:
+        schedule = selection.fock_schedule or selection.schedule
+        if schedule.kind not in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS):
+            continue
+        source = _streaming_fock_source(selection)
+        if not source:
+            continue
+        seen.add(schedule.kind)
+        assert (
+            "GeneratedFockConsumer::Exchange ||" in source
+            and "GeneratedFockConsumer::HartreeFockExchange" in source
+        )
+
+        if schedule.kind == ScheduleKind.PACKED_TASKS:
+            assert "const unsigned survivor_mask = __ballot_sync(active_mask, keep);" in source
+            assert "__popc(survivor_mask & lower_lane_mask)" in source
+            assert "compact_bra_pairs[survivor_rank] = bra_pair;" in source
+            assert "compact_ket_pairs[survivor_rank] = ket_pair;" in source
+            assert "if (threadIdx.x < survivor_count)" in source
+            # J and combined HF preserve the original lane mapping.
+            assert "} else if (keep) {" in source
+        else:
+            assert "__shared__ std::uint32_t exchange_survivor_count;" in source
+            assert "atomicAdd(&exchange_survivor_count, 1U)" in source
+            assert "subgroup < exchange_survivor_count" in source
+            # Non-exchange consumers retain one candidate per original subgroup.
+            assert "if (!compact_exchange)" in source
+
+    assert ScheduleKind.PACKED_TASKS in seen
+    assert ScheduleKind.SUBGROUP_TASKS in seen
