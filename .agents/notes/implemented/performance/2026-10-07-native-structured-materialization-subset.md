@@ -1,0 +1,51 @@
+# Decision: certify a closed native structured-support subset
+
+Status: implemented
+Date: 2026-10-07
+
+## Problem
+
+#1668 already audits Python AST zero producers, but native MP2 support requires
+type/default-constructor, qualified-helper, response and consumer reasoning.
+Matching a familiar name such as `eri_index` or `fourth_power` cannot establish
+those semantics. The historical #1574 production path also differs from current
+streamed producers, so a dense-source hit alone can create a false defect claim.
+
+## Decision
+
+Add an independent standard-library native inventory and closed producer
+certificate. Consume the existing lexical function/comment helpers without
+changing the common audit runner. Certify fresh local arithmetic vectors with
+canonical loops, row-major indexing and independently verified pure helpers.
+Keep aggregate-member/unknown-call/control-flow candidates unknown. Attach
+producer, syntactic caller, ABI and missing-IR evidence to every candidate.
+
+## Rejected alternatives
+
+Do not whitelist MP2 function/type names, treat arbitrary `.assign` as fresh,
+infer occupied/virtual support from naming, or claim that every lower-triangle
+write lowers asymptotic degree. Multi-domain union overlap is not solved here;
+its sum is only an upper bound and receives no representation advice.
+
+## Invariants
+
+No threshold or approximation; no method equations, production policy, storage
+ABI or common CI changes. Certificates end at the producer return. Unknown
+does not mean dense, sparse, harmless or a runtime performance defect. A source
+growth degree and a constant-factor address reduction are separate statements.
+
+## Evidence
+
+`tests/python/test_native_structured_materialization.py` includes true dense
+and structured producers, independently enumerated small-shape addresses,
+lower-triangle growth, and fail-closed counterexamples. The source receipt under
+`benchmarks/results/native-structured-1631-20261007/` binds four current MP2
+files and three scanner modules. It deliberately leaves all 18 real MP2
+candidates unknown and manually locates the dense versus streamed ABI boundary.
+
+## Revisit when
+
+A compiler-owned type/alias/control-flow frontend and structured IR can prove
+complete producer/consumer support, or a shared audit owner is assigned for
+integration. Until then, expand this subset only with adversarial negative
+fixtures and source-matched evidence. This partial slice does not close #1631.
