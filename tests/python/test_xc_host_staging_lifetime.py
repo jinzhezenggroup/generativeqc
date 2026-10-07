@@ -6,13 +6,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _definition(source: str, signature: str) -> str:
+    start = source.index(signature)
+    brace = source.index("{", start)
+    depth, end = 1, brace + 1
+    while depth:
+        depth += (source[end] == "{") - (source[end] == "}")
+        end += 1
+    return source[start:end]
+
+
 def test_host_xc_staging_keeps_copy_sources_alive(
     tmp_path: Path, native_cxx: object
 ) -> None:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    body = source.split("  CudaXcView stage_xc(", 1)[1].split(
-        "\n  void enqueue_legacy()", 1
-    )[0]
+    # Use the method's own closing brace so adjacent controller helpers cannot
+    # become part of this host-XC lifetime probe.
+    body = _definition(source, "  CudaXcView stage_xc(")
     # This probe executes the host route. Keep the extracted host body tied to
     # production while excluding the independent resident VV10 enqueue path.
     body = (

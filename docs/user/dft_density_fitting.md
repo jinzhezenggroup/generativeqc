@@ -59,13 +59,20 @@ and Pulay sources. CUDA first borrows the token-checked final stationary D/W
 already retained by the KS owner and runs the bounded paired one-electron
 consumer without uploading those AO matrices again. If that optional device
 consumer cannot be admitted under the caller's budget, the exact host
-contraction remains the bounded fallback. The CUDA DF J/K response remains in
-the existing CUDA provider and can still upload density terms and other response
-buffers, so this is not a zero-upload resident whole-force path. Resource
-metadata distinguishes the resident one-electron path from its host fallback;
-`density_fitted_response_resources_included=0` still explicitly excludes
-unmeasured DF-provider scratch and transfers. These partial diagnostics cannot
-establish a whole-force memory or transport bound. Full DF resource-plan
+contraction remains the bounded fallback.
+
+For restricted CUDA DF response, the Coulomb J' component also borrows the exact
+final resident density under the same live KS token. The detached host density
+remains the finite/symmetric scientific witness, but the response bridge reads
+the device matrix directly and therefore reports zero density H2D bytes for
+that J-only call. Exchange K' deliberately keeps its existing density/projection
+path in this change, and unrestricted/multi-term response retains the ordinary
+upload path. This is therefore not a zero-upload resident whole-force path.
+
+Resource metadata distinguishes the resident one-electron path from its host
+fallback; `density_fitted_response_resources_included=0` still explicitly
+excludes unmeasured DF-provider scratch and transfers. These partial diagnostics
+cannot establish a whole-force memory or transport bound. Full DF resource-plan
 admission remains unqualified.
 
 `tests/python/test_dft_df_public.py` compares independently converged PySCF

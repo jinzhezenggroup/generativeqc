@@ -88,10 +88,14 @@ struct DeviceBatch {
   // high-order Coulomb recurrence across each exact Fock component packet.
   // Unsupported precision/layout domains retain their existing source owner.
   bool direct_pair_materialized_values{};
-  // Separate full-range dddd J'/K' qualification. Forward AD uses one shared
+  // Full-range dddd Combined/Separate force qualification. Forward AD uses one shared
   // pair-product recurrence per independent atom; other derivative owners stay
   // available when the resident cache or retained recurrence is unavailable.
   bool direct_pair_materialized_derivatives{};
+  // Frozen, default-off angular force schedule for the four order-6/7 s/p/d
+  // classes. An unproved maximum angular momentum fails closed to fallback.
+  bool direct_pair_cooperative_derivatives{};
+  std::uint8_t direct_maximum_shell_angular{255U};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

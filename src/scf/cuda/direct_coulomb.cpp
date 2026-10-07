@@ -39,6 +39,8 @@ void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
   batch.direct_pair_materialized_values = cuda_policy::direct_pair_materialized_values_requested();
   batch.direct_pair_materialized_derivatives =
       cuda_policy::direct_pair_materialized_derivatives_requested();
+  batch.direct_pair_cooperative_derivatives =
+      cuda_policy::direct_pair_cooperative_derivatives_requested();
 }
 
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {

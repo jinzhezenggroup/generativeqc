@@ -8,6 +8,7 @@ scientific source owner.
 
 from __future__ import annotations
 
+from .direct_cooperative_gradient_cuda import emit_cooperative_direct_force_support
 from .direct_pair_materialized_cuda import emit_direct_pair_materialized_support
 from .direct_pair_materialized_gradient_cuda import (
     emit_direct_pair_materialized_gradient_support,
@@ -401,4 +402,5 @@ def emit_direct_source_contraction_header() -> str:
         _SOURCE
         + emit_direct_pair_materialized_support()
         + emit_direct_pair_materialized_gradient_support()
+        + emit_cooperative_direct_force_support()
     )

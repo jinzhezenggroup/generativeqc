@@ -265,12 +265,25 @@ def _cuda_item_inventory(
     # its unchanged byte count is intentional even though production XC borrows
     # the grid and owns a correspondingly smaller private arena.
     setup = max(setup, checked_bytes(int(output[2]) + quadrature.value))
+    provider_query = getattr(
+        library, "generativeqc_resource_ks_matrix_provider_cuda_v1", None
+    )
+    if provider_query is None:
+        raise NotImplementedError("native library has no KS matrix-provider inventory")
+    provider_query.argtypes = [ctypes.c_size_t, ctypes.POINTER(ctypes.c_uint64)]
+    provider_query.restype = ctypes.c_int
+    matrix_provider = ctypes.c_uint64()
+    if provider_query(orbital["nbf"], ctypes.byref(matrix_provider)):
+        raise NotImplementedError(
+            "invalid CUDA KS matrix-provider resource shape/build"
+        )
     return {
         "state": checked_bytes(int(output[0])),
         "xc": checked_bytes(int(output[1])),
         "coulomb": checked_bytes(int(output[2])),
         "setup": checked_bytes(setup),
         "quadrature_setup": checked_bytes(quadrature.value),
+        "matrix_provider": checked_bytes(matrix_provider.value),
     }
 
 
@@ -604,6 +617,20 @@ def ks_resource_request(
                         kind="persistent",
                     )
                 )
+            # Every eligible item retains its own opaque cuBLAS handle. Admit
+            # this separately from numeric arenas so the explicit allocation
+            # ledger cannot spend the provider reservation on other buffers.
+            estimates.append(
+                ResourceEstimate(
+                    "all KS matrix-provider retention allowance",
+                    checked_bytes(sum(x["matrix_provider"] for x in device)),
+                    f"device:{device_id}",
+                    first_phase,
+                    last_phase,
+                    kind="library",
+                    accounting="runtime_allowance",
+                )
+            )
             # At most one owner is rebuilt at a time. Its retired allocation
             # need not coexist with its setup temporary. Quadrature setup
             # already includes the new owner's live Coulomb allocation.

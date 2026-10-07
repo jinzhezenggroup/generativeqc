@@ -203,15 +203,23 @@ __global__ void retained_derivatives(DeviceBatch batch, ActiveShellQuartetTile t
   }
 }
 
-template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate>
+template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate,
+          bool Cooperative = false>
 __global__ void shared_derivatives(DeviceBatch batch, ActiveShellQuartetTile task,
                                    const double* schwarz, double threshold, const double* density,
                                    const std::uint8_t* active, double* forces, unsigned channel,
                                    MaterializedDirectPairWork* work, double* values) {
-  __shared__ MaterializedDirectPairDerivativeRecurrence shared;
-  contract_materialized_direct_pair_force<Unrestricted, Mode>(
-      batch, task, threshold, schwarz, density, active, forces, channel == 2 ? 0.0 : 0.73,
-      channel == 1 ? 0.0 : (channel == 3 ? -0.29 : 0.29), shared, work, values);
+  if constexpr (Cooperative) {
+    __shared__ CooperativeDirectPairDerivativeRecurrence shared;
+    contract_cooperative_direct_pair_force<Unrestricted, Mode>(
+        batch, task, threshold, schwarz, density, active, forces, channel == 2 ? 0.0 : 0.73,
+        channel == 1 ? 0.0 : (channel == 3 ? -0.29 : 0.29), shared, work, values);
+  } else {
+    __shared__ MaterializedDirectPairDerivativeRecurrence shared;
+    contract_materialized_direct_pair_force<Unrestricted, Mode>(
+        batch, task, threshold, schwarz, density, active, forces, channel == 2 ? 0.0 : 0.73,
+        channel == 1 ? 0.0 : (channel == 3 ? -0.29 : 0.29), shared, work, values);
+  }
 }
 
 std::size_t triangle_row(std::size_t ordinal) {
@@ -452,9 +460,11 @@ void qualify_dft_stream() {
 
 /** Signed primitive contractions, independent host J'/K' orbits and exact work.
  * Repeated atoms test chain-rule seeding and translation recovery together. */
-template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate>
-void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold) {
-  Fixture fixture({2, 2, 2, 2}, Unrestricted, atom_layout == 2);
+template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate,
+          bool Cooperative = false>
+void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold,
+                         std::array<unsigned, 4> momenta = {2, 2, 2, 2}) {
+  Fixture fixture(momenta, Unrestricted, atom_layout == 2);
   const std::vector<std::int32_t> atoms = atom_layout == 0 ? std::vector<std::int32_t>{0, 1, 2, 3}
                                           : atom_layout == 1
                                               ? std::vector<std::int32_t>{0, 0, 1, 1}
@@ -463,7 +473,13 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
   build_shell_primitive_pair_cache_kernel<<<10, 32>>>(
       fixture.batch, const_cast<PrimitivePairData*>(fixture.batch.shell_primitive_pairs));
   const ActiveShellQuartetTile task{8U, same_pair ? 8U : 1U, 0U};
-  constexpr std::size_t first_count = 36, second_count = 36;
+  const auto pair_count = [&](std::size_t pair) {
+    const auto first = fixture.first_shells[pair], second = fixture.second_shells[pair];
+    const auto a = fixture.ao_offsets[first + 1] - fixture.ao_offsets[first];
+    const auto b = fixture.ao_offsets[second + 1] - fixture.ao_offsets[second];
+    return std::size_t(first == second ? a * (a + 1) / 2 : a * b);
+  };
+  const auto first_count = pair_count(task.first_pair), second_count = pair_count(task.second_pair);
   const auto count = same_pair ? first_count * (first_count + 1) / 2 : first_count * second_count;
   const auto n = std::size_t(fixture.batch.direct_nbf), matrix = n * n;
   const std::array<std::int32_t, 4> centers{atoms[3], atoms[2],
@@ -485,9 +501,9 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
     values.clear();
     forces.clear();
     work.clear();
-    shared_derivatives<Unrestricted, Mode><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
-                                                       density.data, active.data, forces.data,
-                                                       channel, work.data, values.data);
+    shared_derivatives<Unrestricted, Mode, Cooperative>
+        <<<1, 256>>>(fixture.batch, task, schwarz.data, threshold, density.data, active.data,
+                     forces.data, channel, work.data, values.data);
     check(cudaGetLastError());
     check(cudaDeviceSynchronize());
     const auto actual = values.read(), actual_forces = forces.read();
@@ -553,9 +569,9 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
   check(cudaMemcpy(active.data, &disabled, 1, cudaMemcpyHostToDevice));
   forces.clear();
   work.clear();
-  shared_derivatives<Unrestricted, Mode><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
-                                                     density.data, active.data, forces.data, 0,
-                                                     work.data, nullptr);
+  shared_derivatives<Unrestricted, Mode, Cooperative>
+      <<<1, 256>>>(fixture.batch, task, schwarz.data, threshold, density.data, active.data,
+                   forces.data, 0, work.data, nullptr);
   check(cudaGetLastError());
   check(cudaDeviceSynchronize());
   if (work.read()[0].coulomb_preparations != 0)
@@ -564,9 +580,9 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold)
   check(cudaMemcpy(active.data, &enabled, 1, cudaMemcpyHostToDevice));
   density.clear();
   work.clear();
-  shared_derivatives<Unrestricted, Mode><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
-                                                     density.data, active.data, forces.data, 0,
-                                                     work.data, nullptr);
+  shared_derivatives<Unrestricted, Mode, Cooperative>
+      <<<1, 256>>>(fixture.batch, task, schwarz.data, threshold, density.data, active.data,
+                   forces.data, 0, work.data, nullptr);
   check(cudaGetLastError());
   check(cudaDeviceSynchronize());
   if (work.read()[0].coulomb_preparations != 0)
@@ -588,6 +604,24 @@ int main(int argc, char** argv) {
       qualify_derivatives<false, DirectForceOutputMode::Combined>(0, true, 0.0);
       qualify_derivatives<true, DirectForceOutputMode::Combined>(2, false, 0.0);
       qualify_derivatives<false, DirectForceOutputMode::Combined>(0, false, 2.0);
+      // The four heavy order-six/seven classes use the original AD derivative
+      // and independent host symmetry orbit as numerical/work oracles.
+      for (auto momenta :
+           {std::array<unsigned, 4>{2, 2, 2, 0}, std::array<unsigned, 4>{2, 2, 1, 1},
+            std::array<unsigned, 4>{2, 1, 2, 1}, std::array<unsigned, 4>{2, 2, 2, 1}}) {
+        qualify_derivatives<false, DirectForceOutputMode::Combined, true>(0, false, 0.0, momenta);
+        qualify_derivatives<true, DirectForceOutputMode::Combined, true>(1, false, 0.8, momenta);
+        // Live Separate cases retain the original class, including dddp's
+        // third component packet. Coincident-only cases cannot qualify UHF.
+        qualify_derivatives<false, DirectForceOutputMode::Separate, true>(0, false, 0.0, momenta);
+        qualify_derivatives<true, DirectForceOutputMode::Separate, true>(1, false, 0.8, momenta);
+        qualify_derivatives<true, DirectForceOutputMode::Separate, true>(2, false, 0.0, momenta);
+        qualify_derivatives<false, DirectForceOutputMode::Combined, true>(0, false, 2.0, momenta);
+      }
+      // A repeated dp pair is a valid triangular order-six task. Repeating
+      // the dp pair of a dddp fixture would silently test dpdp instead.
+      qualify_derivatives<false, DirectForceOutputMode::Separate, true>(0, true, 0.0, {2, 1, 2, 1});
+      std::cout << "cooperative weighted order-six/seven forces and exact work PASS\n";
       std::cout << "dddd derivative workspace bytes "
                 << sizeof(MaterializedDirectPairDerivativeRecurrence) << '\n';
       std::cout << "materialized dddd derivatives, RHF/UHF J'/K' and exact work PASS\n";

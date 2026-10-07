@@ -335,7 +335,14 @@
       "contract": "#1890",
       "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
       "references": {
-        "cublasDgemmStridedBatched": 2
+        "cublasCreate": 1,
+        "cublasDestroy": 3,
+        "cublasDgemm": 2,
+        "cublasDgemmStridedBatched": 2,
+        "cublasSetMathMode": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cublasSetWorkspace": 1
       }
     },
     "src/scf/cuda/resources.cpp": {

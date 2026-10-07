@@ -24,6 +24,7 @@
 
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
+#include "runtime/host_component_trace.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/proposal_bridge.hpp"
 #include "scf/reference/observation.hpp"
@@ -59,6 +60,8 @@ constexpr std::array<const char*, 8> kReasons{"unspecified", "overlap",         
 using Counts = std::array<std::size_t, kReasons.size()>;
 thread_local Counts calls{};
 thread_local bool invalid_observation{};
+thread_local runtime::host_trace::detail::State host_work;
+bool expect_force_closure = true;
 
 void require(bool condition, const std::string& detail) {
   if (!condition) throw std::runtime_error(detail);
@@ -71,23 +74,31 @@ std::size_t begin_observation(const char* name, std::size_t n) noexcept {
     else
       ++calls[reason];
   }
-  return 0;
+  return runtime::host_trace::detail::begin(name, n);
 }
-void end_observation(std::size_t, int) noexcept {}
+void end_observation(std::size_t token, int exceptions) noexcept {
+  runtime::host_trace::detail::end(token, exceptions);
+}
 const obs::Observer observer{begin_observation, end_observation};
 class Observation {
  public:
-  Observation() : previous_(obs::active) {
+  Observation() : previous_(obs::active), previous_host_(runtime::host_trace::detail::active) {
+    host_work = {};
+    runtime::host_trace::detail::active = &host_work;
     calls = {};
     invalid_observation = false;
     obs::active = &observer;
   }
-  ~Observation() { obs::active = previous_; }
+  ~Observation() {
+    obs::active = previous_;
+    runtime::host_trace::detail::active = previous_host_;
+  }
   Observation(const Observation&) = delete;
   Observation& operator=(const Observation&) = delete;
 
  private:
   const obs::Observer* previous_;
+  runtime::host_trace::detail::State* previous_host_;
 };
 
 struct Hooks {
@@ -147,9 +158,24 @@ struct Record {
   int status{};
   std::vector<double> density, forces, scalars;
   Counts counts{};
+  std::size_t selector_focks{}, corrections{}, correction_solves{}, fixed_point_checks{},
+      promotions{};
   unsigned proposed{}, observed{};
   bool physical_reference{};
 };
+void capture_counts(Record& r) {
+  r.counts = calls;
+  require(host_work.valid && host_work.current == -1, "incomplete host-work observation");
+  for (const auto& row : host_work.regions) {
+    require(row.finished, "unfinished host-work region");
+    const std::string_view name(row.name);
+    r.selector_focks += name == "final_state_fock_build";
+    r.corrections += name == "strict_final_correction";
+    r.correction_solves += name == "final_state_correction_solve";
+    r.fixed_point_checks += name == "final_state_fixed_point";
+    r.promotions += name == "final_state_fixed_point_promotion";
+  }
+}
 void print(const Record& r) {
   std::cout << "{\"kind\":\"case\",\"entry\":" << json_quote(r.entry)
             << ",\"fixture\":" << json_quote(r.fixture)
@@ -173,7 +199,7 @@ std::size_t count(const Record& r, obs::EigenReason reason) {
   return r.counts[static_cast<std::size_t>(reason)];
 }
 void check_route(const Record& r, bool reference, unsigned iterations, std::size_t spins,
-                 bool converged) {
+                 bool converged, bool forces = true) {
   const std::string prefix =
       r.entry + "/" + r.fixture + "/" + r.approximation + "/" + r.scenario + ": ";
   require(!invalid_observation, prefix + "invalid reference observation");
@@ -183,7 +209,23 @@ void check_route(const Record& r, bool reference, unsigned iterations, std::size
   require(count(r, obs::EigenReason::core_guess) == 1, prefix + "core guess leaf changed");
   require(count(r, obs::EigenReason::iteration) == (reference ? iterations * spins : 0),
           prefix + "iteration provider/count mismatch");
-  require(count(r, obs::EigenReason::final_fock) == (reference && converged ? spins : 0),
+  std::size_t final_spin_solves = converged ? 1 : 0;
+  if (expect_force_closure && converged && forces && spins == 2) {
+    require(r.selector_focks == r.corrections + 1 && r.corrections <= 32 &&
+                r.fixed_point_checks >= 1 && r.correction_solves + r.promotions == r.corrections &&
+                r.fixed_point_checks == r.promotions + 1,
+            prefix + "bounded final-state work did not reconcile");
+    final_spin_solves += r.correction_solves + r.fixed_point_checks;
+    if (r.scalars.size() == 6)
+      require(r.scalars[5] == iterations + 1 + r.selector_focks,
+              prefix + "total Fock builds do not include actual final-state work");
+  } else {
+    require(r.selector_focks == 0 && r.corrections == 0 && r.fixed_point_checks == 0,
+            prefix + "non-force/RHF/failed solve acquired final-state correction work");
+    if (converged && r.scalars.size() == 6)
+      require(r.scalars[5] == iterations + 2, prefix + "ordinary Fock schedule changed");
+  }
+  require(count(r, obs::EigenReason::final_fock) == (reference ? spins * final_spin_solves : 0),
           prefix + "finalization provider/count mismatch");
   require(count(r, obs::EigenReason::reference_export) == 0 && !r.physical_reference,
           prefix + "physical-reference export was used as a selector");
@@ -255,7 +297,7 @@ Record oracle(posthf::RawSource& raw, bool uhf, bool df, const std::string& scen
   r.status = operation(&raw, backend, 0, iterations, kTolerance, df, metric, r.density.data(),
                        r.density.size() - short_by, r.scalars.data(), error.data(), error.size());
   r.detail = error.data();
-  r.counts = calls;
+  capture_counts(r);
   print(r);
   return r;
 }
@@ -318,7 +360,7 @@ Record diagnostic(posthf::RawSource& raw, bool uhf, bool df, bool sol01,
         r.scalars.data(), r.scalars.size(), error.data(), error.size());
   }
   r.detail = error.data();
-  r.counts = calls;
+  capture_counts(r);
   r.proposed = hooks.proposed;
   r.observed = hooks.observed;
   print(r);
@@ -355,10 +397,12 @@ void diagnostic_cases(posthf::RawSource& raw, bool uhf, bool df, bool sol01, boo
   check_route(failed, reference, 1, spins, false);
 }
 
-void primary_case(posthf::RawSource& raw, bool uhf, bool df, bool dispatch, bool reference) {
+void primary_case(posthf::RawSource& raw, bool uhf, bool df, bool dispatch, bool reference,
+                  bool forces = true) {
   auto r = initial_record(dispatch ? "run_fock_strategy" : "run_cpu_fock_strategy", uhf, df,
-                          "converged", 6, true);
+                          forces ? "converged" : "energy_only", 6, forces);
   scf::ScfOptions options;
+  options.compute_forces = forces;
   options.max_iterations = kMaxIterations;
   options.energy_tolerance = options.density_tolerance = kTolerance;
   options.screening_tolerance = 0;
@@ -384,14 +428,14 @@ void primary_case(posthf::RawSource& raw, bool uhf, bool df, bool dispatch, bool
                static_cast<double>(result.iterations),
                result.converged ? 1.0 : 0.0,
                static_cast<double>(result.fock_builds)};
-  r.counts = calls;
+  capture_counts(r);
   r.physical_reference = bool(result.reference);
   print(r);
   require(result.converged && result.density.size() == (uhf ? 98 : 49) &&
-              result.forces.size() == 9 && finite(r.density) && finite(r.forces) &&
+              result.forces.size() == (forces ? 9 : 0) && finite(r.density) && finite(r.forces) &&
               finite(r.scalars),
           r.entry + ": primary solve failed");
-  check_route(r, reference, result.iterations, uhf ? 2 : 1, true);
+  check_route(r, reference, result.iterations, uhf ? 2 : 1, true, forces);
 }
 
 void loaded_libraries() {
@@ -425,6 +469,7 @@ int main(int argc, char** argv) {
                  "primitives\","
                  "\"comparison\":\"integration oracle payloads equal main; integration "
                  "primary/NUM01/SOL01 payloads equal prototype\"}\n";
+    expect_force_closure = mode == "integration";
     loaded_libraries();
     for (const bool uhf : {false, true}) {
       const auto system = water(uhf);
@@ -435,6 +480,7 @@ int main(int argc, char** argv) {
         oracle_cases(raw, uhf, df, mode != "prototype");
         primary_case(raw, uhf, df, false, mode == "main");
         primary_case(raw, uhf, df, true, mode == "main");
+        primary_case(raw, uhf, df, false, mode == "main", false);
         diagnostic_cases(raw, uhf, df, false, mode == "main");
         diagnostic_cases(raw, uhf, df, true, mode == "main");
       }

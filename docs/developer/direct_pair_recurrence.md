@@ -50,6 +50,25 @@ footprint. Missing primitive-pair data/offsets, reachable/convolution derivative
 schedules, non-dddd shells and other radial operators use existing consumers.
 The value and derivative switches are independently selectable.
 
+`GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES=1` is a separate default-off
+force schedule, frozen at preparation. With angular force partitioning and a
+proved s/p/d basis, order-seven tasks use a dedicated CTA consumer. The
+lowering also supports the three order-six classes for native qualification;
+production order-six tasks retain the incumbent consumer. These classes share
+cached geometry, axis-parallel Hermite responses and a
+compiler-generated level schedule for the existing degree-eight Coulomb DAG.
+Each lane holds at most three weights per source and contracts them directly
+into atom gradients; a CTA reduction limits global force atomics to at most
+three per unique atom per source. The omitted atom follows from translation.
+
+The cooperative workspace is bounded below 44 KiB. Its kernel omits the generic
+per-AO recurrence frame rather than carrying it in an unused runtime branch.
+Mixed f bases, an unproved angular bound, missing pair caches, non-angular
+schedules and reachable/convolution derivative selections retain existing
+consumers. Materialized dddd and cooperative order-seven selection are
+independent. The weighted summation order changes, so independent force oracles
+and complete endpoint measurements remain prerequisites for default promotion.
+
 `tests/python/test_direct_pair_materialized_cuda.py` emits and checks the
 generated consumer on a GPU. Set
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_CUDA_TEST=1` inside a finite Slurm job

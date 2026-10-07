@@ -43,7 +43,13 @@ def _inventory_library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(
         resources_ks,
         "_cuda_item_inventory",
-        lambda *args, **kwargs: {"state": 8, "xc": 8, "coulomb": 8, "setup": 24},
+        lambda *args, **kwargs: {
+            "state": 8,
+            "xc": 8,
+            "coulomb": 8,
+            "setup": 24,
+            "matrix_provider": 8,
+        },
     )
     return library
 

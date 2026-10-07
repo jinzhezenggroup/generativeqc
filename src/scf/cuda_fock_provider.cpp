@@ -86,7 +86,8 @@ DirectJkMatrices CudaFockProviderView::build(FockBuildSpec spec, const std::vect
 }
 std::vector<double> CudaFockProviderView::derivative(
     FockBuildSpec spec, const std::vector<double>& density, const std::vector<double>& beta,
-    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection) const {
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection,
+    const CudaDfBorrowedResponseDensity* borrowed_response_density) const {
   std::vector<double> out(ncoord());
   std::string detail;
   if (exact_) {
@@ -99,6 +100,9 @@ std::vector<double> CudaFockProviderView::derivative(
   // The shared generated response uses -cK*Q:M+, whereas Fock assembly uses
   // +FockExchange*K and energy supplies its independent factor of one half.
   const double ck = spec.exchange.present ? -0.5 * spec.exchange.coefficient : 0.0;
+  if (borrowed_response_density && (spec.spin != FockSpin::Restricted || cj == 0.0 || ck != 0.0))
+    throw std::invalid_argument(
+        "borrowed CUDA DF response density requires one restricted Coulomb derivative");
   if (cj == 0.0 && ck == 0.0) return out;
   std::vector<double> total;
   std::vector<DensityFittingDensityResponse> terms;
@@ -121,7 +125,7 @@ std::vector<double> CudaFockProviderView::derivative(
               fitted_, item_, *data_->df_gradient_orbital, *data_->df_gradient_auxiliary,
               data_->raw.three_center, data_->raw.metric, terms, data_->df_gradient_mapping,
               data_->df_gradient_budget - staging, 0, out, detail, nullptr, nullptr,
-              borrowed_fitted_projection),
+              borrowed_fitted_projection, borrowed_response_density),
           detail);
   if (out.size() != ncoord()) throw std::runtime_error("CUDA DF response coordinate mismatch");
   return out;

@@ -24,6 +24,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "runtime/solver_region_cuda.cuh"
 #include "scf/cuda/eigensolver.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/mean_field_setup.hpp"
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
@@ -224,6 +225,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   scf::PreparedCudaFockBinding fock_binding{};
   scf::PreparedCudaFockBinding range_fock_binding{};
   scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
+  MatrixLibraryOwner matrix_products;
   runtime::OwnedCudaEvent range_input_ready, range_output_ready;
   cudaStream_t stream{};
   int device{};
@@ -283,6 +285,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
 
+  void multiply_matrix(const double* left, bool transpose_left, const double* right,
+                       const std::uint8_t* active, double* output) {
+    check(
+        launch_matrix_product(matrix_products.view(), 1, static_cast<int>(n), left, transpose_left,
+                              right, active, output, matrix_products.library_enabled(), 1.0),
+        "CUDA KS matrix product failed");
+  }
+
+  void multiply_spin(unsigned spin_count, const double* left, bool left_is_spin,
+                     bool transpose_left, const double* right, bool right_is_spin,
+                     const std::uint8_t* active, double* output) {
+    check(launch_spin_matrix_product(matrix_products.view(), 1, static_cast<int>(spin_count),
+                                     static_cast<int>(n), left, left_is_spin, transpose_left, right,
+                                     right_is_spin, active, output,
+                                     matrix_products.library_enabled()),
+          "CUDA KS spin matrix product failed");
+  }
+
   void retain_final_fitted_projection() {
     final_fitted_projection_ready = false;
     if (!pending_fitted_occupied || spins != 1 || !warm_orbitals_ready || !occupations[0]) return;
@@ -296,10 +316,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // warm_orbitals is the orthonormal-basis C that generated the exact current
     // density consumed by the final K. Preserve its AO representation in the
     // now-dead proposal slot; final-state canonicalization uses separate storage.
-    const auto blocks = static_cast<unsigned>((matrix + 127) / 128);
-    launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, 1, n, x, false, false,
-                                      warm_orbitals, true, final_enabled, proposal);
-    check(cudaGetLastError());
+    multiply_spin(1, x, false, false, warm_orbitals, true, final_enabled, proposal);
     final_fitted_projection_scratch_generation = projection.scratch_generation;
     final_fitted_projection_ready = true;
     ++movement.fitted_final_projection_leases;
@@ -568,14 +585,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * reference eigen fallback. */
   void prepare_initial_state() {
     runtime::host_trace::Region trace("cuda_ks_initial_state", n);
-    const auto matrix_blocks = (matrix + 127) / 128;
-    if (matrix_blocks > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-      throw std::invalid_argument("CUDA KS setup matrix launch exceeds the device grid domain");
-    const auto blocks = static_cast<unsigned>(matrix_blocks);
     const auto multiply = [&](const double* a, bool transpose, const double* b, double* c) {
-      launch_matrix_product_kernel(blocks, 128, 0, stream, 1, n, a, transpose, b, final_enabled, c,
-                                   1.0);
-      check(cudaGetLastError());
+      multiply_matrix(a, transpose, b, final_enabled, c);
     };
     const auto solve = [&] {
       check(eigensolver->launch(1, tmp2, effective, eigenvalues, solver_info, final_enabled),
@@ -893,6 +904,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
+      check(matrix_products.prepare(stream, static_cast<int>(n)),
+            "CUDA KS matrix provider preparation failed");
+      if (matrix_products.library_enabled())
+        resource.provider_device_bytes =
+            sum(resource.provider_device_bytes, MatrixLibraryOwner::kProviderAllowance);
       eigensolver = std::make_unique<OrdinaryStreamEigensolver>(stream, n, tmp2, eigenvalues);
       resource.state_device_bytes = sum(resource.state_device_bytes, eigensolver->device_bytes());
       resource.retained_host_numeric_bytes =
@@ -986,6 +1002,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       cudaStreamSynchronize(range_fock_binding.stream);
     xc.reset();
     eigensolver.reset();
+    matrix_products.reset();
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
@@ -1265,9 +1282,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto blocks = static_cast<unsigned>((elements + 127) / 128);
     const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                               bool b_spin, const std::uint8_t* mask, double* c) {
-      launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                        b, b_spin, mask, c);
-      check(cudaGetLastError());
+      multiply_spin(spins, a, a_spin, transpose, b, b_spin, mask, c);
     };
     multiply(fock, true, false, density, true, enabled, tmp1);
     multiply(tmp1, true, false, overlap, false, enabled, residual);
@@ -1758,9 +1773,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
-        launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                          b, b_spin, enabled, c);
-        check(cudaGetLastError());
+        multiply_spin(spins, a, a_spin, transpose, b, b_spin, enabled, c);
       };
       // Physical residual is FDS-SDF, using the unchanged CURRENT density.
       multiply(fock, true, false, density, true, tmp1);
@@ -2090,12 +2103,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
           "CUDA KS final-state read requires an ordinary noncapturing stream");
 
     if (!final_frame_ready) {
-      const auto blocks = static_cast<unsigned>((elements + 127) / 128);
       const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                                 bool b_spin, double* c) {
-        launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                          b, b_spin, final_enabled, c);
-        check(cudaGetLastError());
+        multiply_spin(spins, a, a_spin, transpose, b, b_spin, final_enabled, c);
       };
       multiply(fock, true, false, x, false, tmp1);
       multiply(x, false, true, tmp1, true, tmp2);

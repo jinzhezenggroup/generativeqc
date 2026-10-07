@@ -38,6 +38,7 @@ def composed_force_probe(
     angular = (ROOT / "src/scf/cuda/direct_angular_force.cu").read_text()
     definitions = [
         _definition(bounded, "bool materialized_pair_derivative_available("),
+        _definition(bounded, "bool cooperative_pair_derivative_available("),
         _definition(angular, "bool direct_force_resident_bra_capacity_supported("),
         _definition(angular, "bool direct_force_resident_bra_schedule_available("),
         _definition(
@@ -121,11 +122,14 @@ enum class DirectForceOutputMode { Combined, Separate };
 struct ShellPairDensityBounds {};
 struct DeviceShellClassProfileEntry {};
 struct MaterializedDirectPairDerivativeRecurrence { unsigned char bytes[513]; };
+struct CooperativeDirectPairDerivativeRecurrence { unsigned char bytes[777]; };
 struct DeviceBatch {
   bool direct_pair_materialized_derivatives{};
   const void* shell_primitive_pairs{};
   const void* shell_pair_primitive_offsets{};
   unsigned direct_coulomb_reachable{}, direct_hermite_convolution{};
+  bool direct_pair_cooperative_derivatives{};
+  unsigned direct_maximum_shell_angular{255};
 };
 struct DirectForceResidentBraSchedule {
   const void *tasks{}, *ket_pairs{};
@@ -139,6 +143,7 @@ struct Event {
   Kind kind;
   int order;
   bool pair;
+  bool cooperative{};
   bool operator==(const Event&) const = default;
 };
 std::vector<Event> events;
@@ -166,6 +171,8 @@ void check_batch(DeviceBatch batch) {
   assert(batch.shell_pair_primitive_offsets == expected_batch.shell_pair_primitive_offsets);
   assert(batch.direct_coulomb_reachable == expected_batch.direct_coulomb_reachable);
   assert(batch.direct_hermite_convolution == expected_batch.direct_hermite_convolution);
+  assert(batch.direct_pair_cooperative_derivatives == expected_batch.direct_pair_cooperative_derivatives);
+  assert(batch.direct_maximum_shell_angular == expected_batch.direct_maximum_shell_angular);
 }
 cudaError_t cudaMemsetAsync(void* target, int value, std::size_t bytes, cudaStream_t stream) {
   assert(target == &cursor && value == 0 && bytes == sizeof(cursor) && stream == stream_id);
@@ -175,10 +182,10 @@ cudaError_t cudaMemsetAsync(void* target, int value, std::size_t bytes, cudaStre
 }
 cudaError_t cudaGetLastError() {
   assert(!events.empty() && events.back().kind == Bounded);
-  return record({LastError, events.back().order, events.back().pair});
+  return record({LastError, events.back().order, events.back().pair, events.back().cooperative});
 }
 template<bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
-         unsigned Order, int Range, bool PairDerivatives = false>
+         unsigned Order, int Range, bool PairDerivatives = false, bool CooperativeDerivatives = false>
 void bounded_direct_shell_quartet_kernel(
     dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell, const ShellPairDensityBounds* shell_density,
@@ -193,7 +200,8 @@ void bounded_direct_shell_quartet_kernel(
   assert(Unrestricted == expected_unrestricted && static_cast<int>(expected_range) == Range);
   assert(grid.x == 7 && block.x == kBoundedDirectThreads && stream == stream_id);
   assert(screening == tolerance);
-  assert(bytes == (PairDerivatives ? sizeof(MaterializedDirectPairDerivativeRecurrence) : 0U));
+  assert(bytes == (CooperativeDerivatives ? sizeof(CooperativeDirectPairDerivativeRecurrence)
+                     : PairDerivatives ? sizeof(MaterializedDirectPairDerivativeRecurrence) : 0U));
   assert(shell == &shell_bounds && shell_density == &density_bounds && pairs == &pair_order);
   assert(blocks == &block_bounds && systems == &system_bounds && state == &class_state);
   assert(!mask_pointer && mask == 0 && !profile);
@@ -204,7 +212,7 @@ void bounded_direct_shell_quartet_kernel(
   assert(exchange_only == (range == DirectRangeOperator::Long) && domain.identity == 23);
   check_batch(batch);
   assert(!events.empty() && events.back().kind == Reset);
-  record({Bounded, Order, PairDerivatives});
+  record({Bounded, Order, PairDerivatives, CooperativeDerivatives});
   cursor = 919;  // Every subsequent bounded pass must reset its own cursor.
 }
 cudaError_t launch_direct_force_resident_bra(
@@ -267,8 +275,12 @@ int main(int argc, char** argv) {
     }
     // Pair states: admitted, disabled, missing each cache view, conflicting
     // derivative schedules, and unrelated value-only bits (still admitted).
+    for (int cooperative_state = 0; cooperative_state < 4; ++cooperative_state) {
     for (int pair_state = 0; pair_state < 7; ++pair_state) {
       expected_batch = {true, &views, &views, 0, 0};
+      expected_batch.direct_pair_cooperative_derivatives = cooperative_state != 0;
+      expected_batch.direct_maximum_shell_angular = cooperative_state < 2 ? 2
+                                                 : cooperative_state == 2 ? 3 : 255;
       switch (pair_state) {
         case 1: expected_batch.direct_pair_materialized_derivatives = false; break;
         case 2: expected_batch.shell_primitive_pairs = nullptr; break;
@@ -285,8 +297,11 @@ int main(int argc, char** argv) {
         } else {
           const bool pair = !long_range && (pair_state == 0 || pair_state == 6) && order == 8;
           expected.push_back({Reset, -1, false});
-          expected.push_back({Bounded, order, pair});
-          expected.push_back({LastError, order, pair});
+          const bool cooperative = !long_range && cooperative_state == 1 &&
+              (pair_state == 0 || pair_state == 1 || pair_state == 6) &&
+              order == 7;
+          expected.push_back({Bounded, order, pair, cooperative});
+          expected.push_back({LastError, order, pair, cooperative});
         }
       }
       fail_event = -1;
@@ -302,6 +317,7 @@ int main(int argc, char** argv) {
         assert(events == prefix);
       }
     }
+  }
   }
   // The public wrapper rejects other radial operators before any submission.
   for (auto range : {DirectRangeOperator::Short, static_cast<DirectRangeOperator>(99)}) {

@@ -923,7 +923,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
     std::size_t maximum_auxiliary_tile, std::vector<double>& gradient, std::string& detail,
     DfGradientResources* resources, const CudaDfMetricView* device_metric, void* blas_handle,
     const CudaDfResponseBuffers* borrowed, const CudaDfPackedRawTensorView* packed_raw,
-    const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied) {
+    const CudaDfWhitenedTensorView* whitened, const CudaDfOccupiedResponseView* occupied,
+    const CudaDfBorrowedResponseDensity* borrowed_density) {
   detail.clear();
   // Validate even when the selected execution path retains strict evaluation.
   double target = 0;
@@ -964,6 +965,14 @@ generativeqc_status execute_cuda_df_hf_gradient(
       terms.empty() || !std::isfinite(relative_threshold) || relative_threshold <= 0 ||
       relative_threshold >= 1) {
     detail = "invalid generated DF-HF response dimensions or budget";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (borrowed_density &&
+      (!device_metric || !*borrowed_density || borrowed_density->device_id != device ||
+       borrowed_density->stream != stream_handle || borrowed_density->matrix_elements != n * n ||
+       terms.size() != 1 || terms[0].density.size() != n * n ||
+       terms[0].coulomb_coefficient == 0.0 || terms[0].exchange_coefficient != 0.0)) {
+    detail = "borrowed DF response density is incompatible with the Coulomb response";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   const auto metric_matches = [&](const CudaDfMetricView& view) {
@@ -1424,13 +1433,24 @@ generativeqc_status execute_cuda_df_hf_gradient(
                                borrowed->exchange_capacity() / (n * n),
                                maximum_auxiliary_tile ? maximum_auxiliary_tile : a})
                    : tile;
-      auto* densities = static_cast<double*>(arena.allocate(terms.size() * n * n * sizeof(double)));
-      for (std::size_t t = 0; t < terms.size(); ++t) {
-        check(cudaMemcpyAsync(densities + t * n * n, terms[t].density.data(),
-                              n * n * sizeof(double), cudaMemcpyHostToDevice, arena.stream));
-        arena.stats.host_to_device_bytes += n * n * sizeof(double);
-        arena.stats.density_host_to_device_bytes += n * n * sizeof(double);
-        ++arena.stats.uploads;
+      const double* densities = nullptr;
+      if (borrowed_density) {
+        densities = borrowed_density->density;
+        const auto bytes = n * n * sizeof(double);
+        arena.stats.borrowed_device_bytes += bytes;
+        runtime::cuda_trace::trace_counter("response_borrowed_density_bytes", bytes);
+        runtime::cuda_trace::trace_counter("response_borrowed_density", 1);
+      } else {
+        auto* owned_densities =
+            static_cast<double*>(arena.allocate(terms.size() * n * n * sizeof(double)));
+        densities = owned_densities;
+        for (std::size_t t = 0; t < terms.size(); ++t) {
+          check(cudaMemcpyAsync(owned_densities + t * n * n, terms[t].density.data(),
+                                n * n * sizeof(double), cudaMemcpyHostToDevice, arena.stream));
+          arena.stats.host_to_device_bytes += n * n * sizeof(double);
+          arena.stats.density_host_to_device_bytes += n * n * sizeof(double);
+          ++arena.stats.uploads;
+        }
       }
       const auto workspace_elements =
           cuda_df_response_workspace_elements(
@@ -1455,9 +1475,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
         owned_buffers.occupied_response = true;
         owned_buffers.fitted_occupied_source = whitened;
         owned_buffers.final_fitted_occupied_projection = occupied->final_fitted_occupied_projection;
-        arena.stats.borrowed_device_bytes = occupied_coefficients * sizeof(double);
+        const auto occupied_factor_bytes = occupied_coefficients * sizeof(double);
+        arena.stats.borrowed_device_bytes += occupied_factor_bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_occupied_factor_bytes",
-                                           arena.stats.borrowed_device_bytes);
+                                           occupied_factor_bytes);
         if (whitened) {
           const auto forward_bytes = whitened->pair_count * a * sizeof(double);
           arena.stats.borrowed_device_bytes += forward_bytes;
@@ -1482,12 +1503,11 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // These allocations remain owned and charged by the value plan. Keep
         // their capacity visible without double-counting it as new response
         // scratch or silently widening the caller's private force allowance.
-        arena.stats.borrowed_device_bytes =
-            (borrowed->staging_capacity() + borrowed->raw_capacity() +
-             borrowed->exchange_capacity()) *
-            sizeof(double);
-        runtime::cuda_trace::trace_counter("response_borrowed_jk_bytes",
-                                           arena.stats.borrowed_device_bytes);
+        const auto jk_borrowed_bytes = (borrowed->staging_capacity() + borrowed->raw_capacity() +
+                                        borrowed->exchange_capacity()) *
+                                       sizeof(double);
+        arena.stats.borrowed_device_bytes += jk_borrowed_bytes;
+        runtime::cuda_trace::trace_counter("response_borrowed_jk_bytes", jk_borrowed_bytes);
         runtime::cuda_trace::trace_counter("response_resident_auxiliary_tile", consume_tile);
       }
       auto response_scratch_bytes = arena.stats.device_bytes;
@@ -1550,15 +1570,19 @@ generativeqc_status execute_cuda_df_hf_gradient(
       }
       if (shell_target > 0 && shell_execution && full_shell_domain) {
         // Reserve only unused headroom AFTER the original response shape and
-        // scratch have been fixed. Tight budgets retain strict evaluation;
-        // this optimization never shrinks a tile or amplifies source work.
+        // scratch have been fixed. A resident density removes the physical
+        // response allocation, but keep its old bytes logically reserved here
+        // so this placement-only change cannot newly admit force screening.
         const auto orbital_shells = orbital.shells.size();
         const auto auxiliary_shells = auxiliary.shells.size();
         const auto norm_bytes =
             (orbital_shells * orbital_shells + auxiliary_shells) * sizeof(double);
         const auto counter_bytes = shell_counters ? sizeof(observed_shell_screen_work) : 0;
+        const auto density_reservation = borrowed_density ? n * n * sizeof(double) : std::size_t{0};
+        const auto device_headroom = maximum_bytes - arena.stats.device_bytes;
         double* norms = nullptr;
-        if (norm_bytes + counter_bytes <= maximum_bytes - arena.stats.device_bytes &&
+        if (density_reservation <= device_headroom &&
+            norm_bytes + counter_bytes <= device_headroom - density_reservation &&
             counter_bytes <= maximum_bytes - arena.stats.host_bytes) {
           // One optional allocation also makes actual device-memory pressure
           // a strict fallback, without leaving a partially admitted screen.
