@@ -195,10 +195,17 @@ def test_exchange_streams_compact_survivors_before_expensive_fock_work() -> None
         )
 
         if schedule.kind == ScheduleKind.PACKED_TASKS:
+            # Queue slots are consumed by fixed physical lanes [0, N), so the
+            # collective must include the whole statically launched warp even
+            # when independent scheduling separates the screening branches.
+            assert "FockBlockThreads == 32U" in source
+            assert "constexpr unsigned full_warp_mask = 0xffffffffU;" in source
+            assert "__activemask()" not in source
             assert (
-                "const unsigned survivor_mask = __ballot_sync(active_mask, keep);"
+                "const unsigned survivor_mask = __ballot_sync(full_warp_mask, keep);"
                 in source
             )
+            assert source.count("__syncwarp(full_warp_mask);") == 2
             assert "__popc(survivor_mask & lower_lane_mask)" in source
             assert "compact_bra_pairs[survivor_rank] = bra_pair;" in source
             assert "compact_ket_pairs[survivor_rank] = ket_pair;" in source

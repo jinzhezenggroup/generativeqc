@@ -725,8 +725,11 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
         // K screening can leave a sparse set of live lanes.  Pack only pair
         // identities/bounds, then let lanes [0, survivor_count) perform the
         // expensive recurrence.  J/HF retain their established lane mapping.
-        const unsigned active_mask = __activemask();
-        const unsigned survivor_mask = __ballot_sync(active_mask, keep);
+        // The one-warp launch and uniform exits/chunk bounds keep all 32
+        // lanes participating, including rejected and tail candidates.  An
+        // instantaneous active mask can omit lanes after divergent screening.
+        constexpr unsigned full_warp_mask = 0xffffffffU;
+        const unsigned survivor_mask = __ballot_sync(full_warp_mask, keep);
         const unsigned survivor_count = __popc(survivor_mask);
         if (keep) {{
           const unsigned lower_lane_mask = (1U << threadIdx.x) - 1U;
@@ -736,7 +739,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
           compact_ket_pairs[survivor_rank] = ket_pair;
           compact_contribution_bounds[survivor_rank] = contribution_bound;
         }}
-        __syncwarp(active_mask);
+        __syncwarp(full_warp_mask);
         if (threadIdx.x < survivor_count) {{
           const std::uint32_t selected_bra_pair =
               compact_bra_pairs[threadIdx.x];
@@ -766,7 +769,7 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
                 {task_index}, {storage_reference});
           }}
         }}
-        __syncwarp(active_mask);
+        __syncwarp(full_warp_mask);
       }} else if (keep) {{
         const std::uint32_t precision_state = {retained_state};
         {record_precision("precision_state")}
