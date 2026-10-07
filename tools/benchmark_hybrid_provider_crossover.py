@@ -236,6 +236,13 @@ def _proof(batch: Any, arm: str) -> dict[str, Any]:
     }
 
 
+def _metric_diagnostics(batch: Any, arm: str) -> list[dict[str, Any]] | None:
+    """The exact Direct provider has no DF metric query contract."""
+    if arm == "direct":
+        return None
+    return [d.to_dict() for d in batch.last_density_fitting_metric_diagnostics()]
+
+
 def _save_oracle_grid(batch: Any, calc: Any, case: Case, path: Path) -> dict[str, Any]:
     """Export only grid inputs; PySCF performs independent SCF and gradient work."""
     from generativeqc._dft_gradient import StationaryKsState
@@ -420,9 +427,7 @@ def run_native(args: argparse.Namespace) -> None:
                     batch, calc, case, output.with_suffix(".original-grid.npz")
                 )
             }
-            record["metric_diagnostics"] = [
-                d.to_dict() for d in batch.last_density_fitting_metric_diagnostics()
-            ]
+            record["metric_diagnostics"] = _metric_diagnostics(batch, args.arm)
             record["transport_diagnostics"] = [
                 d.to_payload() if d else None for d in batch.ks_transport_diagnostics
             ]
@@ -559,9 +564,7 @@ def _run_profile_impl(
             if not result.succeeded or not result.converged:
                 raise RuntimeError("diagnostic endpoint failed")
             record["provider_proof"] = _proof(batch, args.arm)
-            record["metric_diagnostics"] = [
-                d.to_dict() for d in batch.last_density_fitting_metric_diagnostics()
-            ]
+            record["metric_diagnostics"] = _metric_diagnostics(batch, args.arm)
             record["resource_diagnostics"] = batch.resource_diagnostics
         if args.trace.exists() and args.trace.stat().st_size:
             rows = read_trace(args.trace)

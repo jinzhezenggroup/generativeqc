@@ -10,6 +10,7 @@ import pytest
 from tools.benchmark_hybrid_provider_crossover import (
     ARMS,
     SCHEMA,
+    _metric_diagnostics,
     case_named,
     finite_job_identity,
     frozen_problem,
@@ -143,6 +144,14 @@ def test_finite_job_identity_is_explicit(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("SLURM_JOB_ID", "123")
     with pytest.raises(RuntimeError, match="one finite"):
         finite_job_identity()
+
+
+def test_direct_never_queries_unsupported_df_metric() -> None:
+    class DirectBatch:
+        def last_density_fitting_metric_diagnostics(self) -> None:
+            raise AssertionError("Direct must not query a DF-only diagnostic")
+
+    assert _metric_diagnostics(DirectBatch(), "direct") is None
 
 
 def test_supported_arms_require_oracle_and_never_claim_full_crossover() -> None:

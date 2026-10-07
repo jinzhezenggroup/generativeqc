@@ -56,6 +56,12 @@ shell bundles and had not built the separate stationary manifest targets.
 `complete-aot-and-smoke.sh` pins the exact unchanged core SHA and frozen source,
 builds both PBE0 RKS stationary domains with the task-owned cache, and writes
 new raw attempts without overwriting that negative result.
+Those AOT assets then allowed the full DF-JK arm to complete all four small
+E+force phases and proved occupied force-response reuse. Direct's cold E+force
+also completed, but the benchmark erroneously queried a DF-only metric on its
+exact provider and stopped before warm/moved timing. The runner now leaves
+that metric `null`; `retry-small-with-aot.sh` authenticates the unchanged
+scientific/build inputs and exact core/AOT hashes before the next clean retry.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
