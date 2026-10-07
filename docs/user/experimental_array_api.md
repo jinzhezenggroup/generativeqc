@@ -31,9 +31,12 @@ O = np.eye(3, dtype=np.float64)
 value = observable(C, occupation, O)
 ```
 
-The first call captures a specialization from the concrete argument shapes and
-dtypes, lowers the expression to the canonical TensorIR, caches that program,
-and executes it through the independent reference interpreter. Use
+The namespace also works eagerly on its NumPy-backed reference arrays. The same
+function body can therefore be evaluated directly and then compiled without
+rewriting its array expressions. The first compiled call captures a
+specialization from the concrete argument shapes and dtypes, lowers the
+expression to canonical TensorIR, caches that program, and executes it through
+the independent reference interpreter. Use
 `observable.lower(C, occupation, O)` when the TensorIR `Program` itself is
 needed for inspection, optimization, or a separate native compilation step.
 
@@ -54,8 +57,11 @@ parameter while still giving the inferred public path a supported JVP/VJP route.
 The current preview supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
 dimension, and static indexing with integers, slices (including negative
-strides), `None`/newaxis, and ellipsis. Elementwise exact scalar expressions
-such as `x + 1` and `x - Fraction(1, 2)` are also supported.
+strides), `None`/newaxis, and ellipsis. Generic arrays accept finite Python
+float literals as ordinary scalar values, so expressions such as `x + 0.5`
+have eager/compiled parity. The compiler records the exact binary value of that
+Python float. Explicitly scientific arrays retain the stricter exact-scalar
+spelling rules.
 
 ## Scientific metadata remains explicit
 
@@ -81,8 +87,8 @@ shape/dtype semantics         AO/occ/vir/aux/spin semantics
 
 ## Current limits
 
-The reference compiled-call path currently accepts CPU/NumPy `float32` and
-`float64` arrays. There is no implicit dtype promotion, dynamic Python control
+The eager namespace and reference compiled-call path currently accept CPU/NumPy
+`float32` and `float64` arrays. There is no implicit dtype promotion, dynamic Python control
 flow, or implicit external-device transfer. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
 same-device handoff.
