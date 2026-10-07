@@ -16,11 +16,13 @@ from generativeqc_compiler.array_api import (
     DLPackInteropError,
     ExactScalar,
     VibeArray,
-    capabilities as _compiler_capabilities,
     dlpack_device,
     import_dlpack,
     input_array,
     trace,
+)
+from generativeqc_compiler.array_api import (
+    capabilities as _compiler_capabilities,
 )
 from generativeqc_compiler.array_api import namespace as _namespace
 from generativeqc_compiler.tensor import Index, IndexSpace, Program, TensorSpec
