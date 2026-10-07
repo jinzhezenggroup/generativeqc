@@ -248,6 +248,8 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   add(runtime::size_mul(batch, cart), sizeof(std::int32_t) + 3 + sizeof(double));
   add(runtime::size_mul(shells, shells),
       3 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint32_t) + sizeof(double));
+  // Generated J retains density-conditioned bounds even without a K/force
+  // lease. Keep this shape-only envelope consistent with its optional owner.
   add(runtime::size_mul(shells, shells), sizeof(cuda_execution::ShellPairDensityBounds));
   add(batch, (1 + detail::kDirectShellPairClassCount) * sizeof(double));
   add(runtime::size_mul(primitives, primitives), sizeof(cuda_execution::PrimitivePairData));
