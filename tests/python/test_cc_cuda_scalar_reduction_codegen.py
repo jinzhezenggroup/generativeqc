@@ -54,10 +54,11 @@ def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback(
         assert (
             "for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x)" in parallel
         )
-        assert "__shfl_down_sync(0xffffffffu,sum,offset)" in parallel
-        assert "__shared__ double partial[8]" in parallel
+        assert "cub::BlockReduce<" in parallel
+        assert "cub::BLOCK_REDUCE_WARP_REDUCTIONS" in parallel
+        assert "BlockReduce(temp_storage).Reduce" in parallel
         assert "__dadd_rn" in parallel
-        assert "__shfl_down_sync" not in serial
+        assert "cub::BlockReduce<" not in serial
 
 
 def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_serial() -> (
@@ -69,10 +70,11 @@ def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_se
     )
     replay = tuple(kernel for kernel in kernels if kernel.startswith("replay_"))
 
+    assert "#include <cub/block/block_reduce.cuh>" in codegen.cuda_source()
     assert iteration
-    assert any("__shfl_down_sync" in kernel for kernel in iteration)
+    assert any("cub::BlockReduce<" in kernel for kernel in iteration)
     assert replay
-    assert all("__shfl_down_sync" not in kernel for kernel in replay)
+    assert all("cub::BlockReduce<" not in kernel for kernel in replay)
 
 
 def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
@@ -80,15 +82,15 @@ def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
     hoisted = _kernels(generate_df_ccsd_hoisted.cuda_source())
 
     assert any(
-        kernel.startswith("iteration_node_") and "__shfl_down_sync" in kernel
+        kernel.startswith("iteration_node_") and "cub::BlockReduce<" in kernel
         for kernel in core
     )
     assert any(
-        kernel.startswith("iteration_packed_node_") and "__shfl_down_sync" in kernel
+        kernel.startswith("iteration_packed_node_") and "cub::BlockReduce<" in kernel
         for kernel in hoisted
     )
     assert any(
-        kernel.startswith("iteration_scalar_node_") and "__shfl_down_sync" in kernel
+        kernel.startswith("iteration_scalar_node_") and "cub::BlockReduce<" in kernel
         for kernel in hoisted
     )
 
