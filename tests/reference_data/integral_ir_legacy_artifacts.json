@@ -511,10 +511,10 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "e5846c3f9a74a2f8322d38de30698ee1a870fb62d3daa132ac5b0eb18cfd8f49",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "9ed4ec4e2b770fa1fc250cc4d417f32e34176da3c2713199d6a9cf7f2063c59b",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "903751f53c2f706e8c1517624b205dfe32fc9c37259d3be18dd62510da70a777",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "65d797727e1a0650d3f1f99445b962962c9595f89226a947867d0205afedae0f",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "ec953b286007971320a42d0c24b7842eb664c7c6734f81858122bdb78a3ea383",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "6c436e837b23c3acd56b6ec229b332309a4b558ba652d1f7bdec5c04a56fdaac",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "ed15a6276d4f4be9416046c635bbffb03f8038b0180286a8ee20cdb375475821",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "d4000425d8ca204c1382b25774b568936ab5ed81d256c0506e7ddbd9c7da73dd",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
     "generativeqc_generated_shell_registry.cu": "ed66611d109bc003e1baabc91c0e591664993b89966d98aa0032e9ee823e5fed"
   },
@@ -641,6 +641,17 @@
         "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
         "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
         "sm_90/generativeqc_generated_shell_sm90_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 2060,
+      "source_revision": "c3d695525ad095df21e4eee23648c081c4c72d70",
+      "reason": "Compact accepted Exchange/HartreeFockExchange tasks before packed-lane or subgroup recurrence. Packed consumers use the full 32-lane membership for ballot and queue fences, including rejected and tail candidates. Audited generated sources against base ea8c294e94d3423360bfa3a8886637a271b56268: replacing only the emitted streaming functions restores every previous artifact byte. Only four sm_120 shard hashes change; registry, portable sm_90 shards, manifest and catalog remain byte-identical. Screening thresholds, recurrence and scientific gates are unchanged.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     }
   ]
