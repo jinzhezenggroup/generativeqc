@@ -10,11 +10,20 @@ choose an appropriate fitting basis for scientific production calculations.
 CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
 analytic forces. Full-range global hybrids use matching DF-JK on both backends;
 the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
-trajectory optimization. Analytic forces differentiate the same auxiliary
-basis and Coulomb metric used by the energy, including auxiliary-center and
-metric response. Range-separated/nonlocal DF compositions, ECP DF and
-automatic mixed precision remain rejected. This interface does not change the
-selected functional or grid.
+trajectory optimization. FP64 range-separated energies may use a mixed
+composition: the ordinary full-range J/K primary is density fitted, while the
+omega-dependent long-range exchange correction remains an exact Direct
+provider. CUDA orders the independent provider streams with device events; it
+does not add a successful-path host fence. WB97M-V energy composes this mixed
+J/K owner with the existing self-consistent VV10 path.
+
+This mixed composition is not range-separated RI-K: there are still no
+omega-dependent DF metric/three-center integrals. Analytic forces for
+range-separated or nonlocal DF compositions therefore remain rejected; so do
+ECP DF and automatic mixed precision. Full-range DF forces continue to
+differentiate the same auxiliary basis and Coulomb metric used by the energy,
+including auxiliary-center and metric response. This interface does not change
+the selected functional or grid.
 
 ```python
 from generativeqc import Calculator
