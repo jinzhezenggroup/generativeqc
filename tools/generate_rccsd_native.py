@@ -1394,7 +1394,7 @@ def _parallel_scalar_reduction_kernel(
     The native RCCSD iteration used to assign a scalar output to one CUDA
     thread, leaving millions of contraction terms serial.  This lowering
     flattens the same lexicographic reduction domain across one 256-thread
-    block and combines per-thread FP64 partials with a fixed warp/tree order.
+    block and delegates the deterministic block combine to the shared tensor provider.
     Small domains keep the historical source-major serial order.  Callers must
     opt in explicitly; independent physical replay therefore remains the
     serial acceptance oracle.
@@ -1471,7 +1471,7 @@ def _parallel_scalar_reduction_kernel(
   for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x){{
 {parallel}
   }}
-  sum=BlockReduce(temp_storage).Reduce(sum,{add_name}{{}});
+  sum=BlockReduce::sum(sum,temp_storage);
   if(threadIdx.x==0)
     out[0]=generativeqc_tensor::finite({result},error,{number});
 }}"""
