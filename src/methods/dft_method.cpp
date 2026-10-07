@@ -1167,8 +1167,26 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
     const std::vector<double> empty;
     scf::FockEnergyDerivativeComponents two;
+    std::optional<scf::CudaDfBorrowedResponseDensity> response_density;
     std::optional<scf::CudaDfBorrowedFittedProjection> fitted_projection;
 #if GENERATIVEQC_HAS_CUDA
+    if (cuda_ && spins == 1) {
+      dft::CudaKsResidentDensityBinding lease;
+      std::string lease_detail;
+      const auto lease_status = cuda_->resident_final_density(expected, lease, lease_detail);
+      if (lease_status == GENERATIVEQC_STATUS_SUCCESS) {
+        if (!lease || lease.spins != 1 || lease.matrix_elements != matrix_elements ||
+            lease.device_id != expected.identity.model.device) {
+          detail = "CUDA KS returned an incompatible final density lease for DF response";
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+        }
+        response_density.emplace(scf::CudaDfBorrowedResponseDensity{
+            lease.device_id, lease.alpha, lease.matrix_elements, lease.stream});
+      } else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        detail = lease_detail;
+        return lease_status;
+      }
+    }
     if (cuda_ && spins == 1 && strategy.spec.exchange.present) {
       dft::CudaKsResidentFittedProjectionBinding lease;
       std::string lease_detail;
@@ -1190,7 +1208,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
 #endif
     try {
-      two = fitted_projection
+      two = response_density
+                ? fock_.energy_derivative_components_with_cuda_df_state(
+                      density[0], empty, &*response_density,
+                      fitted_projection ? &*fitted_projection : nullptr)
+            : fitted_projection
                 ? fock_.energy_derivative_components_with_fitted_projection(density[0], empty,
                                                                             *fitted_projection)
                 : fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
