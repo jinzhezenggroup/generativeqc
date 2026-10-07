@@ -61,7 +61,9 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
     )
     source = (ROOT / "src/scf/preliminary_guess.cpp").read_text()
     preparation = between(
-        source, "  diagnostic.preliminary_iterations", "\n}\n}  // namespace"
+        source,
+        "std::optional<std::vector<double>> prepare_impl",
+        "\n}\n}  // namespace",
     )
     assert (
         "admit_preliminary_density(target, std::move(preliminary.density))"
@@ -73,7 +75,8 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
         "\nvoid validate_preliminary_options",
     )
     assert "solver::validate_seed(target.one_electron().overlap, density" in admission
-    assert "normalized_warm_density" not in admission + preparation
+    assert "normalized_warm_density" not in admission
+    assert "admissible_minao_density(system, ints, x, projected.density)" in preparation
 
 
 HARNESS = r"""
@@ -193,6 +196,9 @@ Item run_dft(bool resident) {
   std::vector<BatchResult> results(1);
   results[0].warm_start_used = true;
   std::vector<bool> ready(1, true);
+  std::vector<std::optional<std::vector<double>>> preliminary_seeds(1);
+  std::vector<initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(1);
+  std::vector<bool> preliminary_requested(1, false);
   auto size = [] { return std::size_t{1}; };
   auto host_numeric_capacity = [](std::size_t) { return std::size_t{}; };
   const auto finish = [&](std::size_t i, Native native) {
