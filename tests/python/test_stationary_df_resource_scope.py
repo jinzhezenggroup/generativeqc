@@ -63,9 +63,9 @@ struct Owner {
         + r"""
     std::vector<double> hcore(coordinates), pulay(coordinates), candidate;
     struct { std::vector<double> coulomb, exchange; } two;
-    struct {
-      std::size_t device_bytes{}, host_to_device_bytes{}, device_to_host_bytes{};
-    } one_electron;
+    std::size_t one_electron_device_bytes=0;
+    std::size_t one_electron_h2d_bytes=0;
+    std::size_t one_electron_d2h_bytes=0;
     two.coulomb.resize(coordinates); two.exchange.resize(coordinates);
     candidate.reserve(4*coordinates);
     if (extra_capacity) two.exchange.reserve(40);
