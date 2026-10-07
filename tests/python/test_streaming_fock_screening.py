@@ -180,7 +180,10 @@ def test_exchange_streams_compact_survivors_before_expensive_fock_work() -> None
     seen: set[ScheduleKind] = set()
     for selection in profile.selections:
         schedule = selection.fock_schedule or selection.schedule
-        if schedule.kind not in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS):
+        if schedule.kind not in (
+            ScheduleKind.PACKED_TASKS,
+            ScheduleKind.SUBGROUP_TASKS,
+        ):
             continue
         source = _streaming_fock_source(selection)
         if not source:
@@ -192,7 +195,10 @@ def test_exchange_streams_compact_survivors_before_expensive_fock_work() -> None
         )
 
         if schedule.kind == ScheduleKind.PACKED_TASKS:
-            assert "const unsigned survivor_mask = __ballot_sync(active_mask, keep);" in source
+            assert (
+                "const unsigned survivor_mask = __ballot_sync(active_mask, keep);"
+                in source
+            )
             assert "__popc(survivor_mask & lower_lane_mask)" in source
             assert "compact_bra_pairs[survivor_rank] = bra_pair;" in source
             assert "compact_ket_pairs[survivor_rank] = ket_pair;" in source

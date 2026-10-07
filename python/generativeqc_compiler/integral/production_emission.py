@@ -750,14 +750,14 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
               topology, selected_bra_pair, selected_ket_pair, {task_reference});
           if (precision_state == 3U) {{
             {
-                f'''{prefix}_packed_mixed_fock_lane<Unrestricted>(
+            f'''{prefix}_packed_mixed_fock_lane<Unrestricted>(
                   {task_pointer}, primitive_pairs, primitive_pair_offsets,
                   ao_coefficients, atom_positions, screening_tolerance,
                   schwarz_bounds, density, fock,
                   {task_index}, {storage_reference});'''
-                if supports_mixed_fock
-                else "/* This shell class has no generated mixed Fock helper. */"
-            }
+            if supports_mixed_fock
+            else "/* This shell class has no generated mixed Fock helper. */"
+        }
           }} else {{
             {prefix}_packed_fock_lane<Unrestricted>(
                 {task_pointer}, primitive_pairs, primitive_pair_offsets,
