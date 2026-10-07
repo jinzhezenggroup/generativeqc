@@ -200,3 +200,24 @@ def test_separate_full_range_derivatives_match_libcint(
                 np.testing.assert_array_equal(actual[1], 0)
         finally:
             state._source.close()
+
+
+@pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks"))
+@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("force_schedule", ("bounded", "angular"))
+def test_cooperative_full_range_derivatives_match_libcint(
+    method: str,
+    representation: str,
+    force_schedule: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cooperative opt-in retains both source contracts and bounded fallback.
+
+    Two oxygens admit the four heavy order-six/seven s/p/d classes. Reuse the
+    independent fixed-density Libcint oracle, including Separate-after-Combined
+    replay, while keeping the materialized dddd opt-in independently disabled.
+    """
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES", "1")
+    test_separate_full_range_derivatives_match_libcint(
+        method, representation, "0", True, force_schedule, monkeypatch
+    )

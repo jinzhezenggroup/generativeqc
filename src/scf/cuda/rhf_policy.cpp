@@ -488,6 +488,10 @@ bool direct_pair_materialized_derivatives_requested() noexcept {
   return enabled("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES");
 }
 
+bool direct_pair_cooperative_derivatives_requested() noexcept {
+  return enabled("GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES");
+}
+
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }
 
 bool ppps_signature_bucketing_requested() noexcept {

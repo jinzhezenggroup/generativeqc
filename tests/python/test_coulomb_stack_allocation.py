@@ -48,6 +48,7 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) ->
 @pytest.mark.parametrize("hermite", range(4))
 @pytest.mark.parametrize("pair_materialized", [False, True])
 @pytest.mark.parametrize("pair_derivatives", [False, True])
+@pytest.mark.parametrize("pair_cooperative", [False, True])
 def test_stack_reservation_oom_falls_back_but_other_failures_propagate(
     stack_probe: Path,
     kind: int,
@@ -55,6 +56,7 @@ def test_stack_reservation_oom_falls_back_but_other_failures_propagate(
     hermite: int,
     pair_materialized: bool,
     pair_derivatives: bool,
+    pair_cooperative: bool,
 ) -> None:
     # The shared driver also checks stream fencing, no leaked allocations,
     # and successful fresh preparation after each rejected optional owner.
@@ -67,6 +69,7 @@ def test_stack_reservation_oom_falls_back_but_other_failures_propagate(
             str(hermite),
             str(int(pair_materialized)),
             str(int(pair_derivatives)),
+            str(int(pair_cooperative)),
         ],
         check=True,
         timeout=10,

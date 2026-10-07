@@ -55,14 +55,16 @@ static_assert(sizeof(MaterializedDirectPairDerivativeRecurrence) <= (32U << 10))
 __device__ inline Vec3<Dual3> prepare_materialized_direct_pair_derivative(
     const PrimitivePairData& cached, double alpha, double beta,
     const Vec3<Dual3>& first, const Vec3<Dual3>& second,
-    MaterializedDirectPairDerivativeRecurrence::Pair (&coefficients)[3]) {
+    MaterializedDirectPairDerivativeRecurrence::Pair (&coefficients)[3],
+    unsigned first_angular = 2U, unsigned second_angular = 2U,
+    unsigned axis_begin = 0U, unsigned axis_end = 3U) {
   auto product = product_center(alpha, first, beta, second);
   product.x.value = cached.product_center.x;
   product.y.value = cached.product_center.y;
   product.z.value = cached.product_center.z;
-  for (unsigned axis = 0; axis < 3; ++axis) {
+  for (unsigned axis = axis_begin; axis < axis_end; ++axis) {
     const auto a = vec_axis(first, axis), b = vec_axis(second, axis), ab = a - b;
-    fill_shell_pair_hermite_geometry<2, 2>(2, 2, vec_axis(product, axis), a, b,
+    fill_shell_pair_hermite_geometry<2, 2>(first_angular, second_angular, vec_axis(product, axis), a, b,
         cached.exponent_sum, qexp(-cached.reduced_exponent * ab * ab), coefficients[axis]);
   }
   return product;

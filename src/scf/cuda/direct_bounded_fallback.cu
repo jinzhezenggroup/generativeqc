@@ -35,6 +35,16 @@ __host__ __device__ bool materialized_pair_derivative_available(const DeviceBatc
          (batch.direct_hermite_convolution & 2U) == 0U;
 }
 
+/** The dedicated cooperative specialization has no generic recurrence frame.
+ * Only a proved s/p/d basis makes every order-6/7 task one of its four classes;
+ * mixed f bases, missing caches and optional recurrence modes retain fallback. */
+__host__ __device__ bool cooperative_pair_derivative_available(const DeviceBatch& batch) {
+  return batch.direct_pair_cooperative_derivatives && batch.direct_maximum_shell_angular <= 2U &&
+         batch.shell_primitive_pairs && batch.shell_pair_primitive_offsets &&
+         (batch.direct_coulomb_reachable & 2U) == 0U &&
+         (batch.direct_hermite_convolution & 2U) == 0U;
+}
+
 __device__ bool materialized_pair_derivative_task(const DeviceBatch& batch,
                                                   const ActiveShellQuartetTile& task) {
   return batch.shell_angular[batch.shell_pair_first[task.first_pair]] == 2U &&
@@ -55,7 +65,8 @@ __device__ bool materialized_pair_derivative_task(const DeviceBatch& batch,
  * outer domain plus exact work only in surviving blocks.
  */
 template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
-          int FixedRadialOperator = -1, bool PairDerivatives = false>
+          int FixedRadialOperator = -1, bool PairDerivatives = false,
+          bool CooperativeDerivatives = false>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -70,6 +81,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     detail::BoundedDirectBlockDomain block_domain = {}) {
   static_assert(FixedAngularOrder < 0 || (Force && FixedAngularOrder <= 12));
   static_assert(!PairDerivatives || (Force && (FixedAngularOrder < 0 || FixedAngularOrder == 8)));
+  static_assert(!CooperativeDerivatives ||
+                (Force && !PairDerivatives && (FixedAngularOrder == 6 || FixedAngularOrder == 7)));
   extern __shared__ __align__(16) unsigned char materialized_pair_workspace[];
   const auto radial_operator = FixedRadialOperator < 0
                                    ? runtime_radial_operator
@@ -211,6 +224,22 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
       // assigning generic fallback classes one warp each. psss Fock is
       // compiler-owned; if that generated class is unavailable, order one
       // deliberately falls through to the generic full-warp oracle/fallback.
+      if constexpr (CooperativeDerivatives) {
+        // This pure consumer shares the existing bounded queue and predicates,
+        // but never instantiates the generic private Coulomb/AD workspace.
+        auto& workspace = *reinterpret_cast<CooperativeDirectPairDerivativeRecurrence*>(
+            materialized_pair_workspace);
+        for (std::uint32_t slot = 0; slot < queue_count; ++slot) {
+          constexpr auto mode =
+              FixedRadialOperator == static_cast<int>(DirectRangeOperator::FullSources)
+                  ? DirectForceOutputMode::Separate
+                  : DirectForceOutputMode::Combined;
+          contract_cooperative_direct_pair_force<Unrestricted, mode>(
+              batch, queue[slot], screening_tolerance, schwarz_bounds, density, active, output,
+              coulomb_coefficient, exchange_coefficient, workspace);
+          __syncthreads();
+        }
+      }
       if constexpr (PairDerivatives) {
         // A complete CTA shares recurrence publication for the admitted shell.
         // The warp fallback skips precisely these dddd tasks. Retire readers
@@ -332,7 +361,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
       }
       __syncthreads();
 
-      if constexpr (FixedAngularOrder < 0 || FixedAngularOrder >= 4) {
+      if constexpr (!CooperativeDerivatives && (FixedAngularOrder < 0 || FixedAngularOrder >= 4)) {
         for (std::uint32_t slot = warp; slot < queue_count;
              slot += blockDim.x / detail::kDirectQuartetThreads) {
           const ActiveShellQuartetTile base = queue[slot];
@@ -495,19 +524,31 @@ cudaError_t launch_angular_force_passes(
   auto launch_bounded = [&]() {
     auto error = cudaMemsetAsync(cursor, 0, sizeof(*cursor), stream);
     if (error != cudaSuccess) return error;
-    auto launch = [&]<bool PairDerivatives>() {
+    auto launch = [&]<bool PairDerivatives, bool CooperativeDerivatives = false>() {
       constexpr std::size_t shared_bytes =
-          PairDerivatives ? sizeof(MaterializedDirectPairDerivativeRecurrence) : 0U;
+          CooperativeDerivatives ? sizeof(CooperativeDirectPairDerivativeRecurrence)
+          : PairDerivatives      ? sizeof(MaterializedDirectPairDerivativeRecurrence)
+                                 : 0U;
       bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, Order,
-                                          static_cast<int>(Range), PairDerivatives>
+                                          static_cast<int>(Range), PairDerivatives,
+                                          CooperativeDerivatives>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds, pair_order,
               block_bounds, system_bounds, nullptr, 0U, class_state, schwarz, density, active,
               output, cursor, nullptr, coulomb_coefficient, exchange_coefficient, Range, omega, 0.0,
               false, Range == DirectRangeOperator::Long, domain);
     };
-    if constexpr (Order == 8 && (Range == DirectRangeOperator::FullSources ||
+    // The 96-atom qualification wins at order seven but regresses order six.
+    // Keep order six on the retained consumer until its cooperative schedule
+    // earns selection independently; native qualification still covers it.
+    if constexpr (Order == 7 && (Range == DirectRangeOperator::FullSources ||
                                  Range == DirectRangeOperator::Full)) {
+      if (cooperative_pair_derivative_available(batch))
+        launch.template operator()<false, true>();
+      else
+        launch.template operator()<false>();
+    } else if constexpr (Order == 8 && (Range == DirectRangeOperator::FullSources ||
+                                        Range == DirectRangeOperator::Full)) {
       if (materialized_pair_derivative_available(batch))
         launch.template operator()<true>();
       else
