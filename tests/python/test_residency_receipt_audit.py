@@ -142,6 +142,31 @@ def test_unrelated_directions_do_not_make_a_round_trip() -> None:
     assert audit(expected, receipt(expected, events))["status"] == "INCOMPLETE"
 
 
+def test_repeated_payload_round_trips_pair_by_exact_sequence() -> None:
+    expected = contract()
+    expected["regions"][0]["ratchet"].update(
+        {"h2d_bytes": 16, "d2h_bytes": 16, "round_trips": 2}
+    )
+    events = [
+        event(0, "force_response", "d2h", 8, "density-A"),
+        event(1, "force_response", "h2d", 8, "density-A", derived_from=0),
+        event(2, "force_response", "d2h", 8, "density-A"),
+        event(3, "force_response", "h2d", 8, "density-A", derived_from=2),
+    ]
+    result = audit(expected, receipt(expected, events))
+    assert result["status"] == "PASS"
+    assert [
+        (row["d2h_seq"], row["h2d_seq"]) for row in result["totals"]["round_trips"]
+    ] == [
+        (0, 1),
+        (2, 3),
+    ]
+    events[-1]["derived_from"] = 0
+    assert audit(expected, receipt(expected, events))["status"] == "PASS"
+    events[-1]["derived_from"] = 1
+    assert audit(expected, receipt(expected, events))["status"] == "INCOMPLETE"
+
+
 def test_identity_role_owner_and_event_stream_tampering_is_incomplete() -> None:
     expected = contract()
     base = receipt(
@@ -325,7 +350,14 @@ def test_historical_trace_sha_tampering_and_empty_stream_are_incomplete(
     )
     matching["stored_sha256"] = "0" * 64
     assert "SHA-256 mismatch" in audit_df_trace(historical, trace, altered)["reason"]
+    altered = copy.deepcopy(manifest)
+    altered["schema"] = "wrong"
+    assert audit_df_trace(historical, trace, altered) == {
+        "status": "INCOMPLETE",
+        "reason": "unexpected historical retention manifest schema",
+    }
 
+    altered = copy.deepcopy(manifest)
     empty = tmp_path / "empty.jsonl"
     empty.write_bytes(b"")
     blank_hash = hashlib.sha256(b"").hexdigest()

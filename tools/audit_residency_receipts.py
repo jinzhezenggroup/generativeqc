@@ -102,7 +102,7 @@ def _totals(
 ) -> dict[str, Any]:
     totals = {name: dict.fromkeys(COUNTERS, 0) for name in regions}
     by_role = {role: dict.fromkeys(COUNTERS, 0) for role in ROLES}
-    downloads: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    downloads: dict[int, tuple[str, str, str, str]] = {}
     pairs: list[dict[str, Any]] = []
     for expected_seq, item in enumerate(events):
         event = _object(item, "event")
@@ -151,9 +151,7 @@ def _totals(
                     region["owner"],
                     region["domain"],
                 )
-                if key in downloads:
-                    raise ValueError("duplicate D2H payload identity")
-                downloads[key] = event
+                downloads[expected_seq] = key
             elif direction == "h2d" and source is not None:
                 _count(source, "derived_from")
                 key = (
@@ -162,8 +160,7 @@ def _totals(
                     region["owner"],
                     region["domain"],
                 )
-                prior = downloads.get(key)
-                if prior is None or prior["seq"] != source or source >= expected_seq:
+                if downloads.get(source) != key or source >= expected_seq:
                     raise ValueError(
                         "H2D round-trip link lacks the same prior payload/domain"
                     )
@@ -285,6 +282,8 @@ def audit_df_trace(
         if contract.get("schema") != SCHEMA or contract.get("version") != 1:
             raise ValueError("unsupported contract schema/version")
         _regions(contract)
+        if manifest.get("schema") != "vibeqc.issue206.practical-auxiliary.retention.v1":
+            raise ValueError("unexpected historical retention manifest schema")
         if (
             manifest.get("measured_commit") != identity["source_commit"]
             or manifest.get("native_source_identity") != identity["native_source"]
