@@ -515,7 +515,10 @@ def test_packed_restricted_raw_k_contracts_shell_blocks(
     assert f"kGenerated{class_name}ExchangeConsumerBit" in source
     assert f"kGenerated{class_name}CoulombConsumerBit" in source
     assert "swapped_pair_unique" in source
-    assert source.count("atomicAdd(\n              fock + task.density_offset") == 8
+    block = source.split("const bool raw_exchange_only =", maxsplit=1)[1].split(
+        "      return;", maxsplit=1
+    )[0]
+    assert block.count("atomicAdd(\n              fock + task.density_offset") == 8
     # UHF, HF-weighted K, J, and every unsupported runtime identity retain the
     # incumbent canonical component scatter below the restricted raw-K return.
     assert f"generated_{spec.name}_accumulate_fock<Unrestricted>" in source
