@@ -9,6 +9,7 @@
 
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
+#include "integrals/range_moments.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #include "scf/density_factor.hpp"
 #include "scf/df_value_storage.hpp"
@@ -107,6 +108,22 @@ generativeqc_status create_cuda_density_fitting_integral_source(
     const std::vector<core::System>& auxiliary_systems, CudaDensityFittingIntegralSource** source,
     std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail,
     const cuda_execution::CudaDfSourcePolicy* policy = nullptr);
+
+/** Range-separated analogue of the bounded generated source. The Coulomb
+ * metric and three-center tensor use the same immutable range/omega identity.
+ * Full-range callers should use the ordinary factory above.
+ */
+generativeqc_status create_cuda_range_density_fitting_integral_source(
+    int device_id, const std::vector<core::System>& orbital_systems,
+    const std::vector<core::System>& auxiliary_systems, integrals::CoulombRange range,
+    double omega, CudaDensityFittingIntegralSource** source, std::vector<double>& metrics,
+    std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy* policy = nullptr);
+
+integrals::CoulombRange cuda_density_fitting_integral_source_range(
+    const CudaDensityFittingIntegralSource* source) noexcept;
+double cuda_density_fitting_integral_source_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept;
 
 void destroy_cuda_density_fitting_integral_source(
     CudaDensityFittingIntegralSource* source) noexcept;
@@ -253,6 +270,8 @@ bool cuda_density_fitting_scf_policy_matches(const CudaDensityFittingJkPlan* pla
 bool cuda_density_fitting_jk_plan_matches(const CudaDensityFittingJkPlan* plan, std::size_t item,
                                           std::size_t nbf, std::size_t naux,
                                           double relative_threshold) noexcept;
+bool cuda_density_fitting_jk_plan_operator_matches(
+    const CudaDensityFittingJkPlan* plan, FockOperator op, double omega) noexcept;
 
 /** Scalar state returned by the device-resident DF SCF loop. */
 struct CudaDensityFittingDeviceScfItem {
