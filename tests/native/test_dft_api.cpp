@@ -519,6 +519,108 @@ void warm_execution_allocation_failure() {
           "warm SCF allocation failure lost its last-good density/energy pair");
 }
 
+void mixed_df_rsh_cpu_endpoints() {
+  // This CPU-only gate must run even when no CUDA compiler/device is present.
+  // The paired CUDA qualification below cannot catch a broken CPU reference
+  // if the entire block is compiled out.
+  for (const bool wb97mv : {false, true}) {
+    double restricted_energy = 0.0;
+    for (unsigned spin_case = 0; spin_case < 3; ++spin_case) {
+      const bool unrestricted = spin_case != 0;
+      const bool open_shell = spin_case == 2;
+      Fixture fixture(GENERATIVEQC_BACKEND_CPU_REFERENCE, open_shell ? -1 : 0, open_shell ? 2 : 1);
+      const std::array<generativeqc_ks_semilocal_component, 2> components{{
+          {wb97mv ? "MGGA_X_WB97M_V" : "GGA_X_PBE", 1.0},
+          {wb97mv ? "MGGA_C_WB97M_V" : "GGA_C_PBE", 1.0},
+      }};
+      const double short_exchange = wb97mv ? 0.15 : 0.2;
+      const double long_exchange = wb97mv ? 1.0 : 0.8;
+      const double divisor = unrestricted ? 1.0 : 2.0;
+      const std::array<generativeqc_ks_exchange_term, 2> exchange{{
+          {GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE, short_exchange, 0.3, -short_exchange / divisor},
+          {GENERATIVEQC_KS_EXCHANGE_LONG_RANGE, long_exchange, 0.3, -long_exchange / divisor},
+      }};
+      generativeqc_ks_options ks{};
+      ks.struct_size = sizeof(ks);
+      ks.abi_version = GENERATIVEQC_ABI_VERSION;
+      ks.scf_domain = wb97mv ? "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"
+                             : "semilocal-scaled-v1/pbe-spin-c2-1e-18";
+      ks.grid_version = 1;
+      ks.radial_points = 12;
+      ks.angular_polar = 4;
+      ks.angular_azimuth = 8;
+      ks.partition_iterations = 3;
+      ks.coincident_tolerance = 1e-12;
+      ks.tile_points = 64;
+      ks.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
+      ks.spin_channels = unrestricted ? 2 : 1;
+      ks.semilocal_components = components.data();
+      ks.semilocal_component_count = components.size();
+      ks.semilocal_range_omega = wb97mv ? 0.3 : 0.0;
+      ks.exchange_terms = exchange.data();
+      ks.exchange_term_count = exchange.size();
+      ks.has_nonlocal_correlation = wb97mv;
+      ks.nonlocal_variant = GENERATIVEQC_NONLOCAL_VV10;
+      ks.nonlocal_b = 6.0;
+      ks.nonlocal_c = 0.01;
+      ks.nonlocal_coefficient = 1.0;
+      ks.nonlocal_maximum_bytes = 1 << 24;
+      auto method = lda_method();
+      method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
+      method.ks_options = &ks;
+      method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+      // The implicit auxiliary basis is the orbital basis for this bounded gate.
+      generativeqc_calculation* calculation = nullptr;
+      require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                               &calculation) == GENERATIVEQC_STATUS_SUCCESS &&
+                  calculation,
+              "mixed-DF CPU RSH preparation failed");
+      const std::unique_ptr<generativeqc_calculation, decltype(&generativeqc_calculation_destroy)>
+          owner(calculation, &generativeqc_calculation_destroy);
+      generativeqc_result_descriptor result{};
+      result.struct_size = sizeof(result);
+      result.abi_version = GENERATIVEQC_ABI_VERSION;
+      require(
+          generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::isfinite(result.energy) && result.density_rms < 1e-9 &&
+              result.executed_backend == GENERATIVEQC_BACKEND_CPU_REFERENCE,
+          "mixed-DF CPU RSH execution failed");
+      const double cold = result.energy;
+      // Independently reconverged PySCF 2.14.0 / Libxc 7.0.0 on this exact
+      // basis/grid: DF full-range J/K with the orbital basis as auxiliary,
+      // and unfitted get_k(omega=0.3) for the LR correction. Generic RSH uses
+      // PBE + 0.2*HF + 0.6*LR_HF(0.3); WB97M-V retains its complete VV10 term.
+      // Reproduce with tools/verify_mixed_df_rsh_cpu.py (H2 and H2- doublet).
+      const double oracle = wb97mv ? (open_shell ? -0.8191434240565644 : -1.2886176659087356)
+                                   : (open_shell ? -1.3309273866316103 : -1.6049305975627170);
+      require(std::abs(cold - oracle) < 2e-10,
+              "mixed-DF CPU RSH differs from its independent matched-grid oracle");
+      if (!unrestricted) restricted_energy = cold;
+      if (unrestricted && !open_shell)
+        require(std::abs(cold - restricted_energy) < 2e-10,
+                "mixed-DF CPU RSH closed-shell RKS/UKS spin accounting differs");
+      require(
+          generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
+              result.converged && std::abs(result.energy - cold) < 1e-10,
+          "mixed-DF CPU RSH warm replay changed the endpoint");
+      std::array<double, 6> forces{};
+      result.forces = forces.data();
+      result.force_count = forces.size();
+      require(generativeqc_calculation_execute(calculation, &result) ==
+                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+              "mixed-DF CPU RSH accepted unsupported analytic forces");
+      method.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+      generativeqc_calculation* rejected = nullptr;
+      require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                               &rejected) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                  !rejected,
+              "mixed-DF CPU RSH accepted unsupported AUTO precision");
+      std::cout << "mixed DF " << (wb97mv ? "WB97M-V" : "PBE-RSH") << ' ' << spin_case
+                << " E=" << std::setprecision(17) << cold << '\n';
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -528,6 +630,7 @@ int main() {
     ks_option_semantic_plan();
     automatic_libxc_semilocal_plan();
     pbe0_composition_snapshot();
+    mixed_df_rsh_cpu_endpoints();
     warm_preparation_failure(false);
     warm_preparation_failure(true);
     warm_execution_allocation_failure();

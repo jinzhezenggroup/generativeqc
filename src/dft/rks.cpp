@@ -596,9 +596,12 @@ ScfResult run_rks(
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
+    // DF changes only the full-range primary. The separate LR provider must
+    // still satisfy the exact Direct contract below.
     const bool primary_exchange =
         strategy.spec.exchange.present &&
-        strategy.spec.exchange.approximation == FockApproximation::Exact &&
+        (strategy.spec.exchange.approximation == FockApproximation::Exact ||
+         strategy.spec.exchange.approximation == FockApproximation::DensityFitted) &&
         strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0;
     const bool correction_exchange =
         correction.backend == FockBackend::Cpu && correction.spec.spin == FockSpin::Restricted &&
