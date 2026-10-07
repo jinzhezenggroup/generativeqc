@@ -441,11 +441,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO || execution_plan.range_exchange ||
-        execution_plan.nonlocal_correlation)
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "DFT density fitting requires FP64 full-range local/semilocal or global-hybrid KS");
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "DFT density fitting requires FP64 execution");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
     if (fock.exchange.present) fock.exchange.approximation = scf::FockApproximation::DensityFitted;
   }
@@ -697,30 +695,50 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
 
 #if GENERATIVEQC_HAS_CUDA
 bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
-                                  const scf::ResolvedFockBuild& correction) noexcept {
+                                  const scf::ResolvedFockBuild& correction,
+                                  const scf::PreparedFockPlan* range_provider) noexcept {
   const auto& primary = provider.strategy();
   const auto& primary_spec = primary.spec;
   const auto& correction_spec = correction.spec;
-  const auto direct_binding = scf::prepared_cuda_fock_binding(provider);
-  const bool primary_exchange_compatible =
-      !primary_spec.exchange.present ||
-      (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
-       primary_spec.exchange.op == scf::FockOperator::FullRange &&
-       primary_spec.exchange.omega == 0.0);
-  return direct_binding && primary.backend == scf::FockBackend::Cuda &&
-         primary_spec.derivative_order == 0 && primary_spec.coulomb.present &&
-         primary_spec.coulomb.coefficient == 1.0 &&
-         primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
-         primary_spec.coulomb.op == scf::FockOperator::FullRange &&
-         primary_spec.coulomb.omega == 0.0 && primary_exchange_compatible &&
-         correction.backend == scf::FockBackend::Cuda &&
-         correction_spec.spin == primary_spec.spin && correction_spec.derivative_order == 0 &&
-         !correction_spec.coulomb.present && correction_spec.exchange.present &&
-         correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
-         correction_spec.exchange.op == scf::FockOperator::LongRange &&
-         std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
-         std::isfinite(correction_spec.exchange.coefficient) &&
-         correction.screening_tolerance == primary.screening_tolerance;
+  const auto primary_binding = scf::prepared_cuda_fock_binding(provider);
+  const bool correction_compatible =
+      correction.backend == scf::FockBackend::Cuda &&
+      correction_spec.spin == primary_spec.spin && correction_spec.derivative_order == 0 &&
+      !correction_spec.coulomb.present && correction_spec.exchange.present &&
+      correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
+      correction_spec.exchange.op == scf::FockOperator::LongRange &&
+      std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
+      std::isfinite(correction_spec.exchange.coefficient) &&
+      correction.screening_tolerance == primary.screening_tolerance;
+  if (!primary_binding || primary.backend != scf::FockBackend::Cuda ||
+      primary_spec.derivative_order != 0 || !primary_spec.coulomb.present ||
+      primary_spec.coulomb.coefficient != 1.0 ||
+      primary_spec.coulomb.op != scf::FockOperator::FullRange ||
+      primary_spec.coulomb.omega != 0.0 || !correction_compatible)
+    return false;
+
+  const bool fitted_primary =
+      primary_spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+      (!primary_spec.exchange.present ||
+       (primary_spec.exchange.approximation == scf::FockApproximation::DensityFitted &&
+        primary_spec.exchange.op == scf::FockOperator::FullRange &&
+        primary_spec.exchange.omega == 0.0));
+  if (fitted_primary) {
+    if (!range_provider || range_provider->strategy() != correction ||
+        !range_provider->matches_system(provider.system()))
+      return false;
+    const auto range_binding = scf::prepared_cuda_fock_binding(*range_provider);
+    return range_binding && range_binding.device_id == primary_binding.device_id &&
+           range_binding.nbf == primary_binding.nbf;
+  }
+
+  const bool exact_primary =
+      primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+      (!primary_spec.exchange.present ||
+       (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        primary_spec.exchange.op == scf::FockOperator::FullRange &&
+        primary_spec.exchange.omega == 0.0));
+  return exact_primary && range_provider == nullptr;
 }
 #endif
 
@@ -755,10 +773,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
-        (!range_strategy_ || !cuda_rsh_provider_compatible(fock_, *range_strategy_)))
+        (!range_strategy_ ||
+         !cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())))
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "CUDA range-separated KS requires a compatible prepared Direct SR/LR exchange provider");
+          "CUDA range-separated KS requires compatible primary and Direct LR providers");
 #endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
 #if GENERATIVEQC_HAS_CUDA
@@ -774,7 +793,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
       cuda_ = std::make_unique<dft::CudaKsPlan>(
           fock_, basis_, grid_, options_, xc_functional_code(execution_plan_),
-          options_.xc_tile_points, range, nonlocal_.get(), domain);
+          options_.xc_tile_points, range, nonlocal_.get(), domain, dft::CudaXcPreparationBudget{},
+          range_correction_.get());
     }
 #endif
     if (execution_plan_.d4_correction) prepare_d4(device);
@@ -1584,9 +1604,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
                                            execution_plan_.long_range_exchange,
                                            execution_plan_.range_omega),
         fock_backend, options_.screening_tolerance);
-    if (fock_backend == scf::FockBackend::Cpu)
-      range_correction_ =
-          std::make_unique<scf::PreparedFockPlan>(system_, nullptr, *range_strategy_, device);
+    const bool fitted_primary =
+        fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+    if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
+      const auto budget = fock_backend == scf::FockBackend::Cuda
+                              ? ks_provider_bytes(system_, backend_, 0U)
+                              : 0U;
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(
+          system_, nullptr, *range_strategy_, device, budget);
+    }
   }
 
   void prepare_nonlocal(int device) {
