@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -977,6 +978,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
               sum(resource.provider_device_bytes, prepared->provider_allowance);
           resource.retained_host_numeric_bytes =
               sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
+        }
+        // This explicit qualification switch does not promote a new default.
+        // The compiler qualifies residency against a finite per-owner cap;
+        // the native resource ledger charges the allocation actually retained.
+        const auto qualification_size = [](const char* name, std::size_t fallback) {
+          const char* value = std::getenv(name);
+          if (!value) return fallback;
+          std::size_t result = 0;
+          const auto* end = value + std::strlen(value);
+          const auto parsed = std::from_chars(value, end, result);
+          if (parsed.ec != std::errc{} || parsed.ptr != end)
+            throw std::invalid_argument(std::string(name) + " requires a nonnegative integer");
+          return result;
+        };
+        const auto point_batch_tiles = qualification_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 1);
+        if (point_batch_tiles > 1) {
+          const auto point_batch_budget =
+              qualification_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024);
+          xc->prepare_point_batches(point_batch_tiles, point_batch_budget);
+          resource.xc_device_bytes =
+              sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }
         prepared_ao_work = xc->ao_selection_work();
         prepared_ao_work.requested = select_ao;

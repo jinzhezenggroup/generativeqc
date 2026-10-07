@@ -48,6 +48,20 @@ using CudaXcPointLauncher = void (*)(cudaStream_t, const double*, const double*,
                                      std::size_t, double*, double*, int*, std::uint32_t, double,
                                      double, const double*);
 
+/** Physical point submission over consecutive independent tiles. Feature and
+ * coefficient slots keep each tile's compact channel-major layout, including
+ * the final partial tile. AO maps and matrix accumulation are not coarsened. */
+using CudaXcPointBatchLauncher = void (*)(cudaStream_t, const double*, const double*, std::size_t,
+                                          std::size_t, double*, double*, int*, std::uint32_t,
+                                          double, double, std::size_t);
+
+/** Compiler-owned bounded panel residency plan. No device descriptors, point
+ * gathers, or per-evaluation allocations are needed. A one-tile plan is the
+ * allocation-free incumbent; optional bytes include all retained AO panels. */
+struct CudaXcPointBatchPlan {
+  std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};
+};
+
 /** Compiler-emitted facts for one resolved point program. Runtime schedulers
  * consume these facts instead of inferring arithmetic support from functional
  * ordinals or method names. */
@@ -193,6 +207,11 @@ class CudaXcPlan {
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Qualification-only scheduling ablation. Prepare after maps and before
+   * evaluation/capture; resource rejection and allocation OOM retain one tile.
+   * Response and mixed-arithmetic owners deliberately retain the incumbent. */
+  void prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget);
+  const CudaXcPointBatchPlan& point_batch_plan() const noexcept { return point_batch_plan_; }
   /** Setup-only provider preparation within an explicit additional allowance.
    * Zero retains the generated incumbent. The allowance is separate from the
    * numeric arena and covers opaque provider storage plus any compact-output
@@ -287,6 +306,9 @@ class CudaXcPlan {
                                        const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
+  CudaXcPointBatchLauncher point_batch_launcher_{};
+  CudaXcPointBatchPlan point_batch_plan_;
+  double* point_batch_arena_{};
   std::unique_ptr<tensor::PreparedSymmetricProduct> potential_binding_;
   // Fixed full/tail slots avoid storage proportional to dense grid size.
   std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
@@ -335,6 +357,12 @@ void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* ba
                int* error, unsigned* host_flags);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
 CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
+/** Pure compiler-emitted resource qualification, with no device-model policy. */
+CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
+                                              const std::vector<std::size_t>& ao_offsets,
+                                              std::size_t requested_tiles,
+                                              std::size_t device_budget);
+CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional);
 /** Emitted capability selector for the same finite point-program registry. */
 CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);
 /** Allocation-free launch adapter compiled with the existing generated AO
@@ -349,7 +377,10 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              double* total_density = nullptr, double* total_gradient = nullptr,
              const std::vector<std::size_t>& ao_offsets = {}, const std::size_t* ao_ids = nullptr,
              const tensor::PreparedPanelProduct* density_provider = nullptr,
-             const tensor::PreparedSymmetricProduct* potential_binding = nullptr);
+             const tensor::PreparedSymmetricProduct* potential_binding = nullptr,
+             const CudaXcPointBatchPlan& point_batch_plan = {},
+             CudaXcPointBatchLauncher point_batch_launcher = nullptr,
+             double* point_batch_arena = nullptr);
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,
