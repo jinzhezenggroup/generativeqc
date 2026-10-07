@@ -1,5 +1,11 @@
 include_guard(GLOBAL)
 
+function(generativeqc_set_cuda_compile_pool target pool)
+  if(NOT "${pool}" STREQUAL "")
+    set_property(TARGET ${target} PROPERTY JOB_POOL_COMPILE "${pool}")
+  endif()
+endfunction()
+
 macro(generativeqc_configure_cuda_backend target)
   foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     if(_arch STREQUAL "native" OR _arch STREQUAL "all" OR _arch STREQUAL "all-major")
@@ -55,8 +61,9 @@ macro(generativeqc_configure_cuda_backend target)
   endif()
   set_target_properties(generativeqc_direct_angular_force PROPERTIES
     CUDA_SEPARABLE_COMPILATION OFF
-    CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}"
-    JOB_POOL_COMPILE generativeqc_cuda_compile)
+    CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
+  generativeqc_set_cuda_compile_pool(
+    generativeqc_direct_angular_force "${_generativeqc_cuda_compile_pool}")
   if(GENERATIVEQC_CUDA_FAST_COMPILE)
     target_compile_options(generativeqc_direct_angular_force PRIVATE --Ofast-compile=max)
   endif()
@@ -89,8 +96,9 @@ macro(generativeqc_configure_cuda_backend target)
     set_target_properties(generativeqc_direct_native PROPERTIES
       CUDA_SEPARABLE_COMPILATION ON
       CUDA_RESOLVE_DEVICE_SYMBOLS ON
-      CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}"
-      JOB_POOL_COMPILE generativeqc_cuda_compile)
+      CUDA_ARCHITECTURES "${_generativeqc_cuda_compile_architectures}")
+    generativeqc_set_cuda_compile_pool(
+      generativeqc_direct_native "${_generativeqc_cuda_compile_pool}")
     if(GENERATIVEQC_CUDA_FAST_COMPILE)
       target_compile_options(generativeqc_direct_native PRIVATE --Ofast-compile=max)
     endif()
@@ -98,7 +106,7 @@ macro(generativeqc_configure_cuda_backend target)
   else()
     target_sources(${target} PRIVATE ${GENERATIVEQC_DIRECT_NATIVE_SOURCES})
   endif()
-  set_property(TARGET ${target} PROPERTY JOB_POOL_COMPILE generativeqc_cuda_compile)
+  generativeqc_set_cuda_compile_pool(${target} "${_generativeqc_cuda_compile_pool}")
   if(GENERATIVEQC_CUDA_FAST_COMPILE)
     # Explicitly opt-in: this mode is for iteration speed and must not be used
     # for release performance/resource measurements.
@@ -266,8 +274,9 @@ macro(generativeqc_configure_cuda_backend target)
               "${_generativeqc_aot_compile_architecture_${architecture}}"
               CUDA_STANDARD 20
               CUDA_STANDARD_REQUIRED ON
-              POSITION_INDEPENDENT_CODE ON
-              JOB_POOL_COMPILE ${_generativeqc_aot_compile_pool})
+              POSITION_INDEPENDENT_CODE ON)
+          generativeqc_set_cuda_compile_pool(
+              ${class_target} "${_generativeqc_aot_compile_pool}")
           if(GENERATIVEQC_CUDA_FAST_COMPILE)
             target_compile_options(${class_target} PRIVATE
               $<$<COMPILE_LANGUAGE:CUDA>:--Ofast-compile=max>)
@@ -290,8 +299,9 @@ macro(generativeqc_configure_cuda_backend target)
             "${_generativeqc_aot_compile_architecture_${architecture}}"
             CUDA_STANDARD 20
             CUDA_STANDARD_REQUIRED ON
-            POSITION_INDEPENDENT_CODE ON
-            JOB_POOL_COMPILE ${_generativeqc_aot_compile_pool})
+            POSITION_INDEPENDENT_CODE ON)
+        generativeqc_set_cuda_compile_pool(
+            generativeqc_aot_${profile_architecture} "${_generativeqc_aot_compile_pool}")
         if(GENERATIVEQC_CUDA_FAST_COMPILE)
           target_compile_options(generativeqc_aot_${profile_architecture} PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:--Ofast-compile=max>)
@@ -399,8 +409,9 @@ macro(generativeqc_configure_cuda_backend target)
         CUDA_STANDARD 20
         CUDA_STANDARD_REQUIRED ON
         CUDA_SEPARABLE_COMPILATION ON
-        POSITION_INDEPENDENT_CODE ON
-        JOB_POOL_COMPILE generativeqc_cuda_compile)
+        POSITION_INDEPENDENT_CODE ON)
+    generativeqc_set_cuda_compile_pool(
+        generativeqc_stationary_spd_primitives "${_generativeqc_aot_compile_pool}")
 
     # Generated source weights are exact-plan-bound after #665/#689. Package
     # semilocal and admitted global-hybrid plans through one profile catalog;
@@ -455,8 +466,9 @@ macro(generativeqc_configure_cuda_backend target)
           CUDA_STANDARD 20
           CUDA_STANDARD_REQUIRED ON
           POSITION_INDEPENDENT_CODE ON
-          JOB_POOL_COMPILE ${_generativeqc_aot_compile_pool}
           OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}")
+      generativeqc_set_cuda_compile_pool(
+          ${_generativeqc_stationary_target} "${_generativeqc_aot_compile_pool}")
       if(GENERATIVEQC_PYTHON_WHEEL)
         generativeqc_attach_cuda_implib(${_generativeqc_stationary_target})
       else()
@@ -534,8 +546,9 @@ macro(generativeqc_configure_cuda_backend target)
           CUDA_SEPARABLE_COMPILATION ON
           CUDA_RESOLVE_DEVICE_SYMBOLS ON
           POSITION_INDEPENDENT_CODE ON
-          JOB_POOL_COMPILE generativeqc_cuda_compile
           OUTPUT_NAME "generativeqc_stationary_${_generativeqc_stationary_name}_spd")
+      generativeqc_set_cuda_compile_pool(
+          ${_generativeqc_stationary_spd_target} "${_generativeqc_aot_compile_pool}")
       if(GENERATIVEQC_PYTHON_WHEEL)
         generativeqc_attach_cuda_implib(${_generativeqc_stationary_spd_target})
       else()
