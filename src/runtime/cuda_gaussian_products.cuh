@@ -52,6 +52,7 @@ template <class Policy, unsigned Rank, std::size_t TermCapacity>
 struct Product {
   using Weight = typename WeightType<Policy>::type;
   const Factor (&factors)[Rank];
+  Policy policy{};
   std::int32_t shells[Rank], atoms[Rank];
   std::int64_t primitive[Rank];
   typename Policy::Vec3 centers[Rank];
@@ -63,7 +64,7 @@ struct Product {
   template <unsigned Slot = 0>
   __device__ void terms(Weight weight) {
     if constexpr (Slot == Rank) {
-      Policy::template accumulate<Rank>(result, exponents, centers, angular, weight);
+      policy.template accumulate<Rank>(result, exponents, centers, angular, weight);
     } else {
       const auto& basis = *factors[Slot].view;
       const auto ao = factors[Slot].ao;
@@ -107,8 +108,9 @@ struct Product {
 template <class Policy, std::size_t TermCapacity, unsigned Rank>
 __device__ typename Policy::Accumulator contract(const Factor (&factors)[Rank],
                                                  const double* positions, unsigned lane = 0,
-                                                 unsigned lanes = 1) {
+                                                 unsigned lanes = 1, Policy policy = {}) {
   Product<Policy, Rank, TermCapacity> product{factors};
+  product.policy = policy;
   product.lane = lane;
   product.lanes = lanes;
 #pragma unroll
