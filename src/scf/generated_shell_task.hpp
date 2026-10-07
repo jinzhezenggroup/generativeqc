@@ -14,6 +14,13 @@ enum class GeneratedFockConsumer : std::uint32_t {
   HartreeFockExchange = 3
 };
 
+/** Prepared K scheduling only; zero preserves the incumbent chunk consumer. */
+enum class GeneratedExchangeTaskSchedule : std::uint32_t {
+  Incumbent = 0,
+  Fill = 1,
+  Primitive = 2,
+};
+
 /** Stable geometry-cache ABI shared by handwritten and generated kernels. */
 struct GeneratedPrimitivePairData {
   double exponent_sum;
@@ -97,6 +104,8 @@ struct GeneratedShellPairStream {
   const std::uint8_t* active;
   // Appending keeps aggregate-initialized HF streams on the zero-valued consumer.
   GeneratedFockConsumer fock_consumer;
+  // Admission retains Schwarz order. Optional grouping acts only on survivors.
+  GeneratedExchangeTaskSchedule exchange_task_schedule{};
 };
 
 /**

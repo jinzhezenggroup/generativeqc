@@ -14,6 +14,56 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize(
+    "header", ["aot_shell_registry.hpp", "generated_shell_task.hpp"]
+)
+@pytest.mark.parametrize(
+    "spelling", ['"scf/{header}"', '"../{header}"', "<scf/{header}>"]
+)
+def test_prepared_fock_lowering_accepts_inventory_and_shared_task_abi(
+    tmp_path: Path, header: str, spelling: str
+) -> None:
+    source = tmp_path / "src/scf"
+    (source / "cuda").mkdir(parents=True)
+    (source / header).write_text("// Compiler inventory or shared POD/enum ABI\n")
+    adapter = source / "cuda/direct_fock_lowering.hpp"
+    adapter.write_text(f"#include {spelling.format(header=header)}\n")
+    report = audit_scf_structure(tmp_path)
+    assert not report["errors"]
+    assert report["edges"] == [
+        {"from": "scf/cuda/direct_fock_lowering.hpp", "to": f"scf/{header}"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "scf/cuda/direct_coulomb.hpp",
+        "scf/cuda/direct_native_cartesian.cuh",
+        "scf/generated_shell_task_impl.hpp",
+        "scf/generated_shell_task.hpp.cuh",
+        "scf/generated_shell_task.hpp_impl.hpp",
+        "scf/fleet.hpp",
+    ],
+)
+@pytest.mark.parametrize("spelling", ['"{header}"', '"../../{header}"', "<{header}>"])
+def test_prepared_fock_lowering_cannot_acquire_provider_or_device_state(
+    tmp_path: Path, header: str, spelling: str
+) -> None:
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "scf/generated_shell_task.hpp").write_text("// Shared POD/enum ABI\n")
+    (source / header).write_text("// Provider, recurrence, or method-owned state\n")
+    adapter = source / "scf/cuda/direct_fock_lowering.hpp"
+    adapter.write_text(
+        '#include "scf/generated_shell_task.hpp"\n'
+        f"#include {spelling.format(header=header)}\n"
+    )
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert f"forbidden cuda_direct_fock_lowering dependency on {header}" in errors[0]
+
+
 def test_rhf_bucket_allows_reference_policy_without_device_implementation(
     tmp_path: Path,
 ) -> None:
