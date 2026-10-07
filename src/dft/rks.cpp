@@ -50,7 +50,8 @@ FockBuildSpec make_rsh_primary_fock_spec(FockSpin spin, double short_range_excha
 }
 
 FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_exchange,
-                                            double long_range_exchange, double omega) {
+                                            double long_range_exchange, double omega,
+                                            FockApproximation approximation) {
   if (!std::isfinite(short_range_exchange) || !std::isfinite(long_range_exchange) ||
       !std::isfinite(omega) || omega < 0.0)
     throw std::invalid_argument(
@@ -60,7 +61,7 @@ FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_ex
   spec.coulomb.present = false;
   const double spin_factor = spin == FockSpin::Restricted ? -0.5 : -1.0;
   spec.exchange = {true, spin_factor * (long_range_exchange - short_range_exchange),
-                   FockOperator::LongRange, omega, FockApproximation::Exact};
+                   FockOperator::LongRange, omega, approximation};
   return spec;
 }
 
@@ -75,8 +76,8 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
     throw std::invalid_argument("WB97M-V composition requires CPU or CUDA Fock execution");
   auto expected_primary_spec =
       make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange);
-  // Range-separated DF currently fits only the ordinary full-range J/K owner.
-  // The LR correction remains an exact Direct provider with its own operator/omega identity.
+  // A fitted WB97M-V composition uses independent full-range and long-range
+  // DF owners. Each owner carries its own metric/three-center radial identity.
   const bool fitted_primary =
       primary.spec.coulomb.approximation == FockApproximation::DensityFitted &&
       primary.spec.exchange.approximation == FockApproximation::DensityFitted;
@@ -87,11 +88,14 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
   const auto expected_primary =
       resolve_fock_build(expected_primary_spec, backend, primary.screening_tolerance,
                          primary.metric_relative_threshold);
-  const auto expected_correction =
-      resolve_fock_build(make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
-                                                       dft::generated::kWb97mvLongExchange,
-                                                       dft::generated::kWb97mvOmega),
-                         backend, primary.screening_tolerance);
+  const auto correction_approximation =
+      fitted_primary ? FockApproximation::DensityFitted : FockApproximation::Exact;
+  const auto expected_correction = resolve_fock_build(
+      make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
+                                    dft::generated::kWb97mvLongExchange,
+                                    dft::generated::kWb97mvOmega, correction_approximation),
+      backend, primary.screening_tolerance,
+      fitted_primary ? primary.metric_relative_threshold : 1.0e-10);
   if (correction.backend != backend || primary != expected_primary ||
       correction != expected_correction || nonlocal.variant != dft::nlc::Vv10Variant::vv10 ||
       nonlocal.b != dft::generated::kWb97mvNonlocalB ||
