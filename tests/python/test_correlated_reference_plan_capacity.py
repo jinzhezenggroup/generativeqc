@@ -317,7 +317,7 @@ void short_budget() {
   require(refused,"one byte below mandatory reference admitted");
 }
 void scientific() {
-  for(int field=0;field!=10;++field) {
+  for(int field=0;field!=11;++field) {
     Owner owner; auto o=options(); run(owner,o); auto changed=o;
     switch(field) {
       case 0: changed.energy_tolerance*=2; break;
@@ -329,7 +329,8 @@ void scientific() {
       case 6: changed.precision_mode=GENERATIVEQC_PRECISION_FP64; break;
       case 7: changed.incremental_direct_jk=true; break;
       case 8: ++changed.incremental_direct_jk_rebuild_interval; break;
-      case 9:
+      case 9: changed.incremental_direct_jk_density_rms_threshold=1e-3; break;
+      case 10:
         changed.resolved_fock_build=owner.p->options.resolved_fock_build;
         changed.resolved_fock_build->spec.exchange.coefficient=-0.25; break;
     }
