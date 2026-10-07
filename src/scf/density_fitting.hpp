@@ -52,6 +52,8 @@ struct DensityFittingScfData {
   // The metric cutoff selects the retained Hamiltonian as well as its response.
   // Cached plans must be rebuilt when callers change this numerical control.
   double metric_relative_threshold{};
+  integrals::CoulombRange range{integrals::CoulombRange::Full};
+  double omega{};
   // Resolved execution-resource identity for this prepared owner. A zero public
   // request is resolved once and replayed from this owner rather than probing
   // again during cache reuse.
