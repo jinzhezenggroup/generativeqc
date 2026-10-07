@@ -388,9 +388,14 @@ void run_exact_exchange_case(bool restricted) {
                                     257);
     const auto mismatched = mismatched_plan.run(nullptr, false);
     const auto& mismatched_work = mismatched.incremental_direct_jk;
+    // Symmetric H2 may converge after full + delta and then enter final closure,
+    // before any periodic refresh is due. Enforce the screened count bound here;
+    // the deterministic host controller probe also exercises the refresh branch.
     require(mismatched.converged && !mismatched_plan.failed() &&
                 std::abs(mismatched.energy - result.energy) < 1e-10 &&
-                mismatched_work.delta_builds > 0 && mismatched_work.periodic_rebuilds > 0,
+                mismatched_work.delta_builds > 0 &&
+                mismatched_work.delta_builds <= mismatched_work.anchor_full_builds &&
+                mismatched_work.periodic_rebuilds + 1 == mismatched_work.anchor_full_builds,
             "native CUDA KS options bypassed the prepared provider screening cadence");
   }
 }
