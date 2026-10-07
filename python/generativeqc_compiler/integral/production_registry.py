@@ -647,6 +647,8 @@ def emit_multi_registry_source(
         preferred_streaming_fock_mask = 0
         rys_fock_mask = 0
         rys_fock_cases = []
+        k_block_fock_mask = 0
+        k_block_fock_cases = []
         for candidate in direct_rys_value_candidates(profile):
             shell_class = shell_class_index(candidate.spec)
             symbol = (
@@ -666,6 +668,25 @@ def emit_multi_registry_source(
                 f"      return {symbol}({streaming_fock_arguments});"
             )
             rys_fock_mask |= 1 << shell_class
+        for candidate in direct_k_block_candidates(profile):
+            shell_class = shell_class_index(candidate.spec)
+            symbol = (
+                f"generativeqc_launch_{identifier}_k_block_generated_"
+                f"{candidate.spec.name}_streaming_fock"
+            )
+            declarations.append(
+                f'extern "C" cudaError_t {symbol}('
+                "cudaStream_t, bool, unsigned, const void*, "
+                "const std::int64_t*, const void*, const double*, "
+                "const void*, double, bool, double, const double*, "
+                "const double*, double*, std::uint32_t*, "
+                "unsigned long long*, unsigned long long*);"
+            )
+            k_block_fock_cases.append(
+                f"    case {shell_class}U:\n"
+                f"      return {symbol}({streaming_fock_arguments});"
+            )
+            k_block_fock_mask |= 1 << shell_class
         for selection in _stable_selection_order(profile.selections):
             shell_class = shell_class_index(selection.spec)
             integral = _selection_integral(selection)
@@ -807,6 +828,14 @@ cudaError_t launch_{identifier}_rys_streaming_fock(
   }}
 }}
 
+cudaError_t launch_{identifier}_k_block_streaming_fock(
+    {streaming_fock_parameters}) noexcept {{
+  switch (shell_class) {{
+{chr(10).join(k_block_fock_cases)}
+    default: return cudaErrorNotSupported;
+  }}
+}}
+
 cudaError_t launch_{identifier}_resident(
     {_resident_launch_parameter_declaration()}) noexcept {{
   """
@@ -835,7 +864,7 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
             f"""    {{kCompiledProfiles[{index}], UINT64_C({force_mask}),
       UINT64_C({fock_mask}), UINT64_C({mixed_fock_mask}),
       UINT64_C({preferred_streaming_fock_mask}),
-      UINT64_C({rys_fock_mask}),
+      UINT64_C({rys_fock_mask}), UINT64_C({k_block_fock_mask}),
       kForceNames{index}.data(), kForceNames{index}.size(),
       kFockNames{index}.data(), kFockNames{index}.size(),
       kMixedFockNames{index}.data(), kMixedFockNames{index}.size(),
@@ -843,6 +872,7 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       launch_{identifier}_mixed_fock,
       launch_{identifier}_streaming_fock,
       launch_{identifier}_rys_streaming_fock,
+      launch_{identifier}_k_block_streaming_fock,
       launch_{identifier}_resident}},"""
         )
     return f"""#include "generativeqc_generated_shell_registry.hpp"
@@ -869,6 +899,7 @@ struct KernelSet {{
   std::uint64_t mixed_fock_mask;
   std::uint64_t preferred_streaming_fock_mask;
   std::uint64_t rys_fock_mask;
+  std::uint64_t k_block_fock_mask;
   const ShellKernelMetadata* force_names;
   std::size_t force_name_count;
   const ShellKernelMetadata* fock_names;
@@ -880,6 +911,7 @@ struct KernelSet {{
   LaunchFunction launch_mixed_fock;
   StreamingFockLaunchFunction launch_streaming_fock;
   StreamingFockLaunchFunction launch_rys_streaming_fock;
+  StreamingFockLaunchFunction launch_k_block_streaming_fock;
   ResidentLaunchFunction launch_resident;
 }};
 
