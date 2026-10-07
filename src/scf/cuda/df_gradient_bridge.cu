@@ -1503,10 +1503,9 @@ generativeqc_status execute_cuda_df_hf_gradient(
         // These allocations remain owned and charged by the value plan. Keep
         // their capacity visible without double-counting it as new response
         // scratch or silently widening the caller's private force allowance.
-        const auto jk_borrowed_bytes =
-            (borrowed->staging_capacity() + borrowed->raw_capacity() +
-             borrowed->exchange_capacity()) *
-            sizeof(double);
+        const auto jk_borrowed_bytes = (borrowed->staging_capacity() + borrowed->raw_capacity() +
+                                        borrowed->exchange_capacity()) *
+                                       sizeof(double);
         arena.stats.borrowed_device_bytes += jk_borrowed_bytes;
         runtime::cuda_trace::trace_counter("response_borrowed_jk_bytes", jk_borrowed_bytes);
         runtime::cuda_trace::trace_counter("response_resident_auxiliary_tile", consume_tile);
