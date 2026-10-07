@@ -35,7 +35,21 @@ The first call captures a specialization from the concrete argument shapes and
 dtypes, lowers the expression to the canonical TensorIR, caches that program,
 and executes it through the independent reference interpreter. Use
 `observable.lower(C, occupation, O)` when the TensorIR `Program` itself is
-needed for inspection, AD, optimization, or a separate native compilation step.
+needed for inspection, optimization, or a separate native compilation step.
+
+Inputs are non-differentiable by default. When the lowered program will be used
+with TensorIR AD, declare that contract explicitly:
+
+```python
+@xp.compile(differentiable=("x",))
+def norm2(x):
+    return xp.sum(x * x)
+
+program = norm2.lower(x)
+```
+
+This avoids silently treating every runtime array as a differentiable scientific
+parameter while still giving the inferred public path a supported JVP/VJP route.
 
 The current preview supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
