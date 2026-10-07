@@ -281,8 +281,8 @@ int run_r2scan3c_fixed_charge_profile() {
   Buffer<double> d_gradient(3 * atoms);
   Buffer<double> d_dedq(atoms);
   Buffer<double> d_workspace(d4_cuda_workspace_elements(atoms));
-  Buffer<data::D4ElementData> d_elements(eeq_kD4TableElementCount);
-  Buffer<data::D4ReferenceData> d_references(eeq_kD4TableReferenceCount);
+  Buffer<data::D4ElementData> d_elements(kD4TableElementCount);
+  Buffer<data::D4ReferenceData> d_references(kD4TableReferenceCount);
   Buffer<double> d_c6(kD4PackedReferenceC6Count);
   d_offsets.upload(offsets.data(), offsets.size());
   d_z.upload(molecule.z.data(), atoms);
@@ -297,8 +297,8 @@ int run_r2scan3c_fixed_charge_profile() {
                         d_elements.ptr,
                         d_references.ptr,
                         d_c6.ptr,
-                        eeq_kD4TableElementCount,
-                        eeq_kD4TableReferenceCount,
+                        kD4TableElementCount,
+                        kD4TableReferenceCount,
                         kD4PackedReferenceC6Count,
                         parameters.ga,
                         parameters.gc};
