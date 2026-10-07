@@ -89,9 +89,9 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
 }
 }  // namespace
 
-std::optional<std::vector<double>> prepare_preliminary_density(
-    const PreparedFockPlan& target, const PreliminaryOptions& policy,
-    PreliminaryDiagnostic& diagnostic) {
+std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
+                                                               const PreliminaryOptions& policy,
+                                                               PreliminaryDiagnostic& diagnostic) {
   return prepare_impl(target, policy, diagnostic);
 }
 
@@ -214,15 +214,14 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
   const bool common =
       strategy.spec.spin == FockSpin::Restricted &&
       options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64 &&
-      exact(strategy.spec.coulomb) && exact(strategy.spec.exchange) &&
-      system.ecp_terms.empty() &&
+      exact(strategy.spec.coulomb) && exact(strategy.spec.exchange) && system.ecp_terms.empty() &&
       std::none_of(system.atoms.begin(), system.atoms.end(),
                    [](const auto& atom) { return atom.ecp_core != 0; }) &&
       system.multiplicity == 1 && system.electron_count > 0 && system.electron_count % 2 == 0;
   if (options.preliminary_guess->kind == PreliminaryKind::Minao) {
-    const bool supported_elements =
-        std::all_of(system.atoms.begin(), system.atoms.end(),
-                    [](const auto& atom) { return atom.atomic_number >= 1 && atom.atomic_number <= 18; });
+    const bool supported_elements = std::all_of(
+        system.atoms.begin(), system.atoms.end(),
+        [](const auto& atom) { return atom.atomic_number >= 1 && atom.atomic_number <= 18; });
     if (!common || !supported_elements)
       throw std::invalid_argument(
           "MINAO requires an FP64 all-electron restricted H-Ar exact endpoint");

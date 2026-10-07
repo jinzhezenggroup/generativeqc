@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
-#include <climits>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -936,8 +936,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       scf::initial_guess::PreliminaryDiagnostic& diagnostic) const {
     if (!options_.preliminary_guess) return std::nullopt;
     scf::initial_guess::validate_preliminary_target(system_, fock_.strategy(), options_);
-    diagnostic.requested_kind =
-        static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+    diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
     diagnostic.target_attempts = 1;
     const auto started = std::chrono::steady_clock::now();
     try {
@@ -1643,8 +1642,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const bool policy = allow_preliminary && options_.preliminary_guess.has_value();
       const bool existing = initial_density != nullptr || reuse_warm;
       if (policy) {
-        diagnostic.requested_kind =
-            static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+        diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
         diagnostic.target_attempts = 1;
         if (existing) {
           diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
@@ -2001,8 +1999,7 @@ class KsPreparedBatch final : public PreparedBatch {
         if (item.plan->cuda_plan() && options_.preliminary_guess) {
           auto& diagnostic = preliminary_diagnostics[i];
           preliminary_requested[i] = true;
-          diagnostic.requested_kind =
-              static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+          diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
           diagnostic.target_attempts = 1;
           if (result.warm_start_used) {
             diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
@@ -2061,8 +2058,7 @@ class KsPreparedBatch final : public PreparedBatch {
             diagnostic.target_attempts = 2;
             diagnostic.discarded_target_iterations = result.calculation.convergence.iterations;
             diagnostic.discarded_target_fock_builds = result.calculation.fock_builds;
-            diagnostic.work_counters_complete =
-                result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
+            diagnostic.work_counters_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
             if (preliminary_seeded)
               diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
           }

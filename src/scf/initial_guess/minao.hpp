@@ -28,8 +28,7 @@ struct MinaoDensityResult {
  * normalization remains the existing seed-boundary policy, not part of this
  * projection.
  */
-MinaoDensityResult minao_density(const core::System& system,
-                                 const integrals::IntegralData& target,
+MinaoDensityResult minao_density(const core::System& system, const integrals::IntegralData& target,
                                  const Matrix& target_orthogonalizer);
 
 std::size_t minao_source_ao_count(const core::System& system);

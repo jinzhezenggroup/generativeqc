@@ -19,9 +19,8 @@ using minao_data::kPrimitives;
 using minao_data::kShells;
 
 void validate_domain(const core::System& system) {
-  if (!system.ecp_terms.empty() ||
-      std::any_of(system.atoms.begin(), system.atoms.end(),
-                  [](const auto& atom) { return atom.ecp_core != 0; }))
+  if (!system.ecp_terms.empty() || std::any_of(system.atoms.begin(), system.atoms.end(),
+                                               [](const auto& atom) { return atom.ecp_core != 0; }))
     throw std::invalid_argument("MINAO initial guess is qualified only for all-electron systems");
   for (const auto& atom : system.atoms)
     if (atom.atomic_number < 1 || atom.atomic_number > 18)
@@ -109,12 +108,10 @@ std::size_t minao_source_primitive_count(const core::System& system) {
   return count;
 }
 
-MinaoDensityResult minao_density(const core::System& system,
-                                 const integrals::IntegralData& target,
+MinaoDensityResult minao_density(const core::System& system, const integrals::IntegralData& target,
                                  const Matrix& target_orthogonalizer) {
   const std::size_t n = target.nbf;
-  if (!n || target.overlap.size() != n * n ||
-      target_orthogonalizer.size() != n * n)
+  if (!n || target.overlap.size() != n * n || target_orthogonalizer.size() != n * n)
     throw std::invalid_argument("MINAO target overlap/orthogonalizer shape mismatch");
 
   auto source = source_system(system);
@@ -159,8 +156,7 @@ MinaoDensityResult minao_density(const core::System& system,
     throw std::runtime_error("MINAO projection produced a nonfinite density");
 
   const double projected_electrons = electron_trace(density, target.overlap, n);
-  return {std::move(density), ns, source.primitive_count, source_electrons,
-          projected_electrons};
+  return {std::move(density), ns, source.primitive_count, source_electrons, projected_electrons};
 }
 
 }  // namespace generativeqc::scf::initial_guess

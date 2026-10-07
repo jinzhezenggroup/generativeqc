@@ -158,8 +158,7 @@ void check() {
   matched(baseline, minao);
   require(minao.preliminary_guess.outcome == PreliminaryOutcome::Used &&
               minao.preliminary_guess.preliminary_iterations == 0 &&
-              minao.preliminary_guess.preliminary_fock_builds == 0 &&
-              minao.initial_density_used,
+              minao.preliminary_guess.preliminary_fock_builds == 0 && minao.initial_density_used,
           "MINAO did not remain a zero-Fock initial-density provider");
   const auto minao_cap = preliminary_numeric_capacity(system, *controls.preliminary_guess);
   require(minao_cap > 0 && minao_cap < (256U << 20), "MINAO capacity is not bounded");

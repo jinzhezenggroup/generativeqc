@@ -197,7 +197,9 @@ def test_complete_native_minao_is_zero_fock_preparation(native: None) -> None:
     result = calculator("pbe0-rks", InitialGuessSpec("minao")).singlepoint(
         WATER, properties=("energy",)
     )
-    assert result.converged and result.energy == pytest.approx(baseline.energy, abs=1e-8)
+    assert result.converged and result.energy == pytest.approx(
+        baseline.energy, abs=1e-8
+    )
     assert result.initial_guess["kind"] == "minao"
     assert result.initial_guess["outcome"] == "used"
     assert result.initial_guess["preliminary_iterations"] == 0
