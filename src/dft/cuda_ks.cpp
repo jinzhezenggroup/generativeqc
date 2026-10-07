@@ -24,6 +24,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "runtime/solver_region_cuda.cuh"
 #include "scf/cuda/eigensolver.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/mean_field_setup.hpp"
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
@@ -36,7 +37,6 @@
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
-#include "scf/cuda/matrix_library.hpp"
 #include "xc_cpu_generated.hpp"
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
