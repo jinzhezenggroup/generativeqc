@@ -48,6 +48,10 @@ The shared prepared provider-handle lifecycle in
 workspace-sizing code from that adaptation. The original GPL-3.0-or-later and scoped additional
 permission remain applicable to the xTBloom portions; this ownership cutover
 does not relicense them.
+The shared CPU ABI, provider loader/primitive bindings in `src/tensor/cpu/`
+and prepared spectral work/submission in `src/solver/cpu/symmetric_eigen.hpp`
+likewise retain the original attribution and scoped additional permission for
+portions consolidated from the embedded runtime.
 
 ## xTBloom D3 qualification baseline
 

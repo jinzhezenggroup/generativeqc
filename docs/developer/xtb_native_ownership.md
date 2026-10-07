@@ -79,6 +79,14 @@ selection, workspace/cache lifetime, per-system errors and public method
 admission remain native runtime responsibilities. Generation needs no installed
 GenerativeQC runtime, GPU, or scientific oracle.
 
+CPU linear-algebra ABI, runtime-provider verification/lifetime and primitive
+bindings live in `tensor/cpu/lp64_provider.*`; GFN retains its method admission,
+generalized transforms and publication. Both GFN and the canonical Gaussian
+CPU path execute `solver/cpu/symmetric_eigen.hpp`, with separate borrowed
+column-major and owned row-major contracts. See
+[CPU linear algebra](cpu_linear_algebra.md) for the exact work-count, fallback,
+thread and status boundaries.
+
 CUDA symmetric-eigen setup uses the method-neutral
 `solver/cuda/symmetric_eigen_workspace.*` service. GFN2 declares both vector
 modes and every reachable exact capacity; the shared service performs those
@@ -206,7 +214,7 @@ can set `GENERATIVEQC_XTB_CPU_LINALG_LIBRARY` to the provider's absolute path. W
 builds retain their pinned private OpenBLAS provider and native shim. The former
 `XTBLOOM_CPU_LINALG_LIBRARY` build setting has been retired.
 
-Relevant gates are `test_gfn2_h0_force_codegen.py`,
+Relevant gates are `test_cpu_lp64_provider.py`, `test_gfn2_h0_force_codegen.py`,
 `test_gfn2_spin_native_codegen.py`, `test_gfn2_runtime_bridge_boundary.py`,
 `test_gfn2_xtb.py`, `test_gfn2_runtime_retention.py`, `test_gfn2_cuda_bootstrap.py`, and
 `test_gfn2_xtb_force_qualification.py` under

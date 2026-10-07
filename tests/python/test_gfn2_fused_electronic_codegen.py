@@ -215,6 +215,7 @@ static int injected_spin, expected_spins, gemm_calls;
 static LapackInt expected_n = 1;
 static const EigensolverWorkspace* traced_workspace;
 static bool forbid_allocation = false;
+static bool provider_preflight = false;
 void* operator new(std::size_t size) {
   if (forbid_allocation) std::abort();
   if (void* memory = std::malloc(size)) return memory;
@@ -225,6 +226,7 @@ void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 static LapackInt test_syevd(LapackInt, char, char, LapackInt n, double* a,
                            LapackInt, double* w, double*, LapackInt,
                            LapackInt*, LapackInt) {
+  if (provider_preflight) { w[0] = a[0]; a[0] = 1.0; return 0; }
   if (n != expected_n || injected_spin >= expected_spins) std::abort();
   if (n == 1) {
     a[0] = injected_coefficients[injected_spin];
@@ -241,10 +243,13 @@ static LapackInt test_syevd(LapackInt, char, char, LapackInt n, double* a,
   return 0;
 }
 static void test_trsm(int, int, int, int, int, LapackInt, LapackInt, double,
-                     const double*, LapackInt, double*, LapackInt) {}
+                     const double* factor, LapackInt, double* rhs, LapackInt) {
+  if (provider_preflight) rhs[0] /= factor[0];
+}
 static void test_gemm(int layout, int ta, int tb, LapackInt m, LapackInt n, LapackInt k,
                      double alpha, const double* a, LapackInt lda, const double* b,
                      LapackInt ldb, double beta, double* out, LapackInt ldc) {
+  if (provider_preflight) { out[0] = a[0] * b[0]; return; }
   const int spin = gemm_calls / 2;
   const bool energy_weighted = gemm_calls % 2 != 0;
   const auto& workspace = *traced_workspace;
@@ -277,11 +282,23 @@ static void test_gemm(int layout, int ta, int tb, LapackInt m, LapackInt n, Lapa
     }
   }
 }
+static LapackInt test_potrf(LapackInt, char, LapackInt, double*, LapackInt) { return 0; }
+static LapackInt test_pocon(LapackInt, char, LapackInt, const double*, LapackInt, double,
+                            double* rcond, double*, LapackInt*) { *rcond = 1.0; return 0; }
+static CpuLinearAlgebraBackend make_test_backend() {
+  CpuLinearAlgebraBackend backend;
+  std::string error;
+  provider_preflight = true;
+  const auto status = make_internal_test_lp64_backend(
+      test_potrf, test_pocon, test_syevd, test_trsm, test_gemm, nullptr, backend, error);
+  provider_preflight = false;
+  if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) std::abort();
+  return backend;
+}
 int check(int spins, double coefficient, double eigenvalue, int expected_calls, bool late_beta) {
   // Exercise actual native arithmetic/publication; only LAPACK/BLAS dispatch
   // is injected. No chemistry or external-provider qualification is claimed.
-  auto backend = ::generativeqc::tensor::cpu::CpuLinearAlgebraAccess::make(
-      {}, nullptr, nullptr, test_syevd, test_trsm, test_gemm, nullptr);
+  auto backend = make_test_backend();
   EigensolverPlanData data;
   if (!cpu_eigen::prepare_borrowed_symmetric_eigen(1, data.symmetric_eigen)) return 20;
   std::array<LapackInt, 8> integer_work{};
@@ -386,8 +403,7 @@ int check(int spins, double coefficient, double eigenvalue, int expected_calls, 
 }
 int check_success(LapackInt n, int spins) {
   const std::size_t matrix_count = static_cast<std::size_t>(n) * n;
-  auto backend = ::generativeqc::tensor::cpu::CpuLinearAlgebraAccess::make(
-      {}, nullptr, nullptr, test_syevd, test_trsm, test_gemm, nullptr);
+  auto backend = make_test_backend();
   EigensolverPlanData data;
   if (!cpu_eigen::prepare_borrowed_symmetric_eigen(n, data.symmetric_eigen)) return 20;
   std::array<LapackInt, 28> integer_work{};

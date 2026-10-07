@@ -169,6 +169,7 @@ hessian
 :caption: Execution and backends
 
 tensor_cuda
+cpu_linear_algebra
 cuda_time_estimator
 tensor_precision
 lowering_providers

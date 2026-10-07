@@ -99,6 +99,7 @@ class CpuLinearAlgebraBackend {
       CblasDtrsm dtrsm, CblasDgemm dgemm, BlasSetNumThreadsLocal set_num_threads_local,
       CpuLinearAlgebraBackend& backend, std::string& error, BlasThreadCleanup thread_cleanup);
   friend struct CpuLinearAlgebraAccess;
+  friend class ScopedSequentialBlas;
 };
 
 Lp64BackendStatus prepare_lp64_runtime_backend(CpuLinearAlgebraBackend& backend,
@@ -111,49 +112,10 @@ Lp64BackendStatus prepare_internal_test_lp64_backend(
     CpuLinearAlgebraBackend& backend, std::string& error,
     BlasThreadCleanup thread_cleanup = nullptr);
 
-struct CpuLinearAlgebraAccess {
-  static CpuLinearAlgebraBackend make(CpuLinearAlgebraBackend::Origin origin,
-                                      LapackDpotrfWork dpotrf_work, LapackDpoconWork dpocon_work,
-                                      LapackDsyevdWork dsyevd_work, CblasDtrsm dtrsm,
-                                      CblasDgemm dgemm,
-                                      BlasSetNumThreadsLocal set_num_threads_local,
-                                      BlasThreadCleanup thread_cleanup = nullptr) noexcept {
-    CpuLinearAlgebraBackend backend;
-    backend.origin_ = origin;
-    backend.dpotrf_work_ = dpotrf_work;
-    backend.dpocon_work_ = dpocon_work;
-    backend.dsyevd_work_ = dsyevd_work;
-    backend.dtrsm_ = dtrsm;
-    backend.dgemm_ = dgemm;
-    backend.set_num_threads_local_ = set_num_threads_local;
-    backend.thread_cleanup_ = thread_cleanup;
-    return backend;
-  }
-
-  static LapackDpotrfWork dpotrf(const CpuLinearAlgebraBackend& backend) noexcept {
-    return backend.dpotrf_work_;
-  }
-  static LapackDpoconWork dpocon(const CpuLinearAlgebraBackend& backend) noexcept {
-    return backend.dpocon_work_;
-  }
-  static LapackDsyevdWork dsyevd(const CpuLinearAlgebraBackend& backend) noexcept {
-    return backend.dsyevd_work_;
-  }
-  static CblasDtrsm dtrsm(const CpuLinearAlgebraBackend& backend) noexcept {
-    return backend.dtrsm_;
-  }
-  static CblasDgemm dgemm(const CpuLinearAlgebraBackend& backend) noexcept {
-    return backend.dgemm_;
-  }
-  static BlasSetNumThreadsLocal set_threads(const CpuLinearAlgebraBackend& backend) noexcept {
-    return backend.set_num_threads_local_;
-  }
-};
-
 class ScopedSequentialBlas final {
  public:
   explicit ScopedSequentialBlas(const CpuLinearAlgebraBackend& backend)
-      : setter_(CpuLinearAlgebraAccess::set_threads(backend)) {
+      : setter_(backend.set_num_threads_local_) {
     if (setter_ != nullptr) {
       previous_ = setter_(1);
     }

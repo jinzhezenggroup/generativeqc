@@ -38,6 +38,46 @@
 #include <utility>
 
 namespace generativeqc::tensor::cpu {
+
+struct CpuLinearAlgebraAccess {
+  static CpuLinearAlgebraBackend make(CpuLinearAlgebraBackend::Origin origin,
+                                      LapackDpotrfWork dpotrf_work, LapackDpoconWork dpocon_work,
+                                      LapackDsyevdWork dsyevd_work, CblasDtrsm dtrsm,
+                                      CblasDgemm dgemm,
+                                      BlasSetNumThreadsLocal set_num_threads_local,
+                                      BlasThreadCleanup thread_cleanup = nullptr) noexcept {
+    CpuLinearAlgebraBackend backend;
+    backend.origin_ = origin;
+    backend.dpotrf_work_ = dpotrf_work;
+    backend.dpocon_work_ = dpocon_work;
+    backend.dsyevd_work_ = dsyevd_work;
+    backend.dtrsm_ = dtrsm;
+    backend.dgemm_ = dgemm;
+    backend.set_num_threads_local_ = set_num_threads_local;
+    backend.thread_cleanup_ = thread_cleanup;
+    return backend;
+  }
+
+  static LapackDpotrfWork dpotrf(const CpuLinearAlgebraBackend& backend) noexcept {
+    return backend.dpotrf_work_;
+  }
+  static LapackDpoconWork dpocon(const CpuLinearAlgebraBackend& backend) noexcept {
+    return backend.dpocon_work_;
+  }
+  static LapackDsyevdWork dsyevd(const CpuLinearAlgebraBackend& backend) noexcept {
+    return backend.dsyevd_work_;
+  }
+  static CblasDtrsm dtrsm(const CpuLinearAlgebraBackend& backend) noexcept {
+    return backend.dtrsm_;
+  }
+  static CblasDgemm dgemm(const CpuLinearAlgebraBackend& backend) noexcept {
+    return backend.dgemm_;
+  }
+  static BlasSetNumThreadsLocal set_threads(const CpuLinearAlgebraBackend& backend) noexcept {
+    return backend.set_num_threads_local_;
+  }
+};
+
 namespace {
 static_assert(sizeof(LapackInt) == 4u, "the CPU provider requires an LP64 LAPACK ABI");
 constexpr int kCblasColMajor = 102;

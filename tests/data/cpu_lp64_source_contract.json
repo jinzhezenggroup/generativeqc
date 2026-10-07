@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "reviewed_source": "096b24f92a577a1deb2ae77cb3bf778824ef94e6",
+  "purpose": "Protect the reviewed scalar arithmetic, canonical admission/owned LAPACKE, and Gaussian scientific boundaries without requiring Git history.",
+  "regions": [
+    {
+      "path": "src/tensor/cpu_linalg.cpp",
+      "prefix": "void validate_plan(",
+      "occurrence": 0,
+      "sha256": "2f2d47cc3f12d7d91cc2b4323cc71ca378563f3e15b0d894a088ecada695aee5"
+    },
+    {
+      "path": "src/tensor/cpu_linalg.cpp",
+      "prefix": "class OpenBlasThreadGuard {",
+      "occurrence": 0,
+      "sha256": "49a2f46bceaf5b4b1e26e5669fc5db32cb65009cb917f563d79c24521c268320"
+    },
+    {
+      "path": "src/tensor/cpu_linalg.cpp",
+      "prefix": "CpuSymmetricEigenResult openblas_symmetric_eigen(",
+      "occurrence": 0,
+      "sha256": "1369283bdc8efdf480030aa9e3c19734d598cd68ba130a1e0c4529d139cf4b28"
+    },
+    {
+      "path": "src/tensor/cpu_linalg.cpp",
+      "prefix": "CpuLinalgProvider resolve_cpu_linalg_provider(",
+      "occurrence": 0,
+      "sha256": "c1ab0e8d22329b72833fae904d182acf6b6c6e2b66d000c1529c39bcfceff691"
+    },
+    {
+      "path": "src/tensor/cpu_linalg.cpp",
+      "prefix": "CpuSymmetricEigenResult cpu_symmetric_eigen(",
+      "occurrence": 0,
+      "sha256": "c8871ccb3b744e57c548be31f8bf1588f87d9a961e2df11d2baa9636795800ff"
+    },
+    {
+      "path": "src/tensor/cpu_linalg.cpp",
+      "prefix": "CpuSymmetricEigenResult cpu_symmetric_eigen(",
+      "occurrence": 1,
+      "sha256": "83a27289217fabf4e23218d0530623aa9d9a6de9c9fb97781a50a3c4b484207a"
+    },
+    {
+      "path": "src/solver/cpu/symmetric_eigen.hpp",
+      "prefix": "inline tensor::CpuSymmetricEigenResult scalar_symmetric_eigen(",
+      "occurrence": 0,
+      "sha256": "35c7482dadb5fbacf639ccec45fe80c2248760a208770a739cbbfeb825cd3919"
+    },
+    {
+      "path": "src/scf/rhf.cpp",
+      "prefix": "static ScfResult run_cpu_fock_strategy_impl(",
+      "occurrence": 0,
+      "sha256": "9125685551873117e96346046c02d9885379b4902a9652b07a0619973dd5df9a"
+    }
+  ],
+  "files": {
+    "src/scf/solver/cpu_target_eigen.cpp": "c93672dc0f647efc0cb2288cf5d13de3720dae0b5eff69af15295c63ceb1b861",
+    "src/scf/solver/eigen_frame.cpp": "ba1a5a4e134c923b36d63aeb30f8179bc9aaeac8768f6b309bd78ace0c0cd917"
+  }
+}
