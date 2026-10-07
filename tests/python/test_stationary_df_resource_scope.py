@@ -63,6 +63,9 @@ struct Owner {
         + r"""
     std::vector<double> hcore(coordinates), pulay(coordinates), candidate;
     struct { std::vector<double> coulomb, exchange; } two;
+    std::size_t one_electron_device_bytes=0;
+    std::size_t one_electron_h2d_bytes=0;
+    std::size_t one_electron_d2h_bytes=0;
     two.coulomb.resize(coordinates); two.exchange.resize(coordinates);
     candidate.reserve(4*coordinates);
     if (extra_capacity) two.exchange.reserve(40);
@@ -83,8 +86,8 @@ int main(int argc,char** argv) {
   const auto expected=(extra ? 82U : 48U)*sizeof(double);
   assert(result == (budget < expected ? GENERATIVEQC_STATUS_OUT_OF_MEMORY : 0));
   if (!result) {
-    assert(work[0]==123 && work[3]==expected);
-    assert(work[4]==0 && work[5]==0); // H'/S' contraction has no CUDA movement.
+    assert(work[0]==123 && work[2]==0 && work[3]==expected);
+    assert(work[4]==0 && work[5]==0); // Host fallback has no CUDA movement.
   }
 }
 """
@@ -163,8 +166,70 @@ def test_df_bridge_keeps_nine_slot_wire_and_marks_partial_scope() -> None:
     assert output.shape == (4, 2, 3)
     assert work["compact_source_publication_host_peak_bytes"] == 384
     assert work["one_electron_h2d_bytes"] == work["one_electron_d2h_bytes"] == 0
+    assert work["density_fitted_one_electron_resident_cuda"] == 0
     assert work["density_fitted_one_electron_host_contraction"] == 1
     assert work["density_fitted_response_resources_included"] == 0
+
+
+def test_cuda_df_one_electron_borrows_final_stationary_weights() -> None:
+    source = (ROOT / "src/methods/dft_method.cpp").read_text()
+    begin = source.index("  generativeqc_status density_fitted_integral_gradient(")
+    end = source.index(
+        "  generativeqc_status cuda_full_range_integral_derivatives(", begin
+    )
+    method = source[begin:end]
+
+    assert (
+        "resident_final_stationary_weights(expected, resident_weights, detail)"
+        in method
+    )
+    assert "execute_cuda_stationary_one_electron_pair(" in method
+    assert "system_, {}, {}, 0, maximum_bytes" in method
+    assert "resident_weights.density, resident_weights.weighted_density" in method
+    assert "if (!resident_one_electron)" in method
+    assert method.index("resident_final_stationary_weights") < method.index(
+        "resident_final_fitted_projection"
+    )
+
+
+def test_df_python_metadata_distinguishes_resident_one_electron() -> None:
+    def evaluate(
+        batch: object,
+        handle: object,
+        output: object,
+        count: int,
+        budget: int,
+        usage: object,
+        slots: int,
+    ) -> int:
+        assert slots == 9 and count == 24
+        np.ctypeslib.as_array(ct.cast(output, ct.POINTER(ct.c_double)), shape=(count,))[
+            :
+        ] = 0
+        values = np.ctypeslib.as_array(
+            ct.cast(usage, ct.POINTER(ct.c_uint64)), shape=(slots,)
+        )
+        values[:] = 0
+        values[2] = 4096
+        values[4] = 1024
+        values[5] = 96
+        return 0
+
+    source = SimpleNamespace(
+        density_fitted=True,
+        check_current=lambda: None,
+        _library=SimpleNamespace(
+            generativeqc_ks_snapshot_density_fitted_integral_gradient_v1=evaluate
+        ),
+        _batch=SimpleNamespace(_batch=None, _context=None),
+        _handle=None,
+    )
+    _, work = NativeKsSnapshot.density_fitted_integral_derivatives(source, 2, 4096)
+    assert work["density_fitted_one_electron_resident_cuda"] == 1
+    assert work["density_fitted_one_electron_host_contraction"] == 0
+    assert work["one_electron_device_peak_bytes"] == 4096
+    assert work["one_electron_h2d_bytes"] == 1024
+    assert work["one_electron_d2h_bytes"] == 96
 
 
 def test_cuda_outward_record_discloses_unmeasured_df_transfers() -> None:
@@ -194,12 +259,37 @@ def test_cuda_outward_record_discloses_unmeasured_df_transfers() -> None:
     work = {"transfer_work": {}, "host_scope": "snapshot validation"}
     FunctionType(
         code,
-        {"__builtins__": builtins.__dict__, "work": work, "use_fitted_integrals": True},
+        {
+            "__builtins__": builtins.__dict__,
+            "work": work,
+            "use_fitted_integrals": True,
+            "native_integral_resources": {
+                "density_fitted_one_electron_resident_cuda": 0
+            },
+        },
     )()
     assert work["density_fitted_response_resources_included"] is False
     assert work["transfer_work"]["density_fitted_response_included"] is False
     assert "excludes DF-provider" in work["additional_device_peak_bound_scope"]
+    assert work["native_integral_resource_scope"].endswith("host-one-electron-fallback")
     assert "H'/S'" in work["host_scope"]
+
+    resident = {"transfer_work": {}, "host_scope": "snapshot validation"}
+    FunctionType(
+        code,
+        {
+            "__builtins__": builtins.__dict__,
+            "work": resident,
+            "use_fitted_integrals": True,
+            "native_integral_resources": {
+                "density_fitted_one_electron_resident_cuda": 1
+            },
+        },
+    )()
+    assert resident["native_integral_resource_scope"].endswith(
+        "resident-cuda-one-electron"
+    )
+    assert "final D/W remain resident" in resident["host_scope"]
 
 
 def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(
