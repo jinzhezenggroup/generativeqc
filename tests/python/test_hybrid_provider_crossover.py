@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Callable
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -16,47 +16,107 @@ from tools.benchmark_hybrid_provider_crossover import (
     summarize,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 def _records() -> tuple[list[dict], list[dict], list[dict]]:
-    problem = {"method": "pbe0-rks", "geometry_bohr": [["H", [0, 0, 0]]], "auxiliary_basis": "def2-svp", "df_memory_budget_bytes": 1024}
+    problem = {
+        "method": "pbe0-rks",
+        "geometry_bohr": [["H", [0, 0, 0]]],
+        "auxiliary_basis": "def2-svp",
+        "df_memory_budget_bytes": 1024,
+    }
     source = {"revision": "a" * 40, "dirty": False}
     library = {"sha256": "b" * 64}
     attempts = []
     for phase in ("cold", "warm-0", "changed-geometry", "moved-warm"):
-        attempts.append({"phase": phase, "status": "PASS", "seconds": 1.0, "energy_hartree": -1.0, "forces_hartree_per_bohr": [[0.0, 0.0, 0.0]], "physical_residual_rms": 1e-10})
+        attempts.append(
+            {
+                "phase": phase,
+                "status": "PASS",
+                "seconds": 1.0,
+                "energy_hartree": -1.0,
+                "forces_hartree_per_bohr": [[0.0, 0.0, 0.0]],
+                "physical_residual_rms": 1e-10,
+            }
+        )
     grids = {"original": {"sha256": "c" * 64}, "moved": {"sha256": "d" * 64}}
     records = []
     oracles = []
     profiles = []
     for arm in ("direct", "df-jk-occupied"):
-        records.append({
-            "schema": SCHEMA, "kind": "native", "case": "water-3", "arm": arm,
-            "source": deepcopy(source), "library": deepcopy(library), "device": {"name": "GPU"},
-            "problem": deepcopy(problem), "status": "MEASURED", "attempts": deepcopy(attempts),
-            "counts": {"nao": 24, "naux": 24 if arm == "df-jk-occupied" else None, "nocc": 5},
-            "provider_proof": dict(zip(("coulomb", "exchange"), ARMS[arm]["proof"], strict=True)),
-            "oracle_grids": deepcopy(grids),
-        })
-        oracles.append({
-            "schema": SCHEMA, "kind": "pyscf-oracle", "case": "water-3", "arm": arm,
-            "source": deepcopy(source), "library": deepcopy(library), "problem": deepcopy(problem),
-            "grid_exports": deepcopy(grids), "status": "MEASURED",
-            "samples": [
-                {"geometry": label, "status": "PASS", "energy_hartree": -1.0,
-                 "forces_hartree_per_bohr": [[0.0, 0.0, 0.0]]}
-                for label in ("original", "moved")
-            ],
-        })
-        profiles.append({
-            "schema": SCHEMA, "kind": "diagnostic-profile", "case": "water-3", "arm": arm,
-            "source": deepcopy(source), "library": deepcopy(library), "problem": deepcopy(problem),
-            "status": "MEASURED", "occupied_reuse_verified": arm == "df-jk-occupied",
-            "executed_counters": None, "metric_diagnostics": None,
-        })
-    records.append({
-        "schema": SCHEMA, "kind": "native", "case": "water-3", "arm": "df-j-exact-k",
-        "source": deepcopy(source), "problem": deepcopy(problem), "status": "UNSUPPORTED",
-    })
+        records.append(
+            {
+                "schema": SCHEMA,
+                "kind": "native",
+                "case": "water-3",
+                "arm": arm,
+                "source": deepcopy(source),
+                "library": deepcopy(library),
+                "device": {"name": "GPU"},
+                "problem": deepcopy(problem),
+                "status": "MEASURED",
+                "attempts": deepcopy(attempts),
+                "counts": {
+                    "nao": 24,
+                    "naux": 24 if arm == "df-jk-occupied" else None,
+                    "nocc": 5,
+                },
+                "provider_proof": dict(
+                    zip(("coulomb", "exchange"), ARMS[arm]["proof"], strict=True)
+                ),
+                "oracle_grids": deepcopy(grids),
+            }
+        )
+        oracles.append(
+            {
+                "schema": SCHEMA,
+                "kind": "pyscf-oracle",
+                "case": "water-3",
+                "arm": arm,
+                "source": deepcopy(source),
+                "library": deepcopy(library),
+                "problem": deepcopy(problem),
+                "grid_exports": deepcopy(grids),
+                "status": "MEASURED",
+                "samples": [
+                    {
+                        "geometry": label,
+                        "status": "PASS",
+                        "energy_hartree": -1.0,
+                        "forces_hartree_per_bohr": [[0.0, 0.0, 0.0]],
+                    }
+                    for label in ("original", "moved")
+                ],
+            }
+        )
+        profiles.append(
+            {
+                "schema": SCHEMA,
+                "kind": "diagnostic-profile",
+                "case": "water-3",
+                "arm": arm,
+                "source": deepcopy(source),
+                "library": deepcopy(library),
+                "problem": deepcopy(problem),
+                "status": "MEASURED",
+                "occupied_reuse_verified": arm == "df-jk-occupied",
+                "executed_counters": None,
+                "metric_diagnostics": None,
+            }
+        )
+    records.append(
+        {
+            "schema": SCHEMA,
+            "kind": "native",
+            "case": "water-3",
+            "arm": "df-j-exact-k",
+            "source": deepcopy(source),
+            "problem": deepcopy(problem),
+            "status": "UNSUPPORTED",
+        }
+    )
     return records, oracles, profiles
 
 
@@ -79,14 +139,17 @@ def test_supported_arms_require_oracle_and_never_claim_full_crossover() -> None:
     assert summarize(records, oracles, [profiles[0]])["status"] == "INCOMPLETE"
 
 
-@pytest.mark.parametrize("mutate", [
-    lambda rows, refs: rows[1]["provider_proof"].update(exchange="exact"),
-    lambda rows, refs: rows[1]["source"].update(revision="new-head"),
-    lambda rows, refs: rows[0]["attempts"][1].update(status="FAIL"),
-    lambda rows, refs: rows[0]["attempts"][1].update(physical_residual_rms=1e-4),
-    lambda rows, refs: refs[1]["samples"][0].update(energy_hartree=-0.9),
-    lambda rows, refs: refs[0]["grid_exports"]["original"].update(sha256="wrong"),
-])
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda rows, refs: rows[1]["provider_proof"].update(exchange="exact"),
+        lambda rows, refs: rows[1]["source"].update(revision="new-head"),
+        lambda rows, refs: rows[0]["attempts"][1].update(status="FAIL"),
+        lambda rows, refs: rows[0]["attempts"][1].update(physical_residual_rms=1e-4),
+        lambda rows, refs: refs[1]["samples"][0].update(energy_hartree=-0.9),
+        lambda rows, refs: refs[0]["grid_exports"]["original"].update(sha256="wrong"),
+    ],
+)
 def test_mismatch_or_failure_cannot_pass(
     mutate: Callable[[list[dict], list[dict]], None],
 ) -> None:
