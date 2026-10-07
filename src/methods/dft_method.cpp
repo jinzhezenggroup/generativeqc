@@ -608,6 +608,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.incremental_direct_jk = native.incremental_direct_jk;
   result.precision_work = std::move(native.precision_work);
   native.dft_diagnostic.fock_builds = native.fock_builds;
   native.dft_diagnostic.initial_density_used = native.initial_density_used;
@@ -2305,6 +2306,10 @@ class KsPreparedBatch final : public PreparedBatch {
 };
 
 }  // namespace
+
+Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend) {
+  return adapt_result(std::move(native), backend);
+}
 
 generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
                                           dft::CudaKsFinalStateToken& token, std::string& detail) {
