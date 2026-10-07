@@ -53,6 +53,109 @@ def test_dft_force_consumes_ks_projection_before_generic_response() -> None:
     assert 'trace_counter("response_reused_final_fitted_projection", 1)' in lower
 
 
+def test_dft_coulomb_response_borrows_final_rks_density() -> None:
+    method = (ROOT / "src/methods/dft_method.cpp").read_text()
+    prepared = (ROOT / "src/scf/fock_prepared.cpp").read_text()
+    provider = (ROOT / "src/scf/cuda_fock_provider.cpp").read_text()
+    lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
+    bridge = (ROOT / "src/scf/cuda/df_gradient_bridge.cu").read_text()
+
+    assert "resident_final_density(expected, lease, lease_detail)" in method
+    assert "CudaDfBorrowedResponseDensity" in method
+    assert "energy_derivative_components_with_cuda_df_state" in method
+
+    body = prepared[
+        prepared.index("energy_derivative_components_with_cuda_df_state") :
+        prepared.index("PreparedFockPlan::retained_energy_derivative")
+    ]
+    assert "provider.derivative(exchange, density, beta, projection)" in body
+    assert "provider.derivative(coulomb, density, beta, nullptr, response_density)" in body
+    assert provider.count("borrowed_response_density") >= 2
+    assert "select_borrowed_density" in lower
+    assert "terms[0].exchange_coefficient != 0.0" in lower
+    assert "select_borrowed_density ? borrowed_response_density : nullptr" in lower
+    assert 'trace_counter("response_borrowed_density", 1)' in bridge
+    assert "if (borrowed_density)" in bridge
+    assert "densities = borrowed_density->density" in bridge
+
+
+def test_borrowed_coulomb_density_admission_is_j_only(tmp_path: Path) -> None:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a host C++ compiler")
+    lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
+    begin = lower.index("  const bool select_borrowed_density =")
+    end = lower.index('  const char* storage_control', begin)
+    admission = lower[begin:end]
+    source = tmp_path / "density_admission.cpp"
+    source.write_text(
+        r"""
+#include <cassert>
+#include <string>
+#include <vector>
+#include "scf/cuda_density_fitting.hpp"
+using namespace generativeqc::scf;
+struct Source {
+  int device_id=0;
+  void* stream=reinterpret_cast<void*>(1);
+  std::size_t matrix_elements=4,batch_size=1;
+};
+struct Term {
+  std::vector<double> density=std::vector<double>(4);
+  double coulomb_coefficient=1.0,exchange_coefficient=0.0;
+};
+int admit(int kind,bool& selected) {
+  Source source, *plan=&source;
+  std::size_t system=0;
+  std::vector<Term> terms(1);
+  bool host_weights=false;
+  double values[4]{};
+  CudaDfBorrowedResponseDensity lease{0,values,4,plan->stream};
+  const CudaDfBorrowedResponseDensity* borrowed_response_density=&lease;
+  std::string detail;
+  if(kind==1) lease.device_id=1;
+  if(kind==2) lease.stream=reinterpret_cast<void*>(2);
+  if(kind==3) lease.matrix_elements=3;
+  if(kind==4) plan->batch_size=2;
+  if(kind==5) terms[0].density.resize(3);
+  if(kind==6) terms[0].coulomb_coefficient=0;
+  if(kind==7) terms[0].exchange_coefficient=.25;
+  if(kind==8) terms.emplace_back();
+  if(kind==9) host_weights=true;
+  if(kind==10) borrowed_response_density=nullptr;
+"""
+        + admission
+        + r"""
+  selected=select_borrowed_density;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+int main() {
+  for(int kind=0;kind<11;++kind) {
+    bool selected=false;
+    const auto status=admit(kind,selected);
+    if(kind>=1 && kind<=8) assert(status==GENERATIVEQC_STATUS_INVALID_ARGUMENT);
+    else assert(status==GENERATIVEQC_STATUS_SUCCESS);
+    assert(selected==(kind==0));
+  }
+}
+"""
+    )
+    executable = tmp_path / "density_admission"
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            f"-I{ROOT / 'include'}",
+            f"-I{ROOT / 'src'}",
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+    )
+    subprocess.run([str(executable)], check=True)
+
+
 def test_dft_projection_reuse_keeps_explicit_fallback_controls() -> None:
     lower = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
     assert 'projection != "off"' in lower
