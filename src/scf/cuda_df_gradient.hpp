@@ -14,6 +14,7 @@
 namespace generativeqc::scf {
 struct CudaDensityFittingIntegralSource;
 struct CudaDensityFittingJkPlan;
+struct CudaDfBorrowedResponseDensity;
 /** Bind the prepared owner's immutable source after copying that source into
  * a new single-system plan. The caller owns these host arrays for the plan's
  * lifetime; geometry/basis changes create a new owner. Arbitrary tensor-plan
@@ -164,7 +165,7 @@ struct DfGradientResources {
   std::size_t tensor_host_to_device_bytes{}, tensor_device_to_host_bytes{};
   std::size_t response_host_to_device_bytes{}, density_host_to_device_bytes{};
   std::size_t recomputed_value_bytes{}, device_response_bytes{};
-  /** Already charged to the value plan, never added again to owned device_bytes. */
+  /** Already charged to a prepared owner, never added again to owned device_bytes. */
   std::size_t borrowed_device_bytes{};
   bool device_response{};
   /** True only after the owner validates and executes occupied response. */
@@ -225,6 +226,7 @@ generativeqc_status execute_cuda_df_hf_gradient(
     const CudaDfResponseBuffers* borrowed = nullptr,
     const CudaDfPackedRawTensorView* packed_raw = nullptr,
     const CudaDfWhitenedTensorView* whitened = nullptr,
-    const CudaDfOccupiedResponseView* occupied = nullptr);
+    const CudaDfOccupiedResponseView* occupied = nullptr,
+    const CudaDfBorrowedResponseDensity* borrowed_density = nullptr);
 }  // namespace generativeqc::scf
 #endif

@@ -134,6 +134,34 @@ void lifecycle(bool uhf) {
           detail);
   force(&token, true);
   auto* state = static_cast<cuda_df::PersistentScfState*>(plan->persistent_scf_state);
+  if (!uhf) {
+    const std::vector<DensityFittingDensityResponse> terms{{density, 1, 0}};
+    std::vector<double> host_derivative, resident_derivative;
+    DfGradientResources host_resources, resident_resources;
+    const std::vector<double> raw_values(4), metric{1};
+    require(execute_cuda_density_fitting_generated_force_response(
+                plan.get(), 0, orbital, auxiliary, raw_values, metric, terms, 0, 4U << 20, 0,
+                host_derivative, detail, &host_resources) == GENERATIVEQC_STATUS_SUCCESS,
+            "host-density Coulomb response: " + detail);
+    CudaDfBorrowedResponseDensity borrowed{plan->device_id, state->d_density, density.size(),
+                                           reinterpret_cast<void*>(plan->stream)};
+    require(execute_cuda_density_fitting_generated_force_response(
+                plan.get(), 0, orbital, auxiliary, raw_values, metric, terms, 0, 4U << 20, 0,
+                resident_derivative, detail, &resident_resources, nullptr, nullptr,
+                &borrowed) == GENERATIVEQC_STATUS_SUCCESS,
+            "resident-density Coulomb response: " + detail);
+    require(host_derivative.size() == resident_derivative.size(),
+            "resident-density Coulomb response changed the derivative shape");
+    for (std::size_t i = 0; i < host_derivative.size(); ++i)
+      require(std::abs(host_derivative[i] - resident_derivative[i]) < 1e-12,
+              "resident-density Coulomb response changed the derivative");
+    require(host_resources.density_host_to_device_bytes == density.size() * sizeof(double),
+            "host Coulomb response did not upload its detached density");
+    require(resident_resources.density_host_to_device_bytes == 0,
+            "resident Coulomb response redundantly uploaded final density");
+    require(resident_resources.borrowed_device_bytes >= density.size() * sizeof(double),
+            "resident Coulomb response did not account its borrowed density");
+  }
   check(cudaMemsetAsync(state->d_alpha_factor_generation, 0, sizeof(std::uint32_t), plan->stream));
   check(cudaStreamSynchronize(plan->stream));
   force(&token, false);

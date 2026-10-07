@@ -85,6 +85,22 @@ struct CudaDfBorrowedFittedProjection {
   }
 };
 
+/** Method-owned, token-validated borrow of the exact restricted final
+ * density for one Coulomb response term. The density remains owned by the CUDA
+ * KS plan and is already ordered on the same prepared Fock stream. The DF
+ * response still validates the detached host density term for symmetry and
+ * scientific coefficients; this view only removes the redundant H2D copy. */
+struct CudaDfBorrowedResponseDensity {
+  int device_id{-1};
+  const double* density{};
+  std::size_t matrix_elements{};
+  void* stream{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && density != nullptr && matrix_elements != 0 && stream != nullptr;
+  }
+};
+
 generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan* plan, std::size_t system, const core::System& orbital,
     const core::System& auxiliary, std::span<const double> raw_a, const std::vector<double>& metric,
@@ -92,7 +108,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile, std::vector<double>& derivative,
     std::string& detail, DfGradientResources* resources = nullptr,
     const CudaDfFinalStateToken* final_state = nullptr,
-    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr);
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr,
+    const CudaDfBorrowedResponseDensity* borrowed_response_density = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.
