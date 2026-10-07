@@ -1570,15 +1570,20 @@ generativeqc_status execute_cuda_df_hf_gradient(
       }
       if (shell_target > 0 && shell_execution && full_shell_domain) {
         // Reserve only unused headroom AFTER the original response shape and
-        // scratch have been fixed. Tight budgets retain strict evaluation;
-        // this optimization never shrinks a tile or amplifies source work.
+        // scratch have been fixed. A resident density removes the physical
+        // response allocation, but keep its old bytes logically reserved here
+        // so this placement-only change cannot newly admit force screening.
         const auto orbital_shells = orbital.shells.size();
         const auto auxiliary_shells = auxiliary.shells.size();
         const auto norm_bytes =
             (orbital_shells * orbital_shells + auxiliary_shells) * sizeof(double);
         const auto counter_bytes = shell_counters ? sizeof(observed_shell_screen_work) : 0;
+        const auto density_reservation =
+            borrowed_density ? n * n * sizeof(double) : std::size_t{0};
+        const auto device_headroom = maximum_bytes - arena.stats.device_bytes;
         double* norms = nullptr;
-        if (norm_bytes + counter_bytes <= maximum_bytes - arena.stats.device_bytes &&
+        if (density_reservation <= device_headroom &&
+            norm_bytes + counter_bytes <= device_headroom - density_reservation &&
             counter_bytes <= maximum_bytes - arena.stats.host_bytes) {
           // One optional allocation also makes actual device-memory pressure
           // a strict fallback, without leaving a partially admitted screen.
