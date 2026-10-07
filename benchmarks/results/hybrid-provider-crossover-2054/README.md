@@ -39,6 +39,13 @@ Run only on a source-matched installed build in a finite Slurm GPU Job. Set
 The output below is ignored working evidence; review and compact small records
 before adding any to Git.
 
+For the qz H200 pilot, `build-and-smoke.sh` freezes the actual sm_90 portable
+build, requires an independently installed task-owned `ccache` binary and
+records the real CMake launchers, pre/post cache statistics, binary hash and
+three-atom device attempts. It never starts an uncached full build. Its
+task-owned wheel/cache overlay lives under `.artifacts/` and is not a
+production dependency.
+
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
   --cases water-3 water-48 formaldehyde \
