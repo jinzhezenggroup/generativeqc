@@ -271,9 +271,11 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     rejected: bool,
     phase_case: str = "disabled",
     native: str = "off",
+    force_reduction: str = "separate",
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", force_reduction)
     native_required = native != "off"
     if native_required:
         monkeypatch.setattr(
@@ -317,7 +319,16 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             pass
 
-        def reduction_program(self, *, atoms: int, sources: object = None) -> object:
+        def reduction_program(
+            self,
+            *,
+            atoms: int,
+            sources: object = None,
+            combined_two_electron: bool = False,
+        ) -> object:
+            assert combined_two_electron is (
+                native == "complete" and force_reduction == "combined"
+            )
             return SimpleNamespace(atoms=atoms, sources=sources)
 
         def integral_block(self, name: str, **_kwargs: object) -> object:
@@ -499,7 +510,12 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         )
     if native_required:
         source.cuda_integral_derivatives = MagicMock(
-            return_value=(np.zeros((4, 2, 3)), {}) if native == "complete" else None
+            return_value=(
+                np.zeros((3 if force_reduction == "combined" else 4, 2, 3)),
+                {},
+            )
+            if native == "complete"
+            else None
         )
     state = SimpleNamespace(
         identity=SimpleNamespace(
@@ -574,6 +590,15 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         owner.nuclear.assert_called_once()
         owner.reduced.assert_called_once()
         assert result.work["stationary_task_executor"]["sources"] == ()
+        if force_reduction == "combined":
+            assert "two_electron" in result.components
+            assert "coulomb" not in result.components
+            assert "exact_exchange" not in result.components
+            assert result.work["stationary_native_integral_sources"] == (
+                "one_electron",
+                "overlap_pulay",
+                "two_electron",
+            )
         return
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
     assert admitted["spin_blocks"] == 1
@@ -642,6 +667,24 @@ def test_required_native_pruning_preserves_nuclear_and_rejects_failed_producer(
 ) -> None:
     test_weight_fusion_orchestration_runs_without_a_device(
         monkeypatch, tmp_path, aot, False, 48, 0, False, native=native
+    )
+
+
+@pytest.mark.parametrize("aot", (False, True))
+def test_combined_native_source_grouping_in_complete_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool
+) -> None:
+    """A total-force source must retain truthful coverage through final reduction."""
+    test_weight_fusion_orchestration_runs_without_a_device(
+        monkeypatch,
+        tmp_path,
+        aot,
+        False,
+        48,
+        0,
+        False,
+        native="complete",
+        force_reduction="combined",
     )
 
 

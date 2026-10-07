@@ -271,10 +271,12 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     capacity = checked_add(capacity, bytes(choice.auxiliary));
     capacity = checked_add(capacity, bytes(choice.preparation));
     capacity = checked_add(capacity, bytes(choice.accumulation));
-    // Current, trial, error and a copied history vector coexist before trimming.
+    // Without DIIS only current and the next Jacobi trial coexist. With DIIS,
+    // trial/error plus the copied history vector coexist before trimming.
     // DIIS additionally retains Gram/original augmented arrays while solve_linear
     // owns its by-value matrix/RHS copies. These are numeric storage, not overhead.
-    capacity = checked_add(capacity, bytes(checked_mul(4 + 2 * options.diis_size, elements)));
+    const auto host_vectors = options.diis_size ? 4 + 2 * options.diis_size : 2;
+    capacity = checked_add(capacity, bytes(checked_mul(host_vectors, elements)));
     if (options.diis_size) {
       const std::size_t h = options.diis_size, n = h + 1;
       const auto scratch = checked_add(
@@ -331,6 +333,8 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   current.insert(current.end(), p.initial_t1.begin(), p.initial_t1.end());
   current.insert(current.end(), p.initial_t2.begin(), p.initial_t2.end());
   generativeqc::solver::Diis diis(options.diis_size, elements);
+  generated::IterationOutputs carried_output{};
+  bool has_carried_output = false;
   double previous = std::numeric_limits<double>::quiet_NaN();
   SolverResult result;
   result.diagnostic.denominator_identity = denominator_identity(p);
@@ -500,12 +504,18 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     try {
       auto in = inputs(p, current.data(), current.data() + n1);
       const auto iteration_started = std::chrono::steady_clock::now();
-      const auto out = run_iteration(in);
+      generated::IterationOutputs out{};
+      if (has_carried_output) {
+        out = carried_output;
+        has_carried_output = false;
+      } else {
+        out = run_iteration(in);
+        ++result.diagnostic.iteration_graph_calls;
+        if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
+      }
       result.diagnostic.iteration_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
               .count();
-      ++result.diagnostic.iteration_graph_calls;
-      if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
       const double r1 = max_abs(out.r1, n1), r2 = max_abs(out.r2, n2);
       const double delta = std::isfinite(previous) ? std::abs(out.energy - previous)
                                                    : std::numeric_limits<double>::infinity();
@@ -544,6 +554,11 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
       result.diagnostic.update_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
       ++result.diagnostic.update_calls;
+      if (!options.diis_size) {
+        current = std::move(trial);
+        previous = out.energy;
+        return true;
+      }
       auto trial_in = inputs(p, trial.data(), trial.data() + n1);
       const auto trial_started = std::chrono::steady_clock::now();
       const auto trial_out = run_iteration(trial_in);
@@ -556,7 +571,12 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
       error.insert(error.end(), trial_out.r1, trial_out.r1 + n1);
       error.insert(error.end(), trial_out.r2, trial_out.r2 + n2);
       const auto diis_started = std::chrono::steady_clock::now();
-      current = diis.update(std::move(trial), std::move(error));
+      auto update = diis.update_with_status(std::move(trial), std::move(error));
+      current = std::move(update.vector);
+      if (!update.modified) {
+        carried_output = trial_out;
+        has_carried_output = true;
+      }
       result.diagnostic.diis_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
       previous = out.energy;

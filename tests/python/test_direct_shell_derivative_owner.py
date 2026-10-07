@@ -78,13 +78,30 @@ def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
     assert "add(atoms, 9 * sizeof(double))" in capacity
 
 
+def _assert_full_range_derivative_layout(body: str) -> None:
+    normalized = " ".join(body.split())
+    assert "bool separate_sources" in normalized
+    assert (
+        "std::vector<double> result((separate_sources ? 2U : 1U) * coordinates)"
+        in normalized
+    )
+    assert (
+        "cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream)"
+        in normalized
+    )
+    assert (
+        "cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),"
+        in normalized
+    )
+
+
 def test_full_range_derivative_shares_one_queue_and_download() -> None:
     """Work reduction is source reuse, not removal of an observable component."""
     source = _source("src/scf/cuda/direct_coulomb.cpp")
     body = source.split(
         "cudaError_t execute_generated_full_range_energy_derivatives(", 1
     )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
-    assert "std::vector<double> result(2U * coordinates)" in body
+    _assert_full_range_derivative_layout(body)
     assert body.count("launch_bounded_shell_energy_derivative(") == 1
     assert body.count("cudaMemcpyAsync(") == 1
     assert "for (unsigned source" not in body
@@ -96,6 +113,26 @@ def test_full_range_derivative_shares_one_queue_and_download() -> None:
     contraction = _source("src/scf/cuda/direct_force_quartet.cuh")
     assert "if (coefficient == 0.0 && exchange_weight == 0.0) return;" in contraction
     assert "SeparateSources ? 2U : 1U" in contraction
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    (
+        ("separate_sources ? 2U : 1U", "separate_sources ? 1U : 1U"),
+        ("separate_sources ? 2U : 1U", "separate_sources ? 2U : 0U"),
+        ("result.size() * sizeof(double)", "coordinates * sizeof(double)"),
+    ),
+)
+def test_full_range_derivative_layout_rejects_understated_storage(
+    before: str, after: str
+) -> None:
+    source = _source("src/scf/cuda/direct_coulomb.cpp")
+    body = source.split(
+        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
+    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    assert before in body
+    with pytest.raises(AssertionError):
+        _assert_full_range_derivative_layout(body.replace(before, after))
 
 
 def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
@@ -554,6 +591,48 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
     assert "execute_prepared_cuda_stationary_one_electron_pair(" in method
 
 
+def _assert_stationary_integral_layout(method: str, api: str, snapshot: str) -> None:
+    assert (
+        "candidate.reserve((combined_two_electron ? 3 : range_exchange ? 5 : 4) * nc)"
+        in " ".join(method.split())
+    )
+    assert (
+        "const auto source_count = combined ? 3U : "
+        "snapshot->token.identity.model.range_correction ? 5U : 4U"
+        in " ".join(api.split())
+    )
+    assert (
+        "source_count = 3 if combined_two_electron else 5 if range_exchange else 4"
+        in " ".join(snapshot.split())
+    )
+
+
+@pytest.mark.parametrize(
+    ("index", "before", "after"),
+    (
+        (0, "combined_two_electron ? 3 :", "combined_two_electron ? 2 :"),
+        (0, "range_exchange ? 5 : 4", "range_exchange ? 4 : 3"),
+        (1, "combined ? 3U", "combined ? 2U"),
+        (2, "3 if combined_two_electron", "2 if combined_two_electron"),
+    ),
+)
+def test_stationary_integral_layout_rejects_understated_channels(
+    index: int, before: str, after: str
+) -> None:
+    sources = [
+        " ".join(_source(path).split())
+        for path in (
+            "src/methods/dft_method.cpp",
+            "src/api/c_api_ks_snapshot.cpp",
+            "python/generativeqc/_ks_snapshot.py",
+        )
+    ]
+    assert before in sources[index]
+    sources[index] = sources[index].replace(before, after)
+    with pytest.raises(AssertionError):
+        _assert_stationary_integral_layout(*sources)
+
+
 def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> None:
     methods = _source("src/methods/dft_method.cpp")
     api = _source("src/api/c_api_ks_snapshot.cpp")
@@ -564,15 +643,15 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     end = methods.index("Result execute(bool compute_forces)", begin)
     body = methods[begin:end]
     assert "const bool range_exchange = execution_plan_.range_exchange;" in body
-    assert "candidate.reserve((range_exchange ? 5 : 4) * nc)" in body
+    _assert_stationary_integral_layout(body, api, snapshot)
     assert "execute_prepared_cuda_stationary_one_electron_pair(" in body
     assert "execute_prepared_cuda_direct_rsh_energy_derivatives_device(" in body
     assert "execute_prepared_cuda_direct_shell_full_range_derivatives_device(" in body
     assert "SemilocalFamily::" not in body
 
-    assert "snapshot->token.identity.model.range_correction ? 5U : 4U" in api
     assert "def cuda_integral_derivatives(" in snapshot
     assert '"generativeqc_ks_snapshot_cuda_integral_gradient_v1"' in snapshot
+    assert '"generativeqc_ks_snapshot_cuda_integral_gradient_v2"' in snapshot
 
     assert "stationary_integral_derivative_route=(" in stationary
     assert '"prepared-native-complete"' in stationary

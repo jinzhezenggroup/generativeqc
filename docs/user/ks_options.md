@@ -56,7 +56,38 @@ and equal-radius Becke partition as the reference. Element radii scale radial
 points and radial Jacobians; they do not add a heteronuclear partition
 correction. Pruning, screening, rules and units retain the version-1 contract.
 Changing the grid changes the discrete energy. Changing `tile_points` changes
-the schedule and capacity, with only FP64 reduction-order differences expected.
+the schedule, capacity and FP64 reduction order. With local-AO maps, larger
+block unions can also admit additional AO tail work; complete numerical gates
+remain necessary even though the grid and cutoff are unchanged.
+
+## SCF and force tile policies
+
+`KsOptions.tile_points` configures SCF AO/grid/XC panels. The ordinary public
+CUDA analytic-force executor has a separate fixed 256-point policy; composite
+forces instead use their own budget-aware planner. Increasing the SCF tile does
+not request a larger Becke force workspace.
+
+For an independently qualified larger-tile workload, request the size explicitly:
+
+```python
+options = KsOptions(
+    grid=GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32),
+    tile_points=512,
+)
+```
+
+Larger tiles reduce submission/map counts but can include more local AO
+summands. They are not universally faster, and map reservation bytes are not
+complete endpoint peak memory. The default remains 256: there is no implicit
+512-point promotion or automatic replacement of an explicit tile request.
+Resource budgets and the existing dense/local-AO admission remain authoritative.
+Use a new prepared owner when changing the tile, and inspect the actual
+`ks_diagnostic.tile_points` rather than assuming the requested route ran.
+
+See [complete tile qualification](../maintainer/pbe0_xc_tile_qualification.md)
+for paired E+F validation and the limits of the retained configuration evidence.
+
+## Prepared identity and ABI
 
 The complete options are included in resource identity and Python prepared
 model identity. Resource estimates use the actual grid dimensions and tile,

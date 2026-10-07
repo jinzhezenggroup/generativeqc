@@ -88,5 +88,21 @@ After the measured run, clang-format 23.1.2 reformatted the native solver and
 benchmark sources. `formatting-equivalence.json` retains before/after hashes;
 non-whitespace bytes (apart from include ordering) and the include inventory are
 identical. `restore-measured-format.patch` reversibly restores the exact measured
-source bytes from the final formatted checkout using `git apply --unidiff-zero`. This is a formatting-only
+source bytes from the frozen pre-integration checkpoint using `git apply --unidiff-zero`. This is a formatting-only
 integration check, not a new timing attribution to changed source hashes.
+
+## Current-master integration boundary
+
+These timings remain bound to the original implementation snapshot at
+[3e60fcaa](https://github.com/njzjz-bot/vibeqc/tree/3e60fcaa66fb5b36f7b59b10bc0f80cf89852aeb),
+whose tree is `f83246f99d67ebcaa1c680550d6a28e5d6a0069c`. Apply the formatting
+restore patch at that checkpoint, not to later integrated solver sources.
+
+The subsequent integration with master
+`c3bb6df4468ad75d34a2e2effb6e2450f2838a5a` preserves #2039's accepted-trial
+residual reuse and its two-vector no-DIIS capacity. Actual evaluator counts can
+therefore be smaller than this frozen run's nine evaluations. The source proof
+still identifies nine reference transforms, but per-solve saved work is computed
+from actual evaluations. Integration tests are new correctness evidence; no
+current-master timing or unchanged nine-evaluation trajectory is claimed. The
+reproduction tool follows current solver behavior and reports actual counts.

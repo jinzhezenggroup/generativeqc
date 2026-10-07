@@ -35,7 +35,10 @@ every input except `t1` and `t2` immutable for one synchronous solve. Its `Probl
 vectors, and its reuse arena is local to that call. Every new solve, including a
 changed reference, starts with a fresh preparation. DIIS/trial amplitudes always
 run the dynamic graph. The separately expanded final physical-residual replay is
-unchanged and uncached.
+unchanged and uncached. Accepted-trial residual reuse is orthogonal: when DIIS
+returns an unmodified trial, its already computed output remains reusable, and
+no-DIIS iteration does not evaluate a redundant trial. Static preparation counts
+only actual evaluator calls, never carried-output consumption.
 
 The native generator lowers the same dependency schedule into CPU and CUDA
 prepare/replay entry points. Only the explicitly enabled CPU candidate currently selects them. CUDA

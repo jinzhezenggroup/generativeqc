@@ -1,0 +1,731 @@
+diff --git a/benchmarks/readme_omol25.py b/benchmarks/readme_omol25.py
+index 45089f46c..3e2d3ebb5 100644
+--- a/benchmarks/readme_omol25.py
++++ b/benchmarks/readme_omol25.py
+@@ -73,7 +73,11 @@ def source_hashes() -> dict[str, str]:
+         "python/generativeqc/_snapshot_grid_cache.py",
+         "python/generativeqc/resources_ks.py",
+         "python/generativeqc/_stationary_cuda.py",
++        "python/generativeqc/_force_active_ao.py",
+         "python/generativeqc/batch.py",
++        "python/generativeqc_compiler/dft/ao_cuda.py",
++        "python/generativeqc_compiler/dft/xc_contraction_cuda.py",
++        "python/generativeqc_compiler/method/stationary_cuda.py",
+         "python/generativeqc_compiler/method/stationary_resources.py",
+         "python/generativeqc_compiler/method/stationary_composite_resources.py",
+         "python/generativeqc/_stationary_composite_cuda.py",
+diff --git a/python/generativeqc/_force_active_ao.py b/python/generativeqc/_force_active_ao.py
+index 68483a62d..3cdc8271e 100644
+--- a/python/generativeqc/_force_active_ao.py
++++ b/python/generativeqc/_force_active_ao.py
+@@ -7,7 +7,7 @@ source/device workload evidence; every miss retains the dense AO domain.
+ from __future__ import annotations
+ 
+ import typing
+-from dataclasses import asdict, dataclass
++from dataclasses import asdict, dataclass, replace
+ 
+ DEFAULT_FORCE_ACTIVE_AO_POLICY = "auto"
+ _SUPPORTED_DERIVATIVE_ORDERS = frozenset((1, 2))
+@@ -232,6 +232,24 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] =
+ )
+ 
+ 
++# Keep explicit 256-point callers and the same continuous producer crossover.
++# Automatic tiles are admitted by the shared complete-owner byte-budget planner;
++# do not let their policy label silently disable the existing indexed consumer.
++QUALIFIED_FORCE_ACTIVE_AO_PROFILES += tuple(
++    replace(
++        profile,
++        profile_id=f"{profile.profile_id}-budget-auto",
++        evidence=(
++            *profile.evidence,
++            ".agents/notes/implemented/performance/2026-10-06-pbe0-budget-admitted-cuda-schedule.md",
++        ),
++        tile_policy="budget-auto",
++        tile_points=None,
++    )
++    for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
++)
++
++
+ def resolve_force_active_ao_policy(
+     workload: ForceActiveAoWorkload,
+     *,
+diff --git a/python/generativeqc/_stationary_cuda.py b/python/generativeqc/_stationary_cuda.py
+index 60253f3c6..2e325943f 100644
+--- a/python/generativeqc/_stationary_cuda.py
++++ b/python/generativeqc/_stationary_cuda.py
+@@ -2836,7 +2836,10 @@ def _complete_rks_cuda_gradient_diagnostic(
+ 
+     requested_tile_points = tile_points
+     layout, grid_work = plan_stationary_cuda_grid_schedule(
+-        grid_points=len(state.grid.points), tile_points=tile_points, admit=admit_tile
++        grid_points=len(state.grid.points),
++        tile_points=tile_points,
++        admit=admit_tile,
++        preferred_tile_points=512,
+     )
+     grid_plan = layout.grid_plan
+     tensor_plans = layout.tensor_plans
+diff --git a/python/generativeqc/batch.py b/python/generativeqc/batch.py
+index bf9e8fc92..89d72a00b 100644
+--- a/python/generativeqc/batch.py
++++ b/python/generativeqc/batch.py
+@@ -644,7 +644,7 @@ class PreparedBatch:
+                     tile_policy, policy_tile_points = "budget-auto", None
+                 else:
+                     max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
+-                    tile_policy, policy_tile_points = "fixed", 256
++                    tile_policy, policy_tile_points = "budget-auto", None
+ 
+                 profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
+                 resident_provider = getattr(source, "cuda_resident_grid", None)
+@@ -729,6 +729,7 @@ class PreparedBatch:
+                     all_electron and not source.method_ir.full_range_exact_exchange
+                 )
+                 kwargs = {
++                    "tile_points": policy_tile_points,
+                     "compiler": (
+                         None if packaged else self._stationary_cuda_compiler()
+                     ),
+diff --git a/python/generativeqc_compiler/method/stationary_resources.py b/python/generativeqc_compiler/method/stationary_resources.py
+index e3c9e3c84..c4ad37550 100644
+--- a/python/generativeqc_compiler/method/stationary_resources.py
++++ b/python/generativeqc_compiler/method/stationary_resources.py
+@@ -13,12 +13,12 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
+ from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
+ 
+ GEOMETRY_MAX_LANES = 2048
+-GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
++GEOMETRY_MAX_SCRATCH_BYTES = 16777216
+ GEOMETRY_THREADS = 32
+ BECKE_COOPERATIVE_MAX_ATOMS = 128
+ BECKE_RETAINED_MAX_ATOMS = 32
+ BECKE_PAIR_TILE_ROWS = 4
+-BECKE_COOPERATIVE_THREADS = 32
++BECKE_COOPERATIVE_THREADS = 128
+ BECKE_PAIR_STATE_BYTES = 64
+ BECKE_COOPERATIVE_CONTROL_BYTES = 16
+ STATIONARY_MAX_ATOMS = 128
+@@ -36,14 +36,16 @@ def plan_stationary_cuda_grid_schedule(
+     grid_points: int,
+     tile_points: int | None,
+     admit: Callable[[int], _TileLayout],
++    preferred_tile_points: int = 1024,
+ ) -> _TileLayout:
+     """Select one complete, budget-admitted semilocal or composite grid tile.
+ 
+     The callback is a dry capacity/work query: it must account for every live
+     owner, raise ValueError on rejection, and never allocate or execute CUDA.
+     AO and method owners retain their own layout formulas. The shared schedule
+-    prefers 1024 points, then the qualified 256-point fallback and smaller
+-    tiles; it cannot shrink whole-grid storage or change the scientific grid.
++    prefers the consumer's requested tile (1024 by default), then the qualified
++    256-point fallback and smaller tiles. Preference is a work/coherence choice,
++    not permission to exceed the complete owner's budgets or change its grid.
+     Explicit requests are tried exactly once, including requests above the
+     point count. This preserves caller-controlled capacity and tail tests.
+     """
+@@ -53,13 +55,16 @@ def plan_stationary_cuda_grid_schedule(
+         type(tile_points) is not int or not 1 <= tile_points <= 4096
+     ):
+         raise ValueError("stationary CUDA tile_points must be None or in [1,4096]")
++    if type(preferred_tile_points) is not int or not 1 <= preferred_tile_points <= 4096:
++        raise ValueError("stationary CUDA preferred_tile_points must be in [1,4096]")
+     candidates = (
+         (tile_points,)
+         if tile_points is not None
+         else tuple(
+             dict.fromkeys(
+                 min(points, grid_points)
+-                for points in (1024, 256, 128, 64, 32, 16, 8, 4, 2, 1)
++                for points in (preferred_tile_points, 256, 128, 64, 32, 16, 8, 4, 2, 1)
++                if points <= preferred_tile_points
+             )
+         )
+     )
+diff --git a/tests/python/test_becke_cooperative.py b/tests/python/test_becke_cooperative.py
+index f9a646a81..4307f3d8c 100644
+--- a/tests/python/test_becke_cooperative.py
++++ b/tests/python/test_becke_cooperative.py
+@@ -248,7 +248,7 @@ def test_explicit_cooperative_selection_keeps_point_lanes() -> None:
+         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=True
+     )
+     assert generic.becke_threads_per_point == 1 and generic.becke_shared_bytes == 0
+-    assert cooperative.becke_threads_per_point == 32
++    assert cooperative.becke_threads_per_point == 128
+     assert cooperative.becke_shared_bytes == 16 + 66 * 64
+     assert cooperative.geometry_lanes == generic.geometry_lanes
+     assert cooperative.allocation_bytes == generic.allocation_bytes
+@@ -268,7 +268,7 @@ def test_explicit_cooperative_selection_keeps_point_lanes() -> None:
+         plan = plan_stationary_cuda_resources(
+             **common, target=target, budget_bytes=1 << 30, cooperative_becke=True
+         )
+-        assert plan.becke_threads_per_point == 32
++        assert plan.becke_threads_per_point == 128
+         assert plan.becke_shared_bytes == 16 + 64 * (4 * (2 * atoms - 5) // 2)
+         assert plan.becke_shared_bytes <= 32 << 10
+         assert plan.geometry_lanes == generic.geometry_lanes
+diff --git a/tests/python/test_dft_complete_cuda.py b/tests/python/test_dft_complete_cuda.py
+index 63b6ff8aa..89e9db0df 100644
+--- a/tests/python/test_dft_complete_cuda.py
++++ b/tests/python/test_dft_complete_cuda.py
+@@ -14,6 +14,10 @@ from time import perf_counter
+ 
+ import numpy as np
+ import pytest
++from generativeqc_compiler.method.stationary_resources import (
++    BECKE_COOPERATIVE_THREADS,
++    GEOMETRY_MAX_SCRATCH_BYTES,
++)
+ 
+ pytestmark = pytest.mark.skipif(
+     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
+@@ -38,9 +42,9 @@ def cooperative_becke_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
+         requested = kwargs.setdefault("cooperative_becke", True)
+         original(self, *args, **kwargs)
+         if requested and 1 < self.natom <= 128:
+-            assert self.metrics()["becke_threads_per_point"] == 32, (
+-                "cooperative qualification selected the generic device fallback"
+-            )
++            assert (
++                self.metrics()["becke_threads_per_point"] == BECKE_COOPERATIVE_THREADS
++            ), "cooperative qualification selected the generic device fallback"
+ 
+     monkeypatch.setattr(_CudaSources, "__init__", initialize)
+ 
+@@ -1323,7 +1327,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
+         )
+         sources = []
+         lane_bytes = 144 * basis.natom
+-        maximum_lanes = min(point_capacity, 2048, (8 << 20) // lane_bytes)
++        maximum_lanes = min(
++            point_capacity, 2048, GEOMETRY_MAX_SCRATCH_BYTES // lane_bytes
++        )
+         for lanes, cached, cooperative in (
+             (lanes, cached, cooperative)
+             for lanes in (
+@@ -1371,7 +1377,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
+             )
+             assert owner.metrics()["center_geometry_bytes"] == retained_centers
+             selected = cooperative and atom_count <= 128
+-            assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
++            assert owner.metrics()["becke_threads_per_point"] == (
++                BECKE_COOPERATIVE_THREADS if selected else 1
++            )
+             assert owner.metrics()["becke_shared_bytes"] == (
+                 16 + 64 * (pairs if atom_count <= 32 else 4 * (2 * atom_count - 5) // 2)
+                 if selected
+diff --git a/tests/python/test_dft_mp_v1_capacity.py b/tests/python/test_dft_mp_v1_capacity.py
+index f36282bdc..fca863d53 100644
+--- a/tests/python/test_dft_mp_v1_capacity.py
++++ b/tests/python/test_dft_mp_v1_capacity.py
+@@ -183,7 +183,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
+             "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
+         ),
+         "cuda_force_method_sha256": (
+-            "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
++            "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
+         ),
+         "prepared_aot_selection_sha256": (
+             "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
+@@ -286,7 +286,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
+         "task_executor.execute_pages(domain, submit_page)"
+     )
+     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+-        "geometry_resources_sha256": "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56",
++        "geometry_resources_sha256": "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811",
+         "public_wrapper_sha256": (
+             "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
+         ),
+@@ -339,7 +339,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
+             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
+         ),
+         "endpoint_owner_sha256": (
+-            "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
++            "1d7d817ae81569a293f16262d98743091fc58146bf87938661e097af3536a269"
+         ),
+         "ao_map_reserve_sha256": (
+             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
+@@ -2421,8 +2421,8 @@ def test_snapshot_grid_cache_identity_and_cap_changes_fail_closed(
+     ("old", "new"),
+     [
+         (
+-            "GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20",
+-            "GEOMETRY_MAX_SCRATCH_BYTES = 16 << 20",
++            "GEOMETRY_MAX_SCRATCH_BYTES = 16777216",
++            "GEOMETRY_MAX_SCRATCH_BYTES = 33554432",
+         ),
+         ("phased_becke: bool = False", "phased_becke: bool = True"),
+     ],
+@@ -2976,8 +2976,8 @@ def test_native_primitive_domain_capability_and_work_proofs_fail_closed(
+             "source-resources definition changed",
+         ),
+         (
+-            "tile_points=tile_points, admit=admit_tile",
+-            "tile_points=256, admit=admit_tile",
++            "        tile_points=tile_points,\n        admit=admit_tile,",
++            "        tile_points=256,\n        admit=admit_tile,",
+             "tile schedule binding changed",
+         ),
+         (
+diff --git a/tests/python/test_force_active_ao_policy.py b/tests/python/test_force_active_ao_policy.py
+index c9f565365..79034fe97 100644
+--- a/tests/python/test_force_active_ao_policy.py
++++ b/tests/python/test_force_active_ao_policy.py
+@@ -55,7 +55,12 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
+ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> None:
+     assert tuple(
+         profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+-    ) == ("ordinary-direct-active-ao-cost-v3", "cuda-resident-preao-native-csr-v1")
++    ) == (
++        "ordinary-direct-active-ao-cost-v3",
++        "cuda-resident-preao-native-csr-v1",
++        "ordinary-direct-active-ao-cost-v3-budget-auto",
++        "cuda-resident-preao-native-csr-v1-budget-auto",
++    )
+ 
+     below_crossover = resolve_force_active_ao_policy(_workload())
+     assert below_crossover.selected
+@@ -109,6 +114,35 @@ def test_qualified_default_selects_native_csr() -> None:
+     assert decision.max_active_fraction == 0.8
+ 
+ 
++@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_90", "sm_120"])
++@pytest.mark.parametrize("device_name", [None, "arbitrary CUDA device"])
++@pytest.mark.parametrize("grid_points", [589_824, 1_179_648])
++def test_automatic_tiles_preserve_producer_and_guards_without_product_whitelists(
++    architecture: str, device_name: str | None, grid_points: int
++) -> None:
++    fixed = _workload(
++        architecture=architecture, device_name=device_name, grid_points=grid_points
++    )
++    automatic = replace(fixed, tile_policy="budget-auto", tile_points=None)
++    incumbent = resolve_force_active_ao_policy(fixed)
++    selected = resolve_force_active_ao_policy(automatic)
++    assert selected.selected
++    assert selected.profile_id == f"{incumbent.profile_id}-budget-auto"
++    assert (selected.producer, selected.cutoff, selected.cache_bytes) == (
++        incumbent.producer,
++        incumbent.cutoff,
++        incumbent.cache_bytes,
++    )
++    assert selected.max_active_fraction == incumbent.max_active_fraction
++    for miss in (
++        replace(automatic, density_fitted=True),
++        replace(automatic, resident_grid=False),
++        replace(automatic, max_device_bytes=(512 << 20) - 1),
++        replace(automatic, max_host_bytes=(256 << 20) - 1),
++    ):
++        assert not resolve_force_active_ao_policy(miss).selected
++
++
+ @pytest.mark.parametrize(
+     "updates",
+     [
+diff --git a/tests/python/test_stationary_aot_no_compiler.py b/tests/python/test_stationary_aot_no_compiler.py
+index 9830a9b80..9c0aa05e8 100644
+--- a/tests/python/test_stationary_aot_no_compiler.py
++++ b/tests/python/test_stationary_aot_no_compiler.py
+@@ -168,6 +168,7 @@ def test_public_aot_force_does_not_probe_nvcc(
+ 
+     def calculate(*args: object, **kwargs: object) -> SimpleNamespace:
+         assert kwargs["compiler"] is None
++        assert kwargs["tile_points"] is None
+         assert kwargs["max_grid_points"] is None
+         assert kwargs["max_grid_pair_visits"] is None
+         assert kwargs["target"] is target
+diff --git a/tests/python/test_stationary_composite_resources.py b/tests/python/test_stationary_composite_resources.py
+index d06da0e82..01c142cde 100644
+--- a/tests/python/test_stationary_composite_resources.py
++++ b/tests/python/test_stationary_composite_resources.py
+@@ -52,7 +52,7 @@ def _plan(
+ def test_automatic_composite_schedule_prefers_more_concurrent_points() -> None:
+     selected = _plan()
+     assert selected.grid.tile_points == selected.sources.geometry_lanes == 1024
+-    assert selected.sources.becke_threads_per_point == 32
++    assert selected.sources.becke_threads_per_point == 128
+     assert selected.device_bound <= 1 << 30
+     assert selected.host_bound <= 2 << 30
+ 
+diff --git a/tests/python/test_stationary_cooperative_qualification.py b/tests/python/test_stationary_cooperative_qualification.py
+index 623573193..ab3100b37 100644
+--- a/tests/python/test_stationary_cooperative_qualification.py
++++ b/tests/python/test_stationary_cooperative_qualification.py
+@@ -7,6 +7,7 @@ from types import SimpleNamespace
+ from typing import TYPE_CHECKING
+ 
+ import pytest
++from generativeqc_compiler.method.stationary_resources import BECKE_COOPERATIVE_THREADS
+ 
+ if TYPE_CHECKING:
+     from pathlib import Path
+@@ -33,7 +34,11 @@ def test_full_force_fixture_selects_opt_in_and_preserves_matrix_choices(
+             observed.append((integral_derivatives, cooperative_becke))
+ 
+         def metrics(self) -> dict[str, int]:
+-            return {"becke_threads_per_point": 32 if self.selected else 1}
++            return {
++                "becke_threads_per_point": BECKE_COOPERATIVE_THREADS
++                if self.selected
++                else 1
++            }
+ 
+     monkeypatch.setattr(runtime, "_CudaSources", Owner)
+     monkeypatch.setenv("GENERATIVEQC_TEST_COOPERATIVE_BECKE", "1")
+diff --git a/tests/python/test_stationary_geometry_resources.py b/tests/python/test_stationary_geometry_resources.py
+index b0a2fe6ac..a35b31cac 100644
+--- a/tests/python/test_stationary_geometry_resources.py
++++ b/tests/python/test_stationary_geometry_resources.py
+@@ -11,6 +11,7 @@ from types import CodeType, FunctionType, SimpleNamespace
+ import pytest
+ from generativeqc_compiler.common.cuda_target import cuda_target_info
+ from generativeqc_compiler.method.stationary_resources import (
++    BECKE_COOPERATIVE_THREADS,
+     GEOMETRY_MAX_SCRATCH_BYTES,
+     plan_stationary_cuda_resources,
+     stationary_cuda_allocation_bytes,
+@@ -42,7 +43,9 @@ def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
+     generic = plan_stationary_cuda_resources(
+         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=False
+     )
+-    expected_threads = 32 if architecture == "sm_120" and atoms >= 12 else 1
++    expected_threads = (
++        BECKE_COOPERATIVE_THREADS if architecture == "sm_120" and atoms >= 12 else 1
++    )
+     assert automatic.becke_threads_per_point == expected_threads
+     assert generic.becke_threads_per_point == 1
+     assert automatic.allocation_bytes == generic.allocation_bytes
+@@ -155,7 +158,7 @@ def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
+ #include <stdexcept>
+ #include <limits>
+ constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
+-constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=8<<20;
++constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=16777216;
+ """
+         + function[0]
+         + "\nint main() {\n"
+@@ -418,7 +421,9 @@ def test_fitted_provider_retains_its_full_admitted_allowance(
+         cooperative_becke=cooperative,
+     )
+     assert plan.geometry_lanes == 32
+-    assert plan.becke_threads_per_point == (32 if cooperative else 1)
++    assert plan.becke_threads_per_point == (
++        BECKE_COOPERATIVE_THREADS if cooperative else 1
++    )
+     assert plan.becke_shared_bytes == (4240 if cooperative else 0)
+     assert minimum + allowance - plan.allocation_bytes == allowance
+ 
+diff --git a/tests/python/test_stationary_grid_schedule.py b/tests/python/test_stationary_grid_schedule.py
+index 92663692a..2c8a7744a 100644
+--- a/tests/python/test_stationary_grid_schedule.py
++++ b/tests/python/test_stationary_grid_schedule.py
+@@ -159,6 +159,52 @@ def test_invalid_contract_fails_before_calling_any_owner(
+         )
+ 
+ 
++@pytest.mark.parametrize("preference", [1, 32, 128, 512, 1024, 4096])
++def test_consumer_preference_keeps_budget_fallbacks_bounded(preference: int) -> None:
++    visited = []
++
++    def admit(points: int) -> int:
++        visited.append(points)
++        if points > 32:
++            raise ValueError("concurrent owners exceed budget")
++        return points
++
++    selected = plan_stationary_cuda_grid_schedule(
++        grid_points=10_000,
++        tile_points=None,
++        preferred_tile_points=preference,
++        admit=admit,
++    )
++    assert visited[0] == preference
++    assert selected == min(preference, 32)
++    assert all(points <= preference for points in visited)
++
++
++@pytest.mark.parametrize("preference", [0, 4097, True, None, 512.0])
++def test_invalid_consumer_preference_is_not_silently_ignored(
++    preference: int,
++) -> None:
++    with pytest.raises(ValueError, match="preferred_tile_points"):
++        plan_stationary_cuda_grid_schedule(
++            grid_points=1000,
++            tile_points=None,
++            preferred_tile_points=preference,
++            admit=lambda *_: pytest.fail("invalid preference reached admission"),
++        )
++
++
++def test_explicit_tiles_override_consumer_preference() -> None:
++    assert (
++        plan_stationary_cuda_grid_schedule(
++            grid_points=10,
++            tile_points=1024,
++            preferred_tile_points=512,
++            admit=lambda points: points,
++        )
++        == 1024
++    )
++
++
+ def test_unexpected_owner_error_is_not_hidden_as_another_tile_rejection() -> None:
+     def failed_owner(points: int) -> None:
+         raise RuntimeError("not a capacity rejection")
+diff --git a/tests/python/test_stationary_large_grid_work.py b/tests/python/test_stationary_large_grid_work.py
+index 8158dd44c..47dda891c 100644
+--- a/tests/python/test_stationary_large_grid_work.py
++++ b/tests/python/test_stationary_large_grid_work.py
+@@ -457,7 +457,7 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
+     assert plan["source"].allocation_bytes == source
+     assert plan["reserve"] == reserve
+     assert plan["grid"].peak_bytes + source + reserve < 512 << 20
+-    assert plan["source"].becke_threads_per_point == 32
++    assert plan["source"].becke_threads_per_point == 128
+     assert _resource_preflight(basis, host)["host"] == host
+     with pytest.raises(ValueError, match="additional-host byte budget"):
+         _resource_preflight(basis, host - 1)
+diff --git a/tools/dft_mp_v1/qualify_capacity.py b/tools/dft_mp_v1/qualify_capacity.py
+index 74bd3c1e9..dd306adac 100644
+--- a/tools/dft_mp_v1/qualify_capacity.py
++++ b/tools/dft_mp_v1/qualify_capacity.py
+@@ -277,7 +277,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
+     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
+ )
+ PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
+-    "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
++    "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
+ )
+ PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
+     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
+@@ -345,7 +345,7 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
+     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
+ )
+ STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
+-    "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
++    "1d7d817ae81569a293f16262d98743091fc58146bf87938661e097af3536a269"
+ )
+ STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
+     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
+@@ -493,7 +493,7 @@ GRID_PLAN_DEFINITION = (
+     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
+ )
+ GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
+-    "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56"
++    "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811"
+ )
+ MINIMUM_SOURCE_BYTES_DEFINITION = (
+     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
+@@ -1352,7 +1352,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
+     ]
+     if len(selections) != 1 or ast.unparse(selections[0].value) != (
+         "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
+-        "tile_points=tile_points, admit=admit_tile)"
++        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=512)"
+     ):
+         raise RuntimeError("stationary CUDA tile schedule binding changed")
+     if (
+diff --git a/benchmarks/qualify_cuda_schedule.py b/benchmarks/qualify_cuda_schedule.py
+new file mode 100644
+index 000000000..3cb303d0a
+--- /dev/null
++++ b/benchmarks/qualify_cuda_schedule.py
+@@ -0,0 +1,77 @@
++"""Run complete PBE0 endpoints on an exact CUDA schedule source trial.
++
++Unlike AO-producer qualification, schedule trials may legitimately select a
++different existing AO policy. Preserve that policy and its work receipt rather
++than forcing a producer or assuming that a larger tile remains sparse. Intrusive
++device timers belong in separate runs, never in the clean timing population.
++"""
++
++from __future__ import annotations
++
++import argparse
++import json
++import sys
++from collections.abc import Mapping
++from pathlib import Path
++from typing import Any
++from unittest.mock import patch
++
++import numpy as np
++from generativeqc import _stationary_cuda
++from generativeqc.batch import PreparedBatch
++
++from benchmarks.readme_omol25 import main
++from benchmarks.readme_pbe0 import PBE0
++
++
++def run() -> None:
++    """Retain the standard scientific protocol and actual production routing."""
++    parser = argparse.ArgumentParser(add_help=False)
++    parser.add_argument("--intrusive", action="store_true")
++    arguments, remaining = parser.parse_known_args()
++    diagnostic = _stationary_cuda.complete_rks_cuda_gradient_diagnostic
++    original_force = PreparedBatch._public_dft_cuda_force
++    work_records = []
++
++    def profiled(*values: Any, **kwargs: Any) -> Any:
++        kwargs["profile_device"] = arguments.intrusive
++        return diagnostic(*values, **kwargs)
++
++    def observed_force(self: Any, *values: Any, **kwargs: Any) -> Any:
++        forces, work = original_force(self, *values, **kwargs)
++        work_records.append(work)
++        return forces, work
++
++    def encode(value: Any) -> Any:
++        if isinstance(value, Mapping):
++            return dict(value)
++        if isinstance(value, np.ndarray):
++            return value.tolist()
++        if isinstance(value, np.generic):
++            return value.item()
++        raise TypeError(f"unsupported schedule receipt value: {type(value)}")
++
++    output = (
++        Path(remaining[remaining.index("--output") + 1])
++        if "--output" in remaining
++        else None
++    )
++    with (
++        patch.object(sys, "argv", [sys.argv[0], *remaining]),
++        patch.object(
++            _stationary_cuda, "complete_rks_cuda_gradient_diagnostic", profiled
++        ),
++        patch.object(PreparedBatch, "_public_dft_cuda_force", observed_force),
++    ):
++        try:
++            main(PBE0)
++        finally:
++            if output is not None and output.exists():
++                record = json.loads(output.read_text())
++                record["cuda_schedule_intrusive"] = arguments.intrusive
++                record["cuda_schedule_force_work"] = work_records
++                output.write_text(json.dumps(record, indent=2, default=encode) + "\n")
++
++
++if __name__ == "__main__":
++    run()
+diff --git a/tests/python/test_cuda_schedule_endpoint.py b/tests/python/test_cuda_schedule_endpoint.py
+new file mode 100644
+index 000000000..3995ded89
+--- /dev/null
++++ b/tests/python/test_cuda_schedule_endpoint.py
+@@ -0,0 +1,113 @@
++"""Schedule evidence must observe production policy, not replace it."""
++
++from __future__ import annotations
++
++import json
++import sys
++from typing import TYPE_CHECKING, Any
++
++import numpy as np
++import pytest
++
++from benchmarks import qualify_cuda_schedule
++from benchmarks.readme_pbe0 import PBE0
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++def test_schedule_source_receipt_binds_all_trial_axes_and_ao_policy() -> None:
++    from benchmarks.readme_omol25 import source_hashes
++
++    hashes = source_hashes()
++    assert {
++        "python/generativeqc/_force_active_ao.py",
++        "python/generativeqc/batch.py",
++        "python/generativeqc_compiler/dft/ao_cuda.py",
++        "python/generativeqc_compiler/dft/xc_contraction_cuda.py",
++        "python/generativeqc_compiler/method/stationary_cuda.py",
++        "python/generativeqc_compiler/method/stationary_resources.py",
++    } <= hashes.keys()
++
++
++@pytest.mark.parametrize("intrusive", [False, True])
++def test_schedule_endpoint_preserves_policy_and_protocol(
++    monkeypatch: pytest.MonkeyPatch, intrusive: bool
++) -> None:
++    calls = []
++    payload = {"resident_ao_cutoff": 1e-16, "tile_points": 1024}
++    result = object()
++
++    def diagnostic(*values: Any, **kwargs: Any) -> object:
++        calls.append((values, kwargs))
++        return result
++
++    def endpoint(specification: Any) -> None:
++        assert specification is PBE0
++        assert sys.argv == ["schedule", "native", "--atoms", "48"]
++        actual = qualify_cuda_schedule._stationary_cuda.complete_rks_cuda_gradient_diagnostic(
++            "state", **payload
++        )
++        assert actual is result
++
++    monkeypatch.setattr(
++        qualify_cuda_schedule._stationary_cuda,
++        "complete_rks_cuda_gradient_diagnostic",
++        diagnostic,
++    )
++    monkeypatch.setattr(qualify_cuda_schedule, "main", endpoint)
++    arguments = ["schedule", "native", "--atoms", "48"]
++    if intrusive:
++        arguments.insert(1, "--intrusive")
++    monkeypatch.setattr(sys, "argv", arguments)
++    qualify_cuda_schedule.run()
++    assert calls == [(("state",), {**payload, "profile_device": intrusive})]
++    assert (
++        qualify_cuda_schedule._stationary_cuda.complete_rks_cuda_gradient_diagnostic
++        is diagnostic
++    )
++    assert sys.argv is arguments
++
++
++@pytest.mark.parametrize("fail", [False, True])
++def test_schedule_journals_actual_force_work_even_after_failure(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fail: bool
++) -> None:
++    output = tmp_path / "endpoint.json"
++    forces = np.zeros((1, 3))
++    work = {"selected_tile": np.int64(1024), "array": np.asarray([1, 2])}
++    calls = []
++
++    def force(self: Any, *values: Any, **kwargs: Any) -> Any:
++        calls.append((self, values, kwargs))
++        return forces, work
++
++    def endpoint(specification: Any) -> None:
++        actual_forces, actual_work = (
++            qualify_cuda_schedule.PreparedBatch._public_dft_cuda_force(
++                "owner", "state", preserve_policy=True
++            )
++        )
++        assert actual_forces is forces
++        assert actual_work is work
++        output.write_text(json.dumps({"status": "failed" if fail else "measured"}))
++        if fail:
++            raise RuntimeError("endpoint failed")
++
++    monkeypatch.setattr(
++        qualify_cuda_schedule.PreparedBatch, "_public_dft_cuda_force", force
++    )
++    monkeypatch.setattr(qualify_cuda_schedule, "main", endpoint)
++    monkeypatch.setattr(sys, "argv", ["schedule", "native", "--output", str(output)])
++    if fail:
++        with pytest.raises(RuntimeError, match="endpoint failed"):
++            qualify_cuda_schedule.run()
++    else:
++        qualify_cuda_schedule.run()
++    record = json.loads(output.read_text())
++    assert record["cuda_schedule_force_work"] == [
++        {"selected_tile": 1024, "array": [1, 2]}
++    ]
++    assert record["cuda_schedule_intrusive"] is False
++    assert calls == [("owner", ("state",), {"preserve_policy": True})]
++    assert qualify_cuda_schedule.PreparedBatch._public_dft_cuda_force is force

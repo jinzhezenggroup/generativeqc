@@ -63,13 +63,13 @@ def composed_force_probe(
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
-@pytest.mark.parametrize("long_range", (False, True))
+@pytest.mark.parametrize("range_operator", (0, 1, 2))
 def test_composed_force_owners_and_submission_failures(
-    composed_force_probe: Path, unrestricted: bool, long_range: bool
+    composed_force_probe: Path, unrestricted: bool, range_operator: int
 ) -> None:
     """Every lease/cache state must own each order once and stop on any error."""
     result = subprocess.run(
-        [str(composed_force_probe), str(int(unrestricted)), str(int(long_range))],
+        [str(composed_force_probe), str(int(unrestricted)), str(range_operator)],
         capture_output=True,
         text=True,
         check=False,
@@ -214,8 +214,11 @@ cudaError_t launch_direct_force_resident_bra(
     const double* schwarz_pointer, const double* density_pointer,
     const std::uint8_t* active_pointer, double* output_pointer, std::uint64_t mask,
     double j, double k) {
-  assert(expected_range == DirectRangeOperator::FullSources);
-  assert(mode == DirectForceOutputMode::Separate && unrestricted == expected_unrestricted);
+  assert(expected_range == DirectRangeOperator::FullSources ||
+         expected_range == DirectRangeOperator::Full);
+  assert(mode == (expected_range == DirectRangeOperator::FullSources
+                     ? DirectForceOutputMode::Separate : DirectForceOutputMode::Combined));
+  assert(unrestricted == expected_unrestricted);
   assert(stream == stream_id && screening == tolerance && shell == &shell_bounds);
   assert(shell_density == &density_bounds && density_screening);
   assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
@@ -242,8 +245,11 @@ cudaError_t run() {
 int main(int argc, char** argv) {
   assert(argc == 3);
   expected_unrestricted = std::atoi(argv[1]);
-  const bool long_range = std::atoi(argv[2]);
-  expected_range = long_range ? DirectRangeOperator::Long : DirectRangeOperator::FullSources;
+  const int selection = std::atoi(argv[2]);
+  const bool long_range = selection == 2;
+  expected_range = long_range ? DirectRangeOperator::Long
+                             : selection == 1 ? DirectRangeOperator::Full
+                                              : DirectRangeOperator::FullSources;
   int views;
   // Resident states: complete, empty, missing each view, zero/overflow task
   // count, zero/over-limit bra capacity. Only a complete lease owns order one.
@@ -298,7 +304,7 @@ int main(int argc, char** argv) {
     }
   }
   // The public wrapper rejects other radial operators before any submission.
-  for (auto range : {DirectRangeOperator::Full, DirectRangeOperator::Short}) {
+  for (auto range : {DirectRangeOperator::Short, static_cast<DirectRangeOperator>(99)}) {
     expected_range = range;
     fail_event = -1;
     assert(run() == cudaErrorInvalidValue && events.empty());

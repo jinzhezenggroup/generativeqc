@@ -26,9 +26,7 @@ def test_pair_derivative_selector_preserves_spin_screening_and_force_owner() -> 
                 f"select.template operator()<{spin}, DirectScreeningPurpose::{purpose}>();"
                 in dispatch
             )
-    assert (
-        "separate_sources && materialized_pair_derivative_available(batch)" in dispatch
-    )
+    assert "if (materialized_pair_derivative_available(batch))" in dispatch
     for enabled in ("true", "false"):
         assert (
             f"launch.template operator()<Unrestricted, Purpose, {enabled}>();"

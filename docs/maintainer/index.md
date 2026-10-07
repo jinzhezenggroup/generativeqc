@@ -5,6 +5,7 @@ Use this guide to keep GenerativeQC scientifically trustworthy, reproducible, pe
 - [Validation gates](validation.md)
 - [Frozen DF factor precision](df_frozen_precision.md)
 - [Performance engineering](performance_engineering.md)
+- [PBE0 SCF XC tile qualification](pbe0_xc_tile_qualification.md)
 - [Large-domain stationary CUDA qualification](stationary_large_domain_qualification.md)
 - [Scientific evidence retention](evidence_retention.md)
 - [CUDA ownership](cuda_ownership.md)
@@ -24,6 +25,7 @@ Historical investigation belongs in `.agents/notes/`; current operational truth 
 validation
 df_frozen_precision
 performance_engineering
+pbe0_xc_tile_qualification
 evidence_retention
 cuda_ownership
 vendor_boundaries

@@ -214,7 +214,8 @@ static std::size_t budget(const Problem& p,bool reuse,std::size_t history=0){
  const auto iteration=reuse?iteration_reuse_arena_elements(p.nocc,p.nvir):iteration_arena_elements(p.nocc,p.nvir);
  const auto elements=p.initial_t1.size()+p.initial_t2.size();
  const auto n=history+1,scratch=history?history*history+2*n*n+2*n:0;
- return p.reference_retained_bytes+problem_host_bytes(p)+sizeof(double)*(iteration+replay_arena_elements(p.nocc,p.nvir)+(4+2*history)*elements+scratch);
+ const auto host_vectors=history?4+2*history:2;
+ return p.reference_retained_bytes+problem_host_bytes(p)+sizeof(double)*(iteration+replay_arena_elements(p.nocc,p.nvir)+host_vectors*elements+scratch);
 }
 static void print_result(const Problem& p,const SolverResult& r){
  std::cout<<std::setprecision(17)<<"{\"o\":"<<p.nocc<<",\"v\":"<<p.nvir<<",\"energy\":"<<r.correlation_energy<<",\"t1\":[";
@@ -228,7 +229,8 @@ static void check_owner(Problem p){
  const auto reused=solve_cpu(p,options);const auto& d=reused.diagnostic;
  require(reused.converged(),"reused solve did not converge");
  require(d.iteration_reuse&&d.iteration_invariant_preparations==1,"one preparation per solve");
- require(d.iteration_graph_calls>2&&d.iteration_reused_evaluations==d.iteration_graph_calls,"current and trial reuse");
+ require(d.iteration_graph_calls>2&&d.iteration_reused_evaluations==d.iteration_graph_calls,"current evaluation reuse");
+ require(d.iteration_graph_calls==d.iterations&&d.update_calls+1==d.iterations,"no-DIIS evaluates once per iteration");
  require(d.iteration_invariant_operations==iteration_invariant_operation_count,"prepare work count");
  require(d.iteration_dynamic_operations==d.iteration_graph_calls*iteration_dynamic_operation_count,"dynamic work count");
  require(d.iteration_invariant_operations_saved==(d.iteration_graph_calls-1)*iteration_invariant_operation_count,"net saved work count");
@@ -247,7 +249,7 @@ static void check_owner(Problem p){
   require(fallback.diagnostic.iteration_invariant_operations==fallback.diagnostic.iteration_graph_calls*iteration_invariant_operation_count,"uncached invariant work");
   require(fallback.diagnostic.iteration_dynamic_operations==fallback.diagnostic.iteration_graph_calls*iteration_dynamic_operation_count,"uncached dynamic work");
   require(fallback.correlation_energy==reused.correlation_energy&&fallback.t1==reused.t1&&fallback.t2==reused.t2,"full solver final-state parity");
-  require(fallback.diagnostic.iterations==d.iterations&&fallback.diagnostic.replay_graph_calls==d.replay_graph_calls,"same convergence/replay path");
+  require(fallback.diagnostic.iterations==d.iterations&&fallback.diagnostic.iteration_graph_calls==d.iteration_graph_calls&&fallback.diagnostic.replay_graph_calls==d.replay_graph_calls,"same convergence/evaluation/replay path");
  }
  options.max_bytes=budget(p,false)-1;bool refused=false;
  try{solve_cpu(p,options);}catch(const std::length_error&){refused=true;}require(refused,"one-byte-short complete budget");
@@ -266,6 +268,11 @@ static void check_owner(Problem p){
  require(diis_reused.converged()&&diis_full.converged(),"DIIS convergence");
  require(diis_reused.diagnostic.iteration_invariant_preparations==1&&!diis_full.diagnostic.iteration_reuse,"DIIS reference lifetime");
  require(diis_reused.t1==diis_full.t1&&diis_reused.t2==diis_full.t2&&diis_reused.correlation_energy==diis_full.correlation_energy,"DIIS final-state parity");
+ const auto& diis_d=diis_reused.diagnostic;
+ require(diis_d.iteration_graph_calls==diis_full.diagnostic.iteration_graph_calls&&diis_d.iterations==diis_full.diagnostic.iterations,"same DIIS carried-output decisions");
+ require(diis_d.iteration_graph_calls<2*diis_d.iterations-1,"DIIS must reuse its first accepted trial output");
+ require(diis_d.iteration_reused_evaluations==diis_d.iteration_graph_calls&&diis_d.iteration_dynamic_operations==diis_d.iteration_graph_calls*iteration_dynamic_operation_count,"carried output must not count as a new graph evaluation");
+ require(diis_d.iteration_invariant_operations_saved==(diis_d.iteration_graph_calls-1)*iteration_invariant_operation_count,"saved operations use actual graph calls");
  // The canonical denominator view carries an immutable spectrum/level shift
  // outside the logical d2 pointer; changing amplitudes must still reconstruct
  // each dynamic Jacobi denominator without storing a stale trial.
@@ -279,6 +286,17 @@ static void check_owner(Problem p){
  require(derived_reused.diagnostic.iteration_invariant_preparations==1&&!derived_full.diagnostic.iteration_reuse,"canonical reference lifetime");
  require(derived_reused.diagnostic.derived_d2_iteration_evaluations==derived_reused.diagnostic.iteration_graph_calls*p.initial_t2.size(),"canonical dynamic Jacobi work");
  require(derived_reused.t1==derived_full.t1&&derived_reused.t2==derived_full.t2&&derived_reused.correlation_energy==derived_full.correlation_energy,"canonical final-state parity");
+ require(derived_reused.diagnostic.iteration_graph_calls==derived_full.diagnostic.iteration_graph_calls,"canonical carried-output evaluation parity");
+ // A zero-residual first trial is accepted unchanged. The next iteration
+ // consumes its borrowed arena output without a graph call or preparation.
+ auto unchanged=p;
+ for(auto* values:{&unchanged.fov,&unchanged.ovov,&unchanged.ovvo,&unchanged.oovv,&unchanged.ovvv,&unchanged.ovoo,&unchanged.oooo,&unchanged.vvvv,&unchanged.initial_t1,&unchanged.initial_t2})
+  std::fill(values->begin(),values->end(),0);
+ options.max_bytes=budget(unchanged,true,6);const auto carried=solve_cpu(unchanged,options);
+ const auto& carried_d=carried.diagnostic;
+ require(carried.converged()&&carried_d.iterations==2&&carried_d.iteration_graph_calls==2&&carried_d.update_calls==1,"unchanged DIIS trial consumed once");
+ require(carried_d.iteration_invariant_preparations==1&&carried_d.iteration_reused_evaluations==2&&carried_d.replay_graph_calls==1,"carried arena output preserves reference cache and replay");
+ require(carried_d.iteration_invariant_operations_saved==iteration_invariant_operation_count&&carried_d.iteration_dynamic_operations==2*iteration_dynamic_operation_count,"carried output has zero additional generated work");
 }
 """
 

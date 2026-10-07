@@ -1,0 +1,613 @@
+{
+  "base_commit": "21f6314f5a812e9e83a41b3c9921549d6e944778",
+  "cases": {
+    "48": {
+      "cold": {
+        "candidate_iterations": [
+          25,
+          25,
+          25,
+          24,
+          24
+        ],
+        "candidate_median": 108.86538181453943,
+        "candidate_seconds": [
+          109.48399648070335,
+          108.86538181453943,
+          109.0429628379643,
+          105.83515878021717,
+          105.7018341422081
+        ],
+        "control_iterations": [
+          25,
+          25,
+          24,
+          24,
+          24
+        ],
+        "control_median": 107.04548122733831,
+        "control_seconds": [
+          110.10599104315042,
+          109.8096068277955,
+          107.04548122733831,
+          106.46426589041948,
+          106.73206619918346
+        ],
+        "median_fractional_gain": 0.005909091702654802,
+        "paired_fractional_gains": [
+          0.005649052849479481,
+          0.008598746872273352,
+          -0.018660120798409247,
+          0.005909091702654802,
+          0.00965250738285854
+        ],
+        "positive_pairs": 4,
+        "scope": "diagnostic-only-SCF-work-may-vary"
+      },
+      "moved": {
+        "candidate_iterations": [
+          12,
+          12,
+          14,
+          13,
+          12
+        ],
+        "candidate_median": 50.50924879685044,
+        "candidate_seconds": [
+          50.47733774408698,
+          50.48400887101889,
+          57.16889030486345,
+          53.91651872545481,
+          50.50924879685044
+        ],
+        "control_iterations": [
+          13,
+          12,
+          12,
+          12,
+          12
+        ],
+        "control_median": 51.444684732705355,
+        "control_seconds": [
+          54.68270719796419,
+          51.381534211337566,
+          51.444684732705355,
+          51.43059589341283,
+          51.448580745607615
+        ],
+        "median_fractional_gain": 0.017467857939528725,
+        "paired_fractional_gains": [
+          0.07690492423231332,
+          0.017467857939528725,
+          -0.11126913503114544,
+          -0.04833548569403943,
+          0.01825768437426462
+        ],
+        "positive_pairs": 3,
+        "scope": "diagnostic-only-SCF-work-may-vary"
+      },
+      "moved-warm": {
+        "candidate_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "candidate_median": 8.409539591521025,
+        "candidate_seconds": [
+          8.411951001733541,
+          8.390532322227955,
+          8.409539591521025,
+          8.412662621587515,
+          8.372738879173994
+        ],
+        "control_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "control_median": 8.921205095946789,
+        "control_seconds": [
+          8.93855920061469,
+          8.887638740241528,
+          8.921205095946789,
+          8.912394400686026,
+          8.938593696802855
+        ],
+        "median_fractional_gain": 0.05735385510397372,
+        "paired_fractional_gains": [
+          0.05891421503869833,
+          0.05593233844696792,
+          0.05735385510397372,
+          0.05607155121636496,
+          0.06330468044780409
+        ],
+        "positive_pairs": 5,
+        "scope": "matched-work-qualification"
+      },
+      "warm": {
+        "candidate_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "candidate_median": 8.416575651615858,
+        "candidate_seconds": [
+          8.423992715775967,
+          8.399931244552135,
+          8.416575651615858,
+          8.407603200525045,
+          8.439420036971569
+        ],
+        "control_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "control_median": 8.928828056901693,
+        "control_seconds": [
+          8.93833838775754,
+          8.895352613180876,
+          8.916774608194828,
+          8.942293874919415,
+          8.928828056901693
+        ],
+        "median_fractional_gain": 0.05609640016237145,
+        "paired_fractional_gains": [
+          0.05754376816680496,
+          0.055694404727097524,
+          0.05609640016237145,
+          0.05979345812980091,
+          0.054812122801696
+        ],
+        "positive_pairs": 5,
+        "scope": "matched-work-qualification"
+      }
+    },
+    "96": {
+      "cold": {
+        "candidate_iterations": [
+          29,
+          27,
+          25,
+          26,
+          26
+        ],
+        "candidate_median": 223.54912063851953,
+        "candidate_seconds": [
+          243.68542387709022,
+          230.47903991490602,
+          216.8286260329187,
+          223.3405244536698,
+          223.54912063851953
+        ],
+        "control_iterations": [
+          26,
+          29,
+          30,
+          26,
+          28
+        ],
+        "control_median": 238.75922532752156,
+        "control_seconds": [
+          225.36156529560685,
+          246.0787227228284,
+          253.00276144966483,
+          225.51078620553017,
+          238.75922532752156
+        ],
+        "median_fractional_gain": 0.06339305826734609,
+        "paired_fractional_gains": [
+          -0.08130871188016445,
+          0.06339305826734609,
+          0.14297921180572973,
+          0.009623760301568933,
+          0.06370478321052243
+        ],
+        "positive_pairs": 4,
+        "scope": "diagnostic-only-SCF-work-may-vary"
+      },
+      "moved": {
+        "candidate_iterations": [
+          12,
+          12,
+          13,
+          12,
+          13
+        ],
+        "candidate_median": 113.26270422711968,
+        "candidate_seconds": [
+          113.26270422711968,
+          112.7993200533092,
+          119.8397901840508,
+          113.00312802195549,
+          119.71259726211429
+        ],
+        "control_iterations": [
+          13,
+          14,
+          12,
+          14,
+          13
+        ],
+        "control_median": 121.98507065698504,
+        "control_seconds": [
+          121.98507065698504,
+          128.8405227959156,
+          115.07463796064258,
+          128.62603103369474,
+          121.89623222872615
+        ],
+        "median_fractional_gain": 0.07150355681140809,
+        "paired_fractional_gains": [
+          0.07150355681140809,
+          0.12450432825405243,
+          -0.041409230633756004,
+          0.12145988557826755,
+          0.01791388401993007
+        ],
+        "positive_pairs": 4,
+        "scope": "diagnostic-only-SCF-work-may-vary"
+      },
+      "moved-warm": {
+        "candidate_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "candidate_median": 23.237255707383156,
+        "candidate_seconds": [
+          23.23443016782403,
+          23.254946369677782,
+          23.239122327417135,
+          23.237255707383156,
+          23.220239117741585
+        ],
+        "control_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "control_median": 24.483403723686934,
+        "control_seconds": [
+          24.521298248320818,
+          24.49022224918008,
+          24.483403723686934,
+          24.47835122421384,
+          24.432195656001568
+        ],
+        "median_fractional_gain": 0.05070176113834818,
+        "paired_fractional_gains": [
+          0.05247960640032225,
+          0.0504395536689608,
+          0.05082142214834266,
+          0.05070176113834818,
+          0.04960489656042338
+        ],
+        "positive_pairs": 5,
+        "scope": "matched-work-qualification"
+      },
+      "warm": {
+        "candidate_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "candidate_median": 23.201106425374746,
+        "candidate_seconds": [
+          23.211683869361877,
+          23.14651633426547,
+          23.217250328511,
+          23.201106425374746,
+          23.16117838770151
+        ],
+        "control_iterations": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "control_median": 24.426596697419882,
+        "control_seconds": [
+          24.441986173391342,
+          24.40653098002076,
+          24.449224662035704,
+          24.4046733006835,
+          24.426596697419882
+        ],
+        "median_fractional_gain": 0.05038909620057157,
+        "paired_fractional_gains": [
+          0.05033561083382118,
+          0.05162612608841222,
+          0.05038909620057157,
+          0.04931706564885849,
+          0.051804937273641286
+        ],
+        "positive_pairs": 5,
+        "scope": "matched-work-qualification"
+      }
+    }
+  },
+  "cold_and_moved_scope": "diagnostic-only; natural SCF iteration variability; no speed claim",
+  "decision": "qualified",
+  "deployment_compile_envelope": "not-run",
+  "global_allocator_peak": "not-run",
+  "independent_energy_gate": 1e-08,
+  "independent_force_gate": 1e-07,
+  "max_energy_error": 1.064108801074326e-10,
+  "max_force_error": 3.022204708713616e-11,
+  "minimum_positive_pairs": 4,
+  "minimum_warm_gain": 0.02,
+  "qualification_scope": "warm-and-moved-warm-matched-work",
+  "runtime_artifact_identities": {
+    "adaptive512/48/cold": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/48/moved": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/48/moved-warm": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/48/warm": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/96/cold": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/96/moved": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/96/moved-warm": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "adaptive512/96/warm": [
+      [
+        "5b7702f140c6755186f0cf1e906ca41238a9505eb0efd181938a057f539f0aaf",
+        "b6710acc545ef0ee3a365fcac2467fff20730e55cea87e1e890a54e0f01785b1"
+      ],
+      [
+        "cf9f57edd7fe6d16faea21de201579ca12b698a25cd2a07b7244fc3e0686df03",
+        "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc"
+      ]
+    ],
+    "base/48/cold": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/48/moved": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/48/moved-warm": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/48/warm": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/96/cold": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/96/moved": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/96/moved-warm": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ],
+    "base/96/warm": [
+      [
+        "38db20d22b5b49caefd12ec106beb826954d41e074b7a18770a0ee4b9eb92ca2",
+        "c2f070ff549b020c827d95de46f9d9df3e0249859df80bdda61439f78689ea6d"
+      ],
+      [
+        "fbb95b3ca797f57df477d7e8380650806c75f56b423cc525a7e197d01e6dd998",
+        "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6"
+      ]
+    ]
+  },
+  "schema": "generativeqc.cuda-schedule-qualification.v1",
+  "source_and_binary_identities": {
+    "adaptive512": [
+      {
+        "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+        "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+        "benchmarks/readme_omol25.py": "780608c3925218b18cec54a3f97c0fbe561a75f16c1511026ec312824f095da0",
+        "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+        "benchmarks/readme_wb97mv.py": "c3160265baf9fa4b5baa9de155ceac045d629fc187e6c198397bcda5e3c16c63",
+        "python/generativeqc/_force_active_ao.py": "d375c4fb272da55a6d425a175469fd9fb3d3f69914b6e9bef64bccc939f0d328",
+        "python/generativeqc/_ks_snapshot.py": "efcc035e114a3e38fdf9cbca19e782886be5a15a4cea44ceb575676eee8bf6d4",
+        "python/generativeqc/_snapshot_grid_cache.py": "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6",
+        "python/generativeqc/_stationary_composite_cuda.py": "b3bc42cba30fbd849c9ea74a5e9228b5befdaff9b6451ff8527e3c3a2960942e",
+        "python/generativeqc/_stationary_cuda.py": "d349a5b728f7884fe5b198d8ec5a02947eced4e333600cc1a501e8c72921e35c",
+        "python/generativeqc/batch.py": "92917066fe60cddb7c7f149d8d7ca0ebee967687a3035fd24b68710d2a33d483",
+        "python/generativeqc/calculator.py": "5b03cdc2856752d67f79a71a416a5f9c8216262e4aa258363212a92826a657f1",
+        "python/generativeqc/ks.py": "8678271fe043a1e56828f42706cd6a0e733f59755a449c9ee84e4327bfbf3d44",
+        "python/generativeqc/resources_ks.py": "e443006e79994fffd5ee31806fb58889ca543644cac3fb30647d91d5814423f9",
+        "python/generativeqc_compiler/dft/ao_cuda.py": "557d824af33ff2fc45f02992349aa09e184ef23c57ffb6e7be7543592633bcaa",
+        "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "e1500f7bab3014a17b98bc97498406cde5ba4de15fb7a5f61636398236f5df09",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "f59d9bc7fb8cf93260497e35a695d48204b874493f8f865f010d33b988f00f54",
+        "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+        "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "1f518b47c624326735608aa49afbfad6554854ac7ed1520f68f683844aae8dda",
+        "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "9c7302cc8f38869fd0a962caf3579d317cdacc0f5332822c0be8beacdcb1a2c9",
+        "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "b2288fc429b6953e60df8edfa557a2a81dab943954c02d445ea58b2da9b11ac9",
+        "python/generativeqc_compiler/method/stationary_composite_resources.py": "285fb6d902a79897b12a7e2ed9c7c972a1cfd597f28888d14bc22d91e5b91a92",
+        "python/generativeqc_compiler/method/stationary_cuda.py": "93666d4bac306ac2cd19dab25d1cb469fad0a78cc2dc5c248eb24986f3f55f2d",
+        "python/generativeqc_compiler/method/stationary_resources.py": "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811",
+        "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+        "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+        "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+        "src/scf/cuda/direct_bounded_dddd.cu": "ffc00728d2647ec3440e1ded138d128b4cab4d56d9e0f49545f9212a87eecfdc",
+        "src/scf/cuda/direct_bounded_fallback.cu": "c2a96658de8d3a4e860f8e371d11adf4aba1cfa2b24feb7385f50c7278d93d84",
+        "src/scf/cuda/direct_coulomb.cpp": "80633483b0b05fd0a697e55779d8ad1b45c1f7127f5fd7eede31fb5c8d9ad8a2",
+        "src/scf/cuda/direct_jk.cpp": "e8d73621bccd54868aea57409e29f6efc4f312232904d622d3a22546c56f6b62",
+        "src/scf/cuda/direct_jk_kernels.cu": "85d93c169c79634916d83659f6729febf4e128d0b3726caffb69d79139c1a436",
+        "src/scf/cuda/direct_jk_kernels.hpp": "d1685aba51f3e8a3af643bb358d9ecc0df75b25d200e85e549bfae722dea8b16",
+        "src/scf/cuda/direct_jk_plan.hpp": "87602c26a67ed4c65fbab2fab0ace7add10a29878f8ca9e0bc17aed725b88456",
+        "src/scf/cuda/one_electron_gradient_bridge.cu": "d1db7792d0d3c6bc784bff5c26894d24d3349b15e2a77cb766d2f572fccd563e",
+        "src/scf/cuda/packed_basis.hpp": "4e53c0e16c96fc8f8747247ba6605841d630b73f86b6fa4be3feff9a047d8e57",
+        "src/scf/cuda/rhf_policy.cpp": "8a2f74652bccd4f5daccf62ca9d2134a7375746b85c3d1cd2c738e05983eca33",
+        "src/scf/cuda/rhf_policy.hpp": "fa3565aa436aa39bb955e93973e1bc9fda84338debb932603b55c6b7561b6980"
+      },
+      "ea5e6954e779a621145fae8e121f55b2582a7ef73501b3364f814055611800fc",
+      "a7334475747da3cdc5381a2e4e63e7b01cc3974b02347f36fcc00f055935df60"
+    ],
+    "base": [
+      {
+        "benchmarks/compare_df_direct_endpoint.py": "d17dd583ca3fca7f623213f14658026f9f98aa581647eabe5f988b4e1b239fac",
+        "benchmarks/ks_preliminary_density.py": "105f50994f3712a4fae059fcf7192441c8a12447c2a71707a55767640928336d",
+        "benchmarks/readme_omol25.py": "780608c3925218b18cec54a3f97c0fbe561a75f16c1511026ec312824f095da0",
+        "benchmarks/readme_pbe0.py": "d9d4d677bea3a771205155319b7239d0232fc51cc35b478a5aea9d7ba07d827a",
+        "benchmarks/readme_wb97mv.py": "c3160265baf9fa4b5baa9de155ceac045d629fc187e6c198397bcda5e3c16c63",
+        "python/generativeqc/_force_active_ao.py": "a30bfc08736c774b1ae3dee382f2a8048bfd2ebd4793a53a78528edc35e133f5",
+        "python/generativeqc/_ks_snapshot.py": "efcc035e114a3e38fdf9cbca19e782886be5a15a4cea44ceb575676eee8bf6d4",
+        "python/generativeqc/_snapshot_grid_cache.py": "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6",
+        "python/generativeqc/_stationary_composite_cuda.py": "b3bc42cba30fbd849c9ea74a5e9228b5befdaff9b6451ff8527e3c3a2960942e",
+        "python/generativeqc/_stationary_cuda.py": "467f96cb1fa21e3a469c4b308d3996ed06d37b66e5bb961a63c23b7199a65574",
+        "python/generativeqc/batch.py": "80bf9cfa99a8764e0b868cb4603bbe9b6bee1ce9e9cbabe804bc5e0561299644",
+        "python/generativeqc/calculator.py": "5b03cdc2856752d67f79a71a416a5f9c8216262e4aa258363212a92826a657f1",
+        "python/generativeqc/ks.py": "8678271fe043a1e56828f42706cd6a0e733f59755a449c9ee84e4327bfbf3d44",
+        "python/generativeqc/resources_ks.py": "e443006e79994fffd5ee31806fb58889ca543644cac3fb30647d91d5814423f9",
+        "python/generativeqc_compiler/dft/ao_cuda.py": "557d824af33ff2fc45f02992349aa09e184ef23c57ffb6e7be7543592633bcaa",
+        "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "e1500f7bab3014a17b98bc97498406cde5ba4de15fb7a5f61636398236f5df09",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py": "f59d9bc7fb8cf93260497e35a695d48204b874493f8f865f010d33b988f00f54",
+        "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py": "883feef628cd60b02d711cd33f9f3e2e7e57c6f541ea5c8d0e491e7afcaa9456",
+        "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "1f518b47c624326735608aa49afbfad6554854ac7ed1520f68f683844aae8dda",
+        "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py": "9c7302cc8f38869fd0a962caf3579d317cdacc0f5332822c0be8beacdcb1a2c9",
+        "python/generativeqc_compiler/integral/direct_pair_support_cuda.py": "eadd99898d04ea8f89897a33f221e01a825f66551545dccf2a2fba3cb86be6ff",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py": "d98006beb75c196f1de0b2cf0d87a5f06b8defe0af198534505483f1fcdc13b1",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py": "b2288fc429b6953e60df8edfa557a2a81dab943954c02d445ea58b2da9b11ac9",
+        "python/generativeqc_compiler/method/stationary_composite_resources.py": "285fb6d902a79897b12a7e2ed9c7c972a1cfd597f28888d14bc22d91e5b91a92",
+        "python/generativeqc_compiler/method/stationary_cuda.py": "93666d4bac306ac2cd19dab25d1cb469fad0a78cc2dc5c248eb24986f3f55f2d",
+        "python/generativeqc_compiler/method/stationary_resources.py": "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56",
+        "src/scf/cuda/basis_transform_kernels.cu": "8a382effbd4cc53e2131dd258b91664a7356fac77a27322582f5891f870f6afb",
+        "src/scf/cuda/basis_transform_kernels.hpp": "b4a931c2cbba26e0fed6b01864697a427980c57a9cba2b840cd72a5a36a701c9",
+        "src/scf/cuda/direct_angular_fock.cu": "3f434d5afc69c247e3d07ae974a36c411d08e21e5f0828b44efa97b4ab8a00fc",
+        "src/scf/cuda/direct_bounded_dddd.cu": "ffc00728d2647ec3440e1ded138d128b4cab4d56d9e0f49545f9212a87eecfdc",
+        "src/scf/cuda/direct_bounded_fallback.cu": "c2a96658de8d3a4e860f8e371d11adf4aba1cfa2b24feb7385f50c7278d93d84",
+        "src/scf/cuda/direct_coulomb.cpp": "80633483b0b05fd0a697e55779d8ad1b45c1f7127f5fd7eede31fb5c8d9ad8a2",
+        "src/scf/cuda/direct_jk.cpp": "e8d73621bccd54868aea57409e29f6efc4f312232904d622d3a22546c56f6b62",
+        "src/scf/cuda/direct_jk_kernels.cu": "85d93c169c79634916d83659f6729febf4e128d0b3726caffb69d79139c1a436",
+        "src/scf/cuda/direct_jk_kernels.hpp": "d1685aba51f3e8a3af643bb358d9ecc0df75b25d200e85e549bfae722dea8b16",
+        "src/scf/cuda/direct_jk_plan.hpp": "87602c26a67ed4c65fbab2fab0ace7add10a29878f8ca9e0bc17aed725b88456",
+        "src/scf/cuda/one_electron_gradient_bridge.cu": "d1db7792d0d3c6bc784bff5c26894d24d3349b15e2a77cb766d2f572fccd563e",
+        "src/scf/cuda/packed_basis.hpp": "4e53c0e16c96fc8f8747247ba6605841d630b73f86b6fa4be3feff9a047d8e57",
+        "src/scf/cuda/rhf_policy.cpp": "8a2f74652bccd4f5daccf62ca9d2134a7375746b85c3d1cd2c738e05983eca33",
+        "src/scf/cuda/rhf_policy.hpp": "fa3565aa436aa39bb955e93973e1bc9fda84338debb932603b55c6b7561b6980"
+      },
+      "0a555603c32fe3c5408d5cbda3f9dff32b92a3c910904c2473117578828f35c6",
+      "43bdf997b06cb24582cbca0a268b8ab0ef8ccef785466e9c6a81b626f426d761"
+    ]
+  }
+}

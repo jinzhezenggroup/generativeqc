@@ -183,7 +183,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
         ),
         "cuda_force_method_sha256": (
-            "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
+            "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
         ),
         "prepared_aot_selection_sha256": (
             "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
@@ -286,7 +286,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56",
+        "geometry_resources_sha256": "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811",
         "public_wrapper_sha256": (
             "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
         ),
@@ -339,7 +339,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
+            "a4584a1183c7e70cdd971294b8774b535856331a720be61e019b377d7afedcc3"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -2421,8 +2421,8 @@ def test_snapshot_grid_cache_identity_and_cap_changes_fail_closed(
     ("old", "new"),
     [
         (
-            "GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20",
-            "GEOMETRY_MAX_SCRATCH_BYTES = 16 << 20",
+            "GEOMETRY_MAX_SCRATCH_BYTES = 16777216",
+            "GEOMETRY_MAX_SCRATCH_BYTES = 33554432",
         ),
         ("phased_becke: bool = False", "phased_becke: bool = True"),
     ],
@@ -2749,7 +2749,11 @@ def test_native_required_domain_never_admits_ao_descriptor_fallback_work(
     assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
 
 
-def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> None:
+@pytest.mark.parametrize("reduction", ["combined", "separate"])
+def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
+    monkeypatch: pytest.MonkeyPatch, reduction: str
+) -> None:
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", reduction)
     result = report()
     row = next(
         row
@@ -2758,7 +2762,9 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> Non
     )
     memory = row["resource_requirements"]
     assert memory["stationary_native_integral_host_reserve_bytes"] == 4_851_008
-    # Keep the paired-provider reserve and add the separate grid binding once.
+    # Combined publishes three channels and Separate four, but neither may
+    # discount the conservative paired-provider reserve or its v1 fallback.
+    # Keep that reserve and add the separate grid binding once.
     assert memory["additional_host_numeric_bound"] == 197_047_712 + (32 << 10)
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
@@ -2896,6 +2902,73 @@ def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
 @pytest.mark.parametrize(
     "old,new",
     [
+        (
+            "(3 if combined_requested else 4, na, 3)",
+            "(2 if combined_requested else 4, na, 3)",
+        ),
+        (
+            "(3 if combined_requested else 4, na, 3)",
+            "(3 if combined_requested else 3, na, 3)",
+        ),
+        (
+            "or not np.isfinite(native_integral_components).all()",
+            "or False",
+        ),
+        (
+            "            not use_fitted_integrals\n",
+            "            True\n",
+        ),
+        (
+            '{"combined_two_electron": True}',
+            '{"combined_two_electron": False}',
+        ),
+        (
+            "if combined_requested and native_integral is None:",
+            "if combined_requested:",
+        ),
+        (
+            "                    combined_requested = False\n",
+            "                    combined_requested = True\n",
+        ),
+        (
+            '                components.pop("coulomb", None)\n',
+            "",
+        ),
+        (
+            "combined_two_electron=native_combined_integrals,",
+            "combined_two_electron=False,",
+        ),
+        (
+            '"two_electron" if native_combined_integrals else "coulomb"',
+            '"coulomb"',
+        ),
+        (
+            "native_integral_budget = max_device_bytes - peak",
+            "native_integral_budget = max_device_bytes",
+        ),
+        (
+            'int(native_integral_resources.get("one_electron_host_peak_bytes", 0))',
+            'int(native_integral_resources.get("one_electron_host_peak_bytes", 0)) // 2',
+        ),
+        (
+            'int(native_integral_resources.get("one_electron_device_peak_bytes", 0))',
+            'int(native_integral_resources.get("one_electron_device_peak_bytes", 0)) // 2',
+        ),
+    ],
+)
+def test_combined_and_separate_native_endpoint_contracts_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert old in source
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match="endpoint owner contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
         ("_AUTO_PHASED_BECKE_MIN_ATOMS = 48", "_AUTO_PHASED_BECKE_MIN_ATOMS = 47"),
         (
             "return atoms >= _AUTO_PHASED_BECKE_MIN_ATOMS",
@@ -2976,8 +3049,8 @@ def test_native_primitive_domain_capability_and_work_proofs_fail_closed(
             "source-resources definition changed",
         ),
         (
-            "tile_points=tile_points, admit=admit_tile",
-            "tile_points=256, admit=admit_tile",
+            "        tile_points=tile_points,\n        admit=admit_tile,",
+            "        tile_points=256,\n        admit=admit_tile,",
             "tile schedule binding changed",
         ),
         (

@@ -33,6 +33,14 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
 
+/** Explicit output layout: combined=1 publishes [H', Pulay, J'+K'];
+ * combined=0 retains the v1 independent-source layout. No raw J/K source is
+ * fabricated for total-force consumers. Snapshot/token/budget gates are shared. */
+generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v2(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int combined,
+    double* values, std::size_t count, std::size_t maximum_bytes, std::uint64_t* work,
+    std::size_t work_count);
+
 generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);

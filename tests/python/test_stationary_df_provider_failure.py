@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import os
 from contextlib import nullcontext
 from pathlib import Path
 from types import CodeType, FunctionType, MappingProxyType, SimpleNamespace
@@ -13,6 +14,12 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def separate_source_control(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Most provider tests audit the explicit independent-source contract."""
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", "separate")
 
 
 def _select(
@@ -83,6 +90,7 @@ def _select(
             "native_integral_host_reserve": host_reserve,
             "na": 2,
             "np": np,
+            "os": os,
             "MappingProxyType": MappingProxyType,
             "timeline": SimpleNamespace(phase=lambda _: nullcontext()),
         },
@@ -183,6 +191,55 @@ def test_native_host_staging_must_fit_its_concurrent_reserve(actual: int) -> Non
     else:
         with pytest.raises(RuntimeError, match="host staging exceeds"):
             _select(source, required=True, host_reserve=32)
+
+
+def test_combined_unavailable_retries_complete_separate_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The v1 owner must remain available to enlarged domains using an older library."""
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", "combined")
+    output = np.zeros((4, 2, 3))
+    source = SimpleNamespace(
+        density_fitted=False,
+        cuda_integral_derivatives=Mock(side_effect=[None, (output, {})]),
+    )
+    np.testing.assert_array_equal(_select(source, required=True), output)
+    assert source.cuda_integral_derivatives.call_count == 2
+    assert source.cuda_integral_derivatives.call_args_list[0].kwargs == {
+        "range_exchange": False,
+        "combined_two_electron": True,
+    }
+    assert source.cuda_integral_derivatives.call_args_list[1].kwargs == {
+        "range_exchange": False
+    }
+
+
+def test_combined_failure_does_not_retry_a_different_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", "combined")
+    source = SimpleNamespace(
+        density_fitted=False,
+        cuda_integral_derivatives=Mock(side_effect=RuntimeError("stale owner")),
+    )
+    with pytest.raises(RuntimeError, match="stale owner"):
+        _select(source)
+    assert source.cuda_integral_derivatives.call_count == 1
+
+
+def test_default_complete_direct_owner_combines_two_electron_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION")
+    output = np.zeros((3, 2, 3))
+    source = SimpleNamespace(
+        density_fitted=False,
+        cuda_integral_derivatives=Mock(return_value=(output, {})),
+    )
+    np.testing.assert_array_equal(_select(source, required=True), output)
+    source.cuda_integral_derivatives.assert_called_once_with(
+        2, 32, range_exchange=False, combined_two_electron=True
+    )
 
 
 def _cpu_selection(source: object, execution: str) -> bool:

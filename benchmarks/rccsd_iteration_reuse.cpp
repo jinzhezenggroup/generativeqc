@@ -69,10 +69,11 @@ static std::size_t budget(const Problem& p, bool reuse, std::size_t history) {
   const auto n = p.initial_t1.size() + p.initial_t2.size();
   const auto h = history + 1;
   const auto scratch = history ? history * history + 2 * h * h + 2 * h : 0;
+  const auto host_vectors = history ? 4 + 2 * history : 2;
   const auto iteration = reuse ? generated::iteration_reuse_arena_elements(p.nocc, p.nvir)
                                : generated::iteration_arena_elements(p.nocc, p.nvir);
   return problem_host_bytes(p) +
-         sizeof(double) * ((4 + 2 * history) * n + scratch + iteration +
+         sizeof(double) * (host_vectors * n + scratch + iteration +
                            generated::replay_arena_elements(p.nocc, p.nvir));
 }
 

@@ -644,7 +644,7 @@ class PreparedBatch:
                     tile_policy, policy_tile_points = "budget-auto", None
                 else:
                     max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
-                    tile_policy, policy_tile_points = "fixed", 256
+                    tile_policy, policy_tile_points = "budget-auto", None
 
                 profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
                 resident_provider = getattr(source, "cuda_resident_grid", None)
@@ -729,6 +729,7 @@ class PreparedBatch:
                     all_electron and not source.method_ir.full_range_exact_exchange
                 )
                 kwargs = {
+                    "tile_points": policy_tile_points,
                     "compiler": (
                         None if packaged else self._stationary_cuda_compiler()
                     ),
