@@ -12,7 +12,9 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/initial_guess/minao.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/reference/linalg.hpp"
 #include "scf/solver/proposal_control.hpp"
 
 namespace generativeqc::scf::initial_guess {
@@ -22,21 +24,31 @@ double elapsed(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
 }
 
-std::optional<std::vector<double>> prepare(const PreparedFockPlan& target,
-                                           const PreliminaryOptions& policy,
-                                           PreliminaryDiagnostic& diagnostic) {
+std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
+                                                const PreliminaryOptions& policy,
+                                                PreliminaryDiagnostic& diagnostic) {
   const auto& system = target.system();
+  diagnostic.preparation_numeric_capacity = preliminary_numeric_capacity(system, policy);
+  if (diagnostic.preparation_numeric_capacity > policy.maximum_numeric_bytes) {
+    diagnostic.outcome = PreliminaryOutcome::BudgetSkipped;
+    return std::nullopt;
+  }
+  if (policy.kind == PreliminaryKind::Minao) {
+    const auto& ints = target.one_electron();
+    const auto x = reference::symmetric_orthogonalizer(ints.overlap, ints.nbf);
+    auto projected = minao_density(system, ints, x);
+    auto density = normalized_warm_density(system, ints, projected.density);
+    diagnostic.preliminary_iterations = 0;
+    diagnostic.preliminary_fock_builds = 0;
+    diagnostic.outcome = PreliminaryOutcome::Used;
+    return admit_preliminary_density(target, std::move(density));
+  }
   // The CPU integral provider admits g, but the LDA AO-grid primitive only
   // admits through f. Decline before building an unusable extra integral owner.
   if (policy.kind == PreliminaryKind::Lda &&
       std::any_of(system.shells.begin(), system.shells.end(),
                   [](const auto& shell) { return shell.angular_momentum > 3; })) {
     diagnostic.outcome = PreliminaryOutcome::PreparationFailed;
-    return std::nullopt;
-  }
-  diagnostic.preparation_numeric_capacity = preliminary_numeric_capacity(system, policy);
-  if (diagnostic.preparation_numeric_capacity > policy.maximum_numeric_bytes) {
-    diagnostic.outcome = PreliminaryOutcome::BudgetSkipped;
     return std::nullopt;
   }
   FockBuildSpec spec = make_hf_fock_spec(FockSpin::Restricted, FockApproximation::Exact);
@@ -77,6 +89,12 @@ std::optional<std::vector<double>> prepare(const PreparedFockPlan& target,
 }
 }  // namespace
 
+std::optional<std::vector<double>> prepare_preliminary_density(
+    const PreparedFockPlan& target, const PreliminaryOptions& policy,
+    PreliminaryDiagnostic& diagnostic) {
+  return prepare_impl(target, policy, diagnostic);
+}
+
 std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
                                               std::vector<double> density) {
   solver::validate_seed(target.one_electron().overlap, density, target.one_electron().nbf,
@@ -85,8 +103,9 @@ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
 }
 
 void validate_preliminary_options(const PreliminaryOptions& options) {
-  if (options.kind != PreliminaryKind::HartreeFock && options.kind != PreliminaryKind::Lda)
-    throw std::invalid_argument("unknown preliminary SCF provider");
+  if (options.kind != PreliminaryKind::HartreeFock && options.kind != PreliminaryKind::Lda &&
+      options.kind != PreliminaryKind::Minao)
+    throw std::invalid_argument("unknown preliminary initial-density provider");
   if (!options.max_iterations || options.max_iterations > 64 || !options.diis_history ||
       options.diis_history > 16 || !(options.energy_tolerance > 0) ||
       !std::isfinite(options.energy_tolerance) || !(options.density_tolerance > 0) ||
@@ -119,9 +138,9 @@ std::optional<PreliminaryOptions> preliminary_options(
   if (descriptor->radial_points) options.radial_points = descriptor->radial_points;
   if (descriptor->angular_polar) options.angular_polar = descriptor->angular_polar;
   if (descriptor->angular_azimuth) options.angular_azimuth = descriptor->angular_azimuth;
-  if (options.kind == PreliminaryKind::HartreeFock &&
+  if ((options.kind == PreliminaryKind::HartreeFock || options.kind == PreliminaryKind::Minao) &&
       (descriptor->radial_points || descriptor->angular_polar || descriptor->angular_azimuth))
-    throw std::invalid_argument("HF preliminary SCF does not accept a grid");
+    throw std::invalid_argument("HF/MINAO initial guesses do not accept a grid");
   validate_preliminary_options(options);
   return options;
 }
@@ -133,6 +152,20 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   const auto checked_mul = [](std::size_t a, std::size_t b) { return runtime::size_mul(a, b); };
   const auto n = molecule::ao_count(system);
   const auto n2 = checked_mul(n, n);
+  if (options.kind == PreliminaryKind::Minao) {
+    const auto source_n = minao_source_ao_count(system);
+    const auto source_primitives = minao_source_primitive_count(system);
+    // X + output density, two rectangular projection buffers, occupations and
+    // raw source primitive pairs. Target S/Hcore/provider storage is retained
+    // by the immutable target owner and intentionally excluded here.
+    auto doubles = checked_add(checked_mul(2, n2), checked_mul(2, checked_mul(n, source_n)));
+    doubles = checked_add(doubles, source_n);
+    auto bytes = checked_mul(sizeof(double), doubles);
+    bytes = checked_add(bytes, checked_mul(2 * sizeof(double), source_primitives));
+    if (bytes > static_cast<std::uint64_t>(INT64_MAX))
+      throw std::overflow_error("MINAO capacity exceeds portable int64 scope");
+    return bytes;
+  }
   const auto cartesian = molecule::cartesian_ao_count(system);
   const auto c2 = checked_mul(cartesian, cartesian);
   std::size_t primitives = 0;
@@ -176,14 +209,24 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || term.approximation == FockApproximation::Exact;
   };
-  if (strategy.backend != FockBackend::Cpu || strategy.spec.spin != FockSpin::Restricted ||
-      options.compute_forces ||
-      options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) != GENERATIVEQC_PRECISION_FP64 ||
-      !exact(strategy.spec.coulomb) || !exact(strategy.spec.exchange) ||
-      !system.ecp_terms.empty() ||
-      std::any_of(system.atoms.begin(), system.atoms.end(),
-                  [](const auto& atom) { return atom.ecp_core != 0; }) ||
-      system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2)
+  const bool common =
+      strategy.spec.spin == FockSpin::Restricted &&
+      options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) == GENERATIVEQC_PRECISION_FP64 &&
+      exact(strategy.spec.coulomb) && exact(strategy.spec.exchange) &&
+      system.ecp_terms.empty() &&
+      std::none_of(system.atoms.begin(), system.atoms.end(),
+                   [](const auto& atom) { return atom.ecp_core != 0; }) &&
+      system.multiplicity == 1 && system.electron_count > 0 && system.electron_count % 2 == 0;
+  if (options.preliminary_guess->kind == PreliminaryKind::Minao) {
+    const bool supported_elements =
+        std::all_of(system.atoms.begin(), system.atoms.end(),
+                    [](const auto& atom) { return atom.atomic_number >= 1 && atom.atomic_number <= 18; });
+    if (!common || !supported_elements)
+      throw std::invalid_argument(
+          "MINAO requires an FP64 all-electron restricted H-Ar exact endpoint");
+    return;
+  }
+  if (!common || strategy.backend != FockBackend::Cpu || options.compute_forces)
     throw std::invalid_argument(
         "preliminary SCF requires a CPU FP64 all-electron restricted exact energy endpoint");
 }
@@ -206,7 +249,7 @@ ScfResult run_with_preliminary_guess(const PreparedFockPlan& target, const ScfOp
   const auto started = Clock::now();
   try {
     runtime::CpuRetainedCapacity retained(retained_target_bytes);
-    density = prepare(target, *options.preliminary_guess, diagnostic);
+    density = prepare_preliminary_density(target, *options.preliminary_guess, diagnostic);
   } catch (const std::bad_alloc&) {
     throw;
   } catch (const std::exception&) {
