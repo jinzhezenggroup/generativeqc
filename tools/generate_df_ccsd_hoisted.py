@@ -283,6 +283,7 @@ def cuda_source() -> str:
                     output_fields=fields,
                     reset_error=False,
                     prepared_contractions=binding,
+                    parallel_scalar_reductions=name == "iteration",
                 )
             )
         if name == "auxiliary":
