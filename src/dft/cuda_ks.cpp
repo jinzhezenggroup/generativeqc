@@ -259,19 +259,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
                        const std::uint8_t* active, double* output) {
-    check(launch_matrix_product(matrix_products.view(), 1, static_cast<int>(n), left,
-                                transpose_left, right, active, output,
-                                matrix_products.library_enabled(), 1.0),
-          "CUDA KS matrix product failed");
+    check(
+        launch_matrix_product(matrix_products.view(), 1, static_cast<int>(n), left, transpose_left,
+                              right, active, output, matrix_products.library_enabled(), 1.0),
+        "CUDA KS matrix product failed");
   }
 
   void multiply_spin(unsigned spin_count, const double* left, bool left_is_spin,
                      bool transpose_left, const double* right, bool right_is_spin,
                      const std::uint8_t* active, double* output) {
-    check(launch_spin_matrix_product(
-              matrix_products.view(), 1, static_cast<int>(spin_count), static_cast<int>(n), left,
-              left_is_spin, transpose_left, right, right_is_spin, active, output,
-              matrix_products.library_enabled()),
+    check(launch_spin_matrix_product(matrix_products.view(), 1, static_cast<int>(spin_count),
+                                     static_cast<int>(n), left, left_is_spin, transpose_left, right,
+                                     right_is_spin, active, output,
+                                     matrix_products.library_enabled()),
           "CUDA KS spin matrix product failed");
   }
 

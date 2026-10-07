@@ -116,7 +116,7 @@ generativeqc_status launch_matrix_product(MatrixLibraryResources resources, int 
   const cublasOperation_t operation = transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N;
   if (batch_size == 1)
     return blas_status(cublasDgemm(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha,
-                                  left, nbf, right, nbf, &beta, output, nbf));
+                                   left, nbf, right, nbf, &beta, output, nbf));
   return blas_status(cublasDgemmStridedBatched(
       resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha, left, nbf,
       static_cast<long long>(matrix_size), right, nbf, static_cast<long long>(matrix_size), &beta,
@@ -162,13 +162,13 @@ generativeqc_status launch_spin_matrix_product(MatrixLibraryResources resources,
     const double* spin_right = right + (right_is_spin ? spin_offset : 0);
     const cublasStatus_t status =
         batch_size == 1
-            ? cublasDgemm(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha,
-                          spin_left, nbf, spin_right, nbf, &beta, output + spin_offset, nbf)
-            : cublasDgemmStridedBatched(
-                  resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha, spin_left, nbf,
-                  left_is_spin ? spin_stride : physical_stride, spin_right, nbf,
-                  right_is_spin ? spin_stride : physical_stride, &beta, output + spin_offset, nbf,
-                  spin_stride, batch_size);
+            ? cublasDgemm(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf, &alpha, spin_left,
+                          nbf, spin_right, nbf, &beta, output + spin_offset, nbf)
+            : cublasDgemmStridedBatched(resources.blas_, operation, CUBLAS_OP_N, nbf, nbf, nbf,
+                                        &alpha, spin_left, nbf,
+                                        left_is_spin ? spin_stride : physical_stride, spin_right,
+                                        nbf, right_is_spin ? spin_stride : physical_stride, &beta,
+                                        output + spin_offset, nbf, spin_stride, batch_size);
     if (status != CUBLAS_STATUS_SUCCESS) return blas_status(status);
   }
   return GENERATIVEQC_STATUS_SUCCESS;
