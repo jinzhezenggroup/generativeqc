@@ -103,3 +103,7 @@ Refs #2052
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
+
+The original admission and numeric-cap discussion above is superseded by
+[explicit MINAO ensemble admission](2026-10-07-minao-ensemble-admission.md),
+which preserves the raw projection and strict global seed gate.

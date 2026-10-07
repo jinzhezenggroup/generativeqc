@@ -61,7 +61,9 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
     )
     source = (ROOT / "src/scf/preliminary_guess.cpp").read_text()
     preparation = between(
-        source, "  diagnostic.preliminary_iterations", "\n}\n}  // namespace"
+        source,
+        "std::optional<std::vector<double>> prepare_impl",
+        "\n}\n}  // namespace",
     )
     assert (
         "admit_preliminary_density(target, std::move(preliminary.density))"
@@ -74,7 +76,7 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
     )
     assert "solver::validate_seed(target.one_electron().overlap, density" in admission
     assert "normalized_warm_density" not in admission
-    assert "normalized_warm_density(system, ints, projected.density)" in preparation
+    assert "admissible_minao_density(system, ints, x, projected.density)" in preparation
 
 
 HARNESS = r"""

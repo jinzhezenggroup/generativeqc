@@ -38,8 +38,13 @@ capabilities are unchanged.
   reference, projects it into the target AO metric with the native rectangular
   cross-overlap, and forms the density without a preliminary J/K/XC/Fock build.
   The raw projection follows PySCF's MINAO construction. At the native target
-  seed boundary it is symmetrized and normalized to the requested electron
-  count using the existing density-admission contract
+  seed boundary a separate MINAO-only construction symmetrizes and normalizes
+  it, then projects its orthogonal-metric occupations onto `0 <= f <= 2` with
+  their sum equal to the requested electron count. It preserves the metric
+  eigenvectors and minimizes the occupation change in Euclidean norm before
+  AO reconstruction and strict shared seed validation. The admitted seed may
+  therefore differ from the raw PySCF MINAO seed; explicit/imported densities
+  still undergo the unchanged validation without this repair
 
 HF/LDA use at most 32 preliminary iterations by default, DIIS history 8, energy
 tolerance `1e-6` and density tolerance `1e-4`. These are **preparation controls**.
@@ -80,7 +85,8 @@ storage and the retained target owner are outside that narrow cap.
 For a whole-endpoint host budget, use the ordinary `ResourceBudget`. For
 HF/LDA the planner conservatively composes the complete preparation inventory
 with the target inventory. For MINAO it charges all retained cold seed matrices
-plus the largest serialized cross-basis projection workspace. It never adds an
+plus the largest serialized projection, occupation-construction and strict
+seed-validation workspace (including eigensolver copies). It never adds an
 uncharged workspace allowance. This can overestimate serialized lifetime overlap. An
 infeasible global plan is rejected before execution, rather than silently
 changing a requested strategy to make the plan fit.

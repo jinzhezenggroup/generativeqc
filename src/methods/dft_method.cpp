@@ -1640,7 +1640,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       scf::initial_guess::PreliminaryDiagnostic diagnostic;
       std::optional<std::vector<double>> prepared;
       const bool policy = allow_preliminary && options_.preliminary_guess.has_value();
-      const bool existing = initial_density != nullptr || reuse_warm;
+      const bool existing = initial_density != nullptr || (reuse_warm && cuda_->has_warm_start());
       if (policy) {
         diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
         diagnostic.target_attempts = 1;
@@ -1651,20 +1651,29 @@ class KsPreparedCalculation final : public PreparedCalculation {
         }
       }
       const auto* seed = initial_density ? initial_density : (prepared ? &*prepared : nullptr);
-      auto native = cuda_->run(seed, reuse_warm && !prepared, false);
+      scf::ScfResult native;
+      try {
+        native = cuda_->run(seed, reuse_warm && !prepared, false);
+      } catch (const generativeqc::Error& error) {
+        // CUDA helpers may also throw untyped runtime errors for device faults.
+        // Only an explicitly numerical failure may consume the seed retry.
+        if (!prepared || error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+        diagnostic.work_counters_complete = false;
+      }
+      // Returned physical failures and nonconvergence retain a complete work
+      // census; a typed numerical exception above has no terminal result.
+      if (prepared && (!native.converged || cuda_->failed())) {
+        diagnostic.discarded_target_iterations = native.iterations;
+        diagnostic.discarded_target_fock_builds = native.fock_builds;
+        diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
+        diagnostic.target_attempts = 2;
+        prepared.reset();
+        // Release the discarded result's history before the new solve. begin()
+        // revokes its final state and resets DIIS while preserving last-good warm D.
+        native = {};
+        native = cuda_->run(nullptr, false, false);
+      }
       if (policy) native.preliminary_guess = diagnostic;
-      if (cuda_->failed())
-        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
-                          "CUDA KS physical evaluation failed");
-      if (!prepared || native.converged) return native;
-
-      diagnostic.discarded_target_iterations = native.iterations;
-      diagnostic.discarded_target_fock_builds = native.fock_builds;
-      diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
-      diagnostic.target_attempts = 2;
-      prepared.reset();
-      native = cuda_->run(nullptr, false, false);
-      native.preliminary_guess = diagnostic;
       if (cuda_->failed())
         throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                           "CUDA KS physical evaluation failed");

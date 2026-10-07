@@ -28,6 +28,14 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
                                                 const PreliminaryOptions& policy,
                                                 PreliminaryDiagnostic& diagnostic) {
   const auto& system = target.system();
+  // The CPU integral provider admits g, but the LDA AO-grid primitive only
+  // admits through f. Decline before building an unusable extra integral owner.
+  if (policy.kind == PreliminaryKind::Lda &&
+      std::any_of(system.shells.begin(), system.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum > 3; })) {
+    diagnostic.outcome = PreliminaryOutcome::PreparationFailed;
+    return std::nullopt;
+  }
   diagnostic.preparation_numeric_capacity = preliminary_numeric_capacity(system, policy);
   if (diagnostic.preparation_numeric_capacity > policy.maximum_numeric_bytes) {
     diagnostic.outcome = PreliminaryOutcome::BudgetSkipped;
@@ -37,19 +45,12 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
     const auto& ints = target.one_electron();
     const auto x = reference::symmetric_orthogonalizer(ints.overlap, ints.nbf);
     auto projected = minao_density(system, ints, x);
-    auto density = normalized_warm_density(system, ints, projected.density);
+    auto density = admissible_minao_density(system, ints, x, projected.density);
     diagnostic.preliminary_iterations = 0;
     diagnostic.preliminary_fock_builds = 0;
+    density = admit_preliminary_density(target, std::move(density));
     diagnostic.outcome = PreliminaryOutcome::Used;
-    return admit_preliminary_density(target, std::move(density));
-  }
-  // The CPU integral provider admits g, but the LDA AO-grid primitive only
-  // admits through f. Decline before building an unusable extra integral owner.
-  if (policy.kind == PreliminaryKind::Lda &&
-      std::any_of(system.shells.begin(), system.shells.end(),
-                  [](const auto& shell) { return shell.angular_momentum > 3; })) {
-    diagnostic.outcome = PreliminaryOutcome::PreparationFailed;
-    return std::nullopt;
+    return density;
   }
   FockBuildSpec spec = make_hf_fock_spec(FockSpin::Restricted, FockApproximation::Exact);
   spec.derivative_order = 0;
@@ -155,15 +156,28 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   if (options.kind == PreliminaryKind::Minao) {
     const auto source_n = minao_source_ao_count(system);
     const auto source_primitives = minao_source_primitive_count(system);
-    // X, raw projected D and normalized output D can coexist at the seed
-    // admission boundary. Two rectangular projection buffers, occupations,
-    // source coordinates and raw source primitive pairs complete the numeric
-    // payload. Target S/Hcore/provider storage belongs to the target owner.
-    auto doubles = checked_add(checked_mul(3, n2), checked_mul(2, checked_mul(n, source_n)));
-    doubles = checked_add(doubles, source_n);
-    doubles = checked_add(doubles, checked_mul(3, system.atoms.size()));
+    // Mirror _minao_numeric_capacity in the public planner. Conservative sum
+    // of phase inventories (not a claim that every term coexists):
+    // - 16 n^2 doubles: X/raw/output + the strict validator's 12 matrices,
+    //   including Jacobi input/eigenvectors/sorted eigenvectors and copies.
+    //   The separate occupation construction peaks below this inventory.
+    // - two n*ns projection buffers; source occupations; eight n-sized
+    //   64-bit slots for eigensolver values/order and electron-count arrays.
+    // - 512 bytes per target/source AO covers Cartesian AoViews, sparse
+    //   public expansions (through g), source shells and vector capacities.
+    // - 256 bytes per atom covers source atoms and both Jet center arrays;
+    //   exact reserved source primitive pairs need 16 bytes per primitive.
+    // - 8192 bytes covers bounded single-shell angular expansions and local
+    //   overlap recurrence/generated temporaries through target g/source p.
+    // Target S/Hcore/provider storage belongs to the target owner. Allocator
+    // metadata/runtime overhead remain outside the narrow numeric cap.
+    auto doubles = checked_add(checked_mul(16, n2), checked_mul(2, checked_mul(n, source_n)));
+    doubles = checked_add(doubles, checked_add(checked_mul(8, n), source_n));
     auto bytes = checked_mul(sizeof(double), doubles);
+    bytes = checked_add(bytes, checked_mul(512, checked_add(n, source_n)));
+    bytes = checked_add(bytes, checked_mul(256, system.atoms.size()));
     bytes = checked_add(bytes, checked_mul(2 * sizeof(double), source_primitives));
+    bytes = checked_add(bytes, 8192);
     if (bytes > static_cast<std::uint64_t>(INT64_MAX))
       throw std::overflow_error("MINAO capacity exceeds portable int64 scope");
     return bytes;

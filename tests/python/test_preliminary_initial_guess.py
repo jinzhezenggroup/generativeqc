@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 from generativeqc import Calculator, GridSpec, InitialGuessSpec, KsOptions, _native
 from generativeqc.initial_guess import (
+    _minao_numeric_capacity,
     require_initial_guess_library,
     with_initial_guess_resources,
 )
@@ -117,6 +118,24 @@ def test_minao_resource_inventory_is_explicit() -> None:
         "largest serialized MINAO projection workspace",
     ]
     assert all(item.bytes > 0 for item in extra)
+    assert extra[0].bytes == 8 * 13 * 13
+    assert sum(item.bytes for item in extra) == _minao_numeric_capacity(13, [8, 1, 1])
+    # Batch owners retain all seeds but serialize only the largest workspace.
+    two = replace(
+        target,
+        identity=replace(
+            identity,
+            topology=json.dumps(
+                {
+                    "items": json.loads(topology)["items"] * 2,
+                }
+            ),
+        ),
+    )
+    two_result = with_initial_guess_resources(two, calc, [WATER, WATER], [0, 0], [1, 1])
+    two_extra = two_result.candidates[0].estimates[1:]
+    assert two_extra[0].bytes == 2 * extra[0].bytes
+    assert two_extra[1].bytes == extra[1].bytes
 
 
 def request(name: str, size: int) -> ResourceRequest:
@@ -205,6 +224,22 @@ def test_complete_native_minao_is_zero_fock_preparation(native: None) -> None:
     assert result.initial_guess["preliminary_iterations"] == 0
     assert result.initial_guess["preliminary_fock_builds"] == 0
     assert result.initial_guess["target_attempts"] == 1
+
+
+def test_native_minao_preserves_final_forces(native: None) -> None:
+    import numpy as np
+
+    baseline = calculator("pbe0-rks").singlepoint(
+        WATER, properties=("energy", "forces")
+    )
+    actual = calculator("pbe0-rks", InitialGuessSpec("minao")).singlepoint(
+        WATER, properties=("energy", "forces")
+    )
+    assert baseline.converged and actual.converged
+    assert actual.initial_guess["outcome"] == "used"
+    assert actual.initial_guess["preliminary_fock_builds"] == 0
+    assert actual.energy == pytest.approx(baseline.energy, abs=1e-8)
+    np.testing.assert_allclose(actual.forces, baseline.forces, rtol=0, atol=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -306,7 +341,7 @@ def test_linked_global_budget_observes_preparation(native: None, kind: str) -> N
         assert not observation["complete_plan_peak"]
 
 
-@pytest.mark.parametrize("kind", ["hf", "lda"])
+@pytest.mark.parametrize("kind", ["hf", "lda", "minao"])
 @pytest.mark.parametrize(
     "basis,representation,atoms,charge",
     [

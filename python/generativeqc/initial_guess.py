@@ -19,7 +19,8 @@ class InitialGuessSpec:
 
     HF/LDA retain the CPU FP64 all-electron restricted exact energy domain.
     MINAO is a zero-Fock occupied-ANO projection for all-electron H-Ar targets
-    and additionally admits CUDA restricted KS energy/force endpoints.
+    followed by a bounded metric-occupation admission step, and additionally
+    admits CUDA restricted KS energy/force endpoints.
     Existing explicit/imported/retained densities take precedence. Preparation
     never changes the target basis, grid, functional, precision or tolerances.
     A failed preliminary solve or exhausted preparation budget keeps the core
@@ -161,6 +162,65 @@ def read_initial_guess_diagnostic(
     }
 
 
+# Exact occupied-ANO source primitive inventory for H-Ar (pinned MINAO table).
+_MINAO_PRIMITIVES = (
+    8,
+    9,
+    28,
+    28,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    63,
+    63,
+    75,
+    75,
+    75,
+    75,
+    75,
+    75,
+)
+
+
+def _minao_numeric_capacity(n: int, numbers: typing.Sequence[int]) -> int:
+    """Mirror native preliminary_numeric_capacity, including strict admission.
+
+    16 square matrices cover caller X/raw/output and validator/eigensolver
+    copies. The remaining terms conservatively sum projection buffers, linear
+    eigensolver arrays, AO/primitive/center inventories and bounded through-g
+    overlap scratch. This is an upper bound, not measured whole-process memory.
+    """
+    from generativeqc_compiler.common.resources import byte_product, checked_bytes
+
+    if type(n) is not int or n <= 0:
+        raise ValueError("invalid MINAO target AO topology")
+    if any(type(z) is not int or not 1 <= z <= 18 for z in numbers):
+        raise ValueError("MINAO initial guess is currently qualified for H-Ar")
+    source_n = checked_bytes(
+        sum(
+            1 if z <= 2 else 2 if z <= 4 else 5 if z <= 10 else 6 if z <= 12 else 9
+            for z in numbers
+        )
+    )
+    primitives = checked_bytes(sum(_MINAO_PRIMITIVES[z - 1] for z in numbers))
+    doubles = checked_bytes(
+        byte_product(16, n, n)
+        + byte_product(2, n, source_n)
+        + byte_product(8, n)
+        + source_n
+    )
+    return checked_bytes(
+        byte_product(8, doubles)
+        + byte_product(512, checked_bytes(n + source_n))
+        + byte_product(256, len(numbers))
+        + byte_product(16, primitives)
+        + 8192
+    )
+
+
 def with_initial_guess_resources(
     request: typing.Any,
     calculator: typing.Any,
@@ -202,20 +262,17 @@ def with_initial_guess_resources(
             n = item["orbital"]["nbf"]
             if type(n) is not int or n <= 0:
                 raise ValueError("invalid MINAO target AO topology")
-            source_n = sum(
-                1 if z <= 2 else 2 if z <= 4 else 5 if z <= 10 else 6 if z <= 12 else 9
-                for z in numbers
+            from generativeqc_compiler.common.resources import (
+                byte_product,
+                checked_bytes,
             )
-            seed = 8 * n * n
-            # The retained seed is charged separately below. Workspace covers
-            # X + raw projected D + two n*ns projection buffers, occupations,
-            # source coordinates and source primitive storage. Seventeen
-            # primitives per source AO is a conservative H-Ar upper bound.
-            workspace = (
-                8 * (2 * n * n + 2 * n * source_n + source_n + 3 * len(numbers))
-                + 32 * 17 * source_n
-            )
-            retained += seed
+
+            seed = byte_product(8, n, n)
+            # The same complete preparation bound is used by native admission.
+            # One output matrix is retained separately for every batch member;
+            # preparation is serialized, so only the largest remainder is live.
+            workspace = _minao_numeric_capacity(n, numbers) - seed
+            retained = checked_bytes(retained + seed)
             largest_workspace = max(largest_workspace, workspace)
         extra = (
             ResourceEstimate(

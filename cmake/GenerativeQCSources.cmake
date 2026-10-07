@@ -128,6 +128,7 @@ endfunction()
 function(generativeqc_add_integrals_scf_sources target)
   target_sources(${target} PRIVATE
     src/integrals/s_integrals.cpp
+    src/integrals/minao_basis.cpp
     src/integrals/density_fitting_metric.cpp
     src/integrals/generated_df_cpu.cpp
     src/integrals/ecp.cpp

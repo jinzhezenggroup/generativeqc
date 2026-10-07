@@ -6,6 +6,7 @@
 
 #include "integrals/minao_basis_data.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/bounded_workspace.hpp"
 
 namespace generativeqc::integrals {
 namespace {
@@ -33,7 +34,7 @@ std::size_t minao_basis_ao_count(const core::System& system) {
     for (std::size_t shell_index = kElementShellOffsets[z - 1];
          shell_index < kElementShellOffsets[z]; ++shell_index) {
       const auto l = static_cast<std::size_t>(kShells[shell_index].angular_momentum);
-      count += 2 * l + 1;
+      count = runtime::size_add(count, 2 * l + 1);
     }
   }
   return count;
@@ -46,7 +47,7 @@ std::size_t minao_basis_primitive_count(const core::System& system) {
     const auto z = static_cast<std::size_t>(atom.atomic_number);
     for (std::size_t shell_index = kElementShellOffsets[z - 1];
          shell_index < kElementShellOffsets[z]; ++shell_index)
-      count += kShells[shell_index].primitive_count;
+      count = runtime::size_add(count, kShells[shell_index].primitive_count);
   }
   return count;
 }
@@ -54,6 +55,9 @@ std::size_t minao_basis_primitive_count(const core::System& system) {
 MinaoBasisSource make_minao_basis_source(const core::System& target) {
   validate_domain(target);
   MinaoBasisSource result;
+  const auto source_aos = minao_basis_ao_count(target);
+  result.occupations.reserve(source_aos);
+  result.system.shells.reserve(source_aos);
   result.system.atoms.reserve(target.atoms.size());
   for (const auto& atom : target.atoms)
     result.system.atoms.push_back({atom.atomic_number, atom.position, 0});
