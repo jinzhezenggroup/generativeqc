@@ -31,7 +31,9 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
             for t in node.targets
         )
     )
-    expected = source_hashes("common", "integral", "xc", "dft", assets=assets)
+    expected = source_hashes(
+        "common", "integral", "xc", "dft", "method", "tensor", assets=assets
+    )
     expected["python/generativeqc_compiler/method/stationary_resources.py"] = (
         "explicit-resource-module"
     )
@@ -42,7 +44,7 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
         + selection.split("endforeach()", 1)[0]
         + "endforeach()"
     )
-    unrelated = ("python/generativeqc_compiler/tensor/ir.py", "tools/unrelated.py")
+    unrelated = ("tools/unrelated.py",)
     entries = "\n".join(f'  "{path}"' for path in (*expected, *unrelated))
     output = tmp_path / "dependencies.txt"
     script = tmp_path / "evaluate.cmake"

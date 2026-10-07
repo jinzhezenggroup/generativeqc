@@ -28,6 +28,7 @@ option(GENERATIVEQC_ENABLE_AOT_SHELLS
        "Build generated shell kernels in addition to the generic CUDA path" ON)
 option(GENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT
        "Build packaged stationary CUDA force artifacts" ON)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCStationaryProfiles.cmake")
 option(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT
        "Build packaged stationary CPU first-derivative artifacts" ON)
 option(GENERATIVEQC_BUILD_TESTS "Build native tests" ON)
@@ -51,10 +52,10 @@ set(GENERATIVEQC_CUDA_ARCHITECTURES "" CACHE STRING
     "CUDA architectures shipped by GenerativeQC; defaults to CMAKE_CUDA_ARCHITECTURES")
 set(GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES "" CACHE STRING
     "NVCC architecture values, retaining 120-real/120-virtual intent")
-set(GENERATIVEQC_CUDA_COMPILE_JOBS "2" CACHE STRING
-    "Maximum concurrent native CUDA compiler jobs in the Ninja job pool")
+set(GENERATIVEQC_CUDA_COMPILE_JOBS "" CACHE STRING
+    "Optional native CUDA compiler job limit; empty follows the build tool parallelism")
 set(GENERATIVEQC_AOT_COMPILE_JOBS "" CACHE STRING
-    "Optional independent generated-AOT CUDA job limit; empty shares the native CUDA pool")
+    "Optional independent generated-AOT CUDA job limit; empty follows native CUDA scheduling")
 set(GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS "1" CACHE STRING
     "NVCC split-compile threads for generated AOT kernels; 1 preserves production code generation")
 set(GENERATIVEQC_CUDA_SPLIT_COMPILE_THREADS "1" CACHE STRING
@@ -127,8 +128,10 @@ endif()
 if(NOT GENERATIVEQC_AOT_SHARDS MATCHES "^[1-9][0-9]*$")
   message(FATAL_ERROR "GENERATIVEQC_AOT_SHARDS must be a positive integer")
 endif()
-if(NOT GENERATIVEQC_CUDA_COMPILE_JOBS MATCHES "^[1-9][0-9]*$")
-  message(FATAL_ERROR "GENERATIVEQC_CUDA_COMPILE_JOBS must be a positive integer")
+if(NOT GENERATIVEQC_CUDA_COMPILE_JOBS STREQUAL ""
+   AND NOT GENERATIVEQC_CUDA_COMPILE_JOBS MATCHES "^[1-9][0-9]*$")
+  message(FATAL_ERROR
+          "GENERATIVEQC_CUDA_COMPILE_JOBS must be empty or a positive integer")
 endif()
 if(NOT GENERATIVEQC_AOT_COMPILE_JOBS STREQUAL ""
    AND NOT GENERATIVEQC_AOT_COMPILE_JOBS MATCHES "^[1-9][0-9]*$")
@@ -185,15 +188,23 @@ if(GENERATIVEQC_ENABLE_CUDA)
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
     # numeric profile identity is derived below for manifest and cache paths.
     set(_generativeqc_cuda_compile_architectures ${CMAKE_CUDA_ARCHITECTURES})
-    set(_generativeqc_aot_compile_pool generativeqc_cuda_compile)
-    set(_generativeqc_cuda_job_pools
-        generativeqc_cuda_compile=${GENERATIVEQC_CUDA_COMPILE_JOBS})
+    set(_generativeqc_cuda_compile_pool "")
+    set(_generativeqc_aot_compile_pool "")
+    set(_generativeqc_cuda_job_pools "")
+    if(NOT GENERATIVEQC_CUDA_COMPILE_JOBS STREQUAL "")
+      set(_generativeqc_cuda_compile_pool generativeqc_cuda_compile)
+      set(_generativeqc_aot_compile_pool generativeqc_cuda_compile)
+      list(APPEND _generativeqc_cuda_job_pools
+           generativeqc_cuda_compile=${GENERATIVEQC_CUDA_COMPILE_JOBS})
+    endif()
     if(NOT GENERATIVEQC_AOT_COMPILE_JOBS STREQUAL "")
       list(APPEND _generativeqc_cuda_job_pools
            generativeqc_aot_compile=${GENERATIVEQC_AOT_COMPILE_JOBS})
       set(_generativeqc_aot_compile_pool generativeqc_aot_compile)
     endif()
-    set_property(GLOBAL PROPERTY JOB_POOLS ${_generativeqc_cuda_job_pools})
+    if(_generativeqc_cuda_job_pools)
+      set_property(GLOBAL PROPERTY JOB_POOLS ${_generativeqc_cuda_job_pools})
+    endif()
     # XsyevBatched is the capture-safe production eigensolver for realistic
     # AO buckets and is available in the supported CUDA 12.9 toolkit. Native
     # SDK builds link the toolkit providers normally. Python wheels instead

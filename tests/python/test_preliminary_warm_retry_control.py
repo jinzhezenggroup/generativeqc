@@ -76,7 +76,28 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
     )
     assert "solver::validate_seed(target.one_electron().overlap, density" in admission
     assert "normalized_warm_density" not in admission
-    assert "admissible_minao_density(system, ints, x, projected.density)" in preparation
+    assert (
+        "admissible_minao_density(system, ints, x, projected.density, eigen)"
+        in preparation
+    )
+    assert "admit_preliminary_density(target, std::move(density), eigen)" in preparation
+    assert "symmetric_overlap(ints.overlap, ints.nbf, eigen)" in preparation
+
+
+def test_cuda_minao_borrows_owner_eigen_operation() -> None:
+    """Construction and strict upload must not re-enter CPU reference Jacobi."""
+    source = (ROOT / "src/methods/dft_method.cpp").read_text()
+    preparation = between(
+        source,
+        "  std::optional<std::vector<double>> prepare_cold_initial_guess",
+        "\n  void invalidate_result()",
+    )
+    assert "if (cuda_) eigen = cuda_->seed_eigen_operation();" in preparation
+    assert "fock_, *options_.preliminary_guess, diagnostic, eigen" in preparation
+    cuda = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    admission = between(cuda, "  std::vector<double> seed(", "\n  /** Construct X")
+    assert "return seed_eigen(matrix, dimension);" in admission
+    assert "n, counts, spins == 2 ? 1.0 : 2.0, eigen" in admission
 
 
 HARNESS = r"""

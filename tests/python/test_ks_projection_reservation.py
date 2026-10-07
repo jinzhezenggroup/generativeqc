@@ -186,15 +186,17 @@ int main(int argc, char** argv) {
   const auto reserved=ks_fitted_projection_reservation(system,execution,strategy);
   assert(reserved.restricted_rank == 5);
   if (mode == "authorization") {
-    for (int kind=0; kind<6; ++kind) {
+    auto rsh=execution;
+    rsh.range_exchange=true;
+    assert(ks_fitted_projection_reservation(system,rsh,strategy) == reserved);
+    for (int kind=0; kind<5; ++kind) {
       auto e=execution;
       auto s=strategy;
       if (kind==0) e.spin_channels=2;
-      if (kind==1) e.range_exchange=true;
-      if (kind==2) s.backend=FockBackend::Cpu;
-      if (kind==3) s.spec.spin=FockSpin::Unrestricted;
-      if (kind==4) s.spec.exchange.present=false;
-      if (kind==5) s.spec.exchange.approximation=FockApproximation::Exact;
+      if (kind==1) s.backend=FockBackend::Cpu;
+      if (kind==2) s.spec.spin=FockSpin::Unrestricted;
+      if (kind==3) s.spec.exchange.present=false;
+      if (kind==4) s.spec.exchange.approximation=FockApproximation::Exact;
       assert(!ks_fitted_projection_reservation(system,e,s).restricted_rank);
     }
     for (int electrons : {-2,0,9,50}) {
@@ -214,6 +216,10 @@ int main(int argc, char** argv) {
   } else if (mode == "forwarding") {
     const auto method=method_prepare(system,execution,strategy);
     assert(method.impl_->projection_reservation == reserved);
+    auto rsh=execution;
+    rsh.range_exchange=true;
+    const auto rsh_method=method_prepare(system,rsh,strategy);
+    assert(rsh_method.impl_->projection_reservation == reserved);
     const Capture generic(system,nullptr,strategy,0);
     assert(!generic.impl_->projection_reservation.restricted_rank);
     assert(generic.matches(system,nullptr,strategy,0,0));

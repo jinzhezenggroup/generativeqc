@@ -110,6 +110,65 @@ including the single-zero-factor derivative and saturated-branch policy.
 Primitive CPU emitted bytes are preserved. Device compilation disables FMA
 contraction; no broad fast-math flag or relaxed acceptance threshold is used.
 
+## Stationary AOT packaging
+
+All-electron public force requests select packaged AOT by the actual stationary
+plan, point-program code and spin, including represented global hybrids. A shared
+point code is not sufficient: PBE and PBE0 have distinct plans, and changing an
+exchange coefficient does not reuse a standard hybrid artifact. An unrepresented
+composition retains the explicit bounded JIT path. Once a catalog profile is
+selected, a missing, corrupt or incompatible package fails closed; it does not
+silently discover NVCC or regenerate primitives, wrappers or AD.
+
+The build compiles the method-independent s/p derivative inventory once, and the
+component-expanded s/p/d inventory once as 23 bounded shards. Each selected
+method/spin profile contributes only its specialized wrapper and a device link
+for each domain. XC expressions and exact scientific contraction weights remain
+specialized; this is not a giant dynamically branching all-functional kernel.
+The derivative task ABI and small-system integral fallback are unchanged. Shared
+objects reduce compilation work, but each linked library still includes its
+primitive code; no corresponding package-size reduction is implied.
+
+`GENERATIVEQC_STATIONARY_AOT_PROFILES` is a deterministic semicolon-separated
+CMake build/package inventory. The default preserves the compiler's existing
+qualified profile catalog. For example,
+`-DGENERATIVEQC_STATIONARY_AOT_PROFILES='pbe0_rks;pbe0_uks'` packages only those
+profiles in both s/p and s/p/d forms; an empty value emits no stationary CUDA AOT
+inventory. Unknown names fail configuration, and duplicates/order do not produce
+extra targets. This setting is not scientific admission, and omitting a profile
+does not authorize silent runtime compilation of a normally packaged request.
+Changes to the hashed compiler/asset contract invalidate prior manifests; the
+manifest writer verifies both halves of a separable s/p source before recording
+the combined source identity and linked-binary checksum.
+Integral-weight graph hashes are generated offline into the manifest. Cold
+loading checks the complete method/TensorIR compiler-source closure rather than
+regenerating AD; endpoint source coverage is validated without constructing a
+new reduction program. Runtime work records reuse the admitted weight hashes.
+The manifest writer seals the complete build record, including these graph
+hashes, source/compiler/plan identities, binary checksum, primitive domain and
+target/precision fields, with a versioned canonical integrity checksum. Loading
+rejects a missing or inconsistent seal before returning an artifact, without
+regenerating IR/AD. This detects record corruption under the trusted-build
+model; it is not an authenticity signature. The changed compiler contract and
+required seal deliberately invalidate older unsealed manifests without changing
+the CUDA ABI or generated scientific source.
+Use repeated `--profile` arguments to `tools/audit_stationary_aot_package.py`
+when auditing a deliberately restricted package; both domains remain mandatory
+for each declared profile, so missing files cannot silently reduce the audit.
+
+The explicit hardware gate is `tests/python/test_stationary_aot_cuda.py`.
+Set `GENERATIVEQC_STATIONARY_AOT_CUDA_TEST=1` inside a finite Slurm allocation
+and select the matching built native library through `GENERATIVEQC_LIBRARY`.
+It checks energy/analytic forces, prepared reuse and displacement for both
+hybrids/spins with sto-3g (including p shells) and spherical def2-SVP.
+The fixtures use neutral bent water for RKS and its singly charged doublet for
+UKS. PySCF 2.14.0 / Libxc 7.0.0 is required only as an independent test oracle
+outside production execution. Optional `GENERATIVEQC_STATIONARY_AOT_EVIDENCE`
+retains endpoint timings, numerical errors, artifact provenance and semantic
+work records. This
+small-system gate does not substitute for the investigation-scale timing or
+catalog/resource qualification campaigns.
+
 ## Timeline fixture preparation
 
 The timeline benchmark prepares SCF states with density tolerance `1e-12`,

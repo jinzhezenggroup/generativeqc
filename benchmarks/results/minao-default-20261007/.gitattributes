@@ -1,0 +1,2 @@
+# Unified-diff context markers must survive on otherwise blank lines.
+qualified-source.patch whitespace=-blank-at-eol

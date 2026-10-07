@@ -204,10 +204,12 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     result["public-model:density-fitting"] = calculator_relative.as_posix()
 
     if not re.search(
-        r"initial_guess:\s*InitialGuessSpec\s*\|\s*None\s*=\s*None", calculator
+        r'initial_guess:\s*InitialGuessSpec\s*\|\s*typing\.Literal\["auto"\]\s*\|\s*None\s*=\s*"auto"',
+        calculator,
     ):
-        raise ValueError("preliminary SCF initial-guess default drifted from disabled")
+        raise ValueError("initial-guess default drifted from guarded automatic MINAO")
     result["initial-guess:preliminary-scf"] = calculator_relative.as_posix()
+    result["initial-guess:minao-auto"] = calculator_relative.as_posix()
 
     progressive_relative = Path("python/generativeqc/progressive.py")
     progressive = _read(root / progressive_relative)

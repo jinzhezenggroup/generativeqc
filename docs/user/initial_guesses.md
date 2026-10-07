@@ -1,8 +1,25 @@
 # Cold-start initial guesses
 
-`Calculator` can explicitly prepare a cheaper density before the requested SCF
-calculation. The default remains `initial_guess=None`, which
-preserves the ordinary core guess or an already available warm density.
+`Calculator` defaults to `initial_guess="auto"`. It selects projected MINAO for
+FP64, all-electron H-Ar, restricted exact **CPU HF/KS and CUDA KS** cold starts.
+Other domains keep the ordinary Hcore guess. An already available explicit,
+imported or warm density always takes precedence. Use `initial_guess=None` to
+restore Hcore explicitly, or an `InitialGuessSpec` to request a provider and its
+preparation limits. The low-level C API remains explicit-policy driven.
+Automatic selection also requires the supported preliminary-guess schema and a
+positive MINAO bit from `generativeqc_initial_guess_capabilities_v1()`. Missing
+queries, unknown schemas and HF/LDA-only libraries retain Hcore. Schema 1 alone
+does not identify MINAO support. Explicit `InitialGuessSpec` requests retain
+their existing schema and native provider/domain checks.
+
+Automatic admission is conservative at batch scope: if any item contains an
+unsupported element or ECP, the whole batch keeps Hcore, and resource planning
+does not charge an unused MINAO phase. Where the target has a qualified resource
+plan, eligible batches include the same MINAO numeric inventory as an explicit
+request. Automatic selection does not qualify additional resource-planner
+domains (in particular, CUDA global-hybrid plans remain unsupported).
+`calc.initial_guess` exposes the
+calculator-level candidate; each result reports whether preparation actually ran.
 
 ```python
 from generativeqc import Calculator, GridSpec, InitialGuessSpec, KsOptions
@@ -21,10 +38,11 @@ print(result.energy, result.initial_guess)
 HF and coarse-LDA preparation support CPU, FP64, all-electron, restricted
 closed-shell RHF/RKS **energy** calculations with exact two-electron providers.
 The projected MINAO provider additionally supports FP64 CUDA restricted KS
-energy/force execution for all-electron H-Ar systems. Density-fitted,
-unrestricted, ECP and second-order requests remain rejected rather than changing
-the backend or scientific model. Without the explicit option, existing
-capabilities are unchanged.
+energy/force execution for all-electron H-Ar systems. Explicit preliminary
+requests reject density-fitted, unrestricted, ECP and second-order domains rather
+than changing the backend or scientific model. Automatic selection leaves
+unsupported domains on Hcore and preserves existing endpoint capabilities,
+including qualified CPU second-order endpoints.
 
 ## Providers and controls
 
@@ -45,6 +63,15 @@ capabilities are unchanged.
   AO reconstruction and strict shared seed validation. The admitted seed may
   therefore differ from the raw PySCF MINAO seed; explicit/imported densities
   still undergo the unchanged validation without this repair
+
+For CUDA MINAO, overlap and occupation decompositions, including strict target
+seed admission, use the prepared target's GPU eigensolver and existing charged
+workspace. Native cross-overlap construction, matrix assembly and occupation
+projection remain on the host; bounded synchronous transfers are part of the
+charged cold endpoint. This is not a fully device-resident MINAO implementation.
+CPU targets retain the independent reference decompositions. A failing GPU
+preparation keeps the existing bounded Hcore fallback, not a hidden CPU MINAO
+retry.
 
 HF/LDA use at most 32 preliminary iterations by default, DIIS history 8, energy
 tolerance `1e-6` and density tolerance `1e-4`. These are **preparation controls**.
@@ -115,8 +142,9 @@ lead to a different stationary SCF solution in a multi-solution system, even
 with unchanged charge and spin. Check final energy, density and relevant state
 properties against the intended solution.
 
-There is no `auto` provider, molecule-size heuristic, or default promotion in
-this interface. MINAO is an opt-in implementation candidate for the CUDA hybrid
-cold-start qualification in issue #2052; complete cold endpoint evidence is
-required before any default change. A three-stage HF → LDA → target pipeline is
-an experiment, not a supported production option.
+`"auto"` is a calculator admission policy, not an `InitialGuessSpec` provider or
+a molecule-size profitability heuristic. The CPU and CUDA paths use the same
+MINAO construction and scientific admission, but backend-dependent preparation
+cost means the CUDA timing evidence is not a CPU speedup claim. HF/LDA remain
+explicit opt-ins. A three-stage HF → LDA → target pipeline is an experiment,
+not a supported production option.

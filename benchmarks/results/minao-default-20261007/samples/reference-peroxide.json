@@ -1,0 +1,330 @@
+{
+  "schema": "pbe0-cold-profile.v1",
+  "source": "2b0feff1d5577e58f3a44fbecbc1974be92df4e3+cuda-minao-eigen",
+  "engine": "reference",
+  "guess": "reference-minao",
+  "status": "measured",
+  "protocol": {
+    "case": "peroxide-16",
+    "atoms": 16,
+    "aos": 152,
+    "method": "PBE0/RKS",
+    "basis": "def2-SVP",
+    "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+    "representation": "spherical",
+    "geometries_bohr": [
+      [
+        [
+          "O",
+          [
+            -1.3984,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            1.3984,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.5509,
+            1.8267,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            1.5509,
+            -0.6698,
+            1.699
+          ]
+        ],
+        [
+          "O",
+          [
+            7.6015999999999995,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            10.3984,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            7.4491,
+            1.8267,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            10.5509,
+            -0.6698,
+            1.699
+          ]
+        ],
+        [
+          "O",
+          [
+            -1.3984,
+            9.0,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            1.3984,
+            9.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            -1.5509,
+            10.8267,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            1.5509,
+            8.3302,
+            1.699
+          ]
+        ],
+        [
+          "O",
+          [
+            7.6015999999999995,
+            9.0,
+            0.0
+          ]
+        ],
+        [
+          "O",
+          [
+            10.3984,
+            9.0,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            7.4491,
+            10.8267,
+            0.0
+          ]
+        ],
+        [
+          "H",
+          [
+            10.5509,
+            8.3302,
+            1.699
+          ]
+        ]
+      ]
+    ],
+    "grid": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "properties": [
+      "energy",
+      "forces"
+    ],
+    "force_return": "host_array_in_timed_endpoint",
+    "density_fitting": false,
+    "repeats": 3,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "reference_gradient_tolerance": 1e-10,
+    "screening_tolerance": 1e-12,
+    "reference_direct_scf_tolerance": 1e-14,
+    "reference_fock_policy": "full-density-rebuild",
+    "max_iterations": 100,
+    "energy_gate": 1e-08,
+    "force_gate": 1e-07,
+    "cold_definition": "preparation plus first synchronized energy/force endpoint",
+    "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+    "threads": {
+      "OMP_NUM_THREADS": "8",
+      "OPENBLAS_NUM_THREADS": "8",
+      "MKL_NUM_THREADS": "8"
+    }
+  },
+  "annotated": false,
+  "cpu_profile": null,
+  "cold_definition": "fresh owner/density; persistent compiler and runtime caches reused",
+  "host": "node1",
+  "slurm_job_id": "6404",
+  "cuda_visible_devices": "3",
+  "versions": {
+    "gpu4pyscf-cuda12x": "1.8.1",
+    "cupy-cuda12x": "13.6.0",
+    "pyscf": "2.14.0",
+    "numpy": "2.4.6"
+  },
+  "harness_sha256": "1b687dce1f19df2008c560f7d53086917d490d05605862e6063288822680cf08",
+  "basis_sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+  "environment": {
+    "GENERATIVEQC_LIBRARY": "/data/jzzeng/qc-2068-minao-profit-20261007/lib/libgenerativeqc.so",
+    "OPENBLAS_NUM_THREADS": "8",
+    "GENERATIVEQC_NVCC": "/data/jzzeng/qc-pbe0-integrated-base-20261006/.artifacts/bin/nvcc",
+    "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/qc-pr2044-cold-20261007-9763/stationary-cache",
+    "GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": "8",
+    "OMP_NUM_THREADS": "8",
+    "GENERATIVEQC_CCACHE": "/home/jzzeng/codes/wb97m-20261002/ccache/usr/bin/ccache",
+    "MKL_NUM_THREADS": "8"
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "major": 12,
+    "minor": 0,
+    "multiprocessors": 170,
+    "memory_bytes": 33668988928,
+    "driver": 13000,
+    "runtime": 12090
+  },
+  "prepare_seconds": 0.8411507569253445,
+  "execute_seconds": 32.923943005502224,
+  "scf_seconds": 30.39986578375101,
+  "force_seconds": 2.5240225046873093,
+  "energy": -605.0437295927978,
+  "forces": [
+    [
+      0.029047106664002342,
+      0.012840949869774576,
+      -0.0039943938146543845
+    ],
+    [
+      -0.02869909994564157,
+      -0.008361174411350758,
+      0.010326017471674387
+    ],
+    [
+      -0.010078528843094015,
+      -0.0027741899742568243,
+      -0.002349010163276776
+    ],
+    [
+      0.010563957855176054,
+      -0.0010261528734920589,
+      -0.004326683528368402
+    ],
+    [
+      0.028901584775233857,
+      0.012384912015859229,
+      -0.0033287084175612214
+    ],
+    [
+      -0.028824624987297653,
+      -0.008843858324548481,
+      0.010657434256740927
+    ],
+    [
+      -0.010900753944190322,
+      -0.0027643237619146,
+      -0.003447841824355119
+    ],
+    [
+      0.009935355332935103,
+      -0.0004159536477688075,
+      -0.00405997920028911
+    ],
+    [
+      0.029156915485110346,
+      0.012454173420248668,
+      -0.004212017731549111
+    ],
+    [
+      -0.028689490372670434,
+      -0.008795915076992955,
+      0.010049130970203546
+    ],
+    [
+      -0.010369764834485373,
+      -0.0036372821819421475,
+      -0.0017243419356512864
+    ],
+    [
+      0.010783194634113313,
+      -0.00037489794704315127,
+      -0.003947986144499538
+    ],
+    [
+      0.02868481831361791,
+      0.012170275219872517,
+      -0.003505012329124535
+    ],
+    [
+      -0.029168416096807093,
+      -0.009260632991964002,
+      0.01022670720731389
+    ],
+    [
+      -0.010837873176550994,
+      -0.003699150302916454,
+      -0.002564777458756752
+    ],
+    [
+      0.010495619139777146,
+      0.00010322096780057688,
+      -0.0037985373582478665
+    ]
+  ],
+  "converged": true,
+  "iterations": 58,
+  "final_residuals": {
+    "energy_change_hartree": 0.0,
+    "density_rms": 9.039165354590923e-11,
+    "orbital_gradient_norm": 7.918295619811801e-11
+  },
+  "fock_builds": 59,
+  "grid_points": 393216,
+  "full_fock": true,
+  "initial_guess": "minao",
+  "reference_xc_backend": "7.0.0 (CUDA)",
+  "complete_seconds": 33.76509376242757,
+  "host_spans_inclusive_seconds": {
+    "reference.prepare": [
+      0.8411300331354141
+    ],
+    "reference.scf": [
+      30.399847622960806
+    ],
+    "reference.force": [
+      2.524010941386223
+    ]
+  }
+}

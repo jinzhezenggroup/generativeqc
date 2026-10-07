@@ -23,8 +23,12 @@ with calculator.prepare_batch([h2]) as batch:
 
 `Calculator.estimate_resources(systems, charges=..., multiplicities=...)`
 resolves that calculator's actual basis, auxiliary basis, spin and solver
-controls. `singlepoint` also accepts the calculator's budget and attaches
-diagnostics to its result. Unsupported or infeasible plans fail before native
+controls, including automatic MINAO preparation when admitted. The standalone
+`estimate_hf_resources` estimator describes the Hcore target inventory; use
+`initial_guess=None` when executing that exact inventory, or use the calculator
+estimator to include its active preparation policy. `singlepoint` also accepts
+the calculator's budget and attaches diagnostics to its result. Unsupported or
+infeasible plans fail before native
 context creation in these execution endpoints. Constructing a CUDA calculator
 itself can select a profile and initialize the CUDA runtime; use the standalone
 estimator or CLI for a dry run without those side effects.

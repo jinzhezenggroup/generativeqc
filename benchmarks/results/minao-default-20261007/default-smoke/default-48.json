@@ -1,0 +1,2373 @@
+{
+  "schema": "pbe0-cold-profile.v1",
+  "source": "7c07fa309cf7f9123cde697e460169e481bfca01+cuda-minao-default",
+  "engine": "native",
+  "guess": "default",
+  "status": "measured",
+  "protocol": {
+    "case": "water-48",
+    "atoms": 48,
+    "aos": 384,
+    "method": "PBE0/RKS",
+    "basis": "def2-SVP",
+    "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+    "representation": "spherical",
+    "geometries_bohr": [
+      [
+        [
+          "O",
+          [
+            -5.68695864870603,
+            -9.653477530875584,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.934741636687752,
+            -11.0488257295427,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -4.339681395600782,
+            -10.03509801091492,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.653477530875584,
+            -13.210302597551673,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.03509801091492,
+            -14.557579850656921,
+            3.923524987977727
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.0488257295427,
+            -11.96251960956995,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.112343224611836,
+            -9.496961557199665,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -13.553997598721192,
+            -9.398815932861053,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -12.092024916334609,
+            -7.999127260240872,
+            2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.400299689058038,
+            -13.112343224611836,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.49844531339665,
+            -13.553997598721192,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.89813398601683,
+            -12.092024916334609,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.496961557199665,
+            -5.784918021645867,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.999127260240872,
+            -6.805236329923094,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.398815932861053,
+            -5.343263647536509,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.243783715382119,
+            -5.68695864870603,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.848435516715002,
+            -6.934741636687752,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -8.862163235342782,
+            -4.339681395600782,
+            3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.210302597551673,
+            -9.243783715382119,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.96251960956995,
+            -7.848435516715002,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -14.557579850656921,
+            -8.862163235342782,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -5.784918021645867,
+            -9.400299689058038,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -5.343263647536509,
+            -9.49844531339665,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.805236329923094,
+            -10.89813398601683,
+            2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -5.68695864870603,
+            9.243783715382119,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.934741636687752,
+            7.848435516715002,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -4.339681395600782,
+            8.862163235342782,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.653477530875584,
+            5.68695864870603,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.03509801091492,
+            4.339681395600782,
+            3.923524987977727
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.0488257295427,
+            6.934741636687752,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.112343224611836,
+            9.400299689058038,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -13.553997598721192,
+            9.49844531339665,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -12.092024916334609,
+            10.89813398601683,
+            2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.400299689058038,
+            5.784918021645867,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.49844531339665,
+            5.343263647536509,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.89813398601683,
+            6.805236329923094,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.496961557199665,
+            13.112343224611836,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.999127260240872,
+            12.092024916334609,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.398815932861053,
+            13.553997598721192,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.243783715382119,
+            13.210302597551673,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.848435516715002,
+            11.96251960956995,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -8.862163235342782,
+            14.557579850656921,
+            3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.210302597551673,
+            9.653477530875584,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.96251960956995,
+            11.0488257295427,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -14.557579850656921,
+            10.03509801091492,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -5.784918021645867,
+            9.496961557199665,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -5.343263647536509,
+            9.398815932861053,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.805236329923094,
+            7.999127260240872,
+            2.9564098944273542
+          ]
+        ]
+      ],
+      [
+        [
+          "O",
+          [
+            -5.68695864870603,
+            -9.653477530875584,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.934741636687752,
+            -11.0488257295427,
+            -2.8911348693023315
+          ]
+        ],
+        [
+          "H",
+          [
+            -4.339681395600782,
+            -10.03509801091492,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.653477530875584,
+            -13.210302597551673,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.03509801091492,
+            -14.557579850656921,
+            3.923524987977727
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.0488257295427,
+            -11.96251960956995,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.112343224611836,
+            -9.496961557199665,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -13.553997598721192,
+            -9.398815932861053,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -12.092024916334609,
+            -7.999127260240872,
+            2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.400299689058038,
+            -13.112343224611836,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.49844531339665,
+            -13.553997598721192,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.89813398601683,
+            -12.092024916334609,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.496961557199665,
+            -5.784918021645867,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.999127260240872,
+            -6.805236329923094,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.398815932861053,
+            -5.343263647536509,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.243783715382119,
+            -5.68695864870603,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.848435516715002,
+            -6.934741636687752,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -8.862163235342782,
+            -4.339681395600782,
+            3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.210302597551673,
+            -9.243783715382119,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.96251960956995,
+            -7.848435516715002,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -14.557579850656921,
+            -8.862163235342782,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -5.784918021645867,
+            -9.400299689058038,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -5.343263647536509,
+            -9.49844531339665,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.805236329923094,
+            -10.89813398601683,
+            2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -5.68695864870603,
+            9.243783715382119,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.934741636687752,
+            7.848435516715002,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -4.339681395600782,
+            8.862163235342782,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.653477530875584,
+            5.68695864870603,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.03509801091492,
+            4.339681395600782,
+            3.923524987977727
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.0488257295427,
+            6.934741636687752,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.112343224611836,
+            9.400299689058038,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -13.553997598721192,
+            9.49844531339665,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -12.092024916334609,
+            10.89813398601683,
+            2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.400299689058038,
+            5.784918021645867,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.49844531339665,
+            5.343263647536509,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -10.89813398601683,
+            6.805236329923094,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.496961557199665,
+            13.112343224611836,
+            -2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.999127260240872,
+            12.092024916334609,
+            -2.9564098944273542
+          ]
+        ],
+        [
+          "H",
+          [
+            -9.398815932861053,
+            13.553997598721192,
+            -0.8661927624563385
+          ]
+        ],
+        [
+          "O",
+          [
+            -9.243783715382119,
+            13.210302597551673,
+            2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -7.848435516715002,
+            11.96251960956995,
+            2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -8.862163235342782,
+            14.557579850656921,
+            3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -13.210302597551673,
+            9.653477530875584,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -11.96251960956995,
+            11.0488257295427,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -14.557579850656921,
+            10.03509801091492,
+            -3.923524987977727
+          ]
+        ],
+        [
+          "O",
+          [
+            -5.784918021645867,
+            9.496961557199665,
+            2.648657577077294
+          ]
+        ],
+        [
+          "H",
+          [
+            -5.343263647536509,
+            9.398815932861053,
+            0.8661927624563385
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.805236329923094,
+            7.999127260240872,
+            2.9564098944273542
+          ]
+        ]
+      ]
+    ],
+    "grid": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "properties": [
+      "energy",
+      "forces"
+    ],
+    "force_return": "host_array_in_timed_endpoint",
+    "density_fitting": false,
+    "repeats": 5,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "reference_gradient_tolerance": 1e-10,
+    "screening_tolerance": 1e-12,
+    "reference_direct_scf_tolerance": 1e-14,
+    "reference_fock_policy": "full-density-rebuild",
+    "max_iterations": 100,
+    "energy_gate": 1e-08,
+    "force_gate": 1e-07,
+    "cold_definition": "preparation plus first synchronized energy/force endpoint",
+    "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+    "threads": {
+      "OMP_NUM_THREADS": "8",
+      "OPENBLAS_NUM_THREADS": "8",
+      "MKL_NUM_THREADS": "8"
+    }
+  },
+  "annotated": false,
+  "cpu_profile": null,
+  "cold_definition": "fresh owner/density; persistent compiler and runtime caches reused",
+  "host": "node1",
+  "slurm_job_id": "6427",
+  "cuda_visible_devices": "1",
+  "versions": {
+    "gpu4pyscf-cuda12x": "1.8.1",
+    "cupy-cuda12x": "13.6.0",
+    "pyscf": "2.14.0",
+    "numpy": "2.4.6"
+  },
+  "harness_sha256": "2bb6ef10d923fcb52c48cf2c47f8c612b10a3628a7f3e940c043e8b5ce04f5e5",
+  "basis_sha256": "329c34dff451fcbc2f770e99b050b07f9e418049f260ebf9501ec21f7e79a4bc",
+  "environment": {
+    "GENERATIVEQC_LIBRARY": "/data/jzzeng/qc-2068-minao-profit-20261007/lib/default-libgenerativeqc.so",
+    "OPENBLAS_NUM_THREADS": "8",
+    "GENERATIVEQC_NVCC": "/data/jzzeng/qc-pbe0-integrated-base-20261006/.artifacts/bin/nvcc",
+    "GENERATIVEQC_STATIONARY_CACHE": "/data/jzzeng/qc-pr2044-cold-20261007-9763/stationary-cache",
+    "GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS": "8",
+    "OMP_NUM_THREADS": "8",
+    "GENERATIVEQC_CCACHE": "/home/jzzeng/codes/wb97m-20261002/ccache/usr/bin/ccache",
+    "MKL_NUM_THREADS": "8"
+  },
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "major": 12,
+    "minor": 0,
+    "multiprocessors": 170,
+    "memory_bytes": 33668988928,
+    "driver": 13000,
+    "runtime": 12090
+  },
+  "calculator_construct_seconds_excluded": 0.022986117750406265,
+  "native_build": {
+    "library_path": "/data/jzzeng/qc-2068-minao-profit-20261007/lib/default-libgenerativeqc.so",
+    "library_sha256": "c4e2cb2d509a045adf928a46ac0765e4a51cf821d2d349ace55126b11b2f4f6c",
+    "probe": {
+      "source_identity": "66dea56620f7392c32e7c295ee79ae7127cace574eb142ad727ff92400d298bf",
+      "native_abi": 0,
+      "schema": 1,
+      "policy": {
+        "precision": "fp64",
+        "spin": [
+          "rhf",
+          "uhf"
+        ],
+        "consumers": [
+          "fock",
+          "force"
+        ]
+      },
+      "host": {
+        "system": "Linux",
+        "machine": "x86_64",
+        "libc": [
+          "glibc",
+          "2.39"
+        ]
+      },
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      }
+    }
+  },
+  "prepare_seconds": 1.8956727236509323,
+  "stage": "execute",
+  "execute_seconds": 83.12926786392927,
+  "force_seconds": 23.697115559130907,
+  "scf_and_publication_seconds": 59.432152304798365,
+  "force_work": [
+    {
+      "owned_device_bytes": 27571776,
+      "h2d_bytes": 1152,
+      "d2h_bytes": 15036,
+      "launches": 21866,
+      "primitive_records": 1128,
+      "xc_points": 1179648,
+      "grid_pair_visits": 2661287016,
+      "stream": 1381772592,
+      "task_descriptors": 0,
+      "task_batches": 0,
+      "h2d_calls": 1,
+      "d2h_calls": 1169,
+      "synchronizations": 1167,
+      "geometry_batches": 2304,
+      "geometry_lane_capacity": 512,
+      "geometry_threads": 32,
+      "geometry_scratch_bytes": 3538944,
+      "geometry_peak_lanes": 512,
+      "center_geometry_bytes": 54144,
+      "center_distance_evaluations": 1128,
+      "center_geometry_preparations": 1,
+      "becke_threads_per_point": 128,
+      "becke_shared_bytes": 11664,
+      "becke_pair_state_evaluations": 1330642944,
+      "primitive_batches": 0,
+      "phased_becke_bytes": 20857664,
+      "phased_becke_batches": 2304,
+      "becke_primitive_requested": 0,
+      "becke_primitive_selected": 0,
+      "becke_primitive_batches": 0,
+      "becke_primitive_reverse_pair_visits": 0,
+      "becke_phase_batches": 2304,
+      "becke_phase_points": 1179648,
+      "becke_distance_atom_entries": 56623104,
+      "becke_pair_primal_visits": 1330642944,
+      "becke_log_incident_visits": 2661285888,
+      "becke_normalization_atom_entries": 56623104,
+      "becke_reverse_pair_visits": 1330642944,
+      "becke_gather_incident_visits": 2661285888,
+      "becke_motion_atom_entries": 56623104,
+      "becke_phase_launches": 16128,
+      "becke_primal_pair_panel_write_bytes": 42580574208,
+      "becke_reverse_pair_panel_write_bytes": 42580574208,
+      "becke_gather_unique_pair_panel_read_bytes": 85161148416,
+      "becke_gather_extra_center_direction_read_bytes": 0,
+      "becke_profile_batches": 0,
+      "becke_profile_event_records": 0,
+      "becke_profile_synchronizations": 0,
+      "becke_work_counter_semantics": "launched dense domains; failed forces are not accepted work",
+      "becke_traffic_model": "logical distinct pair-panel values and extra cached directions; not executed loads or hardware transactions",
+      "becke_phase_profile_supported": true,
+      "becke_phase_profile_enabled": false,
+      "becke_phase_ms": {
+        "point_center_distance": 0.0,
+        "pair_primal_switch_log": 0.0,
+        "atom_log_reduction": 0.0,
+        "normalization": 0.0,
+        "reverse_derivative": 0.0,
+        "atom_gather": 0.0,
+        "point_motion_publication": 0.0
+      },
+      "becke_phase_profile_scope": "phased kernels after AO/XC seeds; intrusive per-tile fence when enabled; generic fallback is not split",
+      "device_profile_enabled": false,
+      "device_phase_ms": {
+        "synchronization_wait_wall": 0.0,
+        "setup_transfer_and_clear": 0.0,
+        "setup_validation_kernel": 0.0,
+        "primitive_h2d": 0.0,
+        "primitive_derivative_kernel": 0.0,
+        "primitive_reduction": 0.0,
+        "geometry_h2d": 0.0,
+        "geometry_kernel": 0.0,
+        "geometry_reduction": 0.0,
+        "final_d2h_wall": 0.0
+      },
+      "grid_metrics": {
+        "owned_device_bytes": 42067968,
+        "provider_retained_bytes": 8388608,
+        "prepare_device_delta": 52428800,
+        "observed_device_delta": 6851395584,
+        "device_ms": 0.0,
+        "input_ms": 0.0,
+        "output_ms": 38.01638393010944,
+        "packing_ms": 0.0,
+        "library_ms": 0.0,
+        "kernel_ms": 0.0,
+        "lowering": {
+          "provider": "cublas",
+          "candidate_identity": "c217e42dd849fe918893b449032c850b93e987b45f23c24100d0300ddc5b1446",
+          "precision_identity": "34bae240924bdaefe13d7358fe22cba339b4a78ac6982d61888fa3643f720bb8",
+          "semantic_identity": "cb833e94951c798756d47ae8122ec1ddd4395d4df8191ac371452d36960deb85",
+          "calls": 2096,
+          "summands": 119697698816,
+          "binding_bytes": 100696064,
+          "host_bytes": 32768,
+          "preparations": 1,
+          "prepare_seconds": 0.000269839
+        },
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "cublas_version": 120901,
+        "ao_grid_work": {
+          "evaluation_passes": 2096,
+          "deriv0_passes": 0,
+          "deriv1_passes": 0,
+          "deriv2_passes": 2096,
+          "deriv3_passes": 0,
+          "deriv0_point_ao": 0,
+          "deriv1_point_ao": 0,
+          "deriv2_point_ao": 172813312,
+          "deriv3_point_ao": 0,
+          "evaluation_tiles": 2304,
+          "evaluation_points": 1179648,
+          "active_point_ao": 172813312,
+          "dense_point_ao": 452984832,
+          "ao_jet_values": 1728133120,
+          "discovery_passes": 2304,
+          "discovery_point_ao": 452984832,
+          "discovery_ao_jet_values": 4529848320,
+          "density_gather_passes": 2096,
+          "density_gather_elements": 58446142,
+          "projection_passes": 2096,
+          "projection_matrices": 8384,
+          "projection_fma_pairs": 119697698816,
+          "projection_output_values": 691253248,
+          "identical_spin_copy_bytes": 5530025984,
+          "feature_passes": 2304,
+          "ao_map_h2d_bytes": 2700208,
+          "scatter_passes": 0,
+          "scatter_elements": 0,
+          "orbital_feature_tiles": 0,
+          "ao_stage_ms": 0.0,
+          "density_gather_ms": 0.0,
+          "projection_ms": 0.0,
+          "feature_ms": 0.0
+        }
+      },
+      "borrowed_grid_streams": [
+        1377949888
+      ],
+      "grid_owner_source": "implicit-atom-major-index",
+      "grid_owner_h2d_bytes": 0,
+      "grid_point_source": "exact-native-resident-grid",
+      "grid_point_h2d_bytes": 0,
+      "grid_weight_source": "exact-native-resident-grid",
+      "grid_weight_h2d_bytes": 0,
+      "grid_atomic_measure_source": "exact-native-resident-grid",
+      "grid_atomic_measure_h2d_bytes": 0,
+      "primitive_pages": 0,
+      "primitive_page_peak_records": 0,
+      "primitive_record_page_budget": 16000000,
+      "bulk_pack_chunks": 0,
+      "bulk_packed_descriptors": 0,
+      "scalar_packed_descriptors": 0,
+      "ecp_provider": null,
+      "ecp_provider_workspace_bound": 0,
+      "ecp_state_export": null,
+      "ecp_derivative_export_bytes": 0,
+      "ecp_ordered_pairs": 0,
+      "ecp_quadrature_pair_samples": 0,
+      "ecp_pair_sample_budget": 100000000,
+      "grid_work_plan": {
+        "schema": "generativeqc.stationary-grid-work.v1",
+        "grid_points": 1179648,
+        "tile_points": 512,
+        "tile_count": 2304,
+        "chunk_points": 32768,
+        "chunk_count": 36,
+        "grid_pair_visits": 2661287016,
+        "chunk_pair_visits": 73924608
+      },
+      "resident_ao_selection": {
+        "schema": "generativeqc.stationary-resident-ao-selection.v1",
+        "mode": "sampled-jets",
+        "cutoff": 1e-16,
+        "cache_budget_requested_bytes": 16777216,
+        "cache_host_reserve_bytes": 16777216,
+        "cache_device_reserve_bytes": 0,
+        "full_ao_capacity": 384,
+        "derivative_order": 2,
+        "max_active_fraction": 1.0,
+        "work": {
+          "lookups": 2304,
+          "cache_hits": 0,
+          "discoveries": 2304,
+          "discovery_seconds": 3.1862479746341705,
+          "discovery_ao_jet_values": 4529848320,
+          "discovery_region_bounds": 0,
+          "discovery_density_contractions": 0,
+          "dense_budget_tiles": 0,
+          "dense_capability_tiles": 0,
+          "point_ao_visits": 172813312,
+          "point_ao_square_sum": 29924424704,
+          "dense_point_ao_square_sum": 173946175488,
+          "active_aos_min": 0,
+          "active_aos_max": 346,
+          "active_aos_sum": 337526,
+          "tile_count": 2304,
+          "empty_tile_count": 208,
+          "discovery_producer": "sampled-jets",
+          "retained_map_bytes": 2700208,
+          "transient_reserve_bytes": 7680,
+          "budget_bytes": 16777216,
+          "numeric_peak_bound_bytes": 2707888
+        }
+      },
+      "grid_tile_schedule": "budget-auto",
+      "grid_tile_points_requested": null,
+      "native_integrals_required": true,
+      "primitive_integral_roots_retained": false,
+      "ordered_pairs": 147456,
+      "ordered_quartets": 43486543872,
+      "exchange_ordered_quartets": 21743271936,
+      "full_range_derivative_route": "prepared-native-stationary",
+      "full_range_ao_task_domain_elided": true,
+      "full_range_shell_sources": [
+        "coulomb",
+        "exact_exchange"
+      ],
+      "stationary_integral_derivative_route": "prepared-native-complete",
+      "stationary_native_integral_sources": [
+        "one_electron",
+        "overlap_pulay",
+        "two_electron"
+      ],
+      "native_integral_resources": {
+        "retained_device_bytes": 62820141,
+        "source_host_preparation_bytes": 0,
+        "one_electron_device_peak_bytes": 0,
+        "one_electron_host_peak_bytes": 2304,
+        "one_electron_h2d_bytes": 0,
+        "one_electron_d2h_bytes": 2304,
+        "final_state_export_d2h_bytes": 0,
+        "final_state_export_reads": 0,
+        "final_state_export_synchronizations": 0
+      },
+      "native_integral_host_reserve": 1245888,
+      "additional_device_peak_bound": 257507136,
+      "additional_device_budget": 536870912,
+      "device_ordinal": 0,
+      "tensor_executions": 0,
+      "tensor_work": {
+        "executions": 0,
+        "h2d_numeric_bytes": 0,
+        "d2h_bytes": 0,
+        "owned_device_peak_bytes": 0,
+        "endpoint_ms": 0.0,
+        "device_ms": 0.0
+      },
+      "stationary_weight_lowering": "generated-tensorir/device-pointwise-v1",
+      "stationary_weight_plan_identity": "7d5a539a108e7972ecc947636d920c455d326f9af60106a29e9d669461aa1b7a",
+      "stationary_weight_programs": {
+        "one_electron": "7264a2b744f4c194ca39086023f6080369c9e354e3a1c6722895fa7671e2d346",
+        "overlap_pulay": "fef50206b12fd97f7e8bfe1a25504a6e143193a27e506aa779017b202488bcc0",
+        "coulomb": "fd8c44d2b0aa6cc7a888b7e9217f1e857ffc4ec6eb9b66b26b5362c2aec0c497",
+        "exact_exchange": "ba7b02cc60e9b630f182a5cbf212db16cd5cf648ddfcb6dccaff092aae329c2c"
+      },
+      "stationary_weight_tensor_executions": 0,
+      "stationary_weight_roundtrip_bytes": 0,
+      "stationary_final_reduction": "native-plan-source-device-sum-plus-prepared-integrals-v1",
+      "stationary_state_dw_upload_bytes": 0,
+      "grid_density_source": "exact-final-scf-device-binding",
+      "grid_density_h2d_bytes": 0,
+      "stationary_task_executor": {
+        "schema": "generativeqc.stationary-bounded-task-executor.v2",
+        "fixed_capacity": 32,
+        "resident_capacity": 4096,
+        "page_capacity": 4096,
+        "primitive_record_page_budget": 16000000,
+        "logical_primitive_records": 1128,
+        "sources": []
+      },
+      "additional_host_numeric_bound": 111230496,
+      "additional_host_budget": 268435456,
+      "prepared_execution": true,
+      "prepared_execution_identity": "483e26d5558a1841795ff6b7e32e043762da4d5b854fa69d93b49f379595e33a",
+      "prepared_execution_reused": false,
+      "prepared_execution_index": 1,
+      "prepared_owner_preparation_seconds": 14.400686215609312,
+      "prepared_geometry_rebinds": 0,
+      "snapshot_host_bytes": 62586024,
+      "snapshot_grid_cache_work": {
+        "exact_grid_reused": false,
+        "retained_bytes": 47192065,
+        "budget_bytes": 134217728,
+        "source_points_checked": 1179648
+      },
+      "snapshot_export_work": {
+        "d2h_bytes": 3542020,
+        "reads": 1,
+        "synchronizations": 1
+      },
+      "snapshot_export": "explicit native CUDA final-state export; W/frame validation is host work",
+      "host_scope": "snapshot validation; bounded geometry scheduling; immutable result copies",
+      "measurement_profile_enabled": false,
+      "transfer_work": {
+        "source_h2d_bytes": 1152,
+        "source_d2h_bytes": 15036,
+        "source_h2d_calls": 1,
+        "source_d2h_calls": 1169,
+        "source_synchronizations": 1167,
+        "tensor_h2d_numeric_bytes": 0,
+        "tensor_d2h_bytes": 0
+      },
+      "stationary_artifact_kind": "runtime-jit",
+      "stationary_runtime_module_load": true,
+      "stationary_driver_ptx_jit_possible": true,
+      "stationary_driver_ptx_jit_required": false,
+      "grid_artifact_kind": "native-build-aot",
+      "artifacts": [
+        {
+          "library": "/data/jzzeng/qc-pr2044-cold-20261007-9763/stationary-cache/b9aca86b7d8a0e09e54d228ea8b8fd85a299934947b177aaae5d33b86a82d888/runtime.so",
+          "binary_sha256": "f9f144e2e75236b580871ada36b80a70cb732d176c78dd022e05f2ebcc8e3a96",
+          "key": "b9aca86b7d8a0e09e54d228ea8b8fd85a299934947b177aaae5d33b86a82d888"
+        },
+        {
+          "library": "/data/jzzeng/qc-2068-minao-profit-20261007/lib/default-libgenerativeqc.so",
+          "binary_sha256": "c4e2cb2d509a045adf928a46ac0765e4a51cf821d2d349ace55126b11b2f4f6c",
+          "key": "93272b06239acfd069d2140cd9c58df46796060e65f3e54d12e52a63a810dc89"
+        }
+      ],
+      "endpoint_seconds": 20.48572902008891,
+      "timeline": {
+        "schema": "generativeqc.stationary-cuda-exclusive-wall.v1",
+        "clock": "time.perf_counter",
+        "exclusive_wall_seconds": {
+          "final_reduction": 0.00012299790978431702,
+          "metrics_collection": 0.0005236081779003143,
+          "owner_cleanup": 3.4384429454803467e-06,
+          "owner_state_reset": 0.006709679961204529,
+          "preparation": 0.40108204632997513,
+          "prepared_owner_lookup_or_construction": 14.402148224413395,
+          "prepared_stationary_integral_derivatives": 2.125949077308178,
+          "publication_metadata": 0.007963482290506363,
+          "publication_validation": 0.024070121347904205,
+          "python_packing": 0.024876318871974945,
+          "source_d2h_publication": 5.9101730585098267e-05,
+          "xc_geometry_drain": 0.023922011256217957,
+          "xc_geometry_enqueue": 3.46829891204834
+        },
+        "reconciled_seconds": 20.48572902008891,
+        "endpoint_seconds": 20.48572902008891,
+        "reconciliation_error_seconds": 0.0,
+        "measurement_policy": "exclusive host-wall phases; CUDA transfer/kernel attribution is reported separately and is not added to wall time"
+      },
+      "force_active_ao_policy": {
+        "schema": "generativeqc.force-active-ao-policy.v1",
+        "requested_mode": "auto",
+        "decision": "selected",
+        "profile_id": "ordinary-direct-active-ao-cost-v3-budget-auto",
+        "reason": "qualified-workload-profile",
+        "cutoff": 1e-16,
+        "cache_bytes": 16777216,
+        "producer": "sampled-jets",
+        "max_active_fraction": 1.0,
+        "workload": {
+          "architecture": "sm_120",
+          "derivative_order": 2,
+          "spin_blocks": 1,
+          "composition": "ordinary",
+          "hamiltonian": "all-electron",
+          "density_fitted": false,
+          "atoms": 48,
+          "aos": 384,
+          "grid_points": 1179648,
+          "tile_policy": "budget-auto",
+          "tile_points": null,
+          "max_device_bytes": 536870912,
+          "max_host_bytes": 268435456,
+          "resident_grid": true,
+          "device_name": "NVIDIA GeForce RTX 5090"
+        },
+        "actual_mode": "selected",
+        "selected_point_ao_square_sum": 29924424704,
+        "dense_point_ao_square_sum": 173946175488
+      }
+    },
+    {
+      "owned_device_bytes": 27571776,
+      "h2d_bytes": 1152,
+      "d2h_bytes": 15036,
+      "launches": 21866,
+      "primitive_records": 1128,
+      "xc_points": 1179648,
+      "grid_pair_visits": 2661287016,
+      "stream": 1381772592,
+      "task_descriptors": 0,
+      "task_batches": 0,
+      "h2d_calls": 1,
+      "d2h_calls": 1169,
+      "synchronizations": 1167,
+      "geometry_batches": 2304,
+      "geometry_lane_capacity": 512,
+      "geometry_threads": 32,
+      "geometry_scratch_bytes": 3538944,
+      "geometry_peak_lanes": 512,
+      "center_geometry_bytes": 54144,
+      "center_distance_evaluations": 1128,
+      "center_geometry_preparations": 1,
+      "becke_threads_per_point": 128,
+      "becke_shared_bytes": 11664,
+      "becke_pair_state_evaluations": 1330642944,
+      "primitive_batches": 0,
+      "phased_becke_bytes": 20857664,
+      "phased_becke_batches": 2304,
+      "becke_primitive_requested": 0,
+      "becke_primitive_selected": 0,
+      "becke_primitive_batches": 0,
+      "becke_primitive_reverse_pair_visits": 0,
+      "becke_phase_batches": 2304,
+      "becke_phase_points": 1179648,
+      "becke_distance_atom_entries": 56623104,
+      "becke_pair_primal_visits": 1330642944,
+      "becke_log_incident_visits": 2661285888,
+      "becke_normalization_atom_entries": 56623104,
+      "becke_reverse_pair_visits": 1330642944,
+      "becke_gather_incident_visits": 2661285888,
+      "becke_motion_atom_entries": 56623104,
+      "becke_phase_launches": 16128,
+      "becke_primal_pair_panel_write_bytes": 42580574208,
+      "becke_reverse_pair_panel_write_bytes": 42580574208,
+      "becke_gather_unique_pair_panel_read_bytes": 85161148416,
+      "becke_gather_extra_center_direction_read_bytes": 0,
+      "becke_profile_batches": 0,
+      "becke_profile_event_records": 0,
+      "becke_profile_synchronizations": 0,
+      "becke_work_counter_semantics": "launched dense domains; failed forces are not accepted work",
+      "becke_traffic_model": "logical distinct pair-panel values and extra cached directions; not executed loads or hardware transactions",
+      "becke_phase_profile_supported": true,
+      "becke_phase_profile_enabled": false,
+      "becke_phase_ms": {
+        "point_center_distance": 0.0,
+        "pair_primal_switch_log": 0.0,
+        "atom_log_reduction": 0.0,
+        "normalization": 0.0,
+        "reverse_derivative": 0.0,
+        "atom_gather": 0.0,
+        "point_motion_publication": 0.0
+      },
+      "becke_phase_profile_scope": "phased kernels after AO/XC seeds; intrusive per-tile fence when enabled; generic fallback is not split",
+      "device_profile_enabled": false,
+      "device_phase_ms": {
+        "synchronization_wait_wall": 0.0,
+        "setup_transfer_and_clear": 0.0,
+        "setup_validation_kernel": 0.0,
+        "primitive_h2d": 0.0,
+        "primitive_derivative_kernel": 0.0,
+        "primitive_reduction": 0.0,
+        "geometry_h2d": 0.0,
+        "geometry_kernel": 0.0,
+        "geometry_reduction": 0.0,
+        "final_d2h_wall": 0.0
+      },
+      "grid_metrics": {
+        "owned_device_bytes": 42067968,
+        "provider_retained_bytes": 8388608,
+        "prepare_device_delta": 52428800,
+        "observed_device_delta": 6851395584,
+        "device_ms": 0.0,
+        "input_ms": 0.0,
+        "output_ms": 0.0,
+        "packing_ms": 0.0,
+        "library_ms": 0.0,
+        "kernel_ms": 0.0,
+        "lowering": {
+          "provider": "cublas",
+          "candidate_identity": "c217e42dd849fe918893b449032c850b93e987b45f23c24100d0300ddc5b1446",
+          "precision_identity": "34bae240924bdaefe13d7358fe22cba339b4a78ac6982d61888fa3643f720bb8",
+          "semantic_identity": "cb833e94951c798756d47ae8122ec1ddd4395d4df8191ac371452d36960deb85",
+          "calls": 4192,
+          "summands": 239395397632,
+          "binding_bytes": 100696064,
+          "host_bytes": 32768,
+          "preparations": 1,
+          "prepare_seconds": 0.000269839
+        },
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "cublas_version": 120901,
+        "ao_grid_work": {
+          "evaluation_passes": 2096,
+          "deriv0_passes": 0,
+          "deriv1_passes": 0,
+          "deriv2_passes": 2096,
+          "deriv3_passes": 0,
+          "deriv0_point_ao": 0,
+          "deriv1_point_ao": 0,
+          "deriv2_point_ao": 172813312,
+          "deriv3_point_ao": 0,
+          "evaluation_tiles": 2304,
+          "evaluation_points": 1179648,
+          "active_point_ao": 172813312,
+          "dense_point_ao": 452984832,
+          "ao_jet_values": 1728133120,
+          "discovery_passes": 0,
+          "discovery_point_ao": 0,
+          "discovery_ao_jet_values": 0,
+          "density_gather_passes": 2096,
+          "density_gather_elements": 58446142,
+          "projection_passes": 2096,
+          "projection_matrices": 8384,
+          "projection_fma_pairs": 119697698816,
+          "projection_output_values": 691253248,
+          "identical_spin_copy_bytes": 5530025984,
+          "feature_passes": 2304,
+          "ao_map_h2d_bytes": 2700208,
+          "scatter_passes": 0,
+          "scatter_elements": 0,
+          "orbital_feature_tiles": 0,
+          "ao_stage_ms": 0.0,
+          "density_gather_ms": 0.0,
+          "projection_ms": 0.0,
+          "feature_ms": 0.0
+        }
+      },
+      "borrowed_grid_streams": [
+        1377949888
+      ],
+      "grid_owner_source": "implicit-atom-major-index",
+      "grid_owner_h2d_bytes": 0,
+      "grid_point_source": "exact-native-resident-grid",
+      "grid_point_h2d_bytes": 0,
+      "grid_weight_source": "exact-native-resident-grid",
+      "grid_weight_h2d_bytes": 0,
+      "grid_atomic_measure_source": "exact-native-resident-grid",
+      "grid_atomic_measure_h2d_bytes": 0,
+      "primitive_pages": 0,
+      "primitive_page_peak_records": 0,
+      "primitive_record_page_budget": 16000000,
+      "bulk_pack_chunks": 0,
+      "bulk_packed_descriptors": 0,
+      "scalar_packed_descriptors": 0,
+      "ecp_provider": null,
+      "ecp_provider_workspace_bound": 0,
+      "ecp_state_export": null,
+      "ecp_derivative_export_bytes": 0,
+      "ecp_ordered_pairs": 0,
+      "ecp_quadrature_pair_samples": 0,
+      "ecp_pair_sample_budget": 100000000,
+      "grid_work_plan": {
+        "schema": "generativeqc.stationary-grid-work.v1",
+        "grid_points": 1179648,
+        "tile_points": 512,
+        "tile_count": 2304,
+        "chunk_points": 32768,
+        "chunk_count": 36,
+        "grid_pair_visits": 2661287016,
+        "chunk_pair_visits": 73924608
+      },
+      "resident_ao_selection": {
+        "schema": "generativeqc.stationary-resident-ao-selection.v1",
+        "mode": "sampled-jets",
+        "cutoff": 1e-16,
+        "cache_budget_requested_bytes": 16777216,
+        "cache_host_reserve_bytes": 16777216,
+        "cache_device_reserve_bytes": 0,
+        "full_ao_capacity": 384,
+        "derivative_order": 2,
+        "max_active_fraction": 1.0,
+        "work": {
+          "lookups": 2304,
+          "cache_hits": 2304,
+          "discoveries": 0,
+          "discovery_seconds": 0.0,
+          "discovery_ao_jet_values": 0,
+          "discovery_region_bounds": 0,
+          "discovery_density_contractions": 0,
+          "dense_budget_tiles": 0,
+          "dense_capability_tiles": 0,
+          "point_ao_visits": 172813312,
+          "point_ao_square_sum": 29924424704,
+          "dense_point_ao_square_sum": 173946175488,
+          "active_aos_min": 0,
+          "active_aos_max": 346,
+          "active_aos_sum": 337526,
+          "tile_count": 2304,
+          "empty_tile_count": 208,
+          "discovery_producer": "sampled-jets",
+          "retained_map_bytes": 2700208,
+          "transient_reserve_bytes": 7680,
+          "budget_bytes": 16777216,
+          "numeric_peak_bound_bytes": 2707888
+        }
+      },
+      "grid_tile_schedule": "budget-auto",
+      "grid_tile_points_requested": null,
+      "native_integrals_required": true,
+      "primitive_integral_roots_retained": false,
+      "ordered_pairs": 147456,
+      "ordered_quartets": 43486543872,
+      "exchange_ordered_quartets": 21743271936,
+      "full_range_derivative_route": "prepared-native-stationary",
+      "full_range_ao_task_domain_elided": true,
+      "full_range_shell_sources": [
+        "coulomb",
+        "exact_exchange"
+      ],
+      "stationary_integral_derivative_route": "prepared-native-complete",
+      "stationary_native_integral_sources": [
+        "one_electron",
+        "overlap_pulay",
+        "two_electron"
+      ],
+      "native_integral_resources": {
+        "retained_device_bytes": 62820141,
+        "source_host_preparation_bytes": 0,
+        "one_electron_device_peak_bytes": 0,
+        "one_electron_host_peak_bytes": 2304,
+        "one_electron_h2d_bytes": 0,
+        "one_electron_d2h_bytes": 2304,
+        "final_state_export_d2h_bytes": 0,
+        "final_state_export_reads": 0,
+        "final_state_export_synchronizations": 0
+      },
+      "native_integral_host_reserve": 1245888,
+      "additional_device_peak_bound": 257507136,
+      "additional_device_budget": 536870912,
+      "device_ordinal": 0,
+      "tensor_executions": 0,
+      "tensor_work": {
+        "executions": 0,
+        "h2d_numeric_bytes": 0,
+        "d2h_bytes": 0,
+        "owned_device_peak_bytes": 0,
+        "endpoint_ms": 0.0,
+        "device_ms": 0.0
+      },
+      "stationary_weight_lowering": "generated-tensorir/device-pointwise-v1",
+      "stationary_weight_plan_identity": "7d5a539a108e7972ecc947636d920c455d326f9af60106a29e9d669461aa1b7a",
+      "stationary_weight_programs": {
+        "one_electron": "7264a2b744f4c194ca39086023f6080369c9e354e3a1c6722895fa7671e2d346",
+        "overlap_pulay": "fef50206b12fd97f7e8bfe1a25504a6e143193a27e506aa779017b202488bcc0",
+        "coulomb": "fd8c44d2b0aa6cc7a888b7e9217f1e857ffc4ec6eb9b66b26b5362c2aec0c497",
+        "exact_exchange": "ba7b02cc60e9b630f182a5cbf212db16cd5cf648ddfcb6dccaff092aae329c2c"
+      },
+      "stationary_weight_tensor_executions": 0,
+      "stationary_weight_roundtrip_bytes": 0,
+      "stationary_final_reduction": "native-plan-source-device-sum-plus-prepared-integrals-v1",
+      "stationary_state_dw_upload_bytes": 0,
+      "grid_density_source": "exact-final-scf-device-binding",
+      "grid_density_h2d_bytes": 0,
+      "stationary_task_executor": {
+        "schema": "generativeqc.stationary-bounded-task-executor.v2",
+        "fixed_capacity": 32,
+        "resident_capacity": 4096,
+        "page_capacity": 4096,
+        "primitive_record_page_budget": 16000000,
+        "logical_primitive_records": 1128,
+        "sources": []
+      },
+      "additional_host_numeric_bound": 111230496,
+      "additional_host_budget": 268435456,
+      "prepared_execution": true,
+      "prepared_execution_identity": "483e26d5558a1841795ff6b7e32e043762da4d5b854fa69d93b49f379595e33a",
+      "prepared_execution_reused": true,
+      "prepared_execution_index": 2,
+      "prepared_owner_preparation_seconds": 14.400686215609312,
+      "prepared_geometry_rebinds": 0,
+      "snapshot_host_bytes": 62586024,
+      "snapshot_grid_cache_work": {
+        "exact_grid_reused": true,
+        "retained_bytes": 47192065,
+        "budget_bytes": 134217728,
+        "source_points_checked": 1179648
+      },
+      "snapshot_export_work": {
+        "d2h_bytes": 3542020,
+        "reads": 1,
+        "synchronizations": 1
+      },
+      "snapshot_export": "explicit native CUDA final-state export; W/frame validation is host work",
+      "host_scope": "snapshot validation; bounded geometry scheduling; immutable result copies",
+      "measurement_profile_enabled": false,
+      "transfer_work": {
+        "source_h2d_bytes": 1152,
+        "source_d2h_bytes": 15036,
+        "source_h2d_calls": 1,
+        "source_d2h_calls": 1169,
+        "source_synchronizations": 1167,
+        "tensor_h2d_numeric_bytes": 0,
+        "tensor_d2h_bytes": 0
+      },
+      "stationary_artifact_kind": "runtime-jit",
+      "stationary_runtime_module_load": true,
+      "stationary_driver_ptx_jit_possible": true,
+      "stationary_driver_ptx_jit_required": false,
+      "grid_artifact_kind": "native-build-aot",
+      "artifacts": [
+        {
+          "library": "/data/jzzeng/qc-pr2044-cold-20261007-9763/stationary-cache/b9aca86b7d8a0e09e54d228ea8b8fd85a299934947b177aaae5d33b86a82d888/runtime.so",
+          "binary_sha256": "f9f144e2e75236b580871ada36b80a70cb732d176c78dd022e05f2ebcc8e3a96",
+          "key": "b9aca86b7d8a0e09e54d228ea8b8fd85a299934947b177aaae5d33b86a82d888"
+        },
+        {
+          "library": "/data/jzzeng/qc-2068-minao-profit-20261007/lib/default-libgenerativeqc.so",
+          "binary_sha256": "c4e2cb2d509a045adf928a46ac0765e4a51cf821d2d349ace55126b11b2f4f6c",
+          "key": "93272b06239acfd069d2140cd9c58df46796060e65f3e54d12e52a63a810dc89"
+        }
+      ],
+      "endpoint_seconds": 4.104912683367729,
+      "timeline": {
+        "schema": "generativeqc.stationary-cuda-exclusive-wall.v1",
+        "clock": "time.perf_counter",
+        "exclusive_wall_seconds": {
+          "final_reduction": 8.556991815567017e-05,
+          "metrics_collection": 0.0005931109189987183,
+          "owner_cleanup": 6.0498714447021484e-06,
+          "owner_state_reset": 0.00669349730014801,
+          "preparation": 0.02171267941594124,
+          "prepared_owner_lookup_or_construction": 0.0006537921726703644,
+          "prepared_stationary_integral_derivatives": 1.9502203240990639,
+          "publication_metadata": 0.008190244436264038,
+          "publication_validation": 0.01893867924809456,
+          "python_packing": 0.025432884693145752,
+          "source_d2h_publication": 0.000129014253616333,
+          "xc_geometry_drain": 1.8524536341428757,
+          "xc_geometry_enqueue": 0.21980320289731026
+        },
+        "reconciled_seconds": 4.104912683367729,
+        "endpoint_seconds": 4.104912683367729,
+        "reconciliation_error_seconds": 0.0,
+        "measurement_policy": "exclusive host-wall phases; CUDA transfer/kernel attribution is reported separately and is not added to wall time"
+      },
+      "force_active_ao_policy": {
+        "schema": "generativeqc.force-active-ao-policy.v1",
+        "requested_mode": "auto",
+        "decision": "selected",
+        "profile_id": "ordinary-direct-active-ao-cost-v3-budget-auto",
+        "reason": "qualified-workload-profile",
+        "cutoff": 1e-16,
+        "cache_bytes": 16777216,
+        "producer": "sampled-jets",
+        "max_active_fraction": 1.0,
+        "workload": {
+          "architecture": "sm_120",
+          "derivative_order": 2,
+          "spin_blocks": 1,
+          "composition": "ordinary",
+          "hamiltonian": "all-electron",
+          "density_fitted": false,
+          "atoms": 48,
+          "aos": 384,
+          "grid_points": 1179648,
+          "tile_policy": "budget-auto",
+          "tile_points": null,
+          "max_device_bytes": 536870912,
+          "max_host_bytes": 268435456,
+          "resident_grid": true,
+          "device_name": "NVIDIA GeForce RTX 5090"
+        },
+        "actual_mode": "selected",
+        "selected_point_ao_square_sum": 29924424704,
+        "dense_point_ao_square_sum": 173946175488
+      }
+    }
+  ],
+  "energy": -1220.7987603854235,
+  "forces": [
+    [
+      -0.0025135860430536283,
+      0.005010247619229524,
+      0.005500719065009152
+    ],
+    [
+      -0.0026476953175613716,
+      -0.002928151290009673,
+      -0.00013521162692686772
+    ],
+    [
+      0.0002738454185209349,
+      -0.001582515460113676,
+      -0.0013285023235534155
+    ],
+    [
+      0.005099694820644984,
+      0.0025723144876259596,
+      -0.005360646786543022
+    ],
+    [
+      -0.0016107252389274684,
+      -0.0002939357394886599,
+      0.0013080984789208827
+    ],
+    [
+      -0.002952314301011505,
+      0.0026303240268212846,
+      8.437143072081987e-05
+    ],
+    [
+      0.0007532526261719852,
+      -0.004909880834437885,
+      0.0031661090524508495
+    ],
+    [
+      0.0009172111018416196,
+      0.0012733225997077144,
+      -0.004189198197343202
+    ],
+    [
+      0.002666764557468948,
+      0.0029419291667780456,
+      -0.0013783546409300573
+    ],
+    [
+      0.004991690515522507,
+      0.0006838804322129022,
+      -0.0029913873547329217
+    ],
+    [
+      -0.0012726442613043287,
+      0.000924252106567991,
+      0.004026744257120463
+    ],
+    [
+      -0.00305092885353897,
+      0.0027476371723369475,
+      0.0012847572776519822
+    ],
+    [
+      -0.005074959194631745,
+      -0.001056101936248055,
+      -0.0027959592986057658
+    ],
+    [
+      0.0030174192999243843,
+      -0.002583399224634242,
+      0.0012692343783966553
+    ],
+    [
+      0.001304206825261764,
+      -0.0008250385043768738,
+      0.0037352755353614597
+    ],
+    [
+      -0.005287582626683829,
+      -0.0022873984206501774,
+      -0.005136548399363505
+    ],
+    [
+      0.0031276295661921694,
+      -0.0028086560240883074,
+      5.563179284173714e-05
+    ],
+    [
+      0.001770589702252856,
+      -3.9741702639872756e-06,
+      0.0012134816772730872
+    ],
+    [
+      0.0024661455163572654,
+      -0.005214192083591307,
+      0.005506807457292373
+    ],
+    [
+      0.002775790114898591,
+      0.003098489049054187,
+      -0.00015058577456272815
+    ],
+    [
+      -0.00026956127065158597,
+      0.001638786626678046,
+      -0.0013330318278423903
+    ],
+    [
+      -0.0008113928125812464,
+      0.005075637803190425,
+      0.003142192558051704
+    ],
+    [
+      -0.000908233089188748,
+      -0.0012559858737071217,
+      -0.004170751720922183
+    ],
+    [
+      -0.0027129638812093404,
+      -0.0030591349268513923,
+      -0.0013232450128040085
+    ],
+    [
+      -0.00246614551659885,
+      0.005214192083104585,
+      0.005506807456972851
+    ],
+    [
+      -0.0027757901148617314,
+      -0.0030984890489165196,
+      -0.00015058577461746214
+    ],
+    [
+      0.00026956127074662106,
+      -0.0016387866266391882,
+      -0.0013330318277002817
+    ],
+    [
+      0.005287582626100296,
+      0.0022873984207762987,
+      -0.005136548399210961
+    ],
+    [
+      -0.0017705897022730621,
+      3.97417037945047e-06,
+      0.0012134816772615409
+    ],
+    [
+      -0.0031276295655793263,
+      0.0028086560234825697,
+      5.5631792845511896e-05
+    ],
+    [
+      0.0008113928126967096,
+      -0.005075637802376853,
+      0.0031421925582737487
+    ],
+    [
+      0.0009082330892273838,
+      0.0012559858736352902,
+      -0.0041707517211238
+    ],
+    [
+      0.0027129638808625067,
+      0.0030591349266542167,
+      -0.0013232450129185835
+    ],
+    [
+      0.00507495919539469,
+      0.001056101935944298,
+      -0.0027959592983055614
+    ],
+    [
+      -0.0013042068254587869,
+      0.000825038504517206,
+      0.00373527553507369
+    ],
+    [
+      -0.003017419300491042,
+      0.0025833992247017434,
+      0.001269234378370232
+    ],
+    [
+      -0.0049916905165074965,
+      -0.0006838804322448766,
+      -0.0029913873552942505
+    ],
+    [
+      0.0030509288540736534,
+      -0.0027476371726313786,
+      0.0012847572776788496
+    ],
+    [
+      0.001272644261428743,
+      -0.0009242521065795373,
+      0.00402674425737537
+    ],
+    [
+      -0.005099694821658396,
+      -0.002572314486990024,
+      -0.005360646787017753
+    ],
+    [
+      0.0029523143018259645,
+      -0.0026303240275167283,
+      8.437143079798037e-05
+    ],
+    [
+      0.0016107252391486249,
+      0.00029393573942204654,
+      0.001308098479420039
+    ],
+    [
+      0.0025135860428866508,
+      -0.005010247619654962,
+      0.005500719065169912
+    ],
+    [
+      0.0026476953182918983,
+      0.002928151290438663,
+      -0.00013521162681784382
+    ],
+    [
+      -0.00027384541884512004,
+      0.0015825154603470448,
+      -0.001328502323939773
+    ],
+    [
+      -0.0007532526262910011,
+      0.004909880833842806,
+      0.0031661090520422874
+    ],
+    [
+      -0.0009172111020099294,
+      -0.00127332259946987,
+      -0.004189198196994148
+    ],
+    [
+      -0.0026667645575408905,
+      -0.002941929166445867,
+      -0.0013783546408512315
+    ]
+  ],
+  "converged": true,
+  "status_code": 0,
+  "status_message": "success",
+  "iterations": 19,
+  "fock_builds": 19,
+  "density_rms": 1.8809818125707616e-13,
+  "physical_residual_rms": 3.9651207473721534e-13,
+  "warm_start_used": false,
+  "warm_start_fallback": false,
+  "incremental_direct_jk": {
+    "policy_version": 1,
+    "requested": false,
+    "active": false,
+    "quartet_work_counters_valid": false,
+    "anchor_full_builds": 0,
+    "delta_builds": 0,
+    "periodic_rebuilds": 0,
+    "bypass_full_builds": 0,
+    "post_scf_full_builds": 0,
+    "anchor_updates": 0,
+    "max_abs_delta_density": 0.0,
+    "full_candidate_shell_quartets": 0,
+    "full_rejected_shell_quartets": 0,
+    "full_admitted_shell_quartets": 0,
+    "full_admitted_quartet_tiles": 0,
+    "delta_candidate_shell_quartets": 0,
+    "delta_rejected_shell_quartets": 0,
+    "delta_admitted_shell_quartets": 0,
+    "delta_admitted_quartet_tiles": 0
+  },
+  "ks_diagnostic": {
+    "occupations": [
+      80,
+      80
+    ],
+    "electrons": [
+      80.00000000000004,
+      80.00000000000004
+    ],
+    "grid_points": 1179648,
+    "tile_points": 256,
+    "ao_order": 1,
+    "scf_domain": "semilocal-scaled-v1/pbe-spin-c2-1e-18",
+    "initial_density_used": true,
+    "fock_builds": 19,
+    "components": {
+      "nuclear": 1348.2301520634453,
+      "one_electron": -4370.946671562996,
+      "hartree": 1950.148243069532,
+      "xc": -148.2304839554052
+    },
+    "density_change_max": 1.8809818125707616e-13,
+    "physical_residual_max": 3.9651207473721534e-13,
+    "history": [
+      {
+        "iteration": 1,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4304.399803695198,
+          "hartree": 1914.5617737225293,
+          "xc": -141.99390177065683
+        },
+        "energy_change": null,
+        "density_change_max": 0.025134736949334803,
+        "physical_residual_max": 0.0253068442749744,
+        "electrons": [
+          80.00000000000072,
+          80.00000000000072
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 2,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4406.26406569403,
+          "hartree": 1991.8963203809944,
+          "xc": -153.07602088151702
+        },
+        "energy_change": 35.611834451227196,
+        "density_change_max": 0.007963872105940005,
+        "physical_residual_max": 0.013577680822843222,
+        "electrons": [
+          79.99999999999997,
+          79.99999999999997
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 3,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4348.658286104363,
+          "hartree": 1925.5111715225316,
+          "xc": -145.2938870656696
+        },
+        "energy_change": 0.9972354529477343,
+        "density_change_max": 0.0031285878187997667,
+        "physical_residual_max": 0.008312840312093357,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 4,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4371.004101181068,
+          "hartree": 1950.2282067145777,
+          "xc": -148.25255123235266
+        },
+        "energy_change": 0.5874440513423451,
+        "density_change_max": 0.00015372648901430363,
+        "physical_residual_max": 0.000249094556318438,
+        "electrons": [
+          80.00000000000007,
+          80.00000000000007
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 5,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.986820922562,
+          "hartree": 1950.1907816771989,
+          "xc": -148.2326387066048
+        },
+        "energy_change": 0.00023225312520480657,
+        "density_change_max": 7.935924934024269e-05,
+        "physical_residual_max": 0.00016980911153441293,
+        "electrons": [
+          80.00000000000006,
+          80.00000000000006
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 6,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.983099059309,
+          "hartree": 1950.186076529201,
+          "xc": -148.23186369118974
+        },
+        "energy_change": 0.00020826932950512855,
+        "density_change_max": 2.1572499823333305e-05,
+        "physical_residual_max": 5.7622222273304e-05,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 7,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.950250775758,
+          "hartree": 1950.1523821608241,
+          "xc": -148.2310437529766
+        },
+        "energy_change": 2.614661275401886e-05,
+        "density_change_max": 1.3515110370320458e-06,
+        "physical_residual_max": 3.1330044374652725e-06,
+        "electrons": [
+          79.99999999999999,
+          79.99999999999999
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 8,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946632346298,
+          "hartree": 1950.1481965255045,
+          "xc": -148.2304766268284
+        },
+        "energy_change": 7.971175364218652e-08,
+        "density_change_max": 2.23130463758354e-07,
+        "physical_residual_max": 4.060254512294818e-07,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 9,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946607840793,
+          "hartree": 1950.1481704072287,
+          "xc": -148.23047501485289
+        },
+        "energy_change": 7.951257430249825e-10,
+        "density_change_max": 1.0989823916927232e-07,
+        "physical_residual_max": 2.301300145169724e-07,
+        "electrons": [
+          80.00000000000007,
+          80.00000000000007
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 10,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946646852216,
+          "hartree": 1950.148215176755,
+          "xc": -148.23048077336432
+        },
+        "energy_change": 4.079083737451583e-10,
+        "density_change_max": 3.038203483269476e-08,
+        "physical_residual_max": 7.010038069612172e-08,
+        "electrons": [
+          80.00000000000006,
+          80.00000000000006
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 11,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.9466737858875,
+          "hartree": 1950.148245339123,
+          "xc": -148.23048400210405
+        },
+        "energy_change": 4.320099833421409e-11,
+        "density_change_max": 5.809112860067806e-09,
+        "physical_residual_max": 8.527161103582715e-09,
+        "electrons": [
+          80.00000000000013,
+          80.00000000000013
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 12,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946677751089,
+          "hartree": 1950.1482500323705,
+          "xc": -148.23048473014904
+        },
+        "energy_change": 9.094947017729282e-13,
+        "density_change_max": 2.8017335318183215e-09,
+        "physical_residual_max": 7.236042406721075e-09,
+        "electrons": [
+          80.00000000000006,
+          80.00000000000006
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 13,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.9466715148,
+          "hartree": 1950.1482430307099,
+          "xc": -148.23048396478376
+        },
+        "energy_change": 6.59383658785373e-12,
+        "density_change_max": 2.4879366204260206e-10,
+        "physical_residual_max": 4.991799943904728e-10,
+        "electrons": [
+          80.00000000000009,
+          80.00000000000009
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 14,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.9466713266,
+          "hartree": 1950.148242805635,
+          "xc": -148.23048392790744
+        },
+        "energy_change": 1.3642420526593924e-12,
+        "density_change_max": 8.235317815589465e-11,
+        "physical_residual_max": 1.5174565782748808e-10,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 15,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946671582795,
+          "hartree": 1950.1482430908713,
+          "xc": -148.23048395695008
+        },
+        "energy_change": 9.094947017729282e-13,
+        "density_change_max": 3.458698879703848e-11,
+        "physical_residual_max": 8.034167990330268e-11,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 16,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946671589865,
+          "hartree": 1950.1482430995932,
+          "xc": -148.2304839585982
+        },
+        "energy_change": 3.410605131648481e-12,
+        "density_change_max": 7.822712094439563e-12,
+        "physical_residual_max": 1.8390471447065034e-11,
+        "electrons": [
+          80.00000000000006,
+          80.00000000000006
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 17,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946671563412,
+          "hartree": 1950.1482430701155,
+          "xc": -148.23048395557603
+        },
+        "energy_change": 2.0463630789890885e-12,
+        "density_change_max": 2.6179159731261664e-12,
+        "physical_residual_max": 4.694238753453526e-12,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 18,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946671561427,
+          "hartree": 1950.148243067826,
+          "xc": -148.23048395526774
+        },
+        "energy_change": 3.183231456205249e-12,
+        "density_change_max": 1.0323051622579375e-12,
+        "physical_residual_max": 2.5819120846589426e-12,
+        "electrons": [
+          80.00000000000006,
+          80.00000000000006
+        ],
+        "occupation_stabilized": false
+      },
+      {
+        "iteration": 19,
+        "components": {
+          "nuclear": 1348.2301520634453,
+          "one_electron": -4370.946671562996,
+          "hartree": 1950.148243069532,
+          "xc": -148.2304839554052
+        },
+        "energy_change": 0.0,
+        "density_change_max": 1.8809818125707616e-13,
+        "physical_residual_max": 3.9651207473721534e-13,
+        "electrons": [
+          80.00000000000004,
+          80.00000000000004
+        ],
+        "occupation_stabilized": false
+      }
+    ]
+  },
+  "ao_work": {
+    "requested": 1,
+    "selected": 1,
+    "tiles": 4608,
+    "empty_tiles": 436,
+    "min_active": 0,
+    "max_active": 342,
+    "active_sum": 621388,
+    "discovery_ao_jet_values": 1811939328,
+    "point_ao_visits": 159075328,
+    "point_ao_square_sum": 25257336832,
+    "dense_point_ao_square_sum": 173946175488,
+    "discovery_d2h_bytes": 7096320,
+    "reserved_device_bytes": 19346080,
+    "host_peak_bytes": 14231048,
+    "xc_evaluations": 19,
+    "cutoff": 1e-16,
+    "discovery_seconds": 0.65014003
+  },
+  "resource_diagnostics": null,
+  "initial_guess_diagnostic": {
+    "kind": "minao",
+    "outcome": "used",
+    "work_counters_complete": true,
+    "preliminary_iterations": 0,
+    "preliminary_fock_builds": 0,
+    "target_attempts": 1,
+    "discarded_target_iterations": 0,
+    "discarded_target_fock_builds": 0,
+    "preparation_numeric_capacity": 19875968,
+    "preparation_seconds": 0.43469802
+  },
+  "acceptance": {
+    "energy_error": 2.9558577807620168e-12,
+    "force_error": 1.569788743438494e-11,
+    "gate": true
+  },
+  "complete_seconds": 85.0249405875802,
+  "final_density": {
+    "path": "/data/jzzeng/qc-2068-minao-profit-20261007/results/default-promotion/default-48.density.npy",
+    "count": 147456,
+    "sha256": "df0fd75005d6c5f5747370417de4c00ec2f3a1468aed0272c87446f18ce39a7d"
+  },
+  "warm_probe": {
+    "seconds_excluded_from_cold": 8.026467692106962,
+    "initial_guess_diagnostic": {
+      "kind": "minao",
+      "outcome": "existing_density",
+      "work_counters_complete": true,
+      "preliminary_iterations": 0,
+      "preliminary_fock_builds": 0,
+      "target_attempts": 1,
+      "discarded_target_iterations": 0,
+      "discarded_target_fock_builds": 0,
+      "preparation_numeric_capacity": 0,
+      "preparation_seconds": 0.0
+    },
+    "warm_start_used": true,
+    "acceptance": {
+      "energy_error": 3.410605131648481e-12,
+      "force_error": 1.573496888340742e-11,
+      "gate": true
+    }
+  },
+  "host_spans_inclusive_seconds": {
+    "native.prepare": [
+      1.895605731755495
+    ],
+    "native.force": [
+      23.697115559130907,
+      4.917213190346956
+    ],
+    "native.execute": [
+      83.12924491986632
+    ]
+  }
+}

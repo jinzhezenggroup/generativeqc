@@ -311,29 +311,44 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
             self.target = cuda_target_info("sm_120")
 
+    real_plan_type = runtime.StationaryGradientPlan
+    weight_programs = {
+        name: f"{name}-weight-hash"
+        for name in ("one_electron", "coulomb", "overlap_pulay")
+    }
+
     class FakePlan:
         source_names = runtime._SOURCE_NAMES
+        range_exchange_sources = ()
         spin_blocks = 1
         identity = "plan-id"
 
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             pass
 
-        def reduction_program(
+        def validate_source_coverage(
             self,
             *,
-            atoms: int,
             sources: object = None,
             combined_two_electron: bool = False,
         ) -> object:
             assert combined_two_electron is (
                 native == "complete" and force_reduction == "combined"
             )
-            return SimpleNamespace(atoms=atoms, sources=sources)
+            return real_plan_type.validate_source_coverage(
+                self,
+                sources=sources,
+                combined_two_electron=combined_two_electron,
+            )
+
+        def reduction_program(self, **_kwargs: object) -> object:
+            pytest.fail("native complete reduction regenerated TensorIR")
 
         def integral_block(self, name: str, **_kwargs: object) -> object:
+            if aot:
+                pytest.fail("packaged endpoint regenerated a weight graph")
             return SimpleNamespace(
-                weights=SimpleNamespace(logical_hash=f"{name}-weight-hash")
+                weights=SimpleNamespace(logical_hash=weight_programs[name])
             )
 
     monkeypatch.setattr(runtime, "CudaCompilerAdapter", FakeCompiler)
@@ -364,9 +379,14 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     monkeypatch.setattr(runtime, "plan_cuda", lambda *_a, **_k: tensor_plan)
 
     def artifact(name: str) -> SimpleNamespace:
+        metadata = {"binary_sha256": f"{name}-sha", "key": f"{name}-key"}
+        if aot and name == "stationary":
+            metadata.update(
+                artifact_kind="packaged-aot", weight_programs=weight_programs
+            )
         return SimpleNamespace(
             library=tmp_path / f"{name}.so",
-            metadata={"binary_sha256": f"{name}-sha", "key": f"{name}-key"},
+            metadata=metadata,
         )
 
     emitted = []
@@ -561,6 +581,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             execute()
         return
     result = execute()
+    assert result.work["stationary_weight_programs"] == weight_programs
     assert result.work["primitive_integral_roots_retained"] is (
         not native_required or aot
     )

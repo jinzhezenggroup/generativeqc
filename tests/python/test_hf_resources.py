@@ -101,10 +101,14 @@ def test_prepared_cpu_budget_gates_before_native_context_and_preserves_results(
     fitted: typing.Any,
 ) -> None:
     controls = {"density_fitting": "cpu" if fitted else "none"}
-    baseline = Calculator(**controls).singlepoint(H2)
+    # This standalone estimator describes the Hcore target inventory. Automatic
+    # MINAO plans are obtained from Calculator.estimate_resources instead.
+    baseline = Calculator(**controls, initial_guess=None).singlepoint(H2)
     probe = estimate_hf_resources([H2], **controls)
     calculator = Calculator(
-        **controls, resource_budget=ResourceBudget(host_bytes=probe.peak_bytes["host"])
+        **controls,
+        initial_guess=None,
+        resource_budget=ResourceBudget(host_bytes=probe.peak_bytes["host"]),
     )
     with calculator.prepare_batch([H2]) as batch:
         assert batch.resource_plan.status == "feasible"
@@ -127,6 +131,7 @@ def test_prepared_cpu_budget_gates_before_native_context_and_preserves_results(
         assert abs(second.energy - baseline.energy) < 1e-10
     constrained = Calculator(
         **controls,
+        initial_guess=None,
         resource_budget=ResourceBudget(host_bytes=probe.peak_bytes["host"] - 1),
     )
     with pytest.raises(MemoryError, match="no supported plan fits"):
@@ -150,7 +155,9 @@ def test_bounded_fleet_samples_every_serial_item_and_restores_thread_scope() -> 
 
 def test_failed_solve_retains_available_resource_samples() -> None:
     calculator = Calculator(
-        max_iterations=1, resource_budget=ResourceBudget(host_bytes=10**6)
+        max_iterations=1,
+        initial_guess=None,
+        resource_budget=ResourceBudget(host_bytes=10**6),
     )
     with calculator.prepare_batch([H2]) as batch:
         result = batch.execute()
