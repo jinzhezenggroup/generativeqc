@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -13,8 +12,13 @@ def test_cuda_ks_incremental_direct_jk_is_capability_based() -> None:
     ks = _source("src/dft/cuda_ks.cpp")
 
     assert "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK" in method
-    assert "direct_jk_incremental_exact_eligible(*options.resolved_fock_build)" in method
-    assert "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider" in ks
+    assert (
+        "direct_jk_incremental_exact_eligible(*options.resolved_fock_build)" in method
+    )
+    assert (
+        "CUDA KS incremental Direct-J/K requires one strict-FP64 exact Direct provider"
+        in ks
+    )
 
     # The legacy experiment remains reproducible, but the generic selector is
     # not restricted to one semilocal family or one spin mode.
@@ -45,7 +49,10 @@ def test_cuda_ks_incremental_direct_jk_only_changes_linear_fock_inputs() -> None
 def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
     ks = _source("src/dft/cuda_ks.cpp")
 
-    assert "!precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1" in ks
+    assert (
+        "!precision_schedule.any_lower_precision() && !incremental_direct_jk && spins == 1"
+        in ks
+    )
     assert (
         "const bool strict_final_closure =\n"
         "        incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();"

@@ -491,10 +491,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   options.resolved_fock_build = scf::resolve_fock_build(
       fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
       options.screening_tolerance, options.density_fitting_relative_threshold);
-  const bool generic_incremental_direct_jk = incremental_direct_jk_benchmark_requested(
-      "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
-  const bool legacy_pbe0_incremental_direct_jk = incremental_direct_jk_benchmark_requested(
-      "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
+  const bool generic_incremental_direct_jk =
+      incremental_direct_jk_benchmark_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
+  const bool legacy_pbe0_incremental_direct_jk =
+      incremental_direct_jk_benchmark_requested("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
   if (generic_incremental_direct_jk || legacy_pbe0_incremental_direct_jk) {
     const bool strict_exact_cuda_ks =
         backend == GENERATIVEQC_BACKEND_CUDA &&

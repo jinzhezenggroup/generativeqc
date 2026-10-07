@@ -210,10 +210,9 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       (spins != 1 && spins != 2) || history > 64)
     throw std::invalid_argument("invalid CUDA KS resource shape");
   KsStateStorage layout;
-  return sum(
-      layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
-                       incremental_direct_jk, nullptr),
-      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+  return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
+                              incremental_direct_jk, nullptr),
+             n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
 struct CudaKsPlan::Impl : KsStateStorage {
@@ -846,9 +845,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         throw std::invalid_argument(
             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
     }
-    ks_arena_bytes =
-        partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
-                  nullptr);
+    ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
+                               incremental_direct_jk, nullptr);
     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
     resource.xc_device_bytes =
         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
@@ -1630,8 +1628,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     const auto blocks = static_cast<unsigned>((elements + 127) / 128);
     launch_prepare_incremental_density_kernel(blocks, 128, 0, stream, elements, density,
-                                              incremental_anchor_density,
-                                              incremental_delta_density,
+                                              incremental_anchor_density, incremental_delta_density,
                                               incremental_max_abs_delta_density);
     check(cudaGetLastError());
     ++output.incremental_direct_jk.delta_builds;
@@ -1700,10 +1697,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       bool fused_rsh_values = false;
       if (has_range_correction && !pending_mixed_coulomb && !use_occupied_fitted) {
         jk_status = scf::enqueue_prepared_cuda_rsh_values(
-            provider, *range_correction, jk_density,
-            spins == 2 ? jk_density + matrix : nullptr, matrix,
-            j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr, range_exchange,
-            spins == 2 ? range_exchange + matrix : nullptr, jk_error, range_jk_error, detail);
+            provider, *range_correction, jk_density, spins == 2 ? jk_density + matrix : nullptr,
+            matrix, j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr,
+            range_exchange, spins == 2 ? range_exchange + matrix : nullptr, jk_error,
+            range_jk_error, detail);
         fused_rsh_values = jk_status == GENERATIVEQC_STATUS_SUCCESS;
         if (!fused_rsh_values && jk_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
           check(jk_status, detail);
@@ -1845,8 +1842,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U) +
         (incremental_direct_jk ? sizeof(host_incremental_max_abs_delta_density) : 0U);
     if (incremental_direct_jk)
-      output.incremental_direct_jk.max_abs_delta_density =
-          host_incremental_max_abs_delta_density;
+      output.incremental_direct_jk.max_abs_delta_density = host_incremental_max_abs_delta_density;
     ++movement.synchronizations;
     ++movement.iteration_synchronizations;
     ++movement.iteration_chunks;
