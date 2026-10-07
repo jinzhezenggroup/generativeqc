@@ -11,8 +11,6 @@ from __future__ import annotations
 import functools
 import inspect
 import typing
-from collections.abc import Callable
-
 import numpy as np
 from generativeqc_compiler.array_api import (
     DLPACK_INTEROP_VERSION,
@@ -138,7 +136,7 @@ class CompiledFunction:
     this first public path uses the independent NumPy TensorIR interpreter.
     """
 
-    def __init__(self, function: Callable[..., object], *, backend: str) -> None:
+    def __init__(self, function: typing.Callable[..., object], *, backend: str) -> None:
         if not callable(function):
             raise TypeError("compile requires a callable")
         if backend != "reference":
@@ -210,7 +208,7 @@ class CompiledFunction:
 
 @typing.overload
 def compile(
-    function: Callable[..., object],
+    function: typing.Callable[..., object],
     *,
     backend: str = "reference",
 ) -> CompiledFunction: ...
@@ -221,14 +219,14 @@ def compile(
     function: None = None,
     *,
     backend: str = "reference",
-) -> Callable[[Callable[..., object]], CompiledFunction]: ...
+) -> typing.Callable[[typing.Callable[..., object]], CompiledFunction]: ...
 
 
 def compile(
-    function: Callable[..., object] | None = None,
+    function: typing.Callable[..., object] | None = None,
     *,
     backend: str = "reference",
-) -> CompiledFunction | Callable[[Callable[..., object]], CompiledFunction]:
+) -> CompiledFunction | typing.Callable[[typing.Callable[..., object]], CompiledFunction]:
     """Capture a normal array function lazily from its first concrete signature."""
     if function is None:
         return lambda target: CompiledFunction(target, backend=backend)
