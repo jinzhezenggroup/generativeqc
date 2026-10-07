@@ -54,11 +54,10 @@ def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback(
         assert (
             "for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x)" in parallel
         )
-        assert "cub::BlockReduce<" in parallel
-        assert "cub::BLOCK_REDUCE_WARP_REDUCTIONS" in parallel
-        assert "BlockReduce(temp_storage).Reduce" in parallel
+        assert "generativeqc::tensor::StrictFp64BlockReduce<256>" in parallel
+        assert "BlockReduce::sum(sum,temp_storage)" in parallel
         assert "__dadd_rn" in parallel
-        assert "cub::BlockReduce<" not in serial
+        assert "StrictFp64BlockReduce" not in serial
 
 
 def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_serial() -> (
@@ -70,11 +69,11 @@ def test_production_iteration_uses_parallel_scalar_reduction_but_replay_stays_se
     )
     replay = tuple(kernel for kernel in kernels if kernel.startswith("replay_"))
 
-    assert "#include <cub/block/block_reduce.cuh>" in codegen.cuda_source()
+    assert '#include "tensor/cuda_reduction.cuh"' in codegen.cuda_source()
     assert iteration
-    assert any("cub::BlockReduce<" in kernel for kernel in iteration)
+    assert any("StrictFp64BlockReduce<256>" in kernel for kernel in iteration)
     assert replay
-    assert all("cub::BlockReduce<" not in kernel for kernel in replay)
+    assert all("StrictFp64BlockReduce" not in kernel for kernel in replay)
 
 
 def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
@@ -82,15 +81,15 @@ def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
     hoisted = _kernels(generate_df_ccsd_hoisted.cuda_source())
 
     assert any(
-        kernel.startswith("iteration_node_") and "cub::BlockReduce<" in kernel
+        kernel.startswith("iteration_node_") and "StrictFp64BlockReduce<256>" in kernel
         for kernel in core
     )
     assert any(
-        kernel.startswith("iteration_packed_node_") and "cub::BlockReduce<" in kernel
+        kernel.startswith("iteration_packed_node_") and "StrictFp64BlockReduce<256>" in kernel
         for kernel in hoisted
     )
     assert any(
-        kernel.startswith("iteration_scalar_node_") and "cub::BlockReduce<" in kernel
+        kernel.startswith("iteration_scalar_node_") and "StrictFp64BlockReduce<256>" in kernel
         for kernel in hoisted
     )
 
@@ -118,12 +117,19 @@ def test_complete_orbital_scalar_kernel_declares_runtime_extent(
 #include <cstddef>
 #define __global__
 #define __shared__
+#define __device__
+#define __forceinline__ inline
 struct Dim { unsigned x; };
 Dim threadIdx{0}, blockDim{256};
 double __dadd_rn(double a, double b) { return a+b; }
 double __dmul_rn(double a, double b) { return a*b; }
-double __shfl_down_sync(unsigned, double value, int) { return value; }
-void __syncthreads() {}
+namespace generativeqc::tensor {
+template <int Threads>
+struct StrictFp64BlockReduce {
+  struct TempStorage {};
+  static double sum(double value, TempStorage&) { return value; }
+};
+}
 namespace generativeqc_tensor {
 double finite(double value, int*, int) { return value; }
 }
@@ -135,7 +141,7 @@ int main() {{
   for (std::size_t o=0;o<=2;++o) {{
     for (std::size_t v=0;v<=3;++v) {{
       const auto n=o+v;
-      assert(n<32); // Execute only the actual serial fallback, not mocked shuffles.
+      assert(n<32); // Execute only the actual serial fallback, not the provider shim.
       double expected=0.0;
       for (std::size_t i=0;i<n;++i)
         expected += {"values[i]" if operation == "reduce" else "values[i]*values[i]"};
