@@ -1,6 +1,7 @@
 #include "scf/solver/mean_field_driver.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -14,6 +15,7 @@
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/diis.hpp"
+#include "scf/solver/final_state.hpp"
 #include "scf/solver/proposal_control.hpp"
 #include "solver/self_consistent.hpp"
 
@@ -201,11 +203,19 @@ void finalize_scf(const PreparedFockPlan& plan, const integrals::IntegralData& i
   result.density = density;
 }
 
-void finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralData& ints,
-                  const Matrix& orthogonalizer, std::size_t alpha_occupied,
-                  std::size_t beta_occupied, Matrix& alpha_density, Matrix& beta_density,
-                  bool compute_forces, ScfResult& result,
-                  const initial_guess::EigenOperation& target_eigen) {
+std::uint64_t next_host_final_state_epoch() {
+  static std::atomic<std::uint64_t> next{1};
+  const auto epoch = next.fetch_add(1, std::memory_order_relaxed);
+  if (epoch == 0 || epoch == std::numeric_limits<std::uint64_t>::max())
+    throw std::runtime_error("host final-state epoch exhausted");
+  return epoch;
+}
+
+unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralData& ints,
+                      const Matrix& orthogonalizer, std::size_t alpha_occupied,
+                      std::size_t beta_occupied, Matrix& alpha_density, Matrix& beta_density,
+                      const ScfOptions& options, ScfResult& result,
+                      const initial_guess::EigenOperation& target_eigen) {
   const std::size_t n = ints.nbf;
   runtime::host_trace::Region final_trace("host_finalization", n);
   auto [alpha_fock, beta_fock] = build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
@@ -215,18 +225,54 @@ void finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralData& i
                                           PreparedFockPlan::EigenUse::Finalization, target_eigen);
   alpha_density = density_from_orbitals(alpha_orbitals.vectors, n, alpha_occupied, 1.0);
   beta_density = density_from_orbitals(beta_orbitals.vectors, n, beta_occupied, 1.0);
-  std::tie(alpha_fock, beta_fock) = build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
-  result.energy =
-      uhf_electronic_energy(alpha_density, beta_density, ints.hcore, alpha_fock, beta_fock) +
-      ints.nuclear_repulsion;
-  if (compute_forces) {
-    const Matrix alpha_weighted = physical_weighted_density(alpha_density, alpha_fock, n, 1.0);
-    const Matrix beta_weighted = physical_weighted_density(beta_density, beta_fock, n, 1.0);
+  unsigned physical_fock_builds = 1;
+
+  if (options.compute_forces) {
+    const auto epoch = next_host_final_state_epoch();
+    FinalStateIdentity identity{{epoch, epoch, 2, 2},
+                                epoch,
+                                plan.strategy(),
+                                {alpha_occupied, beta_occupied}};
+    FinalFrameCandidate candidate{identity, 1, true, {alpha_orbitals, beta_orbitals}};
+    const PhysicalFockOperation physical = [&](const auto& current, const auto& densities) {
+      if (densities.size() != 2)
+        throw std::runtime_error("UHF final-state provider lost a spin density");
+      auto [alpha, beta] =
+          build_uhf_focks(plan, ints.hcore, densities[0], densities[1]);
+      return PhysicalFockFrame{current, true, {std::move(alpha), std::move(beta)}};
+    };
+    const initial_guess::EigenOperation eigen =
+        [&](const auto& fock, const auto*, const auto*, auto) {
+          return diagonalize(plan, fock, ints, orthogonalizer,
+                             PreparedFockPlan::EigenUse::Finalization, target_eigen);
+        };
+    auto selected = select_final_state(
+        identity, ints.overlap, ints.hcore, orthogonalizer, ints.nuclear_repulsion,
+        {alpha_density, beta_density}, &candidate, physical, eigen,
+        {options.density_tolerance, options.energy_tolerance, 16, false, false}, true);
+    physical_fock_builds += selected.fock_evaluations;
+    if (!selected.state)
+      throw std::runtime_error("CPU UHF final-state correction failed: " + selected.detail);
+
+    alpha_density = std::move(selected.state->density[0]);
+    beta_density = std::move(selected.state->density[1]);
+    alpha_fock = std::move(selected.state->fock[0]);
+    beta_fock = std::move(selected.state->fock[1]);
+    result.energy = selected.state->diagnostic.energy;
     result.forces = gradient::analytic_uhf_forces(
-        ints, alpha_density, beta_density, alpha_weighted, beta_weighted,
+        ints, alpha_density, beta_density, selected.state->weighted_density[0],
+        selected.state->weighted_density[1],
         plan.energy_derivative(alpha_density, beta_density));
+  } else {
+    std::tie(alpha_fock, beta_fock) =
+        build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
+    ++physical_fock_builds;
+    result.energy =
+        uhf_electronic_energy(alpha_density, beta_density, ints.hcore, alpha_fock, beta_fock) +
+        ints.nuclear_repulsion;
   }
   result.density = concatenate(alpha_density, beta_density);
+  return physical_fock_builds;
 }
 
 }  // namespace
@@ -476,14 +522,17 @@ ScfResult run_uhf_host_plan(const core::System& system, const ScfOptions& option
     result.density = concatenate(alpha_density, beta_density);
     return result;
   }
-  result.fock_builds += 2;  // Physical rebuilds performed by finalization.
-  incremental_jk.note_post_scf_full_builds(2);
   const runtime::CpuRetainedCapacity anchor_capacity(incremental_jk.numeric_capacity());
 
-  // As in RHF, rebuild from the un-extrapolated converged spin Fock matrices
-  // before forming orbital-weighted Pulay densities and analytic forces.
-  finalize_uhf(plan, ints, orthogonalizer, alpha_occupied, beta_occupied, alpha_density,
-               beta_density, options.compute_forces, result, target_eigen);
+  // Rebuild from the un-extrapolated converged spin Fock matrices. Force
+  // publication then uses the shared bounded physical final-state correction,
+  // preserving the requested SCF controls while rejecting a nonstationary D/F
+  // pair before constructing Pulay weights.
+  const unsigned post_scf_builds =
+      finalize_uhf(plan, ints, orthogonalizer, alpha_occupied, beta_occupied, alpha_density,
+                   beta_density, options, result, target_eigen);
+  result.fock_builds += post_scf_builds;
+  incremental_jk.note_post_scf_full_builds(post_scf_builds);
   return result;
 }
 
