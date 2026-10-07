@@ -124,14 +124,15 @@ generativeqc_status generate_cuda_density_fitting_transformed_tile_impl(
         system, pair_begin, pair_count, auxiliary_begin, auxiliary_count,
         system_derivative_coordinate, source->orbital_to_cartesian, source->auxiliary_to_cartesian,
         inverse_square_root, apply_metric_transform, output, mapping, source->value_math,
-        low_output);
+        low_output, source->range, source->omega);
   } else {
     launch_build_cuda_df_transformed_tile_kernel(
         true, blocks, source_threads, 0, stream, source->batch, source->cartesian_nbf,
         source->cartesian_naux, source->public_nbf, source->public_naux, source->dummy_index,
         system, pair_begin, pair_count, auxiliary_begin, auxiliary_count,
         system_derivative_coordinate, source->orbital_to_cartesian, source->auxiliary_to_cartesian,
-        inverse_square_root, apply_metric_transform, output);
+        inverse_square_root, apply_metric_transform, output, 0U, 0U, nullptr, source->range,
+        source->omega);
   }
   cuda_error = cudaPeekAtLastError();
   if (cuda_error != cudaSuccess) return source_cuda_status(cuda_error);
@@ -194,17 +195,19 @@ generativeqc_status generate_cuda_density_fitting_metric_derivative_tile_impl(
       true, blocks, 128U, 0, reinterpret_cast<cudaStream_t>(stream_handle), source->batch,
       source->cartesian_nbf, source->cartesian_naux, source->public_naux, source->dummy_index,
       system, auxiliary_row_begin, auxiliary_row_count, global_coordinate,
-      source->auxiliary_to_cartesian, output);
+      source->auxiliary_to_cartesian, output, 0U, source->range, source->omega);
   cuda_error = cudaPeekAtLastError();
   return cuda_error == cudaSuccess ? GENERATIVEQC_STATUS_SUCCESS : source_cuda_status(cuda_error);
 }
 
 }  // namespace
 
-generativeqc_status create_cuda_density_fitting_integral_source(
+namespace {
+generativeqc_status create_cuda_density_fitting_integral_source_with_range(
     int device_id, const std::vector<core::System>& orbital_systems,
-    const std::vector<core::System>& auxiliary_systems, CudaDensityFittingIntegralSource** source,
-    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const std::vector<core::System>& auxiliary_systems, integrals::CoulombRange range,
+    double omega, CudaDensityFittingIntegralSource** source, std::vector<double>& metrics,
+    std::size_t& nbf, std::size_t& naux, std::string& detail,
     const cuda_execution::CudaDfSourcePolicy* policy) {
   runtime::df_progress::Scope progress("source_setup");
   if (source == nullptr) {
@@ -230,7 +233,7 @@ generativeqc_status create_cuda_density_fitting_integral_source(
   CudaDensityFittingIntegralSourceImpl* implementation = nullptr;
   const generativeqc_status status = create_cuda_density_fitting_integral_source_impl(
       device_id, orbital_systems, auxiliary_systems, &implementation, metrics, nbf, naux, detail,
-      resolved_policy);
+      resolved_policy, range, omega);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   auto* handle = new (std::nothrow) CudaDensityFittingIntegralSource{};
   if (handle == nullptr) {
@@ -241,6 +244,44 @@ generativeqc_status create_cuda_density_fitting_integral_source(
   handle->implementation = implementation;
   *source = handle;
   return GENERATIVEQC_STATUS_SUCCESS;
+}
+}  // namespace
+
+generativeqc_status create_cuda_density_fitting_integral_source(
+    int device_id, const std::vector<core::System>& orbital_systems,
+    const std::vector<core::System>& auxiliary_systems, CudaDensityFittingIntegralSource** source,
+    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy* policy) {
+  return create_cuda_density_fitting_integral_source_with_range(
+      device_id, orbital_systems, auxiliary_systems, integrals::CoulombRange::Full, 0.0, source,
+      metrics, nbf, naux, detail, policy);
+}
+
+generativeqc_status create_cuda_range_density_fitting_integral_source(
+    int device_id, const std::vector<core::System>& orbital_systems,
+    const std::vector<core::System>& auxiliary_systems, integrals::CoulombRange range,
+    double omega, CudaDensityFittingIntegralSource** source, std::vector<double>& metrics,
+    std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy* policy) {
+  if (range == integrals::CoulombRange::Full) {
+    detail = "range DF source requires a short- or long-range operator";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return create_cuda_density_fitting_integral_source_with_range(
+      device_id, orbital_systems, auxiliary_systems, range, omega, source, metrics, nbf, naux,
+      detail, policy);
+}
+
+integrals::CoulombRange cuda_density_fitting_integral_source_range(
+    const CudaDensityFittingIntegralSource* source) noexcept {
+  if (!source || !source->implementation) return integrals::CoulombRange::Full;
+  return static_cast<const CudaDensityFittingIntegralSourceImpl*>(source->implementation)->range;
+}
+
+double cuda_density_fitting_integral_source_omega(
+    const CudaDensityFittingIntegralSource* source) noexcept {
+  if (!source || !source->implementation) return 0.0;
+  return static_cast<const CudaDensityFittingIntegralSourceImpl*>(source->implementation)->omega;
 }
 
 void destroy_cuda_density_fitting_integral_source(
@@ -403,6 +444,12 @@ generativeqc_status generate_cuda_density_fitting_raw_expansion(
   if (!source || !source->implementation || !low || high == low) {
     detail = "bounded DF expansion requires a source and distinct high/low buffers";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const auto* implementation =
+      static_cast<const CudaDensityFittingIntegralSourceImpl*>(source->implementation);
+  if (implementation->range != integrals::CoulombRange::Full) {
+    detail = "compensated raw DF expansion is qualified only for full-range sources";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return generate_cuda_density_fitting_transformed_tile_impl(
       static_cast<CudaDensityFittingIntegralSourceImpl*>(source->implementation), system,
