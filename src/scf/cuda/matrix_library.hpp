@@ -48,8 +48,10 @@ class MatrixLibraryOwner {
 };
 
 /** Use the resolved native/library route, preserving masks and column-major strides.
- * Spin products broadcast physical operands through one strided GEMM per spin.
- * The caller owns every input/output allocation and the borrowed library handles.
+ * Spin products broadcast physical operands through one library submission per spin;
+ * singleton physical batches use ordinary GEMM and true multi-system batches use
+ * strided-batched GEMM. The caller owns every input/output allocation and borrowed
+ * library handles.
  * The optional scale is applied by both the native and cuBLAS routes, allowing
  * occupation normalization without a separate matrix pass.
  */
