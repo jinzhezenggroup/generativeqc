@@ -130,6 +130,12 @@ double validate_inputs(std::size_t o, std::size_t v, std::size_t q, const Layout
   return minimum;
 }
 
+std::size_t prepared_input_storage_bytes(const Layout& p) {
+  std::size_t cursor = 0;
+  for (const auto size : p.sizes) (void)reserve(cursor, bytes(size));
+  return align256(cursor);
+}
+
 struct PreparedInputs {
   unsigned char* base{};
   std::size_t storage_bytes{}, h2d_bytes{};
@@ -969,35 +975,55 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
   const auto staging_layout = layout(o, v, q, 1);
   (void)validate_inputs(o, v, q, staging_layout, host, threshold);
+  const auto prepared_storage = prepared_input_storage_bytes(staging_layout);
+  const auto prepared_caller = checked_add(caller_bytes, prepared_storage);
+
+  // Prove that both sequential consumers fit before allocating the shared
+  // device inputs. This preserves the standalone preflight-before-allocation
+  // contract while accounting the detached pullback outputs during Fock work.
+  auto response_plan = response_layout(o, v, q, max_panel_buffers, prepared_caller,
+                                       parallel_gap_reduction, include_gap_response, true);
+  if (response_plan.complete > max_bytes)
+    response_plan = response_layout(o, v, q, 1, prepared_caller, parallel_gap_reduction,
+                                    include_gap_response, true);
+  if (response_plan.complete > max_bytes)
+    throw std::length_error("combined DF triples pullback exceeds complete numeric budget");
+
+  const auto fock_caller = checked_add(prepared_caller, response_plan.output_bytes);
+  auto page_capacity = max_page_rows ? std::min(o, max_page_rows) : o;
+  auto fock_plan =
+      fock_layout(o, v, q, page_capacity, max_panel_buffers, fock_caller, true);
+  while (fock_plan.complete > max_bytes) {
+    if (fock_plan.value.panel_capacity > 1) {
+      fock_plan = fock_layout(o, v, q, page_capacity, 1, fock_caller, true);
+      if (fock_plan.complete <= max_bytes) break;
+    }
+    if (page_capacity == 1)
+      throw std::length_error("combined DF triples Fock response exceeds complete numeric budget");
+    --page_capacity;
+    fock_plan =
+        fock_layout(o, v, q, page_capacity, max_panel_buffers, fock_caller, true);
+  }
 
   runtime::CudaDeviceScope device_scope(device);
   PreparedInputs prepared(staging_layout, host);
-  const auto prepared_caller = checked_add(caller_bytes, prepared.storage_bytes);
 
   DFCudaCombinedResponseResult result;
   result.shared_input_device_bytes = prepared.storage_bytes;
   result.shared_h2d_bytes = prepared.h2d_bytes;
   result.pullback = pullback_df_cuda_impl(
       o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold, max_bytes, device,
-      prepared_caller, max_panel_buffers, parallel_gap_reduction, include_gap_response,
-      &prepared.values);
+      prepared_caller, response_plan.value.panel_capacity, parallel_gap_reduction,
+      include_gap_response, &prepared.values);
   // Attribute the one shared upload to the first consumer so existing aggregate
   // diagnostics still report actual endpoint transfer bytes without double counting.
   result.pullback.diagnostic.h2d_bytes = prepared.h2d_bytes;
 
-  const std::array<const std::vector<double>*, 9> response_outputs{
-      &result.pullback.bov,  &result.pullback.bvv,   &result.pullback.ovoo,
-      &result.pullback.ovov, &result.pullback.fov,   &result.pullback.t1,
-      &result.pullback.t2,   &result.pullback.eps_o, &result.pullback.eps_v};
-  std::size_t response_bytes = 0;
-  for (const auto* output : response_outputs)
-    response_bytes = checked_add(response_bytes, bytes(output->capacity()));
-
   result.fock = fock_response_df_cuda_impl(
       o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold, max_bytes, device,
-      checked_add(prepared_caller, response_bytes), max_page_rows, max_panel_buffers,
-      &prepared.values);
+      fock_caller, page_capacity, fock_plan.value.panel_capacity, &prepared.values);
   result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
 }
+
 }  // namespace generativeqc::cc::triples
