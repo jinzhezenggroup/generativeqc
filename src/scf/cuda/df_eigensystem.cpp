@@ -17,8 +17,10 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
+#include "solver/cuda/symmetric_eigen_provider.hpp"
 
 namespace generativeqc::scf::cuda_df {
+namespace eigen_provider = ::generativeqc::solver::cuda;
 namespace {
 /** One ordinary frame is serialized across the bucket's items/spins. It never
  * aliases a captured SCF buffer, occupied factor or another item's result. */
@@ -96,11 +98,13 @@ generativeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*
     status = allocate(reinterpret_cast<void**>(&candidate->active), sizeof(std::uint8_t),
                       "allocate ordinary CUDA DF active mask");
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-  const auto sized = cusolverDnXsyevd_bufferSize(
-      plan.solver, plan.solver_parameters, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
-      static_cast<std::int64_t>(n), CUDA_R_64F, candidate->matrix, static_cast<std::int64_t>(n),
-      CUDA_R_64F, candidate->values, CUDA_R_64F, &candidate->workspace_bytes,
-      &candidate->host_workspace_bytes);
+  eigen_provider::SymmetricEigenWorkspace queried;
+  const auto sized = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
+      {plan.solver, plan.solver_parameters}, eigen_provider::SymmetricEigenFamily::xsyevd,
+      {static_cast<std::int64_t>(n), 1, eigen_provider::Eigenvectors::values_and_vectors},
+      candidate->matrix, candidate->values, queried));
+  candidate->workspace_bytes = queried.device_bytes;
+  candidate->host_workspace_bytes = queried.host_bytes;
   if (sized != CUSOLVER_STATUS_SUCCESS)
     return solver_failure(sized, "size ordinary CUDA DF AO eigensolver", detail);
   // The shape planner reserves this allowance without querying a GPU. Check

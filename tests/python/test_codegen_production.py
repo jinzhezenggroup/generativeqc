@@ -401,9 +401,15 @@ def test_large_matrix_stream_fallback_matches_gpu4pyscf_solver_contract() -> Non
 
     source = _direct_cuda_source()
     assert "CudaEigensolverFamily::xsyevd" in source
-    assert "cusolverDnXsyevd_bufferSize" in source
+    assert "SymmetricEigenFamily::xsyevd" in source
+    assert "query_symmetric_eigen(" in source
     eigensolver = (REPOSITORY_ROOT / "src/scf/cuda/eigensolver.cpp").read_text()
-    assert "cusolverDnXsyevd(" in eigensolver
+    assert "launch_symmetric_eigen(" in eigensolver
+    provider = (
+        REPOSITORY_ROOT / "src/solver/cuda/symmetric_eigen_provider.cpp"
+    ).read_text()
+    assert "cusolverDnXsyevd_bufferSize" in provider
+    assert "cusolverDnXsyevd(" in provider
     probe_end = source.index(
         "const XsyevBatchedDispatch dispatch =",
         source.index("probe_xsyev_batched_device_launch_graph("),
@@ -412,7 +418,8 @@ def test_large_matrix_stream_fallback_matches_gpu4pyscf_solver_contract() -> Non
     assert "dispatch.device_launch_graph_provider" in source
     assert "plan.eigensolver_diagnostic.ordinary_family =" in source
     assert "CudaEigensolverFamily::xsyevd" in source
-    assert "Unlike XsyevBatched" in eigensolver
+    assert "!diagnostic_.candidates[diagnostic_.selected].capture_safe" in eigensolver
+    assert "for (std::int64_t system = 0; system < problem.batch; ++system)" in provider
 
 
 def test_bounded_force_registry_gaps_use_exact_runtime_fallback() -> None:
