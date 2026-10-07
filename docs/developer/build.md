@@ -73,19 +73,22 @@ cmake --build build -j10
 ## CUDA build profiles
 
 Two CMake presets make the build-time tradeoff explicit. `cuda-dev-fast`
-targets one real device image, keeps native CUDA compilation bounded, and uses a
-wider generated-AOT compile pool. `cuda-release-sm120` retains production
-optimization settings and the full AOT manifest.
+targets one real device image and uses compile-oriented NVCC settings, while
+`cuda-release-sm120` retains production optimization settings and the full AOT
+manifest. Both leave process-level CUDA compile parallelism to the build tool.
 
 ```bash
 cmake --preset cuda-dev-fast
 cmake --build --preset cuda-dev-fast
 ```
 
-Set `GENERATIVEQC_CUDA_COMPILE_JOBS` to bound CUDA compilation. Generated AOT
-work shares that pool by default, preserving the same total compiler bound. Set
-`GENERATIVEQC_AOT_COMPILE_JOBS` only when an independent AOT pool is desired;
-when set, both limits should match the build host's available memory.
+By default, `GENERATIVEQC_CUDA_COMPILE_JOBS` is empty, so native CUDA and
+generated AOT compilation follow the build tool's normal parallelism (for
+example, `ninja -jN`). Set it only when a memory-constrained host needs a
+separate CUDA compiler cap. When that native limit is set, generated AOT work
+shares it by default. Set `GENERATIVEQC_AOT_COMPILE_JOBS` only when an
+independent AOT cap is desired; explicit limits should match the build host's
+available memory.
 
 The fast preset uses bounded NVCC split compilation for native and generated AOT
 kernels. The release preset keeps split compilation disabled by default.

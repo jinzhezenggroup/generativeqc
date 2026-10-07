@@ -29,7 +29,6 @@ def test_gfn2_cuda_objects_wait_for_method_parameters(tmp_path: Path) -> None:
         f'set(Python3_EXECUTABLE "{sys.executable}")\n'
         "set(GENERATIVEQC_ENABLE_CUDA ON)\n"
         "set(GENERATIVEQC_CUDA_PROVIDER nvidia)\n"
-        "set_property(GLOBAL PROPERTY JOB_POOLS generativeqc_cuda_compile=2)\n"
         # Only unrelated CUDA driver and SDQ setup are stubbed. The runtime
         # target and its method-parameter generator use production declarations.
         "function(generativeqc_attach_cuda_driver_implib target)\n"
