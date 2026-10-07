@@ -37,9 +37,7 @@ CPU_TARGET = TargetCapabilities(
 )
 
 
-def _requests(
-    equation: str = "mk,kn->mn", dtype: str = "float64"
-):
+def _requests(equation: str = "mk,kn->mn", dtype: str = "float64"):
     sizes = {"b": 2, "m": 3, "k": 5, "n": 7}
     axes = {
         label: Index(label, IndexSpace(label, "batch", size))
@@ -86,9 +84,7 @@ def test_cpu_scalar_and_openblas_are_candidates_for_the_same_request() -> None:
     assert {candidate.status for candidate in offers} == {"ready"}
     by_provider = {candidate.providers[0].name: candidate for candidate in offers}
     assert by_provider[CPU_SCALAR_PROVIDER.name].execution is not None
-    assert (
-        by_provider[CPU_SCALAR_PROVIDER.name].execution.determinism == "exact-order"
-    )
+    assert by_provider[CPU_SCALAR_PROVIDER.name].execution.determinism == "exact-order"
     assert by_provider[OPENBLAS_PROVIDER.name].execution is not None
     assert (
         dict(by_provider[OPENBLAS_PROVIDER.name].provenance)["thread_ownership"]
@@ -107,7 +103,9 @@ def test_missing_openblas_thread_control_keeps_negative_evidence() -> None:
     )
     offers = cpu_dense_provider_candidates(cpu, target)
     scalar = next(row for row in offers if row.providers[0] == CPU_SCALAR_PROVIDER)
-    openblas = next(row for row in offers if row.providers[0].name == OPENBLAS_PROVIDER.name)
+    openblas = next(
+        row for row in offers if row.providers[0].name == OPENBLAS_PROVIDER.name
+    )
     assert scalar.status == "ready"
     assert openblas.status == "unsupported"
     assert openblas.reason and "thread-local" in openblas.reason
@@ -127,9 +125,7 @@ def test_current_cpu_runtime_limits_are_explicit_provider_rejections() -> None:
 
 def test_cuda_matrix_providers_do_not_accept_cpu_requests_after_shared_proof() -> None:
     cpu, _ = _requests()
-    cublaslt = CublasLtMatmulProvider(version="12.9.1").candidates(
-        cpu, CPU_TARGET
-    )[0]
+    cublaslt = CublasLtMatmulProvider(version="12.9.1").candidates(cpu, CPU_TARGET)[0]
     cutlass = CutlassAotProvider(version="3.9.2").candidates(cpu, CPU_TARGET)[0]
     assert cublaslt.status == "unsupported"
     assert cublaslt.reason and "CUDA" in cublaslt.reason

@@ -104,7 +104,9 @@ class CpuScalarMatmulProvider:
             rejection = reason
             execution = None
             if precision is None:
-                rejection = rejection or "CPU dense provider requires admitted precision"
+                rejection = (
+                    rejection or "CPU dense provider requires admitted precision"
+                )
             else:
                 rejection = rejection or _precision_rejection(precision)
                 execution = CandidateExecution(
@@ -158,7 +160,9 @@ class OpenBlasMatmulProvider:
             elif not version or features.get("openblas-version") != version:
                 reason = "OpenBLAS requires a matching explicit provider version"
             elif ownership not in ("task-parallel", "provider-parallel"):
-                reason = "OpenBLAS requires explicit CPU linear-algebra thread ownership"
+                reason = (
+                    "OpenBLAS requires explicit CPU linear-algebra thread ownership"
+                )
             elif type(threads) is not int or threads < 1:
                 reason = "OpenBLAS requires a positive explicit provider thread count"
             elif ownership == "task-parallel" and threads != 1:
@@ -205,7 +209,10 @@ class OpenBlasMatmulProvider:
                     target=target,
                     provenance=(
                         ("matrix_recipe", recipe.identity if recipe else "unsupported"),
-                        ("thread_ownership", ownership if type(ownership) is str else "unknown"),
+                        (
+                            "thread_ownership",
+                            ownership if type(ownership) is str else "unknown",
+                        ),
                         ("provider_threads", threads if type(threads) is int else -1),
                         ("selection", "candidate-only-not-promoted"),
                     ),
