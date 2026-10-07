@@ -106,6 +106,26 @@ def require_initial_guess_library(library: object) -> None:
         raise NotImplementedError("unsupported preliminary SCF schema")
 
 
+def supports_automatic_minao(library: object) -> bool:
+    """Require positive provider support; schema 1 alone also describes HF/LDA.
+
+    Automatic selection preserves Hcore on older or incompatible libraries.
+    Explicit policies retain their existing schema and native domain checks.
+    Unexpected query failures remain visible rather than becoming a fallback.
+    """
+    schema = getattr(library, "generativeqc_initial_guess_options_version", None)
+    if schema is None:
+        return False
+    schema.argtypes, schema.restype = [], ctypes.c_uint32
+    if schema() != 1:
+        return False
+    query = getattr(library, "generativeqc_initial_guess_capabilities_v1", None)
+    if query is None:
+        return False
+    query.argtypes, query.restype = [], ctypes.c_uint32
+    return bool(query() & _native.INITIAL_GUESS_CAPABILITY_MINAO)
+
+
 def read_initial_guess_diagnostic(
     library: object, handle: object, index: int | None = None
 ) -> dict | None:

@@ -4,6 +4,7 @@
 #include <limits>
 #include <new>
 #include <stdexcept>
+#include <type_traits>
 
 #include "dft/xc.hpp"
 #include "molecule/basis.hpp"
@@ -17,6 +18,7 @@
 namespace {
 using namespace generativeqc;
 using namespace scf::initial_guess;
+static_assert(std::is_same_v<decltype(generativeqc_initial_guess_capabilities_v1()), uint32_t>);
 void require(bool ok, const char* message) {
   if (!ok) throw std::runtime_error(message);
 }
@@ -59,6 +61,13 @@ std::size_t observe_preparation(const char*, std::size_t) noexcept {
 }
 void finish_observation(std::size_t, int) noexcept {}
 void check() {
+  require(generativeqc_initial_guess_options_version() == 1,
+          "provider capabilities must not change the options schema");
+  require(
+      generativeqc_initial_guess_capabilities_v1() ==
+          (GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF | GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA |
+           GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO),
+      "native preliminary provider capability mask drifted");
   require(!preliminary_options(nullptr), "default must remain disabled");
   generativeqc_initial_guess_options descriptor{};
   descriptor.struct_size = sizeof(descriptor);

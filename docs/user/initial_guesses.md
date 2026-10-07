@@ -6,6 +6,11 @@ Other domains keep the ordinary Hcore guess. An already available explicit,
 imported or warm density always takes precedence. Use `initial_guess=None` to
 restore Hcore explicitly, or an `InitialGuessSpec` to request a provider and its
 preparation limits. The low-level C API remains explicit-policy driven.
+Automatic selection also requires the supported preliminary-guess schema and a
+positive MINAO bit from `generativeqc_initial_guess_capabilities_v1()`. Missing
+queries, unknown schemas and HF/LDA-only libraries retain Hcore. Schema 1 alone
+does not identify MINAO support. Explicit `InitialGuessSpec` requests retain
+their existing schema and native provider/domain checks.
 
 Automatic admission is conservative at batch scope: if any item contains an
 unsupported element or ECP, the whole batch keeps Hcore, and resource planning

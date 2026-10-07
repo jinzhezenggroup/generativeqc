@@ -1039,7 +1039,12 @@ class Calculator:
             and not basis_has_ecp
             and self._capabilities.family in ("hartree_fock", "density_functional")
         ):
-            self._initial_guess = InitialGuessSpec("minao")
+            from .initial_guess import supports_automatic_minao
+
+            # Automatic preparation must not make an optional native feature
+            # mandatory for an otherwise supported default calculation.
+            if supports_automatic_minao(self._library):
+                self._initial_guess = InitialGuessSpec("minao")
 
         if self._initial_guess is not None:
             from .initial_guess import require_initial_guess_library
@@ -1064,7 +1069,8 @@ class Calculator:
                     if minao
                     else "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
                 )
-            require_initial_guess_library(self._library)
+            if not self._automatic_initial_guess:
+                require_initial_guess_library(self._library)
             self._capabilities = replace(
                 self._capabilities,
                 supported_properties=(

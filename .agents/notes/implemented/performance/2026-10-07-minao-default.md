@@ -26,6 +26,16 @@ capabilities merely because automatic MINAO is a candidate. Existing explicit,
 imported and retained warm densities take precedence; preparation failure/cap
 exhaustion uses Hcore, and seeded target failure has one fresh Hcore retry.
 
+Automatic selection also requires a positive MINAO provider bit from the
+additive fixed-width `generativeqc_initial_guess_capabilities_v1` query, as well
+as the supported options schema. Pre-MINAO HF/LDA-only libraries already report
+options schema 1, so that schema cannot identify provider support. Missing
+queries, unsupported schemas or absent MINAO bits keep Hcore without adding a
+preparation resource inventory. Unknown capability bits are ignored. Explicit
+provider requests retain their existing schema and native admission contracts;
+unexpected query errors remain visible. Do not substitute source-SHA heuristics
+or change the options-struct ABI version to infer this capability.
+
 ## Rejected alternatives
 
 - An unconditional MINAO default would break unsupported domains rather than
