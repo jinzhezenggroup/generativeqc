@@ -175,7 +175,9 @@ def _active_scopes(
     feature_token = (
         "density_features<true>" if shape.nao >= 32 else "density_features<false>"
     )
-    point_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false>"
+    # Default-region evidence must select the current, unbatched instantiation.
+    # A compiled qualification-only batch must not fill a missing active scope.
+    point_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,false>"
 
     validation = _matching(
         resources,
