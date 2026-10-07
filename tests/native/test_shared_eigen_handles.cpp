@@ -306,8 +306,8 @@ void scf_lifetime(const std::string& mode) {
     assert(current_device == 11);
   } else {
     expect_calls({"set-device-3", mode == "rhf-jacobi" ? "destroy-jacobi" : "destroy-parameters",
-                  "destroy", "destroy-blas", "free-async-256", "free-async-512", "free-async-768",
-                  "free-async-1024", "sync", "destroy-stream"});
+                  "destroy", "destroy-blas", "free-async-256", "free-async-1280", "free-async-512",
+                  "free-async-768", "free-async-1024", "sync", "destroy-stream"});
     assert(current_device == 3);  // RHF deliberately preserves its existing selection contract.
   }
 }

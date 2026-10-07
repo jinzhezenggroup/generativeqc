@@ -1125,6 +1125,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     reference_base_bytes = reference_detail::base_capacity(layout.bytes, host, matrix_elements,
                                                            reference_provider_allowance,
                                                            options.reference_memory_budget_bytes);
+    // The source frame must not inherit unordered Fock roundoff before the
+    // correlated response starts. Charge the Cartesian (not public) plane.
+    resources.reference_fock_correction_bytes_ =
+        !unrestricted && quartet_direct && bounded_direct_streaming
+            ? posthf::checked_mul(direct_spin_matrix_elements, sizeof(double))
+            : 0;
+    reference_base_bytes = reference_detail::check_capacity(
+        reference_base_bytes, resources.reference_fock_correction_bytes_,
+        options.reference_memory_budget_bytes);
     resources.reference_peak_bytes_ = reference_base_bytes;
   }
   cudaError_t cuda_error = cudaSetDevice(device_id);
@@ -1179,6 +1188,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       return outputs;
     }
     runtime::sample_cuda_arena_capacity(layout.bytes);
+    if (resources.reference_fock_correction_bytes_ &&
+        (cuda_error = runtime::resource_cuda_malloc_async(
+             &resources.reference_fock_correction_, resources.reference_fock_correction_bytes_,
+             resources.stream_)) != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(cuda_error));
+      return outputs;
+    }
     const auto provider_before =
         options.export_physical_reference ? reference_detail::free_bytes(resources.stream_) : 0;
     if (use_cublas) {
@@ -1824,6 +1840,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
   }
 
+  device_batch.reference_fock_correction = resources.reference_fock_correction_;
   if (first_setup && use_cusolver) {
     const auto family = use_jacobi ? eigen_provider::SymmetricEigenFamily::jacobi_batched
                         : ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd
@@ -2359,7 +2376,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   };
   const auto launch_bounded_generic_fock = [&](bool is_unrestricted, const double* quartet_density,
                                                double* quartet_fock) -> cudaError_t {
-    if (host_uncovered_fock_shell_class_mask == 0U || bounded_direct_aot_only_diagnostic) {
+    if (!resources.reference_fock_correction_ &&
+        (host_uncovered_fock_shell_class_mask == 0U || bounded_direct_aot_only_diagnostic)) {
       return cudaSuccess;
     }
     // Generated/native pages own every class in host_generated_fock_shell_class_mask.
@@ -2379,13 +2397,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         resources.stream_, device_batch, options.screening_tolerance, shell_pair_bounds,
         shell_pair_density_bounds, bounded_direct_shell_pair_order,
         bounded_direct_shell_pair_block_bounds, bounded_direct_system_density_bounds, nullptr,
-        host_generated_fock_shell_class_mask, bounded_direct_generated_overflow, schwarz_bounds,
-        quartet_density, active, quartet_fock, bounded_direct_cursor);
+        resources.reference_fock_correction_ ? 0U : host_generated_fock_shell_class_mask,
+        bounded_direct_generated_overflow, schwarz_bounds, quartet_density, active, quartet_fock,
+        bounded_direct_cursor);
     return cudaPeekAtLastError();
   };
   const auto launch_bounded_generated_fock =
       [&](bool is_unrestricted, const double* quartet_density, double* quartet_fock,
           bool allow_mixed_precision) -> cudaError_t {
+    // Existing generic quartet science accepts the compensated sink. Generated
+    // page ABIs do not yet carry it; never mix corrected and uncorrected sums in
+    // an exported frame. Ordinary energy/force SCF retains its selected pages.
+    if (resources.reference_fock_correction_)
+      return launch_bounded_generic_fock(is_unrestricted, quartet_density, quartet_fock);
     if (bounded_direct_fock_only_diagnostic) {
       // The fixed-density measurement uses one uniform streaming schedule.
       // Mark every generated class for that consumer so an all-FP64 page does
@@ -2541,6 +2565,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                        bool track_incremental_work) -> cudaError_t {
     const double* quartet_density = transformed_direct ? direct_density : density_input;
     double* quartet_fock = transformed_direct ? direct_fock : fock;
+    if (resources.reference_fock_correction_) {
+      const auto cleared =
+          cudaMemsetAsync(resources.reference_fock_correction_, 0,
+                          resources.reference_fock_correction_bytes_, resources.stream_);
+      if (cleared != cudaSuccess) return cleared;
+    }
     if (quartet_direct) {
       cudaError_t metadata_error = launch_direct_quartet_metadata(
           density_input, allow_mixed_precision, track_incremental_work);
@@ -2695,6 +2725,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           resources.stream_, device_batch, options.screening_tolerance, hcore, ao_pair_first,
           ao_pair_second, pair_count, schwarz_bounds, density_input, active, fock);
     }
+    if (resources.reference_fock_correction_)
+      launch_jk_compensation_fold(resources.stream_, quartet_fock,
+                                  resources.reference_fock_correction_,
+                                  direct_spin_matrix_elements);
     if (quartet_direct && transformed_direct) {
       launch_transform_direct_fock_left_kernel(
           blocks_for(spin_rectangular_matrix_elements), threads, 0, resources.stream_,

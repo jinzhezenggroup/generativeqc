@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/compensated_atomic.cuh",
+  "reason": "Generic FP64 atomic accumulation sink and rounded residual recovery; no operator, spin, integral, or method equations. Callers own storage and stream-ordered folding.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

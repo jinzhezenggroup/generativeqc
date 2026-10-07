@@ -10,6 +10,7 @@
 #include <type_traits>
 
 #include "generated_direct_source_contraction.cuh"
+#include "runtime/compensated_atomic.cuh"
 #include "scf/cuda/direct_fock_accumulation.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
@@ -116,9 +117,10 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
     } else {
       const double integral = scalar_value(evaluated_integral);
       if (integral == 0.0) return;
-      accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock,
-                                                    i, j, k, l, integral, coulomb_only,
-                                                    exchange_only, hf_exchange);
+      accumulate_direct_fock_integral<Unrestricted>(
+          n, physical_offset, spin_offset, density,
+          runtime::CompensatedOutput{fock, batch.reference_fock_correction}, i, j, k, l, integral,
+          coulomb_only, exchange_only, hf_exchange);
     }
   }
 }

@@ -62,6 +62,15 @@ def test_direct_fock_scatter_has_one_compiler_equation_owner() -> None:
     assert '#include "generated_direct_fock_accumulation.cuh"' in native
 
 
+def test_fock_scatter_accepts_runtime_accumulation_without_new_equations() -> None:
+    """The runtime sink changes summation, not compiler-owned spin/orbit science."""
+    generated = emit_direct_fock_accumulation_header()
+    assert "typename Output = double*" in generated
+    assert "const double* density, Output fock" in generated
+    assert "atomicAdd(fock + physical_offset + ab" in generated
+    assert "Compensated" not in generated
+
+
 def test_direct_force_density_has_one_compiler_equation_owner() -> None:
     """Keep the exact RHF/UHF force density contraction out of native CUDA."""
 
@@ -134,7 +143,7 @@ def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
         assert equation in native
         assert equation in generated
     assert (
-        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>"
+        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double,"
         in native
     )
     assert (

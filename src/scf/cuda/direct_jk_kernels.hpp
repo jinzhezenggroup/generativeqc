@@ -105,16 +105,15 @@ void launch_canonical_rsh_values_kernel(
     const double* bounds, const double* density, double* coulomb, double* full_exchange,
     double* range_exchange, std::uint64_t* work_census);
 
-void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
-                                std::int32_t system, unsigned angular_order,
-                                const std::int32_t* pairs, CanonicalPairRows rows,
-                                std::size_t first_begin, std::size_t first_count,
-                                std::size_t second_begin, std::size_t second_count,
-                                bool same_bucket, bool want_j, bool want_k, bool unrestricted,
-                                DirectCoulombRange exchange_range, double exchange_omega,
-                                double screening, const double* bounds, const double* density,
-                                double* coulomb, double* exchange, std::uint64_t* work_count,
-                                double* source_values = nullptr);
+void launch_canonical_jk_kernel(
+    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
+    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool same_bucket, bool want_j, bool want_k, bool unrestricted,
+    DirectCoulombRange exchange_range, double exchange_omega, double screening,
+    const double* bounds, const double* density, double* coulomb, double* exchange,
+    std::uint64_t* work_count, double* source_values = nullptr,
+    double* coulomb_correction = nullptr, double* exchange_correction = nullptr);
 
 /** Reuse the canonical orbit scatter with an immutable full-range value source.
  * No integral recurrence is instantiated in this replay kernel. */
@@ -123,7 +122,12 @@ void launch_resident_canonical_jk_kernel(
     CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
     std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
     bool unrestricted, const double* source_values, const double* density, double* coulomb,
-    double* exchange, std::uint64_t* work_count);
+    double* exchange, std::uint64_t* work_count, double* coulomb_correction = nullptr,
+    double* exchange_correction = nullptr);
+
+/** Fold an admitted correction plane before AO projection and finite audit. */
+void launch_jk_compensation_fold(cudaStream_t stream, double* sum, const double* correction,
+                                 std::size_t elements);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_derivative_kernel(

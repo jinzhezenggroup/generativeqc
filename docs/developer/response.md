@@ -82,6 +82,29 @@ complete-force endpoint timing. In `benchmarks/df_ccsdt_force_endpoint.cpp`, omi
 the final resident ceiling to measure the automatic policy, append `0` for
 recomputation, or append a positive byte ceiling for explicit reuse.
 
+Canonical exact-RHF frame actions use compensated FP64 J/K scatter, including
+signed source densities, Krylov actions and the independently recomputed final
+audit. The Direct provider retains the compiler-owned spin/permutation
+contraction; two caller-owned canonical correction planes recover the rounding
+residual of each atomic addition and are folded before public-AO projection and
+finite audit. Complete admission charges the Cartesian source dimension, which
+can exceed the spherical public dimension. This is an accuracy improvement,
+not a bitwise-reproducibility guarantee or a tolerance relaxation. Unavailable
+canonical storage retains the existing bounded value route. Resident-source
+refusal still recomputes the same compensated canonical action, and independent
+audits never borrow the resident source. The ordinary device J/K API, mixed
+precision paths and ordinary energy/force SCF dispatch remain unchanged.
+
+Restricted CUDA physical-reference exports also admit one canonical Fock
+correction plane. Bounded quartet references use the existing generic exact
+quartet consumer with the compensated sink throughout SCF, including final
+physical-Fock builds; correction folds precede spherical projection and
+diagonalization. Generated page ABIs currently lack that sink, so exported
+references do not combine their ordinary atomics with corrected accumulation.
+The required plane is charged to cold admission, retained device inventory and
+reuse capacity and is released on the bucket's stream. Small s/p resident-ERI
+references and their fixed-output matrix fallback retain their existing route.
+
 Native `RHFFrameResponseOptions::df_preconditioning` optionally prepares a
 same-frame DF numerical inverse from `D_ia=gap_ia-(ii|aa)-(ia|ia)` and
 `U_Qia=2 B_Qia`. The compiler owns these expressions. A bounded host
