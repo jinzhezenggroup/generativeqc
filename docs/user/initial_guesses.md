@@ -1,7 +1,7 @@
-# Preliminary SCF initial guesses
+# Cold-start initial guesses
 
-`Calculator` can explicitly prepare a cheaper same-basis density before the
-requested SCF calculation. The default remains `initial_guess=None`, which
+`Calculator` can explicitly prepare a cheaper density before the requested SCF
+calculation. The default remains `initial_guess=None`, which
 preserves the ordinary core guess or an already available warm density.
 
 ```python
@@ -18,11 +18,13 @@ result = calc.singlepoint(atoms, properties=("energy",))
 print(result.energy, result.initial_guess)
 ```
 
-The first version supports CPU, FP64, all-electron, restricted closed-shell
-RHF/RKS **energy** calculations with exact two-electron providers. It rejects
-CUDA, unrestricted, ECP, density-fitted, force and second-order requests rather
-than changing the backend or scientific model. Without the explicit option,
-existing capabilities are unchanged.
+HF and coarse-LDA preparation support CPU, FP64, all-electron, restricted
+closed-shell RHF/RKS **energy** calculations with exact two-electron providers.
+The projected MINAO provider additionally supports FP64 CUDA restricted KS
+energy/force execution for all-electron H-Ar systems. Density-fitted,
+unrestricted, ECP and second-order requests remain rejected rather than changing
+the backend or scientific model. Without the explicit option, existing
+capabilities are unchanged.
 
 ## Providers and controls
 
@@ -32,15 +34,23 @@ existing capabilities are unchanged.
   coarse `GridSpec(8, 6, 12)`; its AO-grid provider supports through f. For a
   higher-angular-momentum RHF target, this provider declines before allocating
   an extra integral owner and the ordinary core guess is retained
+- `InitialGuessSpec("minao")` constructs the occupied H-Ar ANO/MINAO atomic
+  reference, projects it into the target AO metric with the native rectangular
+  cross-overlap, and forms the density without a preliminary J/K/XC/Fock build.
+  The raw projection follows PySCF's MINAO construction. At the native target
+  seed boundary it is symmetrized and normalized to the requested electron
+  count using the existing density-admission contract
 
-Both use at most 32 preliminary iterations by default, DIIS history 8, energy
+HF/LDA use at most 32 preliminary iterations by default, DIIS history 8, energy
 tolerance `1e-6` and density tolerance `1e-4`. These are **preparation controls**.
 The target calculation retains its requested method, basis, quadrature,
 precision, charge, multiplicity and convergence tolerances. No orbitals or DIIS
 history are transported: only a validated same-AO density is proposed.
 
-The iteration limit can be set from 1 to 64 and DIIS history from 1 to 16.
-Preliminary LDA accepts a v1 equal-radius grid with 2–32 radial, 2–16 polar and
+The HF/LDA iteration limit can be set from 1 to 64 and DIIS history from 1 to
+16. MINAO performs zero preliminary iterations, so those SCF controls are
+accepted for schema compatibility but do not cause an SCF solve. Preliminary
+LDA accepts a v1 equal-radius grid with 2–32 radial, 2–16 polar and
 4–32 azimuthal points. Its partition and coincidence rules stay fixed. This
 preparation grid does not replace the target grid.
 
@@ -67,10 +77,11 @@ conservative preflight. Its 256 MiB default is an **additional-phase** limit,
 not a process-RSS or whole-calculation budget. Object headers, allocator/BLAS
 storage and the retained target owner are outside that narrow cap.
 
-For a whole-endpoint host budget, use the ordinary `ResourceBudget`. The planner
-conservatively composes the complete existing HF/KS preparation inventory with
-the target inventory, including their overlap; it never adds an uncharged
-workspace allowance. This can overestimate serialized lifetime overlap. An
+For a whole-endpoint host budget, use the ordinary `ResourceBudget`. For
+HF/LDA the planner conservatively composes the complete preparation inventory
+with the target inventory. For MINAO it charges all retained cold seed matrices
+plus the largest serialized cross-basis projection workspace. It never adds an
+uncharged workspace allowance. This can overestimate serialized lifetime overlap. An
 infeasible global plan is rejected before execution, rather than silently
 changing a requested strategy to make the plan fit.
 
@@ -99,6 +110,7 @@ with unchanged charge and spin. Check final energy, density and relevant state
 properties against the intended solution.
 
 There is no `auto` provider, molecule-size heuristic, or default promotion in
-this interface. The available evidence is a bounded CPU probe, not general
-qualification for large molecules or GPUs. A three-stage HF → LDA → target
-pipeline is an experiment, not a supported production option.
+this interface. MINAO is an opt-in implementation candidate for the CUDA hybrid
+cold-start qualification in issue #2052; complete cold endpoint evidence is
+required before any default change. A three-stage HF → LDA → target pipeline is
+an experiment, not a supported production option.
