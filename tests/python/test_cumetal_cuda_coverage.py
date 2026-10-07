@@ -241,6 +241,7 @@ def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
             "Restore CuMetal toolchain",
             "Restore CuMetal ccache",
             "Restore GenerativeQC ccache",
+            "Restore CuMetal QC JIT cache",
         }:
             key = step.split("          key:", 1)[1].splitlines()[0]
             assert "${{ env.CUMETAL_TOOLCHAIN_ID }}" in key
@@ -248,8 +249,7 @@ def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
             assert "restore-keys:" not in step
         if name.startswith("Run bounded CuMetal QC"):
             assert (
-                "CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48"
-                in step
+                "CUMETAL_CACHE_DIR: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}" in step
             )
             assert "CUMETAL_PTX_BACKEND: cumetal-ir" in step
             assert "CUMETAL_FP64_MODE: fast48" in step
@@ -258,6 +258,45 @@ def test_cumetal_qc_toolchain_matches_ptx_deployment_target() -> None:
                 command
                 == ".venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py"
             )
+
+
+def test_cumetal_workflow_reuses_compilation_caches_across_runs() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    runtime_job = workflow.split("\n  cuda-tests:", 1)[1].split(
+        "\n  cumetal-benchmark:", 1
+    )[0]
+    assert "CCACHE_BASEDIR: ${{ github.workspace }}" in runtime_job
+    assert "CCACHE_COMPILERCHECK: content" in runtime_job
+
+    configure = runtime_job.split(
+        "- name: Configure GenerativeQC with CUDA tests enabled", 1
+    )[1].split("\n      - name:", 1)[0]
+    for launcher in (
+        '-DCMAKE_C_COMPILER_LAUNCHER="$(command -v ccache)"',
+        '-DCMAKE_CXX_COMPILER_LAUNCHER="$(command -v ccache)"',
+        '-DCMAKE_CUDA_COMPILER_LAUNCHER="$(command -v ccache)"',
+    ):
+        assert launcher in configure
+
+    restore = runtime_job.split("- name: Restore CuMetal QC JIT cache", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    assert "path: ${{ env.CUMETAL_QC_JIT_CACHE_DIR }}" in restore
+    assert "${{ env.CUMETAL_TOOLCHAIN_ID }}" in restore
+    assert "${{ env.CUMETAL_COMMIT }}" in restore
+    assert "cumetal-ir-fast48" in restore
+    assert "restore-keys:" in restore
+
+    save = runtime_job.split("- name: Save CuMetal QC JIT cache", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    assert "github.event_name != 'merge_group'" in save
+    assert "steps.cumetal_qc_jit_cache.outputs.cache-hit != 'true'" in save
+    assert "steps.qc_gate.outcome == 'success'" in save
+    assert "steps.qc_qualification.outcome == 'success'" in save
+    assert (
+        "key: ${{ steps.cumetal_qc_jit_cache.outputs.cache-primary-key }}" in save
+    )
 
 
 def test_cumetal_runner_preserves_selected_backend_and_precision(
