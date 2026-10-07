@@ -272,7 +272,6 @@ FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t 
   return r;
 }
 
-
 struct JointResponseLayout {
   FockLayout fock;
   std::array<std::size_t, 9> response_outputs{};
@@ -282,8 +281,7 @@ struct JointResponseLayout {
 
 JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::size_t q,
                                           std::size_t capacity, std::size_t panels,
-                                          std::size_t caller_bytes,
-                                          bool parallel_gap_reduction,
+                                          std::size_t caller_bytes, bool parallel_gap_reduction,
                                           bool include_gap_response) {
   JointResponseLayout r;
   r.fock = fock_layout(o, v, q, capacity, panels, 0, true);
@@ -307,9 +305,8 @@ JointResponseLayout joint_response_layout(std::size_t o, std::size_t v, std::siz
   r.response_output_bytes = bytes(values);
   r.complete = checked_add(
       caller_bytes,
-      checked_add(p.total,
-                  checked_add(r.fock.host_bytes,
-                              checked_add(r.fock.output_bytes, r.response_output_bytes))));
+      checked_add(p.total, checked_add(r.fock.host_bytes,
+                                       checked_add(r.fock.output_bytes, r.response_output_bytes))));
   return r;
 }
 
@@ -1047,10 +1044,9 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   auto& p = plan.fock.value;
   const std::size_t requested_outputs = include_gap_response ? 9 : 7;
   const std::array<std::vector<double>*, 9> response_outputs{
-      &response.bov,  &response.bvv,   &response.ovoo,  &response.ovov, &response.fov,
-      &response.t1,   &response.t2,    &response.eps_o, &response.eps_v};
-  for (std::size_t x = 0; x < requested_outputs; ++x)
-    response_outputs[x]->resize(p.sizes[x]);
+      &response.bov, &response.bvv, &response.ovoo,  &response.ovov, &response.fov,
+      &response.t1,  &response.t2,  &response.eps_o, &response.eps_v};
+  for (std::size_t x = 0; x < requested_outputs; ++x) response_outputs[x]->resize(p.sizes[x]);
   fock.foo.resize(checked_mul(o, o));
   fock.fvv.resize(checked_mul(v, v));
 
@@ -1103,8 +1099,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       audit_matrix<<<blocks, 256, 0, context.stream>>>(c, m, n, ldc, context.error);
       generativeqc_tensor::cuda_check(cudaGetLastError());
       ++fock.audit_kernels;
-      fock.contraction_summands =
-          checked_add(fock.contraction_summands, checked_mul(count, kk));
+      fock.contraction_summands = checked_add(fock.contraction_summands, checked_mul(count, kk));
     };
     auto reverse_gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk,
                             double alpha, const double* a, std::size_t lda, const double* b,
@@ -1147,8 +1142,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
         static_cast<unsigned>(std::min<std::size_t>(1 + (v * v - 1) / 256, 65535));
     std::size_t response_tiles = 0;
     const auto response_index = [&](std::size_t i, std::size_t j, std::size_t k) {
-      const auto prefix =
-          checked_mul(checked_mul(i, checked_add(i, 1)), checked_add(i, 2)) / 6;
+      const auto prefix = checked_mul(checked_mul(i, checked_add(i, 1)), checked_add(i, 2)) / 6;
       const auto row = checked_mul(j, checked_add(j, 1)) / 2;
       return checked_add(prefix, checked_add(row, k));
     };
@@ -1174,12 +1168,12 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
         const auto I = occupied[order[0]], J = occupied[order[1]], K = occupied[order[2]];
         generated_df::response_v_tile(o, v, i, j, k, perm, multiplicity, threshold, in, moments,
                                       p.blocks, bar_v, context.error, context.stream);
-        ovov_view<false><<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, in.ovov, packed,
-                                                                   context.error);
+        ovov_view<false>
+            <<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, in.ovov, packed, context.error);
         generativeqc_tensor::cuda_check(cudaGetLastError());
         generated_df::pullback_v(o, v, I, J, K, in, packed, bar_v, packed, out, reverse_gemm);
-        ovov_view<true><<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, packed, out.ovov,
-                                                                  context.error);
+        ovov_view<true>
+            <<<small_blocks, 256, 0, context.stream>>>(o, v, I, J, packed, out.ovov, context.error);
         generativeqc_tensor::cuda_check(cudaGetLastError());
         response.reverse_kernels += 3;
       }
@@ -1187,8 +1181,8 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       if (include_gap_response) {
         generated_df::response_gap_tile(o, v, i, j, k, multiplicity, threshold, in, moments,
                                         p.blocks, bar_v, context.error, context.stream);
-        generated_df::GapCudaState gap{o, v, bar_v, pointer(plan.gap), context.error,
-                                       context.stream, parallel_gap_reduction};
+        generated_df::GapCudaState gap{
+            o, v, bar_v, pointer(plan.gap), context.error, context.stream, parallel_gap_reduction};
         const auto gaps = generated_df::gap_response_cuda(gap);
         scatter_gap<<<small_blocks, 256, 0, context.stream>>>(v, i, j, k, gaps, out.eps_o,
                                                               out.eps_v, context.error);
@@ -1205,8 +1199,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
           continue;
         const auto I = occupied[index];
         const auto* panel = panel_for(I);
-        generativeqc_tensor::cuda_check(
-            cudaMemsetAsync(bar_panel, 0, bytes(p.v3), context.stream));
+        generativeqc_tensor::cuda_check(cudaMemsetAsync(bar_panel, 0, bytes(p.v3), context.stream));
         for (std::size_t perm = 0; perm < 6; ++perm) {
           const auto* order = generated_df::permutations[perm];
           if (occupied[order[0]] != I) continue;
@@ -1268,11 +1261,11 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
           for (std::size_t right = left; right < o; right += page_capacity) {
             if (left != right)
               page(right, j, k, pointer(plan.fock.xr), pointer(plan.fock.yr), false);
-            generated_df::fock_oo(
-                v, page_capacity, pointer(plan.fock.xl),
-                pointer(left == right ? plan.fock.xl : plan.fock.xr), pointer(plan.fock.yl),
-                pointer(left == right ? plan.fock.yl : plan.fock.yr), weight,
-                pointer(plan.fock.block), forward_gemm);
+            generated_df::fock_oo(v, page_capacity, pointer(plan.fock.xl),
+                                  pointer(left == right ? plan.fock.xl : plan.fock.xr),
+                                  pointer(plan.fock.yl),
+                                  pointer(left == right ? plan.fock.yl : plan.fock.yr), weight,
+                                  pointer(plan.fock.block), forward_gemm);
             fock.fock_gemms += 2;
             scatter_fock_block<<<scatter_blocks, 256, 0, context.stream>>>(
                 o, page_capacity, left, right, pointer(plan.fock.block), pointer(plan.fock.foo),
@@ -1314,17 +1307,17 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     generativeqc_tensor::cuda_check(cudaGetLastError());
     ++d.reduction_kernels;
     for (std::size_t x = 0; x < requested_outputs; ++x)
-      generativeqc_tensor::cuda_check(cudaMemcpyAsync(
-          response_outputs[x]->data(), pointer(plan.response_outputs[x]), bytes(p.sizes[x]),
-          cudaMemcpyDeviceToHost, context.stream));
+      generativeqc_tensor::cuda_check(
+          cudaMemcpyAsync(response_outputs[x]->data(), pointer(plan.response_outputs[x]),
+                          bytes(p.sizes[x]), cudaMemcpyDeviceToHost, context.stream));
     generativeqc_tensor::cuda_check(cudaMemcpyAsync(&d.energy, pointer(p.energy), sizeof(double),
                                                     cudaMemcpyDeviceToHost, context.stream));
-    generativeqc_tensor::cuda_check(cudaMemcpyAsync(
-        fock.foo.data(), pointer(plan.fock.foo), bytes(checked_mul(o, o)), cudaMemcpyDeviceToHost,
-        context.stream));
-    generativeqc_tensor::cuda_check(cudaMemcpyAsync(
-        fock.fvv.data(), pointer(plan.fock.fvv), bytes(checked_mul(v, v)), cudaMemcpyDeviceToHost,
-        context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(fock.foo.data(), pointer(plan.fock.foo),
+                                                    bytes(checked_mul(o, o)),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(fock.fvv.data(), pointer(plan.fock.fvv),
+                                                    bytes(checked_mul(v, v)),
+                                                    cudaMemcpyDeviceToHost, context.stream));
     generativeqc_tensor::cuda_check(cudaMemcpyAsync(&failed, context.error, sizeof(int),
                                                     cudaMemcpyDeviceToHost, context.stream));
     generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));

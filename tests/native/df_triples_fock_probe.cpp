@@ -49,11 +49,12 @@ extern "C" int df_triples_fock_probe(std::size_t o, std::size_t v, std::size_t q
   }
 }
 
-extern "C" int df_triples_combined_probe(
-    std::size_t o, std::size_t v, std::size_t q, const double* const* inputs, double threshold,
-    std::size_t budget, std::size_t caller_bytes, std::size_t rows, std::size_t panels,
-    double* const* output, double* values, std::size_t* counts, char* error,
-    std::size_t error_size) noexcept {
+extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size_t q,
+                                         const double* const* inputs, double threshold,
+                                         std::size_t budget, std::size_t caller_bytes,
+                                         std::size_t rows, std::size_t panels,
+                                         double* const* output, double* values, std::size_t* counts,
+                                         char* error, std::size_t error_size) noexcept {
   try {
     const auto r = generativeqc::cc::triples::pullback_and_fock_df_cuda(
         o, v, q, inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6],
@@ -62,9 +63,8 @@ extern "C" int df_triples_combined_probe(
       throw std::runtime_error("combined gap-free response published epsilon cotangents");
     std::copy(r.fock.foo.begin(), r.fock.foo.end(), output[0]);
     std::copy(r.fock.fvv.begin(), r.fock.fvv.end(), output[1]);
-    const std::array response{&r.pullback.bov,  &r.pullback.bvv,  &r.pullback.ovoo,
-                              &r.pullback.ovov, &r.pullback.fov,  &r.pullback.t1,
-                              &r.pullback.t2};
+    const std::array response{&r.pullback.bov, &r.pullback.bvv, &r.pullback.ovoo, &r.pullback.ovov,
+                              &r.pullback.fov, &r.pullback.t1,  &r.pullback.t2};
     for (std::size_t x = 0; x < response.size(); ++x)
       std::copy(response[x]->begin(), response[x]->end(), output[x + 2]);
     const double scalars[]{r.pullback.diagnostic.energy, r.seconds,
