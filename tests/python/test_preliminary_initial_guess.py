@@ -33,9 +33,10 @@ WATER = [
 def test_immutable_typed_policy_and_native_snapshot() -> None:
     hf = InitialGuessSpec("hf")
     lda = InitialGuessSpec("lda")
-    assert hf.grid is None and lda.grid == GridSpec(8, 6, 12)
+    minao = InitialGuessSpec("minao")
+    assert hf.grid is None and lda.grid == GridSpec(8, 6, 12) and minao.grid is None
     assert hf.max_iterations == 32
-    for policy, kind in ((hf, 1), (lda, 2)):
+    for policy, kind in ((hf, 1), (lda, 2), (minao, 3)):
         native = policy.native()
         assert native.struct_size == ctypes.sizeof(native)
         assert native.abi_version == _native.ABI_VERSION
@@ -61,6 +62,7 @@ def test_immutable_typed_policy_and_native_snapshot() -> None:
         {"maximum_numeric_bytes": 0},
         {"maximum_numeric_bytes": 2**63},
         {"kind": "hf", "grid": GridSpec(8, 6, 12)},
+        {"kind": "minao", "grid": GridSpec(8, 6, 12)},
         {"kind": "lda", "grid": False},
         {"kind": "lda", "grid": GridSpec(48, 16, 32)},
         {"kind": "lda", "grid": GridSpec(8, 6, 12, element_radii=((8, 2.0),))},
@@ -74,6 +76,47 @@ def test_invalid_or_unqualified_policy_is_rejected(options: dict) -> None:
 def test_missing_native_feature_is_not_silently_ignored() -> None:
     with pytest.raises(NotImplementedError, match="lacks preliminary"):
         require_initial_guess_library(SimpleNamespace())
+
+
+def test_minao_resource_inventory_is_explicit() -> None:
+    topology = json.dumps(
+        {
+            "items": [
+                {
+                    "electrons": {"atomic_numbers": [8, 1, 1]},
+                    "orbital": {"nbf": 13},
+                }
+            ]
+        }
+    )
+    identity = ResourceIdentity(
+        "target-PBE0",
+        "target",
+        "cuda",
+        "fp64",
+        topology,
+        ("energy", "forces"),
+        '{"max_iterations": 100}',
+    )
+    target = ResourceRequest(
+        "target",
+        identity,
+        (
+            ResourceCandidate(
+                "target",
+                "resident",
+                (ResourceEstimate("target", 100, "pageable", 0, 0),),
+            ),
+        ),
+    )
+    calc = SimpleNamespace(_initial_guess=InitialGuessSpec("minao"))
+    combined = with_initial_guess_resources(target, calc, [WATER], [0], [1])
+    extra = combined.candidates[0].estimates[1:]
+    assert [item.name for item in extra] == [
+        "all retained MINAO cold seeds",
+        "largest serialized MINAO projection workspace",
+    ]
+    assert all(item.bytes > 0 for item in extra)
 
 
 def request(name: str, size: int) -> ResourceRequest:
@@ -149,6 +192,19 @@ def calculator(method: str, policy: InitialGuessSpec | None = None) -> Calculato
     )
 
 
+def test_complete_native_minao_is_zero_fock_preparation(native: None) -> None:
+    baseline = calculator("pbe0-rks").singlepoint(WATER, properties=("energy",))
+    result = calculator("pbe0-rks", InitialGuessSpec("minao")).singlepoint(
+        WATER, properties=("energy",)
+    )
+    assert result.converged and result.energy == pytest.approx(baseline.energy, abs=1e-8)
+    assert result.initial_guess["kind"] == "minao"
+    assert result.initial_guess["outcome"] == "used"
+    assert result.initial_guess["preliminary_iterations"] == 0
+    assert result.initial_guess["preliminary_fock_builds"] == 0
+    assert result.initial_guess["target_attempts"] == 1
+
+
 @pytest.mark.parametrize(
     "method", ["rhf", "pbe-rks", "pbe0-rks", "r2scan-rks", "b3lyp-rks"]
 )
@@ -186,7 +242,7 @@ def test_complete_native_energy_and_fallbacks(
         calc.singlepoint(WATER, properties=("energy", "forces"))
 
 
-@pytest.mark.parametrize("kind", ["hf", "lda"])
+@pytest.mark.parametrize("kind", ["hf", "lda", "minao"])
 def test_existing_and_imported_warm_density_is_authoritative(
     native: None, tmp_path: typing.Any, kind: str
 ) -> None:
@@ -225,7 +281,7 @@ def test_runtime_policy_change_requires_repreparation(native: None) -> None:
             batch.execute()
 
 
-@pytest.mark.parametrize("kind", ["hf", "lda"])
+@pytest.mark.parametrize("kind", ["hf", "lda", "minao"])
 def test_linked_global_budget_observes_preparation(native: None, kind: str) -> None:
     policy = InitialGuessSpec(kind)
     probe = calculator("pbe0-rks", policy).estimate_resources([WATER])
@@ -495,7 +551,8 @@ def test_public_kind_is_fixed_width_against_native_parser(
 #include "scf/preliminary_guess.hpp"
 static_assert(std::is_same_v<generativeqc_initial_guess_kind, std::int32_t>);
 int main() {
-  for (const auto kind : {GENERATIVEQC_INITIAL_GUESS_HF, GENERATIVEQC_INITIAL_GUESS_LDA}) {
+  for (const auto kind : {GENERATIVEQC_INITIAL_GUESS_HF, GENERATIVEQC_INITIAL_GUESS_LDA,
+                          GENERATIVEQC_INITIAL_GUESS_MINAO}) {
     generativeqc_initial_guess_options value;
     std::memset(&value, 0xa5, sizeof(value));
     value.struct_size = sizeof(value);
