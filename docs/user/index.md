@@ -23,6 +23,10 @@ Use this guide to install GenerativeQC and run calculations. If the terminology 
 - [WB97M-V CUDA energy and forces](wb97mv_cuda.md)
 - [r2SCAN-3c](r2scan3c.md)
 
+## Advanced and experimental APIs
+
+- [Experimental symbolic Array API](experimental_array_api.md)
+
 ## Basis and Hamiltonian
 
 - [External basis data](external_basis.md)
@@ -54,6 +58,7 @@ libxc
 dft_density_fitting
 wb97mv_cuda
 r2scan3c
+experimental_array_api
 external_basis
 high_angular_momentum
 ecp

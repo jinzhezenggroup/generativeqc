@@ -5,6 +5,7 @@ from __future__ import annotations
 import typing
 from dataclasses import dataclass
 from fractions import Fraction
+from math import prod
 
 from generativeqc_compiler.tensor.ir import Node
 
@@ -32,6 +33,24 @@ class VibeArray:
     @property
     def ndim(self) -> int:
         return len(self.node.spec.indices)
+
+    @property
+    def size(self) -> int:
+        return prod(self.shape)
+
+    @property
+    def T(self) -> VibeArray:
+        """Reverse all axes, matching the standard array transpose attribute."""
+        from . import namespace
+
+        return namespace.permute_dims(self, tuple(reversed(range(self.ndim))))
+
+    @property
+    def mT(self) -> VibeArray:
+        """Transpose the last two axes while preserving leading batch axes."""
+        from . import namespace
+
+        return namespace.matrix_transpose(self)
 
     def __bool__(self) -> bool:
         raise TypeError("symbolic VibeArray values cannot drive Python control flow")
@@ -81,6 +100,16 @@ class VibeArray:
         from . import namespace
 
         return namespace.divide(other, self)
+
+    def __matmul__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.matmul(self, other)
+
+    def __rmatmul__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.matmul(other, self)
 
     def __pow__(self, exponent: object) -> VibeArray:
         from . import namespace
