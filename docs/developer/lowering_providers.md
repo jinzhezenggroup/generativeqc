@@ -271,6 +271,11 @@ GEMM, so unsupported arithmetic/layouts stay visible as negative provider eviden
 rather than creating a second CPU scientific path. This is an ownership unification,
 not an OpenBLAS default-promotion or endpoint-performance claim.
 
+The separate [CPU spectral/provider contract](cpu_linear_algebra.md) preserves
+canonical admission while GFN consumes opaque runtime-LP64 bindings. Its CPU
+completion is host-return and does not reuse CUDA stream-completion effects.
+This does not broaden the compiler CPU matrix-offer domain.
+
 `tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
 matrix contractions, using the same canonical planned request as existing
 cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and

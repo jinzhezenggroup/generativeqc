@@ -7,6 +7,8 @@
 #include <numeric>
 #include <stdexcept>
 
+#include "solver/cpu/symmetric_eigen.hpp"
+
 #ifndef GENERATIVEQC_HAS_OPENBLAS
 #define GENERATIVEQC_HAS_OPENBLAS 0
 #endif
@@ -359,80 +361,6 @@ int scalar_cholesky_lower(double* matrix, std::size_t n) {
     }
   }
   return 0;
-}
-
-CpuSymmetricEigenResult scalar_symmetric_eigen(std::vector<double> matrix, std::size_t n,
-                                               double absolute_tolerance = 0.0) {
-  // Jacobi angle differences and doubled off-diagonals can overflow even
-  // when every input and eigenvalue is representable. Normalize only extreme
-  // scales; preserve established ordinary-range arithmetic and eigenvectors.
-  double scale = 0.0, output_scale = 1.0;
-  for (double value : matrix) scale = std::max(scale, std::abs(value));
-  if (scale > std::sqrt(std::numeric_limits<double>::max()) ||
-      (scale > 0.0 && scale < std::sqrt(std::numeric_limits<double>::min()))) {
-    output_scale = scale;
-    for (double& value : matrix) value /= scale;
-  }
-  std::vector<double> vectors(matrix.size(), 0.0);
-  for (std::size_t item = 0; item < n; ++item) vectors[item * n + item] = 1.0;
-  constexpr std::size_t maximum_sweeps = 100;
-  bool converged = n == 1;
-  for (std::size_t sweep = 0; sweep < maximum_sweeps && !converged; ++sweep) {
-    double matrix_scale = 0.0;
-    for (double value : matrix) matrix_scale = std::max(matrix_scale, std::abs(value));
-    if (matrix_scale == 0.0) {
-      converged = true;
-      break;
-    }
-    double tolerance = 1.0e-14 * matrix_scale;
-    if (absolute_tolerance > 0.0)
-      tolerance = std::min(tolerance, absolute_tolerance / output_scale);
-    for (std::size_t p = 0; p < n; ++p) {
-      for (std::size_t q = p + 1; q < n; ++q) {
-        const double apq = matrix[p * n + q];
-        if (std::abs(apq) <= tolerance) continue;
-        const double app = matrix[p * n + p], aqq = matrix[q * n + q];
-        const double angle = 0.5 * std::atan2(2.0 * apq, aqq - app);
-        const double cosine = std::cos(angle), sine = std::sin(angle);
-        for (std::size_t k = 0; k < n; ++k) {
-          if (k == p || k == q) continue;
-          const double mkp = matrix[k * n + p], mkq = matrix[k * n + q];
-          matrix[k * n + p] = matrix[p * n + k] = cosine * mkp - sine * mkq;
-          matrix[k * n + q] = matrix[q * n + k] = sine * mkp + cosine * mkq;
-        }
-        matrix[p * n + p] = cosine * cosine * app - 2.0 * sine * cosine * apq + sine * sine * aqq;
-        matrix[q * n + q] = sine * sine * app + 2.0 * sine * cosine * apq + cosine * cosine * aqq;
-        matrix[p * n + q] = matrix[q * n + p] = 0.0;
-        for (std::size_t row = 0; row < n; ++row) {
-          const double vkp = vectors[row * n + p], vkq = vectors[row * n + q];
-          vectors[row * n + p] = cosine * vkp - sine * vkq;
-          vectors[row * n + q] = sine * vkp + cosine * vkq;
-        }
-      }
-    }
-    double largest_off_diagonal = 0.0;
-    for (std::size_t row = 0; row < n; ++row)
-      for (std::size_t column = row + 1; column < n; ++column)
-        largest_off_diagonal = std::max(largest_off_diagonal, std::abs(matrix[row * n + column]));
-    converged = largest_off_diagonal <= tolerance;
-  }
-  if (!converged) throw std::runtime_error("CPU symmetric eigensolver did not converge");
-  std::vector<std::size_t> order(n);
-  std::iota(order.begin(), order.end(), 0);
-  std::sort(order.begin(), order.end(),
-            [&](std::size_t a, std::size_t b) { return matrix[a * n + a] < matrix[b * n + b]; });
-  CpuSymmetricEigenResult result;
-  result.values.resize(n);
-  result.vectors.resize(matrix.size());
-  for (std::size_t column = 0; column < n; ++column) {
-    const std::size_t source = order[column];
-    result.values[column] = matrix[source * n + source] * output_scale;
-    if (!std::isfinite(result.values[column]))
-      throw std::overflow_error("CPU symmetric eigenvalue exceeds finite FP64 range");
-    for (std::size_t row = 0; row < n; ++row)
-      result.vectors[row * n + column] = vectors[row * n + source];
-  }
-  return result;
 }
 
 #if GENERATIVEQC_HAS_OPENBLAS
@@ -1214,12 +1142,24 @@ CpuSymmetricEigenResult cpu_symmetric_eigen(std::vector<double> matrix, std::siz
   if (!std::all_of(matrix.begin(), matrix.end(), [](double x) { return std::isfinite(x); }))
     throw std::invalid_argument("CPU symmetric eigensolver requires finite input");
 #if GENERATIVEQC_HAS_OPENBLAS
-  if (resolve_cpu_linalg_provider(plan, true) == CpuLinalgProvider::openblas)
-    return openblas_symmetric_eigen(std::move(matrix), n, plan);
+  if (resolve_cpu_linalg_provider(plan, true) == CpuLinalgProvider::openblas) {
+    const auto prepared = solver::cpu::prepare_owned_symmetric_eigen(
+        n, solver::cpu::SymmetricEigenFamily::lapack_owned_row_major);
+    return solver::cpu::execute_symmetric_eigen(
+        prepared, std::move(matrix),
+        [](std::vector<double> input, std::size_t order, const void* context) {
+          return openblas_symmetric_eigen(std::move(input), order,
+                                          *static_cast<const CpuLinalgPlan*>(context));
+        },
+        &plan);
+  }
 #else
   (void)resolve_cpu_linalg_provider(plan, true);
 #endif
-  return scalar_symmetric_eigen(std::move(matrix), n, absolute_off_diagonal_tolerance);
+  const auto prepared = solver::cpu::prepare_owned_symmetric_eigen(
+      n, solver::cpu::SymmetricEigenFamily::scalar_owned_row_major,
+      absolute_off_diagonal_tolerance);
+  return solver::cpu::execute_symmetric_eigen(prepared, std::move(matrix));
 }
 
 }  // namespace generativeqc::tensor

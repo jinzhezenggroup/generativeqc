@@ -31,8 +31,8 @@ inline bool energy_weights_inplace(std::int32_t n, const double* eigenvalues, do
 // C diag(w) C^T, using the caller's existing column-major scaling panel. Checked
 // scalar scaling precedes the sole DGEMM call; a failed element leaves the output
 // matrix untouched and the already-computed panel prefix available to the caller.
-template <class Algorithm = generated::CpuExecution>
-inline bool execute_column_major(CblasDgemmLp64 dgemm, std::int32_t n, const double* coefficients,
+template <class Algorithm = generated::CpuExecution, class Provider = CblasDgemmLp64>
+inline bool execute_column_major(Provider dgemm, std::int32_t n, const double* coefficients,
                                  const double* weights, double* weighted_coefficients,
                                  double* density) {
   static_assert(std::is_same_v<Algorithm, generated::ColumnScaleDgemmLp64>,
