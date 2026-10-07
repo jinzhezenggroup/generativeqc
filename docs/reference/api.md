@@ -1,82 +1,9 @@
 # Python API
 
-This reference is generated at Sphinx build time from the importable public Python
-surface. Function and class signatures, type annotations, docstrings, inheritance,
-and source links therefore stay synchronized with the code.
+This source page is populated at Sphinx build time from public Python modules.
 
-For the core package and programmable extension modules, `__all__` is the
-authoritative export list. Adding or removing a public symbol there changes this
-reference automatically. Private implementation names are intentionally excluded.
-
-## Public namespaces
-
-```{eval-rst}
-.. autosummary::
-
-   generativeqc
-   generativeqc.torch
-   generativeqc.extensions.method
-   generativeqc.extensions.tensor
-   generativeqc.extensions.xc
-```
-
-## Core API
-
-```{eval-rst}
-.. automodule:: generativeqc
-   :members:
-   :imported-members:
-   :undoc-members:
-   :show-inheritance:
-```
-
-## PyTorch integration
-
-`generativeqc.torch` is an optional integration. The documentation build mocks
-the optional `torch` import so API generation does not require installing
-PyTorch.
-
-```{eval-rst}
-.. automodule:: generativeqc.torch
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
-
-## Programmable method API
-
-See the [extension guide](../developer/extensions.md) for the semantic contract
-and activation rules.
-
-```{eval-rst}
-.. automodule:: generativeqc.extensions.method
-   :members:
-   :imported-members:
-   :undoc-members:
-   :show-inheritance:
-```
-
-## Programmable TensorIR API
-
-```{eval-rst}
-.. automodule:: generativeqc.extensions.tensor
-   :members:
-   :imported-members:
-   :undoc-members:
-   :show-inheritance:
-```
-
-## Programmable XC API
-
-`generativeqc.extensions.xc.FunctionalSpec` is the same canonical public class
-already documented as `generativeqc.FunctionalSpec`; the alias is excluded below
-only to avoid registering the same Sphinx object twice.
-
-```{eval-rst}
-.. automodule:: generativeqc.extensions.xc
-   :members:
-   :imported-members:
-   :exclude-members: FunctionalSpec
-   :undoc-members:
-   :show-inheritance:
-```
+A module opts into the generated reference by declaring a literal `__all__`.
+The renderer discovers those modules recursively under `python/generativeqc`,
+so adding a new public module does not require editing this file or the
+documentation navigation. Private modules and modules without `__all__` are
+not promoted into the public API by documentation discovery.
