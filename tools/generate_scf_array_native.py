@@ -23,6 +23,8 @@ from generativeqc_compiler.tensor.scf import (
     diis_gram_program,
     hf_force_program,
 )
+from generativeqc_compiler.tensor.weighted_gram import recognize_weighted_gram
+from generativeqc_compiler.tensor.weighted_gram_emit import emit_occupied
 
 
 def _kind_signature(node: typing.Any) -> tuple[str, ...]:
@@ -57,70 +59,6 @@ def template_hash(program: typing.Any) -> str:
 
 def _input_name(node: typing.Any) -> str | None:
     return node.attrs.get("name") if node.op == "input" else None
-
-
-def _validate_common(program: typing.Any, output_name: str) -> typing.Any:
-    if program.provenance.get("construction") != "array_frontend":
-        raise ValueError("SCF native generation requires Array frontend provenance")
-    if tuple(program.outputs) != (output_name,):
-        raise ValueError("SCF Array program must have one expected output")
-    contraction = program.outputs[output_name]
-    if contraction.op != "einsum" or contraction.attrs.get("coefficient") != (1, 1):
-        raise ValueError("SCF Array output must be one unit-coefficient einsum")
-    if _kind_signature(contraction) != ("batch", "spin", "ao", "ao"):
-        raise ValueError("SCF Array output domains changed")
-    labels = contraction.attrs["labels"]
-    output = contraction.attrs["output"]
-    # This native schedule is specialized to row-major AO/orbital storage.
-    # Matching domain kinds alone cannot authorize a different operand layout.
-    expected_labels = ((0, 1, 2, 3), (0, 1, 3), (0, 1, 4, 3))
-    if labels != expected_labels or output != (0, 1, 2, 4):
-        raise ValueError("SCF Array contraction label topology changed")
-    if tuple(_kind_signature(node) for node in contraction.inputs) != (
-        ("batch", "spin", "ao", "orbital"),
-        ("batch", "spin", "orbital"),
-        ("batch", "spin", "ao", "orbital"),
-    ):
-        raise ValueError("SCF Array operand layout changed")
-    if contraction.inputs[0] is not contraction.inputs[2]:
-        raise ValueError("SCF Array coefficients must share one input topology")
-    domains: dict[int, str] = {}
-    for operand, operand_labels in zip(contraction.inputs, labels, strict=True):
-        if len(operand_labels) != len(operand.spec.indices):
-            raise ValueError("SCF Array einsum label rank changed")
-        for label, index in zip(operand_labels, operand.spec.indices, strict=True):
-            kind = index.space.kind
-            if domains.setdefault(label, kind) != kind:
-                raise ValueError("SCF Array einsum crosses scientific index spaces")
-    if tuple(domains[label] for label in output) != ("batch", "spin", "ao", "ao"):
-        raise ValueError("SCF Array einsum output labels changed")
-    reduced = tuple(label for label in domains if label not in output)
-    if len(reduced) != 1 or domains[reduced[0]] != "orbital":
-        raise ValueError("SCF Array density must reduce exactly one orbital axis")
-    return contraction
-
-
-def _validate_density(program: typing.Any) -> None:
-    contraction = _validate_common(program, "density")
-    names = tuple(_input_name(node) for node in contraction.inputs)
-    if names != ("coefficients", "occupations", "coefficients"):
-        raise ValueError("SCF density operand topology changed")
-
-
-def _validate_weighted(program: typing.Any) -> None:
-    contraction = _validate_common(program, "weighted_density")
-    first, weights, third = contraction.inputs
-    if (
-        _input_name(first) != "coefficients"
-        or first is not third
-        or weights.op != "multiply"
-    ):
-        raise ValueError("SCF weighted-density contraction topology changed")
-    names = {_input_name(node) for node in weights.inputs}
-    if names != {"occupations", "orbital_energies"}:
-        raise ValueError("SCF weighted-density weights topology changed")
-    if _kind_signature(weights) != ("batch", "spin", "orbital"):
-        raise ValueError("SCF weighted-density weight domains changed")
 
 
 def _validate_hf_force(program: typing.Any, spin_count: int) -> None:
@@ -242,8 +180,13 @@ def native_header() -> str:
     )
     diis_gram = prepared(diis_gram_program(1, 3, 2, spin_count=2))
     diis_extrapolation = prepared(diis_extrapolation_program(1, 3, 2, spin_count=2))
-    _validate_density(density)
-    _validate_weighted(weighted)
+    if any(
+        p.provenance.get("construction") != "array_frontend"
+        for p in (density, weighted)
+    ):
+        raise ValueError("SCF native generation requires Array frontend provenance")
+    density_region = recognize_weighted_gram(density, "density")
+    weighted_region = recognize_weighted_gram(weighted, "weighted_density")
     _validate_hf_force(restricted_force, 1)
     _validate_hf_force(unrestricted_force, 2)
     _validate_diis_gram(diis_gram)
@@ -266,43 +209,7 @@ inline constexpr const char* hf_force_tensor_template_hash = "{force_hash}";
 inline constexpr const char* diis_gram_tensor_template_hash = "{diis_gram_hash}";
 inline constexpr const char* diis_extrapolation_tensor_template_hash = "{diis_extrapolation_hash}";
 
-inline void density_from_orbitals(double* output, const double* coefficients,
-                                  std::size_t nbf, std::size_t coefficient_stride,
-                                  std::size_t occupied, double occupation_weight) {{
-  // Only canonical occupations authorize mirroring the legacy product order.
-  const bool symmetric = occupation_weight == 1.0 || occupation_weight == 2.0;
-  for (std::size_t mu = 0; mu < nbf; ++mu) {{
-    for (std::size_t nu = symmetric ? mu : 0; nu < nbf; ++nu) {{
-      double value = 0.0;
-      for (std::size_t orbital = 0; orbital < occupied; ++orbital) {{
-        // Preserve the legacy FP64 product/accumulation order for the unique
-        // AO pair. Physical SCF callers use exact occupation weights 1 or 2,
-        // so the mirrored pair is bitwise-equivalent to the swapped product.
-        value += occupation_weight * coefficients[mu * coefficient_stride + orbital] *
-                 coefficients[nu * coefficient_stride + orbital];
-      }}
-      output[mu * nbf + nu] = value;
-      if (symmetric && mu != nu) output[nu * nbf + mu] = value;
-    }}
-  }}
-}}
-
-inline void weighted_density_from_orbitals(double* output, const double* coefficients,
-                                           const double* orbital_energies, std::size_t nbf,
-                                           std::size_t coefficient_stride, std::size_t occupied,
-                                           double occupation_weight) {{
-  for (std::size_t mu = 0; mu < nbf; ++mu) {{
-    for (std::size_t nu = 0; nu < nbf; ++nu) {{
-      double value = 0.0;
-      for (std::size_t orbital = 0; orbital < occupied; ++orbital) {{
-        value += occupation_weight * orbital_energies[orbital] *
-                 coefficients[mu * coefficient_stride + orbital] *
-                 coefficients[nu * coefficient_stride + orbital];
-      }}
-      output[mu * nbf + nu] = value;
-    }}
-  }}
-}}
+{emit_occupied(density_region, weighted_region, backend="cpu")}
 
 
 template <std::size_t SpinCount>

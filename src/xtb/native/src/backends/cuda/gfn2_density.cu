@@ -259,55 +259,7 @@ __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceI
   const std::int64_t pair_count = triangle_inclusive(count);
   // Tile independent matrix outputs, retaining the full ordered orbital
   // reduction and its finite-range checks within each original thread.
-  for (std::int64_t pair = std::int64_t{blockIdx.z} * blockDim.x + threadIdx.x; pair < pair_count;
-       pair += std::int64_t{gridDim.z} * blockDim.x) {
-    const MatrixPair indices = matrix_pair(pair);
-    double density = 0.0;
-    double weighted_density = 0.0;
-    bool finite = true;
-    for (std::int64_t local = 0; local < count; ++local) {
-      const double first = input.coefficients[matrix_begin + indices.row * count + local];
-      const double second = input.coefficients[matrix_begin + indices.column * count + local];
-      double density_left = 0.0;
-      double density_contribution = 0.0;
-      double density_updated = 0.0;
-      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
-              first, workspace.weights[orbital_begin + local], density_left) ||
-          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
-              density_left, second, density_contribution) ||
-          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
-              density_left, second, density, density_updated)) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2DensityDeviceError::kNonfiniteDensityArithmetic);
-        finite = false;
-        break;
-      }
-      double weighted_left = 0.0;
-      double weighted_contribution = 0.0;
-      double weighted_updated = 0.0;
-      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
-              first, workspace.energy_weights[orbital_begin + local], weighted_left) ||
-          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
-              weighted_left, second, weighted_contribution) ||
-          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
-              weighted_left, second, weighted_density, weighted_updated)) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2DensityDeviceError::kNonfiniteWeightedDensityArithmetic);
-        finite = false;
-        break;
-      }
-      density = density_updated;
-      weighted_density = weighted_updated;
-    }
-    if (finite) {
-      const std::int64_t first = matrix_begin + indices.row * count + indices.column;
-      const std::int64_t second = matrix_begin + indices.column * count + indices.row;
-      workspace.density_scratch[first] = density;
-      workspace.weighted_density_scratch[first] = weighted_density;
-      workspace.density_scratch[second] = density;
-      workspace.weighted_density_scratch[second] = weighted_density;
-    }
-  }
+#include "generated_gfn2_density_contract.inc"
 }
 
 __global__ void trace_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceInput input,
@@ -591,55 +543,7 @@ __global__ void spin_contract_kernel(Gfn2DensityDeviceBatch batch,
   const std::int64_t matrix_begin = layout.spin_matrix_offsets[system] + channel * matrix_count;
   const std::int64_t orbital_begin = layout.spin_orbital_offsets[system] + channel * count;
   const std::int64_t pair_count = triangle_inclusive(count);
-  for (std::int64_t pair = std::int64_t{blockIdx.z} * blockDim.x + threadIdx.x; pair < pair_count;
-       pair += std::int64_t{gridDim.z} * blockDim.x) {
-    const MatrixPair indices = matrix_pair(pair);
-    double density = 0.0;
-    double weighted_density = 0.0;
-    bool finite = true;
-    for (std::int64_t local = 0; local < count; ++local) {
-      const double first = input.coefficients[matrix_begin + indices.row * count + local];
-      const double second = input.coefficients[matrix_begin + indices.column * count + local];
-      double density_left = 0.0;
-      double density_contribution = 0.0;
-      double density_updated = 0.0;
-      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
-              first, workspace.weights[orbital_begin + local], density_left) ||
-          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
-              density_left, second, density_contribution) ||
-          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
-              density_left, second, density, density_updated)) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2DensityDeviceError::kNonfiniteDensityArithmetic);
-        finite = false;
-        break;
-      }
-      double weighted_left = 0.0;
-      double weighted_contribution = 0.0;
-      double weighted_updated = 0.0;
-      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
-              first, workspace.energy_weights[orbital_begin + local], weighted_left) ||
-          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
-              weighted_left, second, weighted_contribution) ||
-          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
-              weighted_left, second, weighted_density, weighted_updated)) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2DensityDeviceError::kNonfiniteWeightedDensityArithmetic);
-        finite = false;
-        break;
-      }
-      density = density_updated;
-      weighted_density = weighted_updated;
-    }
-    if (finite) {
-      const std::int64_t first = matrix_begin + indices.row * count + indices.column;
-      const std::int64_t second = matrix_begin + indices.column * count + indices.row;
-      workspace.density_scratch[first] = density;
-      workspace.weighted_density_scratch[first] = weighted_density;
-      workspace.density_scratch[second] = density;
-      workspace.weighted_density_scratch[second] = weighted_density;
-    }
-  }
+#include "generated_gfn2_density_contract.inc"
 }
 
 __global__ void spin_trace_kernel(Gfn2DensityDeviceBatch batch, Gfn2WavefunctionLayoutView layout,

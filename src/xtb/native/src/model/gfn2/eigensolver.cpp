@@ -4,7 +4,7 @@
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
 #include "model/gfn2/occupation_binary64_policy.hpp"
-#include "generated_gfn2_electronic_native.hpp"
+#include "tensor/weighted_gram.hpp"
 
 #if defined(GENERATIVEQC_XTB_CONFIGURED_CPU_LINALG_SHIM) && defined(__linux__)
 #include "runtime/mkl_pthread_tss_bridge.h"
@@ -1239,25 +1239,6 @@ NumericalResult solve_one_spin(const CpuLinearAlgebraBackend& backend,
              : NumericalResult::kDataFailure;
 }
 
-bool form_density_column_major(const CpuLinearAlgebraBackend& backend, LapackInt n,
-                               const double* coefficients, const double* weights,
-                               double* weighted_coefficients, double* density) {
-  const std::size_t dimension = static_cast<std::size_t>(n);
-  for (std::size_t orbital = 0u; orbital < dimension; ++orbital) {
-    for (std::size_t row = 0u; row < dimension; ++row) {
-      const std::size_t index = row + orbital * dimension;
-      if (!::generativeqc::xtb::generated::gfn2_weighted_coefficient_tensor(
-              coefficients[index], weights[orbital], weighted_coefficients[index])) {
-        return false;
-      }
-    }
-  }
-  CpuLinearAlgebraAccess::dgemm(backend)(kCblasColMajor, kCblasNoTrans, kCblasTrans, n, n, n, 1.0,
-                                         weighted_coefficients, n, coefficients, n, 0.0, density,
-                                         n);
-  return true;
-}
-
 NumericalResult solve_system_unchecked(const EigensolverPlanData& data, std::size_t system,
                                        const EigensolverOverlapCache& overlap_cache,
                                        std::uint64_t geometry_generation,
@@ -1318,28 +1299,27 @@ NumericalResult solve_system_unchecked(const EigensolverPlanData& data, std::siz
       weights[orbital] =
           workspace.occupations[orbital] + workspace.occupations[orbital_count + orbital];
       double energy_weight = 0.0;
-      if (!::generativeqc::xtb::generated::gfn2_energy_weight_tensor(
+      if (!::generativeqc::tensor::weighted_gram::generated::energy_weight(
               weights[orbital], workspace.eigenvalues[orbital], energy_weight)) {
         thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }
       band_energy += energy_weight;
     }
-    if (!form_density_column_major(backend, n, workspace.coefficients, weights,
-                                   weighted_coefficients, workspace.densities)) {
+    if (!::generativeqc::tensor::weighted_gram::execute_column_major(
+            CpuLinearAlgebraAccess::dgemm(backend), n, workspace.coefficients, weights,
+            weighted_coefficients, workspace.densities)) {
       thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
       return NumericalResult::kDataFailure;
     }
-    for (std::size_t orbital = 0u; orbital < orbital_count; ++orbital) {
-      if (!::generativeqc::xtb::generated::gfn2_energy_weight_tensor(
-              weights[orbital], workspace.eigenvalues[orbital], weights[orbital])) {
-        thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
-        return NumericalResult::kDataFailure;
-      }
+    if (!::generativeqc::tensor::weighted_gram::energy_weights_inplace(n, workspace.eigenvalues,
+                                                                       weights)) {
+      thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
+      return NumericalResult::kDataFailure;
     }
-    if (!form_density_column_major(backend, n, workspace.coefficients, weights,
-                                   weighted_coefficients,
-                                   workspace.energy_weighted_densities)) {
+    if (!::generativeqc::tensor::weighted_gram::execute_column_major(
+            CpuLinearAlgebraAccess::dgemm(backend), n, workspace.coefficients, weights,
+            weighted_coefficients, workspace.energy_weighted_densities)) {
       thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
       return NumericalResult::kDataFailure;
     }
@@ -1351,22 +1331,24 @@ NumericalResult solve_system_unchecked(const EigensolverPlanData& data, std::siz
       const double* spin_occupations = workspace.occupations + orbital_offset;
       const double* spin_eigenvalues = workspace.eigenvalues + orbital_offset;
       for (std::size_t orbital = 0u; orbital < orbital_count; ++orbital) {
-        if (!::generativeqc::xtb::generated::gfn2_energy_weight_tensor(
+        if (!::generativeqc::tensor::weighted_gram::generated::energy_weight(
                 spin_occupations[orbital], spin_eigenvalues[orbital], weights[orbital])) {
           thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
           return NumericalResult::kDataFailure;
         }
         band_energy += weights[orbital];
       }
-      if (!form_density_column_major(backend, n, workspace.coefficients + spin_matrix_offset,
-                                     spin_occupations, weighted_coefficients,
-                                     workspace.densities + spin_matrix_offset)) {
+      if (!::generativeqc::tensor::weighted_gram::execute_column_major(
+              CpuLinearAlgebraAccess::dgemm(backend), n,
+              workspace.coefficients + spin_matrix_offset, spin_occupations, weighted_coefficients,
+              workspace.densities + spin_matrix_offset)) {
         thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }
-      if (!form_density_column_major(backend, n, workspace.coefficients + spin_matrix_offset,
-                                     weights, weighted_coefficients,
-                                     workspace.energy_weighted_densities + spin_matrix_offset)) {
+      if (!::generativeqc::tensor::weighted_gram::execute_column_major(
+              CpuLinearAlgebraAccess::dgemm(backend), n,
+              workspace.coefficients + spin_matrix_offset, weights, weighted_coefficients,
+              workspace.energy_weighted_densities + spin_matrix_offset)) {
         thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }

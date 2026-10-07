@@ -18,7 +18,7 @@
     "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
     "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
     "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership.",
-    "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
+    "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile. Replace the embedded paired P/W contraction loops with shared TensorIR weighted-Gram emitted fragments; expanding the generated includes reproduces the complete prior CUDA translation unit byte-for-byte, while the physical source-file identity changes.",
     "src/backends/cuda/gfn2_occupations.cu": "Consume compiler-owned exact restricted-spin task sharing after full native admission; copy identical occupation and diagnostic outputs while preserving independent open-shell/unrestricted solves and all binary64 root, reduction, degeneracy and publication policies.",
     "src/backends/cuda/gfn2_scc_setup_eigensolver.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/backends/cuda/gfn2_scc_setup_inputs.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
@@ -128,7 +128,7 @@
     "src/backends/cuda/gfn2_density.cu": {
       "adapted": true,
       "upstream_sha256": "22e2f182a418ddf43834578605ba913c9e9e043f491e0f95f2f7ec6f16735a34",
-      "vendored_sha256": "c365f5b227d63400827440eff384aad412fd2c0a281ad90fd4c0a82990d0b706"
+      "vendored_sha256": "0e8d49d6dec93a3706e5d0751001c764798edd1040bcab1d3713736ac07d0c1b"
     },
     "src/backends/cuda/gfn2_density.cuh": {
       "adapted": true,

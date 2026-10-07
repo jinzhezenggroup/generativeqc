@@ -74,6 +74,16 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
         check=True,
         timeout=60,
     )
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/generate_gfn2_density_cuda.py"),
+            "--output",
+            str(tmp_path / "generated_gfn2_density_contract.inc"),
+        ],
+        check=True,
+        timeout=60,
+    )
     objects = []
     native = ROOT / "src/xtb/native"
     sources = (

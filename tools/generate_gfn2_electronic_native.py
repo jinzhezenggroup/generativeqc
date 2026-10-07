@@ -14,9 +14,6 @@ if __package__ in (None, ""):
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_RUNTIME_VERSION,
     build_gfn2_core_energy_update_program,
-    build_gfn2_density_contribution_program,
-    build_gfn2_density_update_program,
-    build_gfn2_energy_weight_program,
     build_gfn2_multipole_hamiltonian_update_program,
     build_gfn2_multipole_integral_vjp_program,
     build_gfn2_population_update_program,
@@ -24,21 +21,18 @@ from generativeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_scalar_hamiltonian_update_program,
     build_gfn2_scalar_integral_vjp_program,
     build_gfn2_spin_population_publish_program,
-    build_gfn2_weighted_coefficient_program,
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
-from generativeqc_compiler.tensor.scf_cuda import (
+from generativeqc_compiler.tensor.weighted_gram import (
+    checked_scalar_programs,
     density_template_hash,
     weighted_density_template_hash,
 )
+from generativeqc_compiler.tensor.weighted_gram_emit import emit_scalar_stages
 
 POPULATION_INPUTS = ("density", "integral", "accumulator")
 CORE_ENERGY_INPUTS = ("density", "h0", "accumulator")
-ENERGY_WEIGHT_INPUTS = ("occupation", "eigenvalue")
-WEIGHTED_COEFFICIENT_INPUTS = ("coefficient", "weight")
-DENSITY_CONTRIBUTION_INPUTS = ("weighted_coefficient", "coefficient")
-DENSITY_UPDATE_INPUTS = ("weighted_coefficient", "coefficient", "accumulator")
 RESTRICTED_POPULATION_PUBLISH_INPUTS = ("electronic", "reference")
 SPIN_POPULATION_PUBLISH_INPUTS = ("alpha", "beta", "reference")
 SCALAR_HAMILTONIAN_INPUTS = (
@@ -63,24 +57,26 @@ MULTIPOLE_VJP_INPUTS = ("row_potential", "column_potential", "bar_updated")
 def native_header() -> str:
     density_hash = density_template_hash()
     weighted_density_hash = weighted_density_template_hash()
+    density_programs = checked_scalar_programs("cpu")
+    density_sources = emit_scalar_stages(
+        "cpu",
+        {
+            "energy_weight": "gfn2_energy_weight_tensor",
+            "weighted_coefficient": "gfn2_weighted_coefficient_tensor",
+            "contribution": "gfn2_density_contribution_tensor",
+            "updated": "gfn2_density_update_tensor",
+        },
+    )
     population = prepare_for_backend(
         build_gfn2_population_update_program(), backend="cpu"
     )
     core_energy = prepare_for_backend(
         build_gfn2_core_energy_update_program(), backend="cpu"
     )
-    energy_weight = prepare_for_backend(
-        build_gfn2_energy_weight_program(), backend="cpu"
-    )
-    weighted_coefficient = prepare_for_backend(
-        build_gfn2_weighted_coefficient_program(), backend="cpu"
-    )
-    density_contribution = prepare_for_backend(
-        build_gfn2_density_contribution_program(), backend="cpu"
-    )
-    density_update = prepare_for_backend(
-        build_gfn2_density_update_program(), backend="cpu"
-    )
+    energy_weight = density_programs["energy_weight"]
+    weighted_coefficient = density_programs["weighted_coefficient"]
+    density_contribution = density_programs["contribution"]
+    density_update = density_programs["updated"]
     restricted_publish = prepare_for_backend(
         build_gfn2_restricted_population_publish_program(), backend="cpu"
     )
@@ -113,32 +109,10 @@ def native_header() -> str:
             input_order=CORE_ENERGY_INPUTS,
             output_order=("updated",),
         ),
-        emit_scalar_cpp(
-            energy_weight,
-            function_name="gfn2_energy_weight_tensor",
-            input_order=ENERGY_WEIGHT_INPUTS,
-            output_order=("energy_weight",),
-        ),
-        emit_scalar_cpp(
-            weighted_coefficient,
-            function_name="gfn2_weighted_coefficient_tensor",
-            input_order=WEIGHTED_COEFFICIENT_INPUTS,
-            output_order=("weighted_coefficient",),
-        ),
-        emit_scalar_cpp(
-            density_contribution,
-            function_name="gfn2_density_contribution_tensor",
-            input_order=DENSITY_CONTRIBUTION_INPUTS,
-            output_order=("contribution",),
-        ),
-        emit_scalar_cpp(
-            density_update,
-            fused_accumulation=True,
-            function_name="gfn2_density_update_tensor",
-            input_order=DENSITY_UPDATE_INPUTS,
-            output_order=("updated",),
-            ordered_native_sums=True,
-        ),
+        density_sources["energy_weight"],
+        density_sources["weighted_coefficient"],
+        density_sources["contribution"],
+        density_sources["updated"],
         emit_scalar_cpp(
             restricted_publish,
             function_name="gfn2_restricted_population_publish_tensor",
