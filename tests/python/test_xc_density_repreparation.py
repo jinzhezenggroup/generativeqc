@@ -111,10 +111,17 @@ Capabilities cuda_xc_execution_capabilities(const Layout& l) {
   return {l.mixed_physical && !l.local_ao && !l.response};
 }
 bool cuda_xc_capability_qualified(bool value) { return value; }
-struct CudaXcAoTiles { std::vector<std::size_t> indices, offsets; };
+struct CudaXcAoTiles {
+  std::vector<std::size_t> indices, offsets;
+  int derivative_order{-1};
+};
 struct Bound { std::size_t device_bytes{64}, host_peak_bytes{64}, max_entries{9}, tiles{3}; };
 Bound cuda_xc_ao_selection_resources(const Layout&) { return {}; }
-Layout cuda_xc_local_ao_layout(Layout l, const CudaXcAoTiles&) { l.local_ao = true; return l; }
+Layout cuda_xc_local_ao_layout(Layout l, const CudaXcAoTiles& maps) {
+  if (maps.derivative_order != (l.jets == 1 ? 0 : 1))
+    throw std::invalid_argument("discovery lost derivative capability");
+  l.local_ao = true; return l;
+}
 std::vector<int> local_density_launchers(const Layout&, const std::vector<std::size_t>& offsets) {
   ++launcher_calls; return std::vector<int>(offsets.size()-1, 1);
 }
@@ -319,8 +326,11 @@ void response() {
           "response acquired optional resources");
 }
 void discovery() {
+  for (std::size_t jets : {1U, 4U})
   for (bool empty_map : {false, true}) {
-    CudaXcPlan p; p.prepare_density(strict, 1, budget); const Snapshot dense(p);
+    discovery_empty = false;
+    CudaXcPlan p; p.layout_.jets = jets;
+    p.prepare_density(strict, 1, budget); const Snapshot dense(p);
     require(!p.select_local_ao(1e-16, 0), "discovery ignored insufficient resources");
     dense.unchanged(p);
     copy_failure = 1;

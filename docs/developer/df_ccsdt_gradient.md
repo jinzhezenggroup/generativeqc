@@ -29,6 +29,31 @@ cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 occupied/virtual degeneracies. These matrices **replace** the epsilon-diagonal
 sources; adding both would count denominator response twice.
 
+The fixed-canonical API requests all nine cotangents by default. Its explicit
+`include_gap_response=false` demand omits the epsilon outputs, seed VJP,
+reduction, scatter and associated arena. Omitted vectors are empty, not fake
+zero derivatives. All nine primal inputs remain validated, uploaded and
+charged, and the original energy/denominator audits remain active. Only a
+consumer supplying the replacement full-Fock response may omit these sources.
+
+For requested epsilon outputs, the generic TensorIR linear-reduction region is
+the default schedule for virtual dimensions at least four. It streams pointwise
+producers, shares aliased scalar outputs, composes vector marginals without
+intermediate vectors, and uses fixed FP64 warp trees with at most 256 scalar
+partials. Runtime tile counts determine the actual partial reservation.
+`parallel_gap_reduction=false` retains the original source-major serial order
+as an explicit comparison path; no floating-point atomics, fast math, FP32 or
+new CC equation is introduced. The graph and schedule have a compiler-visible
+identity.
+
+`DFGapReductionDiagnostic` reports demand, schedule identity, actual launch count,
+reserved workspace, cumulative intermediate elements and logical value
+reads/writes and summands. These count generated work, not DRAM transactions,
+total instructions or measured peak VRAM. Native reduction tests independently
+compare signed seeds with `math.fsum`/NumPy, preserve all requested cotangents,
+and refuse publication after nonfinite arithmetic, including partial-drain
+overflow. Complete force finite differences must also qualify demand changes.
+
 `pullback_df_factors_cuda` combines retained Gram-block and virtual-factor
 cotangents. Compressed Bov includes both ov/vo sectors, so full symmetric
 embedding assigns half to each. `pullback_df_source_cuda` then reverses the
@@ -171,7 +196,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE]]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
@@ -190,6 +215,31 @@ It accepts only the complete token `0` or `1`; it does not change the meaning
 of the screening token at argument ten, profiling at eleven, or the nuclear
 response schedule at twelve.
 
+Arguments fourteen through seventeen select the true-residual interval, DF Z
+preconditioner, repeated recycling endpoint and packed DIIS. Argument eighteen
+accepts a resident exact J/K byte limit or `auto` to retain its ordinary policy.
+Arguments nineteen and twenty select parallel gap reduction and requested
+epsilon cotangents. Both accept only `0` or `1`; when omitted, the complete
+force owner now defaults to parallel reduction and omits the diagonal
+cotangents because its full-Fock response replaces them. Passing `0 1`
+restores the original serial/all-output path for matched validation. The
+lower-level fixed-canonical triples API still requests all nine cotangents by
+default, while using the parallel gap schedule unless explicitly disabled.
+The separately tracked large-force repeatability issue is pre-existing and does
+not by itself block these defaults; its strict numerical gates remain unchanged.
+Keep automatic J/K selection and all earlier selectors matched when comparing
+serial/all-output, parallel/all-output and demand-pruned endpoints.
+
+Argument twenty-one optionally sets both RHF energy and density tolerances to a
+finite positive value no larger than `1e-12`. Without it, the benchmark retains
+its original `1e-12` energy and `1e-11` density tolerances. This benchmark-only
+control cannot loosen either criterion or change CC, Lambda, Z, stationarity,
+or paired-force acceptance gates. JSON records both requested tolerances and
+the original RHF's final energy change, density RMS and iteration count; these
+diagnostics do not rebuild or replay the reference. Iteration work is null if
+a discarded endpoint attempt prevents complete work accounting. Match this
+argument across schedules when investigating cold-reference variability.
+
 For example, an exact force endpoint with the default six-vector DIIS history
 and explicit symmetric response is:
 
@@ -201,3 +251,65 @@ Historical response benchmark receipts retain the CLI for their recorded source
 revision. When adapting such a command to the current executable, insert the
 DIIS history and CCSD Q batch limit before the orbital screening threshold.
 Do not rewrite retained receipt commands or imply that they used this layout.
+
+## Same-primal response diagnostic
+
+`methods::detail::diagnose_df_ccsdt_gap_schedules` invokes the native cold
+RHF/DF-CCSD owner once and compares serial/all-output, parallel/all-output,
+omitted-output and repeated serial complete force compositions. Each composition
+uses an independently owned host copy through the existing force implementation;
+the physical reference and original DF source/metric/frame remain shared. A
+bit-pattern census guards the nine explicit triples inputs before each response
+and checks that the retained original is unchanged afterward. No replacement
+metric, CPU oracle or second CC equation is used.
+
+The diagnostic requires an explicit positive numeric budget and disallows Z
+recycling. All fixed force outputs are charged during the common cold solve.
+Admission precedes cloning and includes the original host copy and one working
+copy, with shared source/reference ownership charged once. The original host
+buffers remain reserved in every response phase; the original DF source and any
+still-live exact-reference source remain charged beside the final independent
+orbital provider. A failure publishes no partial comparison. Common native
+owners are released before the total comparison timer is stopped.
+
+`benchmarks/df_gap_same_primal_endpoint.cpp` accepts `INPUT OUTPUT_JSON` with the
+same normalized geometry/basis/budget input as the cold endpoint benchmark.
+It uses the retained cold benchmark's reference, DIIS, response and automatic
+J/K controls. JSON separates the single common native call, clone work and each
+response composition. These are diagnostic timings, **not independent cold
+endpoint timings**, and cannot replace cold acceptance or qualify an endpoint
+speedup. Independent force finite differences, unchanged residual/stationarity
+gates and the strict paired force gate still apply.
+
+Each comparison also records ordered bit-pattern identities and element counts
+for 35 existing host payload boundaries: seven requested triples cotangents,
+full-Fock response, corrected Lambda, composed parameter/factor sources, DF
+nuclear gradient and coefficient source, orbital response/weights, and final
+forces. This fixed scalar metadata adds no retained numeric intermediate or
+GPU transfer; empty payloads have explicit zero element counts. Ordinary cold
+calls do not collect these fingerprints. Fingerprinting time is reported
+separately, along with logical host value reads, and remains included in
+diagnostic response/total times. Identity
+differences localize the first observed divergence but are not numerical
+acceptance gates, proof of causation, or a replacement for force tolerances.
+
+The optional `--physical-replay` benchmark mode runs one native primal,
+triples response and Lambda solve, then four source/nuclear responses on the
+same factor seed and four orbital/nuclear responses on one final `bar_f/bar_c`
+seed. The original physical reference is shared and its host identity is
+guarded; DF gradients are not inputs to the orbital solve. This diagnostic
+requires an explicit positive budget and refuses recycling/DF preconditioning.
+Small gradient outputs are reserved before the cold solve; preceding orbital
+matrices are retired before the next response owner is admitted.
+
+Unlike the host-boundary-only comparison, physical replay explicitly copies
+device three-center and metric weights through one admitted row/metric buffer.
+It reports the buffer capacity, logical values, transfer bytes and synchronized
+census time. Host weight copies are discarded after hashing; no complete
+three-center weight tensor is retained. Both the observer overhead and repeated
+physical work remain included in diagnostic timings. The observer can change
+launch timing, so a passing replay does not supersede an uninstrumented failure.
+Weight hashes distinguish source-weight variability from later contraction
+variability only within the observed run; unchanged force/residual gates and
+independent reference qualification still apply. Ordinary cold and same-primal
+schedule calls do not enable physical replay or its added transfers.

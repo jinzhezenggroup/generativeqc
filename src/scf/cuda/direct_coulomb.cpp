@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_target_info.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -16,6 +17,7 @@
 #include "scf/cuda/direct_bounded_dddd.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
+#include "scf/cuda/direct_fock_lowering.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
@@ -34,6 +36,11 @@ unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements +
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
   batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_mode();
   batch.direct_hermite_convolution = cuda_policy::direct_hermite_convolution_mode();
+  batch.direct_pair_materialized_values = cuda_policy::direct_pair_materialized_values_requested();
+  batch.direct_pair_materialized_derivatives =
+      cuda_policy::direct_pair_materialized_derivatives_requested();
+  batch.direct_pair_cooperative_derivatives =
+      cuda_policy::direct_pair_cooperative_derivatives_requested();
 }
 
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {
@@ -94,6 +101,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   const auto pairs = host.shell_pair_first.size();
   const auto primitive_pairs = static_cast<std::size_t>(host.shell_pair_primitive_offsets.back());
   const auto classes = detail::kDirectQuartetShellClassCount;
+  constexpr std::size_t pair_classes = detail::kDirectShellPairClassCount;
   std::size_t required = 0;
   const auto charge = [&](std::size_t count, std::size_t width) {
     required = runtime::size_add(required, product(count, width));
@@ -120,6 +128,9 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   charge(rectangular, sizeof(double));
   charge(matrix, 2 * sizeof(double));  // Total spin density and zero one-electron term.
   charge(pairs, sizeof(double));
+  charge(pairs, sizeof(ShellPairDensityBounds));
+  charge(batch, sizeof(double));
+  charge(product(batch, pair_classes), sizeof(double));
   charge(batch, sizeof(std::uint8_t));
   charge(classes, sizeof(std::uint32_t));
   charge(1, sizeof(GeneratedShellPairStream));
@@ -133,6 +144,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   plan->screening = screening;
   plan->class_mask = present;
   plan->value_class_mask = value_class_mask;
+  plan->rys_fock_mask = prepare_direct_fock_rys_mask(false) & value_class_mask;
   plan->value_capability = value_capability;
   // Reuse the target-legal HF worker and recurrence-stack policy; a prepared
   // KS owner must not rely on an earlier HF call having raised the CUDA limit.
@@ -180,6 +192,10 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     plan->total_density = doubles(matrix);
     plan->zero = doubles(matrix);
     plan->shell_bounds = doubles(pairs);
+    plan->shell_pair_density_bounds =
+        static_cast<ShellPairDensityBounds*>(allocate(pairs, sizeof(ShellPairDensityBounds)));
+    plan->system_density_bounds = doubles(batch);
+    plan->system_pair_density_bounds = doubles(product(batch, pair_classes));
     plan->active = static_cast<std::uint8_t*>(allocate(batch, sizeof(std::uint8_t)));
     plan->heads = static_cast<std::uint32_t*>(allocate(classes, sizeof(std::uint32_t)));
     check(cudaMemsetAsync(plan->active, 1, batch, stream));
@@ -219,26 +235,28 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     plan->pair_order = device_order;
     plan->pair_class_offsets = device_offsets;
     const auto& b = plan->batch;
-    const GeneratedShellPairStream topology{b.batch_size,
-                                            static_cast<std::uint32_t>(b.direct_nbf),
-                                            b.system_shell_offsets,
-                                            b.system_shell_pair_offsets,
-                                            b.shell_atoms,
-                                            b.shell_angular,
-                                            b.shell_direct_ao_offsets,
-                                            b.shell_primitive_offsets,
-                                            b.shell_pair_systems,
-                                            b.shell_pair_first,
-                                            b.shell_pair_second,
-                                            plan->pair_order,
-                                            plan->pair_class_offsets,
-                                            plan->shell_bounds,
-                                            nullptr,
-                                            nullptr,
-                                            nullptr,
-                                            nullptr,
-                                            plan->active,
-                                            detail::GeneratedFockConsumer::Coulomb};
+    const GeneratedShellPairStream topology{
+        b.batch_size,
+        static_cast<std::uint32_t>(b.direct_nbf),
+        b.system_shell_offsets,
+        b.system_shell_pair_offsets,
+        b.shell_atoms,
+        b.shell_angular,
+        b.shell_direct_ao_offsets,
+        b.shell_primitive_offsets,
+        b.shell_pair_systems,
+        b.shell_pair_first,
+        b.shell_pair_second,
+        plan->pair_order,
+        plan->pair_class_offsets,
+        plan->shell_bounds,
+        reinterpret_cast<const detail::GeneratedShellPairDensityBounds*>(
+            plan->shell_pair_density_bounds),
+        plan->system_density_bounds,
+        plan->system_pair_density_bounds,
+        nullptr,
+        plan->active,
+        detail::GeneratedFockConsumer::Coulomb};
     plan->topology =
         static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
     check(cudaStreamSynchronize(stream));
@@ -281,6 +299,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   if (!shared) return {};
   const bool bounded_value_capability = allow_bounded_shell_fallback && !shared->value_capability;
   const bool bounded_resources = force_capability || bounded_value_capability;
+  const bool angular_force = force_capability && cuda_policy::bounded_angular_force_requested();
 
   const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
   const auto matrix = product(product(batch, host.nbf), host.nbf);
@@ -327,12 +346,41 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
       bounded_schedule.block_prefix.clear();
   }
 
+  // HF and DFT build the same complete psss inventory. The matrix-value
+  // packer deliberately skips it, so construct only the requested force lease
+  // here, after required storage has been charged and before any upload.
+  std::vector<PsssResidentTask> resident_tasks;
+  std::vector<std::uint32_t> resident_ket_pairs;
+  std::size_t resident_bra_capacity = 0U;
+  bool resident_inventory = false;
+  if (angular_force && cuda_policy::resident_psss_bra_requested()) {
+    try {
+      resident_inventory = make_direct_force_resident_bra_schedule(
+          host, resident_tasks, resident_ket_pairs, resident_bra_capacity,
+          budget - shared->device_bytes - additional);
+    } catch (const std::bad_alloc&) {
+      // Host metadata is optional as well; the existing bounded lease survives.
+      resident_tasks.clear();
+      resident_ket_pairs.clear();
+      resident_bra_capacity = 0U;
+    }
+  }
+  const auto resident_bytes =
+      runtime::size_add(product(resident_tasks.size(), sizeof(PsssResidentTask)),
+                        product(resident_ket_pairs.size(), sizeof(std::uint32_t)));
+  const bool retain_resident =
+      resident_inventory && !resident_ket_pairs.empty() &&
+      direct_force_resident_bra_capacity_supported(resident_tasks.size(), resident_bra_capacity);
+  if (retain_resident) additional = runtime::size_add(additional, resident_bytes);
+
   // The owner drains H2D on failed preparation before this staging is freed.
   std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
+  plan->rys_fock_mask = prepare_direct_fock_rys_mask(true) & shared->value_class_mask;
+  plan->k_block_fock_mask = prepare_direct_fock_k_block_mask() & shared->value_class_mask;
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
-  plan->angular_force_opt_in = force_capability && cuda_policy::bounded_angular_force_requested();
+  plan->angular_force_opt_in = angular_force;
   plan->bounded_value_capability = bounded_value_capability;
   plan->device_bytes = plan->shared->device_bytes;
   auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
@@ -393,6 +441,36 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
                  host.system_shell_pair_block_quartet_offsets.data()));
   }
   if (force_capability) plan->force = doubles(product(atoms, 9));
+  if (retain_resident) {
+    const auto allocation_begin = plan->allocations.size();
+    const auto bytes_before_resident = plan->device_bytes;
+    auto release_partial_resident = [&]() {
+      // Pending H2D copies own the partial views until this stream drains.
+      // Only resident allocations are retired; the required bounded lease lives.
+      check(cudaStreamSynchronize(stream));
+      while (plan->allocations.size() > allocation_begin) {
+        check(runtime::resource_cuda_free(plan->allocations.back()));
+        plan->allocations.pop_back();
+      }
+      plan->device_bytes = bytes_before_resident;
+      additional -= resident_bytes;
+      (void)cudaGetLastError();
+    };
+    try {
+      const auto* tasks = static_cast<const PsssResidentTask*>(
+          allocate(resident_tasks.size(), sizeof(PsssResidentTask), resident_tasks.data()));
+      const auto* ket_pairs = static_cast<const std::uint32_t*>(
+          allocate(resident_ket_pairs.size(), sizeof(std::uint32_t), resident_ket_pairs.data()));
+      // Publish only complete views. Preparation owns uploads; execution uses
+      // them on this same stream after the geometry-live primitive cache update.
+      plan->force_resident_bra = {tasks, ket_pairs, resident_tasks.size(), resident_bra_capacity};
+    } catch (cudaError_t error) {
+      if (error != cudaErrorMemoryAllocation) throw;
+      release_partial_resident();
+    } catch (const std::bad_alloc&) {
+      release_partial_resident();
+    }
+  }
   if (bounded_value_capability) {
     plan->bounded_value_overflow =
         static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
@@ -436,7 +514,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   plan->host_preparation_bytes = runtime::size_add(
       plan->shared->host_preparation_bytes,
       sizeof(*plan) + runtime::vector_capacities(plan->allocations, bounded_pair_order,
-                                                 bounded_schedule.block_prefix));
+                                                 bounded_schedule.block_prefix, resident_tasks,
+                                                 resident_ket_pairs));
   return plan;
 } catch (cudaError_t error) {
   if (error != cudaErrorMemoryAllocation) throw;
@@ -533,7 +612,8 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       const auto cls = kernels[i].shell_class;
       if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
         continue;
-      error = generated::launch_shell_class_streaming_fock(
+      error = direct_fock_streaming_launcher(p.rys_fock_mask,
+                                             unrestricted ? 0U : p.k_block_fock_mask, cls)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
@@ -637,6 +717,11 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
       (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr) ||
       (!full_range && (!std::isfinite(omega) || omega <= 0.0)))
     return cudaErrorInvalidValue;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_k", p.shared->stream,
+      {static_cast<std::size_t>(p.shared->batch.batch_size),
+       static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", full_range ? p.rys_fock_mask : 0);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   return error == cudaSuccess ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange,
                                                                     beta_exchange, range, omega)
@@ -645,7 +730,8 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
 
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives) {
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
+    bool separate_sources) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
@@ -655,8 +741,14 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 
   auto& shared = *p.shared;
   const auto b = shared.batch;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_jk_force", shared.stream,
+      {static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.nbf), 0, true, true});
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
-  std::vector<double> result(2U * coordinates);
+  // Total-force consumers combine the compiler-owned cotangents before AD;
+  // derivative exports retain independent channels on exactly the same domain.
+  std::vector<double> result((separate_sources ? 2U : 1U) * coordinates);
+  runtime::cuda_trace::trace_counter("direct_force_output_channels", separate_sources ? 2U : 1U);
   // Drain any pending D2H before result is destroyed on failure or exception.
   struct HostResultDrain {
     cudaStream_t stream;
@@ -679,7 +771,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Full, 0.0,
-          coulomb_coefficient, exchange_coefficient, p.bounded_block_domain);
+          coulomb_coefficient, exchange_coefficient, p.bounded_block_domain, p.force_resident_bra,
+          separate_sources);
       if (error != cudaSuccess) return error;
     } else {
       launch_bounded_shell_energy_derivative(
@@ -687,7 +780,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
-          exchange_coefficient, p.bounded_block_domain);
+          exchange_coefficient, p.bounded_block_domain, separate_sources);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
     }
@@ -850,7 +943,25 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
   launch_transform_density_to_direct_left_kernel(blocks(cartesian), 128, 0, p.stream, b.batch_size,
                                                  1, b.nbf, b.direct_nbf, b.ao_to_direct_transform,
                                                  p.temporary, p.active, p.density);
-  auto error = cudaMemsetAsync(p.coulomb, 0, cartesian * sizeof(double), p.stream);
+  auto error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+
+  // Generated J contracts the total Cartesian density. Reuse the Direct-HF
+  // shell-pair reduction so screening is density-conditioned without adding a
+  // second threshold or a J-specific notion of density magnitude.
+  constexpr unsigned density_threads = 128U;
+  launch_reduce_shell_pair_density_bounds_kernel(false, static_cast<unsigned>(b.total_shell_pairs),
+                                                 density_threads,
+                                                 3U * density_threads * sizeof(double), p.stream, b,
+                                                 p.density, p.active, p.shell_pair_density_bounds);
+  launch_reduce_bounded_system_density_bounds_kernel(
+      static_cast<unsigned>(b.batch_size), density_threads,
+      detail::kDirectShellPairClassCount * density_threads * sizeof(double), p.stream, b,
+      p.shell_pair_density_bounds, p.system_density_bounds, p.system_pair_density_bounds);
+  error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+
+  error = cudaMemsetAsync(p.coulomb, 0, cartesian * sizeof(double), p.stream);
   if (error != cudaSuccess) return error;
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           p.stream);
@@ -861,7 +972,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
     const auto cls = kernels[i].shell_class;
     if (!(p.value_class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
       continue;
-    error = generated::launch_shell_class_streaming_fock(
+    error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
         p.schwarz, p.density, p.coulomb, p.heads + cls,
@@ -896,6 +1007,10 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb) 
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
                                       const double* beta, double* coulomb) {
   if (!p.value_capability) return cudaErrorNotSupported;
+  runtime::cuda_trace::TraceOperation trace("direct_j", p.stream,
+                                            {static_cast<std::size_t>(p.batch.batch_size),
+                                             static_cast<std::size_t>(p.batch.nbf), 0, true, true});
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.rys_fock_mask);
   auto error = enqueue_generated_coulomb_direct(p, density, beta);
   return error == cudaSuccess ? project_generated_coulomb(p, coulomb) : error;
 }
@@ -905,6 +1020,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricte
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       coulomb == nullptr)
     return cudaErrorNotSupported;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_j", p.shared->stream,
+      {static_cast<std::size_t>(p.shared->batch.batch_size),
+       static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.shared->rys_fock_mask);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   return error == cudaSuccess
              ? enqueue_generated_coulomb_prepared(p, unrestricted, alpha, beta, coulomb)

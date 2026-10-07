@@ -5,10 +5,12 @@ import typing
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+for path in (ROOT, ROOT / "python"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from tools.render_public_methods_doc import render_public_methods_source
+from tools.render_python_api_doc import render_python_api_source
 from tools.sphinx_repository_links import setup_repository_links
 
 project = "GenerativeQC"
@@ -17,7 +19,10 @@ language = "en"
 
 extensions = [
     "myst_parser",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.mathjax",
+    "sphinx.ext.viewcode",
     "sphinx_book_theme",
 ]
 
@@ -53,12 +58,20 @@ myst_enable_extensions = [
 ]
 myst_heading_anchors = 3
 
+autosummary_generate = True
+autodoc_member_order = "bysource"
+autodoc_preserve_defaults = True
+autodoc_typehints_format = "fully-qualified"
+# Optional integration modules may still be part of the public API reference.
+autodoc_mock_imports = ["torch"]
 
-def _render_public_methods(app: typing.Any, docname: str, source: list[str]) -> None:
+
+def _render_generated_sources(app: typing.Any, docname: str, source: list[str]) -> None:
     render_public_methods_source(app, docname, source)
+    render_python_api_source(app, docname, source)
 
 
 def setup(app: typing.Any) -> dict[str, bool]:
-    app.connect("source-read", _render_public_methods)
+    app.connect("source-read", _render_generated_sources)
     setup_repository_links(app)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

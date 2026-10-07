@@ -57,21 +57,19 @@ int main() {
       (generated::iteration_arena_elements(1,2) + generated::replay_arena_elements(1,2));
   for (unsigned history : {0U,2U}) {
     SolverOptions options; options.diis_size = history;
-    options.max_bytes = base + sizeof(double) * (2 + 2 * history) * elements;
+    // Jacobi-only execution retains current plus its next trial. DIIS execution
+    // additionally retains trial/error and copied vector/error histories.
+    const auto h = std::size_t(history), n = h + 1;
+    const auto scratch = h ? h*h + 2*n*n + 2*n : 0;
+    const auto host_vectors = h ? 4 + 2*h : 2;
+    const auto exact = base + sizeof(double) * (host_vectors*elements + scratch);
+    options.max_bytes = exact - 1;
     bool refused = false;
     try { solve_cpu(p,options); } catch (const std::length_error&) { refused=true; }
     if (!refused) { std::cerr << "transient CPU/DIIS buffers were not reserved\n"; return 1; }
-    // Current/trial/error and a copied history vector can coexist before trim.
-    // Gram, original+copied augmented solve and two RHS vectors are separate.
-    const auto h = std::size_t(history), n = h + 1;
-    const auto scratch = h ? h*h + 2*n*n + 2*n : 0;
-    const auto exact = base + sizeof(double) * ((4 + 2*h)*elements + scratch);
-    options.max_bytes = exact - 1; refused=false;
-    try { solve_cpu(p,options); } catch (const std::length_error&) { refused=true; }
-    if (!refused) return 2;
     options.max_bytes = exact;
     const auto result=solve_cpu(p,options);
-    if (!result.converged() || result.diagnostic.numeric_capacity_bytes != exact) return 3;
+    if (!result.converged() || result.diagnostic.numeric_capacity_bytes != exact) return 2;
   }
   const auto before=problem_host_bytes(p), old_capacity=p.fvv.capacity();
   p.fvv.reserve(old_capacity+32);

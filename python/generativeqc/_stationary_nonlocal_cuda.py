@@ -109,17 +109,20 @@ def resident_nonlocal_geometry(
         for begin in range(0, count, tile_points):
             end = min(begin + tile_points, count)
             point_pointer = resident_grid.points + 3 * begin * 8
-            ao_ids = (
-                None
+            feature_lease = (
+                grid.feature_task_device_points(
+                    point_pointer,
+                    end - begin,
+                    None,
+                    ingredients,
+                    block_layout=None,
+                )
                 if ao_maps is None
-                else ao_maps.select(grid, ao_domain, begin, end - begin)
+                else ao_maps.feature_task(
+                    grid, ao_domain, begin, end - begin, ingredients
+                )
             )
-            with grid.feature_task_device_points(
-                point_pointer,
-                end - begin,
-                ao_ids,
-                ingredients,
-            ) as task:
+            with feature_lease as task:
                 weights = state.grid.weights[begin:end]
                 device_weights = resident_grid.weights + begin * 8
                 device_raw = resident_grid.atomic_weights + begin * 8

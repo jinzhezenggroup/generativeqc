@@ -27,21 +27,6 @@ from generativeqc_compiler.xc.spec import FunctionalSpec
 
 from .ks import resolve_ks_method, scf_domain_for_method
 
-_METHODS = (
-    "lda-rks",
-    "pbe-rks",
-    "r2scan-rks",
-    "lda-uks",
-    "pbe-uks",
-    "r2scan-uks",
-    "pbe0-rks",
-    "pbe0-uks",
-    "b3lyp-rks",
-    "b3lyp-uks",
-    "wb97m-v",
-    "wb97m-v-rks",
-    "wb97m-v-uks",
-)
 _ARRAY_TOLERANCE = 1e-8  # Match the absolute canonicality cap of the #162 handoff.
 _RESIDUAL_TOLERANCE = 1e-8
 
@@ -72,8 +57,11 @@ class StationaryKsIdentity:
         if not isinstance(self.method, str) or not self.method:
             raise ValueError("stationary identity requires a nonempty method")
         expected_spin = expected_ingredients = None
-        if self.method in _METHODS:
+        try:
             method_ir, functional = resolve_ks_method(self.method)
+        except (TypeError, ValueError, NotImplementedError):
+            pass
+        else:
             expected_spin = method_ir.spin
             expected_ingredients = functional.ingredients
         if self.spin is None:

@@ -120,6 +120,13 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
         "FockOperator::LongRange",
         "correction_spec.spin == primary_spec.spin",
         "correction.screening_tolerance == primary.screening_tolerance",
+        "FockApproximation::DensityFitted",
+        "range_provider->strategy() != correction",
+        "range_provider->matches_system(provider.system())",
+        "prepared_cuda_fock_binding(*range_provider)",
+        "range_binding.device_id == primary_binding.device_id",
+        "range_binding.nbf == primary_binding.nbf",
+        "exact_primary && range_provider == nullptr",
     ):
         assert fact in helper
     assert "Wb97mv" not in helper
@@ -128,4 +135,103 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
     constructor_begin = source.index("KsPreparedCalculation(")
     constructor_end = source.index("std::size_t atom_count()", constructor_begin)
     constructor = source[constructor_begin:constructor_end]
-    assert "cuda_rsh_provider_compatible(fock_, *range_strategy_)" in constructor
+    assert (
+        "cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())"
+        in constructor
+    )
+
+
+@pytest.mark.parametrize(
+    ("selector", "expected"),
+    [
+        ("lda-rks", True),
+        ("pbe-rks", True),
+        ("lda-uks", False),
+        ("pbe-uks", False),
+        ("pbe0-rks", False),
+        ("r2scan-rks", False),
+        ("pbe-d4-rks", False),
+    ],
+)
+def test_stationary_second_order_preserves_spin_and_method_domain(
+    selector: str, expected: bool
+) -> None:
+    from generativeqc.ks import stationary_second_order_eligible
+
+    options = resolve_ks_options(selector, KsOptions(grid=GridSpec()))
+    assert stationary_second_order_eligible(options.method_ir) is expected
+
+
+def test_stationary_second_order_rejects_scaled_pbe() -> None:
+    from generativeqc.ks import stationary_second_order_eligible
+
+    graph = resolve_method(
+        MethodSpec(
+            "scaled-second-order",
+            (("GGA_X_PBE", Fraction(1, 2)), ("GGA_C_PBE", Fraction(1))),
+        ),
+        spin="unpolarized",
+    )
+    assert not stationary_second_order_eligible(graph)
+
+
+def test_cpu_stationary_force_preserves_intrinsic_d4_admission() -> None:
+    from generativeqc.ks import cpu_stationary_all_electron_force_eligible
+
+    options = resolve_ks_options("pbe-d4-rks", KsOptions(grid=GridSpec()))
+    assert cpu_stationary_all_electron_force_eligible(options.method_ir)
+
+
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_native_device_xc_selector_preserves_both_spin_flows(spin: str) -> None:
+    from types import SimpleNamespace
+
+    from generativeqc_compiler.dft.native_semilocal import (
+        device_feature_ingredients,
+        legacy_grid_xc_selector,
+    )
+    from generativeqc_compiler.xc.prepared import _native_device_xc
+    from generativeqc_compiler.xc.spec import functional
+
+    spec = functional("PBE", spin=spin)
+    assert device_feature_ingredients(spec) == ("rho", "gradient")
+    assert legacy_grid_xc_selector(spec) == 1
+    program = SimpleNamespace(
+        spec=spec,
+        contract=SimpleNamespace(request=SimpleNamespace(observable="potential")),
+    )
+    assert _native_device_xc(program, object(), object())
+    opposite = "polarized" if spin == "unpolarized" else "unpolarized"
+    with pytest.raises(ValueError, match="spin"):
+        legacy_grid_xc_selector(spec, spin=opposite)
+
+
+def test_native_device_xc_selector_falls_back_for_unsupported_graph() -> None:
+    from types import SimpleNamespace
+
+    from generativeqc_compiler.xc.prepared import _native_device_xc
+    from generativeqc_compiler.xc.spec import functional
+
+    program = SimpleNamespace(
+        spec=functional("R2SCAN"),
+        contract=SimpleNamespace(request=SimpleNamespace(observable="potential")),
+    )
+    assert not _native_device_xc(program, object(), object())
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("include_forces", [False, True])
+def test_ks_planning_rejects_unaccounted_intrinsic_post_scf_owner(
+    backend: str, include_forces: bool
+) -> None:
+    from generativeqc.resources_ks import ks_resource_request
+
+    with pytest.raises(NotImplementedError, match="post-SCF corrections"):
+        ks_resource_request(
+            [[("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]],
+            method="pbe-d4-rks",
+            backend=backend,
+            basis="sto-3g",
+            ks_options=KsOptions(grid=GridSpec()),
+            include_forces=include_forces,
+        )

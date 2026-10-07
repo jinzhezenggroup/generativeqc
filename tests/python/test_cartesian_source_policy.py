@@ -12,13 +12,22 @@ from test_coulomb_optional_allocation import ROOT, compile_cached_probe
 def policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Retain legacy joint aliases and explicit independent consumer selections."""
     source = (ROOT / "src/scf/cuda/rhf_policy.cpp").read_text()
-    begin = source.index("unsigned direct_coulomb_reachable_mode()")
-    end = source.index("bool resident_ppps_bra_requested()", begin)
+    # Extract only the two self-contained parsers. Neighbouring preparation
+    # policies may depend on runtime helpers outside this standalone probe.
+    definitions = []
+    for name in ("direct_coulomb_reachable_mode", "direct_hermite_convolution_mode"):
+        begin = source.index(f"unsigned {name}()")
+        opening = source.index("{", begin)
+        depth, end = 1, opening + 1
+        while depth:
+            depth += (source[end] == "{") - (source[end] == "}")
+            end += 1
+        definitions.append(source[begin:end])
     folder = tmp_path_factory.mktemp("cartesian-source-policy")
     cpp, binary = folder / "probe.cpp", folder / "probe"
     cpp.write_text(
         "#include <cstdlib>\n#include <cstring>\n#include <iostream>\n"
-        + source[begin:end]
+        + "\n".join(definitions)
         + "int main() { std::cout << direct_coulomb_reachable_mode() << ' ' "
         "<< direct_hermite_convolution_mode(); }\n"
     )

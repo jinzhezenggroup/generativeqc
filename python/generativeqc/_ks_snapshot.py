@@ -8,7 +8,7 @@ snapshots. Export is explicit and may transfer the final CUDA matrices.
 import ctypes as ct
 import threading
 import typing
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from hashlib import sha256
 from types import MappingProxyType
 
@@ -28,8 +28,10 @@ from . import _native
 from .batch import PreparedBatch
 from .ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
+    electronic_method_ir,
     native_xc_functional_code,
     scf_domain_for_method,
+    uses_molecular_nonlocal_domain,
 )
 
 _SCF_DOMAIN_VERSION_BY_DOMAIN = {
@@ -615,7 +617,11 @@ class NativeKsSnapshot:
         )
         work = dict(zip(names, map(int, usage), strict=True))
         work["density_fitted_provider"] = 1
-        work["density_fitted_one_electron_host_contraction"] = 1
+        resident_one_electron = work["one_electron_d2h_bytes"] != 0
+        work["density_fitted_one_electron_resident_cuda"] = int(resident_one_electron)
+        work["density_fitted_one_electron_host_contraction"] = int(
+            not resident_one_electron
+        )
         work["density_fitted_response_resources_included"] = 0
         return immutable(output), MappingProxyType(work)
 
@@ -625,8 +631,15 @@ class NativeKsSnapshot:
         maximum_bytes: int,
         *,
         range_exchange: bool,
+        combined_two_electron: bool = False,
     ) -> typing.Any:
-        """Execute all prepared stationary integral sources without host D/W upload."""
+        """Execute prepared stationary sources without host density uploads.
+
+        Full-range combined output has three channels: one-electron, overlap
+        Pulay, and total two-electron derivatives. The ordinary v1 export keeps
+        independent J/K channels. Missing optional bridges return ``None`` so
+        the caller can select a complete bounded owner supported by that library.
+        """
         if self.backend != "cuda":
             return None
         if type(atom_count) is not int or atom_count < 1:
@@ -635,17 +648,28 @@ class NativeKsSnapshot:
             raise ValueError("stationary derivative budget must be positive")
         if type(range_exchange) is not bool:
             raise TypeError("range_exchange must be bool")
+        if type(combined_two_electron) is not bool:
+            raise TypeError("combined_two_electron must be bool")
+        if combined_two_electron and range_exchange:
+            raise ValueError(
+                "combined two-electron derivative requires full-range sources"
+            )
         self.check_current()
         evaluate = getattr(
             self._library,
-            "generativeqc_ks_snapshot_cuda_integral_gradient_v1",
+            "generativeqc_ks_snapshot_cuda_integral_gradient_v2"
+            if combined_two_electron
+            else "generativeqc_ks_snapshot_cuda_integral_gradient_v1",
             None,
         )
         if evaluate is None:
             return None
+        # Assign the complete signature once: mutating an assigned argtypes
+        # list leaves ctypes' argument converters bound to the old layout.
         evaluate.argtypes = [
             ct.c_void_p,
             ct.c_void_p,
+            *((ct.c_int,) if combined_two_electron else ()),
             ct.POINTER(ct.c_double),
             ct.c_size_t,
             ct.c_size_t,
@@ -653,12 +677,13 @@ class NativeKsSnapshot:
             ct.c_size_t,
         ]
         evaluate.restype = ct.c_int
-        source_count = 5 if range_exchange else 4
+        source_count = 3 if combined_two_electron else 5 if range_exchange else 4
         output = np.empty((source_count, atom_count, 3), dtype=np.float64)
         usage = np.zeros(9, dtype=np.uint64)
         status = evaluate(
             self._batch._batch,
             self._handle,
+            *((1,) if combined_two_electron else ()),
             output.ctypes.data_as(ct.POINTER(ct.c_double)),
             output.size,
             maximum_bytes,
@@ -826,32 +851,15 @@ class NativeKsSnapshot:
             or (options.method_ir.spin == "polarized") != (spins == 2)
         ):
             raise ValueError("native stationary composition mismatch")
-        full_method_ir = options.method_ir
-        method = self._batch._calculator._method_name
-        if method == "pbe-d4-rks":
-            from generativeqc_compiler.method import DispersionCorrectionPrimitive
-
-            electronic_primitives = tuple(
-                primitive
-                for primitive in full_method_ir.primitives
-                if not isinstance(primitive, DispersionCorrectionPrimitive)
-            )
-            if len(electronic_primitives) != 1:
-                raise ValueError(
-                    "PBE-D4 stationary projection requires one electronic primitive"
-                )
-            self.method_ir = replace(
-                full_method_ir,
-                identifier=f"{full_method_ir.identifier}/electronic",
-                primitives=electronic_primitives,
-            )
-            method = "pbe-rks"
-        else:
-            self.method_ir = full_method_ir
+        self.method_ir = electronic_method_ir(options.method_ir)
         self.functional = options.functional
         self.model_terms = ()
         self.nonlocal_density_policy = None
-        if functional == 4:
+        if (
+            options.execution_plan.nonlocal_correlation is not None
+            and options.has_range_exchange
+            and uses_molecular_nonlocal_domain(options.method_ir)
+        ):
             from generativeqc_compiler.dft.nonlocal_policy import (
                 MOLECULAR_VV10_DENSITY_POLICY,
             )
@@ -859,10 +867,10 @@ class NativeKsSnapshot:
             from .ks import ks_range_exchange_parameters
 
             try:
-                read_model = self._library.generativeqc_ks_snapshot_wb97mv_model_v1
+                read_model = self._library.generativeqc_ks_snapshot_nonlocal_model_v1
             except AttributeError as error:
                 raise NotImplementedError(
-                    "native library lacks complete WB97M-V snapshot provenance"
+                    "native library lacks complete nonlocal KS snapshot provenance"
                 ) from error
             read_model.argtypes = [
                 ct.c_void_p,
@@ -877,7 +885,7 @@ class NativeKsSnapshot:
             )
             nlc = options.execution_plan.nonlocal_correlation
             if nlc is None:
-                raise ValueError("WB97M-V snapshot lost its nonlocal primitive")
+                raise ValueError("nonlocal KS snapshot lost its nonlocal primitive")
             expected = (
                 *ks_range_exchange_parameters(self.method_ir),
                 1.0,
@@ -889,7 +897,7 @@ class NativeKsSnapshot:
             )
             if tuple(proof) != expected:
                 raise ValueError(
-                    "WB97M-V snapshot complete native model disagrees with MethodIR"
+                    "nonlocal KS snapshot complete native model disagrees with MethodIR"
                 )
             object.__setattr__(self, "model_terms", tuple(proof))
             object.__setattr__(
@@ -987,6 +995,7 @@ class NativeKsSnapshot:
                 f"native-{self.backend}-{coulomb_approximation}-j-"
                 f"{exchange_approximation}-k-fp64"
             )
+        method = self._batch._calculator._method_name
         provider_payload = {
             "provider": provider_name,
             "owner": owner,

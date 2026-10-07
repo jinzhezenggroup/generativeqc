@@ -39,11 +39,15 @@ from generativeqc_compiler.cc.triples import _LABELS, VP
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.tensor import describe_precision
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
+from generativeqc_compiler.tensor.indexed_cuda_reduction import (
+    emit_indexed_reduction_cuda,
+    plan_indexed_reduction,
+)
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
-from tools.generate_rccsd_native import _cuda_program, _required_function
+from tools.generate_rccsd_native import _cuda_program, _dim, _required_function, _size
 
 if typing.TYPE_CHECKING:
     from collections.abc import Mapping
@@ -286,7 +290,8 @@ def _response_scalars() -> dict[str, Program]:
 
 def response_scalar_header() -> str:
     lines = []
-    for name, program in _response_scalars().items():
+    scalars = _response_scalars()
+    for name, program in scalars.items():
         lines.append(
             emit_scalar_cpp(
                 program, function_name="pullback_" + name, ordered_native_sums=True
@@ -307,12 +312,66 @@ def response_scalar_header() -> str:
         ).replace("inline bool ", "GQC_DF_TRIPLES_HD inline bool ")
     )
     program = gap_vjp(3)
+    without_gap = tuple(name for name in scalars if name != "denominator")
+    _, parallel_header, _ = _parallel_gap_response()
     lines += [
+        f"inline constexpr std::size_t response_scalar_outputs_with_gap={len(scalars)};",
+        f"inline constexpr std::size_t response_scalar_outputs_without_gap={len(without_gap)};",
+        f'inline constexpr const char* response_without_gap_identity="{energy_scalar_vjp(without_gap).logical_hash}";',
         "struct GapOutputs { const double *bar_eps_i{},*bar_eps_j{},*bar_eps_k{},*bar_eps_v{}; };",
-        _required_function(program, "gap_response_arena_elements"),
+        _required_function(program, "gap_response_serial_arena_elements"),
         f"inline constexpr std::size_t gap_response_operations={sum(n.op != 'input' for n in program.live_nodes)};",
+        parallel_header,
+        "inline bool gap_response_parallel_selected(std::size_t v,bool enabled){return enabled && v>=4;}",
+        "inline std::size_t gap_response_arena_elements(std::size_t o,std::size_t v,bool parallel=false){",
+        "return gap_response_parallel_selected(v,parallel)?gap_response_parallel_arena_elements(o,v):gap_response_serial_arena_elements(o,v);}",
+        "inline std::size_t gap_response_kernel_count(std::size_t o,std::size_t v,bool parallel){",
+        "return gap_response_parallel_selected(v,parallel)?gap_response_parallel_kernel_count(o,v):gap_response_operations;}",
     ]
+    output_roots = set(program.outputs.values())
+    original_counts = {
+        "materialized_elements": [
+            _size(node.spec)
+            for node in program.live_nodes
+            if node.op != "input" and node not in output_roots
+        ],
+        "value_reads": [
+            _size(child.spec) for node in program.live_nodes for child in node.inputs
+        ],
+        "value_writes": [
+            _size(node.spec) for node in program.live_nodes if node.op != "input"
+        ],
+        "reduction_summands": [
+            _size(node.inputs[0].spec)
+            for node in program.live_nodes
+            if node.op == "reduce"
+        ],
+    }
+    for name, terms in original_counts.items():
+        expression = "0"
+        for term in terms:
+            expression = f"checked_add({expression},{term})"
+        lines.append(
+            f"inline std::size_t gap_response_serial_{name}(std::size_t o,std::size_t v){{return {expression};}}"
+        )
+        lines.append(
+            f"inline std::size_t gap_response_{name}(std::size_t o,std::size_t v,bool parallel){{"
+            f"return gap_response_parallel_selected(v,parallel)?gap_response_parallel_{name}(o,v):gap_response_serial_{name}(o,v);}}"
+        )
     return "\n".join(lines)
+
+
+def _parallel_gap_response() -> tuple[str, str, str]:
+    """Stream the audited gap AD graph; scheduling introduces no CC equation."""
+    return emit_indexed_reduction_cuda(
+        plan_indexed_reduction(gap_vjp(3)),
+        "gap_response_parallel",
+        dimension=_dim,
+        parameters=("o", "v"),
+        input_bindings={"bar_gap": "state.bar_gap"},
+        state_type="GapCudaState",
+        output_type="GapOutputs",
+    )
 
 
 def _response_point(program: Program, name: str, result: str) -> list[str]:
@@ -424,6 +483,7 @@ def response_cuda_source() -> str:
             "generativeqc_tensor::cuda_check(cudaGetLastError()); }",
         ]
     program = gap_vjp(3)
+    parallel_source, _, _ = _parallel_gap_response()
     lines += [
         _cuda_program(
             program,
@@ -434,7 +494,9 @@ def response_cuda_source() -> str:
             output_fields=tuple(program.outputs),
             reset_error=False,
         ),
-        "GapOutputs gap_response_cuda(GapCudaState& s){return run_gap_response(s);}",
+        parallel_source,
+        "GapOutputs gap_response_cuda(GapCudaState& s){",
+        "return gap_response_parallel_selected(s.v,s.parallel_reduction)?run_gap_response_parallel(s):run_gap_response(s);}",
     ]
     return "\n".join(lines)
 
@@ -845,6 +907,7 @@ def header() -> str:
     lines = [
         "// Generated from occupied_triples TensorIR; do not edit.",
         "#pragma once",
+        "#include <algorithm>",
         "#include <cstddef>",
         "#include <cmath>",
         "#include <initializer_list>",
@@ -961,7 +1024,7 @@ void response_gap_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,s
                      double degeneracy,double threshold,const Inputs& in,const double* moments,
                      unsigned blocks,double* output,int* error,cudaStream_t stream);
 struct GapCudaState { std::size_t o{},v{}; const double* bar_gap{}; double* response_arena{};
-                      int* error{}; cudaStream_t stream{}; };
+                      int* error{}; cudaStream_t stream{}; bool parallel_reduction{}; };
 GapOutputs gap_response_cuda(GapCudaState& state);
 void resolvent_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
                     double threshold,const Inputs& in,const double* moments,unsigned blocks,

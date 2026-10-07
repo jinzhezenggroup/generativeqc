@@ -56,7 +56,70 @@ and equal-radius Becke partition as the reference. Element radii scale radial
 points and radial Jacobians; they do not add a heteronuclear partition
 correction. Pruning, screening, rules and units retain the version-1 contract.
 Changing the grid changes the discrete energy. Changing `tile_points` changes
-the schedule and capacity, with only FP64 reduction-order differences expected.
+the schedule, capacity and FP64 reduction order. With local-AO maps, larger
+block unions can also admit additional AO tail work; complete numerical gates
+remain necessary even though the grid and cutoff are unchanged.
+
+## SCF and force tile policies
+
+`KsOptions.tile_points` configures SCF AO/grid/XC panels. The ordinary public
+CUDA analytic-force executor has a separate fixed 256-point policy; composite
+forces instead use their own budget-aware planner. Increasing the SCF tile does
+not request a larger Becke force workspace.
+
+For an independently qualified larger-tile workload, request the size explicitly:
+
+```python
+options = KsOptions(
+    grid=GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32),
+    tile_points=512,
+)
+```
+
+Larger tiles reduce submission/map counts but can include more local AO
+summands. They are not universally faster, and map reservation bytes are not
+complete endpoint peak memory. The default remains 256: there is no implicit
+512-point promotion or automatic replacement of an explicit tile request.
+Resource budgets and the existing dense/local-AO admission remain authoritative.
+Use a new prepared owner when changing the tile, and inspect the actual
+`ks_diagnostic.tile_points` rather than assuming the requested route ran.
+
+See [complete tile qualification](../maintainer/pbe0_xc_tile_qualification.md)
+for paired E+F validation and the limits of the retained configuration evidence.
+
+## Prepared identity and ABI
+
+### Experimental incremental Direct-J/K and resource budgets
+
+The benchmark-only `GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=1` (or `on`)
+selector is not supported by public KS resource planning. The current inventory
+does not account for its additional anchor/delta storage and final-closure
+history. `estimate_ks_resources` and `Calculator.estimate_resources` return an
+unsupported plan; `require_feasible()`, budgeted execution, and preparation with
+an ordinary precomputed plan reject it before native preparation. The legacy
+`GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK` selector has the same planning limit.
+Both switches must be unset, `0`, or `off` for ordinary resource planning;
+setting the generic switch to `off` does not override an enabled legacy switch.
+Other spellings are invalid, matching native validation.
+
+Explicit experimental execution without a `resource_budget` or `resource_plan`
+remains available under the native strict-FP64 exact-direct CUDA eligibility
+checks. It has no whole-calculation capacity guarantee. CPU, mixed-precision,
+and density-fitted execution remain excluded from incremental mode, and the
+legacy selector retains its PBE0 RKS restriction. No default or numerical/
+performance qualification changes with this planning guard.
+
+Incremental solves return to full-density J/K builds once the density-change and
+physical-residual gates are satisfied, even if the energy-change gate is not yet
+satisfied. This full-density energy refinement keeps the original DIIS history
+and convergence tolerances; it prevents differing full/ΔD screening omissions
+from blocking the energy gate indefinitely. Strict full-density physical
+finalization remains mandatory. Energy convergence requires two consecutive
+full-density builds. For ordinary RKS, the qualifying full-density build is
+already the final physical audit; UKS and ECP retain their separate corrective
+closure. A fresh solve resets this refinement phase.
+
+### Model binding
 
 The complete options are included in resource identity and Python prepared
 model identity. Resource estimates use the actual grid dimensions and tile,

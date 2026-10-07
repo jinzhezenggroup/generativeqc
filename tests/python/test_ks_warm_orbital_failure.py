@@ -1,10 +1,15 @@
 """A failed KS proposal cannot keep an intermediate orbital frame eligible."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,10 +26,9 @@ def _method(source: str, signature: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def orbital_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
+def orbital_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     methods = "\n".join(
         _method(source, signature)
@@ -70,6 +74,7 @@ struct Owner {
   bool warm_energy_baseline = false, final_state_ready = false;
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
+  bool pending_incremental_delta = true;
   double warm_energy = std::numeric_limits<double>::infinity();
   std::size_t elements = 8;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
@@ -160,8 +165,10 @@ int main(int argc, char** argv) {
     fail_copy = 0;
     owner.enqueue();
     assert(owner.finish());
+    assert(!owner.pending_incremental_delta);
     assert(owner.warm_orbitals_ready && owner.movement.warm_orbital_frames_retained == 1);
   } else if (scenario == "retry") {
+    assert(owner.pending_incremental_delta);
     assert(owner.warm_orbitals_ready == initially_ready);
     assert(copies == 0 && owner.density[0] == 10.0);
   } else if (scenario == "converged") {
@@ -171,6 +178,7 @@ int main(int argc, char** argv) {
     assert(owner.output.precision_work.returned_solve_epoch == owner.solve_epoch);
     assert(owner.output.precision_work.returned_state_generation == owner.final_generation);
   } else {
+    assert(!owner.pending_incremental_delta);
     assert(owner.warm_orbitals_ready && owner.movement.warm_orbital_frames_retained == 1);
     for (std::size_t i = 0; i < owner.elements; ++i)
       assert(owner.density[i] == 20.0 && owner.warm_orbitals[i] == 20.0);
@@ -187,12 +195,11 @@ int main(int argc, char** argv) {
     directory = tmp_path_factory.mktemp("ks-orbital-failure")
     cpp, executable = directory / "probe.cpp", directory / "probe"
     cpp.write_text(harness)
-    subprocess.run(
-        [compiler, "-std=c++17", "-Wall", "-Werror", str(cpp), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=("-std=c++17", "-Wall", "-Werror"),
+        compile_timeout=30,
     )
     return executable
 

@@ -29,6 +29,10 @@ std::uint64_t enabled_fock_shell_class_mask() noexcept { return 0; }
 // query defined so the generic CUDA RHF caller can load and select its fallback.
 std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept { return 0; }
 
+std::uint64_t enabled_rys_fock_shell_class_mask() noexcept { return 0; }
+
+std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept { return 0; }
+
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept { return 0; }
 
 cudaError_t launch_shell_class(unsigned, cudaStream_t, bool, unsigned, const void*,
@@ -65,6 +69,24 @@ cudaError_t launch_shell_class_streaming_fock(unsigned, cudaStream_t, bool, unsi
                                               const void*, double, bool, double, const double*,
                                               const double*, double*, std::uint32_t*,
                                               unsigned long long*, unsigned long long*) noexcept {
+  return cudaErrorNotSupported;
+}
+
+cudaError_t launch_shell_class_rys_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
+                                                  const void*, const std::int64_t*, const void*,
+                                                  const double*, const void*, double, bool, double,
+                                                  const double*, const double*, double*,
+                                                  std::uint32_t*, unsigned long long*,
+                                                  unsigned long long*) noexcept {
+  return cudaErrorNotSupported;
+}
+
+cudaError_t launch_shell_class_k_block_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
+                                                      const void*, const std::int64_t*, const void*,
+                                                      const double*, const void*, double, bool,
+                                                      double, const double*, const double*, double*,
+                                                      std::uint32_t*, unsigned long long*,
+                                                      unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 

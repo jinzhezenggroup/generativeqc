@@ -1,0 +1,197 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "The termination repair retains all original tolerances and accepts all five repaired independent cold E/F endpoints. Paired incremental cold medians are essentially equal; no performance or default promotion. Failed and interrupted alternatives remain explicitly retained.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 7663,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "fade9d7c846522e7d40120486e146c683cda26194eaf555b69fc9f084b0efb46"
+    },
+    {
+      "bytes": 578,
+      "path": "check-source.py.txt",
+      "role": "reproduction",
+      "sha256": "260bd0e7f30ee9217da84a9972330ae49eecf4e1cef7e9a961c052603a537555"
+    },
+    {
+      "bytes": 5856,
+      "path": "cold.py.txt",
+      "role": "reproduction",
+      "sha256": "2a72436a9a96299184303251bece2bfba0e2e00174fe4f781fcfb497d6aeed44"
+    },
+    {
+      "bytes": 12844,
+      "path": "fixed-off-1.json.gz",
+      "role": "samples",
+      "sha256": "076554291488ea28496775ea970d9eb174c476dd3d331c72bb189a876f090cda"
+    },
+    {
+      "bytes": 2992,
+      "path": "fixed-off-2.json.gz",
+      "role": "samples",
+      "sha256": "43ae3987deec31306c9ff2f3e8f5308a2b69ab12d73296267b0ce74d2b559c4d"
+    },
+    {
+      "bytes": 13385,
+      "path": "fixed-on-0.json.gz",
+      "role": "samples",
+      "sha256": "e72c33c0d5a30f15df127cdd57769d59b05ad465f01e9a35e3f71efd02423ac4"
+    },
+    {
+      "bytes": 6317,
+      "path": "fixed-on-1.json.gz",
+      "role": "samples",
+      "sha256": "2f37ae02f17bafb65962a378645b7bc6f1aece962c075b0b983e7ae6bf373bba"
+    },
+    {
+      "bytes": 13433,
+      "path": "fixed-on-2.json.gz",
+      "role": "samples",
+      "sha256": "b2928e066b9663b2c45eeb4874d3728478d1389ab8972ed1d9265bc287fad9d4"
+    },
+    {
+      "bytes": 12788,
+      "path": "master-off-1.json.gz",
+      "role": "samples",
+      "sha256": "b0797fde0b22e7b2ddf49f7238c29e3462e6149ff0f0b16c11355e8093b05cc1"
+    },
+    {
+      "bytes": 12743,
+      "path": "master-off-2.json.gz",
+      "role": "samples",
+      "sha256": "6efdd53591775939ad19912ec22eae495bd36c90c7db8dce07a66eb23605a207"
+    },
+    {
+      "bytes": 12992,
+      "path": "master-off-3.json.gz",
+      "role": "samples",
+      "sha256": "e38b763d471a0412594a85e540dce61edc7766bd0056669c2a5370db0b8ef7f5"
+    },
+    {
+      "bytes": 2991,
+      "path": "merged-gate4-1.json.gz",
+      "role": "samples",
+      "sha256": "91221790c8bb7d40dd291fb2cf2cc296556becc84eeea1e8b9c602aa5e243faf"
+    },
+    {
+      "bytes": 12917,
+      "path": "merged-off-1.json.gz",
+      "role": "samples",
+      "sha256": "aa48fea3478e63adcdce0c2a69647138bcbcfe958ec345aee3b95f2c381e0dd4"
+    },
+    {
+      "bytes": 12630,
+      "path": "merged-off-2.json.gz",
+      "role": "samples",
+      "sha256": "9b0025c8fb16e0831ea967a3a1b8630e6dc705828b3ea0bd4f791658e7f663aa"
+    },
+    {
+      "bytes": 15715,
+      "path": "merged-on-1.json.gz",
+      "role": "samples",
+      "sha256": "d8c8c170493561eec0e456b0ecf3afde0c212cd6b9d1139fa6afa68a96233806"
+    },
+    {
+      "bytes": 15657,
+      "path": "merged-on-2.json.gz",
+      "role": "samples",
+      "sha256": "f88bdad7167f3553f16a116a015ffd798ad8af400fcc8c61e12034d334f43d5a"
+    },
+    {
+      "bytes": 54079,
+      "path": "merged-source.patch",
+      "role": "source-patch",
+      "sha256": "e5559dee5237f3281e881a812082d9d62d62e3cf3b15dc0841110537b5d12735"
+    },
+    {
+      "bytes": 3161,
+      "path": "rejected-first-repair.patch",
+      "role": "source-patch",
+      "sha256": "4f9c2a91bf986a57172d88b0690ce5c3b3eef60cbd031f67ce978615678c8ff5"
+    },
+    {
+      "bytes": 12847,
+      "path": "repaired-off-1.json.gz",
+      "role": "samples",
+      "sha256": "e7d773c0acff6a76cd1faccedf8c7c6f1944a445b8fcf703432e450bc4331652"
+    },
+    {
+      "bytes": 12729,
+      "path": "repaired-off-2.json.gz",
+      "role": "samples",
+      "sha256": "76ac15c992daf984cc5385a3da1342d9f32be59d52752a58edcd98023827f324"
+    },
+    {
+      "bytes": 13125,
+      "path": "repaired-on-0.json.gz",
+      "role": "samples",
+      "sha256": "25fd7ea066ba6e8c2cf08ef6e34fd07ed71e367c0d8e0ff0a58a9095f96cdb12"
+    },
+    {
+      "bytes": 13247,
+      "path": "repaired-on-1.json.gz",
+      "role": "samples",
+      "sha256": "49c24fa4d7fc298dca385dfed17c44ae72ff58e63234c741db03bdc8633a07b8"
+    },
+    {
+      "bytes": 12898,
+      "path": "repaired-on-2.json.gz",
+      "role": "samples",
+      "sha256": "c3514a2251a09d1af4a8d25aae0414943bbfa70bc7833c8533cf647a62f9e12f"
+    },
+    {
+      "bytes": 82902,
+      "path": "repaired-source.patch",
+      "role": "source-patch",
+      "sha256": "5877fa30ff10e69f60311caeec9552d85db0a8955eec5fa3d86eaa240d0e0a1b"
+    },
+    {
+      "bytes": 2234,
+      "path": "run-repaired-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "d2e5b18dba165f96287bfac0a2696685ad5cfb955043f2c38b7e860b3b4e9003"
+    },
+    {
+      "bytes": 31141,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "53869b8c26a3e878055d7bc6428e0f6cb0824757df24287591c90c0e109a47d4"
+    },
+    {
+      "bytes": 1046,
+      "path": "test-results.json",
+      "role": "summary",
+      "sha256": "96789d9c6c4ee76865cfd7301cb74bffec54503676f9ec9937b464e63c39c173"
+    },
+    {
+      "bytes": 53877,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "4715b9b127aba27cf8be530536021d7316dbeabb31209bac998bdd4be6f2707f"
+    },
+    {
+      "bytes": 9799,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "b17b6e912291262c9f5a5eaf03ad1ea1fe57ca72f772b0020d85d510eea7bd55"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-incremental-refinement-20261007/verify.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "reconstruction_base": "e6f1a6b0c16b2763ee65e124188fdfbea37a68a5",
+    "reconstruction_scope": "Frozen master plus PR #2044 composition and the repaired CUDA KS controller; full measured library/compiler/Python inputs and focused regression tests are in repaired-source.patch. Canonical identity verified.",
+    "revision": "e6f1a6b0c16b2763ee65e124188fdfbea37a68a5"
+  }
+}

@@ -48,27 +48,28 @@ __global__ void ragged_kernel(const std::int32_t* z, const double* xyz, const do
                                          energy + 2 * row, grad + 3 * b, dq + b);
 }
 struct GpuEval {
-  Buffer<data::D4ElementData> elements{data::kElementCount};
-  Buffer<data::D4ReferenceData> references{data::kReferenceCount};
-  Buffer<double> c6{data::kReferenceC6.size()};
+  Buffer<data::D4ElementData> elements{kD4TableElementCount};
+  Buffer<data::D4ReferenceData> references{kD4TableReferenceCount};
+  Buffer<double> c6{kD4PackedReferenceC6Count};
   Buffer<std::int32_t> z{kD4MaximumAtoms};
   Buffer<double> xyz{3 * kD4MaximumAtoms}, q{kD4MaximumAtoms};
   Buffer<double> w{d4_workspace_elements(kD4MaximumAtoms)};
   Buffer<double> energy{8}, grad{3 * kD4MaximumAtoms}, dq{kD4MaximumAtoms};
   Buffer<D4Status> status{4};
   GpuEval() {
-    elements.upload(data::kElements.data(), elements.count);
-    references.upload(data::kReferences.data(), references.count);
-    c6.upload(data::kReferenceC6.data(), c6.count);
+    const auto host_tables = gfn2_d4_host_tables();
+    elements.upload(host_tables.elements, elements.count);
+    references.upload(host_tables.references, references.count);
+    c6.upload(host_tables.reference_c6, c6.count);
   }
   D4Tables tables() {
     return {D4ReferenceModel::gfn2,
             elements.ptr,
             references.ptr,
             c6.ptr,
-            data::kElementCount,
-            data::kReferenceCount,
-            data::kReferenceC6.size(),
+            kD4TableElementCount,
+            kD4TableReferenceCount,
+            kD4PackedReferenceC6Count,
             3.0,
             2.0};
   }

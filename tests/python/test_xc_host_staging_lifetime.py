@@ -1,22 +1,28 @@
 """Deferred H2D copies must borrow owner storage, not a returned stack frame."""
 
-import shutil
 import subprocess
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_host_xc_staging_keeps_copy_sources_alive(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def _definition(source: str, signature: str) -> str:
+    start = source.index(signature)
+    brace = source.index("{", start)
+    depth, end = 1, brace + 1
+    while depth:
+        depth += (source[end] == "{") - (source[end] == "}")
+        end += 1
+    return source[start:end]
+
+
+def test_host_xc_staging_keeps_copy_sources_alive(
+    tmp_path: Path, native_cxx: object
+) -> None:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    body = source.split("  CudaXcView stage_xc(", 1)[1].split(
-        "\n  void enqueue_legacy()", 1
-    )[0]
+    # Use the method's own closing brace so adjacent controller helpers cannot
+    # become part of this host-XC lifetime probe.
+    body = _definition(source, "  CudaXcView stage_xc(")
     # This probe executes the host route. Keep the extracted host body tied to
     # production while excluding the independent resident VV10 enqueue path.
     body = (
@@ -34,10 +40,8 @@ def test_host_xc_staging_keeps_copy_sources_alive(tmp_path: Path) -> None:
 #include <iostream>
 #include "dft/semilocal_family.hpp"
 using generativeqc::dft::SemilocalFamily;
+using generativeqc::dft::semilocal_family_from_code;
 int selected_route = -1;
-constexpr bool is_semilocal_family(std::uint32_t functional, SemilocalFamily family) noexcept {
- return functional == static_cast<std::uint32_t>(family);
-}
 namespace scf { struct ScfOptions {
  enum class XcExecutionSchedule { DeviceFused, HostUnfused };
  XcExecutionSchedule xc_execution_schedule=XcExecutionSchedule::HostUnfused;
@@ -54,11 +58,13 @@ struct SpinXcIntegral { std::array<std::vector<double>,2> potential{
 template<class... T> XcIntegral integrate_lda_xc_pw_rks(T&&...) { selected_route=0; return {}; }
 template<class... T> XcIntegral integrate_pbe_rks_with_tail(T&&...) { selected_route=1; return {}; }
 template<class... T> XcIntegral integrate_r2scan_rks(T&&...) { selected_route=2; return {}; }
-template<class... T> SpinXcIntegral integrate_lda_xc_pw_uks(T&&...) { selected_route=3; return {}; }
-template<class... T> SpinXcIntegral integrate_pbe_uks(T&&...) { selected_route=4; return {}; }
-template<class... T> SpinXcIntegral integrate_r2scan_uks(T&&...) { selected_route=5; return {}; }
-template<class... T> XcIntegral integrate_wb97mv_rks(T&&...) { selected_route=6; return {}; }
-template<class... T> SpinXcIntegral integrate_wb97mv_uks(T&&...) { selected_route=7; return {}; }
+template<class... T> SpinXcIntegral integrate_lda_xc_pw_uks(T&&...) { selected_route=5; return {}; }
+template<class... T> SpinXcIntegral integrate_pbe_uks(T&&...) { selected_route=6; return {}; }
+template<class... T> SpinXcIntegral integrate_r2scan_uks(T&&...) { selected_route=7; return {}; }
+template<class... T> XcIntegral integrate_wb97mv_rks(T&&...) { selected_route=4; return {}; }
+template<class... T> SpinXcIntegral integrate_wb97mv_uks(T&&...) { selected_route=9; return {}; }
+template<class... T> XcIntegral integrate_b3lyp_rks(T&&...) { selected_route=3; return {}; }
+template<class... T> SpinXcIntegral integrate_b3lyp_uks(T&&...) { selected_route=8; return {}; }
 namespace nlc {
 XcIntegral integrate_vv10_rks(int,int,std::vector<double>&,int&,std::size_t,
                               std::vector<int>,int) { return {}; }
@@ -104,7 +110,7 @@ struct Owner {
  CudaXcView stage_xc(STAGE_BODY
 };
 int main() {
- for(unsigned spins:{1U,2U}) for(unsigned functional:{0U,1U,2U,4U}) {
+ for(unsigned spins:{1U,2U}) for(unsigned functional:{0U,1U,2U,3U,4U}) {
   auto owner=std::make_unique<Owner>();
   owner->spins=spins; owner->elements=4*spins; owner->functional=functional;
   selected_route=-1;
@@ -114,8 +120,7 @@ int main() {
    owner->host_xc_potential.size()*sizeof(double)});
   try {
    const auto result=owner->stage_xc(7);
-   const auto expected_route=functional==4U ? 6+static_cast<int>(spins-1)
-                                             : static_cast<int>(functional+3*(spins-1));
+   const auto expected_route=static_cast<int>(functional+5*(spins-1));
    if(selected_route!=expected_route)
     throw std::runtime_error("wrong semilocal route");
    for(auto copy:queued) std::memcpy(copy.destination,copy.source,copy.bytes);
@@ -131,21 +136,11 @@ int main() {
     harness = harness.replace("STAGE_BODY", body)
     cpp, binary = tmp_path / "staging.cpp", tmp_path / "staging"
     cpp.write_text(harness)
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-I",
-            str(ROOT / "src"),
-            str(cpp),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=("-std=c++20", "-O2", f"-I{ROOT / 'src'}"),
+        compile_timeout=30,
     )
     result = subprocess.run(
         [str(binary)], check=False, capture_output=True, text=True, timeout=10

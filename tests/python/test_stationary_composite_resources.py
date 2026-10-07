@@ -52,7 +52,7 @@ def _plan(
 def test_automatic_composite_schedule_prefers_more_concurrent_points() -> None:
     selected = _plan()
     assert selected.grid.tile_points == selected.sources.geometry_lanes == 1024
-    assert selected.sources.becke_threads_per_point == 32
+    assert selected.sources.becke_threads_per_point == 128
     assert selected.device_bound <= 1 << 30
     assert selected.host_bound <= 2 << 30
 
@@ -83,6 +83,35 @@ def test_small_grid_and_target_shared_memory_keep_bounded_fallbacks() -> None:
 def test_full_grid_nonlocal_storage_is_not_shrunk_to_fit_a_tile() -> None:
     with pytest.raises(ValueError, match="no admitted"):
         _plan(nonlocal_bytes=2 << 30)
+
+
+@pytest.mark.parametrize("spins", [1, 2])
+def test_primitive_reservation_charges_both_composite_owners(spins: int) -> None:
+    """Opt-in cannot displace full-grid nonlocal storage or point concurrency."""
+    basis = SimpleNamespace(
+        **{**vars(BASIS), "natom": 48, "nao": 384, "nprimitive": 352}
+    )
+    baseline = _plan(basis, tile_points=256, spins=spins)
+    primitive = _plan(basis, tile_points=256, spins=spins, becke_primitive=True)
+    assert baseline.sources.becke_primitive is False
+    assert primitive.sources.becke_primitive is True
+    assert primitive.sources.phased_becke_bytes > 0
+    assert primitive.grid == baseline.grid
+    assert primitive.sources.geometry_lanes == baseline.sources.geometry_lanes
+    assert (
+        primitive.device_bound - baseline.device_bound
+        == 2 * primitive.sources.phased_becke_bytes
+    )
+    bounded = _plan(
+        basis,
+        tile_points=256,
+        spins=spins,
+        becke_primitive=True,
+        max_device_bytes=primitive.device_bound - 1,
+    )
+    assert bounded.sources.becke_primitive is False
+    assert bounded.sources.phased_becke_bytes == 0
+    assert bounded.sources.geometry_lanes == baseline.sources.geometry_lanes
 
 
 def test_full_tzvpd_96_requires_explicit_complete_capacity() -> None:

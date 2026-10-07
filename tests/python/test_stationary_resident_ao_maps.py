@@ -56,18 +56,41 @@ def bindings(monkeypatch: pytest.MonkeyPatch) -> typing.Iterator[typing.Any]:
 
     class Cache:
         def __init__(
-            self, grid: typing.Any, domain: _Domain, *, cutoff: float, budget_bytes: int
+            self,
+            grid: typing.Any,
+            domain: _Domain,
+            *,
+            cutoff: float,
+            budget_bytes: int,
+            producer: str = "sampled-jets",
         ) -> None:
             self.grid, self.domain = grid, domain
             self.cutoff, self.budget_bytes = cutoff, budget_bytes
+            self.producer = producer
             self.resets = 0
 
         def reset_work(self) -> None:
             self.resets += 1
 
+    class NativeCache(Cache):
+        """Mirror the native owner's occupancy input without allocating a GPU map."""
+
+        def __init__(
+            self,
+            grid: typing.Any,
+            domain: _Domain,
+            *,
+            cutoff: float,
+            budget_bytes: int,
+            max_active_fraction: float,
+        ) -> None:
+            super().__init__(grid, domain, cutoff=cutoff, budget_bytes=budget_bytes)
+            self.max_active_fraction = max_active_fraction
+
     module = ModuleType("generativeqc._resident_ao_maps")
     module.ResidentAoMapDomain = _Domain
     module.ResidentAoMapCache = Cache
+    module.ResidentDeviceAoMapOwner = NativeCache
     monkeypatch.setitem(sys.modules, module.__name__, module)
     checks = []
     state = SimpleNamespace(
@@ -108,6 +131,26 @@ def test_replay_rechecks_snapshot_but_not_density_independent_maps(
     assert bindings[4] == [True, True]
     assert first.domain.derivative_order == 2
     assert first.domain.basis_identity == "initial-basis"
+
+
+def test_native_map_replay_and_producer_occupancy_rebinding(
+    bindings: typing.Any,
+) -> None:
+    """Producer and occupancy policy are cache bindings, not density generations."""
+    sampled = _cache(bindings)
+    native = _cache(
+        bindings, producer="pre-ao-envelope-native-csr", max_active_fraction=0.8
+    )
+    assert native is not sampled and native.max_active_fraction == 0.8
+    assert (
+        _cache(bindings, producer="pre-ao-envelope-native-csr", max_active_fraction=0.8)
+        is native
+    )
+    changed = _cache(
+        bindings, producer="pre-ao-envelope-native-csr", max_active_fraction=0.7
+    )
+    assert changed is not native and changed.max_active_fraction == 0.7
+    assert _cache(bindings) is not changed
 
 
 @pytest.mark.parametrize(
@@ -262,7 +305,8 @@ def test_default_and_public_forwarding_do_not_enable_screening(
     assert calls[-1]["resident_ao_cache_bytes"] == 0
 
 
-def test_actual_resident_loop_passes_map_to_native_geometry_lease() -> None:
+def test_actual_resident_loop_uses_owner_for_selected_geometry_lease() -> None:
+    """Only the no-map branch may construct a dense device-point feature lease."""
     source = ast.parse(
         inspect.getsource(runtime._complete_rks_cuda_gradient_diagnostic)
     )
@@ -274,4 +318,15 @@ def test_actual_resident_loop_passes_map_to_native_geometry_lease() -> None:
         and node.func.attr == "feature_task_device_points"
     ]
     assert len(leases) == 1
-    assert ast.unparse(leases[0].args[2]) == "selected_ao_ids"
+    assert ast.unparse(leases[0].args[2]) == "None"
+    selection = next(
+        node
+        for node in ast.walk(source)
+        if isinstance(node, ast.IfExp) and node.body is leases[0]
+    )
+    assert ast.unparse(selection.test) == "ao_maps is None"
+    assert ast.unparse(selection.orelse.func) == "ao_maps.feature_task"
+    assert [ast.unparse(value) for value in selection.orelse.args[:2]] == [
+        "ao",
+        "ao_maps.domain",
+    ]

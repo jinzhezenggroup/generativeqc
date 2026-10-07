@@ -13,12 +13,12 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
 
 GEOMETRY_MAX_LANES = 2048
-GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
+GEOMETRY_MAX_SCRATCH_BYTES = 16777216
 GEOMETRY_THREADS = 32
 BECKE_COOPERATIVE_MAX_ATOMS = 128
 BECKE_RETAINED_MAX_ATOMS = 32
 BECKE_PAIR_TILE_ROWS = 4
-BECKE_COOPERATIVE_THREADS = 32
+BECKE_COOPERATIVE_THREADS = 128
 BECKE_PAIR_STATE_BYTES = 64
 BECKE_COOPERATIVE_CONTROL_BYTES = 16
 STATIONARY_MAX_ATOMS = 128
@@ -36,14 +36,16 @@ def plan_stationary_cuda_grid_schedule(
     grid_points: int,
     tile_points: int | None,
     admit: Callable[[int], _TileLayout],
+    preferred_tile_points: int = 1024,
 ) -> _TileLayout:
     """Select one complete, budget-admitted semilocal or composite grid tile.
 
     The callback is a dry capacity/work query: it must account for every live
     owner, raise ValueError on rejection, and never allocate or execute CUDA.
     AO and method owners retain their own layout formulas. The shared schedule
-    prefers 1024 points, then the qualified 256-point fallback and smaller
-    tiles; it cannot shrink whole-grid storage or change the scientific grid.
+    prefers the consumer's requested tile (1024 by default), then the qualified
+    256-point fallback and smaller tiles. Preference is a work/coherence choice,
+    not permission to exceed the complete owner's budgets or change its grid.
     Explicit requests are tried exactly once, including requests above the
     point count. This preserves caller-controlled capacity and tail tests.
     """
@@ -53,13 +55,16 @@ def plan_stationary_cuda_grid_schedule(
         type(tile_points) is not int or not 1 <= tile_points <= 4096
     ):
         raise ValueError("stationary CUDA tile_points must be None or in [1,4096]")
+    if type(preferred_tile_points) is not int or not 1 <= preferred_tile_points <= 4096:
+        raise ValueError("stationary CUDA preferred_tile_points must be in [1,4096]")
     candidates = (
         (tile_points,)
         if tile_points is not None
         else tuple(
             dict.fromkeys(
                 min(points, grid_points)
-                for points in (1024, 256, 128, 64, 32, 16, 8, 4, 2, 1)
+                for points in (preferred_tile_points, 256, 128, 64, 32, 16, 8, 4, 2, 1)
+                if points <= preferred_tile_points
             )
         )
     )
@@ -227,6 +232,7 @@ class StationaryCudaResources:
     becke_threads_per_point: int = 1
     becke_shared_bytes: int = 0
     phased_becke_bytes: int = 0
+    becke_primitive: bool = False
 
 
 def plan_stationary_cuda_resources(
@@ -242,6 +248,7 @@ def plan_stationary_cuda_resources(
     budget_bytes: int,
     cooperative_becke: bool | None = None,
     phased_becke: bool = False,
+    becke_primitive: bool = False,
 ) -> StationaryCudaResources:
     """Choose up to one lane per point within the admitted owner's byte budget.
 
@@ -263,6 +270,8 @@ def plan_stationary_cuda_resources(
         raise ValueError("cooperative Becke selection must be boolean")
     if type(phased_becke) is not bool:
         raise ValueError("phased Becke selection must be boolean")
+    if type(becke_primitive) is not bool:
+        raise ValueError("Becke primitive selection must be boolean")
     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
         raise ValueError("stationary CUDA byte budget is not representable")
     minimum = stationary_cuda_allocation_bytes(
@@ -315,7 +324,7 @@ def plan_stationary_cuda_resources(
     # Qualification-only opt-in. Preserve the lane count, integral reserve and
     # bounded route; never evict a concurrent owner to admit a pair cache.
     if (
-        phased_becke
+        (phased_becke or becke_primitive)
         and atoms > BECKE_RETAINED_MAX_ATOMS
         and lanes == points
         and center_bytes
@@ -336,6 +345,7 @@ def plan_stationary_cuda_resources(
         becke_threads,
         shared_bytes,
         phase_bytes,
+        bool(phase_bytes and becke_primitive),
     )
 
 

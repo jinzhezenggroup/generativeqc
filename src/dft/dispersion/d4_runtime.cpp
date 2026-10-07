@@ -5,8 +5,6 @@
 #include <limits>
 #include <new>
 
-#include "dft/dispersion/d4_eeq_data.hpp"
-#include "dft/dispersion/d4_eeq_r2scan3c_c6.hpp"
 #include "generated_d4_derivative.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/dispersion/d4_cuda.hpp"
@@ -22,8 +20,10 @@ bool add_bytes(std::uint64_t& total, std::uint64_t value) {
 }
 
 std::uint64_t static_table_bytes() {
-  return sizeof(eeq_data::kElements) + sizeof(eeq_data::kReferences) +
-         sizeof(eeq_data::kReferenceC6Standard) + sizeof(eeq_data::kChargeElements);
+  return kD4TableElementCount * sizeof(data::D4ElementData) +
+         kD4TableReferenceCount * sizeof(data::D4ReferenceData) +
+         kD4PackedReferenceC6Count * sizeof(double) +
+         kD4TableElementCount * sizeof(D4EEQChargeElementData);
 }
 
 D4ResourceUsage resources_for(generativeqc_backend backend, std::size_t systems, std::size_t atoms,
@@ -120,7 +120,7 @@ std::unique_ptr<D4Plan> D4Plan::prepare(
     }
   }
   for (auto z : atomic_numbers) {
-    if (z < 1 || z > static_cast<int>(eeq_data::kElementCount)) {
+    if (z < 1 || z > static_cast<int>(kD4TableElementCount)) {
       status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
       detail = "D4 EEQ production data cover atomic numbers 1 through 86";
       return nullptr;

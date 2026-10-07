@@ -38,16 +38,19 @@ from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 
-_METHODS = (
-    "lda-rks",
-    "pbe-rks",
-    "lda-uks",
-    "pbe-uks",
-    "pbe0-rks",
-    "pbe0-uks",
-    "b3lyp-rks",
-    "b3lyp-uks",
-)
+
+def _incremental_direct_jk_controls() -> dict[str, bool]:
+    """Match both native benchmark selectors, including legacy OR semantics."""
+    controls = {}
+    for name in (
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK",
+        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
+    ):
+        value = os.environ.get(name)
+        if value not in (None, "0", "off", "1", "on"):
+            raise ValueError(f"{name} must be 0/off or 1/on")
+        controls[name] = value in ("1", "on")
+    return controls
 
 
 def _item_host_inventory(
@@ -55,7 +58,7 @@ def _item_host_inventory(
     *,
     diis_history: typing.Any,
     max_iterations: typing.Any,
-    pbe: typing.Any,
+    requires_first_ao_derivatives: typing.Any,
     backend: typing.Any,
     model: typing.Any,
 ) -> typing.Any:
@@ -107,7 +110,12 @@ def _item_host_inventory(
     matrix_work += byte_product(16, diis_history + 1, diis_history + 1)
     host_unfused = backend == "cuda" and model.xc_schedule == "host_unfused"
     xc_tile = (
-        byte_product(8, min(points, model.tile_points), n, 4 if pbe else 1)
+        byte_product(
+            8,
+            min(points, model.tile_points),
+            n,
+            4 if requires_first_ao_derivatives else 1,
+        )
         + byte_product(8, spins, n2)
         if backend == "cpu" or host_unfused
         else 0
@@ -118,7 +126,7 @@ def _item_host_inventory(
     ao_grid_cache = 0
     if (
         backend == "cpu"
-        and pbe
+        and requires_first_ao_derivatives
         and spins == 1
         and n > 0
         and points <= _CPU_AO_GRID_CACHE_CAP // 32 // n
@@ -191,7 +199,7 @@ def _cuda_item_inventory(
     item: typing.Any,
     *,
     diis_history: typing.Any,
-    pbe: typing.Any,
+    requires_first_ao_derivatives: typing.Any,
     tile: typing.Any,
 ) -> typing.Any:
     query = getattr(library, "generativeqc_resource_ks_cuda_v1", None)
@@ -208,7 +216,7 @@ def _cuda_item_inventory(
         item["grid_points"],
         diis_history,
         item["spins"],
-        int(pbe),
+        int(requires_first_ao_derivatives),
         tile,
     )
     if any(value > 2 ** (8 * ctypes.sizeof(ctypes.c_size_t)) - 1 for value in args):
@@ -257,12 +265,25 @@ def _cuda_item_inventory(
     # its unchanged byte count is intentional even though production XC borrows
     # the grid and owns a correspondingly smaller private arena.
     setup = max(setup, checked_bytes(int(output[2]) + quadrature.value))
+    provider_query = getattr(
+        library, "generativeqc_resource_ks_matrix_provider_cuda_v1", None
+    )
+    if provider_query is None:
+        raise NotImplementedError("native library has no KS matrix-provider inventory")
+    provider_query.argtypes = [ctypes.c_size_t, ctypes.POINTER(ctypes.c_uint64)]
+    provider_query.restype = ctypes.c_int
+    matrix_provider = ctypes.c_uint64()
+    if provider_query(orbital["nbf"], ctypes.byref(matrix_provider)):
+        raise NotImplementedError(
+            "invalid CUDA KS matrix-provider resource shape/build"
+        )
     return {
         "state": checked_bytes(int(output[0])),
         "xc": checked_bytes(int(output[1])),
         "coulomb": checked_bytes(int(output[2])),
         "setup": checked_bytes(setup),
         "quadrature_setup": checked_bytes(quadrature.value),
+        "matrix_provider": checked_bytes(matrix_provider.value),
     }
 
 
@@ -292,16 +313,28 @@ def ks_resource_request(
     """Resolve one complete KS request for the shared global planner."""
     if type(include_forces) is not bool:
         raise TypeError("include_forces must be boolean")
-    if method not in _METHODS or backend not in ("cpu", "cuda"):
+    if backend not in ("cpu", "cuda"):
+        raise NotImplementedError("KS planning requires a native CPU or CUDA backend")
+    try:
+        model = resolve_ks_options(method, ks_options)
+    except (TypeError, ValueError, NotImplementedError) as error:
         raise NotImplementedError(
-            "KS planning supports native CPU LDA/PBE/PBE0 and CUDA LDA/PBE RKS/UKS energies"
+            "KS planning requires a compiler-resolved native KS execution plan"
+        ) from error
+    if model.execution_plan.post_scf:
+        raise NotImplementedError(
+            "KS planning supports electronic contributions only; "
+            "post-SCF corrections require a separate resource owner"
+        )
+    if "tau" in model.functional.ingredients:
+        raise NotImplementedError(
+            "KS planning does not yet account for tau-dependent native XC workspace"
         )
     precision = str(precision).lower()
     if precision not in ("fp64", "auto"):
         raise ValueError("KS precision must be 'fp64' or 'auto'")
     if precision == "auto" and backend != "cuda":
         raise NotImplementedError("KS automatic precision currently requires CUDA")
-    model = resolve_ks_options(method, ks_options)
     if backend == "cuda" and model.has_nonlocal_correlation:
         raise NotImplementedError(
             "self-consistent nonlocal correlation currently requires CPU"
@@ -310,6 +343,8 @@ def ks_resource_request(
         raise NotImplementedError(
             "CUDA KS planning does not claim scaled/global-hybrid execution"
         )
+    incremental_controls = _incremental_direct_jk_controls()
+    incremental_requested = any(incremental_controls.values())
     systems = tuple(tuple(Atom.from_value(a) for a in atoms) for atoms in systems)
     if not systems or any(not atoms for atoms in systems):
         raise ValueError("KS resource planning requires nonempty systems")
@@ -332,7 +367,8 @@ def ks_resource_request(
             raise ValueError("KS numerical tolerances must be positive finite")
     selected = _snapshot_basis(basis, basis_representation)
     cpu_forces = backend == "cpu" and (qualified_basis(selected) or include_forces)
-    pbe, unrestricted = bool(model.ao_order), method.endswith("uks")
+    requires_first_ao_derivatives = bool(model.ao_order)
+    unrestricted = model.method_ir.spin == "polarized"
     items = []
     for atoms, charge, multiplicity in zip(
         systems, charges, multiplicities, strict=True
@@ -369,7 +405,7 @@ def ks_resource_request(
             atoms,
             backend=backend,
             operator="ao",
-            derivative_order=int(pbe),
+            derivative_order=int(requires_first_ao_derivatives),
             representation=orbital["representation"],
             role="orbital",
         )
@@ -409,6 +445,8 @@ def ks_resource_request(
                 "GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"
             ),
         )
+    if incremental_requested:
+        controls["incremental_direct_jk"] = incremental_controls
     # AUTO runs two separately bounded nonlinear stages. Reserve the native
     # owner and exported history for both stages plus strict closure corrections.
     history_iterations = max_iterations
@@ -432,12 +470,29 @@ def ks_resource_request(
         exclusions += (
             "CUDA driver/context/modules, compiler-managed stacks and pool/page retention",
         )
+    if incremental_requested:
+        # Inventory v1 has no incremental-mode input. Its ordinary device
+        # layout and strict host-history bound omit the anchor/delta buffers
+        # and final-closure records. Fail before querying/loading a library;
+        # never admit that experimental owner under an ordinary resource plan.
+        return ResourceRequest(
+            name,
+            identity,
+            (),
+            exclusions,
+            unsupported_reason=(
+                "KS resource planning does not support experimental incremental "
+                "Direct-J/K storage and closure history; unset "
+                "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK and "
+                "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK or set both to 0/off"
+            ),
+        )
     host = [
         _item_host_inventory(
             item,
             diis_history=diis_history,
             max_iterations=history_iterations,
-            pbe=pbe,
+            requires_first_ao_derivatives=requires_first_ao_derivatives,
             backend=backend,
             model=model,
         )
@@ -543,7 +598,7 @@ def ks_resource_request(
                     library,
                     item,
                     diis_history=diis_history,
-                    pbe=pbe,
+                    requires_first_ao_derivatives=requires_first_ao_derivatives,
                     tile=model.tile_points,
                 )
                 for item in items
@@ -562,6 +617,20 @@ def ks_resource_request(
                         kind="persistent",
                     )
                 )
+            # Every eligible item retains its own opaque cuBLAS handle. Admit
+            # this separately from numeric arenas so the explicit allocation
+            # ledger cannot spend the provider reservation on other buffers.
+            estimates.append(
+                ResourceEstimate(
+                    "all KS matrix-provider retention allowance",
+                    checked_bytes(sum(x["matrix_provider"] for x in device)),
+                    f"device:{device_id}",
+                    first_phase,
+                    last_phase,
+                    kind="library",
+                    accounting="runtime_allowance",
+                )
+            )
             # At most one owner is rebuilt at a time. Its retired allocation
             # need not coexist with its setup temporary. Quadrature setup
             # already includes the new owner's live Coulomb allocation.

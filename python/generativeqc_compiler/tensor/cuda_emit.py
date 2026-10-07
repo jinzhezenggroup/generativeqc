@@ -252,6 +252,37 @@ return finite({scaled}, error, {i});"""
             f"return {_read(child, _flat(coordinates, source_shape), prefix)};"
         )
         return "\n".join(lines)
+    if node.op in ("runtime_cartesian_select", "runtime_cartesian_scatter_add"):
+        child, maps = args[0], args[1:]
+        source_shape = plan.steps[child].node.spec.shape
+        select = node.op == "runtime_cartesian_select"
+        coordinates = list(c)
+        lines = [] if select else [f"{ty} value = {scalar.zero};"]
+        error_code = -(2 * len(plan.steps) + i + 1)
+        for ordinal, (axis, mapping) in enumerate(zip(a["axes"], maps, strict=True)):
+            position = c[axis] if select else f"runtime_local_{ordinal}"
+            if not select:
+                lines.append(
+                    f"for (I {position} = 0; {position} < {_integer(source_shape[axis])}; ++{position}) {{"
+                )
+            variable = f"runtime_index_{ordinal}"
+            lines.append(f"const I {variable} = {_read(mapping, position, prefix)};")
+            extent = source_shape[axis] if select else shape[axis]
+            lines.append(
+                f"if ({variable} < 0 || {variable} >= {_integer(extent)}) "
+                f"{{ atomicCAS(error, 0, {error_code}); return {scalar.zero}; }}"
+            )
+            coordinates[axis] = variable if select else position
+            if not select:
+                lines.append(f"if ({variable} == {c[axis]}) {{")
+        contribution = _read(child, _flat(coordinates, source_shape), prefix)
+        if select:
+            lines.append(f"return {contribution};")
+        else:
+            lines.append(f"value = {add}(value, {contribution});")
+            lines.extend("}}" for _ in maps)
+            lines.append(f"return finite(value, error, {i});")
+        return "\n".join(lines)
     child = args[0]
     source_shape = plan.steps[child].node.spec.shape
     if node.op == "reshape":
@@ -325,7 +356,15 @@ def _arithmetic_error_expression(plan: typing.Any, legacy: typing.Any) -> typing
     separate range below -2n. The planner bounds the integer diagnostic range.
     """
     transcendental = any(s.node.op in TRANSCENDENTALS for s in plan.steps)
-    runtime_indexed = any(s.node.op == "runtime_indexed_select" for s in plan.steps)
+    runtime_indexed = any(
+        s.node.op
+        in (
+            "runtime_indexed_select",
+            "runtime_cartesian_select",
+            "runtime_cartesian_scatter_add",
+        )
+        for s in plan.steps
+    )
     if not transcendental and not runtime_indexed:
         return legacy
     n = len(plan.steps)

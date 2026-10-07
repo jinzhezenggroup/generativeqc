@@ -1440,7 +1440,7 @@ def emit_stationary_wrapper_cuda(
         + ";\n"
         + "}\n"
         + _runtime_layout_cuda(plan)
-        + emit_stationary_phased_becke_cuda()
+        + emit_stationary_phased_becke_cuda(iterations=iterations)
         + '#include "dft/stationary_gradient_cuda.cuh"\n'
         + emit_stationary_scientific_kernels(plan)
     )

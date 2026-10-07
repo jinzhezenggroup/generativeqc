@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..capabilities import CAPABILITY_MIXED_FOCK
+from ..capabilities import CAPABILITY_K_BLOCK_FOCK, CAPABILITY_MIXED_FOCK
 from ..cuda_schedule import (
     PairOrientation,
     PairStorage,
@@ -39,6 +39,7 @@ from .common import (
     _specialize_dppp_identifiers,
 )
 from .fock import _emit_shell_class_fock_cuda, _emit_shell_class_mixed_fock_cuda
+from .fock_component import emit_rys_value_support_cuda
 from .force_packed import (
     _emit_packed_force_consumer_cuda,
     _emit_scalar_thread_force_consumer_cuda,
@@ -1229,6 +1230,44 @@ void generated_dppp_shell_class_force_uhf_persistent_kernel(
 }}
 """
     if (
+        plan.kernel.integral.recurrence.startswith("rys")
+        and KernelConsumer.FORCE not in plan.kernel.integral.consumers
+    ):
+        # Keep the shared task/scatter ABI but give a value-only Rys artifact
+        # its own roots and exact TRR bounds. Do not manufacture a derivative
+        # plan or fall back to Cartesian math under this lowering identity.
+        marker = """template <bool Unrestricted>
+__device__ __forceinline__ void generated_dppp_shell_class_force_task("""
+        begin = source.find(marker)
+        if begin < 0:
+            raise RuntimeError("generated force task marker changed unexpectedly")
+        value_plan = (
+            plan
+            if fock_schedule is None
+            else build_fused_shell_plan(
+                spec,
+                integral=plan.kernel.integral,
+                schedule=fock_schedule,
+                target=plan.kernel.target,
+            )
+        )
+        source = source[:begin] + emit_rys_value_support_cuda(
+            spec, plan.kernel.integral
+        )
+        source += _emit_shell_class_fock_cuda(
+            spec,
+            value_plan,
+            honor_schedule_block_threads=True,
+            k_block=CAPABILITY_K_BLOCK_FOCK in selected_capabilities,
+        )
+        if CAPABILITY_MIXED_FOCK in selected_capabilities:
+            source += _emit_shell_class_mixed_fock_cuda(spec, value_plan)
+        source = source.replace(
+            "GENERATIVEQC_PAIR_UNROLL",
+            "#pragma unroll" if plan.schedule.unroll_pair_terms else "#pragma unroll 1",
+        )
+        return _specialize_dppp_identifiers(source, spec)
+    if (
         plan.schedule.kind == ScheduleKind.COMPONENT_LANES
         and plan.kernel.integral.recurrence.startswith("rys")
         and plan.kernel.integral.required_rys_roots in (3, 4, 5)
@@ -1351,6 +1390,7 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
             fock_plan,
             honor_schedule_block_threads=fock_schedule is not None,
             rys_support_integral=rys_support_integral,
+            k_block=CAPABILITY_K_BLOCK_FOCK in selected_capabilities,
         )
         if CAPABILITY_MIXED_FOCK in selected_capabilities:
             source += _emit_shell_class_mixed_fock_cuda(

@@ -5,11 +5,15 @@ from __future__ import annotations
 import builtins
 import typing
 from fractions import Fraction
+from math import copysign, isfinite
+from string import ascii_letters
 
 from generativeqc_compiler.tensor import ir as tensor_ir
-from generativeqc_compiler.tensor.types import Index
+from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 
 from .array import ExactScalar, VibeArray
+
+_GENERIC_SPACE_PREFIX = "_array_extent_"
 
 
 def _array(value: object, name: str = "operand") -> VibeArray:
@@ -41,6 +45,31 @@ def _shape(value: object, name: str) -> tuple[int, ...]:
     return value
 
 
+def _reshape_shape(value: object, size: int) -> tuple[int, ...]:
+    if not isinstance(value, tuple) or any(type(extent) is not int for extent in value):
+        raise TypeError("reshape shape must be a tuple of integers")
+    missing = [position for position, extent in enumerate(value) if extent == -1]
+    if len(missing) > 1 or any(extent < -1 for extent in value):
+        raise ValueError("reshape permits at most one inferred -1 dimension")
+    if not missing:
+        shape = _shape(value, "reshape")
+        product = 1
+        for extent in shape:
+            product *= extent
+        if product != size:
+            raise ValueError("reshape must preserve element count")
+        return shape
+    known = 1
+    for extent in value:
+        if extent != -1:
+            known *= extent
+    if known == 0 or size % known:
+        raise ValueError("reshape inferred dimension is not integral")
+    shape = list(value)
+    shape[missing[0]] = size // known
+    return tuple(shape)
+
+
 def _target_indices(shape: object, indices: object, name: str) -> tuple[Index, ...]:
     target_shape = _shape(shape, name)
     if not isinstance(indices, tuple) or any(
@@ -52,26 +81,180 @@ def _target_indices(shape: object, indices: object, name: str) -> tuple[Index, .
     return indices
 
 
+def _generic_space(extent: int) -> IndexSpace:
+    return IndexSpace(f"{_GENERIC_SPACE_PREFIX}{extent}", "matrix", extent)
+
+
+def _generic_indices(shape: tuple[int, ...]) -> tuple[Index, ...]:
+    return tuple(
+        Index(f"axis_{axis}", _generic_space(extent))
+        for axis, extent in enumerate(shape)
+    )
+
+
+def _is_generic_array(value: VibeArray) -> bool:
+    return all(
+        index.space.kind == "matrix"
+        and index.space.name == f"{_GENERIC_SPACE_PREFIX}{index.space.size}"
+        for index in value.node.spec.indices
+    )
+
+
+def _canonical_generic(value: VibeArray) -> VibeArray:
+    if not _is_generic_array(value):
+        return value
+    indices = _generic_indices(value.shape)
+    if tuple(index.domain for index in value.node.spec.indices) == tuple(
+        index.domain for index in indices
+    ):
+        return value
+    return VibeArray(tensor_ir.reshape(value.node, indices))
+
+
+def _broadcast_shape(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[int, ...]:
+    rank = max(len(left), len(right))
+    a = (1,) * (rank - len(left)) + left
+    b = (1,) * (rank - len(right)) + right
+    result = []
+    for first, second in zip(a, b, strict=True):
+        if first == second:
+            result.append(first)
+        elif first == 1:
+            result.append(second)
+        elif second == 1:
+            result.append(first)
+        else:
+            raise ValueError(
+                f"operands with shapes {left} and {right} cannot be broadcast together"
+            )
+    return tuple(result)
+
+
+def _broadcast_generic(value: VibeArray, target_shape: tuple[int, ...]) -> VibeArray:
+    value = _canonical_generic(value)
+    if len(value.shape) > len(target_shape):
+        raise ValueError("cannot broadcast to fewer dimensions")
+    padded = (1,) * (len(target_shape) - len(value.shape)) + value.shape
+    for source, target in zip(padded, target_shape, strict=True):
+        if source != target and source != 1:
+            raise ValueError(
+                f"array with shape {value.shape} cannot broadcast to {target_shape}"
+            )
+    target_indices = _generic_indices(target_shape)
+    offset = len(target_shape) - value.ndim
+    kept_indices = []
+    kept_axes = []
+    for source_axis, source_index in enumerate(value.node.spec.indices):
+        target_axis = offset + source_axis
+        source_extent = value.shape[source_axis]
+        target_extent = target_shape[target_axis]
+        if source_extent == target_extent:
+            kept_indices.append(source_index)
+            kept_axes.append(target_axis)
+        elif source_extent != 1:
+            raise ValueError(
+                f"array with shape {value.shape} cannot broadcast to {target_shape}"
+            )
+    node = value.node
+    if len(kept_indices) != value.ndim:
+        node = tensor_ir.reshape(node, tuple(kept_indices))
+    if tuple(index.domain for index in node.spec.indices) == tuple(
+        target_indices[axis].domain for axis in kept_axes
+    ) and len(kept_axes) == len(target_shape):
+        return VibeArray(node)
+    return VibeArray(tensor_ir.broadcast(node, target_indices, tuple(kept_axes)))
+
+
+def _generic_binary(
+    left: VibeArray, right: VibeArray
+) -> tuple[VibeArray, VibeArray] | None:
+    if not (_is_generic_array(left) and _is_generic_array(right)):
+        return None
+    shape = _broadcast_shape(left.shape, right.shape)
+    return _broadcast_generic(left, shape), _broadcast_generic(right, shape)
+
+
+def _generic_scalar(value: object, name: str) -> Fraction:
+    if type(value) is float:
+        if not isfinite(value):
+            raise ValueError(f"{name} must be finite")
+        if value == 0 and copysign(1.0, value) < 0:
+            raise ValueError(f"{name} cannot represent a negative-zero literal")
+        return Fraction.from_float(value)
+    return _exact(value, name)
+
+
+def _generic_exact_scalar(value: object, *, dtype: str, name: str) -> VibeArray:
+    factor = _generic_scalar(value, name)
+    spec = TensorSpec(dtype=dtype, role="constant")
+    return VibeArray(tensor_ir.constant(factor, spec))
+
+
+def _generic_array_and_scalar(
+    array: VibeArray, scalar: object, *, name: str
+) -> tuple[VibeArray, VibeArray]:
+    if not _is_generic_array(array):
+        raise TypeError(f"{name} requires two symbolic arrays for scientific domains")
+    scalar_array = _generic_exact_scalar(
+        scalar, dtype=array.dtype, name=f"{name} scalar"
+    )
+    return array, _broadcast_generic(scalar_array, array.shape)
+
+
 def add(x1: object, x2: object) -> VibeArray:
-    """Elementwise add on identical TensorIR scientific domains."""
-    left, right = _binary_arrays(x1, x2, "add")
-    return VibeArray(tensor_ir.add(left.node, right.node))
+    """Elementwise add with standard broadcasting for generic public arrays."""
+    if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
+        left, right = x1, x2
+        operands = _generic_binary(left, right)
+        if operands is not None:
+            left, right = operands
+    elif isinstance(x1, VibeArray):
+        left, right = _generic_array_and_scalar(x1, x2, name="add")
+    elif isinstance(x2, VibeArray):
+        right, left = _generic_array_and_scalar(x2, x1, name="add")
+    else:
+        raise TypeError("add requires at least one symbolic VibeArray")
+    return _canonical_generic(VibeArray(tensor_ir.add(left.node, right.node)))
 
 
 def subtract(x1: object, x2: object) -> VibeArray:
-    """Elementwise subtraction on identical TensorIR scientific domains."""
-    left, right = _binary_arrays(x1, x2, "subtract")
-    return VibeArray(tensor_ir.add(left.node, right.node, coefficients=(1, -1)))
+    """Elementwise subtraction with standard broadcasting for generic arrays."""
+    if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
+        left, right = x1, x2
+        operands = _generic_binary(left, right)
+        if operands is not None:
+            left, right = operands
+    elif isinstance(x1, VibeArray):
+        left, right = _generic_array_and_scalar(x1, x2, name="subtract")
+    elif isinstance(x2, VibeArray):
+        right, left = _generic_array_and_scalar(x2, x1, name="subtract")
+    else:
+        raise TypeError("subtract requires at least one symbolic VibeArray")
+    return _canonical_generic(
+        VibeArray(tensor_ir.add(left.node, right.node, coefficients=(1, -1)))
+    )
 
 
 def multiply(x1: object, x2: object) -> VibeArray:
     """Multiply arrays elementwise or scale one array by an exact scalar."""
     if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
-        return VibeArray(tensor_ir.multiply(x1.node, x2.node))
+        operands = _generic_binary(x1, x2)
+        left, right = operands if operands is not None else (x1, x2)
+        return _canonical_generic(VibeArray(tensor_ir.multiply(left.node, right.node)))
     if isinstance(x1, VibeArray):
+        if _is_generic_array(x1):
+            left, right = _generic_array_and_scalar(x1, x2, name="multiply")
+            return _canonical_generic(
+                VibeArray(tensor_ir.multiply(left.node, right.node))
+            )
         factor = _exact(x2)
         return VibeArray(tensor_ir.add(x1.node, coefficients=(factor,)))
     if isinstance(x2, VibeArray):
+        if _is_generic_array(x2):
+            right, left = _generic_array_and_scalar(x2, x1, name="multiply")
+            return _canonical_generic(
+                VibeArray(tensor_ir.multiply(left.node, right.node))
+            )
         factor = _exact(x1)
         return VibeArray(tensor_ir.add(x2.node, coefficients=(factor,)))
     raise TypeError("multiply requires at least one symbolic VibeArray")
@@ -80,8 +263,15 @@ def multiply(x1: object, x2: object) -> VibeArray:
 def divide(x1: object, x2: object) -> VibeArray:
     """Divide arrays elementwise or divide one array by an exact scalar."""
     if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
-        return VibeArray(tensor_ir.divide(x1.node, x2.node))
+        operands = _generic_binary(x1, x2)
+        left, right = operands if operands is not None else (x1, x2)
+        return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
     if isinstance(x1, VibeArray):
+        if _is_generic_array(x1):
+            left, right = _generic_array_and_scalar(x1, x2, name="divide")
+            return _canonical_generic(
+                VibeArray(tensor_ir.divide(left.node, right.node))
+            )
         denominator = _exact(x2, "divisor")
         if denominator == 0:
             raise ZeroDivisionError("exact scalar divisor cannot be zero")
@@ -89,10 +279,8 @@ def divide(x1: object, x2: object) -> VibeArray:
             tensor_ir.add(x1.node, coefficients=(Fraction(1, 1) / denominator,))
         )
     if isinstance(x2, VibeArray):
-        raise TypeError(
-            "scalar / VibeArray is not in the initial frontend subset because "
-            "it would require an explicit domain-shaped scalar broadcast"
-        )
+        right, left = _generic_array_and_scalar(x2, x1, name="divide")
+        return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
     raise TypeError("divide requires at least one symbolic VibeArray")
 
 
@@ -103,7 +291,12 @@ def negative(x: object) -> VibeArray:
 
 def pow(x: object, exponent: object) -> VibeArray:
     value = _array(x)
-    return VibeArray(tensor_ir.power(value.node, _exact(exponent, "exponent")))
+    factor = (
+        _generic_scalar(exponent, "exponent")
+        if _is_generic_array(value)
+        else _exact(exponent, "exponent")
+    )
+    return VibeArray(tensor_ir.power(value.node, factor))
 
 
 def exp(x: object) -> VibeArray:
@@ -124,13 +317,16 @@ def reshape(
     *,
     indices: tuple[Index, ...] | None = None,
 ) -> VibeArray:
-    """Reshape only with explicit TensorIR target-index semantics."""
+    """Reshape generic arrays by shape; scientific arrays require explicit indices."""
     value = _array(x)
     if indices is None:
-        raise ValueError(
-            "frontend reshape requires explicit TensorIR indices; "
-            "shape alone cannot define QC index spaces"
-        )
+        if not _is_generic_array(value):
+            raise ValueError(
+                "frontend reshape requires explicit TensorIR indices for "
+                "scientifically annotated arrays"
+            )
+        target_shape = _reshape_shape(shape, value.size)
+        return VibeArray(tensor_ir.reshape(value.node, _generic_indices(target_shape)))
     target = _target_indices(shape, indices, "reshape")
     return VibeArray(tensor_ir.reshape(value.node, target))
 
@@ -142,11 +338,18 @@ def broadcast_to(
     indices: tuple[Index, ...] | None = None,
     axes: tuple[int, ...] | None = None,
 ) -> VibeArray:
-    """Broadcast with explicit target indices and source-to-target axis map."""
+    """Broadcast generic arrays by shape or use explicit scientific axis semantics."""
     value = _array(x)
+    if indices is None and axes is None:
+        if not _is_generic_array(value):
+            raise ValueError(
+                "frontend broadcast_to requires explicit TensorIR indices and axes "
+                "for scientifically annotated arrays"
+            )
+        return _broadcast_generic(value, _shape(shape, "broadcast_to"))
     if indices is None or axes is None:
         raise ValueError(
-            "frontend broadcast_to requires explicit TensorIR indices and axes"
+            "frontend broadcast_to requires both explicit TensorIR indices and axes"
         )
     target = _target_indices(shape, indices, "broadcast_to")
     if not isinstance(axes, tuple) or any(type(axis) is not int for axis in axes):
@@ -155,7 +358,7 @@ def broadcast_to(
 
 
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> VibeArray:
-    """Static unit-step half-open slicing that retains TensorIR populations."""
+    """Static unit-step half-open slicing."""
     value = _array(x)
     if not isinstance(ranges, tuple) or any(
         not isinstance(bounds, tuple)
@@ -164,7 +367,8 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> VibeArray:
         for bounds in ranges
     ):
         raise TypeError("slice ranges must be a static tuple of (start, stop) pairs")
-    return VibeArray(tensor_ir.slice_tensor(value.node, ranges))
+    result = VibeArray(tensor_ir.slice_tensor(value.node, ranges))
+    return _canonical_generic(result)
 
 
 def take(
@@ -173,7 +377,7 @@ def take(
     *,
     axis: int,
 ) -> VibeArray:
-    """Static gather along one axis, preserving the source scientific domain."""
+    """Static gather along one axis."""
     value = _array(x)
     if type(axis) is not int:
         raise TypeError("take axis must be an integer")
@@ -181,9 +385,10 @@ def take(
         type(index) is not int for index in indices
     ):
         raise TypeError("take indices must be a static tuple of integers")
-    return VibeArray(
+    result = VibeArray(
         tensor_ir.gather(value.node, _axis(axis, value.ndim, "take"), indices)
     )
+    return _canonical_generic(result)
 
 
 def sum(
@@ -202,24 +407,77 @@ def sum(
     if axis is None:
         axes = tuple(range(value.ndim))
     elif type(axis) is int:
-        axes = (axis,)
+        axes = (_axis(axis, value.ndim, "sum"),)
     elif isinstance(axis, tuple):
-        axes = axis
+        axes = tuple(_axis(item, value.ndim, "sum") for item in axis)
     else:
         raise TypeError("axis must be an int, tuple of ints, or None")
-    return VibeArray(tensor_ir.reduce_sum(value.node, axes=axes))
+    result = VibeArray(tensor_ir.reduce_sum(value.node, axes=tuple(sorted(axes))))
+    return _canonical_generic(result)
 
 
 def permute_dims(x: object, axes: tuple[int, ...]) -> VibeArray:
     value = _array(x)
-    return VibeArray(tensor_ir.transpose(value.node, axes))
+    result = VibeArray(tensor_ir.transpose(value.node, axes))
+    return _canonical_generic(result)
+
+
+def matrix_transpose(x: object) -> VibeArray:
+    """Transpose the final two dimensions, preserving leading batch axes."""
+    value = _array(x)
+    if value.ndim < 2:
+        raise ValueError(
+            "matrix_transpose requires an array with at least two dimensions"
+        )
+    axes = list(range(value.ndim))
+    axes[-2], axes[-1] = axes[-1], axes[-2]
+    return permute_dims(value, tuple(axes))
+
+
+def _matmul_generic(left: VibeArray, right: VibeArray) -> VibeArray:
+    if left.ndim == 0 or right.ndim == 0:
+        raise ValueError("matmul requires arrays with at least one dimension")
+    left_vector = left.ndim == 1
+    right_vector = right.ndim == 1
+    left_work = reshape(left, (1, left.shape[0])) if left_vector else left
+    right_work = reshape(right, (right.shape[0], 1)) if right_vector else right
+    if left_work.shape[-1] != right_work.shape[-2]:
+        raise ValueError("matmul core dimensions do not agree")
+    batch = _broadcast_shape(left_work.shape[:-2], right_work.shape[:-2])
+    left_shape = batch + left_work.shape[-2:]
+    right_shape = batch + right_work.shape[-2:]
+    left_work = _broadcast_generic(left_work, left_shape)
+    right_work = _broadcast_generic(right_work, right_shape)
+    batch_rank = len(batch)
+    if batch_rank + 3 > len(ascii_letters):
+        raise ValueError("matmul rank exceeds the bounded symbolic label inventory")
+    labels = iter(ascii_letters)
+    batch_labels = "".join(next(labels) for _ in range(batch_rank))
+    m, k, n = next(labels), next(labels), next(labels)
+    equation = f"{batch_labels}{m}{k},{batch_labels}{k}{n}->{batch_labels}{m}{n}"
+    result = VibeArray(tensor_ir.einsum(equation, left_work.node, right_work.node))
+    if left_vector and right_vector:
+        final_shape: tuple[int, ...] = batch
+    elif left_vector:
+        final_shape = batch + (right_work.shape[-1],)
+    elif right_vector:
+        final_shape = batch + (left_work.shape[-2],)
+    else:
+        final_shape = batch + (left_work.shape[-2], right_work.shape[-1])
+    if result.shape != final_shape:
+        result = reshape(result, final_shape)
+    return _canonical_generic(result)
 
 
 def matmul(x1: object, x2: object) -> VibeArray:
-    """Initial rank-2 matmul subset; batching is intentionally unsupported."""
+    """Array-API-style matmul for generic arrays; strict rank-2 for scientific IR."""
     left, right = _binary_arrays(x1, x2, "matmul")
+    if _is_generic_array(left) and _is_generic_array(right):
+        return _matmul_generic(left, right)
     if left.ndim != 2 or right.ndim != 2:
-        raise ValueError("frontend matmul currently supports rank-2 arrays only")
+        raise ValueError(
+            "scientifically annotated matmul currently supports rank-2 arrays only"
+        )
     return VibeArray(tensor_ir.einsum("ik,kj->ij", left.node, right.node))
 
 
@@ -230,13 +488,14 @@ def einsum(
 ) -> VibeArray:
     """GenerativeQC extension for general contractions absent from the core subset."""
     arrays = tuple(_array(value, "einsum operand") for value in operands)
-    return VibeArray(
+    result = VibeArray(
         tensor_ir.einsum(
             equation,
             *(value.node for value in arrays),
             coefficient=_exact(coefficient, "einsum coefficient"),
         )
     )
+    return _canonical_generic(result)
 
 
 def _axis(axis: object, rank: int, operation: str) -> int:
@@ -248,9 +507,64 @@ def _axis(axis: object, rank: int, operation: str) -> int:
     return normalized
 
 
+def _expand_index_key(key: object, rank: int) -> tuple[object, ...]:
+    items = list(key if isinstance(key, tuple) else (key,))
+    ellipses = [position for position, item in enumerate(items) if item is Ellipsis]
+    if len(ellipses) > 1:
+        raise IndexError("an index can contain at most one ellipsis")
+    consumed = builtins.sum(item is not None and item is not Ellipsis for item in items)
+    if consumed > rank:
+        raise IndexError("too many indices for symbolic VibeArray")
+    fill = rank - consumed
+    if ellipses:
+        position = ellipses[0]
+        items[position : position + 1] = [builtins.slice(None)] * fill
+    else:
+        items.extend(builtins.slice(None) for _ in range(fill))
+    return tuple(items)
+
+
+def _getitem_generic(value: VibeArray, key: object) -> VibeArray:
+    items = _expand_index_key(key, value.ndim)
+    node = value.node
+    source_axis = 0
+    output_shape: list[int] = []
+    for item in items:
+        if item is None:
+            output_shape.append(1)
+            continue
+        extent = node.spec.shape[source_axis]
+        if type(item) is int:
+            position = item + extent if item < 0 else item
+            if not 0 <= position < extent:
+                raise IndexError("symbolic VibeArray index is out of range")
+            node = tensor_ir.gather(node, source_axis, (position,))
+            source_axis += 1
+            continue
+        if not isinstance(item, builtins.slice):
+            raise TypeError(
+                "generic symbolic indexing supports integers, slices, None, and ellipsis"
+            )
+        start, stop, step = item.indices(extent)
+        positions = tuple(range(start, stop, step))
+        if step == 1 and positions:
+            ranges = tuple(
+                (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
+                for axis in range(len(node.spec.shape))
+            )
+            node = tensor_ir.slice_tensor(node, ranges)
+        else:
+            node = tensor_ir.gather(node, source_axis, positions)
+        output_shape.append(len(positions))
+        source_axis += 1
+    return VibeArray(tensor_ir.reshape(node, _generic_indices(tuple(output_shape))))
+
+
 def _getitem(x: object, key: object) -> VibeArray:
-    """Static rank-preserving slicing with nonnegative unit-step slices only."""
+    """Index generic arrays naturally while preserving strict scientific slices."""
     value = _array(x)
+    if _is_generic_array(value):
+        return _getitem_generic(value, key)
     items = key if isinstance(key, tuple) else (key,)
     if len(items) > value.ndim:
         raise IndexError("too many indices for symbolic VibeArray")
@@ -259,15 +573,16 @@ def _getitem(x: object, key: object) -> VibeArray:
     for item, extent in zip(items, value.shape):
         if not isinstance(item, builtins.slice):
             raise TypeError(
-                "symbolic VibeArray indexing supports rank-preserving slices only"
+                "scientifically annotated symbolic indexing supports "
+                "rank-preserving slices only"
             )
         if item.step is not None and (type(item.step) is not int or item.step != 1):
-            raise ValueError("symbolic VibeArray slices require unit step")
+            raise ValueError("scientific symbolic VibeArray slices require unit step")
         start = 0 if item.start is None else item.start
         stop = extent if item.stop is None else item.stop
         if type(start) is not int or type(stop) is not int:
             raise TypeError("symbolic VibeArray slice bounds must be integers or None")
         if start < 0 or stop < 0:
-            raise ValueError("symbolic VibeArray slice bounds must be nonnegative")
+            raise ValueError("scientific symbolic slice bounds must be nonnegative")
         ranges.append((start, stop))
     return VibeArray(tensor_ir.slice_tensor(value.node, tuple(ranges)))

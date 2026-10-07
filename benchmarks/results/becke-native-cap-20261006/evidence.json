@@ -1,0 +1,124 @@
+{
+  "attachments": [
+    {
+      "path": "receipts.txt",
+      "sha256": "96245512d5adb1e54c9e25bbb8cb62381b707f585b00fa7f59bf5664cdca1947"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "generic_native_max_scaled_error_statistic": {
+      "atol": 1,
+      "max_absolute_error": 0.0,
+      "max_scaled_error": 0.0,
+      "passed": true,
+      "rms_error": 0.0,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Exact previously compiled binary reused; original mandatory ccache compile/launcher proof remains in the earlier frozen publication. No new compiler wall time claimed.",
+    "seconds": null
+  },
+  "device": {
+    "identity_source": "finite main/gpu:5090:1 step and retained device visibility",
+    "name": "NVIDIA GeForce RTX 5090",
+    "node": "node1",
+    "slurm_job": "6203",
+    "step": "0"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm_job": "6203",
+    "slurm_step": "0",
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "389ba8af8fc7ce291546a4b52e6ceb7c4c45b0f9d2f7d674a2147e12ed97dd9e",
+    "ir": "54a2495eba36e0cf9ae296828afcaf58bf0dee24844bcf08a02cee59c977bf32",
+    "schedule": "ee0c4492bf9a5e52261988e7f2c28ba9449e7d7b40cb0c783c35b22845f72dc7",
+    "source": "8d1a4ca9ee51bd47e57218e63330d6527092de3c168f1b0f464f0e9b5d716fe0"
+  },
+  "inputs_hash": "7fec606a386b2338867d6a9f7f1aea0c554d744741223ff58dbce0ccd6698cc8",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "No clean performance comparison or promotion in this synthetic boundary cohort.",
+    "status": "not-run"
+  },
+  "residuals": {
+    "generic_ad_max_absolute_error": 0.0,
+    "generic_ad_max_scaled_error": 0.0
+  },
+  "revision": "ad739338c870e12bc57eb8fd1d5a26b7c742bdd7",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "actual_atoms": [
+      128
+    ],
+    "complete_endpoint": false,
+    "device": "cuda",
+    "fast_compile": false,
+    "numeric_scope": "Recorded generic-native maximum absolute/scaled statistics, not unrecorded force-vector RMS. Independent 60-digit CPU direct-product FD and molecular oracles are separately retained qualifications.",
+    "profile_scope": "Separate intrusive per-tile events when enabled. Raw disabled ABI zero times are unmeasured, not measured zeros.",
+    "promotion": "none; default stays off",
+    "source_scope": "585 scientific/compiler inputs match the original job6148 standalone owner. The exact frozen binary is reused, not a new compilation or a later clean build. Original compile/source/header provenance remains in becke-native-phases-20261006.",
+    "traffic_scope": "Dense-domain logical panel bytes, not measured hardware transactions."
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Synthetic fixed AO/XC gate; no SCF solver is run.",
+  "stages": {
+    "compilation": {
+      "binary_sha256": "cf82d6ecd5e973c38fd2f30f54fc04ebde00dd0fe5bd832ff558f7715faa6bfb",
+      "reason": "Exact binary SHA256 verified; original mandatory ccache build provenance retained separately.",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "Synthetic cap qualification, not complete molecular timing.",
+      "status": "not-run"
+    },
+    "numerical": {
+      "cuda_passed": 48,
+      "cuda_skipped": 0,
+      "racecheck_hazards": 0,
+      "racecheck_warnings": 0,
+      "reason": "48 native synthetic domain-cap tests, no selected-case skips; four sanitizer cases pass. Generic comparator is not an independent physical oracle.",
+      "sanitizer_errors": 0,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Previously authenticated actual active-prefix bound128 operation/graph unchanged.",
+      "status": "pass"
+    },
+    "runtime": {
+      "reason": "Actual cap selection, requested/selected flags, 17 counters, tails, moved/restored geometry, invalid-point publication/recovery and disabled/enabled profiling asserted.",
+      "status": "pass"
+    },
+    "source": {
+      "reason": "585 current scientific/compiler inputs match original frozen standalone owner; current cap test/dirty patch retained.",
+      "status": "pass"
+    }
+  },
+  "subject": "issue1894 actual 128-atom shared-owner cap qualification",
+  "tier": "gpu-numerical",
+  "timings": [],
+  "toolchain": {
+    "ccache": "4.5.1",
+    "compile_flags": "-O3 -std=c++20 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Isrc -Xcompiler=-fPIC -c",
+    "cuda": "12.9.86",
+    "library_sha256": "cf82d6ecd5e973c38fd2f30f54fc04ebde00dd0fe5bd832ff558f7715faa6bfb",
+    "python": "3.13.9"
+  }
+}

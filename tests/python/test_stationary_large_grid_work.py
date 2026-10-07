@@ -10,6 +10,7 @@ from types import CodeType, FunctionType, SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc_compiler.dft.indexed_layout import AoGridBlockLayout
 from generativeqc_compiler.dft.plan import plan_tiles
 from generativeqc_compiler.method.stationary_resources import (
     plan_stationary_cuda_grid_work,
@@ -209,20 +210,59 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
     seen, events = [], []
     active = False
     mask = None if selected is None else np.asarray(selected, dtype=np.uintp)
-    selections = []
+    selections, capabilities = [], []
 
-    def select(owner: typing.Any, domain: str, begin: int, count: int) -> np.ndarray:
+    @contextmanager
+    def mapped_task(
+        owner: typing.Any,
+        domain: str,
+        begin: int,
+        count: int,
+        ingredients: tuple[str, ...],
+    ) -> typing.Iterator[typing.Any]:
         assert not active and domain == "order-two-grid"
         assert owner is scope["ao"]
+        assert ingredients == scope["ingredients"]
         selections.append((begin, count))
-        return mask
+        with task(lease.points + 24 * begin, count, mask, ingredients) as view:
+            yield view
+
+    class CheckedLayout(AoGridBlockLayout):
+        def require_derivative_order(self, order: int) -> None:
+            assert active and order == 2
+            super().require_derivative_order(order)
+            capabilities.append(
+                (self.point_start, self.npoint, self.nactive, self.indexed)
+            )
 
     @contextmanager
     def task(*args: typing.Any, **kwargs: typing.Any) -> typing.Iterator[typing.Any]:
         nonlocal active
+        assert not active
+        if resident:
+            begin, count = (args[0] - lease.points) // 24, args[1]
+            ids = args[2]
+            assert args[3] == scope["ingredients"] and not kwargs
+        else:
+            begin, count = int(args[0][0, 0] // 3), len(args[0])
+            ids = args[1]
+            assert ids is None and args[2] == scope["ingredients"]
+            assert kwargs == {"defer_error_to_consumer": True}
+        layout = CheckedLayout(
+            5,
+            5 if ids is None else len(ids),
+            count,
+            2,
+            "basis",
+            ids is not None,
+            2 if ids is not None else None,
+            begin,
+        )
         active = True
-        yield args
-        active = False
+        try:
+            yield SimpleNamespace(args=args, layout=layout)
+        finally:
+            active = False
 
     def geometry(
         view: typing.Any,
@@ -234,7 +274,7 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
     ) -> None:
         assert active and functional == 1
         begin, count = int(owners[0]), len(owners)
-        np.testing.assert_array_equal(view[0], grid.points[begin : begin + count])
+        np.testing.assert_array_equal(view.args[0], grid.points[begin : begin + count])
         np.testing.assert_array_equal(weighted, grid.weights[begin : begin + count])
         np.testing.assert_array_equal(atomic, weights[begin : begin + count])
         seen.append((begin, count))
@@ -252,18 +292,20 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
         functional: int,
     ) -> None:
         assert active and functional == 1 and points_per_atom == 17
-        assert view[0] == lease.points + 24 * begin
-        assert view[2] is mask
+        assert view.args[0] == lease.points + 24 * begin
+        assert view.args[2] is mask
         assert weighted == lease.weights + 8 * begin
         assert atomic == lease.atomic_weights + 8 * begin
         if profile:
             np.testing.assert_array_equal(
-                host_weighted, grid.weights[begin : begin + view[1]]
+                host_weighted, grid.weights[begin : begin + view.args[1]]
             )
-            np.testing.assert_array_equal(host_atomic, weights[begin : begin + view[1]])
+            np.testing.assert_array_equal(
+                host_atomic, weights[begin : begin + view.args[1]]
+            )
         else:
             assert host_weighted is host_atomic is None
-        seen.append((begin, view[1]))
+        seen.append((begin, view.args[1]))
         events.append("tile")
 
     def drain() -> None:
@@ -282,7 +324,7 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
         "ao_maps": (
             None
             if selected is None
-            else SimpleNamespace(domain="order-two-grid", select=select)
+            else SimpleNamespace(domain="order-two-grid", feature_task=mapped_task)
         ),
         "sources": SimpleNamespace(
             geometry=geometry,
@@ -291,6 +333,7 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
         ),
         "timeline": SimpleNamespace(phase=lambda _: nullcontext()),
         "ingredients": ("rho", "sigma"),
+        "needs_first": True,
         "points_per_atom": 17,
         "functional": 1,
         "profile_device": profile,
@@ -309,6 +352,27 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
     assert events[-1] == "drain"
     assert events.count("drain") == (fail_at_drain or plan.chunk_count)
     assert selections == (seen if resident and selected is not None else [])
+    assert capabilities == (
+        [
+            (
+                begin,
+                count,
+                5 if selected is None else len(selected),
+                selected is not None,
+            )
+            for begin, count in seen
+        ]
+        if resident
+        else []
+    )
+    expected_events = []
+    for begin, end in plan.chunks():
+        if begin >= stop:
+            break
+        expected_events.extend("tile" for _ in range(begin, end, tile))
+        expected_events.append("drain")
+    assert events == expected_events
+    assert not active
 
 
 def _resource_preflight(basis: typing.Any, host_budget: int = 256 << 20) -> dict:
@@ -393,7 +457,7 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve
     assert plan["grid"].peak_bytes + source + reserve < 512 << 20
-    assert plan["source"].becke_threads_per_point == 32
+    assert plan["source"].becke_threads_per_point == 128
     assert _resource_preflight(basis, host)["host"] == host
     with pytest.raises(ValueError, match="additional-host byte budget"):
         _resource_preflight(basis, host - 1)

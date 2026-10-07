@@ -56,6 +56,7 @@ electronic_method_ir
 program_ir
 integral_ir
 tensor_ir
+iteration_reuse
 array_api_frontend
 source_registry
 spatial_tasks
@@ -83,6 +84,7 @@ scf_proposals
 incremental_low_rank
 range_separated_integrals
 weighted_eri
+direct_pair_recurrence
 hf_force_finalization
 ```
 
@@ -92,6 +94,9 @@ hf_force_finalization
 :caption: DFT and XC
 
 dft_grid
+preao_force_domain
+becke_normalization
+stationary_cuda_scheduling
 dft_d3
 xc_expressions
 xc_integration

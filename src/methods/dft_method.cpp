@@ -2,9 +2,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
+#include <chrono>
 #include <climits>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -207,6 +211,44 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
 
+/** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
+ * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
+bool incremental_direct_jk_benchmark_requested(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
+    return false;
+  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
+  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                    std::string(name) + " must be 0/off or 1/on");
+}
+
+std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) return std::nullopt;
+  if (*value < '0' || *value > '9')
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be an unsigned integer");
+  errno = 0;
+  char* end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 10);
+  if (errno == ERANGE || end == value || *end != '\0' || parsed > UINT_MAX)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be an unsigned integer");
+  return static_cast<unsigned>(parsed);
+}
+
+std::optional<double> incremental_direct_jk_benchmark_density_rms_threshold(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) return std::nullopt;
+  errno = 0;
+  char* end = nullptr;
+  const double parsed = std::strtod(value, &end);
+  if (errno == ERANGE || end == value || *end != '\0' || !std::isfinite(parsed) || parsed < 0.0)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be finite and nonnegative");
+  return parsed;
+}
+
 scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                             generativeqc_backend backend, NativeKsExecutionPlan& execution_plan) {
   if (!std::isfinite(descriptor.energy_tolerance) || !std::isfinite(descriptor.density_tolerance) ||
@@ -383,13 +425,13 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     }
   }
 
-  const bool complete_wb97mv = execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv &&
-                               execution_plan.range_exchange && execution_plan.nonlocal_correlation;
-  const bool cuda_wb97mv = backend == GENERATIVEQC_BACKEND_CUDA && complete_wb97mv;
+  const auto& semilocal_metadata = dft::semilocal_family_metadata(execution_plan.semilocal_family);
+  const bool complete_cuda_nonlocal = semilocal_metadata.cuda_nonlocal_correlation &&
+                                      execution_plan.range_exchange &&
+                                      execution_plan.nonlocal_correlation;
+  const bool cuda_nonlocal = backend == GENERATIVEQC_BACKEND_CUDA && complete_cuda_nonlocal;
   const bool scaled_or_hybrid = options.semilocal_exchange_scale != 1.0 ||
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
-  const double pbe0_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.125 : -0.25;
-  const double b3lyp_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.1 : -0.2;
   // AUTO is admitted per component by CudaKsPlan: Direct Coulomb J may use
   // mixed arithmetic while exact exchange K remains strict FP64. Density-fitted
   // global hybrids retain their separate strict-FP64 admission.
@@ -399,14 +441,17 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
        options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
       fock.exchange.present;
-  const bool cuda_pbe0 =
-      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
-      options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
-      fock.exchange.coefficient == pbe0_fock_coefficient;
-  const bool cuda_b3lyp =
-      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::B3lyp &&
-      options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
-      fock.exchange.coefficient == b3lyp_fock_coefficient;
+  const double qualified_exact_exchange = semilocal_metadata.cuda_global_hybrid_exact_exchange;
+  const double expected_semilocal_exchange =
+      semilocal_metadata.component_coefficients_are_native_scales && qualified_exact_exchange > 0.0
+          ? 1.0 - qualified_exact_exchange
+          : 1.0;
+  const double spin_divisor = fock.spin == scf::FockSpin::Restricted ? 2.0 : 1.0;
+  const bool cuda_curated_global_hybrid =
+      cuda_global_hybrid && qualified_exact_exchange > 0.0 &&
+      options.semilocal_exchange_scale == expected_semilocal_exchange &&
+      options.semilocal_correlation_scale == 1.0 &&
+      fock.exchange.coefficient == -qualified_exact_exchange / spin_divisor;
   bool cuda_split_hybrid = false;
 #if GENERATIVEQC_HAS_CUDA
   if (cuda_global_hybrid && execution_plan.generated_split_hybrid &&
@@ -422,37 +467,68 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   }
 #endif
   if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
-      !cuda_pbe0 && !cuda_b3lyp && !cuda_split_hybrid && !cuda_wb97mv)
+      !cuda_curated_global_hybrid && !cuda_split_hybrid && !cuda_nonlocal)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA scaled/global-hybrid KS composition is not qualified");
-  if (execution_plan.nonlocal_correlation &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
+  if (execution_plan.nonlocal_correlation && !semilocal_metadata.native_nonlocal_correlation)
     throw MethodError(
         GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
         "self-consistent nonlocal correlation has no lowerer for this semilocal graph");
   if (execution_plan.nonlocal_correlation && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
-      !cuda_wb97mv)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "CUDA self-consistent nonlocal correlation is qualified only for WB97M-V");
-  if (execution_plan.range_exchange &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
-      execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
+      !cuda_nonlocal)
+    throw MethodError(
+        GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+        "CUDA self-consistent nonlocal correlation lacks a qualified family capability");
+  if (execution_plan.range_exchange && !semilocal_metadata.native_range_exchange)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO || execution_plan.range_exchange ||
-        execution_plan.nonlocal_correlation)
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "DFT density fitting requires FP64 full-range local/semilocal or global-hybrid KS");
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "DFT density fitting requires FP64 execution");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
     if (fock.exchange.present) fock.exchange.approximation = scf::FockApproximation::DensityFitted;
   }
   options.resolved_fock_build = scf::resolve_fock_build(
       fock, backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu,
       options.screening_tolerance, options.density_fitting_relative_threshold);
-  if (execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+  const bool generic_incremental_direct_jk =
+      incremental_direct_jk_benchmark_requested("GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK");
+  const bool legacy_pbe0_incremental_direct_jk =
+      incremental_direct_jk_benchmark_requested("GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK");
+  if (generic_incremental_direct_jk || legacy_pbe0_incremental_direct_jk) {
+    const bool strict_exact_cuda_ks =
+        backend == GENERATIVEQC_BACKEND_CUDA &&
+        options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        options.precision_mode == GENERATIVEQC_PRECISION_FP64 &&
+        scf::direct_jk_incremental_exact_eligible(*options.resolved_fock_build);
+    if (!strict_exact_cuda_ks)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "KS incremental Direct-J/K benchmark mode requires strict-FP64 "
+                        "exact-direct CUDA KS");
+    if (legacy_pbe0_incremental_direct_jk) {
+      const bool strict_exact_pbe0_rks =
+          cuda_curated_global_hybrid && fock.spin == scf::FockSpin::Restricted &&
+          execution_plan.semilocal_family == dft::SemilocalFamily::Pbe;
+      if (!strict_exact_pbe0_rks)
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "legacy PBE0 incremental Direct-J/K selector requires CUDA RKS PBE0");
+    }
+    options.incremental_direct_jk = true;
+    auto interval = incremental_direct_jk_benchmark_rebuild_interval(
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+    if (!interval)
+      interval = incremental_direct_jk_benchmark_rebuild_interval(
+          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
+    if (interval) options.incremental_direct_jk_rebuild_interval = *interval;
+    auto threshold = incremental_direct_jk_benchmark_density_rms_threshold(
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+    if (!threshold)
+      threshold = incremental_direct_jk_benchmark_density_rms_threshold(
+          "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD");
+    if (threshold) options.incremental_direct_jk_density_rms_threshold = *threshold;
+  }
+  if (semilocal_metadata.molecular_nonlocal_domain) {
     if (!execution_plan.range_exchange || !execution_plan.nonlocal_correlation)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
@@ -533,6 +609,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
   result.precision = native.precision;
+  result.incremental_direct_jk = native.incremental_direct_jk;
   result.precision_work = std::move(native.precision_work);
   native.dft_diagnostic.fock_builds = native.fock_builds;
   native.dft_diagnostic.initial_density_used = native.initial_density_used;
@@ -697,30 +774,50 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
 
 #if GENERATIVEQC_HAS_CUDA
 bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
-                                  const scf::ResolvedFockBuild& correction) noexcept {
+                                  const scf::ResolvedFockBuild& correction,
+                                  const scf::PreparedFockPlan* range_provider) noexcept {
   const auto& primary = provider.strategy();
   const auto& primary_spec = primary.spec;
   const auto& correction_spec = correction.spec;
-  const auto direct_binding = scf::prepared_cuda_fock_binding(provider);
-  const bool primary_exchange_compatible =
-      !primary_spec.exchange.present ||
-      (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
-       primary_spec.exchange.op == scf::FockOperator::FullRange &&
-       primary_spec.exchange.omega == 0.0);
-  return direct_binding && primary.backend == scf::FockBackend::Cuda &&
-         primary_spec.derivative_order == 0 && primary_spec.coulomb.present &&
-         primary_spec.coulomb.coefficient == 1.0 &&
-         primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
-         primary_spec.coulomb.op == scf::FockOperator::FullRange &&
-         primary_spec.coulomb.omega == 0.0 && primary_exchange_compatible &&
-         correction.backend == scf::FockBackend::Cuda &&
-         correction_spec.spin == primary_spec.spin && correction_spec.derivative_order == 0 &&
-         !correction_spec.coulomb.present && correction_spec.exchange.present &&
-         correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
-         correction_spec.exchange.op == scf::FockOperator::LongRange &&
-         std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
-         std::isfinite(correction_spec.exchange.coefficient) &&
-         correction.screening_tolerance == primary.screening_tolerance;
+  const auto primary_binding = scf::prepared_cuda_fock_binding(provider);
+  const bool correction_compatible =
+      correction.backend == scf::FockBackend::Cuda && correction_spec.spin == primary_spec.spin &&
+      correction_spec.derivative_order == 0 && !correction_spec.coulomb.present &&
+      correction_spec.exchange.present &&
+      correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
+      correction_spec.exchange.op == scf::FockOperator::LongRange &&
+      std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
+      std::isfinite(correction_spec.exchange.coefficient) &&
+      correction.screening_tolerance == primary.screening_tolerance;
+  if (!primary_binding || primary.backend != scf::FockBackend::Cuda ||
+      primary_spec.derivative_order != 0 || !primary_spec.coulomb.present ||
+      primary_spec.coulomb.coefficient != 1.0 ||
+      primary_spec.coulomb.op != scf::FockOperator::FullRange ||
+      primary_spec.coulomb.omega != 0.0 || !correction_compatible)
+    return false;
+
+  const bool fitted_primary =
+      primary_spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+      (!primary_spec.exchange.present ||
+       (primary_spec.exchange.approximation == scf::FockApproximation::DensityFitted &&
+        primary_spec.exchange.op == scf::FockOperator::FullRange &&
+        primary_spec.exchange.omega == 0.0));
+  if (fitted_primary) {
+    if (!range_provider || range_provider->strategy() != correction ||
+        !range_provider->matches_system(provider.system()))
+      return false;
+    const auto range_binding = scf::prepared_cuda_fock_binding(*range_provider);
+    return range_binding && range_binding.device_id == primary_binding.device_id &&
+           range_binding.nbf == primary_binding.nbf;
+  }
+
+  const bool exact_primary =
+      primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+      (!primary_spec.exchange.present ||
+       (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        primary_spec.exchange.op == scf::FockOperator::FullRange &&
+        primary_spec.exchange.omega == 0.0));
+  return exact_primary && range_provider == nullptr;
 }
 #endif
 
@@ -755,25 +852,28 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
-        (!range_strategy_ || !cuda_rsh_provider_compatible(fock_, *range_strategy_)))
+        (!range_strategy_ ||
+         !cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())))
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "CUDA range-separated KS requires a compatible prepared Direct SR/LR exchange provider");
+          "CUDA range-separated KS requires compatible primary and Direct LR providers");
 #endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
-      if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv &&
+      const auto& metadata = dft::semilocal_family_metadata(execution_plan_.semilocal_family);
+      if (execution_plan_.nonlocal_correlation && metadata.cuda_nonlocal_correlation &&
           options_.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused)
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                          "public CUDA WB97M-V requires device-fused XC/nonlocal execution");
+                          "public CUDA nonlocal KS requires device-fused XC/nonlocal execution");
       const auto* range = range_strategy_ ? &*range_strategy_ : nullptr;
-      const auto domain = execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv
+      const auto domain = metadata.molecular_nonlocal_domain
                               ? dft::nlc::Vv10DensityDomain::MolecularV1
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
       cuda_ = std::make_unique<dft::CudaKsPlan>(
           fock_, basis_, grid_, options_, xc_functional_code(execution_plan_),
-          options_.xc_tile_points, range, nonlocal_.get(), domain);
+          options_.xc_tile_points, range, nonlocal_.get(), domain, dft::CudaXcPreparationBudget{},
+          range_correction_.get());
     }
 #endif
     if (execution_plan_.d4_correction) prepare_d4(device);
@@ -830,6 +930,31 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) cuda_->clear_warm_start();
 #endif
+  }
+
+  std::optional<std::vector<double>> prepare_cold_initial_guess(
+      scf::initial_guess::PreliminaryDiagnostic& diagnostic) const {
+    if (!options_.preliminary_guess) return std::nullopt;
+    scf::initial_guess::validate_preliminary_target(system_, fock_.strategy(), options_);
+    diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+    diagnostic.target_attempts = 1;
+    const auto started = std::chrono::steady_clock::now();
+    try {
+      runtime::CpuRetainedCapacity retained(host_numeric_capacity());
+      auto density = scf::initial_guess::prepare_preliminary_density(
+          fock_, *options_.preliminary_guess, diagnostic);
+      diagnostic.preparation_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return density;
+    } catch (const std::bad_alloc&) {
+      throw;
+    } catch (const std::exception&) {
+      diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::PreparationFailed;
+      diagnostic.work_counters_complete = false;
+      diagnostic.preparation_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return std::nullopt;
+    }
   }
 
   void invalidate_result() override { invalidate_final_state(); }
@@ -1110,21 +1235,82 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
 
-    std::vector<double> hcore(coordinates), pulay(coordinates);
-    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
-      const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
-      const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
-      for (unsigned spin = 0; spin < spins; ++spin)
-        for (std::size_t item = 0; item < matrix_elements; ++item) {
-          hcore[coordinate] += density[spin][item] * dh[item];
-          pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+    std::vector<double> hcore, pulay;
+    std::size_t one_electron_device_bytes = 0;
+    std::size_t one_electron_h2d_bytes = 0;
+    std::size_t one_electron_d2h_bytes = 0;
+    bool resident_one_electron = false;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      scf::OneElectronGradientResources one_electron;
+      dft::CudaKsResidentStationaryWeightsBinding resident_weights;
+      const auto resident_status =
+          cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
+      if (resident_status == GENERATIVEQC_STATUS_SUCCESS) {
+        if (!resident_weights || resident_weights.device_id != expected.identity.model.device ||
+            resident_weights.matrix_elements != matrix_elements ||
+            resident_weights.spins != spins) {
+          detail = "CUDA DF stationary D/W binding is incompatible with the final KS state";
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
+        const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
+            resident_weights.device_id, system_, {}, {}, 0, maximum_bytes, hcore, pulay, detail,
+            &one_electron, resident_weights.density, resident_weights.weighted_density);
+        if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
+          resident_one_electron = true;
+          one_electron_device_bytes = one_electron.device_bytes;
+          one_electron_h2d_bytes = one_electron.host_to_device_bytes;
+          one_electron_d2h_bytes = one_electron.device_to_host_bytes;
+        } else if (one_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                   one_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) {
+          return one_status;
+        }
+      } else if (resident_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        return resident_status;
+      }
+    }
+#endif
+    if (!resident_one_electron) {
+      // CPU and bounded CUDA fallback preserve the established exact host
+      // contraction. CUDA only reaches this branch when the optional resident
+      // one-electron consumer cannot be admitted; J/K response ownership is
+      // unaffected.
+      hcore.assign(coordinates, 0.0);
+      pulay.assign(coordinates, 0.0);
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+        const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
+        const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
+        for (unsigned spin = 0; spin < spins; ++spin)
+          for (std::size_t item = 0; item < matrix_elements; ++item) {
+            hcore[coordinate] += density[spin][item] * dh[item];
+            pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+          }
+      }
+      detail.clear();
     }
 
     const std::vector<double> empty;
     scf::FockEnergyDerivativeComponents two;
+    std::optional<scf::CudaDfBorrowedResponseDensity> response_density;
     std::optional<scf::CudaDfBorrowedFittedProjection> fitted_projection;
 #if GENERATIVEQC_HAS_CUDA
+    if (cuda_ && spins == 1) {
+      dft::CudaKsResidentDensityBinding lease;
+      std::string lease_detail;
+      const auto lease_status = cuda_->resident_final_density(expected, lease, lease_detail);
+      if (lease_status == GENERATIVEQC_STATUS_SUCCESS) {
+        if (!lease || lease.spins != 1 || lease.matrix_elements != matrix_elements ||
+            lease.device_id != expected.identity.model.device) {
+          detail = "CUDA KS returned an incompatible final density lease for DF response";
+          return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+        }
+        response_density.emplace(scf::CudaDfBorrowedResponseDensity{
+            lease.device_id, lease.alpha, lease.matrix_elements, lease.stream});
+      } else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        detail = lease_detail;
+        return lease_status;
+      }
+    }
     if (cuda_ && spins == 1 && strategy.spec.exchange.present) {
       dft::CudaKsResidentFittedProjectionBinding lease;
       std::string lease_detail;
@@ -1146,7 +1332,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
 #endif
     try {
-      two = fitted_projection
+      two = response_density ? fock_.energy_derivative_components_with_cuda_df_state(
+                                   density[0], empty, &*response_density,
+                                   fitted_projection ? &*fitted_projection : nullptr)
+            : fitted_projection
                 ? fock_.energy_derivative_components_with_fitted_projection(density[0], empty,
                                                                             *fitted_projection)
                 : fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
@@ -1184,12 +1373,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "density-fitted stationary derivative source is nonfinite";
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
-    // H'/S' were exported during provider preparation; their contractions here
-    // are host work and perform no force-time one-electron CUDA transfers.
-    // DF response has separate scratch/transfers which this compact publication
-    // bridge does not measure. Do not invent those counts from spin dimensions.
+    // H'/S' derivative tensors remain retained host provider data. CUDA may
+    // instead contract the exact final resident D/W with the paired device
+    // consumer; slots 2/4/5 report that consumer's device peak and actual
+    // metadata/output movement. DF J/K response scratch/transfers remain
+    // separate and are not inferred from spin dimensions.
     work[0] = fock_.diagnostic().device_bytes;
+    work[2] = one_electron_device_bytes;
     work[3] = publication_peak_bytes;
+    work[4] = one_electron_h2d_bytes;
+    work[5] = one_electron_d2h_bytes;
     output = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1244,7 +1437,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
-      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
+      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr,
+      bool combined_two_electron = false) {
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
@@ -1254,6 +1448,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const bool range_exchange = execution_plan_.range_exchange;
+    if (combined_two_electron && (fitted || range_exchange)) {
+      detail = "combined stationary two-electron derivative requires full-range Direct sources";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     if (range_exchange != range_strategy_.has_value()) {
       detail = "CUDA stationary integral gradient has inconsistent range-exchange ownership";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -1331,7 +1529,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     scf::OneElectronGradientResources one;
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
-    candidate.reserve((range_exchange ? 5 : 4) * nc);
+    candidate.reserve((combined_two_electron ? 3 : range_exchange ? 5 : 4) * nc);
     std::vector<double> hcore, pulay, value;
     status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (!fitted)
@@ -1379,7 +1577,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                          resident_density.matrix_elements, value, detail)
                    : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
                          fock_, resident_density.alpha, resident_density.beta,
-                         resident_density.matrix_elements, value, detail);
+                         resident_density.matrix_elements, value, detail, !combined_two_electron);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       candidate.insert(candidate.end(), value.begin(), value.end());
     }
@@ -1397,8 +1595,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const char* issue =
           execution_plan_.automatic_program
               ? "#1122"
-              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
-                                                                                  : "#163");
+              : (dft::semilocal_family_requires_tau(execution_plan_.semilocal_family) ? "#164"
+                                                                                      : "#163");
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
@@ -1439,7 +1637,43 @@ class KsPreparedCalculation final : public PreparedCalculation {
       // Native iterations read only scalar diagnostics. The public energy
       // result does not require a final AO matrix download; warm D stays resident.
       cuda_->set_warm_start_updates(update_warm);
-      auto native = cuda_->run(initial_density, reuse_warm, false);
+      scf::initial_guess::PreliminaryDiagnostic diagnostic;
+      std::optional<std::vector<double>> prepared;
+      const bool policy = allow_preliminary && options_.preliminary_guess.has_value();
+      const bool existing = initial_density != nullptr || (reuse_warm && cuda_->has_warm_start());
+      if (policy) {
+        diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+        diagnostic.target_attempts = 1;
+        if (existing) {
+          diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
+        } else {
+          prepared = prepare_cold_initial_guess(diagnostic);
+        }
+      }
+      const auto* seed = initial_density ? initial_density : (prepared ? &*prepared : nullptr);
+      scf::ScfResult native;
+      try {
+        native = cuda_->run(seed, reuse_warm && !prepared, false);
+      } catch (const generativeqc::Error& error) {
+        // CUDA helpers may also throw untyped runtime errors for device faults.
+        // Only an explicitly numerical failure may consume the seed retry.
+        if (!prepared || error.status() != GENERATIVEQC_STATUS_NUMERICAL_FAILURE) throw;
+        diagnostic.work_counters_complete = false;
+      }
+      // Returned physical failures and nonconvergence retain a complete work
+      // census; a typed numerical exception above has no terminal result.
+      if (prepared && (!native.converged || cuda_->failed())) {
+        diagnostic.discarded_target_iterations = native.iterations;
+        diagnostic.discarded_target_fock_builds = native.fock_builds;
+        diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
+        diagnostic.target_attempts = 2;
+        prepared.reset();
+        // Release the discarded result's history before the new solve. begin()
+        // revokes its final state and resets DIIS while preserving last-good warm D.
+        native = {};
+        native = cuda_->run(nullptr, false, false);
+      }
+      if (policy) native.preliminary_guess = diagnostic;
       if (cuda_->failed())
         throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                           "CUDA KS physical evaluation failed");
@@ -1466,7 +1700,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     } else if (execution_plan_.generated_split_hybrid)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
-    else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv) {
+    else if (dft::semilocal_family_uses_molecular_nonlocal_domain(
+                 execution_plan_.semilocal_family)) {
       if (!range_correction_ || !nonlocal_)
         throw std::runtime_error("WB97M-V requires both range-exchange and nonlocal owners");
       native = unrestricted(execution_plan_)
@@ -1536,7 +1771,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                         options_.semilocal_correlation_scale};
       if (range_correction_) identity.model.range_correction = range_correction_->strategy();
       if (nonlocal_) identity.model.nonlocal_correlation = nonlocal_->parameters();
-      if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv)
+      if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan_.semilocal_family))
         identity.model.nonlocal_density_domain = dft::nlc::Vv10DensityDomain::MolecularV1;
       dft::KsPhysicalState physical{identity,
                                     true,
@@ -1577,9 +1812,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
                                            execution_plan_.long_range_exchange,
                                            execution_plan_.range_omega),
         fock_backend, options_.screening_tolerance);
-    if (fock_backend == scf::FockBackend::Cpu)
-      range_correction_ =
-          std::make_unique<scf::PreparedFockPlan>(system_, nullptr, *range_strategy_, device);
+    const bool fitted_primary =
+        fock_.strategy().spec.coulomb.approximation == scf::FockApproximation::DensityFitted;
+    if (fock_backend == scf::FockBackend::Cpu || fitted_primary) {
+      const auto budget =
+          fock_backend == scf::FockBackend::Cuda ? ks_provider_bytes(system_, backend_, 0U) : 0U;
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr,
+                                                                  *range_strategy_, device, budget);
+    }
   }
 
   void prepare_nonlocal(int device) {
@@ -1731,6 +1971,9 @@ class KsPreparedBatch final : public PreparedBatch {
       throw std::invalid_argument("KS batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
     std::vector<bool> ready(size(), false);
+    std::vector<std::optional<std::vector<double>>> preliminary_seeds(size());
+    std::vector<scf::initial_guess::PreliminaryDiagnostic> preliminary_diagnostics(size());
+    std::vector<bool> preliminary_requested(size(), false);
     // Allocate source-geometry metadata before launching any item. The success
     // path can then publish its last-good identity without a coordinate copy.
     std::vector<scf::HfWarmState> candidates(size());
@@ -1761,6 +2004,19 @@ class KsPreparedBatch final : public PreparedBatch {
           item.plan = make_plan(target);
         }
         result.warm_start_used = warm_enabled_ && item.warm.has_value();
+#if GENERATIVEQC_HAS_CUDA
+        if (item.plan->cuda_plan() && options_.preliminary_guess) {
+          auto& diagnostic = preliminary_diagnostics[i];
+          preliminary_requested[i] = true;
+          diagnostic.requested_kind = static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+          diagnostic.target_attempts = 1;
+          if (result.warm_start_used) {
+            diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
+          } else {
+            preliminary_seeds[i] = item.plan->prepare_cold_initial_guess(diagnostic);
+          }
+        }
+#endif
         ready[i] = true;
       } catch (...) {
         result.status = item_exception_status();
@@ -1769,6 +2025,8 @@ class KsPreparedBatch final : public PreparedBatch {
 
     const auto finish = [&](std::size_t i, scf::ScfResult native) {
       auto& result = results[i];
+      if (preliminary_requested[i] && !native.preliminary_guess.requested_kind)
+        native.preliminary_guess = preliminary_diagnostics[i];
       result.calculation = adapt_result(std::move(native), backend_);
       items_[i].plan->apply_d4(result.calculation);
       const auto& calculation = result.calculation;
@@ -1796,21 +2054,36 @@ class KsPreparedBatch final : public PreparedBatch {
         const bool seed_failure = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED ||
                                   result.status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE ||
                                   result.status == GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-        if (!ready[i] || (attempt && (!result.warm_start_used || !seed_failure))) continue;
+        const bool preliminary_seeded = preliminary_seeds[i].has_value();
+        const bool first_seeded = result.warm_start_used || preliminary_seeded;
+        if (!ready[i] || (attempt && (!first_seeded || !seed_failure))) continue;
         if (attempt) {
           result.warm_start_fallback = true;
           // Release the failed attempt's exported history before starting another
           // solve, preserving the two-history resource bound.
           result.calculation.ks_diagnostic.reset();
+          if (preliminary_requested[i]) {
+            auto& diagnostic = preliminary_diagnostics[i];
+            diagnostic.target_attempts = 2;
+            diagnostic.discarded_target_iterations = result.calculation.convergence.iterations;
+            diagnostic.discarded_target_fock_builds = result.calculation.fock_builds;
+            diagnostic.work_counters_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
+            if (preliminary_seeded)
+              diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::TargetRetried;
+          }
+          preliminary_seeds[i].reset();
         }
         auto& item = items_[i];
         const bool reuse = !attempt && result.warm_start_used;
-        const auto* seed = reuse && !item.resident_warm ? &item.warm->density : nullptr;
+        const auto* seed =
+            reuse && !item.resident_warm
+                ? &item.warm->density
+                : (!attempt && preliminary_seeds[i] ? &*preliminary_seeds[i] : nullptr);
         try {
 #if GENERATIVEQC_HAS_CUDA
           if (auto* cuda = item.plan->cuda_plan()) {
             cuda->set_warm_start_updates(warm_enabled_ && warm_updates_);
-            cuda->begin(seed, reuse && item.resident_warm);
+            cuda->begin(seed, reuse && item.resident_warm && !preliminary_seeds[i]);
             running[i] = true;
             continue;
           }
@@ -2062,10 +2335,12 @@ class KsPreparedBatch final : public PreparedBatch {
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
-      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
+      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr,
+      bool combined_two_electron = false) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->cuda_integral_gradient(
-          expected, output, maximum_bytes, work, detail, cached_density, cached_weighted_density);
+          expected, output, maximum_bytes, work, detail, cached_density, cached_weighted_density,
+          combined_two_electron);
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -2148,6 +2423,10 @@ class KsPreparedBatch final : public PreparedBatch {
 
 }  // namespace
 
+Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend) {
+  return adapt_result(std::move(native), backend);
+}
+
 generativeqc_status dft_final_state_token(const PreparedCalculation& calculation,
                                           dft::CudaKsFinalStateToken& token, std::string& detail) {
   const auto* ks = dynamic_cast<const KsPreparedCalculation*>(&calculation);
@@ -2228,11 +2507,12 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     const std::vector<scf::reference::Matrix>& density,
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
-    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+    bool combined_two_electron) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
-                                      &density, &weighted_density);
+                                      &density, &weighted_density, combined_two_electron);
   detail = "CUDA integral gradient requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
@@ -2317,9 +2597,10 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
 
 void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
                             const core::System& system) {
-  if (execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv && !system.ecp_terms.empty())
+  if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
+      !system.ecp_terms.empty())
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "WB97M-V ECP execution is not qualified");
+                      "molecular-nonlocal KS ECP execution is not qualified");
   if (!unrestricted(execution_plan)) {
     if (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1)
       throw std::invalid_argument(

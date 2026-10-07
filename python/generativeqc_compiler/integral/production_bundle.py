@@ -8,6 +8,7 @@ from generativeqc_compiler.common.cuda_target import normalize_cuda_architecture
 
 from .production_cost import _partition_production_selections
 from .production_emission import emit_production_shard, emit_profile_shard
+from .production_k_block import direct_k_block_candidates
 from .production_profile import (
     _profile_identifier,
     load_production_kernel_selections,
@@ -19,11 +20,15 @@ from .production_registry import (
     emit_registry_header,
     emit_registry_source,
 )
+from .production_rys_values import direct_rys_value_candidates
 from .shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
+
+    from .production_profile import ResolvedProductionProfile
+    from .production_selection import KernelSelection
 
 
 def write_production_bundles(
@@ -72,6 +77,36 @@ def write_production_bundles(
     output_directory.mkdir(parents=True, exist_ok=True)
     outputs = []
     for profile in profiles:
+        rys_by_name = {
+            item.spec.name: item for item in direct_rys_value_candidates(profile)
+        }
+        k_block_by_name = {
+            item.spec.name: item for item in direct_k_block_candidates(profile)
+        }
+
+        def emit_unit(
+            unit: tuple[KernelSelection, ...],
+            profile: ResolvedProductionProfile = profile,
+            rys_by_name: dict[str, KernelSelection] = rys_by_name,
+            k_block_by_name: dict[str, KernelSelection] = k_block_by_name,
+        ) -> str:
+            """Keep alternatives in the same stable build unit as their owner."""
+            rys_alternatives = tuple(
+                rys_by_name[item.spec.name]
+                for item in unit
+                if item.spec.name in rys_by_name
+            )
+            k_block_alternatives = tuple(
+                k_block_by_name[item.spec.name]
+                for item in unit
+                if item.spec.name in k_block_by_name
+            )
+            return (
+                emit_profile_shard(profile, unit)
+                + emit_profile_shard(profile, rys_alternatives, variant="_rys_value")
+                + emit_profile_shard(profile, k_block_alternatives, variant="_k_block")
+            )
+
         identifier = _profile_identifier(profile.target.architecture)
         profile_directory = output_directory / profile.target.architecture
         profile_directory.mkdir(parents=True, exist_ok=True)
@@ -92,7 +127,7 @@ def write_production_bundles(
                 path = profile_directory / (
                     f"generativeqc_generated_shell_{identifier}_{name}.cu"
                 )
-                _write_if_changed(path, emit_profile_shard(profile, unit))
+                _write_if_changed(path, emit_unit(unit))
                 outputs.append(path)
         else:
             shards = _partition_production_selections(profile.selections, shard_count)
@@ -100,7 +135,7 @@ def write_production_bundles(
                 path = profile_directory / (
                     f"generativeqc_generated_shell_{identifier}_shard_{index}.cu"
                 )
-                _write_if_changed(path, emit_profile_shard(profile, shard))
+                _write_if_changed(path, emit_unit(shard))
                 outputs.append(path)
     header = output_directory / "generativeqc_generated_shell_registry.hpp"
     source = output_directory / "generativeqc_generated_shell_registry.cu"

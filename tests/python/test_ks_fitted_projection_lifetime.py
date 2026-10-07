@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,10 +25,9 @@ def _definition(source: str, signature: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def projection_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def projection_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     owner = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     facade = (ROOT / "src/scf/cuda_fock_execution.cpp").read_text()
     binding = (ROOT / "src/scf/cuda_fock_execution.hpp").read_text()
@@ -33,7 +35,14 @@ def projection_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     public = (ROOT / "src/dft/cuda_ks.hpp").read_text()
     legacy = _definition(owner, "  void enqueue_legacy()")
     submission_begin = legacy.index("      pending_fitted_occupied =")
-    submission_end = legacy.index("      generativeqc_status jk_status")
+    # Extract only the fitted lease initialization, not the unrelated Direct-J/K
+    # density preparation between this reset and the provider submission.
+    submission_end = (
+        legacy.index(
+            ";", legacy.index("      pending_fitted_projection_scratch_generation =")
+        )
+        + 1
+    )
     submitted = legacy[legacy.index("\n      check(jk_status, detail);") :]
     capture = _definition(submitted, "      if (use_occupied_fitted) {")
     unit = r"""
@@ -114,11 +123,13 @@ struct Owner {
   double *x=values, *warm_orbitals=values, *proposal=values;
   unsigned char enabled=1, *final_enabled=&enabled;
   struct { unsigned fitted_final_projection_leases=0; } movement;
+  void multiply_spin(unsigned, const double*, bool, bool, const double*, bool,
+                     const std::uint8_t*, double*) { ++launches; }
   CudaKsFinalStateToken token() const { return {1, final_generation}; }
 """
     unit += _definition(owner, "  void retain_final_fitted_projection()")
     unit += "\n  void capture_submission(bool use_occupied_fitted) {\n"
-    unit += legacy[submission_begin:submission_end] + capture + "\n}\n"
+    unit += legacy[submission_begin:submission_end] + "\n" + capture + "\n}\n"
     unit += r"""
 };
 struct CudaKsPlan {
@@ -198,23 +209,12 @@ int main(int argc, char** argv) {
     directory = tmp_path_factory.mktemp("ks-projection-lifetime")
     cpp, executable = directory / "probe.cpp", directory / "probe"
     cpp.write_text(unit)
-    result = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            str(cpp),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=("-std=c++17", "-Wall", "-Wextra", "-Werror"),
+        compile_timeout=30,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
     return executable
 
 

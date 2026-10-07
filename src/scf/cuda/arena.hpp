@@ -125,6 +125,8 @@ struct ArenaLayout {
   std::size_t incremental_anchor_fock{};
   std::size_t incremental_delta_updates{};
   std::size_t incremental_full_build{};
+  std::size_t incremental_full_build_count{};
+  std::size_t incremental_delta_build_count{};
   std::size_t incremental_max_abs_delta_density{};
   std::size_t incremental_full_admitted_shell_quartets{};
   std::size_t incremental_delta_admitted_shell_quartets{};

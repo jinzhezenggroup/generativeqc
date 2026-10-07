@@ -146,8 +146,12 @@ def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
         "exchange_only ? 1.0 : -1.0",
     ):
         assert coefficient in native
-    assert "? 1.0 : -0.5" in generated
-    assert "? 1.0 : -1.0" in generated
+    # Both consumer bits now encode HF-weighted K, distinct from raw K.
+    # The numerical scatter probe checks every mode against dense contractions.
+    for coefficient in ("-0.5", "-1.0"):
+        assert f"hf_exchange ? {coefficient}" in native
+        assert f"? {coefficient} : 1.0" in generated
+        assert f"? 0.0 : {coefficient}" in generated
 
 
 def test_direct_fock_scatter_cli_is_deterministic(tmp_path: Path) -> None:

@@ -515,7 +515,7 @@
     },
     {
       "id": "dft.force-active-ao",
-      "classification": "needs-qualification",
+      "classification": "already-default",
       "controls": [
         "dft-policy:force-active-ao-auto"
       ],
@@ -529,12 +529,15 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces resolve one method-name-free active-AO policy from derivative order, execution composition, spin, provider/resource identity and workload bounds. The production positive-profile registry is intentionally empty because retained complete-force evidence does not cross the shared promotion gate; auto therefore resolves to dense while both ordinary and composite consumers reuse the resident-map owner.",
-      "revisit_condition": "Add a positive profile only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence, independent numerical gates, actual selected/dense AO-work counters and adjacent losing-domain controls under #1598. Matching must remain structural/workload/resource based and dense on every miss.",
+      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
+      "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
         "issue:#1598",
-        "pr:#1833",
+        "pr:#1881",
+        "pr:#1934",
+        "benchmarks:benchmarks/results/pbe0-public-force-policy-20261005/README.md",
+        "benchmarks:benchmarks/results/pbe0-force-followups-20261005/README.md",
         "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md"
       ]
     },
@@ -648,6 +651,32 @@
         "issue:#189",
         "issue:#192",
         "docs:docs/user/basis_projection.md"
+      ]
+    },
+    {
+      "id": "cc.iteration-invariant-reuse",
+      "classification": "needs-qualification",
+      "controls": [
+        "cc-option:iteration_invariant_reuse"
+      ],
+      "owner_issues": [
+        933,
+        926,
+        1598
+      ],
+      "sources": [
+        "src/cc/solver.hpp",
+        "python/generativeqc_compiler/tensor/iteration_reuse.py",
+        "tools/benchmark_rccsd_iteration_reuse.py",
+        "docs/developer/iteration_reuse.md"
+      ],
+      "rationale": "The common TensorIR proof safely retains immutable reference transforms within one conventional CPU solve, with unchanged dynamic amplitudes and independent replay. A corrected matched-budget CPU solve probe did not reproduce the initial noisy slower sign, but this bounded synthetic result does not establish representative molecular or GPU benefit. The schedule remains internal and default-off.",
+      "revisit_condition": "Require representative complete molecular endpoint benefit, full retained-memory accounting, unchanged physical replay and convergence, and real-device CUDA owner validation before promoting a backend. Do not infer an unmeasured shape threshold from the initial bounded probe.",
+      "evidence": [
+        "issue:#933",
+        "issue:#926",
+        "issue:#1598",
+        "note:.agents/notes/implemented/architecture/2026-10-06-shared-iteration-invariants.md"
       ]
     },
     {

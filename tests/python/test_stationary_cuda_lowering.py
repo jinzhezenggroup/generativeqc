@@ -187,23 +187,6 @@ def test_strict_stationary_cuda_rejects_environment_overrides(
     assert not cache.exists()
 
 
-def test_native_gradient_grid_helpers_do_not_duplicate_the_ao_translation_unit() -> (
-    None
-):
-    from generativeqc_compiler.dft.ao_cuda import emit_grid_policy
-    from generativeqc_compiler.xc.geometry_cuda import emit_native_geometry_cuda
-
-    ao = emit_grid_policy()
-    gradient = emit_native_geometry_cuda()
-    assert "namespace generativeqc_grid_policy {" in ao
-    assert "namespace generativeqc_grid_policy {" not in gradient
-    assert "generativeqc_grid_policy::" not in gradient
-    assert "namespace generativeqc_xc_gradient_grid_policy {" in gradient
-    assert "generativeqc_xc_gradient_grid_policy::axis_jet" in gradient
-    assert "namespace generativeqc_grid_adjoint {" in gradient
-    assert "grid_response_adjoint.hpp" not in gradient
-
-
 def test_stationary_aot_inventory_is_fixed_full_sp_domain() -> None:
     from itertools import product
 

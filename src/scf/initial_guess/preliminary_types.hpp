@@ -6,7 +6,7 @@
 
 namespace generativeqc::scf::initial_guess {
 
-enum class PreliminaryKind : std::uint32_t { HartreeFock = 1, Lda = 2 };
+enum class PreliminaryKind : std::uint32_t { HartreeFock = 1, Lda = 2, Minao = 3 };
 enum class PreliminaryOutcome : std::uint32_t {
   Disabled = 0,
   ExplicitDensity = 1,

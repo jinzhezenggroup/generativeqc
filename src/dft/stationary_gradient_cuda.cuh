@@ -22,8 +22,14 @@ struct Owner {
       becke_shared_bytes{}, byte_budget{}, phased_bytes{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
+  bool becke_primitive_requested = false, becke_primitive = false,
+       becke_primitive_configured = false;
+  bool becke_normalize_supported = false, becke_normalize_cooperative = false,
+       becke_normalize_configured = false;
   cudaStream_t geometry_stream{};
   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
+  cudaEvent_t becke_events[8]{};
+  double becke_phase_ms[7]{};
   double synchronization_wait_ms{}, setup_transfer_ms{}, setup_validation_ms{};
   double primitive_h2d_ms{}, primitive_kernel_ms{}, primitive_reduction_ms{};
   double geometry_h2d_ms{}, geometry_kernel_ms{}, geometry_reduction_ms{}, final_d2h_wall_ms{};
@@ -36,6 +42,8 @@ struct Owner {
   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
   uint64_t center_distance_evaluations{}, center_geometry_preparations{},
       becke_pair_state_evaluations{}, phased_batches{};
+  uint64_t becke_primitive_batches{}, becke_primitive_reverse_pair_visits{};
+  uint64_t phased_points{}, becke_profile_batches{};
   bool retains_becke_pair_state() const {
     return bool(phased_storage) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
@@ -223,15 +231,56 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
   if (owner.phased_storage) {
     const dim3 atom_blocks(blocks(view.npoint, 128), na);
     const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
+    // These events follow the AO/XC seed producer on its borrowed stream.
+    // Disabled profiling records nothing and adds no device synchronization.
+    profile_record(owner, owner.becke_events[0], stream);
     phased_becke_atom<0><<<atom_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[1], stream);
     phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[2], stream);
     phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
-    phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
-    phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
-    phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[3], stream);
+    if constexpr (stationary_becke_cooperative_normalize) {
+      if (owner.becke_normalize_cooperative)
+        phased_becke_normalize_cooperative<<<blocks(view.npoint,
+                                                    stationary_becke_normalize_point_lanes),
+                                             dim3(stationary_becke_normalize_point_lanes,
+                                                  128 / stationary_becke_normalize_point_lanes),
+                                             0, stream>>>(phased);
+      else
+        phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+    } else {
+      phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+    }
+    profile_record(owner, owner.becke_events[4], stream);
+    if (owner.becke_primitive) {
+      phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
+      profile_record(owner, owner.becke_events[5], stream);
+      phased_becke_atom<2, true><<<atom_blocks, 128, 0, stream>>>(phased);
+      ++owner.becke_primitive_batches;
+      owner.becke_primitive_reverse_pair_visits += view.npoint * na * (na - 1) / 2;
+    } else {
+      phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
+      profile_record(owner, owner.becke_events[5], stream);
+      phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
+    }
+    profile_record(owner, owner.becke_events[6], stream);
     phased_becke_atom<3><<<atom_blocks, 128, 0, stream>>>(phased);
+    profile_record(owner, owner.becke_events[7], stream);
     owner.launches += 7;
     ++owner.phased_batches;
+    owner.phased_points += view.npoint;
+    if (owner.profile) {
+      // Event reuse across deferred tiles is safe only after the last event.
+      // This intentional per-tile fence is intrusive qualification, never a
+      // clean endpoint sample; report its event/fence counts separately.
+      cuda_check(cudaEventSynchronize(owner.becke_events[7]));
+      ++owner.synchronizations;
+      ++owner.becke_profile_batches;
+      for (size_t phase = 0; phase < 7; ++phase)
+        profile_elapsed(owner, owner.becke_phase_ms[phase], owner.becke_events[phase],
+                        owner.becke_events[phase + 1]);
+    }
   }
 }
 }  // namespace generativeqc_stationary_cuda
@@ -391,6 +440,19 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
     cuda_check(cudaStreamSynchronize(owner->context.stream));
     owner->phased_bytes = bytes;
     owner->bytes += bytes;
+    if constexpr (stationary_becke_cooperative_normalize) {
+      cudaDeviceProp property{};
+      cudaFuncAttributes attributes{};
+      cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
+      cuda_check(cudaFuncGetAttributes(&attributes, phased_becke_normalize_cooperative));
+      owner->becke_normalize_supported =
+          owner->atoms <= stationary_becke_normalize_max_atoms &&
+          size_t(property.maxThreadsDim[0]) >= stationary_becke_normalize_point_lanes &&
+          size_t(property.maxThreadsDim[1]) >= 128 / stationary_becke_normalize_point_lanes &&
+          property.maxThreadsPerBlock >= 128 && attributes.maxThreadsPerBlock >= 128 &&
+          attributes.sharedSizeBytes <= size_t(property.sharedMemPerBlock);
+      owner->becke_normalize_cooperative = owner->becke_normalize_supported;
+    }
     ++owner->launches;
     ++owner->synchronizations;
   });
@@ -400,6 +462,96 @@ int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t c
   if (!owner || !output || count != 2) return 1;
   output[0] = owner->phased_bytes;
   output[1] = owner->phased_batches;
+  return 0;
+}
+// Qualification may compare the two schedules, but never mutate a live
+// topology/geometry owner. Both use the same reservation and canonical AD.
+int stationary_configure_becke_normalize_v1(void* pointer, int enabled, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || owner->becke_normalize_configured ||
+        (enabled != 0 && enabled != 1))
+      throw std::invalid_argument("Becke normalization must be configured once before topology");
+    owner->context.check_device();
+    owner->becke_normalize_configured = true;
+    owner->becke_normalize_cooperative = enabled && owner->becke_normalize_supported;
+  });
+}
+int stationary_becke_normalize_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 4) return 1;
+  output[0] = owner->becke_normalize_supported;
+  output[1] = owner->becke_normalize_cooperative;
+  output[2] = owner->phased_batches;
+  output[3] = owner->phased_points;
+  return 0;
+}
+int stationary_configure_becke_primitive_v1(void* pointer, int enabled, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || owner->becke_primitive_configured ||
+        (enabled != 0 && enabled != 1))
+      throw std::invalid_argument("Becke primitive must be configured once before topology");
+    owner->context.check_device();
+    owner->becke_primitive_configured = true;
+    owner->becke_primitive_requested = enabled;
+    // A losing schedule is opt-in only. Reuse the already admitted reservation,
+    // center lifetime and point lanes; never allocate or evict another owner.
+    if (!enabled || !owner->phased_storage || !owner->center_pairs ||
+        owner->atoms > stationary_becke_primitive_max_atoms)
+      return;
+    cudaFuncAttributes reverse{}, gather{};
+    cuda_check(cudaFuncGetAttributes(&reverse, phased_becke_pair<true, true>));
+    cuda_check(cudaFuncGetAttributes(&gather, phased_becke_atom<2, true>));
+    if (reverse.maxThreadsPerBlock < 128 || gather.maxThreadsPerBlock < 128) return;
+    owner->becke_primitive = true;
+  });
+}
+int stationary_becke_primitive_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 4) return 1;
+  output[0] = owner->becke_primitive_requested;
+  output[1] = owner->becke_primitive;
+  output[2] = owner->becke_primitive_batches;
+  output[3] = owner->becke_primitive_reverse_pair_visits;
+  return 0;
+}
+int stationary_becke_phase_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 17) return 1;
+  const uint64_t points = owner->phased_points;
+  const uint64_t atom_entries = points * owner->atoms;
+  const uint64_t pairs = points * owner->atoms * (owner->atoms - 1) / 2;
+  const uint64_t reverse_words = owner->becke_primitive ? 2 : 4;
+  // Dense launched domains and logical distinct panel values, not hardware
+  // transactions or completed work from a failed force. Conditional primal/log
+  // reads and scalar transcendental evaluations are deliberately not inferred.
+  const uint64_t values[]{owner->phased_batches,
+                          points,
+                          atom_entries,
+                          pairs,
+                          2 * pairs,
+                          atom_entries,
+                          pairs,
+                          2 * pairs,
+                          atom_entries,
+                          7 * owner->phased_batches,
+                          4 * 8 * pairs,
+                          reverse_words * 8 * pairs,
+                          2 * reverse_words * 8 * pairs,
+                          owner->becke_primitive ? 2 * 3 * 8 * pairs : 0,
+                          owner->becke_profile_batches,
+                          8 * owner->becke_profile_batches,
+                          owner->becke_profile_batches};
+  std::copy(values, values + 17, output);
+  return 0;
+}
+int stationary_becke_phase_profile_v1(void* pointer, double* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 7) return 1;
+  std::copy(owner->becke_phase_ms, owner->becke_phase_ms + 7, output);
   return 0;
 }
 int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
@@ -448,7 +600,7 @@ int stationary_profile(void* pointer, char* error, size_t size) {
     if (!p) throw std::invalid_argument("null stationary owner");
     p->context.check_device();
     if (p->profile) return;
-    cudaEvent_t events[4]{};
+    cudaEvent_t events[12]{};
     try {
       for (auto& event : events) cuda_check(cudaEventCreate(&event));
     } catch (...) {
@@ -460,6 +612,7 @@ int stationary_profile(void* pointer, char* error, size_t size) {
     p->stage1 = events[1];
     p->stage2 = events[2];
     p->stage3 = events[3];
+    std::copy(events + 4, events + 12, p->becke_events);
     p->profile = true;
   });
 }
@@ -1177,6 +1330,8 @@ void stationary_destroy(void* pointer) {
     if (p->stage1) cudaEventDestroy(p->stage1);
     if (p->stage2) cudaEventDestroy(p->stage2);
     if (p->stage3) cudaEventDestroy(p->stage3);
+    for (auto event : p->becke_events)
+      if (event) cudaEventDestroy(event);
   }
   if (have_device) cudaSetDevice(previous);
   delete p;

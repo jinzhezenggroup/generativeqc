@@ -106,25 +106,26 @@ int main(int argc, char** argv) {
     Buffer<double> d_gradient(3u * total_atoms);
     Buffer<double> d_dedq(total_atoms);
     Buffer<double> d_workspace(d4_cuda_workspace_elements(total_atoms));
-    Buffer<data::D4ElementData> d_elements(data::kElementCount);
-    Buffer<data::D4ReferenceData> d_references(data::kReferenceCount);
-    Buffer<double> d_c6(data::kReferenceC6.size());
+    Buffer<data::D4ElementData> d_elements(kD4TableElementCount);
+    Buffer<data::D4ReferenceData> d_references(kD4TableReferenceCount);
+    Buffer<double> d_c6(kD4PackedReferenceC6Count);
     d_offsets.upload(offsets.data(), offsets.size());
     d_z.upload(z.data(), z.size());
     d_xyz.upload(xyz.data(), xyz.size());
     d_q.upload(q.data(), q.size());
     d_active.upload(active.data(), active.size());
-    d_elements.upload(data::kElements.data(), d_elements.count);
-    d_references.upload(data::kReferences.data(), d_references.count);
-    d_c6.upload(data::kReferenceC6.data(), d_c6.count);
+    const auto host_tables = gfn2_d4_host_tables();
+    d_elements.upload(host_tables.elements, d_elements.count);
+    d_references.upload(host_tables.references, d_references.count);
+    d_c6.upload(host_tables.reference_c6, d_c6.count);
 
     D4Tables tables{D4ReferenceModel::gfn2,
                     d_elements.ptr,
                     d_references.ptr,
                     d_c6.ptr,
-                    data::kElementCount,
-                    data::kReferenceCount,
-                    data::kReferenceC6.size(),
+                    kD4TableElementCount,
+                    kD4TableReferenceCount,
+                    kD4PackedReferenceC6Count,
                     3.0,
                     2.0};
     const auto parameters = gfn2_d4_parameters();

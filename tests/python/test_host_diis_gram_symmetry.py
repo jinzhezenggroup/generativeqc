@@ -7,8 +7,8 @@ COEFFICIENTS = ROOT / "src/solver/diis_coefficients.hpp"
 
 def _update_body() -> str:
     source = SOURCE.read_text()
-    start = source.index("  std::vector<double> update(")
-    end = source.index("\n private:", start)
+    start = source.index("  UpdateResult update_with_status(")
+    end = source.index("\n  std::vector<double> update(", start)
     return source[start:end]
 
 

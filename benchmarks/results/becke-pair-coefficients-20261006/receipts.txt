@@ -1,0 +1,110 @@
+--- measured IR from hash-verified emitted CUDA ---
+// Canonical Becke coefficient operation: 508d7d369f92f9b1cfe2d3f48aedcb51d3c8de2ba0eedd1ef229ecd1f3d1ef70
+Original samples primitive_identity is null; no later graph identity is substituted.
+
+--- step.txt ---
+StepId=6129.0 UserId=1001 StartTime=2026-10-06T08:58:48 TimeLimit=00:14:00 State=RUNNING Partition=main NodeList=node1 Nodes=1 CPUs=8 Tasks=1 Name=bash Network=(null) TRES=cpu=8,mem=32G,node=1 ResvPorts=(null) CPUFreqReq=Default Dist=Cyclic SrunHost:Pid=node1:274840 TresPerStep=cpu:8 TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8,cpu:8
+
+--- environment.txt ---
+node=node1
+job=6129
+step=0
+visible=1
+
+--- source-check.txt ---
+benchmarks/becke_phased_probe.cu: OK
+benchmarks/becke_phased_probe.py: OK
+python/generativeqc_compiler/xc/grid_phased.py: OK
+python/generativeqc_compiler/xc/becke_coefficients.py: OK
+tests/python/test_becke_pair_coefficients.py: OK
+tests/python/test_becke_coefficient_cuda.py: OK
+.agents/notes/proposed/2026-10-06-becke-dense-coefficients.md: OK
+
+--- compiled.sha256 ---
+56796bb323c49bb23d33ff9f9a37500216fe2300ea477366a70c50b7f7c651e8  .artifacts/coefficients/coefficients.cu
+7b98067b50d28e107fedf0aa61c175732487c32dde8c7f3d746547c58bf610e6  .artifacts/coefficients/coefficients.so
+
+--- cuda-tests.log ---
+ssssssssssssss..............ssssssssssssss.......                        [100%]
+21 passed, 28 skipped in 6.03s
+
+--- job.exit ---
+0
+
+--- ccache-version.txt ---
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+--- ccache-before.txt ---
+Summary:
+  Hits:             353 /  670 (52.69 %)
+    Direct:         350 /  670 (52.24 %)
+    Preprocessed:     3 /  320 (0.94 %)
+  Misses:           317
+    Direct:         320
+    Preprocessed:   317
+  Uncacheable:     2921
+Primary storage:
+  Hits:             732 / 1340 (54.63 %)
+  Misses:           608
+  Cache size (GB): 0.16 / 5.00 (3.16 %)
+
+Use the -v/--verbose option for more details.
+
+--- ccache-after.txt ---
+Summary:
+  Hits:             353 /  670 (52.69 %)
+    Direct:         350 /  670 (52.24 %)
+    Preprocessed:     3 /  320 (0.94 %)
+  Misses:           317
+    Direct:         320
+    Preprocessed:   317
+  Uncacheable:     2922
+Primary storage:
+  Hits:             732 / 1340 (54.63 %)
+  Misses:           608
+  Cache size (GB): 0.16 / 5.00 (3.16 %)
+
+Use the -v/--verbose option for more details.
+
+--- nvcc-version.txt ---
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+
+--- python-version.txt ---
+Python 3.13.9
+
+--- memcheck: intrusive, not timing evidence ---
+========= ERROR SUMMARY: 0 errors
+
+--- initcheck: intrusive, not timing evidence ---
+========= ERROR SUMMARY: 0 errors
+
+--- racecheck: intrusive, not timing evidence ---
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+
+--- synccheck: intrusive, not timing evidence ---
+========= ERROR SUMMARY: 0 errors
+
+--- failed initial compilation (job 6128; no GPU results) ---
+.artifacts/coefficients/coefficients.cu(1089): error: argument of type "uint2 *" is incompatible with parameter of type "const int64_t *"
+                  coefficient_reverse<<<pair_blocks, 128>>>(work, indices.data, geometry.data,
+                                                                  ^
+
+1 error detected in the compilation of ".artifacts/coefficients/coefficients.cu".
+
+--- separate later host graph/identity qualification ---
+All 20 scalar and 20 mixed AD identities equal the measured base.

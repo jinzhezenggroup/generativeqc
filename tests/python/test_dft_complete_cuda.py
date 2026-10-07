@@ -14,6 +14,10 @@ from time import perf_counter
 
 import numpy as np
 import pytest
+from generativeqc_compiler.method.stationary_resources import (
+    BECKE_COOPERATIVE_THREADS,
+    GEOMETRY_MAX_SCRATCH_BYTES,
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
@@ -38,9 +42,9 @@ def cooperative_becke_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
         requested = kwargs.setdefault("cooperative_becke", True)
         original(self, *args, **kwargs)
         if requested and 1 < self.natom <= 128:
-            assert self.metrics()["becke_threads_per_point"] == 32, (
-                "cooperative qualification selected the generic device fallback"
-            )
+            assert (
+                self.metrics()["becke_threads_per_point"] == BECKE_COOPERATIVE_THREADS
+            ), "cooperative qualification selected the generic device fallback"
 
     monkeypatch.setattr(_CudaSources, "__init__", initialize)
 
@@ -180,6 +184,9 @@ def test_complete_cuda_independent_analytic(
         # CUDA SCF, explicit export and the complete diagnostic call.
         endpoint_seconds = perf_counter() - started
         ref_energy, ref_gradient, refs = independent_gradient(basis, state, method)
+        if "two_electron" in result.components:
+            # These LDA/PBE gates have no exact exchange: Combined is exactly J.
+            refs["two_electron"] = refs["coulomb"]
         source_error = {
             key: float(np.max(np.abs(value - refs[key])))
             for key, value in result.components.items()
@@ -274,7 +281,8 @@ def test_production_grid_cuda_energy_and_force(
 
     calc = _production_calculator(method)
     with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
-        energy = batch.execute(strict=True).items[0].energy
+        public_result = batch.execute(strict=True).items[0]
+        energy = public_result.energy
         state = StationaryKsState.from_native(batch, basis)
         assert state._source.grid_spec.version == 2
         assert state._source.grid_provenance["policy_version"] == 2
@@ -288,6 +296,9 @@ def test_production_grid_cuda_energy_and_force(
         )
         ref_energy, ref_gradient, _ = independent_gradient(basis, state, method)
         assert energy == pytest.approx(ref_energy, abs=2e-9)
+        np.testing.assert_allclose(
+            public_result.forces, -ref_gradient, atol=1e-7, rtol=0
+        )
         np.testing.assert_allclose(result.gradient, ref_gradient, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-10, rtol=0)
 
@@ -309,7 +320,8 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         ) as batch,
         NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
     ):
-        energy = batch.execute(strict=True).items[0].energy
+        public_result = batch.execute(strict=True).items[0]
+        energy = public_result.energy
         state = StationaryKsState.from_native(batch, basis)
         assert state.density.shape[0] == 2
         assert not np.allclose(state.density[0], state.density[1], atol=1e-12, rtol=0)
@@ -323,6 +335,7 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         )
         reference_energy, reference = independent_uks_gradient(basis, state, method)
         assert abs(energy - reference_energy) < 2e-9
+        np.testing.assert_allclose(public_result.forces, -reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
         assert result.work["xc_points"] == len(state.grid.points)
@@ -402,7 +415,8 @@ def test_complete_cuda_r2scan_independent_analytic(
         ) as batch,
         NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis,
     ):
-        energy = batch.execute(strict=True).items[0].energy
+        public_result = batch.execute(strict=True).items[0]
+        energy = public_result.energy
         state = StationaryKsState.from_native(batch, basis)
         assert state.identity.method == method
         result = _diagnostic(
@@ -428,6 +442,7 @@ def test_complete_cuda_r2scan_independent_analytic(
             },
         )
         assert energy_error < 2e-8
+        np.testing.assert_allclose(public_result.forces, -reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient, reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-9, rtol=0)
         assert result.work["xc_points"] == len(state.grid.points)
@@ -913,7 +928,7 @@ def test_public_cuda_force_active_ao_profile_replay(
         independent_uks_gradient,
     )
 
-    assert policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES == ()
+    monkeypatch.setattr(policy, "QUALIFIED_FORCE_ACTIVE_AO_PROFILES", ())
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     xyz = np.asarray([position for _, position in ATOMS])
     moved = xyz.copy()
@@ -958,17 +973,11 @@ def test_public_cuda_force_active_ao_profile_replay(
     profile = policy.QualifiedForceActiveAoProfile(
         profile_id="test-only-force-map-routing",
         evidence=("test-only-independent-analytic-gradient",),
-        architectures=("sm_120",),
         compositions=("ordinary",),
         derivative_orders=(1, 2),
         spin_blocks=(1, 2),
         density_fitted=False,
-        min_atoms=1,
-        max_atoms=96,
-        min_aos=1,
-        max_aos=1024,
-        min_grid_points=1,
-        max_grid_points=4_000_000,
+        min_dense_point_ao_square_work=1,
         tile_policy="fixed",
         tile_points=256,
         min_device_bytes=512 << 20,
@@ -1321,7 +1330,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         )
         sources = []
         lane_bytes = 144 * basis.natom
-        maximum_lanes = min(point_capacity, 2048, (8 << 20) // lane_bytes)
+        maximum_lanes = min(
+            point_capacity, 2048, GEOMETRY_MAX_SCRATCH_BYTES // lane_bytes
+        )
         for lanes, cached, cooperative in (
             (lanes, cached, cooperative)
             for lanes in (
@@ -1369,7 +1380,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             )
             assert owner.metrics()["center_geometry_bytes"] == retained_centers
             selected = cooperative and atom_count <= 128
-            assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
+            assert owner.metrics()["becke_threads_per_point"] == (
+                BECKE_COOPERATIVE_THREADS if selected else 1
+            )
             assert owner.metrics()["becke_shared_bytes"] == (
                 16 + 64 * (pairs if atom_count <= 32 else 4 * (2 * atom_count - 5) // 2)
                 if selected

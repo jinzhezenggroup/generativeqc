@@ -104,6 +104,7 @@ def test_two_sources_preserve_scalar_results_and_share_geometry(tmp_path: Path) 
 
 PROBE = r"""
 #include "scf/cuda/direct_force_low_order_sources.cuh"
+#include "scf/cuda/direct_force_execution.cuh"
 #include "scf/cuda/direct_force_low_order.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_order3.cuh"
@@ -237,8 +238,8 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
   const auto control_geometry = weighted::geometry_calls;
   const auto control_forces = weighted::force_calls;
   weighted::geometry_calls = weighted::force_calls = 0;
-  contract_two_electron_force_low_order_sources<Unrestricted>(
-      shell_class,batch,task,screening,bounds,density,&active,actual.data(),coulomb,exchange);
+  contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Separate>(
+      batch,task,screening,bounds,density,&active,actual.data(),0,coulomb,exchange);
   for (std::size_t coordinate = 0; coordinate < actual.size(); ++coordinate) {
     if (!std::isfinite(actual[coordinate]) ||
         std::bit_cast<std::uint64_t>(actual[coordinate]) !=
@@ -262,6 +263,73 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
   controls += control_geometry;
   shared += weighted::geometry_calls;
   force_calls += weighted::force_calls;
+
+  // An independent historical HF consumer checks the Combined layout. It
+  // receives the original signed scales once, without a method-dependent
+  // factor or a reduction of separately rounded J/K output arrays.
+  std::array<double,12> combined_control{}, combined{};
+  const unsigned order = direct_shell_class_angular_order(shell_class);
+  if (order == 0)
+    contract_two_electron_force_ssss_task_scaled<Unrestricted>(
+        batch,task,screening,bounds,density,&active,combined_control.data(),coulomb,exchange);
+  else if (order == 1)
+    contract_two_electron_force_psss_task_scaled<Unrestricted>(
+        batch,task,screening,bounds,density,&active,combined_control.data(),0,coulomb,exchange);
+  else if (order == 2) {
+    contract_two_electron_force_psps_task_scaled<Unrestricted>(
+        batch,task,screening,bounds,density,&active,combined_control.data(),0,coulomb,exchange);
+    contract_two_electron_force_pair_order2_task_scaled<Unrestricted,kPpssShellClass>(
+        batch,task,screening,bounds,density,&active,combined_control.data(),0,coulomb,exchange);
+    contract_two_electron_force_pair_order2_task_scaled<Unrestricted,kDsssShellClass>(
+        batch,task,screening,bounds,density,&active,combined_control.data(),0,coulomb,exchange);
+  } else
+    contract_two_electron_force_order3_task_scaled<Unrestricted>(
+        batch,task,screening,bounds,density,&active,combined_control.data(),0,coulomb,exchange);
+  contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Combined>(
+      batch,task,screening,bounds,density,&active,combined.data(),0,coulomb,exchange);
+  for (unsigned coordinate = 0; coordinate < 12; ++coordinate) {
+    if (std::bit_cast<std::uint64_t>(combined[coordinate]) !=
+        std::bit_cast<std::uint64_t>(combined_control[coordinate])) {
+      std::fprintf(stderr,"combined class=%u spin=%u coordinate=%u: %.17g != %.17g\n",
+                   shell_class,Unrestricted,coordinate,combined[coordinate],
+                   combined_control[coordinate]);
+      std::exit(3);
+    }
+    ++comparisons;
+  }
+  if (shell_class == kPsssShellClass) {
+    // Resident p-s records are oriented exactly as in the immutable global
+    // cache. Test every p-shell slot and a partial lease that must fall back.
+    const bool first_is_bra =
+        fixture.angular[fixture.pair_first[task.first_pair]] +
+        fixture.angular[fixture.pair_second[task.first_pair]] == 1;
+    const auto bra = first_is_bra ? task.first_pair : task.second_pair;
+    const auto begin = fixture.pair_offsets[bra];
+    const auto count = fixture.pair_offsets[bra+1] - begin;
+    std::vector<PrimitivePairData> resident(fixture.primitives.begin()+begin,
+                                          fixture.primitives.begin()+begin+count);
+    for (auto capacity : {count,count-1}) {
+      auto leased = resident;
+      if (capacity != count) {
+        leased.resize(capacity);
+        // A partial view is both smaller and deliberately different. Matching
+        // forces must therefore come from the global-cache fallback, not from
+        // accidentally reading identical resident records despite bad capacity.
+        for (auto& primitive : leased) primitive.weighted_coefficient *= 7.0;
+      }
+      std::array<double,24> resident_separate{};
+      std::array<double,12> resident_combined{};
+      contract_two_electron_force_low_order_sources_task<Unrestricted,kPsssShellClass,false,
+          LowOrderSourceRoots<kPsssShellClass>,DirectForceOutputMode::Separate,true>(
+          batch,task,screening,bounds,density,&active,resident_separate.data(),coulomb,exchange,
+          0.0,leased.data(),capacity);
+      contract_two_electron_force_low_order_sources_task<Unrestricted,kPsssShellClass,false,
+          LowOrderSourceRoots<kPsssShellClass>,DirectForceOutputMode::Combined,true>(
+          batch,task,screening,bounds,density,&active,resident_combined.data(),coulomb,exchange,
+          0.0,leased.data(),capacity);
+      if (resident_separate != actual || resident_combined != combined) std::exit(4);
+    }
+  }
 }
 
 template<bool Unrestricted>

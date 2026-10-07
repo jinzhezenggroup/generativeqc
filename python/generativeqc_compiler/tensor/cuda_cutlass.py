@@ -75,6 +75,8 @@ class CutlassAotProvider:
         features = dict(target.features)
         reason, recipe = None, None
         try:
+            if request.backend != "cuda":
+                raise ValueError("CUTLASS requires the canonical CUDA einsum request")
             recipe = matrix_contraction(request)
             output = recipe.layouts[2]
             columns = output.columns if output.order == "row" else output.rows

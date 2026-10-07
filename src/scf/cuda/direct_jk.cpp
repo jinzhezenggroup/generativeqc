@@ -248,6 +248,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   add(runtime::size_mul(batch, cart), sizeof(std::int32_t) + 3 + sizeof(double));
   add(runtime::size_mul(shells, shells),
       3 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint32_t) + sizeof(double));
+  // Generated J retains density-conditioned bounds even without a K/force
+  // lease. Keep this shape-only envelope consistent with its optional owner.
+  add(runtime::size_mul(shells, shells), sizeof(cuda_execution::ShellPairDensityBounds));
+  add(batch, (1 + detail::kDirectShellPairClassCount) * sizeof(double));
   add(runtime::size_mul(primitives, primitives), sizeof(cuda_execution::PrimitivePairData));
   add(shells, sizeof(std::int64_t));
   // Generated shell topology also retains public shell AO offsets so
@@ -370,6 +374,11 @@ generativeqc_status create_cuda_direct_jk_plan(
     plan->coordinates_per_item = coordinates;
     plan->screening_tolerance = screening_tolerance;
     configure_direct_coulomb_recurrence(plan->batch);
+    // Prove the complete angular-pass domain before selecting a kernel that
+    // intentionally omits the generic per-AO recurrence and its private frame.
+    if (!host.shell_angular.empty())
+      plan->batch.direct_maximum_shell_angular =
+          *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
     plan->batch.batch_size = static_cast<std::int32_t>(systems.size());
     plan->batch.nbf = static_cast<std::int32_t>(host.nbf);
     plan->batch.direct_nbf = static_cast<std::int32_t>(host.direct_nbf);
@@ -1652,7 +1661,7 @@ generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan*
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    std::vector<double>& derivatives, std::string& detail) {
+    std::vector<double>& derivatives, std::string& detail, bool separate_sources) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -1674,7 +1683,7 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     direct_jk_check(cudaSetDevice(plan->device_id));
     direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
         *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-        exchange_coefficient, derivatives));
+        exchange_coefficient, derivatives, separate_sources));
     direct_jk_finite_result(derivatives);
   });
 }

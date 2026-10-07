@@ -11,8 +11,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "dft/dispersion/d4_data.hpp"
 #include "dft/dispersion/d4_math.hpp"
+#include "dft/dispersion/d4_types.hpp"
 #include "generated_method_parameters.hpp"
 
 #if defined(__CUDACC__)
@@ -26,6 +26,10 @@ namespace generativeqc::dft::dispersion {
 // A deliberately bounded scalar baseline, not a promoted GPU schedule.
 inline constexpr int kD4MaximumAtoms = 256;
 inline constexpr int kD4MaximumReferences = 7;
+inline constexpr std::size_t kD4TableElementCount = 86u;
+inline constexpr std::size_t kD4TableReferenceCount = 262u;
+inline constexpr std::size_t kD4PackedReferenceC6Count =
+    kD4TableReferenceCount * (kD4TableReferenceCount + 1u) / 2u;
 enum class D4ReferenceModel : int { gfn2 = 1, eeq = 2 };
 enum class D4Status : int { success, invalid_argument, unsupported, numerical_failure };
 
@@ -57,18 +61,9 @@ struct D4Tables {
   double gc;
 };
 
-// Host view; a device consumer must explicitly upload each array once at setup.
-inline D4Tables gfn2_d4_host_tables() {
-  return {D4ReferenceModel::gfn2,
-          data::kElements.data(),
-          data::kReferences.data(),
-          data::kReferenceC6.data(),
-          data::kElementCount,
-          data::kReferenceCount,
-          data::kReferenceC6.size(),
-          3.0,
-          2.0};
-}
+// Host view; implemented in the ordinary C++ table owner so CUDA translation
+// units never parse the large generated parameter arrays.
+D4Tables gfn2_d4_host_tables();
 
 GENERATIVEQC_D4_HD inline std::size_t d4_unbounded_workspace_elements(int atoms) {
   if (atoms < 0) return 0u;
@@ -210,8 +205,8 @@ GENERATIVEQC_D4_HD inline D4Status evaluate_d4_fixed_charge_impl(
   if (n < 0 || (n > 0 && required_workspace == 0u) || !valid_parameters(p) ||
       workspace_size < required_workspace)
     return D4Status::invalid_argument;
-  if (t.element_count != data::kElementCount || t.reference_count != data::kReferenceCount ||
-      t.reference_c6_count != data::kReferenceCount * (data::kReferenceCount + 1) / 2)
+  if (t.element_count != kD4TableElementCount || t.reference_count != kD4TableReferenceCount ||
+      t.reference_c6_count != kD4PackedReferenceC6Count)
     return D4Status::unsupported;
   const std::size_t count = static_cast<std::size_t>(n);
   const void* ptrs[] = {z,    xyz, q,          workspace,    energy,

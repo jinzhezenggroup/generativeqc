@@ -1,0 +1,171 @@
+
+=== 6204: job.txt ===
+JobId=6204 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=01:40:00 TimeMin=N/A SubmitTime=2026-10-06T14:08:04 EligibleTime=2026-10-06T14:08:04 AccrueTime=Unknown StartTime=2026-10-06T14:08:04 EndTime=2026-10-06T15:48:04 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T14:08:04 Scheduler=Main Partition=main AllocNode:Sid=localhost:482536 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== 6204: job.exit ===
+0
+
+=== 6204: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== 6204: core-check.txt ===
+build/cuda-release-sm120/libgenerativeqc.so: OK
+
+=== 6204: ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== 6204: ccache-before.txt ===
+Summary:
+  Hits:             6205 /  9980 (62.17 %)
+    Direct:         5962 / 10005 (59.59 %)
+    Preprocessed:    243 /  4042 (6.01 %)
+  Misses:           3775
+    Direct:         4043
+    Preprocessed:   3799
+  Uncacheable:      3797
+Primary storage:
+  Hits:            13343 / 20009 (66.68 %)
+  Misses:           6666
+  Cache size (GB):  2.84 /  5.00 (56.74 %)
+
+Use the -v/--verbose option for more details.
+
+=== 6204: ccache-after.txt ===
+Summary:
+  Hits:             6987 / 10792 (64.74 %)
+    Direct:         6744 / 10817 (62.35 %)
+    Preprocessed:    243 /  4072 (5.97 %)
+  Misses:           3805
+    Direct:         4073
+    Preprocessed:   3829
+  Uncacheable:      4584
+Primary storage:
+  Hits:            14926 / 21633 (69.00 %)
+  Misses:           6707
+  Cache size (GB):  2.99 /  5.00 (59.74 %)
+
+Use the -v/--verbose option for more details.
+
+=== 6202: job.txt ===
+JobId=6202 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-06T13:59:31 EligibleTime=2026-10-06T13:59:31 AccrueTime=Unknown StartTime=2026-10-06T13:59:31 EndTime=2026-10-06T14:19:31 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T13:59:31 Scheduler=Main Partition=main AllocNode:Sid=localhost:477388 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== 6202: job.exit ===
+0
+
+=== 6202: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== 6202: core-check.txt ===
+build/cuda-release-sm120/libgenerativeqc.so: OK
+
+=== 6202: ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== 6202: ccache-before.txt ===
+Summary:
+  Hits:             5912 /  9663 (61.18 %)
+    Direct:         5669 /  9688 (58.52 %)
+    Preprocessed:    243 /  4018 (6.05 %)
+  Misses:           3751
+    Direct:         4019
+    Preprocessed:   3775
+  Uncacheable:      3772
+Primary storage:
+  Hits:            12746 / 19375 (65.79 %)
+  Misses:           6629
+  Cache size (GB):  2.81 /  5.00 (56.19 %)
+
+Use the -v/--verbose option for more details.
+
+=== 6202: ccache-after.txt ===
+Summary:
+  Hits:             6205 /  9977 (62.19 %)
+    Direct:         5962 / 10002 (59.61 %)
+    Preprocessed:    243 /  4039 (6.02 %)
+  Misses:           3772
+    Direct:         4040
+    Preprocessed:   3796
+  Uncacheable:      3792
+Primary storage:
+  Hits:            13343 / 20003 (66.70 %)
+  Misses:           6660
+  Cache size (GB):  2.84 /  5.00 (56.74 %)
+
+Use the -v/--verbose option for more details.
+
+=== 6204: progress ===
+2026-10-06T14:08:05+08:00 paired-48 START
+2026-10-06T14:19:21+08:00 paired-96 START
+2026-10-06T14:53:53+08:00 COMPLETE
+
+=== 6204: SSH exit ===
+0
+
+=== 6204: terminal controller ===
+JobId=6204 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=COMPLETED Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:45:49 TimeLimit=01:40:00 TimeMin=N/A SubmitTime=2026-10-06T14:08:04 EligibleTime=2026-10-06T14:08:04 AccrueTime=Unknown StartTime=2026-10-06T14:08:04 EndTime=2026-10-06T14:53:53 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T14:08:04 Scheduler=Main Partition=main AllocNode:Sid=localhost:482536 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== 6204: terminal observation time ===
+2026-10-06T14:53:55+08:00
+
+=== failed harness 6200: job.txt ===
+JobId=6200 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-06T13:48:38 EligibleTime=2026-10-06T13:48:38 AccrueTime=Unknown StartTime=2026-10-06T13:48:38 EndTime=2026-10-06T14:08:38 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T13:48:38 Scheduler=Main Partition=main AllocNode:Sid=localhost:472340 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== failed harness 6200: job.exit ===
+1
+
+=== failed harness 6200: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== failed harness 6200: feasibility-48.log ===
+Traceback (most recent call last):
+  File "/data/jzzeng/qc-becke-physical-1894-v4/.artifacts/issue1894/paired-warm-v1/paired-warm.py", line 314, in <module>
+    main()
+    ~~~~^^
+  File "/data/jzzeng/qc-becke-physical-1894-v4/.artifacts/issue1894/paired-warm-v1/paired-warm.py", line 76, in main
+    "environment": environment_metadata("cuda"),
+                   ~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+TypeError: environment_metadata() takes 0 positional arguments but 1 was given
+
+=== failed harness 6201: job.txt ===
+JobId=6201 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-06T13:52:28 EligibleTime=2026-10-06T13:52:28 AccrueTime=Unknown StartTime=2026-10-06T13:52:28 EndTime=2026-10-06T14:12:28 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T13:52:28 Scheduler=Main Partition=main AllocNode:Sid=localhost:474144 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== failed harness 6201: job.exit ===
+1
+
+=== failed harness 6201: device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== failed harness 6201: feasibility-48.log ===
+Traceback (most recent call last):
+  File "/data/jzzeng/qc-becke-physical-1894-v4/.artifacts/issue1894/paired-warm-v1/paired-warm.py", line 317, in <module>
+    main()
+    ~~~~^^
+  File "/data/jzzeng/qc-becke-physical-1894-v4/.artifacts/issue1894/paired-warm-v1/paired-warm.py", line 249, in main
+    prepare(selection)
+    ~~~~~~~^^^^^^^^^^^
+  File "/data/jzzeng/qc-becke-physical-1894-v4/.artifacts/issue1894/paired-warm-v1/paired-warm.py", line 198, in prepare
+    assert owner._warm_start_updates is False
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'PreparedBatch' object has no attribute '_warm_start_updates'. Did you mean: 'set_warm_start_updates'?

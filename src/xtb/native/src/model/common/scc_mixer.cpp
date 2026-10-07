@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include "model/common/scc_mixer.hpp"
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -115,13 +117,7 @@ bool checked_add_size(std::size_t increment, std::size_t& value) {
   return true;
 }
 
-bool checked_multiply_size(std::size_t first, std::size_t second, std::size_t& product) {
-  if (first != 0u && second > std::numeric_limits<std::size_t>::max() / first) {
-    return false;
-  }
-  product = first * second;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 bool checked_add_i64(std::int64_t increment, std::int64_t& value) {
   if (increment < 0 || value > std::numeric_limits<std::int64_t>::max() - increment) {
@@ -169,7 +165,7 @@ const T* offset_pointer(const void* base, std::size_t offset) {
 bool vector_range(const void* pointer, std::size_t count, std::size_t element_size,
                   AddressRange& range) {
   std::size_t bytes = 0u;
-  return checked_multiply_size(count, element_size, bytes) && make_range(pointer, bytes, range);
+  return checked_multiply(count, element_size, bytes) && make_range(pointer, bytes, range);
 }
 
 bool overlaps_plan_storage(const SccMixerPlan& plan, const AddressRange& range) {
@@ -853,7 +849,7 @@ generativeqc_xtb_status_t make_scc_mixer_plan(const SccMixerVectorLayoutView& la
     if (candidate.element_count <= 0 || candidate.system_offsets == nullptr ||
         candidate.system_offset_count != batch + 1u || candidate.system_offsets[0] != 0 ||
         candidate.system_offsets[batch] != candidate.element_count ||
-        !checked_multiply_size(static_cast<std::size_t>(candidate.element_count), sizeof(double),
+        !checked_multiply(static_cast<std::size_t>(candidate.element_count), sizeof(double),
                                expected_size) ||
         expected_size != candidate.size_bytes ||
         candidate.offset_bytes > layout.workspace_size_bytes ||
@@ -926,7 +922,7 @@ generativeqc_xtb_status_t make_scc_mixer_plan(const SccMixerVectorLayoutView& la
 
     const auto bytes_for = [&](std::int64_t count, std::size_t element_size, std::size_t& bytes) {
       return count >= 0 &&
-             checked_multiply_size(static_cast<std::size_t>(count), element_size, bytes) &&
+             checked_multiply(static_cast<std::size_t>(count), element_size, bytes) &&
              static_cast<std::uint64_t>(count) <=
                  static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max());
     };

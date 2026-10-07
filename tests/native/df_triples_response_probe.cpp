@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
+#include <string>
 
 #include "cc/df_triples.hpp"
 
@@ -14,9 +16,21 @@ extern "C" int df_triples_response_probe(std::size_t o, std::size_t v, std::size
                                          std::size_t* counts, char* error,
                                          std::size_t error_size) noexcept {
   try {
+    const auto* selected = std::getenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE");
+    const bool parallel_gap = selected && std::string(selected) == "1";
+    const auto* omitted = std::getenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE");
+    const bool include_gap = !(omitted && std::string(omitted) == "1");
     const auto result = generativeqc::cc::triples::pullback_df_cuda(
         o, v, q, inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6],
-        inputs[7], inputs[8], threshold, budget, 0, caller_bytes, panels);
+        inputs[7], inputs[8], threshold, budget, 0, caller_bytes, panels, parallel_gap,
+        include_gap);
+    if (include_gap && parallel_gap && v >= 4 && !result.gap.parallel)
+      throw std::runtime_error(
+          "parallel gap qualification did not exercise the requested schedule");
+    if (!include_gap && (result.gap.requested || result.gap.kernels || !result.eps_o.empty() ||
+                         !result.eps_v.empty()))
+      throw std::runtime_error(
+          "omitted gap qualification executed or published unrequested outputs");
     const auto& d = result.diagnostic;
     const std::array arrays{&result.bov, &result.bvv, &result.ovoo,  &result.ovov, &result.fov,
                             &result.t1,  &result.t2,  &result.eps_o, &result.eps_v};

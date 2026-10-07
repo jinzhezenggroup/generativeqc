@@ -88,6 +88,7 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
         "core/",
     ),
     "cuda_eigensolver": (
+        "solver/cuda/symmetric_eigen_provider.hpp",
         "scf/cuda/eigensolver.",
         "scf/cuda/eigensolver_kernels.",
         "scf/cuda/eigensolver_types.",
@@ -153,6 +154,7 @@ CUDA_MODULES["cuda_df_runtime"] = (
 CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
+    "solver/cuda/symmetric_eigen_provider.hpp",
     "runtime/cuda_component_trace.hpp",
     "tensor/cuda_vector_contraction.hpp",
     "scf/cuda/df_metric_kernels.",
@@ -217,6 +219,9 @@ CUDA_ALLOWED["cuda_resources"] = (
 )
 CUDA_MODULES["cuda_matrix_library"] = ("matrix_library", "runtime_support")
 CUDA_ALLOWED["cuda_matrix_library"] = (
+    # Prepared matrix handles share only the neutral allocation-measurement
+    # mutex; bucket/graph state and unrelated runtime ownership stay forbidden.
+    "runtime/allocation_measurement.hpp",
     "scf/cuda/matrix_library.",
     "scf/cuda/runtime_support.",
     "scf/cuda/scf_matrix_kernels.",
@@ -249,6 +254,10 @@ CUDA_ALLOWED["cuda_direct_queues"] = tuple(
     "scf/cuda/packed_basis.",
     "scf/cuda/device_timer.",
 )
+# The prepared lowering adapter reads the optional compiler inventory only.
+# Keep it separate from provider lifetime and retained device recurrences.
+CUDA_MODULES["cuda_direct_fock_lowering"] = ("direct_fock_lowering.hpp",)
+CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (
@@ -257,6 +266,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
     "direct_coulomb",
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
+    "scf/cuda/direct_force_schedule.hpp",
     "scf/direct_block_schedule.hpp",
     "scf/cuda/direct_jk.",
     "scf/cuda/direct_jk_plan.",
@@ -266,6 +276,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",
     "scf/cuda/direct_density_bounds.hpp",
+    "scf/cuda/direct_fock_lowering.hpp",
     "scf/cuda/direct_pair_cache.hpp",
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/queue_plan.hpp",
@@ -304,6 +315,7 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
     "one_electron_export_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
+    "scf/cuda/direct_force_schedule.hpp",
     "scf/cuda/packed_basis.",
     "scf/direct_block_domain.hpp",
 )
@@ -384,6 +396,12 @@ CUDA_ALLOWED["cuda_direct_numerics"] = (
         "scf/cuda/direct_gradient_types.cuh",
     )
 )
+# The output-layout policy is a leaf shared by device tasks and host interfaces.
+CUDA_MODULES["cuda_direct_force_sources"] = ("direct_force_sources.hpp",)
+CUDA_ALLOWED["cuda_direct_force_sources"] = ()
+# The borrowed resident lease exposes metadata only, never device execution.
+CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
+CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -394,6 +412,7 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_scatter",
     "direct_force_low_order",
     "direct_force_low_order_sources",
+    "direct_force_execution",
     "direct_force_order4_sources",
     "direct_force_order5_sources",
     "direct_force_order2",
@@ -411,6 +430,7 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         # this exact dependency does not admit integral tensors or CPU oracles.
         "integrals/range_moments.hpp",
         "scf/cuda/direct_constants.hpp",
+        "scf/cuda/direct_force_sources.hpp",
         "scf/cuda/direct_metadata.hpp",
         "scf/cuda/packed_basis.hpp",
         "scf/cuda/direct_queue_index.cuh",
@@ -456,6 +476,8 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "weighted_eri_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
+    "scf/cuda/direct_force_schedule.hpp",
+    "scf/cuda/direct_force_sources.hpp",
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",
     "scf/cuda_weighted_eri.hpp",
@@ -496,12 +518,14 @@ CUDA_ALLOWED["cuda_hf_graph"] = (
 # implementation includes out of C++.
 CUDA_MODULES["cuda_hf_driver"] = ("scf/cuda_rhf.cpp",)
 CUDA_ALLOWED["cuda_hf_driver"] = (
+    "solver/cuda/symmetric_eigen_provider.hpp",
     # Public ECP device consumer only; quadrature kernels remain in integrals.
     "integrals/ecp_cuda.hpp",
     "molecule/basis.hpp",
     # The driver owns finalization work counts. The host-only journal is a
     # leaf sink with no dependency on any scientific provider or collector.
     "runtime/df_progress_trace.hpp",
+    "runtime/cuda_component_trace.hpp",
     "runtime/resource_cuda.cuh",
     "runtime/resource_usage.hpp",
     "scf/aot_shell_registry.hpp",
@@ -521,6 +545,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/direct_reference_force.hpp",
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/direct_density_bounds.hpp",
+    "scf/cuda/direct_fock_lowering.hpp",
     "scf/cuda/direct_generated_tasks.hpp",
     "scf/cuda/direct_jk_kernels.hpp",
     "scf/cuda/weighted_eri_kernels.hpp",

@@ -50,6 +50,8 @@ from .ir import (
     power,
     reduce_sum,
     reshape,
+    runtime_cartesian_scatter_add,
+    runtime_cartesian_select,
     runtime_indexed_scatter_add,
     runtime_indexed_select,
     scaled_bilinear,
@@ -352,6 +354,22 @@ def _jvp_graph(node: Node, operand_tangents: typing.Any) -> Node | None:
             tuple(zip(node.attrs["axes"], node.inputs[1:], strict=True)),
             node.spec.indices,
         )
+    if node.op == "runtime_cartesian_select":
+        return runtime_cartesian_select(
+            tangent,
+            tuple(
+                (axis, mapping, node.spec.indices[axis])
+                for axis, mapping in zip(
+                    node.attrs["axes"], node.inputs[1:], strict=True
+                )
+            ),
+        )
+    if node.op == "runtime_cartesian_scatter_add":
+        return runtime_cartesian_scatter_add(
+            tangent,
+            tuple(zip(node.attrs["axes"], node.inputs[1:], strict=True)),
+            node.spec.indices,
+        )
     if node.op == "reduce":
         return reduce_sum(tangent, node.attrs["axes"])
     if node.op == "broadcast":
@@ -573,6 +591,26 @@ def _vjp_graph(
             if active[0]
             else None
         )
+        return [result, *([None] * (len(node.inputs) - 1))]
+    if node.op in ("runtime_cartesian_select", "runtime_cartesian_scatter_add"):
+        result = None
+        if active[0]:
+            if node.op == "runtime_cartesian_select":
+                result = runtime_cartesian_scatter_add(
+                    bar,
+                    tuple(zip(node.attrs["axes"], node.inputs[1:], strict=True)),
+                    node.inputs[0].spec.indices,
+                )
+            else:
+                result = runtime_cartesian_select(
+                    bar,
+                    tuple(
+                        (axis, mapping, node.inputs[0].spec.indices[axis])
+                        for axis, mapping in zip(
+                            node.attrs["axes"], node.inputs[1:], strict=True
+                        )
+                    ),
+                )
         return [result, *([None] * (len(node.inputs) - 1))]
     raise ValueError(f"no demand-driven VJP rule for primitive: {node.op}")
 

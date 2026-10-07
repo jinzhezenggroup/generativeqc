@@ -7,13 +7,15 @@ stand-in. This checks publication order, not CUDA arithmetic or synchronization.
 from __future__ import annotations
 
 import ctypes as ct
-import shutil
-import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 STAND_IN = r"""
 #include <cstddef>
@@ -54,8 +56,9 @@ struct GridPlan {
   bool density_jets_ready{}, use_orbitals{}, last_identity_map{};
   std::uint64_t generation{};
   std::size_t last_points = 1, nao = 1, last_active = 1, jets = 1;
-  std::size_t id = 0;
+  std::size_t id = 0, resident_id = 0;
   std::size_t* ao_ids = &id;
+  const std::size_t* current_ao_ids = &resident_id;
   double storage[32]{};
   double *points = storage, *ao = storage, *features = storage;
   const double* current_points = storage + 16;
@@ -92,10 +95,9 @@ extern "C" int run(int defer_error_to_consumer, int device_error,
 
 
 @pytest.fixture(scope="module")
-def publication(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
-    compiler = shutil.which("c++") or shutil.which("clang++")
-    if compiler is None:
-        pytest.skip("host C++ compiler required for publication regression")
+def publication(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> ct.CDLL:
     source = (ROOT / "src/dft/cuda_grid.cu").read_text(encoding="utf-8")
     begin = source.index("static int grid_cuda_run_selected_impl(")
     end = source.index("\nint grid_cuda_run_selected_v1(", begin)
@@ -121,6 +123,11 @@ extern "C" int view_uses_selected_points() {
   if (grid_cuda_view_v1(&plan, &view, nullptr, 0)) return -1;
   return view.points == plan.current_points && view.points != plan.points;
 }
+extern "C" int view_uses_selected_map() {
+  generativeqc::dft::GridTaskView view{};
+  if (grid_cuda_view_v1(&plan, &view, nullptr, 0)) return -1;
+  return view.ao_ids == plan.current_ao_ids && view.ao_ids != plan.ao_ids;
+}
 extern "C" int sections() { return plan.context.sections; }
 extern "C" int view_error() {
   generativeqc::dft::GridTaskView view{};
@@ -135,23 +142,12 @@ extern "C" int view_identity() {
 """,
         encoding="utf-8",
     )
-    compiled = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-shared",
-            "-fPIC",
-            str(cpp),
-            "-o",
-            str(library),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+    native_cxx.build_shared(
+        (cpp,),
+        library,
+        compile_args=("-std=c++17", "-O2"),
+        compile_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     native = ct.CDLL(str(library))
     native.run.argtypes = [ct.c_int] * 4
     native.run.restype = ct.c_int
@@ -193,3 +189,11 @@ def test_view_exports_selected_points_not_owned_scratch(
 ) -> None:
     assert publication.run(deferred, 0, 0, 0) == 0
     assert publication.view_uses_selected_points() == 1
+
+
+@pytest.mark.parametrize("deferred", [0, 1])
+def test_view_exports_selected_map_not_owned_upload_scratch(
+    publication: ct.CDLL, deferred: int
+) -> None:
+    assert publication.run(deferred, 0, 0, 0) == 0
+    assert publication.view_uses_selected_map() == 1

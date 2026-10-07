@@ -15,6 +15,7 @@
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #endif
 
@@ -100,6 +101,20 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
   } catch (...) {
     return 1;
   }
+#else
+  return 2;
+#endif
+}
+
+/** Shape-only opaque matrix-provider reservation, separate from explicit arenas.
+ * This additive query keeps the KS v1 three-output numeric inventory unchanged.
+ * It never creates a CUDA context or provider handle. */
+int generativeqc_resource_ks_matrix_provider_cuda_v1(std::size_t nao, std::uint64_t* bytes) {
+  if (!bytes || !nao || nao > static_cast<std::size_t>(std::numeric_limits<int>::max())) return 1;
+#if GENERATIVEQC_HAS_CUDA
+  *bytes = generativeqc::scf::cuda_execution::MatrixLibraryOwner::provider_allowance(
+      static_cast<int>(nao));
+  return 0;
 #else
   return 2;
 #endif

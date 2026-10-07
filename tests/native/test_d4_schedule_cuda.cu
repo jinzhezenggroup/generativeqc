@@ -90,18 +90,19 @@ struct DeviceFixture {
   Buffer<double> gradients{3 * host.z.size()};
   Buffer<double> dedq{host.z.size()};
   Buffer<double> workspace{d4_cuda_workspace_elements(host.z.size())};
-  Buffer<data::D4ElementData> elements{data::kElementCount};
-  Buffer<data::D4ReferenceData> references{data::kReferenceCount};
-  Buffer<double> c6{data::kReferenceC6.size()};
+  Buffer<data::D4ElementData> elements{kD4TableElementCount};
+  Buffer<data::D4ReferenceData> references{kD4TableReferenceCount};
+  Buffer<double> c6{kD4PackedReferenceC6Count};
 
   DeviceFixture() {
     offsets.upload(host.offsets.data(), host.offsets.size());
     z.upload(host.z.data(), host.z.size());
     xyz.upload(host.xyz.data(), host.xyz.size());
     q.upload(host.q.data(), host.q.size());
-    elements.upload(data::kElements.data(), elements.count);
-    references.upload(data::kReferences.data(), references.count);
-    c6.upload(data::kReferenceC6.data(), c6.count);
+    const auto host_tables = gfn2_d4_host_tables();
+    elements.upload(host_tables.elements, elements.count);
+    references.upload(host_tables.references, references.count);
+    c6.upload(host_tables.reference_c6, c6.count);
   }
 
   D4Tables tables() const {
@@ -109,9 +110,9 @@ struct DeviceFixture {
             elements.ptr,
             references.ptr,
             c6.ptr,
-            data::kElementCount,
-            data::kReferenceCount,
-            data::kReferenceC6.size(),
+            kD4TableElementCount,
+            kD4TableReferenceCount,
+            kD4PackedReferenceC6Count,
             3.0,
             2.0};
   }
@@ -223,21 +224,22 @@ int run_all_empty_batch() {
   Buffer<std::uint32_t> d_offsets(offsets.size());
   Buffer<D4Status> d_status(2);
   Buffer<double> d_energy(4);
-  Buffer<data::D4ElementData> d_elements(data::kElementCount);
-  Buffer<data::D4ReferenceData> d_references(data::kReferenceCount);
-  Buffer<double> d_c6(data::kReferenceC6.size());
+  Buffer<data::D4ElementData> d_elements(kD4TableElementCount);
+  Buffer<data::D4ReferenceData> d_references(kD4TableReferenceCount);
+  Buffer<double> d_c6(kD4PackedReferenceC6Count);
   d_offsets.upload(offsets.data(), offsets.size());
-  d_elements.upload(data::kElements.data(), d_elements.count);
-  d_references.upload(data::kReferences.data(), d_references.count);
-  d_c6.upload(data::kReferenceC6.data(), d_c6.count);
+  const auto host_tables = gfn2_d4_host_tables();
+  d_elements.upload(host_tables.elements, d_elements.count);
+  d_references.upload(host_tables.references, d_references.count);
+  d_c6.upload(host_tables.reference_c6, d_c6.count);
 
   const D4Tables tables{D4ReferenceModel::gfn2,
                         d_elements.ptr,
                         d_references.ptr,
                         d_c6.ptr,
-                        data::kElementCount,
-                        data::kReferenceCount,
-                        data::kReferenceC6.size(),
+                        kD4TableElementCount,
+                        kD4TableReferenceCount,
+                        kD4PackedReferenceC6Count,
                         3.0,
                         2.0};
   const D4CudaBatch batch{2u, 0u, d_offsets.ptr, nullptr, nullptr, nullptr, nullptr};
@@ -279,26 +281,22 @@ int run_r2scan3c_fixed_charge_profile() {
   Buffer<double> d_gradient(3 * atoms);
   Buffer<double> d_dedq(atoms);
   Buffer<double> d_workspace(d4_cuda_workspace_elements(atoms));
-  Buffer<data::D4ElementData> d_elements(eeq_data::kElementCount);
-  Buffer<data::D4ReferenceData> d_references(eeq_data::kReferenceCount);
-  Buffer<double> d_c6(eeq_data::kReferenceC6R2SCAN3C.size());
+  Buffer<data::D4ElementData> d_elements(kD4TableElementCount);
+  Buffer<data::D4ReferenceData> d_references(kD4TableReferenceCount);
+  Buffer<double> d_c6(kD4PackedReferenceC6Count);
   d_offsets.upload(offsets.data(), offsets.size());
   d_z.upload(molecule.z.data(), atoms);
   d_xyz.upload(molecule.xyz.data(), 3 * atoms);
   d_q.upload(molecule.q.data(), atoms);
-  d_elements.upload(eeq_data::kElements.data(), d_elements.count);
-  d_references.upload(eeq_data::kReferences.data(), d_references.count);
-  d_c6.upload(eeq_data::kReferenceC6R2SCAN3C.data(), d_c6.count);
+  const auto host_tables = eeq_d4_host_tables(D4EEQProfile::r2scan3c);
+  d_elements.upload(host_tables.elements, d_elements.count);
+  d_references.upload(host_tables.references, d_references.count);
+  d_c6.upload(host_tables.reference_c6, d_c6.count);
 
-  const D4Tables tables{D4ReferenceModel::eeq,
-                        d_elements.ptr,
-                        d_references.ptr,
-                        d_c6.ptr,
-                        eeq_data::kElementCount,
-                        eeq_data::kReferenceCount,
-                        eeq_data::kReferenceC6R2SCAN3C.size(),
-                        parameters.ga,
-                        parameters.gc};
+  const D4Tables tables{
+      D4ReferenceModel::eeq, d_elements.ptr,         d_references.ptr,          d_c6.ptr,
+      kD4TableElementCount,  kD4TableReferenceCount, kD4PackedReferenceC6Count, parameters.ga,
+      parameters.gc};
   const D4CudaBatch batch{
       1u, static_cast<std::uint32_t>(atoms), d_offsets.ptr, d_z.ptr, d_xyz.ptr, d_q.ptr, nullptr};
   const D4CudaResult output{d_status.ptr, d_energy.ptr, d_gradient.ptr, d_dedq.ptr};

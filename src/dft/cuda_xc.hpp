@@ -76,6 +76,8 @@ struct CudaXcLayout {
   // Prepared contraction metadata is separate from the exact numeric arena.
   static constexpr std::size_t lowering_host_bytes =
       tensor::PreparedSymmetricProduct::host_reservation;
+  /** Discovery capability is not inferred from the consumer's evaluated jets. */
+  int map_derivative_order{-1};
   /** Immutable admission facts resolved from the point program, never its display name. */
   CudaXcFastPathCapabilities fast_paths{};
 };
@@ -96,6 +98,9 @@ CudaXcExecutionCapabilities cuda_xc_execution_capabilities(const CudaXcLayout& l
  * the caller's selected scientific domain, not an error-certified cutoff. */
 struct CudaXcAoTiles {
   std::vector<std::size_t> offsets, indices;
+  /** Complete through-order support supplied by this map's producer; unknown
+   * maps cannot certify an indexed consumer merely by matching dimensions. */
+  int derivative_order{-1};
 };
 
 /** Worst-case admission for sampled-jet discovery. The device bound includes

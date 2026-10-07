@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
@@ -34,6 +35,8 @@ struct GeneratedCoulombPlan {
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
   std::uint64_t class_mask{}, value_class_mask{};
+  /** Geometry-bound J lowering selection; K retains an independent mask. */
+  std::uint64_t rys_fock_mask{};
   /** True only when generated/native streaming value consumers cover every
    * present shell class without the bounded higher-l fallback. */
   bool value_capability{true};
@@ -41,6 +44,8 @@ struct GeneratedCoulombPlan {
   double screening{};
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{},
       *shell_bounds{};
+  ShellPairDensityBounds* shell_pair_density_bounds{};
+  double *system_density_bounds{}, *system_pair_density_bounds{};
   std::uint8_t* active{};
   std::uint32_t* heads{};
   const std::uint32_t* pair_order{};
@@ -80,6 +85,8 @@ struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
+  /** Prepared strict-K choices never inherit the J owner's preference. */
+  std::uint64_t rys_fock_mask{}, k_block_fock_mask{};
   double *public_spin{}, *direct_spin{}, *direct_exchange{};
   double *density_temporary{}, *fock_temporary{}, *public_exchange{};
   ShellPairDensityBounds* shell_pair_density_bounds{};
@@ -91,6 +98,9 @@ struct GeneratedExchangePlan {
   bool force_capability{}, bounded_value_capability{};
   /** Experimental schedule only; false retains the qualified single traversal. */
   bool angular_force_opt_in{};
+  /** Optional complete psss lease consumed by the shared force scheduler.
+   * Storage is charged to this owner; an empty lease retains bounded execution. */
+  DirectForceResidentBraSchedule force_resident_bra{};
   const std::uint32_t* bounded_pair_order{};
   /** Optional geometry-live row index; owned by allocations, never by a call. */
   detail::BoundedDirectBlockDomain bounded_block_domain{};
@@ -136,10 +146,13 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unres
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each
  * containing 3*atom_count energy-gradient values. The public AO density stays
- * resident; this routine transforms it to the owner's Cartesian basis once. */
+ * resident; this routine transforms it to the owner's Cartesian basis once.
+ * separate_sources=false publishes one J+K block after precontracting the
+ * cotangents, using the same scientific weights and screened shell domain. */
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives);
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
+    bool separate_sources = true);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

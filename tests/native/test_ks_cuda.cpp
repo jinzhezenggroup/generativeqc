@@ -121,6 +121,14 @@ RshStrategies rsh_strategies(bool restricted, scf::FockBackend backend) {
               backend, 1e-12)};
 }
 
+RshStrategies density_fitted_primary(RshStrategies model, scf::FockBackend backend) {
+  auto spec = model.primary.spec;
+  spec.coulomb.approximation = scf::FockApproximation::DensityFitted;
+  if (spec.exchange.present) spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+  model.primary = scf::resolve_fock_build(spec, backend, model.primary.screening_tolerance, 1e-10);
+  return model;
+}
+
 void prepared_cuda_fock_seam() {
   const auto system = hydrogens(2, true);
   const scf::PreparedFockPlan cpu(system, nullptr, strategy(true, scf::FockBackend::Cpu));
@@ -283,6 +291,24 @@ void run_exact_exchange_case(bool restricted) {
   const auto hybrid_bytes = dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history, true);
   require(hybrid_bytes == plain_bytes + spins * basis.nao * basis.nao * sizeof(double),
           "CUDA KS exact-exchange buffer is missing from state admission");
+  const auto incremental_hybrid_bytes =
+      dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history, true, false, true);
+  require(incremental_hybrid_bytes > hybrid_bytes,
+          "CUDA KS incremental Direct-J/K state is missing from resource admission");
+
+  {
+    auto short_options = options;
+    short_options.max_iterations = 2;
+    dft::CudaKsPlan ordinary_budget(gpu, basis, grid, short_options, dft::SemilocalFamily::Pbe,
+                                    257);
+    short_options.incremental_direct_jk = true;
+    dft::CudaKsPlan incremental_budget(gpu, basis, grid, short_options, dft::SemilocalFamily::Pbe,
+                                       257);
+    require(incremental_budget.resources().retained_host_numeric_bytes >=
+                ordinary_budget.resources().retained_host_numeric_bytes +
+                    4U * sizeof(dft::ScfIteration),
+            "strict incremental CUDA KS omitted bounded final-closure history from resources");
+  }
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
   const auto result = plan.run(nullptr, false);
@@ -315,6 +341,88 @@ void run_exact_exchange_case(bool restricted) {
               std::abs(snapshot.components.exact_exchange -
                        result.dft_diagnostic.components.exact_exchange) < 1e-10,
           "CUDA exact-exchange final state lost the converged model or energy");
+
+  // The public KS owner must actually consume #990's controller: a permissive
+  // late-SCF gate executes delta builds, while a deliberately unreachable gate
+  // keeps the same trajectory on full builds. XC still sees full D in both.
+  auto incremental_options = options;
+  incremental_options.incremental_direct_jk = true;
+  incremental_options.incremental_direct_jk_rebuild_interval = 8;
+  incremental_options.incremental_direct_jk_density_rms_threshold = 0.0;
+  Matrix incremental_seed;
+  if (restricted) {
+    // Symmetric H2's core guess is already stationary. A valid localized
+    // two-electron seed exercises delta work before full-energy refinement.
+    incremental_seed.assign(basis.nao * basis.nao, 0.0);
+    incremental_seed[0] = 2.0;
+  }
+  const auto* incremental_input = restricted ? &incremental_seed : nullptr;
+  dft::CudaKsPlan incremental_plan(gpu, basis, grid, incremental_options, dft::SemilocalFamily::Pbe,
+                                   257);
+  const auto incremental = incremental_plan.run(incremental_input, false);
+  const auto& incremental_work = incremental.incremental_direct_jk;
+  require(incremental.converged && !incremental_plan.failed() &&
+              std::abs(incremental.energy - result.energy) < 1e-10 && incremental_work.requested &&
+              incremental_work.active && incremental_work.anchor_full_builds > 0 &&
+              incremental_work.delta_builds > 0 &&
+              incremental_work.anchor_updates == incremental_work.delta_builds &&
+              incremental_work.post_scf_full_builds > 0 &&
+              incremental_work.anchor_full_builds + incremental_work.delta_builds +
+                      incremental_work.post_scf_full_builds ==
+                  incremental.fock_builds,
+          "CUDA KS incremental Direct-J/K did not execute a guarded delta/full trajectory");
+  require(incremental_plan.transfers().execution_region_bindings == 0 &&
+              incremental_plan.transfers().iteration_synchronizations == incremental.iterations,
+          "CUDA KS incremental Direct-J/K entered an unqualified chunk/replay path");
+  physical_check(cpu, basis, grid, 1U, incremental);
+
+  // Full-energy refinement must retain a state accepted by the independent
+  // unshifted F[D] export validator, not only by the iterative DIIS gates.
+  require(incremental_plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  require(incremental_plan.read_final_state(token, false, snapshot, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  require(snapshot.density.size() == spins && snapshot.fock.size() == spins &&
+              snapshot.identity.determinant.model == gpu.strategy() &&
+              std::abs(snapshot.components.total() - incremental.energy) < 1e-10,
+          "CUDA incremental KS full-energy audit did not preserve the physical final state");
+
+  const auto restarted = incremental_plan.run(incremental_input, false);
+  require(restarted.converged && restarted.incremental_direct_jk.delta_builds > 0 &&
+              restarted.incremental_direct_jk.post_scf_full_builds > 0 &&
+              std::abs(restarted.energy - result.energy) < 1e-10,
+          "fresh CUDA KS solve retained the previous solve's full-energy refinement state");
+  physical_check(cpu, basis, grid, 1U, restarted);
+
+  auto gated_options = incremental_options;
+  gated_options.incremental_direct_jk_density_rms_threshold = 1e-30;
+  dft::CudaKsPlan gated_plan(gpu, basis, grid, gated_options, dft::SemilocalFamily::Pbe, 257);
+  const auto gated = gated_plan.run(incremental_input, false);
+  const auto& gated_work = gated.incremental_direct_jk;
+  require(gated.converged && !gated_plan.failed() &&
+              std::abs(gated.energy - result.energy) < 1e-10 && gated_work.requested &&
+              gated_work.active && gated_work.delta_builds == 0 &&
+              gated_work.anchor_full_builds >= incremental_work.anchor_full_builds &&
+              gated_work.post_scf_full_builds > 0,
+          "CUDA KS density-RMS gate did not replace early delta J/K with full builds");
+
+  if (restricted) {
+    auto mismatched_options = incremental_options;
+    mismatched_options.screening_tolerance = 0.0;
+    mismatched_options.incremental_direct_jk_rebuild_interval = 0;
+    dft::CudaKsPlan mismatched_plan(gpu, basis, grid, mismatched_options, dft::SemilocalFamily::Pbe,
+                                    257);
+    const auto mismatched = mismatched_plan.run(incremental_input, false);
+    const auto& mismatched_work = mismatched.incremental_direct_jk;
+    // The prepared provider's screened cadence still applies when the caller
+    // requests unscreened SCF options; refinement adds only full-density work.
+    require(mismatched.converged && !mismatched_plan.failed() &&
+                std::abs(mismatched.energy - result.energy) < 1e-10 &&
+                mismatched_work.delta_builds > 0 &&
+                mismatched_work.delta_builds <= mismatched_work.anchor_full_builds &&
+                mismatched_work.periodic_rebuilds + 1 == mismatched_work.anchor_full_builds,
+            "native CUDA KS options bypassed the prepared provider screening cadence");
+  }
 }
 
 void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true) {
@@ -518,6 +626,57 @@ void run_range_exchange_case(bool restricted) {
           "changed-geometry CUDA range-separated warm seed changed the physical endpoint");
 }
 
+void run_density_fitted_range_exchange_case(bool restricted) {
+  const auto system = hydrogens(restricted ? 2U : 3U, restricted);
+  const dft::AoBasis basis(system);
+  const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
+  const dft::MolecularGrid grid(system, grid_spec);
+  const auto cpu_model = density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cpu),
+                                                scf::FockBackend::Cpu);
+  const auto gpu_model = density_fitted_primary(rsh_strategies(restricted, scf::FockBackend::Cuda),
+                                                scf::FockBackend::Cuda);
+  const scf::PreparedFockPlan cpu_primary(system, &system, cpu_model.primary);
+  const scf::PreparedFockPlan cpu_correction(system, nullptr, cpu_model.correction);
+  const scf::PreparedFockPlan gpu_primary(system, &system, gpu_model.primary, 0);
+  const scf::PreparedFockPlan gpu_correction(system, nullptr, gpu_model.correction, 0);
+
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.max_iterations = 200;
+
+  dft::CudaKsPlan plan(gpu_primary, basis, grid, options, dft::SemilocalFamily::Pbe, 257,
+                       &gpu_model.correction, nullptr, dft::nlc::Vv10DensityDomain::StrictPositive,
+                       {}, &gpu_correction);
+  const auto result = plan.run(nullptr, false);
+  const auto reference =
+      restricted ? scf::run_pbe_rsh_rks(cpu_primary, cpu_correction, basis, grid, options)
+                 : scf::run_pbe_rsh_uks(cpu_primary, cpu_correction, basis, grid, options);
+  require(result.converged && reference.converged && !plan.failed() &&
+              std::abs(reference.energy - result.energy) < 1e-10,
+          "mixed DF/Direct CUDA range-separated endpoint disagrees with CPU");
+  require(std::abs(result.dft_diagnostic.components.exact_exchange -
+                   reference.dft_diagnostic.components.exact_exchange) < 1e-10,
+          "mixed DF/Direct range-separated exact exchange disagrees with CPU");
+  const auto movement = plan.transfers();
+  require(movement.iteration_synchronizations == movement.iterations &&
+              movement.execution_region_bindings == 0,
+          "mixed DF/Direct RSH entered the unqualified device-chunk path");
+
+  dft::CudaKsFinalStateToken token;
+  std::string detail;
+  require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  dft::VerifiedKsFinalState snapshot;
+  require(plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail);
+  require(snapshot.identity.determinant.model == gpu_model.primary &&
+              snapshot.identity.model.range_correction &&
+              *snapshot.identity.model.range_correction == gpu_model.correction &&
+              std::abs(snapshot.components.total() - result.energy) < 1e-10,
+          "mixed DF/Direct RSH final state lost provider identity");
+}
+
 RshStrategies wb97mv_rsh_strategies(bool restricted, scf::FockBackend backend) {
   const auto spin = restricted ? scf::FockSpin::Restricted : scf::FockSpin::Unrestricted;
   constexpr double short_exchange = 0.15;
@@ -589,18 +748,26 @@ std::unique_ptr<dft::nlc::Vv10Plan> prepare_wb97mv_nonlocal(generativeqc_backend
   return plan;
 }
 
-void run_wb97mv_nonlocal_composition_case(bool restricted) {
+void run_wb97mv_nonlocal_composition_case(bool restricted, bool fitted = false) {
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 12, 4, 8, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
   constexpr std::size_t tile_points = 64;
 
-  const auto cpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cpu);
-  const auto gpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cuda);
-  const scf::PreparedFockPlan cpu_primary(system, nullptr, cpu_model.primary);
+  auto cpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cpu);
+  auto gpu_model = wb97mv_rsh_strategies(restricted, scf::FockBackend::Cuda);
+  if (fitted) {
+    cpu_model = density_fitted_primary(std::move(cpu_model), scf::FockBackend::Cpu);
+    gpu_model = density_fitted_primary(std::move(gpu_model), scf::FockBackend::Cuda);
+  }
+  const scf::PreparedFockPlan cpu_primary(system, fitted ? &system : nullptr, cpu_model.primary);
   const scf::PreparedFockPlan cpu_correction(system, nullptr, cpu_model.correction);
-  const scf::PreparedFockPlan gpu_primary(system, nullptr, gpu_model.primary, 0);
+  const scf::PreparedFockPlan gpu_primary(system, fitted ? &system : nullptr, gpu_model.primary, 0);
+  std::unique_ptr<scf::PreparedFockPlan> gpu_correction;
+  if (fitted)
+    gpu_correction =
+        std::make_unique<scf::PreparedFockPlan>(system, nullptr, gpu_model.correction, 0);
   auto cpu_nonlocal = prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CPU_REFERENCE, -1,
                                               grid.point_count(), tile_points);
   auto gpu_nonlocal =
@@ -630,7 +797,7 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
     configured.xc_execution_schedule = schedule;
     dft::CudaKsPlan plan(gpu_primary, basis, grid, configured, dft::SemilocalFamily::Wb97mv,
                          tile_points, &gpu_model.correction, gpu_nonlocal.get(),
-                         dft::nlc::Vv10DensityDomain::MolecularV1);
+                         dft::nlc::Vv10DensityDomain::MolecularV1, {}, gpu_correction.get());
     auto result = plan.run(nullptr, false);
     require(result.converged && !plan.failed(),
             "CUDA WB97M-V nonlocal composition did not converge");
@@ -674,7 +841,8 @@ void run_wb97mv_nonlocal_composition_case(bool restricted) {
   const auto device = solve(scf::ScfOptions::XcExecutionSchedule::DeviceFused);
   for (const auto* endpoint : {&host, &device}) {
     require(std::abs(reference.energy - endpoint->result.energy) < 2e-8,
-            "CUDA WB97M-V complete composition endpoint disagrees with CPU");
+            fitted ? "mixed DF/Direct CUDA WB97M-V endpoint disagrees with CPU"
+                   : "CUDA WB97M-V complete composition endpoint disagrees with CPU");
     require(endpoint->result.dft_diagnostic.scf_domain_version ==
                     dft::semilocal_family_domain_version(dft::SemilocalFamily::Wb97mv) &&
                 std::abs(reference.dft_diagnostic.components.xc -
@@ -1050,6 +1218,7 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   require(
       plan.final_state_token(unavailable, snapshot_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
       "fresh CUDA KS owner published a final-state token");
+  require(!plan.has_warm_start(), "fresh CUDA KS owner advertised a warm seed");
   plan.begin(nullptr, false);
   while (plan.active()) {
     plan.enqueue_iteration();
@@ -1221,7 +1390,13 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
                 plan.transfers().final_state_d2h_bytes == before_rejection.final_state_d2h_bytes,
             "stale CUDA KS token transferred or published state");
   }
+  const auto before_warm_query = plan.transfers();
+  require(plan.has_warm_start(), "converged CUDA KS owner did not advertise its warm seed");
+  require(plan.transfers().matrix_d2h_bytes == before_warm_query.matrix_d2h_bytes &&
+              plan.transfers().synchronizations == before_warm_query.synchronizations,
+          "CUDA warm availability query exported or synchronized density");
   plan.invalidate_final_state();
+  require(plan.has_warm_start(), "final-state revocation discarded the independent warm seed");
   require(
       plan.final_state_token(unavailable, snapshot_detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
       "explicit result invalidation preserved CUDA KS eligibility");
@@ -1256,11 +1431,14 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
   require(plan.warm_density() == frozen_density,
           "successful frozen solve replaced the resident last-good density");
   plan.clear_warm_start();
-  require(plan.warm_density().empty(), "cleared CUDA seed remains visible");
-  require(plan.run(nullptr, true, false).converged && plan.warm_density().empty(),
+  require(!plan.has_warm_start() && plan.warm_density().empty(),
+          "cleared CUDA seed remains visible");
+  require(plan.run(nullptr, true, false).converged && !plan.has_warm_start() &&
+              plan.warm_density().empty(),
           "frozen CUDA owner established a new seed");
   plan.set_warm_start_updates(true);
-  require(plan.run(nullptr, false, false).converged && !plan.warm_density().empty(),
+  require(plan.run(nullptr, false, false).converged && plan.has_warm_start() &&
+              !plan.warm_density().empty(),
           "unfrozen CUDA owner failed to establish a seed");
 
   if (atoms > 1) {
@@ -1310,7 +1488,8 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
                              dft::semilocal_family_from_code(functional));
   const auto limited = unfinished.run();
   require(!limited.converged && !unfinished.failed(), "iteration limit misreported its status");
-  require(unfinished.warm_density().empty(), "unfinished solve published a good warm state");
+  require(!unfinished.has_warm_start() && unfinished.warm_density().empty(),
+          "unfinished solve published a good warm state");
   require(unfinished.final_state_token(unavailable, snapshot_detail) ==
               GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "unfinished CUDA KS solve published a final-state token");
@@ -1970,6 +2149,12 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--incremental") {
+      run_exact_exchange_case(true);
+      run_exact_exchange_case(false);
+      std::cout << "Native CUDA incremental KS physical-state and fresh-solve gates passed\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--density-provider") {
       ks_density_provider_cases();
       return 0;
@@ -2011,10 +2196,14 @@ int main(int argc, char** argv) {
     run_density_fitted_exchange_case(false);
     run_range_exchange_case(true);
     run_range_exchange_case(false);
+    run_density_fitted_range_exchange_case(true);
+    run_density_fitted_range_exchange_case(false);
     run_wb97mv_semilocal_rsh_case(true);
     run_wb97mv_semilocal_rsh_case(false);
     run_wb97mv_nonlocal_composition_case(true);
     run_wb97mv_nonlocal_composition_case(false);
+    run_wb97mv_nonlocal_composition_case(true, true);
+    run_wb97mv_nonlocal_composition_case(false, true);
     for (bool pbe : {false, true}) {
       run_case(2, true, pbe);
       run_hydroxyl(pbe);

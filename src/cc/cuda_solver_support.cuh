@@ -18,6 +18,10 @@ struct CudaState {
   double* canonical_eps{};
   double canonical_level_shift{};
   double *iteration_arena{}, *replay_arena{}, *response_arena{};
+  // Unpromoted shared-plan path: a future owner must admit the full pinned
+  // arena, keep reference inputs immutable, and validate asynchronous prepare
+  // completion before publishing reusable state. Current CUDA owners ignore it.
+  double* iteration_reuse_arena{};
   // Borrowed semantic table; the native owner keeps it and its context alive.
   tensor::PreparedContractions* conventional_contractions{};
   double *bar_correlation_energy{}, *bar_singles_residual{}, *bar_doubles_residual{};
@@ -70,6 +74,8 @@ struct DeviceOrbitalJvpOutput {
 };
 
 DeviceIterationOutputs run_iteration_cuda(CudaState& state);
+void run_iteration_reuse_prepare_cuda(CudaState& state);
+DeviceIterationOutputs run_iteration_reused_cuda(CudaState& state);
 DeviceIterationOutputs run_iteration_prepared_cuda(CudaState& state);
 void prepare_iteration_contractions(CudaState&, tensor::CudaContractionContext&, std::size_t& calls,
                                     std::size_t& summands);

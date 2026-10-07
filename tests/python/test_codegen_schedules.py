@@ -46,10 +46,7 @@ from generativeqc_compiler.integral import (
     build_integral_ir,
     build_shell_class_contraction_kernel,
     cuda_target_info,
-    dppp_components,
-    emit_dppp_fused_cuda,
     emit_shell_class_fused_cuda,
-    evaluate_dppp_fused_component,
     evaluate_fused_shell_component,
     evaluate_fused_shell_value,
     schedule_candidates,
@@ -69,6 +66,7 @@ from generativeqc_compiler.integral.benchmark import (
     emit_dppp_benchmark_cuda,
     emit_shell_class_benchmark_cuda,
 )
+from generativeqc_compiler.integral.capabilities import CAPABILITY_K_BLOCK_FOCK
 from generativeqc_compiler.integral.production import (
     _schedule_from_payload,
     load_production_kernel_selections,
@@ -478,6 +476,92 @@ def test_packed_schedule_models_low_order_fock_workers(spec: typing.Any) -> None
     assert not schedule.shared_coulomb
 
 
+@pytest.mark.parametrize(
+    ("spec", "expected_doubles"),
+    (
+        (PSSS_SPEC, 16),
+        (PPSS_SPEC, 24),
+        (PSPS_SPEC, 32),
+        (FUSED_SHELL_SPEC_BY_NAME["dsss"], 28),
+    ),
+)
+def test_packed_restricted_raw_k_contracts_shell_blocks(
+    spec: typing.Any, expected_doubles: int
+) -> None:
+    """Coalesce low-footprint raw-K scatters without changing other consumers."""
+
+    integral = build_integral_ir(spec, consumers=(KernelConsumer.FOCK,))
+    packed = next(
+        item
+        for item in schedule_candidates(integral, target=TEST_CUDA_TARGET)
+        if item.kind == ScheduleKind.PACKED_TASKS
+    )
+    plan = build_fused_shell_plan(
+        spec,
+        integral=integral,
+        schedule=packed,
+        target=TEST_CUDA_TARGET,
+    )
+    incumbent = emit_shell_class_fused_cuda(spec, plan)
+    source = emit_shell_class_fused_cuda(
+        spec, plan, capabilities=(CAPABILITY_K_BLOCK_FOCK,)
+    )
+    class_name = spec.name[0].upper() + spec.name[1:]
+
+    assert "double exchange_block[" not in incumbent
+    assert f"double exchange_block[{expected_doubles}];" in source
+    assert "if constexpr (!Unrestricted)" in source
+    assert "const bool raw_exchange_only =" in source
+    assert f"kGenerated{class_name}ExchangeConsumerBit" in source
+    assert f"kGenerated{class_name}CoulombConsumerBit" in source
+    assert "swapped_pair_unique" in source
+    block = source.split("const bool raw_exchange_only =", maxsplit=1)[1].split(
+        "      return;", maxsplit=1
+    )[0]
+    assert block.count("atomicAdd(\n              fock + task.density_offset") == 8
+    assert re.findall(
+        r"output_row = task.ao_begin\[(\d)\] \+ row;\s*"
+        r"const std::size_t output_column = task.ao_begin\[(\d)\] \+ column;",
+        block,
+    ) == [
+        ("0", "2"),
+        ("1", "2"),
+        ("0", "3"),
+        ("1", "3"),
+        ("2", "0"),
+        ("2", "1"),
+        ("3", "0"),
+        ("3", "1"),
+    ]
+    # UHF, HF-weighted K, J, and every unsupported runtime identity retain the
+    # incumbent canonical component scatter below the restricted raw-K return.
+    assert f"generated_{spec.name}_accumulate_fock<Unrestricted>" in source
+
+
+def test_packed_restricted_raw_k_block_storage_is_bounded() -> None:
+    """Large packed shell classes must keep the incumbent scatter footprint."""
+
+    integral = build_integral_ir(DPPP_SPEC, consumers=(KernelConsumer.FOCK,))
+    packed = next(
+        item
+        for item in schedule_candidates(integral, target=TEST_CUDA_TARGET)
+        if item.kind == ScheduleKind.PACKED_TASKS
+    )
+    plan = build_fused_shell_plan(
+        DPPP_SPEC,
+        integral=integral,
+        schedule=packed,
+        target=TEST_CUDA_TARGET,
+    )
+    source = emit_shell_class_fused_cuda(
+        DPPP_SPEC, plan, capabilities=(CAPABILITY_K_BLOCK_FOCK,)
+    )
+
+    assert "double exchange_block[" not in source
+    assert "const bool raw_exchange_only =" not in source
+    assert "generated_dppp_accumulate_fock<Unrestricted>" in source
+
+
 def test_zero_order_pairs_lower_through_shell_task_schedule() -> None:
     """Generate low-order force/Fock code without handwritten psss algebra."""
 
@@ -624,9 +708,9 @@ def test_generic_fused_schedule_preserves_every_component_gradient(
 
 def test_dppp_fused_schedule_preserves_all_component_gradients() -> None:
     values = factored_dppp_variables(sample_variables())
-    for component in dppp_components():
+    for component in DPPP_SPEC.components:
         direct = build_dppp_contraction_kernel(component[0], component[1:])
-        fused = evaluate_dppp_fused_component(component, values)
+        fused = evaluate_fused_shell_component(DPPP_SPEC, component, values)
         for center in range(4):
             for axis in range(3):
                 expected = direct.graph.evaluate(direct.gradients[center][axis], values)
@@ -635,7 +719,7 @@ def test_dppp_fused_schedule_preserves_all_component_gradients() -> None:
 
 
 def test_dppp_fused_cuda_emits_one_shared_shell_class_schedule() -> None:
-    source = emit_dppp_fused_cuda()
+    source = emit_shell_class_fused_cuda(DPPP_SPEC, target=TEST_CUDA_TARGET)
     assert "kGeneratedDpppComponentCount = 162U" in source
     assert "kGeneratedDpppCoulombStateCount = 84U" in source
     assert "kGeneratedDpppBlockThreads = 192U" in source

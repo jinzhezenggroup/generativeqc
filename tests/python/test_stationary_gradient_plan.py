@@ -480,6 +480,33 @@ def test_complete_reduction_requires_all_sources_once_and_preserves_inputs() -> 
     assert normal.logical_hash == reordered.logical_hash
 
 
+@pytest.mark.parametrize("method", ("PBE", "PBE0"))
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_combined_two_electron_reduction_keeps_complete_coverage(
+    method: str,
+    spin: str,
+) -> None:
+    """A named total J'+K' replaces both sources, never a fabricated zero K."""
+    p = plan(spin, method)
+    components = {
+        name: np.full((2, 3), i + 1.0) for i, name in enumerate(p.source_names)
+    }
+    expected = p.reduce_diagnostic(components, atoms=2)
+    combined = {
+        k: v for k, v in components.items() if k not in ("coulomb", "exact_exchange")
+    }
+    combined["two_electron"] = components["coulomb"] + components.get(
+        "exact_exchange", 0.0
+    )
+    program = p.reduction_program(atoms=2, sources=combined, combined_two_electron=True)
+    np.testing.assert_array_equal(
+        execute(program, combined).outputs["gradient"], expected
+    )
+    for sources, enabled in ((combined, False), (components, True)):
+        with pytest.raises(ValueError, match="coverage"):
+            p.reduction_program(atoms=2, sources=sources, combined_two_electron=enabled)
+
+
 def test_plan_identity_uses_semantics_not_names_or_live_solve_epochs() -> None:
     p = plan()
     renamed = replace(p, method=replace(p.method, identifier="an-equivalent-alias"))

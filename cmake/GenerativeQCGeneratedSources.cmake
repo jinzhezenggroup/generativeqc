@@ -11,6 +11,10 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/cusolver_compat.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda_eigensolver_policy.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver_kernels.cu"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver_types.hpp"
@@ -904,6 +908,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_source_contraction_cuda.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
 
@@ -1084,15 +1089,6 @@ macro(generativeqc_register_cuda_generated_sources target)
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
     ARGS --output "${GENERATIVEQC_GRID_SOURCE}")
 
-  set(GENERATIVEQC_XC_GRADIENT_SOURCE
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_xc_gradient.cu")
-  generativeqc_register_generated_sources(
-    TARGET ${target}
-    ADD_TO_TARGET
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_xc_gradient_cuda.py"
-    OUTPUTS "${GENERATIVEQC_XC_GRADIENT_SOURCE}"
-    ARGS --output "${GENERATIVEQC_XC_GRADIENT_SOURCE}")
-
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")
   generativeqc_register_generated_sources(
@@ -1153,6 +1149,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS ${GENERATIVEQC_DF_OCCUPIED_TRIPLES_SOURCES}
     DEPENDS
       ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/indexed_cuda_reduction.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_gemm.py"
     ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")

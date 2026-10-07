@@ -47,7 +47,8 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     const std::vector<scf::reference::Matrix>& density,
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
-    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+    bool combined_two_electron = false);
 
 /** Token-checked density-fitted stationary integral sources for CPU or CUDA.
  * Output is source-major [hcore, overlap/Pulay, J_DF, K_DF], each block
@@ -103,6 +104,10 @@ generativeqc_status dft_cuda_resident_nonlocal_features(PreparedBatch& batch, st
 
 generativeqc_status validate_dft_system(generativeqc_method method, const core::System& system,
                                         std::string& detail);
+
+/** Convert one completed native KS solve into the method-neutral publication record.
+ * Kept in detail scope so adapter field coverage can be tested without a backend execution. */
+Result adapt_dft_result(scf::ScfResult native, generativeqc_backend backend);
 
 /** Internal #163 handoff. These helpers accept prepared CPU RKS/CUDA KS owners;
  * they do not extend public result layouts or authorize force execution. */

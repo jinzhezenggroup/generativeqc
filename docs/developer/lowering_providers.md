@@ -260,6 +260,17 @@ mode-group/stride proof and retain their own precision, toolkit and resource
 admission. A matrix recipe does not define another scientific operation or imply
 that a particular library/kernel can execute it.
 
+`tensor.cpu_providers` projects the existing `src/tensor/cpu_linalg.*`
+scalar/OpenBLAS owner into this same lowering contract. CPU and CUDA requests for
+the same TensorIR einsum therefore retain one scientific and semantic identity;
+only the backend-bound request and provider offers differ. The shared matrix-view
+proof is backend-neutral, while OpenBLAS owns its explicit version and thread-
+ownership capability checks and CUDA providers own their CUDA-specific admission.
+The current native CPU adapter remains strict-FP64, unbatched, row-major-output
+GEMM, so unsupported arithmetic/layouts stay visible as negative provider evidence
+rather than creating a second CPU scientific path. This is an ownership unification,
+not an OpenBLAS default-promotion or endpoint-performance claim.
+
 `tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
 matrix contractions, using the same canonical planned request as existing
 cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and

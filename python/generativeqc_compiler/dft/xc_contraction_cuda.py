@@ -214,7 +214,9 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
     const std::size_t* ids, double* output, int* error) {
   for (I i=I(blockIdx.x)*blockDim.x+threadIdx.x; i<batches*n*n;
        i+=I(blockDim.x)*gridDim.x) {
-    const I spin=i/(n*n), row=ids[i/n%n], col=ids[i%n];
+    const I spin=i/(n*n);
+    // A complete sorted CSR span is published as the null identity map.
+    const I row=ids ? ids[i/n%n] : i/n%n, col=ids ? ids[i%n] : i%n;
     const I source=(spin*global_n+row)*global_n+col;
     const I transpose=(spin*global_n+col)*global_n+row;
 """

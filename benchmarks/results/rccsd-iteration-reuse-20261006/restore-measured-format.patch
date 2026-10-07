@@ -1,0 +1,82 @@
+--- a/src/cc/solver.cpp
++++ b/src/cc/solver.cpp
+@@ -264,2 +264,2 @@
+-  const auto uncached_elements =
+-      p.naux ? std::size_t{0} : generated::iteration_arena_elements(p.nocc, p.nvir);
++  const auto uncached_elements = p.naux ? std::size_t{0}
++                                      : generated::iteration_arena_elements(p.nocc, p.nvir);
+@@ -269 +269,3 @@
+-    capacity = checked_add(capacity, bytes(p.naux ? choice.iteration : dense_elements));
++    capacity = checked_add(
++        capacity,
++        bytes(p.naux ? choice.iteration : dense_elements));
+@@ -325 +327,2 @@
+-  if (!reuse_invariants) iteration_arena.resize(p.naux ? plan.iteration : conventional_elements);
++  if (!reuse_invariants)
++    iteration_arena.resize(p.naux ? plan.iteration : conventional_elements);
+@@ -389,2 +392,2 @@
+-        generated::run_iteration_reuse_prepare_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
+-                                                   iteration_arena.size());
++        generated::run_iteration_reuse_prepare_cpu(
++            p.nocc, p.nvir, in, iteration_arena.data(), iteration_arena.size());
+@@ -400,2 +403 @@
+-      result.diagnostic.iteration_dynamic_operations +=
+-          generated::iteration_dynamic_operation_count;
++      result.diagnostic.iteration_dynamic_operations += generated::iteration_dynamic_operation_count;
+@@ -408,2 +410,2 @@
+-      const auto out = generated::run_iteration_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
+-                                                    iteration_arena.size());
++      const auto out = generated::run_iteration_cpu(
++          p.nocc, p.nvir, in, iteration_arena.data(), iteration_arena.size());
+@@ -412,2 +414 @@
+-      result.diagnostic.iteration_dynamic_operations +=
+-          generated::iteration_dynamic_operation_count;
++      result.diagnostic.iteration_dynamic_operations += generated::iteration_dynamic_operation_count;
+--- a/benchmarks/rccsd_iteration_reuse.cpp
++++ b/benchmarks/rccsd_iteration_reuse.cpp
+@@ -1,0 +2,3 @@
++#include "cc/solver.hpp"
++#include "generated_rccsd_cpu.hpp"
++
+@@ -12,3 +14,0 @@
+-
+-#include "cc/solver.hpp"
+-#include "generated_rccsd_cpu.hpp"
+@@ -74,3 +74,2 @@
+-  return problem_host_bytes(p) +
+-         sizeof(double) * ((4 + 2 * history) * n + scratch + iteration +
+-                           generated::replay_arena_elements(p.nocc, p.nvir));
++  return problem_host_bytes(p) + sizeof(double) * ((4 + 2 * history) * n + scratch + iteration +
++                                                  generated::replay_arena_elements(p.nocc, p.nvir));
+@@ -90 +89 @@
+-  return {p.foo.data(),  p.fov.data(),  p.fvv.data(),  p.ovov.data(), p.ovvo.data(),
++  return {p.foo.data(),  p.fov.data(),  p.fvv.data(), p.ovov.data(), p.ovvo.data(),
+@@ -92 +91 @@
+-          p.d1.data(),   p.d2.data(),   t1.data(),     t2.data()};
++          p.d1.data(),   p.d2.data(),   t1.data(), t2.data()};
+@@ -118,5 +117,2 @@
+-    expected.push_back({out.energy,
+-                        {out.r1, out.r1 + n1},
+-                        {out.r2, out.r2 + n2},
+-                        {out.next_t1, out.next_t1 + n1},
+-                        {out.next_t2, out.next_t2 + n2}});
++    expected.push_back({out.energy, {out.r1, out.r1 + n1}, {out.r2, out.r2 + n2},
++                        {out.next_t1, out.next_t1 + n1}, {out.next_t2, out.next_t2 + n2}});
+@@ -135,5 +131,4 @@
+-        const auto out =
+-            mode == 0 ? generated::run_iteration_cpu(o, v, in, full.data(), full.size())
+-                      : generated::run_iteration_reused_cpu(o, v, in, pinned.data(), pinned.size());
+-        elapsed[mode] +=
+-            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
++        const auto out = mode == 0
++                             ? generated::run_iteration_cpu(o, v, in, full.data(), full.size())
++                             : generated::run_iteration_reused_cpu(o, v, in, pinned.data(), pinned.size());
++        elapsed[mode] += std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+@@ -149,2 +144 @@
+-              << ",\"pinned_reprepare\":" << elapsed[1] << ",\"pinned_reuse\":" << elapsed[2]
+-              << "}";
++              << ",\"pinned_reprepare\":" << elapsed[1] << ",\"pinned_reuse\":" << elapsed[2] << "}";
+@@ -202,2 +196 @@
+-        elapsed[k] =
+-            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
++        elapsed[k] = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();

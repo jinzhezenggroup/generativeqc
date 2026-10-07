@@ -6,6 +6,7 @@ VV10 are all included in both engines; no component-only success promotes API.
 """
 
 import ast
+import json
 import os
 import typing
 from dataclasses import replace
@@ -63,21 +64,21 @@ def test_wb97mv_geometry_layout_admits_f_without_spdf_integral_schedule() -> Non
 )
 def test_wb97mv_cuda_named_force_basis_domain(basis: str, expected: bool) -> None:
     """A non-bundled diffuse name must still require an explicit local snapshot."""
-    from generativeqc.ks import cuda_wb97mv_force_basis_eligible
+    from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
-    assert cuda_wb97mv_force_basis_eligible(basis) is expected
+    assert cuda_nonlocal_force_basis_eligible(basis) is expected
 
 
 def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
     """Geometry-only f admission must not expand the generic GPU angular domain."""
     from generativeqc import load_basis
-    from generativeqc.ks import cuda_wb97mv_force_basis_eligible
+    from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
     basis = load_basis(
         Path(__file__).resolve().parents[2]
         / "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json"
     )
-    assert cuda_wb97mv_force_basis_eligible(basis)
+    assert cuda_nonlocal_force_basis_eligible(basis)
     higher = replace(
         basis,
         elements=tuple(
@@ -93,7 +94,7 @@ def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
             for element in basis.elements
         ),
     )
-    assert not cuda_wb97mv_force_basis_eligible(higher)
+    assert not cuda_nonlocal_force_basis_eligible(higher)
 
 
 def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
@@ -116,7 +117,7 @@ def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
         for node in ast.walk(constructor)
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name) and target.id == "cuda_wb97mv_force"
+            isinstance(target, ast.Name) and target.id == "cuda_nonlocal_force"
             for target in node.targets
         )
     )
@@ -125,10 +126,11 @@ def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
     assert "_precision_mode" not in segment
     for guard in (
         'self._device_name == "cuda"',
-        'self._method_name.startswith("wb97m-v")',
         "not basis_has_ecp",
         "self._ks_options is not None",
-        "cuda_wb97mv_force_basis_eligible(self._basis)",
+        "self._ks_options.execution_plan.nonlocal_correlation is not None",
+        "self._ks_options.has_range_exchange",
+        "cuda_nonlocal_force_basis_eligible(self._basis)",
     ):
         assert guard in segment
 
@@ -366,7 +368,11 @@ def test_wb97mv_auto_matches_fp64_cold_warm_and_moved(
     ],
 )
 def test_complete_cuda_force_matches_independent_engine(
-    method: str, spin: int, atoms: typing.Any, basis: str
+    method: str,
+    spin: int,
+    atoms: typing.Any,
+    basis: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Reconverge every displaced energy, reusing only native engine-local seeds."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -374,6 +380,20 @@ def test_complete_cuda_force_matches_independent_engine(
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     import cupy as cp
     from generativeqc import Calculator, GridSpec, KsOptions
+
+    primitive_gate = os.environ.get("GENERATIVEQC_WB97MV_BECKE_PRIMITIVE_TEST") == "1"
+    if primitive_gate:
+        from test_global_hybrid_cuda_forces import primitive_physical_cluster
+
+        if basis != "sto-3g":
+            pytest.skip("the explicit cluster gate uses its named modest-AO fixture")
+        # Require a genuinely converged public state before force qualification.
+        # The isolated-H cluster fails cold UKS even with Becke selection off;
+        # expand this test's original H3 doublet without shrinking the domain.
+        atoms = primitive_physical_cluster(
+            "uks" if spin else "rks", molecular_radical=bool(spin)
+        )
+        monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
 
     from benchmarks.readme_wb97mv import (
         reference_engine,
@@ -410,8 +430,9 @@ def test_complete_cuda_force_matches_independent_engine(
     ) as batch:
         assert batch.capabilities == calc.capabilities
         cold = batch.execute(strict=True).items[0]
+        cold_work = batch._stationary_cuda_execution.last_work
         warm = batch.execute(strict=True).items[0]
-        if spin == 0:
+        if spin == 0 and not primitive_gate:
             assert warm.iterations == 1
         work = batch._stationary_cuda_execution.last_work
         assert work["prepared_execution_reused"]
@@ -478,6 +499,123 @@ def test_complete_cuda_force_matches_independent_engine(
                 energies.append(result.energy)
             errors.append(abs((energies[1] - energies[0]) / (2 * step) - analytic))
         assert errors[0] < 1e-5 and max(errors[1:]) < 2e-6, errors
+        if primitive_gate:
+            # A moved force must consume the refreshed public snapshot, not the
+            # old cold-grid/cache. Keep the oracle outside production execution.
+            moved_coordinates = coordinates.copy()
+            moved_coordinates[-1] += (0.02, -0.01, 0.03)
+            moved = batch.execute([moved_coordinates], strict=True).items[0]
+            moved_work = batch._stationary_cuda_execution.last_work
+            moved_atoms = [
+                (symbol, tuple(position))
+                for (symbol, _), position in zip(atoms, moved_coordinates, strict=True)
+            ]
+            with reference_vv10_domain(1e-8):
+                moved_oracle = reference_sample(
+                    reference_engine(moved_atoms, reference_basis, grid, spin=spin), cp
+                )
+            np.testing.assert_allclose(
+                moved.forces,
+                moved_oracle["forces_hartree_per_bohr"][0],
+                atol=1e-7,
+                rtol=0,
+            )
+            assert abs(moved.energy - moved_oracle["energies_hartree"][0]) < 1e-8
+            for observed in (cold_work, work, moved_work):
+                owners = observed["stationary_source_work"]
+                assert set(owners) == {"semilocal", "nonlocal"}
+                for metrics in owners.values():
+                    assert metrics["becke_primitive_requested"] == 1
+                    assert metrics["becke_primitive_selected"] == 1
+                    assert metrics["becke_primitive_batches"] > 0
+                    assert metrics["becke_phase_points"] == observed["grid_points"]
+                    assert metrics["becke_primitive_reverse_pair_visits"] == (
+                        observed["grid_points"] * len(atoms) * (len(atoms) - 1) // 2
+                    )
+            if directory := os.environ.get("GENERATIVEQC_WB97MV_BECKE_EVIDENCE"):
+                destination = Path(directory)
+                destination.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "method": method,
+                    "atoms": atoms,
+                    "spin": spin,
+                    "basis": basis,
+                    "slurm_job": os.environ["SLURM_JOB_ID"],
+                    "cold_energy": cold.energy,
+                    "cold_reference_energy": oracle["energies_hartree"][0],
+                    "cold_forces": cold.forces.tolist(),
+                    "cold_reference_forces": oracle["forces_hartree_per_bohr"][0],
+                    "moved_energy": moved.energy,
+                    "moved_reference_energy": moved_oracle["energies_hartree"][0],
+                    "moved_forces": moved.forces.tolist(),
+                    "moved_reference_forces": moved_oracle["forces_hartree_per_bohr"][
+                        0
+                    ],
+                    "source_artifacts": {
+                        name: {
+                            "library": str(owner.artifact.library),
+                            "metadata": owner.artifact.metadata,
+                            "objects": {
+                                item["key"]: json.loads(
+                                    (
+                                        owner.artifact.library.parent.parent
+                                        / item["key"]
+                                        / "artifact.json"
+                                    ).read_text()
+                                )
+                                for item in owner.artifact.metadata["identity"][
+                                    "objects"
+                                ]
+                            },
+                        }
+                        for name, owner in (
+                            ("semilocal", batch._stationary_cuda_execution.sources),
+                            (
+                                "nonlocal",
+                                batch._stationary_cuda_execution.nonlocal_sources,
+                            ),
+                        )
+                    },
+                    "energy_error": abs(cold.energy - oracle["energies_hartree"][0]),
+                    "force_max_error": float(
+                        np.max(
+                            np.abs(cold.forces - oracle["forces_hartree_per_bohr"][0])
+                        )
+                    ),
+                    "moved_energy_error": abs(
+                        moved.energy - moved_oracle["energies_hartree"][0]
+                    ),
+                    "moved_force_max_error": float(
+                        np.max(
+                            np.abs(
+                                moved.forces
+                                - moved_oracle["forces_hartree_per_bohr"][0]
+                            )
+                        )
+                    ),
+                    "warm_force_max_error": float(
+                        np.max(np.abs(warm.forces - cold.forces))
+                    ),
+                    "finite_difference_errors": errors,
+                    "actual_iterations": [
+                        cold.iterations,
+                        warm.iterations,
+                        moved.iterations,
+                    ],
+                    "actual_fock_builds": [
+                        cold.fock_builds,
+                        warm.fock_builds,
+                        moved.fock_builds,
+                    ],
+                    "source_work": [
+                        observed["stationary_source_work"]
+                        for observed in (cold_work, work, moved_work)
+                    ],
+                    "scope": "complete public nonlocal RKS/UKS physical forces; both actual source owners",
+                }
+                (destination / f"{method}-sto-3g.json").write_text(
+                    json.dumps(payload, indent=2) + "\n"
+                )
 
 
 def test_cuda_force_rebuild_failure_isolation_and_stale_snapshot() -> None:

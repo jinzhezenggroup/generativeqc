@@ -71,6 +71,12 @@ struct Schedule { unsigned persistent_quartet_warps_per_sm=1; std::size_t cuda_s
 Schedule resolve_direct_jk_schedule_policy(int) { return {}; }
 unsigned reachable_policy=0;
 unsigned hermite_policy=0;
+bool pair_materialized_policy=false;
+bool pair_derivatives_policy=false;
+bool pair_cooperative_policy=false;
+bool direct_pair_materialized_values_requested() { return pair_materialized_policy; }
+bool direct_pair_materialized_derivatives_requested() { return pair_derivatives_policy; }
+bool direct_pair_cooperative_derivatives_requested() { return pair_cooperative_policy; }
 unsigned direct_hermite_convolution_mode() { return hermite_policy; }
 unsigned direct_coulomb_reachable_mode() { return reachable_policy; }
 }
@@ -94,10 +100,19 @@ struct HostBatch {
   std::vector<double> ao_to_direct_transform, ao_term_coefficients{1}, direct_ao_coefficients{1};
 };
 struct PrimitivePairData { double value; };
+struct ShellPairDensityBounds {
+  double coulomb{}, exchange_alpha{}, exchange_beta{};
+};
+namespace detail {
+using GeneratedShellPairDensityBounds = ShellPairDensityBounds;
+}
 struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
   unsigned direct_coulomb_reachable=0;
   unsigned direct_hermite_convolution=0;
+  bool direct_pair_materialized_values=false;
+  bool direct_pair_materialized_derivatives=false;
+  bool direct_pair_cooperative_derivatives=false;
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -114,11 +129,13 @@ struct GeneratedCoulombPlan {
   cudaStream_t stream{};
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
-  std::uint64_t class_mask{}, value_class_mask{};
+  std::uint64_t class_mask{}, value_class_mask{}, rys_fock_mask{};
   bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{}, *shell_bounds{};
+  ShellPairDensityBounds* shell_pair_density_bounds{};
+  double *system_density_bounds{}, *system_pair_density_bounds{};
   std::uint8_t* active{};
   std::uint32_t* heads{};
   const std::uint32_t* pair_order{};
@@ -127,6 +144,11 @@ struct GeneratedCoulombPlan {
   ~GeneratedCoulombPlan();
 };
 std::uint64_t present_direct_shell_class_mask(const HostBatch&) { return 1; }
+std::uint64_t requested_rys_mask=1;
+std::uint64_t prepare_direct_fock_rys_mask(bool exchange) {
+  assert(!exchange); return requested_rys_mask;
+}
+std::uint64_t prepare_direct_fock_k_block_mask() { return 0; }
 bool make_bounded_stream_shell_pair_order(const HostBatch&, std::vector<std::uint32_t>& a,
                                         std::vector<std::uint32_t>& b) {
   a={0,1}; b={0,2}; return true;
@@ -139,7 +161,13 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
-  assert(argc==5);
+  assert(argc==8);
+  const bool pair_cooperative=std::atoi(argv[7])!=0;
+  cuda_policy::pair_cooperative_policy=pair_cooperative;
+  const bool pair_derivatives=std::atoi(argv[6])!=0;
+  cuda_policy::pair_derivatives_policy=pair_derivatives;
+  const bool pair_materialized=std::atoi(argv[5])!=0;
+  cuda_policy::pair_materialized_policy=pair_materialized;
   const unsigned hermite=static_cast<unsigned>(std::atoi(argv[4]));
   cuda_policy::hermite_policy=hermite;
   const unsigned reachable=static_cast<unsigned>(std::atoi(argv[3]));
@@ -147,6 +175,9 @@ int main(int argc,char** argv) {
   HostBatch host; DeviceBatch borrowed;
   borrowed.direct_coulomb_reachable=reachable ^ 3U;
   borrowed.direct_hermite_convolution=hermite ^ 3U;
+  borrowed.direct_pair_materialized_values=!pair_materialized;
+  borrowed.direct_pair_materialized_derivatives=!pair_derivatives;
+  borrowed.direct_pair_cooperative_derivatives=!pair_cooperative;
   injected_stage=std::atoi(argv[1]); injected_kind=std::atoi(argv[2]);
   bool propagated=false;
   try {
@@ -155,6 +186,9 @@ int main(int argc,char** argv) {
       assert(plan && live_allocations>0);
       assert(plan->batch.direct_coulomb_reachable==reachable);
       assert(plan->batch.direct_hermite_convolution==hermite);
+      assert(plan->batch.direct_pair_materialized_values==pair_materialized);
+      assert(plan->batch.direct_pair_materialized_derivatives==pair_derivatives);
+      assert(plan->batch.direct_pair_cooperative_derivatives==pair_cooperative);
     }
     else assert(!plan);
   } catch(const std::bad_alloc&) { return 2; }
@@ -169,16 +203,36 @@ int main(int argc,char** argv) {
   assert(recovered && live_allocations>0);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
   assert(recovered->batch.direct_hermite_convolution==hermite);
+  assert(recovered->batch.direct_pair_materialized_values==pair_materialized);
+  assert(recovered->batch.direct_pair_materialized_derivatives==pair_derivatives);
+  assert(recovered->batch.direct_pair_cooperative_derivatives==pair_cooperative);
+  assert(recovered->rys_fock_mask==1);
   // A prepared owner freezes its policy; only a new owner sees later changes.
   cuda_policy::reachable_policy=reachable ^ 3U;
   cuda_policy::hermite_policy=hermite ^ 3U;
+  cuda_policy::pair_materialized_policy=!pair_materialized;
+  cuda_policy::pair_derivatives_policy=!pair_derivatives;
+  cuda_policy::pair_cooperative_policy=!pair_cooperative;
+  requested_rys_mask=0;
+  assert(recovered->rys_fock_mask==1);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
   assert(recovered->batch.direct_hermite_convolution==hermite);
+  assert(recovered->batch.direct_pair_materialized_values==pair_materialized);
+  assert(recovered->batch.direct_pair_materialized_derivatives==pair_derivatives);
+  assert(recovered->batch.direct_pair_cooperative_derivatives==pair_cooperative);
   auto reselected=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
   assert(reselected && reselected->batch.direct_coulomb_reachable==(reachable ^ 3U));
   assert(reselected->batch.direct_hermite_convolution==(hermite ^ 3U));
+  assert(reselected->batch.direct_pair_materialized_values==!pair_materialized);
+  assert(reselected->batch.direct_pair_materialized_derivatives==!pair_derivatives);
+  assert(reselected->batch.direct_pair_cooperative_derivatives==!pair_cooperative);
+  assert(reselected->rys_fock_mask==0);
+  assert(recovered->rys_fock_mask==1);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
   assert(recovered->batch.direct_hermite_convolution==hermite);
+  assert(recovered->batch.direct_pair_materialized_values==pair_materialized);
+  assert(recovered->batch.direct_pair_materialized_derivatives==pair_derivatives);
+  assert(recovered->batch.direct_pair_cooperative_derivatives==pair_cooperative);
   reselected.reset();
   recovered.reset(); assert(live_allocations==0);
 }
@@ -247,11 +301,29 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.mark.parametrize("stage", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("reachable", range(4))
 @pytest.mark.parametrize("hermite", range(4))
+@pytest.mark.parametrize("pair_materialized", [False, True])
+@pytest.mark.parametrize("pair_derivatives", [False, True])
+@pytest.mark.parametrize("pair_cooperative", [False, True])
 def test_optional_host_allocation_failure_falls_back(
-    allocation_probe: Path, stage: int, reachable: int, hermite: int
+    allocation_probe: Path,
+    stage: int,
+    reachable: int,
+    hermite: int,
+    pair_materialized: bool,
+    pair_derivatives: bool,
+    pair_cooperative: bool,
 ) -> None:
     subprocess.run(
-        [str(allocation_probe), str(stage), "0", str(int(reachable)), str(hermite)],
+        [
+            str(allocation_probe),
+            str(stage),
+            "0",
+            str(int(reachable)),
+            str(hermite),
+            str(int(pair_materialized)),
+            str(int(pair_derivatives)),
+            str(int(pair_cooperative)),
+        ],
         check=True,
         timeout=10,
     )
@@ -260,11 +332,29 @@ def test_optional_host_allocation_failure_falls_back(
 @pytest.mark.parametrize("kind", [1, 2, 3])
 @pytest.mark.parametrize("reachable", range(4))
 @pytest.mark.parametrize("hermite", range(4))
+@pytest.mark.parametrize("pair_materialized", [False, True])
+@pytest.mark.parametrize("pair_derivatives", [False, True])
+@pytest.mark.parametrize("pair_cooperative", [False, True])
 def test_late_device_oom_falls_back_but_other_errors_propagate(
-    allocation_probe: Path, kind: int, reachable: int, hermite: int
+    allocation_probe: Path,
+    kind: int,
+    reachable: int,
+    hermite: int,
+    pair_materialized: bool,
+    pair_derivatives: bool,
+    pair_cooperative: bool,
 ) -> None:
     subprocess.run(
-        [str(allocation_probe), "5", str(kind), str(int(reachable)), str(hermite)],
+        [
+            str(allocation_probe),
+            "5",
+            str(kind),
+            str(int(reachable)),
+            str(hermite),
+            str(int(pair_materialized)),
+            str(int(pair_derivatives)),
+            str(int(pair_cooperative)),
+        ],
         check=True,
         timeout=10,
     )
@@ -272,11 +362,28 @@ def test_late_device_oom_falls_back_but_other_errors_propagate(
 
 @pytest.mark.parametrize("reachable", range(4))
 @pytest.mark.parametrize("hermite", range(4))
+@pytest.mark.parametrize("pair_materialized", [False, True])
+@pytest.mark.parametrize("pair_derivatives", [False, True])
+@pytest.mark.parametrize("pair_cooperative", [False, True])
 def test_successful_optional_preparation_is_unchanged(
-    allocation_probe: Path, reachable: int, hermite: int
+    allocation_probe: Path,
+    reachable: int,
+    hermite: int,
+    pair_materialized: bool,
+    pair_derivatives: bool,
+    pair_cooperative: bool,
 ) -> None:
     subprocess.run(
-        [str(allocation_probe), "0", "0", str(int(reachable)), str(hermite)],
+        [
+            str(allocation_probe),
+            "0",
+            "0",
+            str(int(reachable)),
+            str(hermite),
+            str(int(pair_materialized)),
+            str(int(pair_derivatives)),
+            str(int(pair_cooperative)),
+        ],
         check=True,
         timeout=10,
     )

@@ -2,10 +2,12 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 
 #include "dft/ao_grid.hpp"
 #include "dft/grid.hpp"
 #include "generativeqc/generativeqc.h"
+#include "methods/dft_method.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/mean_field.hpp"
@@ -15,6 +17,27 @@ using namespace generativeqc;
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
+}
+
+void dft_result_adapter_preserves_incremental_direct_jk() {
+  generativeqc::scf::ScfResult native;
+  native.fock_builds = 6;
+  native.incremental_direct_jk.requested = true;
+  native.incremental_direct_jk.active = true;
+  native.incremental_direct_jk.anchor_full_builds = 3;
+  native.incremental_direct_jk.delta_builds = 2;
+  native.incremental_direct_jk.post_scf_full_builds = 1;
+  native.incremental_direct_jk.anchor_updates = 2;
+  native.incremental_direct_jk.max_abs_delta_density = 0.125;
+
+  const auto result = generativeqc::methods::detail::adapt_dft_result(
+      std::move(native), GENERATIVEQC_BACKEND_CPU_REFERENCE);
+  const auto& diagnostic = result.incremental_direct_jk;
+  require(result.fock_builds == 6 && diagnostic.requested && diagnostic.active &&
+              diagnostic.anchor_full_builds == 3 && diagnostic.delta_builds == 2 &&
+              diagnostic.post_scf_full_builds == 1 && diagnostic.anchor_updates == 2 &&
+              diagnostic.max_abs_delta_density == 0.125,
+          "DFT result adapter dropped incremental Direct-J/K diagnostics");
 }
 
 struct Handles {
@@ -186,6 +209,7 @@ void check_measures(bool uks, bool pbe) {
 
 int main() {
   try {
+    dft_result_adapter_preserves_incremental_direct_jk();
     for (bool uks : {false, true})
       for (bool pbe : {false, true}) check_measures(uks, pbe);
     std::cout << "RKS/UKS public density and physical residual measures remain distinct\n";

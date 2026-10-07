@@ -883,6 +883,17 @@ jobs:
           PY_INNER
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
+      - name: Qualify owned sccache compiler lifetimes
+        if: matrix.shard == 'compiler-heavy'
+        env:
+          GENERATIVEQC_REQUIRE_SCCACHE_TEST: "1"
+        run: |
+          uv pip install --python .venv/bin/python sccache==0.16.0
+          PATH="$PWD/.venv/bin:$PATH" PYTHONPATH="$PWD/python:$PWD" \
+            .venv/bin/python -m pytest -q \
+              tests/python/test_compiler_cache.py \
+              tests/python/test_compiler_cache_lifecycle.py \
+              tests/python/test_sccache_lifecycle_integration.py
       - name: Build the CPU native library
         run: |
           cmake -S . -B build -G Ninja \
@@ -977,7 +988,7 @@ jobs:
               # several minutes by itself. Focused capability/emitter tests stay
               # routine; retain the exhaustive catalog sweep nightly/manual.
               --deselect
-              'tests/python/test_codegen.py::test_codegen_capability_report_covers_catalog_and_manifest'
+              'tests/python/test_codegen_production.py::test_codegen_capability_report_covers_catalog_and_manifest'
               --deselect
               'tests/python/test_ecp_f.py::test_f_prepared_replay_with_planned_budget[cpu]'
               --deselect
@@ -1035,7 +1046,7 @@ jobs:
               --deselect
               'tests/python/test_high_angular.py::test_g_one_electron_all_components_libcint[nuclear_attraction-angular3]'
               --deselect
-              'tests/python/test_codegen.py::test_dddp_rys5_recurrence_matches_every_symbolic_component'
+              'tests/python/test_codegen_high_l.py::test_dddp_rys5_recurrence_matches_every_symbolic_component'
               --deselect
               'tests/python/test_range_separation.py::test_generated_range_values_and_all_center_derivatives_against_libcint[angular3-cpu-long_range]'
               # WB97M-V reconverged finite-difference replays are qualification
@@ -1150,7 +1161,9 @@ jobs:
             tests/python/test_hessian_analytic.py
             tests/python/test_hessian_directional.py
             tests/python/test_response_operator.py
-            tests/python/test_codegen.py
+            tests/python/test_codegen_high_l.py
+            tests/python/test_codegen_production.py
+            tests/python/test_codegen_cuda_compile.py
             tests/python/test_codegen_autotune.py
             tests/python/test_codegen_profiles.py
             tests/python/test_d3_geometry_ir.py
@@ -1307,7 +1320,9 @@ jobs:
               ;;
             compiler-heavy)
               test_targets=(
-                tests/python/test_codegen.py
+                tests/python/test_codegen_high_l.py
+                tests/python/test_codegen_production.py
+                tests/python/test_codegen_cuda_compile.py
                 tests/python/test_codegen_autotune.py
                 tests/python/test_codegen_profiles.py
                 tests/python/test_d3_geometry_ir.py

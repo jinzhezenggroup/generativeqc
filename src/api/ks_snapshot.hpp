@@ -33,6 +33,14 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
 
+/** Explicit output layout: combined=1 publishes [H', Pulay, J'+K'];
+ * combined=0 retains the v1 independent-source layout. No raw J/K source is
+ * fabricated for total-force consumers. Snapshot/token/budget gates are shared. */
+generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v2(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int combined,
+    double* values, std::size_t count, std::size_t maximum_bytes, std::uint64_t* work,
+    std::size_t work_count);
+
 generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
@@ -60,7 +68,11 @@ generativeqc_status generativeqc_ks_snapshot_energy_v1(const generativeqc_batch*
                                                        const generativeqc_ks_snapshot* snapshot,
                                                        double* energy);
 /** Live native proof: 0=all-electron, 1=ECP; never inferred from electron count. */
-/** Current-owner proof of the complete RSH/VV10 model, including its density domain. */
+/** Current-owner proof of a complete range-exchange/nonlocal model, including its domain. */
+generativeqc_status generativeqc_ks_snapshot_nonlocal_model_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count);
+/** Compatibility alias for the original WB97M-V-specific symbol. */
 generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count);

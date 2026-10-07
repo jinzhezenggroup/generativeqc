@@ -8,6 +8,12 @@ scientific source owner.
 
 from __future__ import annotations
 
+from .direct_cooperative_gradient_cuda import emit_cooperative_direct_force_support
+from .direct_pair_materialized_cuda import emit_direct_pair_materialized_support
+from .direct_pair_materialized_gradient_cuda import (
+    emit_direct_pair_materialized_gradient_support,
+)
+
 _SOURCE = r"""#pragma once
 
 #include <cuda_runtime.h>
@@ -390,6 +396,11 @@ __device__ inline Scalar contracted_eri_cartesian_source(const DeviceBatch& batc
 
 
 def emit_direct_source_contraction_header() -> str:
-    """Emit the qualified Direct source-contraction CUDA header unchanged."""
+    """Emit retained component lowering and shared pair-materialized support."""
 
-    return _SOURCE
+    return (
+        _SOURCE
+        + emit_direct_pair_materialized_support()
+        + emit_direct_pair_materialized_gradient_support()
+        + emit_cooperative_direct_force_support()
+    )

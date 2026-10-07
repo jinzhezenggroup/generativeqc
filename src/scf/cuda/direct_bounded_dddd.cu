@@ -28,14 +28,31 @@ namespace generativeqc::scf::cuda_execution {
  * dddd value/gradient consumer while retaining O(N_shell^2) topology storage
  * and zero whole-topology scan when all production classes are covered.
  */
-template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force>
+template <bool MaterializedValues>
+__device__ inline void synchronize_dddd_stream() {
+  // Whole-shell consumers publish shared recurrence across eight warps. The
+  // retained value/force schedules use a single warp and its original fence.
+  if constexpr (MaterializedValues)
+    __syncthreads();
+  else
+    __syncwarp();
+}
+
+template <bool MaterializedValues>
+inline constexpr unsigned kDdddStreamThreads =
+    MaterializedValues ? detail::kDirectQuartetTileSize : detail::kDirectQuartetThreads;
+
+template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
+          bool MaterializedValues = false>
 __global__
-__launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_streaming_kernel(
+__launch_bounds__(kDdddStreamThreads<MaterializedValues>) void bounded_direct_dddd_streaming_kernel(
     DeviceBatch batch, const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
-    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient) {
+    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient,
+    MaterializedDirectPairWork* materialized_work = nullptr) {
   static_assert(detail::kDirectQuartetThreads == 32);
+  static_assert(!MaterializedValues || !Force);
   constexpr std::uint32_t kSkip = 0U;
   constexpr std::uint32_t kConsume = 1U;
   constexpr std::uint32_t kFinished = 2U;
@@ -56,8 +73,11 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
       reinterpret_cast<const ShellPairDensityBounds*>(topology.shell_pair_density_bounds);
 
   if (lane == 0U) queue_count = 1U;
-  __syncwarp();
+  synchronize_dddd_stream<MaterializedValues>();
   while (true) {
+    // Empty screened claims also retire all readers before the leader
+    // overwrites shared task/state, even when no recurrence was consumed.
+    if constexpr (MaterializedValues) __syncthreads();
     if (lane == 0U) {
       candidate_ordinal = atomicAdd(bra_head, 1U);
       std::uint64_t remaining = candidate_ordinal;
@@ -83,11 +103,15 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
         bool keep = (active == nullptr || active[system] != 0U) &&
                     topology.shell_pair_bounds[bra_pair] * topology.shell_pair_bounds[ket_pair] >=
                         screening_tolerance;
-        if (keep && topology.fock_consumer != detail::GeneratedFockConsumer::Coulomb) {
+        if (keep && density_bounds != nullptr) {
+          const bool coulomb_only =
+              topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb;
+          const bool exchange_only =
+              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange ||
+              topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange;
           keep = direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
               batch, bra_pair, ket_pair, screening_tolerance, topology.shell_pair_bounds,
-              density_bounds, nullptr,
-              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange);
+              density_bounds, nullptr, exchange_only, coulomb_only);
         }
         stream_state = keep ? kConsume : kSkip;
         if (keep) {
@@ -104,7 +128,7 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
         break;
       }
     }
-    __syncwarp();
+    synchronize_dddd_stream<MaterializedValues>();
     if (stream_state == kFinished) return;
     if (stream_state != kConsume) continue;
 
@@ -112,26 +136,49 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
       if (lane == 0U) {
         profile_bounded_direct_shell_quartet(batch, task, profile);
       }
-      __syncwarp();
+      synchronize_dddd_stream<MaterializedValues>();
     }
-    for (std::uint32_t tile = 0U; tile < tile_count; ++tile) {
-      if (lane == 0U) task.tile = tile;
-      __syncwarp();
-      for (std::size_t subtile = 0U; subtile < kSubtilesPerTile; ++subtile) {
-        if constexpr (Force) {
-          contract_two_electron_force_quartet_subtile_scaled<Unrestricted, kDdddAngularOrder>(
-              batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
-              output, 0U, coulomb_coefficient, exchange_coefficient, subtile, lane);
-        } else {
-          contract_fock_direct_quartet_subtile<Unrestricted, kDdddAngularOrder>(
-              batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
-              output, nullptr, subtile, lane,
-              topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb,
-              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange);
+    if constexpr (MaterializedValues) {
+      // dddd has at most 6^4 Cartesian components. Six independent packet
+      // lanes per thread cover its complete shell domain without a global
+      // component tensor or repeated primitive-pair preparation. The shell
+      // admission above is identical to the retained J/K stream; each AO
+      // component still checks its own Schwarz predicate in the consumer.
+      constexpr unsigned slots = (6U * 6U * 6U * 6U + detail::kDirectQuartetTileSize - 1U) /
+                                 detail::kDirectQuartetTileSize;
+      __shared__ MaterializedDirectPairRecurrence<kDdddAngularOrder> recurrence;
+      contract_materialized_direct_pair_fock<Unrestricted, kDdddAngularOrder, slots>(
+          batch, task, screening_tolerance, schwarz_bounds, density, active, output, nullptr,
+          recurrence, materialized_work,
+          topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb,
+          topology.fock_consumer == detail::GeneratedFockConsumer::Exchange ||
+              topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange,
+          nullptr, topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange);
+      // Readers and final scatter must retire before the leader claims and
+      // publishes the next shell task, including empty/inactive domains.
+      synchronize_dddd_stream<MaterializedValues>();
+    } else
+      for (std::uint32_t tile = 0U; tile < tile_count; ++tile) {
+        if (lane == 0U) task.tile = tile;
+        __syncwarp();
+        for (std::size_t subtile = 0U; subtile < kSubtilesPerTile; ++subtile) {
+          if constexpr (Force) {
+            contract_two_electron_force_quartet_subtile_scaled<Unrestricted, kDdddAngularOrder>(
+                batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
+                output, 0U, coulomb_coefficient, exchange_coefficient, subtile, lane);
+          } else {
+            contract_fock_direct_quartet_subtile<Unrestricted, kDdddAngularOrder>(
+                batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
+                output, nullptr, subtile, lane,
+                topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb,
+                topology.fock_consumer == detail::GeneratedFockConsumer::Exchange ||
+                    topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange,
+                generativeqc::integrals::CoulombRange::Full, 0.0,
+                topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange);
+          }
         }
+        __syncwarp();
       }
-      __syncwarp();
-    }
   }
 }
 
@@ -141,7 +188,28 @@ void launch_bounded_direct_dddd_streaming_kernel_scaled(
     const GeneratedShellPairStream* topology_pointer, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     std::uint32_t* bra_head, DeviceShellClassProfileEntry* profile,
-    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient) {
+    unsigned long long* fp64_work_count, double coulomb_coefficient, double exchange_coefficient,
+    MaterializedDirectPairWork* materialized_work) {
+  if (!force && purpose == DirectScreeningPurpose::Fock && batch.direct_pair_materialized_values &&
+      batch.shell_primitive_pairs && batch.shell_pair_primitive_offsets &&
+      !(batch.direct_coulomb_reachable & 1U) && !(batch.direct_hermite_convolution & 1U)) {
+    // This immutable full-range stream supplies positive J-only/K-only, or
+    // the same combined HF scatter, so it shares the prepared source exactly.
+    // SR/LR and derivative consumers retain their separately qualified owner.
+    if (unrestricted)
+      bounded_direct_dddd_streaming_kernel<true, DirectScreeningPurpose::Fock, false, true>
+          <<<grid, detail::kDirectQuartetTileSize, 0, stream>>>(
+              batch, topology_pointer, screening_tolerance, schwarz_bounds, density, active, output,
+              bra_head, profile, fp64_work_count, coulomb_coefficient, exchange_coefficient,
+              materialized_work);
+    else
+      bounded_direct_dddd_streaming_kernel<false, DirectScreeningPurpose::Fock, false, true>
+          <<<grid, detail::kDirectQuartetTileSize, 0, stream>>>(
+              batch, topology_pointer, screening_tolerance, schwarz_bounds, density, active, output,
+              bra_head, profile, fp64_work_count, coulomb_coefficient, exchange_coefficient,
+              materialized_work);
+    return;
+  }
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
       if (force == false) {

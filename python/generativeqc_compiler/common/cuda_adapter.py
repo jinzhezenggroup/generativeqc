@@ -11,8 +11,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .compiler_process import CompileResult as CudaCompileResult
-from .compiler_process import run_compiler
+from .compiler_cache import run_cached_compiler
+from .compiler_process import CompileResult as CudaCompileResult  # noqa: TC001
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -120,7 +120,7 @@ class CudaCompilerAdapter:
 
     def _run_compiler(self, command: list[str]) -> CudaCompileResult:
         """Bound NVCC and every child for either object or shared-library builds."""
-        return run_compiler(command, self.compile_timeout, label="NVCC")
+        return run_cached_compiler(command, self.compile_timeout, label="NVCC")
 
     def link(
         self,
@@ -135,23 +135,25 @@ class CudaCompilerAdapter:
     ) -> subprocess.CompletedProcess[str]:
         """Link compiled candidates and the target-probing driver."""
 
-        return subprocess.run(
-            [
-                str(self.nvcc),
-                f"-std={standard}",
-                f"-arch={self.target.architecture}",
-                "-O3",
-                *(f"-I{path}" for path in includes),
-                str(driver),
-                *(str(item) for item in objects),
-                *options,
-                "-o",
-                str(executable),
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+        command = [
+            str(self.nvcc),
+            f"-std={standard}",
+            f"-arch={self.target.architecture}",
+            "-O3",
+            *(f"-I{path}" for path in includes),
+            str(driver),
+            *(str(item) for item in objects),
+            *options,
+            "-o",
+            str(executable),
+        ]
+        result = run_cached_compiler(command, timeout, label="NVCC")
+        if result.timed_out:
+            raise subprocess.TimeoutExpired(
+                command, timeout, output=result.stdout, stderr=result.stderr
+            )
+        return subprocess.CompletedProcess(
+            command, result.returncode, result.stdout, result.stderr
         )
 
 

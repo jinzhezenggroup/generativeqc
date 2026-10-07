@@ -262,7 +262,6 @@ class Calculator:
             DispersionCorrectionPrimitive,
             GeometricCounterpoisePrimitive,
             MethodIR,
-            SemilocalXCPrimitive,
             resolve_method,
             validate_basis_snapshot,
         )
@@ -355,7 +354,6 @@ class Calculator:
                 for node in supplied_method_ir.primitives
                 if isinstance(node, GeometricCounterpoisePrimitive)
             )
-            electronic_family = None
             if corrections:
                 if len(corrections) != 1:
                     raise NotImplementedError(
@@ -367,7 +365,6 @@ class Calculator:
                         raise NotImplementedError(
                             "Calculator D3 execution does not accept a gCP primitive"
                         )
-                    electronic_family = "pbe"
                 elif isinstance(correction, D4Spec):
                     if gcp_nodes:
                         expected = resolve_method(
@@ -379,11 +376,8 @@ class Calculator:
                             != expected.manifest_identity
                         ):
                             raise NotImplementedError(
-                                "Calculator D4+gCP execution requires the canonical r2SCAN-3c MethodIR"
+                                "Calculator D4+gCP execution requires the canonical composite MethodIR"
                             )
-                        electronic_family = "r2scan"
-                    else:
-                        electronic_family = "parameterized-d4"
                 else:
                     raise NotImplementedError(
                         "Calculator MethodIR execution does not support this correction family"
@@ -414,62 +408,20 @@ class Calculator:
                     basis=None,
                 )
             )
-            semilocal = tuple(
-                node
-                for node in electronic_ir.primitives
-                if isinstance(node, SemilocalXCPrimitive)
-            )
-            components = (
-                set(dict(semilocal[0].functional.components))
-                if len(semilocal) == 1
-                else set()
-            )
-            if electronic_family is None:
-                if automatic_libxc_resolution is not None:
-                    if (
-                        electronic_ir.identity
-                        != automatic_libxc_resolution.method.identity
-                    ):
-                        raise RuntimeError(
-                            "automatic Libxc MethodIR changed during Calculator resolution"
-                        )
-                    electronic_family = "automatic-libxc"
-                else:
-                    if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
-                        raise NotImplementedError(
-                            "Calculator electronic MethodIR execution currently supports "
-                            "the PBE family or one automatic Libxc semilocal functional"
-                        )
-                    electronic_family = "pbe"
-
-            if electronic_family == "automatic-libxc":
+            if automatic_libxc_resolution is not None:
+                if electronic_ir.identity != automatic_libxc_resolution.method.identity:
+                    raise RuntimeError(
+                        "automatic Libxc MethodIR changed during Calculator resolution"
+                    )
                 if automatic_libxc_transport is None:
                     raise RuntimeError(
                         "automatic Libxc native transport was not resolved"
                     )
                 method = automatic_libxc_transport
-            elif electronic_family == "parameterized-d4":
+            else:
                 from .ks import native_dft_carrier_for_ir
 
                 method = native_dft_carrier_for_ir(electronic_ir)
-            elif electronic_family == "pbe":
-                if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
-                    raise NotImplementedError(
-                        "Calculator PBE-family MethodIR has incompatible semilocal components"
-                    )
-                method = (
-                    "pbe-uks" if supplied_method_ir.spin == "polarized" else "pbe-rks"
-                )
-            else:
-                if components != {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN"}:
-                    raise NotImplementedError(
-                        "canonical r2SCAN-3c requires the audited r2SCAN electronic graph"
-                    )
-                method = (
-                    "r2scan-uks"
-                    if supplied_method_ir.spin == "polarized"
-                    else "r2scan-rks"
-                )
 
             from .ks import AUTOMATIC_SCF_DOMAIN, SCF_DOMAIN, KsOptions
 
@@ -859,31 +811,26 @@ class Calculator:
         basis_has_ecp = isinstance(self._basis, BasisSet) and any(
             element.ecp_core_electrons for element in self._basis.elements
         )
-        named_cpu_all_electron_force = (
+        from .ks import (
+            cpu_stationary_all_electron_force_eligible,
+            stationary_second_order_eligible,
+        )
+
+        cpu_composed_all_electron_force = (
             self._device_name == "cpu"
-            and self._method_name
-            in (
-                "pbe0-rks",
-                "pbe0-uks",
-                "b3lyp-rks",
-                "b3lyp-uks",
-                "pbe-d4-rks",
-                "wb97m-v",
-                "wb97m-v-rks",
-                "wb97m-v-uks",
-            )
             and not basis_has_ecp
+            and self._automatic_libxc_name is None
             and self._ks_options is not None
-            and (
-                self._ks_options.coefficients[2] < 0.0
-                or (
-                    self._method_name == "pbe-d4-rks"
-                    and self._ks_options.coefficients == (1.0, 1.0, 0.0)
-                )
+            and cpu_stationary_all_electron_force_eligible(
+                self._ks_options.method_ir,
+                dispersion_method_ir=self._dispersion_method_ir,
             )
         )
-        if self._method_name.startswith("wb97m-v"):
-            named_cpu_all_electron_force = named_cpu_all_electron_force and (
+        if (
+            cpu_composed_all_electron_force
+            and self._ks_options.execution_plan.nonlocal_correlation is not None
+        ):
+            cpu_composed_all_electron_force = (
                 self._basis == "sto-3g"
                 if isinstance(self._basis, str)
                 else all(
@@ -901,7 +848,16 @@ class Calculator:
                 self._device_name == "cuda"
                 and self._ks_options.execution_plan.nonlocal_correlation is not None
             )
-            and not (self._method_name == "pbe-d4-rks" and basis_has_ecp)
+            and not (
+                basis_has_ecp
+                and any(
+                    isinstance(primitive, DispersionCorrectionPrimitive)
+                    and isinstance(primitive.specification, D4Spec)
+                    for primitive in (
+                        self._dispersion_method_ir or self._ks_options.method_ir
+                    ).primitives
+                )
+            )
             and (
                 self._device_name == "cuda"
                 or (
@@ -913,7 +869,7 @@ class Calculator:
         from .ks import (
             SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
-            cuda_wb97mv_force_basis_eligible,
+            cuda_nonlocal_force_basis_eligible,
         )
 
         cuda_hybrid_force = (
@@ -927,12 +883,13 @@ class Calculator:
                 or self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN
             )
         )
-        cuda_wb97mv_force = (
+        cuda_nonlocal_force = (
             self._device_name == "cuda"
-            and self._method_name.startswith("wb97m-v")
             and not basis_has_ecp
             and self._ks_options is not None
-            and cuda_wb97mv_force_basis_eligible(self._basis)
+            and self._ks_options.execution_plan.nonlocal_correlation is not None
+            and self._ks_options.has_range_exchange
+            and cuda_nonlocal_force_basis_eligible(self._basis)
         )
         density_fitted_force = (
             density_fitting_mode != _native.DENSITY_FITTING_NONE
@@ -955,9 +912,9 @@ class Calculator:
                     density_fitting_mode == _native.DENSITY_FITTING_NONE
                     and (
                         semilocal_force
-                        or named_cpu_all_electron_force
+                        or cpu_composed_all_electron_force
                         or cuda_hybrid_force
-                        or cuda_wb97mv_force
+                        or cuda_nonlocal_force
                     )
                 )
                 or density_fitted_force
@@ -1002,7 +959,6 @@ class Calculator:
         )
         public_rks_second_order = (
             self._device_name == "cpu"
-            and self._method_name in ("lda-rks", "pbe-rks")
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
             and self._precision_mode == _native.PRECISION_FP64
             and self._representation_name == "cartesian"
@@ -1010,8 +966,7 @@ class Calculator:
             and self._dispersion_method_ir is None
             and second_order_basis
             and self._ks_options is not None
-            and self._ks_options.coefficients == (1.0, 1.0, 0.0)
-            and self._ks_options.execution_plan.nonlocal_correlation is None
+            and stationary_second_order_eligible(self._ks_options.method_ir)
         )
         if public_rks_second_order:
             self._capabilities = replace(
@@ -1065,8 +1020,14 @@ class Calculator:
                 self._ks_options is not None
                 and self._ks_options.method_ir.spin == "unpolarized"
             )
+            minao = self._initial_guess.kind == "minao"
+            backend_ok = self._device_name == "cpu" or (
+                minao
+                and self._device_name == "cuda"
+                and self._capabilities.family == "density_functional"
+            )
             if (
-                self._device_name != "cpu"
+                not backend_ok
                 or self._precision_mode != _native.PRECISION_FP64
                 or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                 or not restricted
@@ -1075,12 +1036,18 @@ class Calculator:
                 not in ("hartree_fock", "density_functional")
             ):
                 raise NotImplementedError(
-                    "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
+                    "MINAO requires FP64 all-electron restricted exact CPU HF/KS or CUDA KS"
+                    if minao
+                    else "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
                 )
             require_initial_guess_library(self._library)
             self._capabilities = replace(
                 self._capabilities,
-                supported_properties=frozenset({"energy"}),
+                supported_properties=(
+                    self._capabilities.supported_properties
+                    if minao
+                    else frozenset({"energy"})
+                ),
                 supported_second_order=frozenset(),
             )
 

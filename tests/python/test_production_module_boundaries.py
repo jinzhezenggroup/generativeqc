@@ -22,6 +22,7 @@ PRODUCTION_MODULES = {
     "production_cost",
     "production_emission",
     "production_profile",
+    "production_k_block",
     "production_registry",
     "production_selection",
 }

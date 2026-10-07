@@ -82,7 +82,8 @@ struct CudaKsTransfers {
  * provider's actual host/device queries are checked before allocation. This
  * shape query performs no CUDA call and allocates no numeric buffers. */
 std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
-                                bool exact_exchange = false, bool range_correction = false);
+                                bool exact_exchange = false, bool range_correction = false,
+                                bool incremental_direct_jk = false);
 
 /** Borrowed exact occupied factor and fitted projection for a successful
  * restricted density-fitted hybrid final state. Both allocations stay owned by
@@ -195,14 +196,16 @@ class CudaKsPlan {
              const scf::ResolvedFockBuild* range_correction = nullptr,
              nlc::Vv10Plan* nonlocal_correlation = nullptr,
              nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive,
-             CudaXcPreparationBudget xc_budget = {});
+             CudaXcPreparationBudget xc_budget = {},
+             const scf::PreparedFockPlan* range_provider = nullptr);
   CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis, const MolecularGrid& grid,
              const scf::ScfOptions& options, SemilocalFamily functional,
              std::size_t tile_points = 256,
              const scf::ResolvedFockBuild* range_correction = nullptr,
              nlc::Vv10Plan* nonlocal_correlation = nullptr,
              nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive,
-             CudaXcPreparationBudget xc_budget = {});
+             CudaXcPreparationBudget xc_budget = {},
+             const scf::PreparedFockPlan* range_provider = nullptr);
   ~CudaKsPlan();
   CudaKsPlan(const CudaKsPlan&) = delete;
   CudaKsPlan& operator=(const CudaKsPlan&) = delete;
@@ -221,6 +224,8 @@ class CudaKsPlan {
   /** Energy-only adapters leave the final density resident by disabling export. */
   scf::ScfResult run(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
                      bool export_density = true);
+  /** Read-only last-good seed availability; no CUDA call or density export. */
+  bool has_warm_start() const noexcept;
   /** Export only the last converged state for a changed-geometry rebuild. */
   std::vector<double> warm_density();
   /** Borrow the ordinary GPU eigen provider for synchronous input admission.

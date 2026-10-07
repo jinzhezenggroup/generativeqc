@@ -1,0 +1,318 @@
+{
+  "attachments": [
+    {
+      "path": "receipts.txt",
+      "sha256": "4876d8270f6d8a7426479b349cacd356f9dc21e90fadac3a62616087541f7b7d"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "wb97m-v-uks.cold.energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 4.5350958544077e-09,
+      "max_scaled_error": 0.45350958544077,
+      "passed": true,
+      "rms_error": 4.5350958544077e-09,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v-uks.cold.forces": {
+      "atol": 1e-07,
+      "max_absolute_error": 1.8488787723036637e-09,
+      "max_scaled_error": 0.018488787723036637,
+      "passed": true,
+      "rms_error": 6.192304435784713e-10,
+      "rtol": 0,
+      "shape": [
+        35,
+        3
+      ]
+    },
+    "wb97m-v-uks.fd.0": {
+      "atol": 1e-05,
+      "max_absolute_error": 6.646099114451798e-08,
+      "max_scaled_error": 0.006646099114451797,
+      "passed": true,
+      "rms_error": 6.646099114451798e-08,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v-uks.fd.1": {
+      "atol": 2e-06,
+      "max_absolute_error": 5.9180131038727435e-09,
+      "max_scaled_error": 0.0029590065519363717,
+      "passed": true,
+      "rms_error": 5.9180131038727435e-09,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v-uks.fd.2": {
+      "atol": 2e-06,
+      "max_absolute_error": 5.297306933382817e-10,
+      "max_scaled_error": 0.00026486534666914086,
+      "passed": true,
+      "rms_error": 5.297306933382817e-10,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v-uks.moved.energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 4.513502460667951e-09,
+      "max_scaled_error": 0.4513502460667951,
+      "passed": true,
+      "rms_error": 4.513502460667951e-09,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v-uks.moved.forces": {
+      "atol": 1e-07,
+      "max_absolute_error": 1.8303054627466508e-09,
+      "max_scaled_error": 0.01830305462746651,
+      "passed": true,
+      "rms_error": 6.21314756225753e-10,
+      "rtol": 0,
+      "shape": [
+        35,
+        3
+      ]
+    },
+    "wb97m-v-uks.warm.force_inf_norm_statistic": {
+      "atol": 2e-08,
+      "max_absolute_error": 3.929689906811973e-12,
+      "max_scaled_error": 0.00019648449534059864,
+      "passed": true,
+      "rms_error": 3.929689906811973e-12,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v.cold.energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 7.903800280928408e-09,
+      "max_scaled_error": 0.7903800280928408,
+      "passed": true,
+      "rms_error": 7.903800280928408e-09,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v.cold.forces": {
+      "atol": 1e-07,
+      "max_absolute_error": 8.467618828333912e-10,
+      "max_scaled_error": 0.008467618828333912,
+      "passed": true,
+      "rms_error": 3.7911699793496625e-10,
+      "rtol": 0,
+      "shape": [
+        36,
+        3
+      ]
+    },
+    "wb97m-v.fd.0": {
+      "atol": 1e-05,
+      "max_absolute_error": 3.920346815927678e-08,
+      "max_scaled_error": 0.003920346815927678,
+      "passed": true,
+      "rms_error": 3.920346815927678e-08,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v.fd.1": {
+      "atol": 2e-06,
+      "max_absolute_error": 3.5253410364533e-09,
+      "max_scaled_error": 0.00176267051822665,
+      "passed": true,
+      "rms_error": 3.5253410364533e-09,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v.fd.2": {
+      "atol": 2e-06,
+      "max_absolute_error": 9.673871911863863e-10,
+      "max_scaled_error": 0.00048369359559319314,
+      "passed": true,
+      "rms_error": 9.673871911863863e-10,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v.moved.energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 7.941906687847222e-09,
+      "max_scaled_error": 0.7941906687847222,
+      "passed": true,
+      "rms_error": 7.941906687847222e-09,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "wb97m-v.moved.forces": {
+      "atol": 1e-07,
+      "max_absolute_error": 8.994449629540213e-10,
+      "max_scaled_error": 0.008994449629540213,
+      "passed": true,
+      "rms_error": 3.7801537041607677e-10,
+      "rtol": 0,
+      "shape": [
+        36,
+        3
+      ]
+    },
+    "wb97m-v.warm.force_inf_norm_statistic": {
+      "atol": 2e-08,
+      "max_absolute_error": 2.55351295663786e-15,
+      "max_scaled_error": 1.27675647831893e-07,
+      "passed": true,
+      "rms_error": 2.55351295663786e-15,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Cached artifacts reused; historical per-artifact compile_seconds are not a fresh total compilation measurement.",
+    "seconds": null
+  },
+  "device": {
+    "identity_source": "finite main/gpu:5090:1 step and retained device visibility",
+    "name": "NVIDIA GeForce RTX 5090",
+    "node": "node1",
+    "slurm_job": "6183",
+    "step": "0"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm_job": "6183",
+    "slurm_step": "0",
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "389ba8af8fc7ce291546a4b52e6ceb7c4c45b0f9d2f7d674a2147e12ed97dd9e",
+    "ir": "54a2495eba36e0cf9ae296828afcaf58bf0dee24844bcf08a02cee59c977bf32",
+    "schedule": "f7b4070ee79ab6b694acc1a0f1a608498b4d820d7729915d54d558836f90df77",
+    "source": "7774f9372763d2adaf8cf6b5f2a5d85cbe607becb52e4c1b78a66efb6cb8daac"
+  },
+  "inputs_hash": "852df6c47b23e5c4e3df4350ce494ed4f1e021ad4e6c6b1b01696745f6ebf593",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Qualification has no clean timing comparison; no promotion or full issue completion.",
+    "status": "not-run"
+  },
+  "residuals": {
+    "energy_max_absolute_error": 7.941906687847222e-09,
+    "force_max_absolute_error": 1.8488787723036637e-09
+  },
+  "revision": "5828f274205693021b8a1ec4dd8145c51d411771",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "atom_domain": [
+      1,
+      128
+    ],
+    "cold_scf_control_scope": "Both isolated-H cold UKS arms fail at 200 iterations before a force; trajectories differ and are not normalized or claimed matched. H3 controls converge in 18 iterations with the same thresholds. No oracle seed or SCF solver modification.",
+    "compiler_cache_scope": "Cached verified linked/object artifacts reused; mandatory ccache compilation provenance retained in artifact metadata and original build/qualification receipts. Shared before/after statistics are aggregate, not per-owner hits/misses.",
+    "complete_endpoint": false,
+    "fast_compile": false,
+    "finite_difference_steps": [
+      0.001,
+      0.0003,
+      0.0001
+    ],
+    "grid": [
+      12,
+      4,
+      8
+    ],
+    "iterations": 3,
+    "physical_cohort": "Independent GPU4PySCF cold/moved RKS/UKS oracles, warm replay and all three reconverged FD steps; both actual source owners selected.",
+    "profile_enabled_cases": [
+      false
+    ],
+    "profile_scope": "Profiling disabled; zero-filled raw ABI times are unmeasured, not measured zeros.",
+    "promotion": "none; default remains off",
+    "qualified_actual_atoms": [
+      35,
+      36
+    ],
+    "scope": "Complete 48/96 PBE0 comparison and physical baseline/candidate phase attribution remain separate. Default off, no performance promotion, no issue completion.",
+    "source_hash_scope": "Input-set digest; per-generated-object source/headers and linked-library digests are retained in observations. The core was built from a65b075ca plus its archived dirty patch; all 1400 scientific/build inputs match this later source revision byte-for-byte.",
+    "source_inputs_sha256": "7774f9372763d2adaf8cf6b5f2a5d85cbe607becb52e4c1b78a66efb6cb8daac",
+    "traffic": "Logical dense-domain panel values/cached directions, not executed hardware traffic."
+  },
+  "solver_iterations": [
+    8,
+    1,
+    8,
+    18,
+    2,
+    10
+  ],
+  "solver_trace_reason": null,
+  "stages": {
+    "compilation": {
+      "reason": "Verified cached linked/object identities and actual source-owner binary hashes; no fresh-build duration claimed.",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "The complete 48/96 PBE0 comparison is not in this physical-force publication.",
+      "status": "not-run"
+    },
+    "numerical": {
+      "cuda_passed": 2,
+      "cuda_skipped": 0,
+      "reason": "Two physical nonlocal cases pass complete independent cold/moved force vectors, energy thresholds and all FD steps. Both source owners select the primitive. Old isolated-H SCF failures remain excluded preconditions, not passes.",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Previously authenticated active-prefix canonical Becke graph and operation are unchanged; prior independent graph/AD qualification is not reattributed as new GPU tests.",
+      "status": "pass"
+    },
+    "runtime": {
+      "reason": "Requested/selected flags and dense point/pair visits verified separately for both source owners, cold/warm/moved.",
+      "status": "pass"
+    },
+    "source": {
+      "reason": "All 1400 scientific/build inputs match the measured frozen core; actual two tested source files and per-owner object/source/header/binary identities are retained.",
+      "status": "pass"
+    }
+  },
+  "subject": "issue1894 independent physical RKS/UKS nonlocal cold/moved forces: specified converged clusters only",
+  "tier": "gpu-numerical",
+  "timings": [],
+  "toolchain": {
+    "ccache": "4.5.1",
+    "compile_flags_scope": "Exact object/link flags, compiler/assembler versions and source/header hashes are retained per actual source owner in observations; cached compilation dates are not this qualification's wall time.",
+    "cuda": "12.9.86",
+    "library_sha256": "806f28a2191ecbdaea5964e4ab8e3b53629ca1ea44b66aee1cda069df8db3f1d",
+    "python": "3.13.9"
+  }
+}

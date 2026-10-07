@@ -19,7 +19,13 @@ def _inventory_library(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     monkeypatch.setattr(
         resources_ks,
         "_cuda_item_inventory",
-        lambda *args, **kwargs: {"state": 8, "xc": 8, "coulomb": 8, "setup": 24},
+        lambda *args, **kwargs: {
+            "state": 8,
+            "xc": 8,
+            "coulomb": 8,
+            "setup": 24,
+            "matrix_provider": 0,
+        },
     )
     return library
 
@@ -58,6 +64,7 @@ def test_cuda_retained_force_owner_coexists_with_next_setup(
             "xc": 8 * mib,
             "coulomb": 8 * mib,
             "setup": 320 * mib,
+            "matrix_provider": 0,
         },
     )
     request = resources_ks.ks_resource_request([H2], backend="cuda", library=library)

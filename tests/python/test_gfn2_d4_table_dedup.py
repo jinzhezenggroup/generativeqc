@@ -12,7 +12,8 @@ def test_gfn2_runtime_reuses_canonical_d4_tables() -> None:
     assert not (runtime / "data/parameters/d4_c6_part1.inc").exists()
 
     source = d4_source.read_text(encoding="utf-8")
-    assert '#include "dft/dispersion/d4_data.hpp"' in source
+    assert '#include "dft/dispersion/d4_element_data.hpp"' in source
+    assert '#include "dft/dispersion/d4_data.hpp"' not in source
     assert '#include "dft/dispersion/d4_reference.hpp"' in source
     assert "shared::evaluate_d4_fixed_charge" in source
     assert "shared::prepare_d4_cached_weights" in source

@@ -108,6 +108,7 @@ from generativeqc import _generated_methods as generated_methods
 from generativeqc._model_resolution import snapshot_basis
 from generativeqc._stationary_cuda import (
     COMPONENT_LABELS,
+    _resolve_becke_primitive_policy,
     _resolve_phased_becke_policy,
     complete_rks_cuda_gradient_diagnostic,
 )
@@ -160,6 +161,7 @@ _LOCAL_HELPERS = {
     "snapshot_basis": snapshot_basis,
     "BasisSet": BasisSet,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
+    "_resolve_becke_primitive_policy": _resolve_becke_primitive_policy,
     "resolved_basis_metadata": resolved_basis_metadata,
     "KsOptions": KsOptions,
     "ks_coefficients": ks_coefficients,
@@ -264,17 +266,18 @@ NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
 )
 # The complete predicate now also admits a bounded all-electron CPU branch.
-# That branch remains inside the CPU device guard: CUDA semilocal coefficients,
-# automatic-Libxc/nonlocal exclusions, promotion and runtime ownership are
-# unchanged. Keep hashing the full predicate so future guard drift fails closed.
+# The capability refactor keeps that branch inside the CPU device guard. CUDA
+# coefficients, automatic-Libxc/nonlocal exclusions and runtime ownership retain
+# their contracts; structural D4/ECP rejection preserves the admitted D3 owner.
+# Keep hashing the full predicate so future guard drift fails closed.
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "083183902052ec67c806a67e6bbdf2422b21e609e1a10ec0f1a8b9035a6370d5"
+    "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
-    "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
+    "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "3defc2e5e05b2fd1af16e82bda36fa479a41b7b7a15029a49fecf98090e9c95b"
+    "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -306,8 +309,10 @@ STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
+# Normalization selection is constructor-only and leaves page/resource budgets
+# unchanged. Bind the full initializer, including legacy-artifact rejection.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "93c90107478ad20ff9d78231acfd4b13254a39278f2ae82a5dd5e22be29dc321"
+    "312d4b7120a5af71cc7958aeaf2db1e7262550ed69b1931f8592b4511a436485"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -339,20 +344,28 @@ STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
 STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
+# Audited full-range Combined output has three channels; Separate/DF retains
+# four. The bounded v1 fallback, strict shape/finite checks, host reserve and
+# complete reduction remain bound by the exact whole-owner source span.
+# The DF resident-one-electron metadata distinguishes device execution from
+# host fallback without changing admission or claiming DF-response coverage.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "704f72675dcaf35e37497acd34c71a656ef20cea352022052bc5116b8290b07c"
+    "34b24d3895eed20d7846c81380dd040afbc6d9fadf423a1dbb27f0908f9c4c60"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
 )
 STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
-    "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
+    "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "ae04ceaa389b148cb6d8f3a1316a4f23ebdbe698753efe1cf5ae81d96251ca42"
+    "1889ebf22dff9d64f602f714ab5157e69b01bf122ba682f04cea04b2c232dba8"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
+)
+BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256 = (
+    "9d11620513c8800057827b5af1fee1659552c1d43dd7d014c6fcb53c95f901ad"
 )
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -360,17 +373,19 @@ STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
     "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
 )
+# Audited capability-driven electronic projection and molecular-nonlocal proof.
+# Owner/token, coefficient/spin checks and exact grid/provider binding are retained.
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "5bd874ce5ba8d4d5d78eb282244144052822bb2f0266d40d33361735302b1a97"
+    "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
 )
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+    "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
+    "4f69d058f71826cd8a81ce74d4971a1249074447b5bbf6bcdc8e795c8fd535cb"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -404,7 +419,38 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "a6f197f1ac3fa905f87a8b1d29b083fa51af9c14f57afabb05ad1376a1496264"
+    "ab6fbe1da74f53081a13afe0edb6f7c4bf1d65bb2594deb645d4c4e1f7244740"
+)
+# Ordered cooperative normalization reuses the existing phased reservation and
+# exact work counts. Audit allocation, actual-device/kernel admission, immutable
+# configuration and counters as well as the launch route; a digest refresh must
+# not leave the new schedule's capacity or fallback predicates unauthenticated.
+NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256 = (
+    "b61a4ea89c0e68e81cf044c73b075dfcba414cb956be4888bf45e7e222fc8894"
+)
+NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256 = (
+    "89c3159ed18cb971b9056aa0f30291539de95996a6e0d913d1c879e7efd23489"
+)
+NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256 = (
+    "972e73f41fa143a8a470fc4ba8bb5178cb82eb92081bcd323328dacaa1ea9801"
+)
+NATIVE_BECKE_NORMALIZE_METRICS_CONTRACT_SHA256 = (
+    "0b9c9d546fff87884bd0279f6a39231a5821afeb5b1664cbfea1ef54abb3550b"
+)
+NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256 = (
+    "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
+)
+NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256 = (
+    "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
+)
+NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256 = (
+    "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
+)
+NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256 = (
+    "b7f8d1b346ae580f2c977cece992aa5cbea0582adcc9e0f2ab76c0fa94831e4b"
+)
+NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256 = (
+    "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
 )
 NATIVE_STATIONARY_CONFIGURE_BECKE_CONTRACT_SHA256 = (
     "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -416,10 +462,10 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "543a82fd68894b485deb025825efb2e93ae61a0942a2da6f0326ddbd5937da27"
+    "f8f25beb7854340a5d33db367762dc92bc1c174beaa1cb7dddcae9c82b511f21"
 )
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "a241beee3699b72cc945c162e6422a658381cd30c1dbfe37606ee704d95d521b"
+    "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -452,7 +498,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a"
+    "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -464,7 +510,8 @@ SOURCE_RESOURCES_DEFINITION = (
     "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
     "sources=len(source_names), target=target, budget_bytes=max_device_bytes - "
     "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - "
-    "native_geometry_reserve, phased_becke=_resolve_phased_becke_policy(na, None))"
+    "native_geometry_reserve, phased_becke=_resolve_phased_becke_policy(na, None), "
+    "becke_primitive=_resolve_becke_primitive_policy())"
 )
 SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
@@ -678,6 +725,198 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     return methods
 
 
+def _require_ast_fragments(
+    owner: ast.AST, fragments: tuple[str, ...], *, label: str
+) -> None:
+    """Explain newly admitted source semantics without relaxing owner hashes.
+
+    Full owner fingerprints below still reject additional statements, reordered
+    gates, and any other drift. These independent AST checks prevent refreshing
+    those fingerprints from accidentally admitting broken CSR policy wiring.
+    """
+
+    actual = [ast.dump(node) for node in ast.walk(owner)]
+    for fragment in fragments:
+        expected = ast.parse(fragment).body[0]
+        if isinstance(expected, ast.Expr):
+            expected = expected.value
+        if actual.count(ast.dump(expected)) != 1:
+            raise RuntimeError(f"{label} contract changed: {fragment}")
+
+
+def _resident_ao_policy_contract(tree: ast.Module) -> None:
+    """Bind CSR selection, replay identity, and reserves to their source owners."""
+
+    names = (
+        "complete_rks_cuda_gradient_diagnostic",
+        "_complete_rks_cuda_gradient_diagnostic",
+        "_stationary_resident_ao_cache",
+        "ensure",
+        "_request",
+    )
+    owners = {}
+    for name in names:
+        candidates = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
+        if len(candidates) != 1:
+            raise RuntimeError("stationary CUDA resident AO policy owner is ambiguous")
+        owners[name] = candidates[0]
+    wrapper, endpoint, cache, ensure, request = (owners[name] for name in names)
+    label = "stationary CUDA resident AO policy"
+    for owner in (wrapper, endpoint, ensure, request, cache):
+        defaults = {
+            arg.arg: ast.unparse(value)
+            for arg, value in zip(
+                owner.args.kwonlyargs, owner.args.kw_defaults, strict=True
+            )
+            if value is not None
+        }
+        prefix = "" if owner is cache else "resident_ao_"
+        producer = "producer" if owner is cache else "resident_ao_producer"
+        if (
+            defaults.get(producer) != "'sampled-jets'"
+            or defaults.get(prefix + "max_active_fraction") != "1.0"
+        ):
+            raise RuntimeError(f"{label} defaults contract changed")
+    # Both the public wrapper and prepared replay identity must preserve the
+    # selected producer and threshold, even when current defaults are dense.
+    for owner in (wrapper, request):
+        for field in ("resident_ao_producer", "resident_ao_max_active_fraction"):
+            bindings = [
+                ast.unparse(value)
+                for node in ast.walk(owner)
+                if isinstance(node, ast.Dict)
+                for key, value in zip(node.keys, node.values, strict=True)
+                if isinstance(key, ast.Constant) and key.value == field
+            ]
+            if bindings != [field]:
+                raise RuntimeError(f"{label} identity/forwarding contract changed")
+    for owner, callee in ((endpoint, "prepared.ensure"), (ensure, "self._request")):
+        calls = [
+            node
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Call) and ast.unparse(node.func) == callee
+        ]
+        if len(calls) != 1:
+            raise RuntimeError(f"{label} forwarding owner is ambiguous")
+        for field in ("resident_ao_producer", "resident_ao_max_active_fraction"):
+            bindings = [
+                ast.unparse(keyword.value)
+                for keyword in calls[0].keywords
+                if keyword.arg == field
+            ]
+            if bindings != [field]:
+                raise RuntimeError(f"{label} forwarding contract changed")
+    _require_ast_fragments(
+        endpoint,
+        (
+            (
+                'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
+                "    dense_device_bound = (grid_plan.peak_bytes + source_bytes + "
+                "sum(value.peak_bytes for value in tensor_plans.values()))\n"
+                "    ao_map_reserve = min(ao_map_reserve, "
+                "max(0, max_device_bytes - dense_device_bound))"
+            ),
+            "host_bound += ao_map_reserve",
+            (
+                "_stationary_resident_ao_cache(prepared, ao, state, resident_grid, "
+                "cutoff=resident_ao_cutoff, budget_bytes=ao_map_reserve, "
+                "producer=resident_ao_producer, "
+                "max_active_fraction=resident_ao_max_active_fraction)"
+            ),
+            (
+                "feature_lease = (ao.feature_task_device_points(point_pointer, "
+                "end - begin, None, ingredients) if ao_maps is None else "
+                "ao_maps.feature_task(ao, ao_maps.domain, begin, end - begin, ingredients))"
+            ),
+            "task.layout.require_derivative_order(2 if needs_first else 1)",
+        ),
+        label=label,
+    )
+    _require_ast_fragments(
+        ensure,
+        (
+            (
+                'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
+                "    device_peak_bound += resident_ao_cache_bytes"
+            ),
+            (
+                "if device_peak_bound > max_device_bytes:\n"
+                '    raise ValueError("prepared stationary CUDA device budget exceeded")'
+            ),
+        ),
+        label=label,
+    )
+    _require_ast_fragments(
+        cache,
+        (
+            (
+                "key = (domain, id(grid), grid.geometry_generation, "
+                "grid.basis_generation, float(cutoff), budget_bytes, "
+                "producer, max_active_fraction)"
+            ),
+            (
+                "owner = (ResidentDeviceAoMapOwner(grid, domain, cutoff=cutoff, "
+                "budget_bytes=budget_bytes, max_active_fraction=max_active_fraction) "
+                "if producer == 'pre-ao-envelope-native-csr' else "
+                "ResidentAoMapCache(grid, domain, cutoff=cutoff, "
+                "budget_bytes=budget_bytes, producer=producer))"
+            ),
+        ),
+        label=label,
+    )
+
+
+def _public_resident_ao_policy_contract(owner: ast.FunctionDef) -> None:
+    """Keep the public policy decision attached to ordinary and composite calls."""
+
+    label = "public CUDA resident AO policy"
+    expected = {
+        "resident_ao_producer": "decision.producer",
+        "resident_ao_max_active_fraction": "decision.max_active_fraction",
+    }
+    for field, value in expected.items():
+        bindings = [
+            ast.unparse(item)
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Dict)
+            for key, item in zip(node.keys, node.values, strict=True)
+            if isinstance(key, ast.Constant) and key.value == field
+        ]
+        if bindings != [value]:
+            raise RuntimeError(f"{label} forwarding contract changed")
+    for callee, fields in (
+        (
+            "ForceActiveAoWorkload",
+            {"device_name": "getattr(self, '_stationary_cuda_device_name', None)"},
+        ),
+        (
+            "prepared.execute",
+            {
+                "active_ao_producer": "decision.producer",
+                "active_ao_max_active_fraction": "decision.max_active_fraction",
+            },
+        ),
+    ):
+        calls = [
+            node
+            for node in ast.walk(owner)
+            if isinstance(node, ast.Call) and ast.unparse(node.func) == callee
+        ]
+        if len(calls) != 1:
+            raise RuntimeError(f"{label} forwarding owner is ambiguous")
+        for field, value in fields.items():
+            if [
+                ast.unparse(keyword.value)
+                for keyword in calls[0].keywords
+                if keyword.arg == field
+            ] != [value]:
+                raise RuntimeError(f"{label} forwarding contract changed")
+
+
 def _source_limits(repository: Path) -> dict[str, Any]:
     """Bind current compiler/native capacity and private diagnostic defaults.
 
@@ -731,6 +970,18 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         or ast.unparse(phase_thresholds[0].value) != "48"
     ):
         raise RuntimeError("stationary CUDA phased Becke policy contract changed")
+    primitive_policies = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_resolve_becke_primitive_policy"
+    ]
+    if (
+        len(primitive_policies) != 1
+        or _source_node_sha256(source, primitive_policies[0])
+        != BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256
+    ):
+        raise RuntimeError("stationary CUDA Becke primitive policy contract changed")
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     resource_owners = [
         node
@@ -807,6 +1058,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "geometry_resources_sha256": resource_digest,
         "ordinary_tile_layout_sha256": STATIONARY_TILE_LAYOUT_CONTRACT_SHA256,
         "phased_becke_policy_sha256": PHASED_BECKE_POLICY_CONTRACT_SHA256,
+        "becke_primitive_policy_sha256": BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256,
     }
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
@@ -891,6 +1143,42 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_metrics_sha256": (
             "int stationary_metrics(",
             NATIVE_STATIONARY_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_primitive_admission_sha256": (
+            "int stationary_configure_becke_primitive_v1(",
+            NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256,
+        ),
+        "native_becke_primitive_metrics_sha256": (
+            "int stationary_becke_primitive_metrics_v1(",
+            NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_phased_becke_allocation_sha256": (
+            "size_t phased_allocation(",
+            NATIVE_PHASED_BECKE_ALLOCATION_CONTRACT_SHA256,
+        ),
+        "native_phased_becke_admission_sha256": (
+            "int stationary_configure_phased_becke_v1(",
+            NATIVE_PHASED_BECKE_ADMISSION_CONTRACT_SHA256,
+        ),
+        "native_becke_normalize_configuration_sha256": (
+            "int stationary_configure_becke_normalize_v1(",
+            NATIVE_BECKE_NORMALIZE_CONFIGURATION_CONTRACT_SHA256,
+        ),
+        "native_becke_normalize_metrics_sha256": (
+            "int stationary_becke_normalize_metrics_v1(",
+            NATIVE_BECKE_NORMALIZE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_phase_metrics_sha256": (
+            "int stationary_becke_phase_metrics_v1(",
+            NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_phase_profile_sha256": (
+            "int stationary_becke_phase_profile_v1(",
+            NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256,
+        ),
+        "native_profile_sha256": (
+            "int stationary_profile(",
+            NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256,
         ),
         "native_finish_span_sha256": (
             "int stationary_finish_span(",
@@ -1069,7 +1357,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ]
     if len(selections) != 1 or ast.unparse(selections[0].value) != (
         "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
-        "tile_points=tile_points, admit=admit_tile)"
+        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=512)"
     ):
         raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (
@@ -1182,6 +1470,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if endpoint_owner_digest != STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA endpoint owner contract changed")
     page_contract["endpoint_owner_sha256"] = endpoint_owner_digest
+    _resident_ao_policy_contract(tree)
 
     return {
         "owner": STATIONARY_OWNER,
@@ -1197,6 +1486,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "basis_primitive_count": 4096,
         },
         "phased_becke_auto_min_atoms": 48,
+        "becke_primitive_requested": _resolve_becke_primitive_policy(),
         "native_integral_requirement_definition": NATIVE_REQUIREMENT_DEFINITION,
         "native_integral_host_reserve_definition": NATIVE_HOST_RESERVE_DEFINITION,
         "host_bound_total_definition": "host_bound + native_integral_host_reserve",
@@ -1571,6 +1861,7 @@ def _method_resources(
             limits["additional_device_bytes"] - grid_plan.peak_bytes - native_reserve,
         ),
         phased_becke=_resolve_phased_becke_policy(atom_count, None),
+        becke_primitive=_resolve_becke_primitive_policy(),
     )
     source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes
@@ -1936,6 +2227,7 @@ def _source_public_route(repository: Path) -> dict[str, Any]:
     batch_digest = _source_node_sha256(batch, force_methods[0])
     if batch_digest != PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256:
         raise RuntimeError("public CUDA force route changed")
+    _public_resident_ao_policy_contract(force_methods[0])
     return {
         "semilocal_force_predicate_sha256": semilocal_digest,
         "global_hybrid_force_predicate_sha256": hybrid_digest,
@@ -2095,6 +2387,7 @@ def _prepared_aot_route_contract(repository: Path) -> str:
         != PREPARED_AO_REQUEST_CONTRACT_SHA256
     ):
         raise RuntimeError("prepared stationary AO request contract changed")
+    _resident_ao_policy_contract(tree)
     return digest
 
 

@@ -98,6 +98,7 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_cpu_target_eigen_tests tests/native/test_cpu_target_eigen.cpp)
     generativeqc_native_test(generativeqc_cpu_oracle_bridge_tests tests/native/test_cpu_oracle_bridge.cpp)
     target_link_libraries(generativeqc_cpu_oracle_bridge_tests PRIVATE ${CMAKE_DL_LIBS})
+    generativeqc_native_test(generativeqc_uhf_final_state_tests tests/native/test_uhf_final_state.cpp)
     generativeqc_native_test(generativeqc_warm_subspace_tests tests/native/test_warm_subspace.cpp)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
@@ -221,7 +222,11 @@ macro(generativeqc_add_native_tests)
       ${_generativeqc_d4_production_test} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   endforeach()
   generativeqc_native_test(generativeqc_d4_reference_tests tests/native/test_d4_reference.cpp NO_GENERATIVEQC)
+  target_sources(generativeqc_d4_reference_tests PRIVATE
+    src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_d4_eeq_tests tests/native/test_d4_eeq.cpp NO_GENERATIVEQC)
+  target_sources(generativeqc_d4_eeq_tests PRIVATE
+    src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_gcp_r2scan3c_tests tests/native/test_gcp_r2scan3c.cpp NO_GENERATIVEQC)
   foreach(_generativeqc_parameter_test IN ITEMS
           generativeqc_d4_reference_tests generativeqc_d4_eeq_tests generativeqc_gcp_r2scan3c_tests)
@@ -280,6 +285,8 @@ macro(generativeqc_add_native_tests)
 
     generativeqc_native_test(generativeqc_d4_reference_cuda_tests tests/native/test_d4_reference_cuda.cu
                        NO_GENERATIVEQC SKIP_77)
+    target_sources(generativeqc_d4_reference_cuda_tests PRIVATE
+      src/dft/dispersion/d4_table_data.cpp)
     add_dependencies(generativeqc_d4_reference_cuda_tests generativeqc_method_parameters_codegen)
     target_include_directories(
       generativeqc_d4_reference_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -303,6 +310,8 @@ macro(generativeqc_add_native_tests)
 
     generativeqc_native_test(generativeqc_d4_eeq_cuda_tests tests/native/test_d4_eeq_cuda.cu
                        NO_GENERATIVEQC SKIP_77)
+    target_sources(generativeqc_d4_eeq_cuda_tests PRIVATE
+      src/dft/dispersion/d4_table_data.cpp)
     add_dependencies(generativeqc_d4_eeq_cuda_tests generativeqc_method_parameters_codegen)
     target_include_directories(
       generativeqc_d4_eeq_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -429,6 +438,9 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_cuda_fock_canonical_tests
              COMMAND generativeqc_cuda_fock_provider_tests --canonical-values-only)
     set_tests_properties(generativeqc_cuda_fock_canonical_tests PROPERTIES TIMEOUT 900)
+    add_test(NAME generativeqc_cuda_generated_j_budget_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --generated-j-budget-only)
+    set_tests_properties(generativeqc_cuda_generated_j_budget_tests PROPERTIES TIMEOUT 180)
     generativeqc_native_test(generativeqc_cuda_stream_eigensolver_tests tests/native/test_cuda_stream_eigensolver.cpp
                        LIBRARIES CUDA::cudart CUDA::cusolver)
     generativeqc_native_test(generativeqc_ecp_cuda_error_tests tests/native/test_ecp_cuda_errors.cpp

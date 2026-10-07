@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Synthetic native route, counters and intrusive phase observations pass; full physical/complete-endpoint acceptance is outside this cohort. No promotion or issue completion.",
+    "scope": "numerical",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 5245,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "86c057f2e196ce12e299c157219f7511bd4232fcf8e65446053ba1f972cb6c3f"
+    },
+    {
+      "bytes": 4484,
+      "path": "phase-observations.json.gz",
+      "role": "samples",
+      "sha256": "1a5cede44b5b7318bed326818012296402e32a1ce2605c5013a0993d9a841b6a"
+    },
+    {
+      "bytes": 67754,
+      "path": "source-files.sha256",
+      "role": "input",
+      "sha256": "a783ca9724f32326bbc14e4a42011939d3dfa52f10eada8f8074b6c9676e3fa2"
+    },
+    {
+      "bytes": 36067,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "3fbb1e040e77456f08202fac753b46d90edd1bf3d6695dad89e6826b100df1fe"
+    },
+    {
+      "bytes": 5073,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "7c010aa0d305cc59bdda9669870827ee8dfe6d220618af1c5975db4b87230537"
+    },
+    {
+      "bytes": 2316,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "b50b963b34ba2d8b8d2536c5be9d0116310b36e42cdf4e57a139b33fd4bd1402"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-native-phases-20261006/reproduce.sh"
+    ],
+    "prerequisites": "finite main/gpu:5090:1 Slurm, CUDA 12.9 sm_120, ccache, compute-sanitizer, compiler dependencies, NumPy/pytest/CuPy. PYTHON and CUDA_ROOT select installations; preserve scheduler visibility.",
+    "source_restore": "Keep the bundle outside the checkout. Restore source.revision, apply source.patch, then run the recipe from the restored checkout. Both included headers and generated mathematical source must match."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "a65b075ca0b38f61508a5e596ba408d4f8214807"
+  }
+}

@@ -181,20 +181,41 @@ GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zer
     if (!zeros[a]) maximum = std::max(maximum, logs[a]);
   return maximum;
 }
+GENERATIVEQC_GRID_HD inline double normalized_product_value(double logarithm,
+    size_t zeros, double maximum) {
+  return zeros ? 0 : portable_exp(logarithm - maximum);
+}
+template <class Products, class Ratio>
+GENERATIVEQC_GRID_HD auto normalized_product_objective(size_t na, size_t owner,
+    Products products, Ratio ratio) {
+  double total = 0;
+  // Preserve atom order even when the products were evaluated in parallel.
+  for (size_t atom = 0; atom < na; ++atom) total += products[atom];
+  return ratio(products[owner], total);
+}
+template <class Objective>
+GENERATIVEQC_GRID_HD inline double normalized_product_bar(size_t atom, size_t owner,
+    double seed, Objective objective) {
+  return seed * (objective[2] + (atom == owner ? objective[1] : 0));
+}
 template <class Logs, class Products, class Bars, class Zeros, class Ratio>
-GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, double seed,
+GENERATIVEQC_GRID_HD double normalized_product_adjoint(size_t na, size_t owner, double seed,
     Logs logs, Products products, Bars bar_product, Zeros zeros,
     double maximum, Ratio ratio) {
   double total = 0;
   for (size_t a = 0; a < na; ++a) {
-    products[a] = zeros[a] ? 0 : portable_exp(logs[a] - maximum);
+    products[a] = normalized_product_value(logs[a], zeros[a], maximum);
     total += products[a];
   }
   // The selected objective uses the SAME ratio graph. A frozen log scale
   // cancels between numerator and denominator.
   const auto objective = ratio(products[owner], total);
   for (size_t a = 0; a < na; ++a)
-    bar_product[a] = seed * (objective[2] + (a == owner ? objective[1] : 0));
+    bar_product[a] = normalized_product_bar(a, owner, seed, objective);
+  // Indexed consumers broadcast this same denominator adjoint instead of
+  // materializing it for products whose first derivatives are annihilated.
+  // Preserve the dense branch's addition and multiplication order.
+  return seed * (objective[2] + 0.0);
 }
 GENERATIVEQC_GRID_HD inline void point_motion_adjoint(size_t na, size_t owner,
     const double* bar_distance, const std::array<double, 4>* distances, double* gradient) {

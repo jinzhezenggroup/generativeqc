@@ -1062,13 +1062,13 @@ void launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain) {
+    detail::BoundedDirectBlockDomain block_domain, bool separate_sources) {
   launch_bounded_direct_shell_quartet_kernel_scaled(
       unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
       batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
       shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
-      density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient, true,
-      block_domain);
+      density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient,
+      separate_sources, block_domain);
 }
 
 cudaError_t launch_bounded_shell_angular_energy_derivative(
@@ -1079,7 +1079,8 @@ cudaError_t launch_bounded_shell_angular_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DirectCoulombRange range, double omega, double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain) {
+    detail::BoundedDirectBlockDomain block_domain, DirectForceResidentBraSchedule resident,
+    bool separate_sources) {
   if (range != DirectCoulombRange::Full && range != DirectCoulombRange::Long)
     return cudaErrorInvalidValue;
   // Keep the host provider independent of the Direct consumer's radial enum
@@ -1088,9 +1089,10 @@ cudaError_t launch_bounded_shell_angular_energy_derivative(
       unrestricted, worker_blocks, stream, batch, screening, shell_pair_bounds,
       shell_pair_density_bounds, pair_order, shell_pair_block_bounds, system_density_bounds,
       class_state, schwarz_bounds, density, active, output, cursor,
-      range == DirectCoulombRange::Full ? DirectRangeOperator::FullSources
-                                        : DirectRangeOperator::Long,
-      omega, coulomb_coefficient, exchange_coefficient, block_domain);
+      range == DirectCoulombRange::Full
+          ? (separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full)
+          : DirectRangeOperator::Long,
+      omega, coulomb_coefficient, exchange_coefficient, block_domain, resident);
 }
 
 void launch_bounded_shell_range_exchange_derivative(

@@ -11,6 +11,7 @@ interpreter fallback is available.
 from __future__ import annotations
 
 import ctypes as ct
+import os
 import threading
 import typing
 from contextlib import ExitStack, contextmanager, nullcontext
@@ -110,6 +111,34 @@ _INT = ct.POINTER(ct.c_int64)
 _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
 _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
 _AUTO_PHASED_BECKE_MIN_ATOMS = 48
+_BECKE_PHASE_NAMES = (
+    "point_center_distance",
+    "pair_primal_switch_log",
+    "atom_log_reduction",
+    "normalization",
+    "reverse_derivative",
+    "atom_gather",
+    "point_motion_publication",
+)
+_BECKE_PHASE_COUNTER_NAMES = (
+    "becke_phase_batches",
+    "becke_phase_points",
+    "becke_distance_atom_entries",
+    "becke_pair_primal_visits",
+    "becke_log_incident_visits",
+    "becke_normalization_atom_entries",
+    "becke_reverse_pair_visits",
+    "becke_gather_incident_visits",
+    "becke_motion_atom_entries",
+    "becke_phase_launches",
+    "becke_primal_pair_panel_write_bytes",
+    "becke_reverse_pair_panel_write_bytes",
+    "becke_gather_unique_pair_panel_read_bytes",
+    "becke_gather_extra_center_direction_read_bytes",
+    "becke_profile_batches",
+    "becke_profile_event_records",
+    "becke_profile_synchronizations",
+)
 
 
 def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
@@ -121,6 +150,23 @@ def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
     if type(selection) is not bool:
         raise TypeError("phased Becke selection must be boolean or None")
     return selection
+
+
+def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool:
+    """Keep the measured losing primitive qualification-only and method-neutral.
+
+    Explicit owner selections take precedence over the experiment environment.
+    Native admission/metrics, not this request, prove actual execution. Older
+    artifacts and insufficient concurrent resources retain their bounded route.
+    """
+    if selection is not None:
+        if type(selection) is not bool:
+            raise TypeError("Becke primitive selection must be boolean or None")
+        return selection
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "off")
+    if mode not in {"off", "coefficients"}:
+        raise ValueError("Becke primitive mode must be 'off' or 'coefficients'")
+    return mode == "coefficients"
 
 
 class _StationaryTaskSource(typing.Protocol):
@@ -504,10 +550,15 @@ class _CudaSources:
         integral_derivatives: bool = True,
         cooperative_becke: bool | None = None,
         phased_becke: bool | None = None,
+        becke_primitive: bool | None = None,
+        becke_normalize: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
+        if becke_normalize is not None and type(becke_normalize) is not bool:
+            raise TypeError("Becke normalization selection must be boolean or None")
         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
+        becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
         self.source_names = source_names
         self.integral_derivatives = integral_derivatives
         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
@@ -517,6 +568,11 @@ class _CudaSources:
         self.profile_device = False
         self.handle = ct.c_void_p()
         self.library = lib = ct.CDLL(str(artifact.library))
+        configure_normalize = getattr(
+            lib, "stationary_configure_becke_normalize_v1", None
+        )
+        if becke_normalize is not None and configure_normalize is None:
+            raise ValueError("stationary artifact lacks normalization schedule control")
         self.natom, self.nao, self.point_capacity = basis.natom, basis.nao, points
         if spin_blocks not in (1, 2):
             raise ValueError("stationary CUDA requires one or two density spin blocks")
@@ -729,6 +785,7 @@ class _CudaSources:
             budget_bytes=budget,
             cooperative_becke=cooperative_becke,
             phased_becke=phased_becke,
+            becke_primitive=becke_primitive,
         )
         self._call(
             "stationary_create",
@@ -765,6 +822,29 @@ class _CudaSources:
             )
         # An older AOT artifact retains its bounded route. The plan reservation
         # stays conservative; only native metrics report actual phase allocation.
+        configure_primitive = getattr(
+            lib, "stationary_configure_becke_primitive_v1", None
+        )
+        self.becke_primitive_supported = configure_primitive is not None and hasattr(
+            lib, "stationary_becke_primitive_metrics_v1"
+        )
+        if self.becke_primitive_supported:
+            configure_primitive.argtypes = [ct.c_void_p, ct.c_int, *tail]
+            self._call(
+                "stationary_configure_becke_primitive_v1",
+                self.handle,
+                int(becke_primitive),
+            )
+        # Qualification selects a schedule only during construction. Legacy
+        # artifacts keep their serial default; never reconfigure a live owner.
+        if becke_normalize is not None:
+            assert configure_normalize is not None
+            configure_normalize.argtypes = [ct.c_void_p, ct.c_int, *tail]
+            self._call(
+                "stationary_configure_becke_normalize_v1",
+                self.handle,
+                int(becke_normalize),
+            )
         if profile_device:
             self.enable_profile()
         self._call(
@@ -1593,6 +1673,68 @@ class _CudaSources:
             metrics["phased_becke_bytes"], metrics["phased_becke_batches"] = (
                 phased_values
             )
+        primitive_metrics = getattr(
+            self.library, "stationary_becke_primitive_metrics_v1", None
+        )
+        if primitive_metrics is not None:
+            primitive_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            primitive_values = (ct.c_uint64 * 4)()
+            if primitive_metrics(self.handle, primitive_values, 4):
+                raise RuntimeError("stationary Becke primitive metrics unavailable")
+            metrics.update(
+                zip(
+                    (
+                        "becke_primitive_requested",
+                        "becke_primitive_selected",
+                        "becke_primitive_batches",
+                        "becke_primitive_reverse_pair_visits",
+                    ),
+                    primitive_values,
+                )
+            )
+        becke_counters = getattr(
+            self.library, "stationary_becke_phase_metrics_v1", None
+        )
+        if becke_counters is not None:
+            becke_counters.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            becke_values = (ct.c_uint64 * len(_BECKE_PHASE_COUNTER_NAMES))()
+            if becke_counters(self.handle, becke_values, len(becke_values)):
+                raise RuntimeError("stationary Becke phase counters unavailable")
+            metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values))
+            metrics["becke_work_counter_semantics"] = (
+                "launched dense domains; failed forces are not accepted work"
+            )
+            metrics["becke_traffic_model"] = (
+                "logical distinct pair-panel values and extra cached directions; "
+                "not executed loads or hardware transactions"
+            )
+        becke_profile = getattr(self.library, "stationary_becke_phase_profile_v1", None)
+        metrics["becke_phase_profile_supported"] = becke_profile is not None
+        metrics["becke_phase_profile_enabled"] = (
+            self.profile_device and becke_profile is not None
+        )
+        if becke_profile is not None:
+            becke_profile.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_double),
+                ct.c_size_t,
+            ]
+            becke_times = (ct.c_double * len(_BECKE_PHASE_NAMES))()
+            if becke_profile(self.handle, becke_times, len(becke_times)):
+                raise RuntimeError("stationary Becke phase profile unavailable")
+            metrics["becke_phase_ms"] = dict(zip(_BECKE_PHASE_NAMES, becke_times))
+            metrics["becke_phase_profile_scope"] = (
+                "phased kernels after AO/XC seeds; intrusive per-tile fence "
+                "when enabled; generic fallback is not split"
+            )
         profile = (ct.c_double * 10)()
         if self.profile_device:
             self.library.stationary_profile_metrics.argtypes = [
@@ -1728,6 +1870,8 @@ class PreparedStationaryCudaExecution:
         page_work_budget: int,
         resident_ao_cutoff: float | None = None,
         resident_ao_cache_bytes: int = 0,
+        resident_ao_producer: str = "sampled-jets",
+        resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
@@ -1761,6 +1905,8 @@ class PreparedStationaryCudaExecution:
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
                 "resident_ao_cutoff": resident_ao_cutoff,
                 "resident_ao_cache_bytes": resident_ao_cache_bytes,
+                "resident_ao_producer": resident_ao_producer,
+                "resident_ao_max_active_fraction": resident_ao_max_active_fraction,
                 "tensor_plans": [
                     (name, value.identity)
                     for name, value in sorted(tensor_plans.items())
@@ -1826,6 +1972,8 @@ class PreparedStationaryCudaExecution:
         profile_device: bool = False,
         resident_ao_cutoff: float | None = None,
         resident_ao_cache_bytes: int = 0,
+        resident_ao_producer: str = "sampled-jets",
+        resident_ao_max_active_fraction: float = 1.0,
         integral_derivatives: bool = True,
     ) -> None:
         if not integral_derivatives and (
@@ -1860,6 +2008,8 @@ class PreparedStationaryCudaExecution:
             page_work_budget=page_work_budget,
             resident_ao_cutoff=resident_ao_cutoff,
             resident_ao_cache_bytes=resident_ao_cache_bytes,
+            resident_ao_producer=resident_ao_producer,
+            resident_ao_max_active_fraction=resident_ao_max_active_fraction,
             integral_derivatives=integral_derivatives,
         )
         if self._lease.contract is not None:
@@ -1900,6 +2050,8 @@ class PreparedStationaryCudaExecution:
 
         tensor_peak = sum(value.peak_bytes for value in tensor_plans.values())
         device_peak_bound = grid_plan.peak_bytes + source_bytes + tensor_peak
+        if resident_ao_producer == "pre-ao-envelope-native-csr":
+            device_peak_bound += resident_ao_cache_bytes
         if device_peak_bound > max_device_bytes:
             raise ValueError("prepared stationary CUDA device budget exceeded")
         retained_host = host_bound + sum(
@@ -2135,6 +2287,9 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "center_geometry_preparations",
         "becke_pair_state_evaluations",
         "phased_becke_batches",
+        "becke_primitive_batches",
+        "becke_primitive_reverse_pair_visits",
+        *_BECKE_PHASE_COUNTER_NAMES,
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]
@@ -2142,6 +2297,11 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         result["device_phase_ms"] = {
             name: value - before["device_phase_ms"][name]
             for name, value in after["device_phase_ms"].items()
+        }
+    if "becke_phase_ms" in after and "becke_phase_ms" in before:
+        result["becke_phase_ms"] = {
+            name: value - before["becke_phase_ms"][name]
+            for name, value in after["becke_phase_ms"].items()
         }
     return result
 
@@ -2157,6 +2317,11 @@ def _grid_metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "kernel_ms",
     ):
         result[name] = after[name] - before[name]
+    if "ao_grid_work" in after and "ao_grid_work" in before:
+        result["ao_grid_work"] = {
+            name: value - before["ao_grid_work"][name]
+            for name, value in after["ao_grid_work"].items()
+        }
     return result
 
 
@@ -2355,6 +2520,7 @@ def _plan_stationary_cuda_tile(
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
         phased_becke=_resolve_phased_becke_policy(na, None),
+        becke_primitive=_resolve_becke_primitive_policy(),
     )
     return _StationaryCudaTileLayout(
         grid_plan,
@@ -2391,6 +2557,8 @@ def _stationary_resident_ao_cache(
     *,
     cutoff: float | None,
     budget_bytes: int,
+    producer: str = "sampled-jets",
+    max_active_fraction: float = 1.0,
 ) -> typing.Any:
     """Bind optional force masks to the current token-checked resident grid."""
     if cutoff is None or resident is None:
@@ -2398,7 +2566,11 @@ def _stationary_resident_ao_cache(
             prepared._resident_ao_maps = None
             prepared._resident_ao_map_key = None
         return None
-    from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+    from ._resident_ao_maps import (
+        ResidentAoMapCache,
+        ResidentAoMapDomain,
+        ResidentDeviceAoMapOwner,
+    )
 
     state._source.check_current()
     domain = ResidentAoMapDomain(
@@ -2418,6 +2590,8 @@ def _stationary_resident_ao_cache(
         grid.basis_generation,
         float(cutoff),
         budget_bytes,
+        producer,
+        max_active_fraction,
     )
     owner = None if prepared is None else prepared._resident_ao_maps
     if owner is None or prepared._resident_ao_map_key != key:
@@ -2427,8 +2601,22 @@ def _stationary_resident_ao_cache(
             prepared._resident_ao_maps = None
             prepared._resident_ao_map_key = None
         owner = None
-        owner = ResidentAoMapCache(
-            grid, domain, cutoff=cutoff, budget_bytes=budget_bytes
+        owner = (
+            ResidentDeviceAoMapOwner(
+                grid,
+                domain,
+                cutoff=cutoff,
+                budget_bytes=budget_bytes,
+                max_active_fraction=max_active_fraction,
+            )
+            if producer == "pre-ao-envelope-native-csr"
+            else ResidentAoMapCache(
+                grid,
+                domain,
+                cutoff=cutoff,
+                budget_bytes=budget_bytes,
+                producer=producer,
+            )
         )
         if prepared is not None:
             prepared._resident_ao_maps = owner
@@ -2461,6 +2649,8 @@ def _complete_rks_cuda_gradient_diagnostic(
     profile_device: bool = False,
     resident_ao_cutoff: float | None = None,
     resident_ao_cache_bytes: int = 16 << 20,
+    resident_ao_producer: str = "sampled-jets",
+    resident_ao_max_active_fraction: float = 1.0,
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
@@ -2646,7 +2836,10 @@ def _complete_rks_cuda_gradient_diagnostic(
 
     requested_tile_points = tile_points
     layout, grid_work = plan_stationary_cuda_grid_schedule(
-        grid_points=len(state.grid.points), tile_points=tile_points, admit=admit_tile
+        grid_points=len(state.grid.points),
+        tile_points=tile_points,
+        admit=admit_tile,
+        preferred_tile_points=512,
     )
     grid_plan = layout.grid_plan
     tensor_plans = layout.tensor_plans
@@ -2669,6 +2862,23 @@ def _complete_rks_cuda_gradient_diagnostic(
         ),
         max_host_bytes,
     )
+    if type(resident_ao_producer) is not str or resident_ao_producer not in {
+        "sampled-jets",
+        "pre-ao-envelope",
+        "pre-ao-envelope-native-csr",
+    }:
+        raise ValueError("unsupported resident AO domain producer")
+    if resident_ao_producer == "pre-ao-envelope-native-csr":
+        # Charge both device storage/staging and the host offset mirror without
+        # consuming the already admitted dense fallback's resource headroom.
+        dense_device_bound = (
+            grid_plan.peak_bytes
+            + source_bytes
+            + sum(value.peak_bytes for value in tensor_plans.values())
+        )
+        ao_map_reserve = min(
+            ao_map_reserve, max(0, max_device_bytes - dense_device_bound)
+        )
     host_bound += ao_map_reserve
     cache = Path(cache)
     spec = state._source.grid_spec
@@ -2744,6 +2954,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                 profile_device=profile_device,
                 resident_ao_cutoff=resident_ao_cutoff,
                 resident_ao_cache_bytes=ao_map_reserve,
+                resident_ao_producer=resident_ao_producer,
+                resident_ao_max_active_fraction=resident_ao_max_active_fraction,
                 integral_derivatives=primitive_demand.integral_derivatives,
             )
         artifact = prepared.stationary_artifact
@@ -2828,6 +3040,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             sources.timeline = timeline
             with timeline.phase("metrics_collection"):
                 source_before, grid_before = sources.metrics(), ao.metrics()
+        if profile_device:
+            ao.profile_stages()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
         fitted_integral_provider = getattr(
@@ -2837,6 +3051,14 @@ def _complete_rks_cuda_gradient_diagnostic(
             state._source, "cuda_integral_derivatives", None
         )
         use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
+        # Total forces can combine the canonical J/K cotangents before the
+        # derivative program. Explicit source exports keep their separate ABI.
+        native_combined_integrals = False
+        combined_requested = (
+            not use_fitted_integrals
+            and os.environ.get("GENERATIVEQC_DIRECT_FORCE_REDUCTION", "combined")
+            == "combined"
+        )
         integral_provider = (
             fitted_integral_provider
             if use_fitted_integrals
@@ -2852,18 +3074,33 @@ def _complete_rks_cuda_gradient_diagnostic(
                         na,
                         native_integral_budget,
                         range_exchange=False,
+                        **(
+                            {"combined_two_electron": True}
+                            if combined_requested
+                            else {}
+                        ),
                     )
                 )
+                if combined_requested and native_integral is None:
+                    # An older native library may expose only v1. Preserve its
+                    # complete bounded owner before considering an AO fallback;
+                    # errors or malformed combined outputs still fail closed.
+                    native_integral = integral_provider(
+                        na, native_integral_budget, range_exchange=False
+                    )
+                    combined_requested = False
             if native_integral is not None:
                 native_integral_components, native_integral_resources = native_integral
                 native_integral_components = np.asarray(native_integral_components)
                 if (
-                    native_integral_components.shape != (4, na, 3)
+                    native_integral_components.shape
+                    != (3 if combined_requested else 4, na, 3)
                     or not np.isfinite(native_integral_components).all()
                 ):
                     raise RuntimeError(
                         "prepared stationary integral source returned invalid output"
                     )
+                native_combined_integrals = combined_requested
         if use_fitted_integrals and native_integral_components is None:
             raise NotImplementedError(
                 "density-fitted stationary derivative provider is unavailable; "
@@ -3058,6 +3295,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             resident_grid,
             cutoff=resident_ao_cutoff,
             budget_bytes=ao_map_reserve,
+            producer=resident_ao_producer,
+            max_active_fraction=resident_ao_max_active_fraction,
         )
         for chunk_begin, chunk_end in grid_work.chunks():
             with timeline.phase("xc_geometry_enqueue"):
@@ -3065,17 +3304,26 @@ def _complete_rks_cuda_gradient_diagnostic(
                     end = min(begin + tile_points, chunk_end)
                     if resident_grid is not None:
                         point_pointer = resident_grid.points + 3 * begin * 8
-                        selected_ao_ids = (
-                            None
+                        feature_lease = (
+                            ao.feature_task_device_points(
+                                point_pointer,
+                                end - begin,
+                                None,
+                                ingredients,
+                            )
                             if ao_maps is None
-                            else ao_maps.select(ao, ao_maps.domain, begin, end - begin)
+                            else ao_maps.feature_task(
+                                ao,
+                                ao_maps.domain,
+                                begin,
+                                end - begin,
+                                ingredients,
+                            )
                         )
-                        with ao.feature_task_device_points(
-                            point_pointer,
-                            end - begin,
-                            selected_ao_ids,
-                            ingredients,
-                        ) as task:
+                        with feature_lease as task:
+                            task.layout.require_derivative_order(
+                                2 if needs_first else 1
+                            )
                             sources.geometry_molecular_resident_weights(
                                 task,
                                 begin,
@@ -3115,12 +3363,23 @@ def _complete_rks_cuda_gradient_diagnostic(
             components["overlap_pulay"] = np.ascontiguousarray(
                 native_integral_components[1]
             )
-            components["coulomb"] = np.ascontiguousarray(native_integral_components[2])
-            if has_exchange:
+            if native_combined_integrals:
+                components.pop("coulomb", None)
+                components.pop("exact_exchange", None)
+                components["two_electron"] = np.ascontiguousarray(
+                    native_integral_components[2]
+                )
+            else:
+                components["coulomb"] = np.ascontiguousarray(
+                    native_integral_components[2]
+                )
+            if has_exchange and not native_combined_integrals:
                 components["exact_exchange"] = np.ascontiguousarray(
                     native_integral_components[3]
                 )
-            elif np.any(native_integral_components[3] != 0):
+            elif not native_combined_integrals and np.any(
+                native_integral_components[3] != 0
+            ):
                 raise RuntimeError(
                     "semilocal prepared stationary source published unexpected K"
                 )
@@ -3159,7 +3418,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         # Validate actual coverage before the complete reduction. All-electron
         # plan-owned work reduces inside the stationary owner; ECP retains the
         # generated TensorIR sum because its two extra sources are separate owners.
-        plan.reduction_program(atoms=na, sources=components)
+        plan.reduction_program(
+            atoms=na,
+            sources=components,
+            combined_two_electron=native_combined_integrals,
+        )
         if ecp:
             tp = tensor_plans["reduction"]
             if prepared is None:
@@ -3179,9 +3442,11 @@ def _complete_rks_cuda_gradient_diagnostic(
                         gradient
                         + components["one_electron"]
                         + components["overlap_pulay"]
-                        + components["coulomb"]
+                        + components[
+                            "two_electron" if native_combined_integrals else "coulomb"
+                        ]
                     )
-                    if has_exchange:
+                    if has_exchange and not native_combined_integrals:
                         gradient = gradient + components["exact_exchange"]
                 elif native_shell_full_range:
                     gradient = gradient + components["coulomb"]
@@ -3275,13 +3540,19 @@ def _complete_rks_cuda_gradient_diagnostic(
             "mode": "disabled"
             if resident_ao_cutoff is None
             else (
-                "dense-no-resident-grid" if ao_maps is None else "sampled-jet-cutoff"
+                "dense-no-resident-grid" if ao_maps is None else resident_ao_producer
             ),
             "cutoff": resident_ao_cutoff,
             "cache_budget_requested_bytes": resident_ao_cache_bytes,
             "cache_host_reserve_bytes": ao_map_reserve,
+            "cache_device_reserve_bytes": (
+                ao_map_reserve
+                if resident_ao_producer == "pre-ao-envelope-native-csr"
+                else 0
+            ),
             "full_ao_capacity": n,
             "derivative_order": grid_plan.order,
+            "max_active_fraction": resident_ao_max_active_fraction,
             "work": None if ao_maps is None else ao_maps.work,
         },
         grid_tile_schedule=(
@@ -3327,8 +3598,12 @@ def _complete_rks_cuda_gradient_diagnostic(
             (
                 "one_electron",
                 "overlap_pulay",
-                "coulomb",
-                *(("exact_exchange",) if has_exchange else ()),
+                "two_electron" if native_combined_integrals else "coulomb",
+                *(
+                    ("exact_exchange",)
+                    if has_exchange and not native_combined_integrals
+                    else ()
+                ),
             )
             if native_complete_integrals
             else ()
@@ -3336,6 +3611,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         native_integral_resources=dict(native_integral_resources),
         native_integral_host_reserve=native_integral_host_reserve,
         additional_device_peak_bound=peak
+        + (
+            ao_map_reserve
+            if prepared is None and resident_ao_producer == "pre-ao-envelope-native-csr"
+            else 0
+        )
         + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
         additional_device_budget=max_device_bytes,
         device_ordinal=device,
@@ -3443,14 +3723,25 @@ def _complete_rks_cuda_gradient_diagnostic(
     )
     if use_fitted_integrals:
         work["density_fitted_response_resources_included"] = False
+        resident_df_one_electron = bool(
+            native_integral_resources.get(
+                "density_fitted_one_electron_resident_cuda", 0
+            )
+        )
         work["native_integral_resource_scope"] = (
-            "compact-publication-and-host-one-electron-only"
+            "compact-publication-and-resident-cuda-one-electron"
+            if resident_df_one_electron
+            else "compact-publication-and-host-one-electron-fallback"
         )
         work["additional_device_peak_bound_scope"] = (
             "stationary-consumer-only; excludes DF-provider response scratch"
         )
         work["transfer_work"]["density_fitted_response_included"] = False
-        work["host_scope"] += "; retained H'/S' source contraction"
+        work["host_scope"] += (
+            "; final D/W remain resident for H'/S' contraction"
+            if resident_df_one_electron
+            else "; retained H'/S' source contraction fallback"
+        )
     timeline_record = timeline.finish()
     work.update(
         endpoint_seconds=timeline_record["endpoint_seconds"],
@@ -3495,6 +3786,8 @@ def complete_rks_cuda_gradient_diagnostic(
     profile_device: bool = False,
     resident_ao_cutoff: float | None = None,
     resident_ao_cache_bytes: int = 16 << 20,
+    resident_ao_producer: str = "sampled-jets",
+    resident_ao_max_active_fraction: float = 1.0,
 ) -> typing.Any:
     """Execute once, optionally retaining validated CUDA owners for later replay."""
     kwargs = {
@@ -3518,6 +3811,8 @@ def complete_rks_cuda_gradient_diagnostic(
         "profile_device": profile_device,
         "resident_ao_cutoff": resident_ao_cutoff,
         "resident_ao_cache_bytes": resident_ao_cache_bytes,
+        "resident_ao_producer": resident_ao_producer,
+        "resident_ao_max_active_fraction": resident_ao_max_active_fraction,
     }
     if prepared is None:
         return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)

@@ -8,7 +8,7 @@ from pathlib import Path
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_CODEGEN_TEST = _REPOSITORY_ROOT / "tests/python/test_codegen.py"
-LEGACY_LINE_BUDGET = 4518
+LEGACY_LINE_BUDGET = 6
 
 
 class OwnershipGuardError(RuntimeError):

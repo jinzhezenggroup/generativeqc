@@ -11,6 +11,7 @@ from types import CodeType, FunctionType, SimpleNamespace
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.method.stationary_resources import (
+    BECKE_COOPERATIVE_THREADS,
     GEOMETRY_MAX_SCRATCH_BYTES,
     plan_stationary_cuda_resources,
     stationary_cuda_allocation_bytes,
@@ -42,7 +43,9 @@ def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
     generic = plan_stationary_cuda_resources(
         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=False
     )
-    expected_threads = 32 if architecture == "sm_120" and atoms >= 12 else 1
+    expected_threads = (
+        BECKE_COOPERATIVE_THREADS if architecture == "sm_120" and atoms >= 12 else 1
+    )
     assert automatic.becke_threads_per_point == expected_threads
     assert generic.becke_threads_per_point == 1
     assert automatic.allocation_bytes == generic.allocation_bytes
@@ -155,7 +158,7 @@ def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
 #include <stdexcept>
 #include <limits>
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
-constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=8<<20;
+constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=16777216;
 """
         + function[0]
         + "\nint main() {\n"
@@ -418,7 +421,9 @@ def test_fitted_provider_retains_its_full_admitted_allowance(
         cooperative_becke=cooperative,
     )
     assert plan.geometry_lanes == 32
-    assert plan.becke_threads_per_point == (32 if cooperative else 1)
+    assert plan.becke_threads_per_point == (
+        BECKE_COOPERATIVE_THREADS if cooperative else 1
+    )
     assert plan.becke_shared_bytes == (4240 if cooperative else 0)
     assert minimum + allowance - plan.allocation_bytes == allowance
 

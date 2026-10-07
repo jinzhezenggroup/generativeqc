@@ -4,6 +4,7 @@ import typing
 
 # Imported pytest fixtures are intentionally reused as test arguments.
 # ruff: noqa: F811
+import numpy as np
 import pytest
 from generativeqc_compiler.common.resources import ResourceBudget
 from generativeqc_compiler.dft import DensitySource
@@ -47,6 +48,16 @@ def test_cpu_spatial_keeps_explicit_original_density_interface(
         with pytest.raises(ValueError, match="requires DensitySource"):
             next(spatial.iter_features(density, route="orbitals"))
         assert len(list(spatial.iter_features(density))) > 0
+        legacy_tiles = list(spatial._tiles())
+        indexed_tiles = list(spatial._tiles(with_layout=True))
+        assert len(legacy_tiles) == len(indexed_tiles)
+        for (task, ids), (indexed_task, indexed_ids, layout) in zip(
+            legacy_tiles, indexed_tiles, strict=True
+        ):
+            assert indexed_task is task
+            np.testing.assert_array_equal(ids, indexed_ids)
+            assert layout.npoint == len(ids)
+            assert layout.nactive == len(task.ao_ids)
     with pytest.raises(ValueError, match="CUDA orbital capacity"):
         PreparedSpatialGrid(basis, grid, orbital_capacity=(3, 2))
 

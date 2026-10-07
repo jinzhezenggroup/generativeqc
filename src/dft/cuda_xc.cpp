@@ -191,6 +191,13 @@ CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& ma
   if (!cuda_xc_execution_capabilities(dense).local_ao_selection || dense.ao_map_entries ||
       dense.host_ao_map_bytes)
     throw std::invalid_argument("local CUDA XC maps require a dense physical FP64 layout");
+  const int required_order = dense.jets == 1    ? 0
+                             : dense.jets == 4  ? 1
+                             : dense.jets == 10 ? 2
+                             : dense.jets == 20 ? 3
+                                                : -1;
+  if (required_order < 0 || maps.derivative_order < required_order || maps.derivative_order > 3)
+    throw std::invalid_argument("local CUDA XC map lacks the required derivative capability");
   const auto tiles = 1 + (dense.npoint - 1) / dense.tile_points;
   if (maps.offsets.size() != tiles + 1 || maps.offsets.front() != 0 ||
       maps.offsets.back() != maps.indices.size())
@@ -205,6 +212,7 @@ CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& ma
   }
   constexpr auto overflow = "local CUDA XC map storage overflow";
   dense.local_ao = true;
+  dense.map_derivative_order = maps.derivative_order;
   dense.ao_map_entries = maps.indices.size();
   dense.host_ao_map_bytes =
       size_add(size_mul(maps.offsets.size(), sizeof(std::size_t), overflow),
@@ -458,6 +466,7 @@ bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
   if (bound.device_bytes > arena_bytes_ || bound.host_peak_bytes > max_host_bytes) return false;
   const auto started = std::chrono::steady_clock::now();
   CudaXcAoTiles maps;
+  maps.derivative_order = layout_.jets == 1 ? 0 : 1;
   // Reserve once from the conservative admission, preventing vector growth
   // from briefly holding two copies of a geometry's selected map storage.
   maps.indices.reserve(bound.max_entries);

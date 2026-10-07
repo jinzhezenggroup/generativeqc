@@ -32,7 +32,8 @@ struct IncrementalDirectJkDiagnostic {
   std::uint64_t anchor_full_builds{};
   /** Exact provider applications to delta-D for accepted SCF iterates. */
   std::uint64_t delta_builds{};
-  /** Periodic accepted-iterate rebuilds after an existing anchor. */
+  /** Accepted full refreshes after an existing anchor. The stable ABI field
+   * name is historical; this includes cadence- and density-RMS-driven rebuilds. */
   std::uint64_t periodic_rebuilds{};
   /** Full proposal/audit builds that never mutate the accepted anchor. */
   std::uint64_t bypass_full_builds{};
@@ -111,6 +112,10 @@ struct ScfOptions {
   /** Accepted delta updates before refreshing the full anchor. Zero disables
    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
   unsigned incremental_direct_jk_rebuild_interval{8};
+  /** For screened CUDA lowers, require the previous accepted density RMS to be
+   * at or below this positive threshold before using a ΔD build. Zero preserves
+   * the cadence-only controller. */
+  double incremental_direct_jk_density_rms_threshold{};
   /** Select the DF solver; direct four-center remains the default. */
   generativeqc_density_fitting_mode density_fitting_mode{GENERATIVEQC_DENSITY_FITTING_NONE};
   /** Relative cutoff used when factoring the auxiliary Coulomb metric. */
@@ -167,6 +172,66 @@ struct ScfOptions {
   /** Explicit bounded cold-start preparation; absent preserves the core guess. */
   std::optional<initial_guess::PreliminaryOptions> preliminary_guess;
 };
+
+/** Lower-specific facts consumed by the shared incremental Direct-J/K policy.
+ *
+ * These capabilities describe execution semantics, not backend identity. CPU
+ * and CUDA therefore resolve the same accepted-iterate policy before lowering,
+ * while a lower that performs density-weighted screening can request the
+ * stricter refresh cadence needed to bound omitted delta contributions.
+ */
+struct IncrementalDirectJkCapabilities {
+  bool provider_eligible{};
+  bool density_weighted_screening{};
+  bool conflicting_precision_policy{};
+};
+
+/** Backend-neutral accepted-iterate policy for exact incremental Direct-J/K. */
+struct IncrementalDirectJkPolicy {
+  bool requested{};
+  bool active{};
+  unsigned requested_rebuild_interval{};
+  unsigned effective_rebuild_interval{};
+  double density_rms_threshold{};
+};
+
+inline bool direct_jk_incremental_exact_eligible(const ResolvedFockBuild& strategy) noexcept {
+  const auto exact = [](const FockTermSpec& term) {
+    return !term.present || term.approximation == FockApproximation::Exact;
+  };
+  return (strategy.spec.coulomb.present || strategy.spec.exchange.present) &&
+         exact(strategy.spec.coulomb) && exact(strategy.spec.exchange);
+}
+
+/** Resolve one policy before CPU/CUDA lowering.
+ *
+ * A density-weighted screened lower is allowed at most one accepted delta build
+ * before a full-density refresh. This keeps screening omissions from accumulating
+ * through an arbitrarily long anchor chain. Exact-linear lowers retain the
+ * caller's requested cadence, including zero for no periodic refresh.
+ */
+inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
+    const ScfOptions& options, IncrementalDirectJkCapabilities capabilities) noexcept {
+  IncrementalDirectJkPolicy policy;
+  policy.requested = options.incremental_direct_jk;
+  policy.requested_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
+  const bool screened_lower =
+      capabilities.density_weighted_screening && options.screening_tolerance != 0.0;
+  policy.density_rms_threshold =
+      screened_lower ? options.incremental_direct_jk_density_rms_threshold : 0.0;
+  policy.effective_rebuild_interval =
+      screened_lower ? 1U : options.incremental_direct_jk_rebuild_interval;
+  policy.active = policy.requested && capabilities.provider_eligible &&
+                  !capabilities.conflicting_precision_policy;
+  return policy;
+}
+
+inline bool direct_jk_incremental_requires_full_build(
+    bool anchored, unsigned delta_updates_since_full,
+    const IncrementalDirectJkPolicy& policy) noexcept {
+  return !anchored || (policy.effective_rebuild_interval != 0U &&
+                       delta_updates_since_full >= policy.effective_rebuild_interval);
+}
 
 /** Internal mean-field result, including state retained for warm starts. */
 /** Transitional compatibility alias. New HF/post-HF code should use hf::PhysicalReference. */

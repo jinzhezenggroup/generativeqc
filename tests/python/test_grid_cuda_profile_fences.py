@@ -96,17 +96,18 @@ def test_full_local_identity_map_skips_map_upload_and_density_gather() -> None:
     source = (ROOT / "src/dft/cuda_grid.cu").read_text()
     block = _selected_execution()
     assert "identity_map = !ao_ids && active == p.nao;" in block
+    assert "p.current_ao_ids = resident ? ao_ids : p.ao_ids;" in block
     assert "p.local && active && !identity_map" in block
     assert "p.local && !identity_map ? p.local_density : p.density" in block
-    assert "p.local && !identity_map ? p.ao_ids : nullptr" in block
+    assert "p.local && !identity_map ? p.current_ao_ids : nullptr" in block
     view = source.split("int grid_cuda_view_v1", 1)[1].split(
         "int grid_cuda_basis_v1", 1
     )[0]
-    assert "p.last_identity_map ? nullptr : p.ao_ids" in view
+    assert "p.last_identity_map ? nullptr : p.current_ao_ids" in view
     scatter = source.split("int grid_cuda_scatter_v1", 1)[1].split(
         "int grid_cuda_metrics_v1", 1
     )[0]
-    assert "p.last_identity_map ? nullptr : p.ao_ids" in scatter
+    assert "p.last_identity_map ? nullptr : p.current_ao_ids" in scatter
 
 
 def test_stationary_geometry_consumes_null_map_as_identity() -> None:

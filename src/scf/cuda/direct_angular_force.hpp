@@ -6,12 +6,27 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "scf/cuda/direct_force_schedule.hpp"
+#include "scf/cuda/direct_force_sources.hpp"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
-/** Method-neutral resident-bra force route with explicit J/K coefficients. */
+/** Launch one admitted psss lease with the compiler-owned launch dimensions.
+ * Returning NotSupported leaves ownership with the caller's bounded scheduler;
+ * success transfers the whole psss domain for this stream-ordered force call. */
+cudaError_t launch_direct_force_resident_bra(
+    DirectForceOutputMode output_mode, bool unrestricted, cudaStream_t stream, DeviceBatch batch,
+    DirectForceResidentBraSchedule schedule, double screening_tolerance,
+    const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
+    bool force_density_product_screening, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask,
+    double coulomb_coefficient, double exchange_coefficient);
+
+/** Shared resident-bra scheduler for Combined or Separate signed J/K forces.
+ * Caller admits a complete canonical bra view and owns stream-ordered lifetime.
+ * Output storage contains DirectForceSources<mode>::count atom-force arrays. */
 void launch_two_electron_force_psss_resident_bra_kernel_scaled(
     bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
     DeviceBatch batch, const PsssResidentTask* resident_tasks,
@@ -20,7 +35,8 @@ void launch_two_electron_force_psss_resident_bra_kernel_scaled(
     const ShellPairDensityBounds* shell_pair_density_bounds, bool force_density_product_screening,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
-    double exchange_coefficient);
+    double exchange_coefficient,
+    DirectForceOutputMode output_mode = DirectForceOutputMode::Combined);
 
 /** HF compatibility route preserving the historical J/K coefficients. */
 void launch_two_electron_force_psss_resident_bra_kernel(
@@ -32,7 +48,9 @@ void launch_two_electron_force_psss_resident_bra_kernel(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask);
 
-/** Method-neutral shell-force dispatch with explicit Coulomb/exchange coefficients. */
+/** Shared shell-class scheduler with explicit coefficients and output layout.
+ * Packed, resident, precontracted and generic bounded fallback policies share
+ * one traversal; Separate never launches the HF scheduler twice. */
 void dispatch_angular_force_quartets_scaled(
     bool unrestricted, cudaStream_t stream,
     const std::array<std::size_t, detail::kDirectQuartetAngularOrderCount>& capacities,
@@ -46,7 +64,8 @@ void dispatch_angular_force_quartets_scaled(
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
     bool force_density_product_screening, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask,
-    double coulomb_coefficient, double exchange_coefficient);
+    double coulomb_coefficient, double exchange_coefficient,
+    DirectForceOutputMode output_mode = DirectForceOutputMode::Combined);
 
 /** Resolve host spin/precision while retaining compile-time angular dispatch. */
 void dispatch_angular_force_quartets(

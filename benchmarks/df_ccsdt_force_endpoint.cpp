@@ -35,14 +35,15 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 19)
+    if (argc < 4 || argc > 22)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
           "[ORBITAL_SCHWARZ "
           "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
-          "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES]]]]]]]]]]]]]]]");
+          "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO "
+          "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -88,7 +89,21 @@ int main(int argc, char** argv) {
     const bool recycle_repeat = argc > 16 && selector(16);
     if (recycle_repeat) frame_options.recycling = &recycling;
     const bool packed_diis = argc > 17 && selector(17);
-    if (argc > 18) frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
+    if (argc > 18 && std::string(argv[18]) != "auto")
+      frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
+    const bool parallel_gap_reduction = argc <= 19 || selector(19);
+    const bool request_triples_gap_cotangents = argc > 20 && selector(20);
+    double reference_energy_tolerance = 1e-12, reference_density_tolerance = 1e-11;
+    if (argc > 21) {
+      const std::string token(argv[21]);
+      std::size_t consumed = 0;
+      const double tolerance = std::stod(token, &consumed);
+      if (consumed != token.size() || !std::isfinite(tolerance) || tolerance <= 0.0 ||
+          tolerance > reference_energy_tolerance)
+        throw std::invalid_argument("invalid reference tolerance: require 0 < value <= 1e-12");
+      // This benchmark-only control tightens RHF, never the CC/response acceptance gates.
+      reference_energy_tolerance = reference_density_tolerance = tolerance;
+    }
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -113,8 +128,8 @@ int main(int argc, char** argv) {
     descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
     descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
     descriptor.max_iterations = 150;
-    descriptor.energy_tolerance = 1e-12;
-    descriptor.density_tolerance = 1e-11;
+    descriptor.energy_tolerance = reference_energy_tolerance;
+    descriptor.density_tolerance = reference_density_tolerance;
     descriptor.ccsd_max_iterations = 150;
     descriptor.ccsd_diis_history = static_cast<unsigned>(diis_history);
     descriptor.ccsd_energy_tolerance = 1e-12;
@@ -127,7 +142,8 @@ int main(int argc, char** argv) {
     for (int repetition = 0; repetition < (recycle_repeat ? 2 : 1); ++repetition) {
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-          batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis);
+          batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
+          parallel_gap_reduction, request_triples_gap_cotangents);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -151,6 +167,11 @@ int main(int argc, char** argv) {
       field("matrix_gemm_requested", matrix ? 1 : 0);
       field("total_energy", result.energy);
       field("reference_energy", result.reference_energy);
+      field("reference_energy_tolerance", descriptor.energy_tolerance);
+      field("reference_density_tolerance", descriptor.density_tolerance);
+      field("reference_energy_change", result.reference_energy_change);
+      field("reference_density_rms", result.reference_density_rms);
+      work_field("reference_iterations", result.reference_iterations);
       field("correlation_energy", result.correlation_energy);
       field("triples_energy", result.triples_energy);
       field("lambda_residual", result.lambda.independent_residual_norm);
@@ -272,6 +293,15 @@ int main(int argc, char** argv) {
       work_field("source_weight_values", result.source_weight_values);
       work_field("metric_weight_values", result.metric_weight_values);
       work_field("triples_work", result.triples.contraction_summands);
+      field("triples_gap_parallel", result.triples_gap.parallel);
+      field("triples_gap_requested", result.triples_gap.requested);
+      output << "  \"triples_gap_schedule\": " << std::quoted(result.triples_gap.schedule) << ",\n";
+      work_field("triples_gap_kernels", result.triples_gap.kernels);
+      work_field("triples_gap_workspace_bytes", result.triples_gap.workspace_bytes);
+      work_field("triples_gap_materialized_elements", result.triples_gap.materialized_elements);
+      work_field("triples_gap_value_reads", result.triples_gap.value_reads);
+      work_field("triples_gap_value_writes", result.triples_gap.value_writes);
+      work_field("triples_gap_reduction_summands", result.triples_gap.reduction_summands);
       work_field("fock_response_work", result.triples_fock.contraction_summands);
       work_field("lambda_work", result.lambda.df_contraction_terms);
       field("lambda_matrix_gemm", result.lambda.df_matrix_gemm);

@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include <algorithm>
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -47,21 +49,9 @@ SetupDiagnostic cuda_failure(SetupError error, SetupField field, cudaError_t sta
   return result;
 }
 
-bool checked_add(std::size_t first, std::size_t second, std::size_t& result) noexcept {
-  if (first > std::numeric_limits<std::size_t>::max() - second) {
-    return false;
-  }
-  result = first + second;
-  return true;
-}
+using ::generativeqc::runtime::checked_add;
 
-bool checked_multiply(std::size_t first, std::size_t second, std::size_t& result) noexcept {
-  if (first != 0u && second > std::numeric_limits<std::size_t>::max() / first) {
-    return false;
-  }
-  result = first * second;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 bool checked_add(std::int64_t first, std::int64_t second, std::int64_t& result) noexcept {
   if (first < 0 || second < 0 || first > std::numeric_limits<std::int64_t>::max() - second) {
@@ -80,24 +70,14 @@ bool checked_multiply(std::int64_t first, std::int64_t second, std::int64_t& res
   return true;
 }
 
-bool align_up(std::size_t value, std::size_t alignment, std::size_t& result) noexcept {
-  if (alignment == 0u) {
-    return false;
-  }
-  const std::size_t remainder = value % alignment;
-  if (remainder == 0u) {
-    result = value;
-    return true;
-  }
-  return checked_add(value, alignment - remainder, result);
-}
+using ::generativeqc::runtime::checked_align_up;
 
 template <typename T>
 bool append_array(std::size_t elements, std::size_t& cursor, std::size_t& offset) noexcept {
   std::size_t aligned = 0u;
   std::size_t bytes = 0u;
   std::size_t end = 0u;
-  if (!align_up(cursor, alignof(T), aligned) || !checked_multiply(elements, sizeof(T), bytes) ||
+  if (!checked_align_up(cursor, alignof(T), aligned) || !checked_multiply(elements, sizeof(T), bytes) ||
       !checked_add(aligned, bytes, end)) {
     return false;
   }
@@ -492,7 +472,7 @@ Gfn2SccSetupEigensolverDiagnostic Gfn2SccSetupEigensolver::create(
                           query_matrix_bytes) ||
         !checked_multiply(static_cast<std::size_t>(candidate->total_spin_orbitals), sizeof(double),
                           query_orbital_bytes) ||
-        !align_up(query_matrix_bytes, kGfn2SccSetupEigensolverArenaAlignment,
+        !checked_align_up(query_matrix_bytes, kGfn2SccSetupEigensolverArenaAlignment,
                   query_orbital_offset) ||
         !checked_add(query_orbital_offset, query_orbital_bytes, query_bytes)) {
       return failure(GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT, SetupError::kCountOverflow,
@@ -582,7 +562,7 @@ Gfn2SccSetupEigensolverDiagnostic Gfn2SccSetupEigensolver::create(
         !append_array<std::uint64_t>(batch, cursor,
                                      candidate->requirements.cache_generation_offset) ||
         !append_array<std::uint32_t>(batch, cursor, candidate->requirements.cache_status_offset) ||
-        !align_up(cursor, kGfn2SccSetupEigensolverArenaAlignment, cursor)) {
+        !checked_align_up(cursor, kGfn2SccSetupEigensolverArenaAlignment, cursor)) {
       return failure(GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT, SetupError::kCountOverflow,
                      SetupField::kSetupArena);
     }

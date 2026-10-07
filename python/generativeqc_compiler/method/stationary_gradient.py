@@ -495,7 +495,11 @@ class StationaryGradientPlan:
         )
 
     def reduction_program(
-        self, *, atoms: typing.Any, sources: typing.Any = None
+        self,
+        *,
+        atoms: typing.Any,
+        sources: typing.Any = None,
+        combined_two_electron: bool = False,
     ) -> typing.Any:
         """Generate one complete component sum with an explicit coverage gate.
 
@@ -504,22 +508,45 @@ class StationaryGradientPlan:
         would double count. No partial sum is silently padded with zero sources.
         """
         _positive(atoms, "atoms")
-        sources = self.source_names if sources is None else tuple(sources)
+        if type(combined_two_electron) is not bool:
+            raise TypeError("combined_two_electron must be bool")
+        if combined_two_electron and self.range_exchange_sources:
+            raise ValueError(
+                "combined two-electron reduction requires full-range sources"
+            )
+        # This is an explicit realization of the same unit-weight source sum.
+        # The provider computes J'+K' with the canonical MethodIR coefficients;
+        # neither independent source can be relabelled or silently padded.
+        expected = (
+            tuple(
+                "two_electron" if name == "coulomb" else name
+                for name in self.source_names
+                if not (combined_two_electron and name == "exact_exchange")
+            )
+            if combined_two_electron
+            else self.source_names
+        )
+        sources = expected if sources is None else tuple(sources)
         if any(not isinstance(name, str) for name in sources):
             raise TypeError("gradient source names must be strings")
         if len(sources) != len(set(sources)):
             raise ValueError("duplicate gradient source")
-        if set(sources) != set(self.source_names):
+        if set(sources) != set(expected):
             raise ValueError("incomplete or unknown gradient source coverage")
         a = Index("a", IndexSpace("atoms", "batch", atoms))
         x = Index("x", IndexSpace("cartesian", "batch", 3))
         # Canonical source order is independent of provider completion order.
-        nodes = [_input(name, (a, x)) for name in self.source_names]
+        nodes = [_input(name, (a, x)) for name in expected]
         return Program(
             {"gradient": add(*nodes, coefficients=(1,) * len(nodes))},
             provenance={
                 "stationary_plan": self.identity,
                 "role": "component-reduction",
+                **(
+                    {"integral_layout": "combined-two-electron"}
+                    if combined_two_electron
+                    else {}
+                ),
             },
         )
 

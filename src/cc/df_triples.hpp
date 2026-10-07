@@ -31,6 +31,16 @@ struct DFCudaResult {
   std::size_t contraction_summands{}, h2d_bytes{}, d2h_bytes{};
 };
 
+/** Actual gap-schedule launches and compiler-derived logical data/work counts. */
+struct DFGapReductionDiagnostic {
+  bool requested{};
+  bool parallel{};
+  std::string_view schedule;
+  std::size_t kernels{}, workspace_bytes{};
+  // Cumulative logical elements, not measured device transactions or peak VRAM.
+  std::size_t materialized_elements{}, value_reads{}, value_writes{}, reduction_summands{};
+};
+
 /** Complete fixed-canonical-input triples pullback; all arrays are detached.
  * Bvv is an unprojected dense Frobenius cotangent on the symmetric physical
  * factor domain. eps_o/eps_v describe canonical denominator derivatives;
@@ -38,6 +48,7 @@ struct DFCudaResult {
  */
 struct DFCudaResponseResult {
   DFCudaResult diagnostic;
+  DFGapReductionDiagnostic gap;
   std::vector<double> bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v;
   std::size_t numeric_capacity_bytes{}, borrowed_host_bytes{};
   std::size_t reverse_gemms{}, reverse_kernels{}, audit_kernels{}, scalar_response_evaluations{};
@@ -55,6 +66,20 @@ struct DFCudaFockResult {
   std::size_t occupied_pairs{}, unique_vector_cubes{}, vector_cubes{}, page_builds{};
   std::size_t panel_gemms{}, w_gemms{}, fock_gemms{}, contraction_summands{};
   std::size_t scalar_evaluations{}, audit_kernels{}, scatter_kernels{}, h2d_bytes{}, d2h_bytes{};
+};
+
+/** Fixed-frame triples pullback plus full oo/vv Fock response with one staged
+ * device-input owner. Scientific contractions, reduction order and detached
+ * outputs are identical to the standalone phase APIs; only immutable input
+ * staging is shared across the two sequential CUDA consumers.
+ */
+struct DFCudaCombinedResponseResult {
+  DFCudaResponseResult pullback;
+  DFCudaFockResult fock;
+  std::size_t shared_input_device_bytes{}, shared_h2d_bytes{};
+  /** Triangular pullback cubes whose already-built W moments also feed Fock response. */
+  std::size_t shared_response_cubes{}, avoided_w_gemms{};
+  double seconds{};
 };
 
 /** Standard closed-shell (T) on a supplied physical DF Hamiltonian.
@@ -85,15 +110,21 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
  * owned CUDA/provider storage and caller_bytes for all other live numeric state.
  * No CPU mathematical fallback or complete ovvv/rank-six tensor is constructed.
  * A one-panel fallback preserves the same equations when three panels do not fit.
+ * The compiler's bounded FP64 reduction tree is the default gap schedule;
+ * parallel_gap_reduction=false retains the original serial order for independent
+ * schedule comparisons.
+ * include_gap_response=false explicitly omits the epsilon cotangents (empty
+ * vectors), their kernels and their workspace. All primal denominator checks
+ * remain active. A molecular consumer must instead supply full same-space Fock
+ * response; adding both epsilon and full-Fock sources would double count.
  * This internal fixed-frame derivative is not a complete molecular force.
  */
-DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t q,
-                                      const double* bov, const double* bvv, const double* ovoo,
-                                      const double* ovov, const double* fov, const double* t1,
-                                      const double* t2, const double* eps_o, const double* eps_v,
-                                      double denominator_threshold, std::size_t max_bytes,
-                                      int device, std::size_t caller_bytes = 0,
-                                      std::size_t max_panel_buffers = 3);
+DFCudaResponseResult pullback_df_cuda(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double denominator_threshold, std::size_t max_bytes,
+    int device, std::size_t caller_bytes = 0, std::size_t max_panel_buffers = 3,
+    bool parallel_gap_reduction = true, bool include_gap_response = true);
 /** Full oo/vv derivative of the separable triples Fock inverse on CUDA.
  * Fixed j>=k pages vary i and retain cubic X/Y vectors; no same-space energy
  * differences are divided. max_page_rows=0 requests all occupied rows. If they
@@ -109,6 +140,19 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
                                        int device, std::size_t caller_bytes = 0,
                                        std::size_t max_page_rows = 0,
                                        std::size_t max_panel_buffers = 3);
+
+/** Compose the two force-only triples response phases while retaining one
+ * immutable device copy of B_ov/B_vv, retained blocks, amplitudes and orbital
+ * energies. max_bytes remains a complete simultaneously-live numeric bound;
+ * standalone APIs remain available as independent qualification or fallback.
+ */
+DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double denominator_threshold, std::size_t max_bytes,
+    int device, std::size_t caller_bytes = 0, std::size_t max_page_rows = 0,
+    std::size_t max_panel_buffers = 3, bool parallel_gap_reduction = true,
+    bool include_gap_response = true);
 #endif
 
 }  // namespace generativeqc::cc::triples

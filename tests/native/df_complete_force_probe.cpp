@@ -9,6 +9,25 @@
 #include "posthf/raw_source.hpp"
 #include "runtime/execution_context.hpp"
 
+namespace {
+generativeqc_method_descriptor force_descriptor(std::size_t budget) {
+  generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = GENERATIVEQC_METHOD_RCCSD;
+  descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
+  descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  descriptor.energy_tolerance = 1e-12;
+  descriptor.density_tolerance = 1e-12;
+  descriptor.ccsd_diis_history = 6;
+  descriptor.ccsd_max_iterations = 200;
+  descriptor.ccsd_energy_tolerance = 1e-12;
+  descriptor.ccsd_residual_tolerance = 1e-10;
+  descriptor.correlation_memory_budget_bytes = budget;
+  return descriptor;
+}
+}  // namespace
+
 extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, std::size_t budget,
                                        double* force_output, double* values, std::size_t* counts,
                                        char* error, std::size_t error_size) noexcept {
@@ -18,19 +37,7 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     core::ContextState context;
     context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
     runtime::ExecutionContext execution(context);
-    generativeqc_method_descriptor descriptor{};
-    descriptor.struct_size = sizeof(descriptor);
-    descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
-    descriptor.method = GENERATIVEQC_METHOD_RCCSD;
-    descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
-    descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
-    descriptor.energy_tolerance = 1e-12;
-    descriptor.density_tolerance = 1e-12;
-    descriptor.ccsd_diis_history = 6;
-    descriptor.ccsd_max_iterations = 200;
-    descriptor.ccsd_energy_tolerance = 1e-12;
-    descriptor.ccsd_residual_tolerance = 1e-10;
-    descriptor.correlation_memory_budget_bytes = budget;
+    const auto descriptor = force_descriptor(budget);
     hf::RHFFrameResponseOptions options;
     // Test-only selection runs unchanged independent FD gates through the
     // optional accelerator without changing public method semantics.
@@ -40,9 +47,16 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
       options.resident_jk_maximum_bytes = std::stoull(resident);
     const auto* selected = std::getenv("GENERATIVEQC_TEST_PACKED_CC_HISTORY");
     const bool packed = selected && std::string(selected) == "1";
+    const auto* gap_selected = std::getenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE");
+    const bool parallel_gap = gap_selected && std::string(gap_selected) == "1";
+    const auto* gap_omitted = std::getenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE");
+    const bool include_gap = !(gap_omitted && std::string(gap_omitted) == "1");
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
-        8, options, true, packed);
+        8, options, true, packed, parallel_gap, include_gap);
+    if (forces && triples && !include_gap &&
+        (result.triples_gap.requested || result.triples_gap.kernels))
+      throw std::runtime_error("complete-force qualification did not omit unrequested gap outputs");
     if (forces && options.resident_jk_maximum_bytes.value_or(0) > 0 &&
         !result.orbital.resident_jk_bytes)
       throw std::runtime_error(
@@ -80,6 +94,149 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     std::copy(result.forces.begin(), result.forces.end(), force_output);
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
+    return 0;
+  } catch (const std::exception& failure) {
+    if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
+    return 1;
+  }
+}
+
+static int run_df_gap_probe(void* opaque, std::size_t budget, double* force_output, double* values,
+                            std::uint64_t* common_counts, std::size_t* case_counts,
+                            std::uint64_t* fingerprints, char* error,
+                            std::size_t error_size) noexcept {
+  using namespace generativeqc;
+  try {
+    const auto& raw = *static_cast<posthf::RawSource*>(opaque);
+    core::ContextState context;
+    context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+    runtime::ExecutionContext execution(context);
+    const auto comparison = methods::detail::diagnose_df_ccsdt_gap_schedules(
+        execution, raw.orbital(), raw.auxiliary(), force_descriptor(budget));
+    const std::uint64_t shared[]{comparison.retained_primal_host_bytes,
+                                 comparison.retained_df_source_bytes,
+                                 comparison.retained_exact_source_bytes,
+                                 comparison.output_bytes,
+                                 comparison.clone_admission_bytes,
+                                 comparison.source_identity,
+                                 comparison.denominator_identity,
+                                 comparison.primal_identity,
+                                 comparison.nocc,
+                                 comparison.nvir,
+                                 comparison.naux,
+                                 static_cast<std::uint64_t>(comparison.reference_iterations)};
+    std::copy(std::begin(shared), std::end(shared), common_counts);
+    std::size_t force_offset = 0;
+    for (std::size_t index = 0; index < comparison.cases.size(); ++index) {
+      const auto& snapshot = comparison.cases[index];
+      const double scalars[]{snapshot.energy,
+                             snapshot.triples_energy,
+                             snapshot.lambda.independent_residual_norm,
+                             snapshot.orbital_residual,
+                             snapshot.maximum_stationarity,
+                             snapshot.clone_seconds,
+                             snapshot.response_seconds};
+      const std::size_t counts[]{snapshot.numeric_capacity_bytes,
+                                 snapshot.gap.requested,
+                                 snapshot.gap.parallel,
+                                 snapshot.gap.kernels,
+                                 snapshot.gap.workspace_bytes,
+                                 snapshot.gap.materialized_elements,
+                                 snapshot.source_weight_values,
+                                 snapshot.metric_weight_values,
+                                 snapshot.lambda.df_contraction_terms,
+                                 snapshot.fock_response_work};
+      std::copy(snapshot.forces.begin(), snapshot.forces.end(), force_output + force_offset);
+      force_offset += snapshot.forces.size();
+      std::copy(std::begin(scalars), std::end(scalars), values + index * std::size(scalars));
+      std::copy(std::begin(counts), std::end(counts), case_counts + index * std::size(counts));
+      if (fingerprints)
+        for (std::size_t stage = 0; stage < snapshot.fingerprints.identities.size(); ++stage) {
+          const auto offset = (index * snapshot.fingerprints.identities.size() + stage) * 2;
+          fingerprints[offset] = snapshot.fingerprints.identities[stage];
+          fingerprints[offset + 1] = snapshot.fingerprints.elements[stage];
+        }
+    }
+    return 0;
+  } catch (const std::exception& failure) {
+    if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
+    return 1;
+  }
+}
+
+extern "C" int df_gap_same_primal_probe(void* opaque, std::size_t budget, double* force_output,
+                                        double* values, std::uint64_t* common_counts,
+                                        std::size_t* case_counts, char* error,
+                                        std::size_t error_size) noexcept {
+  return run_df_gap_probe(opaque, budget, force_output, values, common_counts, case_counts, nullptr,
+                          error, error_size);
+}
+
+extern "C" std::size_t df_gap_same_primal_fingerprint_count() noexcept {
+  return generativeqc::methods::detail::df_gap_fingerprint_names.size();
+}
+
+extern "C" int df_gap_same_primal_fingerprints_probe(void* opaque, std::size_t budget,
+                                                     double* force_output, double* values,
+                                                     std::uint64_t* common_counts,
+                                                     std::size_t* case_counts,
+                                                     std::uint64_t* fingerprints, char* error,
+                                                     std::size_t error_size) noexcept {
+  return run_df_gap_probe(opaque, budget, force_output, values, common_counts, case_counts,
+                          fingerprints, error, error_size);
+}
+
+extern "C" int df_physical_response_replay_probe(void* opaque, std::size_t budget,
+                                                 double* gradients, double* forces, double* values,
+                                                 std::uint64_t* shared, std::size_t* counts,
+                                                 std::uint64_t* weights,
+                                                 std::uint64_t* fingerprints, char* error,
+                                                 std::size_t error_size) noexcept {
+  using namespace generativeqc;
+  try {
+    const auto& raw = *static_cast<posthf::RawSource*>(opaque);
+    core::ContextState context;
+    context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+    runtime::ExecutionContext execution(context);
+    const auto comparison = methods::detail::diagnose_df_ccsdt_physical_responses(
+        execution, raw.orbital(), raw.auxiliary(), force_descriptor(budget));
+    const std::uint64_t common[]{comparison.nocc,
+                                 comparison.nvir,
+                                 comparison.naux,
+                                 comparison.source_identity,
+                                 comparison.reference_identity,
+                                 comparison.factor_seed_identity,
+                                 comparison.orbital_seed_identity,
+                                 comparison.output_bytes,
+                                 comparison.numeric_capacity_bytes};
+    std::copy(std::begin(common), std::end(common), shared);
+    std::copy(comparison.forces.begin(), comparison.forces.end(), forces);
+    std::size_t offset = 0;
+    for (std::size_t index = 0; index < comparison.cases.size(); ++index) {
+      const auto& snapshot = comparison.cases[index];
+      for (const auto* gradient : {&snapshot.df_gradient, &snapshot.orbital_gradient}) {
+        std::copy(gradient->begin(), gradient->end(), gradients + offset);
+        offset += gradient->size();
+      }
+      const double scalars[]{comparison.energy,         snapshot.source_seconds,
+                             snapshot.orbital_seconds,  snapshot.weight_census_seconds,
+                             snapshot.orbital_residual, snapshot.maximum_stationarity};
+      const std::size_t work[]{snapshot.numeric_capacity_bytes, snapshot.weight_buffer_bytes,
+                               snapshot.weight_transfer_bytes,  snapshot.weight_elements[0],
+                               snapshot.weight_elements[1],     snapshot.fingerprints.value_reads,
+                               snapshot.orbital_iterations,     snapshot.orbital_actions};
+      std::copy(std::begin(scalars), std::end(scalars), values + index * std::size(scalars));
+      std::copy(std::begin(work), std::end(work), counts + index * std::size(work));
+      for (std::size_t kind = 0; kind < 2; ++kind) {
+        weights[(index * 2 + kind) * 2] = snapshot.weight_identities[kind];
+        weights[(index * 2 + kind) * 2 + 1] = snapshot.weight_elements[kind];
+      }
+      for (std::size_t stage = 0; stage < snapshot.fingerprints.identities.size(); ++stage) {
+        const auto slot = (index * snapshot.fingerprints.identities.size() + stage) * 2;
+        fingerprints[slot] = snapshot.fingerprints.identities[stage];
+        fingerprints[slot + 1] = snapshot.fingerprints.elements[stage];
+      }
+    }
     return 0;
   } catch (const std::exception& failure) {
     if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());

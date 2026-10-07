@@ -111,8 +111,9 @@ function(generativeqc_add_gfn2_runtime target)
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf_cuda.py"
       ARGS --output "${GENERATIVEQC_GFN2_ELECTRONIC_CUDA_HEADER}"
       COMMENT "Generating compiler-owned GFN2 CUDA electronic pair science")
-    # Both CPU and CUDA consume the one compiler-owned pair artifact.
+    # Both CPU and CUDA consume compiler-owned pair and D4 parameter artifacts.
     add_dependencies(generativeqc_gfn2_cuda
+      generativeqc_method_parameters_codegen
       generativeqc_gfn2_pair_cpu_codegen
       generativeqc_gfn2_sdq_cuda_codegen
       generativeqc_gfn2_es2_native_codegen

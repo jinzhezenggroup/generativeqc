@@ -1,8 +1,12 @@
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cmath>
+#include <span>
 #include <stdexcept>
+#include <utility>
 
+#include "integrals/electron_interaction_source.hpp"
 #include "methods/df_ccsdt_force.hpp"
 #include "molecule/nuclear_gradient.hpp"
 #include "posthf/capacity.hpp"
@@ -33,6 +37,38 @@ std::size_t difference(std::size_t total, std::size_t included) {
   if (included > total)
     throw std::logic_error("DF force phase accounting overlap exceeds live state");
   return total - included;
+}
+std::size_t primal_host_bytes(const RccsdNativeState& state) {
+  return checked_add(cc::problem_host_bytes(state.problem),
+                     capacity({&state.solved.t1, &state.solved.t2, &state.eps_o, &state.eps_v}));
+}
+void append_numeric_identity(std::uint64_t& identity, std::span<const double> values) {
+  identity = (identity ^ values.size()) * 1099511628211ULL;
+  for (const double value : values)
+    identity = (identity ^ std::bit_cast<std::uint64_t>(value)) * 1099511628211ULL;
+}
+std::uint64_t numeric_identity(std::initializer_list<std::span<const double>> blocks) {
+  // A diagnostic bit-pattern census, not a cache key or a second scientific map.
+  auto identity = std::uint64_t{14695981039346656037ULL};
+  for (const auto values : blocks) append_numeric_identity(identity, values);
+  return identity;
+}
+std::uint64_t primal_identity(const RccsdNativeState& state) {
+  return numeric_identity({state.problem.df_bov, state.problem.df_bvv, state.problem.ovoo,
+                           state.problem.ovov, state.problem.fov, state.solved.t1, state.solved.t2,
+                           state.eps_o, state.eps_v});
+}
+void record_fingerprints(DFGapResponseFingerprints& diagnostic, std::size_t first,
+                         std::initializer_list<std::span<const double>> blocks) {
+  // Read only completed host boundaries; never add a transfer or retain arrays.
+  const auto started = Clock::now();
+  auto index = first;
+  for (const auto values : blocks) {
+    diagnostic.identities.at(index) = numeric_identity({values});
+    diagnostic.elements.at(index++) = values.size();
+    diagnostic.value_reads = checked_add(diagnostic.value_reads, values.size());
+  }
+  diagnostic.seconds += elapsed(started);
 }
 
 void publish_force_diagnostic(DFCCSDTResult& result) {
@@ -66,11 +102,16 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
     bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
     std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis) {
+    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
+    bool parallel_gap_reduction, bool request_triples_gap_cotangents,
+    RccsdNativeState* replay_state = nullptr, std::size_t retained_host_bytes = 0,
+    std::size_t retained_df_source_bytes = 0, DFGapResponseFingerprints* fingerprints = nullptr,
+    DFPhysicalResponseComparison* physical_replay = nullptr) {
   const auto started = Clock::now();
-  runtime::df_progress::Scope trace("df_ccsdt_native");
+  runtime::df_progress::Scope trace(replay_state ? "df_ccsdt_response_replay" : "df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
-  if (trace.enabled()) Trace::label("phase", "cold_rhf_df_ccsd");
+  if (trace.enabled())
+    Trace::label("phase", replay_state ? "same_primal_response" : "cold_rhf_df_ccsd");
   if (!execution.cuda_requested()) throw std::invalid_argument("DF force endpoint requires CUDA");
   // Both sources are normalized views of the same immutable nuclear geometry.
   if (system.atoms.size() != auxiliary.atoms.size())
@@ -82,21 +123,33 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   const auto recycle_bytes = frame_options.recycling ? frame_options.recycling->storage_bytes() : 0;
   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
   // in every phase, then let the response owner rebind/release it explicitly.
-  auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
-                                      recycle_bytes, &auxiliary, forces, df_matrix_gemm, nullptr,
-                                      ccsd_batch_limit, derived_denominators, packed_diis);
+  auto state =
+      replay_state
+          ? std::move(*replay_state)
+          : run_rccsd_native_state(
+                execution, system, descriptor, nullptr, nullptr, nullptr,
+                checked_add(recycle_bytes, physical_replay ? physical_replay->output_bytes : 0),
+                &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
+                packed_diis);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;
+  result.reference_energy_change = state.reference_energy_change;
+  result.reference_density_rms = state.reference_density_rms;
+  result.reference_iterations = state.reference_iterations;
   result.correlation_energy = state.solved.correlation_energy;
   result.energy = state.solved.total_energy;
   result.primal = state.performance;
   result.solver = state.solved.diagnostic;
   result.method_result = state.result;
   result.correlation = state.diagnostic;
+  const auto reserved_bytes = state.external_reservation_bytes;
+  const auto external_bytes = checked_add(reserved_bytes, retained_host_bytes);
+  if (reserved_bytes < recycle_bytes || retained_host_bytes >= state.budget)
+    throw std::length_error("DF force retained caller state exhausts complete budget");
   result.numeric_capacity_bytes =
-      difference(state.diagnostic.numeric_capacity_bytes, recycle_bytes);
-  const auto budget = state.budget;
+      difference(state.diagnostic.numeric_capacity_bytes, reserved_bytes);
+  const auto budget = state.budget - retained_host_bytes;
   const auto device = execution.device_id();
   auto& p = state.problem;
   const auto o = p.nocc, v = p.nvir, n = o + v, q = p.naux, nn = checked_mul(n, n);
@@ -104,6 +157,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   auto base = checked_add(
       p.reference_retained_bytes,
       checked_add(cc::problem_host_bytes(p), capacity({&state.solved.t1, &state.solved.t2})));
+  if (replay_state) result.numeric_capacity_bytes = base;
   const auto borrowed = bytes(p.df_bov.size() + p.df_bvv.size() + p.ovoo.size() + p.ovov.size() +
                               p.fov.size() + state.solved.t1.size() + state.solved.t2.size() +
                               state.eps_o.size() + state.eps_v.size());
@@ -113,22 +167,25 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   if (trace.enabled()) Trace::label("phase", "triples");
   if (with_triples) {
     if (forces) {
-      t = cc::triples::pullback_df_cuda(
+      auto response = cc::triples::pullback_and_fock_df_cuda(
           o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
           state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-          1e-10, budget, device, difference(base, borrowed));
+          1e-10, budget, device, difference(base, borrowed), 0, 3, parallel_gap_reduction,
+          request_triples_gap_cotangents);
+      t = std::move(response.pullback);
+      result.triples_fock = std::move(response.fock);
       result.triples = t.diagnostic;
+      result.triples_gap = t.gap;
       result.numeric_capacity_bytes =
-          std::max(result.numeric_capacity_bytes, t.numeric_capacity_bytes);
+          std::max({result.numeric_capacity_bytes, t.numeric_capacity_bytes,
+                    result.triples_fock.numeric_capacity_bytes});
       tbytes =
           capacity({&t.bov, &t.bvv, &t.ovoo, &t.ovov, &t.fov, &t.t1, &t.t2, &t.eps_o, &t.eps_v});
-      result.triples_fock = cc::triples::fock_response_df_cuda(
-          o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
-          state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-          1e-10, budget, device, checked_add(difference(base, borrowed), tbytes));
-      result.numeric_capacity_bytes =
-          std::max(result.numeric_capacity_bytes, result.triples_fock.numeric_capacity_bytes);
       fbytes = capacity({&result.triples_fock.foo, &result.triples_fock.fvv});
+      if (fingerprints)
+        record_fingerprints(*fingerprints, 0,
+                            {t.bov, t.bvv, t.ovoo, t.ovov, t.fov, t.t1, t.t2,
+                             result.triples_fock.foo, result.triples_fock.fvv});
     } else {
       result.triples = cc::triples::evaluate_df_cuda(
           o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
@@ -151,7 +208,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
         std::min(result.correlation.minimum_absolute_denominator,
                  result.triples.minimum_absolute_denominator);
   if (!forces) {
-    result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, recycle_bytes);
+    result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, external_bytes);
     // The public diagnostic includes the caller-owned reservation restored at
     // this boundary, just like the complete native endpoint allowance.
     result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
@@ -182,6 +239,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes,
                checked_add(lambda_external, result.lambda.numeric_capacity_bytes));
+  if (fingerprints)
+    record_fingerprints(*fingerprints, 9, {parameters.lambda.lambda1, parameters.lambda.lambda2});
   if (with_triples) {
     add(parameters.foo, result.triples_fock.foo);
     add(parameters.fvv, result.triples_fock.fvv);
@@ -195,6 +254,11 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::vector<double>().swap(result.triples_fock.foo);
     std::vector<double>().swap(result.triples_fock.fvv);
   }
+  if (fingerprints)
+    record_fingerprints(
+        *fingerprints, 11,
+        {parameters.foo, parameters.fov, parameters.fvv, parameters.ovov, parameters.ovvo,
+         parameters.oovv, parameters.ovoo, parameters.oooo, parameters.df_bov, parameters.df_bvv});
   // Lambda vectors are no longer needed once their parameter VJPs are detached.
   parameters.lambda = {};
   result.lambda_seconds = elapsed(phase);
@@ -235,26 +299,74 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
       cc::pullback_df_factors_cuda(o, v, q, view, budget, device, difference(live, factor_inputs));
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes, factors.numeric_capacity_bytes);
+  if (fingerprints)
+    record_fingerprints(*fingerprints, 21, {factors.boo, factors.bov, factors.bvv, bar_f});
   parameters = {};
+  if (physical_replay) {
+    physical_replay->nocc = o;
+    physical_replay->nvir = v;
+    physical_replay->naux = q;
+    physical_replay->source_identity = p.df_source_identity;
+    const auto& reference = *state.reference;
+    physical_replay->reference_identity =
+        numeric_identity({reference.overlap, reference.hcore, reference.fock,
+                          reference.coefficients, reference.orbital_energies, reference.density});
+    physical_replay->factor_seed_identity =
+        numeric_identity({factors.boo, factors.bov, factors.bvv});
+  }
   std::vector<double> correlation_gradient;
-  {
+  const auto physical_cases = physical_replay ? physical_replay->cases.size() : 1;
+  for (std::size_t index = 0; index < physical_cases; ++index) {
+    const auto source_started = Clock::now();
+    auto* snapshot = physical_replay ? &physical_replay->cases[index] : nullptr;
+    // One row/metric buffer, never the complete three-center weight tensor.
+    // Reserve both the old gradient and the newly returned sink gradient.
+    const auto weight_buffer_values = snapshot ? std::max(checked_mul(n, q), checked_mul(q, q)) : 0;
+    const auto census_bytes =
+        checked_add(bytes(weight_buffer_values), capacity({&correlation_gradient}));
     const auto outer = checked_add(
         base, checked_add(capacity({&bar_f, &bar_c, &factors.boo, &factors.bov, &factors.bvv}),
-                          bytes(coords)));
+                          checked_add(bytes(coords), census_bytes)));
+    if (outer >= budget)
+      throw std::length_error("DF physical response diagnostic exceeds complete numeric budget");
+    std::vector<double> weight_buffer(weight_buffer_values);
     scf::CudaDfNuclearSink sink(device, system, auxiliary, difference(budget, outer));
-    const auto caller =
-        checked_add(difference(base, state.df_source.retained_source_bytes),
-                    checked_add(capacity({&bar_f, &bar_c}),
-                                checked_add(bytes(coords), sink.numeric_capacity_bytes())));
+    const auto caller = checked_add(
+        difference(base, state.df_source.retained_source_bytes),
+        checked_add(
+            capacity({&bar_f, &bar_c}),
+            checked_add(checked_add(bytes(coords), census_bytes), sink.numeric_capacity_bytes())));
+    if (snapshot) {
+      snapshot->weight_identities.fill(14695981039346656037ULL);
+      snapshot->weight_buffer_bytes = capacity({&weight_buffer});
+    }
+    const auto census_weights = [&](unsigned kind, const double* values, std::size_t count,
+                                    cudaStream_t stream) {
+      if (!snapshot) return;
+      const auto census_started = Clock::now();
+      if (count > weight_buffer.size())
+        throw std::logic_error("DF physical response weight census exceeds admitted buffer");
+      runtime::cuda_resource_check(cudaMemcpyAsync(weight_buffer.data(), values, bytes(count),
+                                                   cudaMemcpyDeviceToHost, stream));
+      runtime::cuda_resource_check(cudaStreamSynchronize(stream));
+      append_numeric_identity(snapshot->weight_identities.at(kind),
+                              std::span<const double>(weight_buffer.data(), count));
+      snapshot->weight_elements.at(kind) = checked_add(snapshot->weight_elements.at(kind), count);
+      snapshot->weight_transfer_bytes = checked_add(snapshot->weight_transfer_bytes, bytes(count));
+      snapshot->weight_census_seconds += elapsed(census_started);
+    };
+    result.source_weight_values = result.metric_weight_values = 0;
     const auto reverse = cc::pullback_df_source_cuda(
         state.df_source.response_state, factors,
         [&](std::size_t mu, const double* row, cudaStream_t stream) {
           sink.consume(0, {mu * n * q, 1, 1, 1}, row, n * q, stream);
           result.source_weight_values += n * q;
+          census_weights(0, row, n * q, stream);
         },
         [&](const double* dc, const double* dm, cudaStream_t stream) {
           sink.consume(1, {0, 1, 1, 1}, dm, q * q, stream);
           result.metric_weight_values += q * q;
+          census_weights(1, dm, q * q, stream);
           runtime::cuda_resource_check(
               cudaMemcpyAsync(bar_c.data(), dc, bytes(nn), cudaMemcpyDeviceToHost, stream));
         },
@@ -262,10 +374,22 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     result.numeric_capacity_bytes =
         std::max(result.numeric_capacity_bytes, reverse.numeric_capacity_bytes);
     correlation_gradient = sink.finish();
+    if (snapshot) {
+      std::copy(correlation_gradient.begin(), correlation_gradient.end(),
+                snapshot->df_gradient.begin());
+      record_fingerprints(snapshot->fingerprints, 25, {bar_c, correlation_gradient});
+      snapshot->source_seconds = elapsed(source_started);
+      snapshot->numeric_capacity_bytes =
+          checked_add(reverse.numeric_capacity_bytes, external_bytes);
+      if (physical_replay->factor_seed_identity !=
+          numeric_identity({factors.boo, factors.bov, factors.bvv}))
+        throw std::logic_error("DF physical response replay mutated its fixed factor seed");
+    }
   }
   if (result.source_weight_values != checked_mul(nn, q) ||
       result.metric_weight_values != checked_mul(q, q))
     throw std::logic_error("DF force physical source traversal was incomplete");
+  if (fingerprints) record_fingerprints(*fingerprints, 25, {bar_c, correlation_gradient});
   factors = {};
   result.source_response_seconds = elapsed(phase);
   phase = Clock::now();
@@ -295,19 +419,66 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   state.result = {};
   std::vector<double>().swap(state.eps_o);
   std::vector<double>().swap(state.eps_v);
-  result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, recycle_bytes);
-  orbital_options.maximum_bytes = checked_add(budget, recycle_bytes);
-  orbital_options.caller_bytes =
-      checked_add(posthf::source_capacity(auxiliary),
-                  checked_add(capacity({&correlation_gradient}), bytes(coords)));
-  result.orbital = hf::rhf_frame_response_cuda(system, *state.reference, bar_f, bar_c, device,
-                                               orbital_options, std::move(preconditioner.data));
+  result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, external_bytes);
+  orbital_options.maximum_bytes = checked_add(state.budget, reserved_bytes);
+  // The original replay source survives CC release. The exact-reference source
+  // also stays live in this state while the independent orbital provider runs.
+  const auto exact_source_bytes = state.reference_interaction_source
+                                      ? state.reference_interaction_source->retained_numeric_bytes()
+                                      : 0;
+  orbital_options.caller_bytes = checked_add(
+      difference(external_bytes, recycle_bytes),
+      checked_add(
+          retained_df_source_bytes,
+          checked_add(exact_source_bytes,
+                      checked_add(posthf::source_capacity(auxiliary),
+                                  checked_add(capacity({&correlation_gradient}), bytes(coords))))));
+  if (physical_replay) physical_replay->orbital_seed_identity = numeric_identity({bar_f, bar_c});
+  for (std::size_t index = 0; index < physical_cases; ++index) {
+    const auto orbital_started = Clock::now();
+    // Release the preceding response matrices before admitting the next owner.
+    result.orbital = {};
+    result.orbital = hf::rhf_frame_response_cuda(system, *state.reference, bar_f, bar_c, device,
+                                                 orbital_options, std::move(preconditioner.data));
+    if (physical_replay) {
+      auto& snapshot = physical_replay->cases[index];
+      const auto& response = result.orbital;
+      std::copy(response.gradient.begin(), response.gradient.end(),
+                snapshot.orbital_gradient.begin());
+      record_fingerprints(snapshot.fingerprints, 27,
+                          {response.orbital_rhs, response.orbital_response.solution,
+                           response.hcore_weights, response.overlap_weights,
+                           response.fock_ao_weights, response.gradient, response.stationarity});
+      snapshot.orbital_residual = response.orbital_residual;
+      snapshot.maximum_stationarity = response.maximum_stationarity;
+      snapshot.orbital_iterations = response.orbital_response.iterations;
+      snapshot.orbital_actions = response.orbital_response.operator_actions;
+      snapshot.numeric_capacity_bytes =
+          std::max(snapshot.numeric_capacity_bytes, response.numeric_capacity_bytes);
+      result.numeric_capacity_bytes =
+          std::max(result.numeric_capacity_bytes, response.numeric_capacity_bytes);
+      snapshot.orbital_seconds = elapsed(orbital_started);
+      const auto& reference = *state.reference;
+      if (physical_replay->orbital_seed_identity != numeric_identity({bar_f, bar_c}) ||
+          physical_replay->reference_identity !=
+              numeric_identity({reference.overlap, reference.hcore, reference.fock,
+                                reference.coefficients, reference.orbital_energies,
+                                reference.density}))
+        throw std::logic_error("DF physical response replay mutated its fixed orbital inputs");
+    }
+  }
   result.orbital.preconditioner_setup_seconds += preconditioner.seconds;
   result.orbital.preconditioner_contraction_terms = preconditioner.contraction_terms;
   if (!preconditioner.reason.empty()) result.orbital.preconditioner_reason = preconditioner.reason;
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes, result.orbital.numeric_capacity_bytes);
   result.orbital_seconds = elapsed(phase);
+  if (fingerprints)
+    record_fingerprints(
+        *fingerprints, 27,
+        {result.orbital.orbital_rhs, result.orbital.orbital_response.solution,
+         result.orbital.hcore_weights, result.orbital.overlap_weights,
+         result.orbital.fock_ao_weights, result.orbital.gradient, result.orbital.stationarity});
   result.forces = std::move(correlation_gradient);
   add(result.forces, result.orbital.gradient);
   molecule::add_nuclear_repulsion_gradient(system, result.forces);
@@ -315,28 +486,177 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     value = -value;
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
+  if (fingerprints) record_fingerprints(*fingerprints, 34, {result.forces});
   result.method_result.forces = result.forces;
   publish_force_diagnostic(result);
   result.total_seconds = elapsed(started);
   return result;
 }
 
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
-                                  const core::System& auxiliary,
-                                  const generativeqc_method_descriptor& descriptor, bool forces,
-                                  bool with_triples, bool df_auxiliary_reduction,
-                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-                                  const hf::RHFFrameResponseOptions& frame_options,
-                                  bool derived_denominators, bool packed_diis) {
+DFGapForceComparison diagnose_df_ccsdt_gap_schedules(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor,
+    const hf::RHFFrameResponseOptions& frame_options, std::size_t lambda_batch_limit,
+    std::size_t ccsd_batch_limit, bool derived_denominators, bool packed_diis) {
+  const auto started = Clock::now();
+  runtime::df_progress::Scope trace("df_gap_same_primal_comparison");
+  if (!execution.cuda_requested() || !descriptor.correlation_memory_budget_bytes ||
+      frame_options.recycling)
+    throw std::invalid_argument(
+        "DF gap comparison requires CUDA, explicit budget and no recycling");
+  if (system.atoms.size() != auxiliary.atoms.size())
+    throw std::invalid_argument("DF gap comparison auxiliary geometry differs from orbital system");
+  for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
+    if (system.atoms[atom].position != auxiliary.atoms[atom].position ||
+        system.atoms[atom].atomic_number != auxiliary.atoms[atom].atomic_number)
+      throw std::invalid_argument(
+          "DF gap comparison auxiliary geometry differs from orbital system");
+  DFGapForceComparison comparison;
+  const auto coords = checked_mul(system.atoms.size(), 3);
+  comparison.output_bytes = checked_mul(comparison.cases.size(), bytes(coords));
+  if (comparison.output_bytes >= descriptor.correlation_memory_budget_bytes)
+    throw std::length_error("DF gap comparison output buffers exceed complete budget");
+  for (auto& snapshot : comparison.cases) snapshot.forces.resize(coords);
+  comparison.output_bytes = 0;
+  for (const auto& snapshot : comparison.cases)
+    comparison.output_bytes =
+        checked_add(comparison.output_bytes, bytes(snapshot.forces.capacity()));
+  if (comparison.output_bytes >= descriptor.correlation_memory_budget_bytes)
+    throw std::length_error("DF gap comparison output capacities exceed complete budget");
+  {
+    const auto primal_started = Clock::now();
+    const auto original = run_rccsd_native_state(
+        execution, system, descriptor, nullptr, nullptr, nullptr, comparison.output_bytes,
+        &auxiliary, true, true, nullptr, ccsd_batch_limit, derived_denominators, packed_diis);
+    comparison.primal_seconds = elapsed(primal_started);
+    if (!original.solved.converged() || !original.df_source.response_state ||
+        original.df_source.source_identity != original.problem.df_source_identity)
+      throw std::logic_error("DF gap comparison lost its converged native source/frame");
+    // These blocks must have moved into Problem; a future additional detached
+    // owner needs its own copy/phase charge before this diagnostic can accept it.
+    if (capacity({&original.df_source.boo, &original.df_source.bov, &original.df_source.bvv,
+                  &original.df_source.ovov, &original.df_source.ovvo, &original.df_source.oovv,
+                  &original.df_source.ovoo, &original.df_source.oooo, &original.result.forces}))
+      throw std::logic_error("DF gap comparison has an unaccounted detached primal owner");
+    comparison.nocc = original.problem.nocc;
+    comparison.nvir = original.problem.nvir;
+    comparison.naux = original.problem.naux;
+    comparison.primal = original.performance;
+    comparison.solver = original.solved.diagnostic;
+    comparison.reference_energy = original.reference->energy;
+    comparison.reference_energy_change = original.reference_energy_change;
+    comparison.reference_density_rms = original.reference_density_rms;
+    comparison.reference_iterations = original.reference_iterations;
+    comparison.source_identity = original.problem.df_source_identity;
+    comparison.denominator_identity = cc::denominator_identity(original.problem);
+    comparison.primal_identity = primal_identity(original);
+    comparison.retained_primal_host_bytes = primal_host_bytes(original);
+    comparison.retained_df_source_bytes = original.df_source.retained_source_bytes;
+    comparison.retained_exact_source_bytes =
+        original.reference_interaction_source
+            ? original.reference_interaction_source->retained_numeric_bytes()
+            : 0;
+    // reference_retained_bytes already charges the clone's split epsilon vectors
+    // and each shared reference/source once. The original host copy is additional.
+    comparison.clone_admission_bytes = checked_add(
+        comparison.output_bytes,
+        checked_add(
+            comparison.retained_primal_host_bytes,
+            checked_add(original.problem.reference_retained_bytes,
+                        checked_add(cc::problem_host_bytes(original.problem),
+                                    capacity({&original.solved.t1, &original.solved.t2})))));
+    const auto complete_budget = checked_add(original.budget, original.external_reservation_bytes);
+    if (comparison.clone_admission_bytes > complete_budget)
+      throw std::length_error("DF gap comparison native copies exceed complete budget");
+    for (std::size_t index = 0; index < comparison.cases.size(); ++index) {
+      auto& snapshot = comparison.cases[index];
+      const auto clone_started = Clock::now();
+      auto state = original;
+      if (primal_identity(state) != comparison.primal_identity)
+        throw std::logic_error("DF gap comparison did not preserve bitwise native inputs");
+      snapshot.clone_seconds = elapsed(clone_started);
+      const auto result = run_df_ccsdt_native_attempt(
+          execution, system, auxiliary, descriptor, true, true, true, true, true,
+          lambda_batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
+          index == 1 || index == 2, index != 2, &state, comparison.retained_primal_host_bytes,
+          comparison.retained_df_source_bytes, &snapshot.fingerprints);
+      if (result.forces.size() != coords || primal_identity(original) != comparison.primal_identity)
+        throw std::logic_error("DF gap comparison changed its immutable primal or force shape");
+      std::copy(result.forces.begin(), result.forces.end(), snapshot.forces.begin());
+      snapshot.energy = result.energy;
+      snapshot.triples_energy = result.triples_energy;
+      snapshot.orbital_residual = result.orbital.orbital_residual;
+      snapshot.maximum_stationarity = result.orbital.maximum_stationarity;
+      snapshot.response_seconds = result.total_seconds;
+      snapshot.triples_seconds = result.triples_seconds;
+      snapshot.lambda_seconds = result.lambda_seconds;
+      snapshot.source_response_seconds = result.source_response_seconds;
+      snapshot.orbital_seconds = result.orbital_seconds;
+      snapshot.numeric_capacity_bytes =
+          std::max(result.numeric_capacity_bytes, comparison.clone_admission_bytes);
+      snapshot.source_weight_values = result.source_weight_values;
+      snapshot.metric_weight_values = result.metric_weight_values;
+      snapshot.orbital_iterations = result.orbital.orbital_response.iterations;
+      snapshot.orbital_actions = result.orbital.orbital_response.operator_actions;
+      snapshot.fock_response_work = result.triples_fock.contraction_summands;
+      snapshot.lambda = result.lambda;
+      snapshot.triples = result.triples;
+      snapshot.gap = result.triples_gap;
+    }
+  }
+  comparison.total_seconds = elapsed(started);
+  return comparison;
+}
+
+DFPhysicalResponseComparison diagnose_df_ccsdt_physical_responses(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor,
+    const hf::RHFFrameResponseOptions& frame_options) {
+  const auto started = Clock::now();
+  if (!execution.cuda_requested() || !descriptor.correlation_memory_budget_bytes ||
+      frame_options.recycling || frame_options.df_preconditioning)
+    throw std::invalid_argument(
+        "DF physical response replay requires CUDA, explicit budget and unrecycled diagonal "
+        "response");
+  DFPhysicalResponseComparison comparison;
+  const auto coords = checked_mul(system.atoms.size(), 3);
+  comparison.output_bytes = bytes(checked_mul(2 * comparison.cases.size(), coords));
+  if (comparison.output_bytes >= descriptor.correlation_memory_budget_bytes)
+    throw std::length_error("DF physical response outputs exhaust complete numeric budget");
+  for (auto& snapshot : comparison.cases) {
+    snapshot.df_gradient.resize(coords);
+    snapshot.orbital_gradient.resize(coords);
+  }
+  auto result = run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, true, true,
+                                            true, true, true, 8, 8, frame_options, true, false,
+                                            false, true, nullptr, 0, 0, nullptr, &comparison);
+  comparison.forces = std::move(result.forces);
+  comparison.energy = result.energy;
+  comparison.reference_iterations = result.reference_iterations;
+  comparison.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  comparison.primal = result.primal;
+  comparison.triples_seconds = result.triples_seconds;
+  comparison.lambda_seconds = result.lambda_seconds;
+  comparison.lambda = result.lambda;
+  comparison.total_seconds = elapsed(started);
+  return comparison;
+}
+
+DFCCSDTResult run_df_ccsdt_native(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
+    bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
+    std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
+    bool parallel_gap_reduction, bool request_triples_gap_cotangents) {
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
   const auto attempt = [&] {
-    return run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, forces,
-                                       with_triples, df_auxiliary_reduction, df_matrix_gemm,
-                                       lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit,
-                                       frame_options, derived_denominators, packed_diis);
+    return run_df_ccsdt_native_attempt(
+        execution, system, auxiliary, descriptor, forces, with_triples, df_auxiliary_reduction,
+        df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
+        derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents);
   };
   try {
     return attempt();

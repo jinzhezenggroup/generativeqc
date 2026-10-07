@@ -109,6 +109,11 @@ def test_local_features_preserve_all_cross_ao_terms_and_fixed_masks(
                 seen = []
                 for tile in p.iter_features(density, include_jets=True):
                     seen.extend(tile.point_ids)
+                    assert tile.layout is not None
+                    assert tile.layout.nactive == len(tile.ao_ids)
+                    assert tile.layout.npoint == len(tile.point_ids)
+                    assert tile.layout.basis_identity == basis.identity
+                    tile.layout.require_derivative_order(p.tile_plan.order)
                     masked = dense[:, tile.point_ids].copy()
                     omitted = np.ones(basis.nao, dtype=bool)
                     omitted[tile.ao_ids] = False

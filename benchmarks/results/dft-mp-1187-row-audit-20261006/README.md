@@ -1,7 +1,7 @@
 # #1187 frozen hybrid FP64 row audit
 
 Initial audit: official `master` `21e682d1e24de606b85c76f174ad65e82cec66d5`.
-Validation base: official `master` `162b4d88f83860792205a206c84bf04c3057b070`
+Validation base: official `master` `2b0feff1d5577e58f3a44fbecbc1974be92df4e3`
 with this PR's mapper, catalog, and regression tests overlaid.
 Contract: `de6c847b1ed93e537c1422679ae3df53a4cca3cd13e7268483e419afbf2faa00`.
 Scope: 20 mandatory PBE0 and 6 mandatory versioned B3LYP strict-FP64 rows;

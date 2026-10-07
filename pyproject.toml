@@ -15,6 +15,8 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "LICENSES/*.txt", "THIRD_PARTY_NOTICES.md"]
 dependencies = [
   "numpy>=1.24",
+  "sccache>=0.16.0",
+  "tomli>=2; python_version < '3.11'",
   "nvidia-cublas-cu12>=12.9.1.4; sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')",
   "nvidia-cusolver-cu12>=11.7.5.82; sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')",
   "nvidia-cusparse-cu12>=12.5.10.65; sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')",
@@ -81,8 +83,11 @@ wheel.py-api = "py3"
 "src/runtime/resource_cuda.cuh" = "generativeqc_compiler/assets/src/runtime/resource_cuda.cuh"
 "src/runtime/resource_ledger.hpp" = "generativeqc_compiler/assets/src/runtime/resource_ledger.hpp"
 "src/dft/cuda_grid.cu" = "generativeqc_compiler/assets/src/dft/cuda_grid.cu"
+"src/dft/ao_grid_work.hpp" = "generativeqc_compiler/assets/src/dft/ao_grid_work.hpp"
 "src/dft/grid_task_view.cuh" = "generativeqc_compiler/assets/src/dft/grid_task_view.cuh"
 "src/dft/xc_point.hpp" = "generativeqc_compiler/assets/src/dft/xc_point.hpp"
+"src/dft/semilocal_family.hpp" = "generativeqc_compiler/assets/src/dft/semilocal_family.hpp"
+"src/dft/xc_capabilities.hpp" = "generativeqc_compiler/assets/src/dft/xc_capabilities.hpp"
 "src/dft/xc_runtime.cuh" = "generativeqc_compiler/assets/src/dft/xc_runtime.cuh"
 "src/integrals/range_moments.hpp" = "generativeqc_compiler/assets/src/integrals/range_moments.hpp"
 "src/integrals/eri_geometry.hpp" = "generativeqc_compiler/assets/src/integrals/eri_geometry.hpp"

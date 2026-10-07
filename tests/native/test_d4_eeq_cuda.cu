@@ -67,10 +67,10 @@ __global__ void ragged_kernel(const std::int32_t* z, const double* xyz, const do
 }
 
 struct GpuEval {
-  static constexpr std::size_t c6_count = eeq_data::kReferenceC6Standard.size();
-  Buffer<data::D4ElementData> elements{eeq_data::kElementCount};
-  Buffer<data::D4ReferenceData> references{eeq_data::kReferenceCount};
-  Buffer<eeq_data::EEQChargeElementData> charge_elements{eeq_data::kElementCount};
+  static constexpr std::size_t c6_count = kD4PackedReferenceC6Count;
+  Buffer<data::D4ElementData> elements{kD4TableElementCount};
+  Buffer<data::D4ReferenceData> references{kD4TableReferenceCount};
+  Buffer<D4EEQChargeElementData> charge_elements{kD4TableElementCount};
   Buffer<double> c6_standard{c6_count};
   Buffer<double> c6_r2scan{c6_count};
   Buffer<std::int32_t> z{kMaxAtoms};
@@ -82,23 +82,24 @@ struct GpuEval {
   Buffer<D4Status> status{3};
 
   GpuEval() {
-    elements.upload(eeq_data::kElements.data(), elements.count);
-    references.upload(eeq_data::kReferences.data(), references.count);
-    charge_elements.upload(eeq_data::kChargeElements.data(), charge_elements.count);
-    c6_standard.upload(eeq_data::kReferenceC6Standard.data(), c6_standard.count);
-    c6_r2scan.upload(eeq_data::kReferenceC6R2SCAN3C.data(), c6_r2scan.count);
+    const auto eeq_tables = eeq2019_host_tables();
+    const auto standard_tables = eeq_d4_host_tables(D4EEQProfile::standard);
+    const auto r2scan_tables = eeq_d4_host_tables(D4EEQProfile::r2scan3c);
+    elements.upload(standard_tables.elements, elements.count);
+    references.upload(standard_tables.references, references.count);
+    charge_elements.upload(eeq_tables.charge_elements, charge_elements.count);
+    c6_standard.upload(standard_tables.reference_c6, c6_standard.count);
+    c6_r2scan.upload(r2scan_tables.reference_c6, c6_r2scan.count);
   }
 
-  EEQTables eeq_tables() const {
-    return {elements.ptr, charge_elements.ptr, eeq_data::kElementCount};
-  }
+  EEQTables eeq_tables() const { return {elements.ptr, charge_elements.ptr, kD4TableElementCount}; }
   D4Tables d4_tables(D4EEQProfile profile) const {
     return {D4ReferenceModel::eeq,
             elements.ptr,
             references.ptr,
             profile == D4EEQProfile::r2scan3c ? c6_r2scan.ptr : c6_standard.ptr,
-            eeq_data::kElementCount,
-            eeq_data::kReferenceCount,
+            kD4TableElementCount,
+            kD4TableReferenceCount,
             c6_count,
             profile == D4EEQProfile::r2scan3c ? 2.0 : 3.0,
             profile == D4EEQProfile::r2scan3c ? 1.0 : 2.0};

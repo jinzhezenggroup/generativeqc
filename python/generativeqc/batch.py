@@ -570,6 +570,7 @@ class PreparedBatch:
         from .profiles import probe_device
 
         device = probe_device(self._library, self._calculator._device_id)["device"]
+        self._stationary_cuda_device_name = device["name"]
         return cuda_target_info(f"sm_{device['major']}{device['minor']}")
 
     def _stationary_cuda_compiler(self) -> typing.Any:
@@ -643,7 +644,7 @@ class PreparedBatch:
                     tile_policy, policy_tile_points = "budget-auto", None
                 else:
                     max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
-                    tile_policy, policy_tile_points = "fixed", 256
+                    tile_policy, policy_tile_points = "budget-auto", None
 
                 profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
                 resident_provider = getattr(source, "cuda_resident_grid", None)
@@ -662,6 +663,7 @@ class PreparedBatch:
                 )
                 workload = ForceActiveAoWorkload(
                     architecture=target.architecture,
+                    device_name=getattr(self, "_stationary_cuda_device_name", None),
                     derivative_order=(
                         2
                         if composite_force or "sigma" in state.identity.ingredients
@@ -706,6 +708,8 @@ class PreparedBatch:
                         max_host_bytes=max_host_bytes,
                         active_ao_cutoff=decision.cutoff,
                         active_ao_cache_bytes=decision.cache_bytes,
+                        active_ao_producer=decision.producer,
+                        active_ao_max_active_fraction=decision.max_active_fraction,
                     )
                     work = dict(work)
                     work["force_active_ao_policy"] = force_active_ao_policy_record(
@@ -725,6 +729,7 @@ class PreparedBatch:
                     all_electron and not source.method_ir.full_range_exact_exchange
                 )
                 kwargs = {
+                    "tile_points": policy_tile_points,
                     "compiler": (
                         None if packaged else self._stationary_cuda_compiler()
                     ),
@@ -740,6 +745,8 @@ class PreparedBatch:
                     "max_host_bytes": max_host_bytes,
                     "resident_ao_cutoff": decision.cutoff,
                     "resident_ao_cache_bytes": decision.cache_bytes,
+                    "resident_ao_producer": decision.producer,
+                    "resident_ao_max_active_fraction": decision.max_active_fraction,
                     "max_grid_points": None,
                     "max_grid_pair_visits": None,
                 }
@@ -785,19 +792,19 @@ class PreparedBatch:
         direct_semilocal_all_electron = (
             not ecp_force and qualified_direct_semilocal_context(calculator)
         )
-        direct_all_electron = direct_semilocal_all_electron or (
-            calculator._method_name
-            in (
-                "pbe0-rks",
-                "pbe0-uks",
-                "b3lyp-rks",
-                "b3lyp-uks",
-                "pbe-d4-rks",
-                "wb97m-v",
-                "wb97m-v-rks",
-                "wb97m-v-uks",
+        from .ks import cpu_stationary_all_electron_force_eligible
+
+        direct_compiled_all_electron = (
+            not ecp_force
+            and calculator._automatic_libxc_name is None
+            and calculator._ks_options is not None
+            and cpu_stationary_all_electron_force_eligible(
+                calculator._ks_options.method_ir,
+                dispersion_method_ir=calculator._dispersion_method_ir,
             )
-            and not ecp_force
+        )
+        direct_all_electron = (
+            direct_semilocal_all_electron or direct_compiled_all_electron
         )
         density_fitted_all_electron = (
             calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE

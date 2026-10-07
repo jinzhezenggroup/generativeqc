@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${SLURM_JOB_ID:?Slurm allocation required}"
+: "${CUDA_VISIBLE_DEVICES:?Slurm GPU visibility required}"
+root=/data/jzzeng/qc-pr2044-cold-20261007-9763
+environment=/home/jzzeng/codes/wb97m-20261002
+export CUDA_PATH=/group/software/cuda-12.9.1
+export GENERATIVEQC_CCACHE="$environment/ccache/usr/bin/ccache"
+export PATH="/data/jzzeng/qc-provider-1886-tools/cmake/bin:/data/jzzeng/qc-provider-1886-tools/bin:$environment/ccache/usr/bin:$CUDA_PATH/bin:$PATH"
+export LD_PRELOAD="$CUDA_PATH/lib64/libcudart.so.12:$CUDA_PATH/lib64/libcublas.so.12:$CUDA_PATH/lib64/libcublasLt.so.12:$CUDA_PATH/lib64/libcusolver.so.11:$CUDA_PATH/lib64/libcusparse.so.12${LD_PRELOAD:+:$LD_PRELOAD}"
+export GENERATIVEQC_NVCC=/data/jzzeng/qc-pbe0-integrated-base-20261006/.artifacts/bin/nvcc
+export CUDACXX="$GENERATIVEQC_NVCC"
+export CXX=/data/jzzeng/qc-pbe0-integrated-base-20261006/.artifacts/bin/c++
+export CCACHE_DIR=/data/jzzeng/ccache
+export GENERATIVEQC_STATIONARY_CACHE="$root/stationary-cache"
+export GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS=8
+export PYTHONDONTWRITEBYTECODE=1
+export OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8
+export TMPDIR="$root/tmp"
+cd "$root/merged"
+export CCACHE_BASEDIR="$PWD" PYTHONPATH="$PWD/python:$PWD:$PWD/tests/python"
+export LD_LIBRARY_PATH="$PWD/build/cuda-release-sm120:$environment/ccache/usr/lib/x86_64-linux-gnu:$environment/gpu-env/lib/python3.13/site-packages/cutensor/lib:$CUDA_PATH/lib64"
+export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+export GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD=0
+for sample in repaired-on-0 repaired-off-1 repaired-on-1 repaired-on-2 repaired-off-2; do
+  mode=${sample#*-}; mode=${mode%-*}
+  export GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=0
+  if [[ "$mode" == on ]]; then export GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK=1; fi
+  echo "START $sample $(date -Iseconds) job=$SLURM_JOB_ID"
+  "$environment/gpu-env/bin/python" "$root/cold.py" "$root/results/$sample.json" \
+    > "$root/results/$sample.log" 2>&1 && status=0 || status=$?
+  echo "$status" > "$root/results/$sample.exit"
+  tail -1 "$root/results/$sample.log"
+  echo "DONE $sample status=$status $(date -Iseconds)"
+done

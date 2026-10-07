@@ -1,0 +1,86 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "21f6314f5a812e9e83a41b3c9921549d6e944778",
+    "dirty": true
+  },
+  "files": [
+    {
+      "path": "bundle.json.xz",
+      "role": "samples",
+      "bytes": 756252,
+      "sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f"
+    },
+    {
+      "path": "manifest.json",
+      "role": "input",
+      "bytes": 24591,
+      "sha256": "d4f4d4a2af5be4e3cd032167013f1441b035fc53d2727a48311df92286cc0ac2"
+    },
+    {
+      "path": "qualification.json",
+      "role": "summary",
+      "bytes": 25277,
+      "sha256": "86a7f3cc6461e4d90b76c1804c188be663b594bf1f6dabf728806541d54d2020"
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "bytes": 122502,
+      "sha256": "c973c45ebd78a953c8bdbfb2f579e71a907c4eaec47385d8d5a21707cfbc5e3c"
+    },
+    {
+      "path": "verify.py",
+      "role": "reproduction",
+      "bytes": 10094,
+      "sha256": "7f7f82fcc972f1048851daf93f5d5533ef9f7e3e7388d88073d4d772c61b6c49"
+    },
+    {
+      "path": "source.patch",
+      "role": "source-patch",
+      "bytes": 32486,
+      "sha256": "ed60f1df376fe235b4bfb473788d0c59c8f24a851099097a5b20b8dea1b485e8"
+    },
+    {
+      "path": "integration-bundle.json.xz",
+      "role": "samples",
+      "bytes": 612472,
+      "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f"
+    },
+    {
+      "path": "integration-manifest.json",
+      "role": "input",
+      "bytes": 13661,
+      "sha256": "59bb9f3cf8da4252c3f48034af35bf007f0db19e6b5c16c8c99444143969abb1"
+    },
+    {
+      "path": "integration-qualification.json",
+      "role": "summary",
+      "bytes": 25284,
+      "sha256": "f5324c0bba193b2a7b104480d8bffaa3f69fec345c6369932e69301c9397064d"
+    },
+    {
+      "path": "integration-source.patch",
+      "role": "source-patch",
+      "bytes": 12774,
+      "sha256": "befd07e4564426b5195beb7407c4e31e45364b9a8c1f8c08f9f18f7d81d494df"
+    }
+  ],
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Resource-admitted scheduling passes independent numerical/work gates and >2% paired complete warm/moved-warm benefits at both sizes; generic allocator/deployment-compile promotion is not claimed."
+  },
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-cuda-schedule-20261006/verify.py",
+      "benchmarks/results/pbe0-cuda-schedule-20261006",
+      "--output",
+      ".artifacts/recomputed-cuda-schedule.json"
+    ],
+    "prerequisites": "Offline: Python and NumPy. Fresh GPU reproduction: a compatible CUDA target/toolchain, verified compiler cache and finite Slurm GPU allocation; preserve scheduler visibility.",
+    "source_restore": "Restore the exact base revision, apply source.patch and authenticate the bundled source manifests. The bundle retains the exact paired script, environment, trial preparation and hardware-specific Slurm receipts, without requiring this GPU model for production admission."
+  }
+}
