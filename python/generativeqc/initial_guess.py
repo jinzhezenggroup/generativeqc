@@ -1,4 +1,4 @@
-"""Explicit bounded preliminary SCF, separate from the immutable target model."""
+"""Explicit bounded cold-start densities, separate from the immutable target model."""
 
 from __future__ import annotations
 
@@ -15,9 +15,11 @@ from . import _native
 
 @dataclass(frozen=True)
 class InitialGuessSpec:
-    """An opt-in same-basis HF or coarse-LDA cold start.
+    """An opt-in HF, coarse-LDA, or projected MINAO cold start.
 
-    CPU FP64, all-electron restricted exact energy endpoints are admitted.
+    HF/LDA retain the CPU FP64 all-electron restricted exact energy domain.
+    MINAO is a zero-Fock occupied-ANO projection for all-electron H-Ar targets
+    and additionally admits CUDA restricted KS energy/force endpoints.
     Existing explicit/imported/retained densities take precedence. Preparation
     never changes the target basis, grid, functional, precision or tolerances.
     A failed preliminary solve or exhausted preparation budget keeps the core
@@ -37,8 +39,8 @@ class InitialGuessSpec:
     grid: GridSpec | None = None
 
     def __post_init__(self) -> None:
-        if self.kind not in ("hf", "lda"):
-            raise ValueError("initial guess kind must be 'hf' or 'lda'")
+        if self.kind not in ("hf", "lda", "minao"):
+            raise ValueError("initial guess kind must be 'hf', 'lda', or 'minao'")
         for name, low, high in (
             ("max_iterations", 1, 64),
             ("diis_history", 1, 16),
@@ -55,9 +57,9 @@ class InitialGuessSpec:
                 or value <= 0
             ):
                 raise ValueError(f"{name} must be finite and positive")
-        if self.kind == "hf":
+        if self.kind in ("hf", "minao"):
             if self.grid is not None:
-                raise ValueError("HF preliminary SCF does not use a grid")
+                raise ValueError("HF/MINAO initial guesses do not use a grid")
             return
         grid = GridSpec(8, 6, 12) if self.grid is None else self.grid
         if not isinstance(grid, GridSpec):
@@ -82,7 +84,7 @@ class InitialGuessSpec:
         return _native.InitialGuessOptionsDescriptor(
             ctypes.sizeof(_native.InitialGuessOptionsDescriptor),
             _native.ABI_VERSION,
-            1 if self.kind == "hf" else 2,
+            {"hf": 1, "lda": 2, "minao": 3}[self.kind],
             self.max_iterations,
             self.diis_history,
             self.energy_tolerance,
@@ -136,12 +138,12 @@ def read_initial_guess_diagnostic(
         "budget_skipped",
         "target_retried",
     )
-    if out.requested_kind not in (1, 2) or out.outcome >= len(outcomes):
-        raise RuntimeError("invalid preliminary SCF diagnostic")
+    if out.requested_kind not in (1, 2, 3) or out.outcome >= len(outcomes):
+        raise RuntimeError("invalid initial-guess diagnostic")
     if not math.isfinite(out.preparation_seconds) or out.preparation_seconds < 0:
         raise RuntimeError("invalid preliminary SCF preparation time")
     return {
-        "kind": "hf" if out.requested_kind == 1 else "lda",
+        "kind": {1: "hf", 2: "lda", 3: "minao"}[out.requested_kind],
         "outcome": outcomes[out.outcome],
         "work_counters_complete": bool(out.work_counters_complete),
         **{
@@ -180,6 +182,59 @@ def with_initial_guess_resources(
         "initial_guess": policy.to_payload(),
     }
     identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
+    if policy.kind == "minao":
+        from generativeqc_compiler.common.resources import ResourceEstimate
+
+        items = json.loads(request.identity.topology)["items"]
+        if len(items) != len(systems):
+            raise ValueError("MINAO topology does not match the batch")
+        retained = 0
+        largest_workspace = 0
+        for item in items:
+            numbers = item["electrons"]["atomic_numbers"]
+            if any(type(z) is not int or z < 1 or z > 18 for z in numbers):
+                return replace(
+                    request,
+                    identity=identity,
+                    candidates=(),
+                    unsupported_reason="MINAO initial guess is currently qualified for H-Ar",
+                )
+            n = item["orbital"]["nbf"]
+            if type(n) is not int or n <= 0:
+                raise ValueError("invalid MINAO target AO topology")
+            source_n = sum(
+                1 if z <= 2 else 2 if z <= 4 else 5 if z <= 10 else 6 if z <= 12 else 9
+                for z in numbers
+            )
+            seed = 8 * n * n
+            # Native capacity is X + output D + two n*ns projection buffers,
+            # occupations and source primitive pairs. Seventeen primitives per
+            # source AO is a conservative H-Ar upper bound.
+            workspace = (
+                8 * (2 * n * n + 2 * n * source_n + source_n)
+                + 32 * 17 * source_n
+            )
+            retained += seed
+            largest_workspace = max(largest_workspace, workspace)
+        extra = (
+            ResourceEstimate(
+                "all retained MINAO cold seeds", retained, "pageable", 0, 0
+            ),
+            ResourceEstimate(
+                "largest serialized MINAO projection workspace",
+                largest_workspace,
+                "pageable",
+                0,
+                0,
+            ),
+        )
+        return replace(
+            request,
+            identity=identity,
+            candidates=tuple(
+                replace(c, estimates=(*c.estimates, *extra)) for c in request.candidates
+            ),
+        )
     if policy.kind == "lda":
         # The native provider declines >f before constructing a source owner.
         # Use the target's already validated, ordered topology rather than
