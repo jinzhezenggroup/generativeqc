@@ -73,9 +73,20 @@ void require_wb97mv_composition(const ResolvedFockBuild& primary,
   const auto backend = primary.backend;
   if (backend != FockBackend::Cpu && backend != FockBackend::Cuda)
     throw std::invalid_argument("WB97M-V composition requires CPU or CUDA Fock execution");
+  auto expected_primary_spec =
+      make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange);
+  // Range-separated DF currently fits only the ordinary full-range J/K owner.
+  // The LR correction remains an exact Direct provider with its own operator/omega identity.
+  const bool fitted_primary =
+      primary.spec.coulomb.approximation == FockApproximation::DensityFitted &&
+      primary.spec.exchange.approximation == FockApproximation::DensityFitted;
+  if (fitted_primary) {
+    expected_primary_spec.coulomb.approximation = FockApproximation::DensityFitted;
+    expected_primary_spec.exchange.approximation = FockApproximation::DensityFitted;
+  }
   const auto expected_primary =
-      resolve_fock_build(make_rsh_primary_fock_spec(spin, dft::generated::kWb97mvShortExchange),
-                         backend, primary.screening_tolerance);
+      resolve_fock_build(expected_primary_spec, backend, primary.screening_tolerance,
+                         primary.metric_relative_threshold);
   const auto expected_correction =
       resolve_fock_build(make_rsh_correction_fock_spec(spin, dft::generated::kWb97mvShortExchange,
                                                        dft::generated::kWb97mvLongExchange,
