@@ -34,6 +34,9 @@ Expose a curated facade at `generativeqc.experimental.array_api`.
   shape broadcasting/indexing/matmul semantics. Explicitly scientific arrays
   retain strict QC domain identity and fail closed when shape-only operations
   would erase that metadata.
+- Inferred runtime inputs are non-differentiable by default. The public compile
+  boundary accepts an explicit tuple of differentiable parameter names and maps
+  only those inputs to differentiable TensorIR parameters.
 - Keep experimental package import lazy.
 
 ## Rejected alternatives
@@ -78,8 +81,10 @@ array consumers.
 - Public-facade tests compare the public trace logical hash with the internal
   compiler frontend for the same symbolic equation.
 - Inferred-call tests cover `(C * occupation) @ C.T`, generic broadcasting,
-  exact scalars, reshape/indexing/newaxis and batched matmul without any
-  TensorIR type declarations.
+  exact scalars, reshape/indexing/newaxis, empty slices and batched matmul without
+  any TensorIR type declarations.
+- A declared differentiable inferred input is exercised through TensorIR JVP;
+  undeclared inferred inputs remain non-differentiable.
 - Import tests verify `generativeqc.experimental` does not eagerly activate the
   Array frontend.
 - Capability tests require the public report to remain explicitly experimental,
