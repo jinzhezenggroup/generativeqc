@@ -8,8 +8,10 @@
 #include "dft/xc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/initial_guess/minao.hpp"
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
+#include "scf/reference/linalg.hpp"
 
 namespace {
 using namespace generativeqc;
@@ -64,6 +66,12 @@ void check() {
   descriptor.energy_tolerance = std::numeric_limits<double>::quiet_NaN();
   invalid([&] { preliminary_options(&descriptor); });
   descriptor.energy_tolerance = 0;
+  descriptor.radial_points = 8;
+  invalid([&] { preliminary_options(&descriptor); });
+  descriptor.radial_points = 0;
+  descriptor.kind = GENERATIVEQC_INITIAL_GUESS_MINAO;
+  parsed = preliminary_options(&descriptor);
+  require(parsed && parsed->kind == PreliminaryKind::Minao, "MINAO descriptor was not parsed");
   descriptor.radial_points = 8;
   invalid([&] { preliminary_options(&descriptor); });
   descriptor.radial_points = 0;
@@ -133,7 +141,36 @@ void check() {
                 !failed.initial_density_used,
             "failed preparation did not keep core fallback");
   }
+
   controls.preliminary_guess = PreliminaryOptions{};
+  controls.preliminary_guess->kind = PreliminaryKind::Minao;
+  const auto& ints = plan.one_electron();
+  const auto x = scf::reference::symmetric_orthogonalizer(ints.overlap, ints.nbf);
+  const auto raw_minao = minao_density(system, ints, x);
+  require(raw_minao.source_aos == 7 && raw_minao.source_primitives > 0,
+          "water MINAO source inventory changed");
+  require(std::abs(raw_minao.source_electrons - 10.0) < 1e-12,
+          "water MINAO atomic occupations changed");
+  require(raw_minao.density.size() == ints.nbf * ints.nbf &&
+              std::isfinite(raw_minao.projected_electrons),
+          "MINAO projection shape/trace is invalid");
+  const auto minao = scf::run_pbe_rks(plan, basis, grid, controls);
+  matched(baseline, minao);
+  require(minao.preliminary_guess.outcome == PreliminaryOutcome::Used &&
+              minao.preliminary_guess.preliminary_iterations == 0 &&
+              minao.preliminary_guess.preliminary_fock_builds == 0 &&
+              minao.initial_density_used,
+          "MINAO did not remain a zero-Fock initial-density provider");
+  const auto minao_cap = preliminary_numeric_capacity(system, *controls.preliminary_guess);
+  require(minao_cap > 0 && minao_cap < (256U << 20), "MINAO capacity is not bounded");
+  controls.preliminary_guess->maximum_numeric_bytes = minao_cap - 1;
+  const auto minao_budget = scf::run_pbe_rks(plan, basis, grid, controls);
+  matched(baseline, minao_budget);
+  require(minao_budget.preliminary_guess.outcome == PreliminaryOutcome::BudgetSkipped &&
+              !minao_budget.initial_density_used,
+          "MINAO budget did not keep core fallback");
+  controls.preliminary_guess->maximum_numeric_bytes = 256U << 20;
+
   unsigned calls = 0;
   // Explicit control-flow doubles, not numerical evidence: discarded attempts
   // must never publish success or leave a proposed density attached to retry.
@@ -168,6 +205,8 @@ void check() {
   }
   auto force = controls;
   force.compute_forces = true;
+  validate_preliminary_target(system, plan.strategy(), force);
+  force.preliminary_guess->kind = PreliminaryKind::HartreeFock;
   invalid([&] { validate_preliminary_target(system, plan.strategy(), force); });
   auto spin = system;
   spin.multiplicity = 3;
