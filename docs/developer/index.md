@@ -56,6 +56,7 @@ electronic_method_ir
 program_ir
 integral_ir
 tensor_ir
+iteration_reuse
 array_api_frontend
 source_registry
 spatial_tasks

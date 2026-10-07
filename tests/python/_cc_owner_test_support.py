@@ -40,10 +40,10 @@ for name, module in [('generated_df_ccsd', actions), ('generated_df_ccsd_core', 
 def compile_owner(
     compiler: str, directory: Path, sources: list[Path], output: Path
 ) -> None:
-    """Cache individual objects; a multi-source compile cannot use ccache."""
-    cache = shutil.which("ccache")
+    """Cache individual objects with the same verified launcher order as CMake."""
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if cache is None:
-        pytest.skip("ccache is required for native owner probes")
+        pytest.skip("sccache or ccache is required for native owner probes")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
     objects = []
     for i, source in enumerate(sources):

@@ -17,6 +17,9 @@ struct SolverOptions {
   double damping{};
   double level_shift{};
   std::size_t max_bytes{256ULL << 20};
+  // Internal opt-in schedule. CPU evidence is shape-dependent; keep the
+  // original evaluator as default until broader endpoint performance gates.
+  bool iteration_invariant_reuse{false};
   // Internal DF scheduling control; dense/conventional paths are unaffected.
   // Admission retains the bounded original schedule when work or storage wins.
   bool df_auxiliary_reduction{true};
@@ -84,6 +87,14 @@ struct SolverDiagnostic {
   std::size_t derived_d2_iteration_evaluations{};
   std::size_t synchronizations{};
   std::size_t iteration_graph_calls{};
+  // Common TensorIR proof, scoped to one conventional dense CPU solve. The
+  // operation counters include successful cached or uncached evaluations;
+  // these fields do not report DF or CUDA work. Saved operations exclude the
+  // first evaluation's one-time preparation.
+  bool iteration_reuse{};
+  std::size_t iteration_invariant_preparations{}, iteration_reused_evaluations{};
+  std::size_t iteration_invariant_operations{}, iteration_dynamic_operations{};
+  std::size_t iteration_invariant_operations_saved{};
   std::size_t replay_graph_calls{};
   std::size_t update_calls{};
   std::size_t generated_error_checks{};
