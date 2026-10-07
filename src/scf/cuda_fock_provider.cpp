@@ -100,8 +100,7 @@ std::vector<double> CudaFockProviderView::derivative(
   // The shared generated response uses -cK*Q:M+, whereas Fock assembly uses
   // +FockExchange*K and energy supplies its independent factor of one half.
   const double ck = spec.exchange.present ? -0.5 * spec.exchange.coefficient : 0.0;
-  if (borrowed_response_density &&
-      (spec.spin != FockSpin::Restricted || cj == 0.0 || ck != 0.0))
+  if (borrowed_response_density && (spec.spin != FockSpin::Restricted || cj == 0.0 || ck != 0.0))
     throw std::invalid_argument(
         "borrowed CUDA DF response density requires one restricted Coulomb derivative");
   if (cj == 0.0 && ck == 0.0) return out;
