@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.backend import TargetInfo
 from generativeqc_compiler.common.specialization import TargetCapabilities
@@ -24,9 +23,6 @@ from generativeqc_compiler.tensor.cuda_cublaslt import CublasLtMatmulProvider
 from generativeqc_compiler.tensor.cuda_cutlass import CutlassAotProvider
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.matrix_view import matrix_contraction
-
-if TYPE_CHECKING:
-    from generativeqc_compiler.common.lowering_provider import LoweringRequest
 
 CPU_TARGET = TargetCapabilities(
     TargetInfo("cpu", "x86_64-generic", None, 1, None),
