@@ -46,6 +46,13 @@ void CudaFockProviderView::validate(const ResolvedFockBuild& strategy) const {
                                                  strategy.metric_relative_threshold) &&
                 data_->metric_relative_threshold == strategy.metric_relative_threshold,
             "CUDA DF Fock item/dimensions/cutoff mismatch");
+    const auto validate_operator = [&](const FockTermSpec& term) {
+      if (!term.present || term.approximation != FockApproximation::DensityFitted) return;
+      require(cuda_density_fitting_jk_plan_operator_matches(fitted_, term.op, term.omega),
+              "CUDA DF Fock operator/range identity mismatch");
+    };
+    validate_operator(strategy.spec.coulomb);
+    validate_operator(strategy.spec.exchange);
     if (strategy.spec.derivative_order)
       require(data_->df_gradient_orbital && data_->df_gradient_auxiliary &&
                   data_->df_gradient_budget > 0 &&
