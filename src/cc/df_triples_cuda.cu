@@ -955,4 +955,49 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
                                     threshold, max_bytes, device, caller_bytes, max_page_rows,
                                     max_panel_buffers, nullptr);
 }
+
+DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
+    std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
+    const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
+    const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
+    std::size_t caller_bytes, std::size_t max_page_rows, std::size_t max_panel_buffers,
+    bool parallel_gap_reduction, bool include_gap_response) {
+  const auto started = Clock::now();
+  if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
+      !max_panel_buffers || max_panel_buffers > 3)
+    throw std::invalid_argument("invalid combined DF triples response dimensions or controls");
+  const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
+  const auto staging_layout = layout(o, v, q, 1);
+  (void)validate_inputs(o, v, q, staging_layout, host, threshold);
+
+  runtime::CudaDeviceScope device_scope(device);
+  PreparedInputs prepared(staging_layout, host);
+  const auto prepared_caller = checked_add(caller_bytes, prepared.storage_bytes);
+
+  DFCudaCombinedResponseResult result;
+  result.shared_input_device_bytes = prepared.storage_bytes;
+  result.shared_h2d_bytes = prepared.h2d_bytes;
+  result.pullback = pullback_df_cuda_impl(
+      o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold, max_bytes, device,
+      prepared_caller, max_panel_buffers, parallel_gap_reduction, include_gap_response,
+      &prepared.values);
+  // Attribute the one shared upload to the first consumer so existing aggregate
+  // diagnostics still report actual endpoint transfer bytes without double counting.
+  result.pullback.diagnostic.h2d_bytes = prepared.h2d_bytes;
+
+  const std::array<const std::vector<double>*, 9> response_outputs{
+      &result.pullback.bov,  &result.pullback.bvv,   &result.pullback.ovoo,
+      &result.pullback.ovov, &result.pullback.fov,   &result.pullback.t1,
+      &result.pullback.t2,   &result.pullback.eps_o, &result.pullback.eps_v};
+  std::size_t response_bytes = 0;
+  for (const auto* output : response_outputs)
+    response_bytes = checked_add(response_bytes, bytes(output->capacity()));
+
+  result.fock = fock_response_df_cuda_impl(
+      o, v, q, bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v, threshold, max_bytes, device,
+      checked_add(prepared_caller, response_bytes), max_page_rows, max_panel_buffers,
+      &prepared.values);
+  result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
+  return result;
+}
 }  // namespace generativeqc::cc::triples
