@@ -1,0 +1,60 @@
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -264,7 +264,8 @@
+   std::uint64_t final_fitted_projection_scratch_generation{};
+   runtime::ExecutionPrecisionSchedule precision_schedule{};
+   scf::IncrementalDirectJkPolicy incremental_direct_jk_policy{};
+-  bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{};
++  bool incremental_direct_jk{}, incremental_anchored{}, pending_incremental_delta{},
++      incremental_energy_refinement{};
+   unsigned incremental_delta_updates{};
+   double host_incremental_max_abs_delta_density{};
+   bool strict_refinement{}, pending_mixed_coulomb{}, pending_mixed_density{},
+@@ -1070,6 +1071,7 @@
+     output.incremental_direct_jk.active = incremental_direct_jk;
+     incremental_anchored = false;
+     pending_incremental_delta = false;
++    incremental_energy_refinement = false;
+     incremental_delta_updates = 0;
+     host_incremental_max_abs_delta_density = 0.0;
+     is_active = false;
+@@ -1622,7 +1624,8 @@
+   }
+ 
+   bool incremental_delta_admitted() const noexcept {
+-    if (!incremental_direct_jk || !incremental_anchored || final_closure || strict_refinement)
++    if (!incremental_direct_jk || !incremental_anchored || incremental_energy_refinement ||
++        final_closure || strict_refinement)
+       return false;
+     if (incremental_direct_jk_policy.effective_rebuild_interval != 0U &&
+         incremental_delta_updates >= incremental_direct_jk_policy.effective_rebuild_interval)
+@@ -1634,6 +1637,20 @@
+     return true;
+   }
+ 
++  /** Screened full and delta builds need not omit the same integrals. Their
++   * reconstructed energies can therefore alternate above the energy tolerance
++   * even after D and the physical residual are stationary. Finish energy
++   * convergence with the full target operator instead of waiting for that
++   * alternating energy gate before permitting a full-density audit. Keep DIIS
++   * and the original convergence tolerances; final closure remains separate. */
++  void refine_incremental_energy(double density_change, double residual,
++                                 double maximum_residual) noexcept {
++    const double residual_tolerance = std::min(1e-9, options.density_tolerance);
++    if (incremental_direct_jk && density_change < options.density_tolerance &&
++        residual < residual_tolerance && maximum_residual < residual_tolerance)
++      incremental_energy_refinement = true;
++  }
++
+   const double* prepare_incremental_jk_density() {
+     pending_incremental_delta = false;
+     if (!incremental_direct_jk) return density;
+@@ -1936,6 +1953,8 @@
+       stabilize_occupations = true;
+     const bool has_energy_history =
+         output.iterations > 1 || (output.iterations == 1 && warm_energy_baseline);
++    refine_incremental_energy(physical.density_change, physical.residual,
++                              physical.maximum_residual);
+     const bool converged = has_energy_history && output.energy_change < options.energy_tolerance &&
+                            physical.density_change < options.density_tolerance &&
+                            physical.residual < std::min(1e-9, options.density_tolerance) &&
