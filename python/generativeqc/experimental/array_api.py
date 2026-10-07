@@ -37,7 +37,11 @@ from generativeqc_compiler.tensor import (
     IndexSpace,
     Program,
     TensorSpec,
+)
+from generativeqc_compiler.tensor import (
     cast as _cast,
+)
+from generativeqc_compiler.tensor import (
     execute as _execute,
 )
 
@@ -148,8 +152,7 @@ class CompiledFunction:
             inspect.Parameter.VAR_KEYWORD,
         }
         if any(
-            parameter.kind in unsupported
-            for parameter in signature.parameters.values()
+            parameter.kind in unsupported for parameter in signature.parameters.values()
         ):
             raise TypeError(
                 "compiled array functions require named, non-variadic parameters"
@@ -157,9 +160,7 @@ class CompiledFunction:
         self._function = function
         self._signature = signature
         self._backend = backend
-        self._programs: dict[
-            tuple[tuple[str, tuple[int, ...], str], ...], Program
-        ] = {}
+        self._programs: dict[tuple[tuple[str, tuple[int, ...], str], ...], Program] = {}
         functools.update_wrapper(self, function)
 
     def _prepare(
@@ -237,7 +238,7 @@ def compile(
 def capabilities() -> dict[str, object]:
     """Return the detached capability contract for this public preview."""
     report = _compiler_capabilities()
-    functions = set(typing.cast(tuple[str, ...], report["functions"]))
+    functions = set(typing.cast("tuple[str, ...]", report["functions"]))
     functions.update({"asarray", "compile", "matrix_transpose"})
     report.update(
         {

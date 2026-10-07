@@ -157,11 +157,9 @@ def _broadcast_generic(value: VibeArray, target_shape: tuple[int, ...]) -> VibeA
     node = value.node
     if len(kept_indices) != value.ndim:
         node = tensor_ir.reshape(node, tuple(kept_indices))
-    if (
-        tuple(index.domain for index in node.spec.indices)
-        == tuple(target_indices[axis].domain for axis in kept_axes)
-        and len(kept_axes) == len(target_shape)
-    ):
+    if tuple(index.domain for index in node.spec.indices) == tuple(
+        target_indices[axis].domain for axis in kept_axes
+    ) and len(kept_axes) == len(target_shape):
         return VibeArray(node)
     return VibeArray(tensor_ir.broadcast(node, target_indices, tuple(kept_axes)))
 
@@ -186,7 +184,9 @@ def _generic_array_and_scalar(
 ) -> tuple[VibeArray, VibeArray]:
     if not _is_generic_array(array):
         raise TypeError(f"{name} requires two symbolic arrays for scientific domains")
-    scalar_array = _generic_exact_scalar(scalar, dtype=array.dtype, name=f"{name} scalar")
+    scalar_array = _generic_exact_scalar(
+        scalar, dtype=array.dtype, name=f"{name} scalar"
+    )
     return array, _broadcast_generic(scalar_array, array.shape)
 
 
@@ -395,7 +395,9 @@ def matrix_transpose(x: object) -> VibeArray:
     """Transpose the final two dimensions, preserving leading batch axes."""
     value = _array(x)
     if value.ndim < 2:
-        raise ValueError("matrix_transpose requires an array with at least two dimensions")
+        raise ValueError(
+            "matrix_transpose requires an array with at least two dimensions"
+        )
     axes = list(range(value.ndim))
     axes[-2], axes[-1] = axes[-1], axes[-2]
     return permute_dims(value, tuple(axes))
@@ -421,10 +423,7 @@ def _matmul_generic(left: VibeArray, right: VibeArray) -> VibeArray:
     labels = iter(ascii_letters)
     batch_labels = "".join(next(labels) for _ in range(batch_rank))
     m, k, n = next(labels), next(labels), next(labels)
-    equation = (
-        f"{batch_labels}{m}{k},{batch_labels}{k}{n}->"
-        f"{batch_labels}{m}{n}"
-    )
+    equation = f"{batch_labels}{m}{k},{batch_labels}{k}{n}->{batch_labels}{m}{n}"
     result = VibeArray(tensor_ir.einsum(equation, left_work.node, right_work.node))
     if left_vector and right_vector:
         final_shape: tuple[int, ...] = batch

@@ -73,9 +73,7 @@ def test_compiled_observable_uses_array_syntax_without_tensor_specs() -> None:
         density = (C * occupation) @ C.T
         return xp.sum(density * O)
 
-    coefficients = np.array(
-        [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float64
-    )
+    coefficients = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]], dtype=np.float64)
     occupation = xp.asarray([2.0, 1.0], dtype=xp.float64)
     operator = np.eye(3, dtype=np.float64)
 
