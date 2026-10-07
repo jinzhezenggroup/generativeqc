@@ -95,3 +95,29 @@ post-convergence selection to become pure reuse.
 - #2043
 - `src/scf/solver/final_state.hpp`
 - `src/scf/solver/mean_field_driver.cpp`
+
+## Bounded-budget qualification
+
+At head `a10d8a5`, the 16-correction cap exhausted on both GCC reference and
+scalar routes of the unchanged #1790 fixture. The physical fixed-point iteration
+was slowly contracting rather than divergent: the late density-step ratio was
+approximately 0.89686. At correction 16 the maximum physical commutator remained
+2.16648e-10 and an independent SciPy generalized diagonalization measured a
+1.37531e-10 maximum projector defect, both above the unchanged 1e-10 gate.
+Physical energy changes were already of order 1e-14.
+
+The CPU UHF force caller now permits 32 corrections, without changing the shared
+selector, eigen/commutator/projector/energy gates or other callers. This is at most
+33 selector Fock evaluations plus its initial physical finalization Fock, hence
+at most 34 post-SCF builds. The existing SCF maximum-iteration setting is unchanged.
+A two-spin analytic two-cycle verifies that all 32 corrections are counted and
+exhaustion still returns no state (33 evaluations, 64 solves, 32 density updates).
+
+On the unchanged GCC fixture both routes accept at correction 24: 21 SCF
+iterations, 26 post-SCF builds, 47 total Fock builds. Maximum torque is about
+1.786e-10 Eh against the unchanged 1e-9 gate; commutator is about 9.069e-11 and
+maximum projector defect about 5.757e-11. This extra work is reported explicitly,
+not a CPU performance claim. Native/ Python qualification reconciles actual
+selector/projection work with total builds and retains zero reference target
+solves on scalar routes. Energy-only UHF and RHF keep two finalization builds.
+This local evidence is GCC CPU evidence; Clang CI and GPU execution are separate.

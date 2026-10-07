@@ -1,12 +1,14 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
 #include "molecule/basis.hpp"
+#include "runtime/host_component_trace.hpp"
 #include "scf/mean_field.hpp"
 
 namespace {
@@ -87,13 +89,71 @@ double maximum_torque(const core::System& system, const std::vector<double>& for
   return std::max({std::abs(torque[0]), std::abs(torque[1]), std::abs(torque[2])});
 }
 
-void check_route(const char* name, bool reference) {
+namespace trace = runtime::host_trace;
+namespace obs = scf::reference::observation;
+thread_local std::size_t reference_final{}, reference_iterations{};
+std::size_t observe(const char* name, std::size_t n) noexcept {
+  if (std::strcmp(name, "reference_eigensolve") == 0) {
+    reference_final += obs::active_reason == obs::EigenReason::final_fock;
+    reference_iterations += obs::active_reason == obs::EigenReason::iteration;
+  }
+  return trace::detail::begin(name, n);
+}
+void end_observe(std::size_t token, int exceptions) noexcept {
+  trace::detail::end(token, exceptions);
+}
+const obs::Observer observer{observe, end_observe};
+struct WorkObservation {
+  trace::detail::State state;
+  trace::detail::State* previous_state{trace::detail::active};
+  const obs::Observer* previous_observer{obs::active};
+  WorkObservation() {
+    reference_final = reference_iterations = 0;
+    trace::detail::active = &state;
+    obs::active = &observer;
+  }
+  ~WorkObservation() {
+    trace::detail::active = previous_state;
+    obs::active = previous_observer;
+  }
+  std::size_t count(const char* name) const {
+    require(state.valid && state.current == -1, "incomplete work observation");
+    return std::count_if(state.regions.begin(), state.regions.end(), [&](const auto& row) {
+      require(row.finished && !row.failed, "failed final-state work region");
+      return std::strcmp(row.name, name) == 0;
+    });
+  }
+};
+
+void check_route(const char* name, bool reference, bool forces) {
   const auto system = water_cation();
-  const auto options = controls();
+  auto options = controls();
+  options.compute_forces = forces;
+  WorkObservation work;
   const scf::ScfResult result = reference
                                     ? scf::run_cpu_reference_fock_strategy(system, nullptr, options)
                                     : scf::run_cpu_fock_strategy(system, nullptr, options);
   require(result.converged, std::string(name) + " route did not converge");
+  require(reference_iterations == (reference ? 2 * result.iterations : 0),
+          std::string(name) + " iteration eigensolver isolation changed");
+  const auto corrections = work.count("strict_final_correction");
+  const auto focks = work.count("final_state_fock_build");
+  if (!forces) {
+    require(result.forces.empty() && result.fock_builds == result.iterations + 2 && focks == 0 &&
+                corrections == 0 && reference_final == (reference ? 2U : 0U),
+            std::string(name) + " energy-only finalization schedule changed");
+    return;
+  }
+  const auto solves = work.count("final_state_correction_solve");
+  const auto probes = work.count("final_state_fixed_point");
+  const auto promotions = work.count("final_state_fixed_point_promotion");
+  require(corrections > 0 && corrections <= 32 && focks == corrections + 1 &&
+              solves + promotions == corrections && probes == promotions + 1 &&
+              result.fock_builds == result.iterations + 1 + focks &&
+              result.fock_builds <= result.iterations + 34 &&
+              reference_final == (reference ? 2 * (1 + solves + probes) : 0) &&
+              work.count("final_state_weighted_density") == 1,
+          std::string(name) + " final-state work/count/provider mismatch");
   require(result.forces.size() == 9, std::string(name) + " route did not publish forces");
   const double torque = maximum_torque(system, result.forces);
   if (!(torque <= kTorqueTolerance)) {
@@ -107,8 +167,10 @@ void check_route(const char* name, bool reference) {
 
 int main() {
   try {
-    check_route("reference", true);
-    check_route("scalar", false);
+    for (bool forces : {true, false}) {
+      check_route("reference", true, forces);
+      check_route("scalar", false, forces);
+    }
     return 0;
   } catch (const std::exception& error) {
     std::cerr << "UHF final-state regression failed: " << error.what() << '\n';

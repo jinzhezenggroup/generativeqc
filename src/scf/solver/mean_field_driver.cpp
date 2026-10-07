@@ -243,10 +243,13 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
       return diagonalize(plan, fock, ints, orthogonalizer, PreparedFockPlan::EigenUse::Finalization,
                          target_eigen);
     };
+    // The #1790 standard-control determinant contracts by about 0.897 per
+    // physical projection and needs 24 corrections. Keep a finite margin:
+    // at most 33 selector evaluations plus the initial physical Fock above.
     auto selected = select_final_state(
         identity, ints.overlap, ints.hcore, orthogonalizer, ints.nuclear_repulsion,
         {alpha_density, beta_density}, &candidate, physical, eigen,
-        {options.density_tolerance, options.energy_tolerance, 16, false, false}, true);
+        {options.density_tolerance, options.energy_tolerance, 32, false, false}, true);
     physical_fock_builds += selected.fock_evaluations;
     if (!selected.state)
       throw std::runtime_error("CPU UHF final-state correction failed: " + selected.detail);
