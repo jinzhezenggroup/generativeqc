@@ -335,14 +335,14 @@ void run_exact_exchange_case(bool restricted) {
   incremental_options.incremental_direct_jk = true;
   incremental_options.incremental_direct_jk_rebuild_interval = 8;
   incremental_options.incremental_direct_jk_density_rms_threshold = 0.0;
-  dft::CudaKsPlan incremental_plan(gpu, basis, grid, incremental_options,
-                                   dft::SemilocalFamily::Pbe, 257);
+  dft::CudaKsPlan incremental_plan(gpu, basis, grid, incremental_options, dft::SemilocalFamily::Pbe,
+                                   257);
   const auto incremental = incremental_plan.run(nullptr, false);
   const auto& incremental_work = incremental.incremental_direct_jk;
   require(incremental.converged && !incremental_plan.failed() &&
-              std::abs(incremental.energy - result.energy) < 1e-10 &&
-              incremental_work.requested && incremental_work.active &&
-              incremental_work.anchor_full_builds > 0 && incremental_work.delta_builds > 0 &&
+              std::abs(incremental.energy - result.energy) < 1e-10 && incremental_work.requested &&
+              incremental_work.active && incremental_work.anchor_full_builds > 0 &&
+              incremental_work.delta_builds > 0 &&
               incremental_work.anchor_updates == incremental_work.delta_builds &&
               incremental_work.post_scf_full_builds > 0 &&
               incremental_work.anchor_full_builds + incremental_work.delta_builds +
