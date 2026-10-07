@@ -481,7 +481,7 @@ def _expand_index_key(key: object, rank: int) -> tuple[object, ...]:
     ellipses = [position for position, item in enumerate(items) if item is Ellipsis]
     if len(ellipses) > 1:
         raise IndexError("an index can contain at most one ellipsis")
-    consumed = sum(item is not None and item is not Ellipsis for item in items)
+    consumed = builtins.sum(item is not None and item is not Ellipsis for item in items)
     if consumed > rank:
         raise IndexError("too many indices for symbolic VibeArray")
     fill = rank - consumed
