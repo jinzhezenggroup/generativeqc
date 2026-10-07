@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -13,8 +14,6 @@ from tools import generate_df_ccsd_core, generate_df_ccsd_hoisted
 from tools import generate_rccsd_native as codegen
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from conftest import NativeCxx
 
 
@@ -50,6 +49,7 @@ def test_scalar_iteration_reduction_has_fixed_parallel_tree_and_serial_fallback(
 
         assert "const std::size_t reduction_count=" in parallel
         assert "if(reduction_count<32)" in parallel
+        assert "#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE" in parallel
         assert "for(std::size_t r=0;r<reduction_count;++r)" in parallel
         assert (
             "for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x)" in parallel
@@ -85,11 +85,13 @@ def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
         for kernel in core
     )
     assert any(
-        kernel.startswith("iteration_packed_node_") and "StrictFp64BlockReduce<256>" in kernel
+        kernel.startswith("iteration_packed_node_")
+        and "StrictFp64BlockReduce<256>" in kernel
         for kernel in hoisted
     )
     assert any(
-        kernel.startswith("iteration_scalar_node_") and "StrictFp64BlockReduce<256>" in kernel
+        kernel.startswith("iteration_scalar_node_")
+        and "StrictFp64BlockReduce<256>" in kernel
         for kernel in hoisted
     )
 
@@ -98,7 +100,7 @@ def test_df_iteration_paths_enable_parallel_scalar_reduction() -> None:
 def test_complete_orbital_scalar_kernel_declares_runtime_extent(
     tmp_path: Path, native_cxx: NativeCxx, operation: str
 ) -> None:
-    """Compile with host syntax shims and execute only the real serial fallback."""
+    """Compile the CuMetal branch and execute its real full-domain serial fallback."""
     space = IndexSpace("complete", "orbital", codegen.REPRESENTATIVE_ORBITALS)
     source = input_tensor("x", TensorSpec((Index("p", space),), role="input"))
     node = (
@@ -115,6 +117,7 @@ def test_complete_orbital_scalar_kernel_declares_runtime_extent(
         """
 #include <cassert>
 #include <cstddef>
+#include <initializer_list>
 #define __global__
 #define __shared__
 #define __device__
@@ -123,13 +126,9 @@ struct Dim { unsigned x; };
 Dim threadIdx{0}, blockDim{256};
 double __dadd_rn(double a, double b) { return a+b; }
 double __dmul_rn(double a, double b) { return a*b; }
-namespace generativeqc::tensor {
-template <int Threads>
-struct StrictFp64BlockReduce {
-  struct TempStorage {};
-  static double sum(double value, TempStorage&) { return value; }
-};
-}
+#define GENERATIVEQC_CUDA_PROVIDER_CUMETAL 1
+#include "tensor/cuda_reduction.cuh"
+static_assert(!GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE);
 namespace generativeqc_tensor {
 double finite(double value, int*, int) { return value; }
 }
@@ -137,11 +136,11 @@ double finite(double value, int*, int) { return value; }
         + kernel
         + f"""
 int main() {{
-  const double values[]={{1,2,3,4,5}};
-  for (std::size_t o=0;o<=2;++o) {{
-    for (std::size_t v=0;v<=3;++v) {{
+  double values[300];
+  for (int i=0;i<300;++i) values[i]=(i%7)-3;
+  for (std::size_t o : {{0,1,2}}) {{
+    for (std::size_t v : {{0,1,5,31,32,33,255,256,257}}) {{
       const auto n=o+v;
-      assert(n<32); // Execute only the actual serial fallback, not the provider shim.
       double expected=0.0;
       for (std::size_t i=0;i<n;++i)
         expected += {"values[i]" if operation == "reduce" else "values[i]*values[i]"};
@@ -157,6 +156,13 @@ int main() {{
     executable = native_cxx.build_executable(
         [unit],
         tmp_path / "complete",
-        compile_args=("-std=c++17", "-Wall", "-Wextra", "-Werror"),
+        compile_args=(
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(Path(__file__).resolve().parents[2] / "src"),
+        ),
     )
     subprocess.run([str(executable)], check=True, timeout=10)

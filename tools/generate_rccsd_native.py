@@ -1395,7 +1395,8 @@ def _parallel_scalar_reduction_kernel(
     thread, leaving millions of contraction terms serial.  This lowering
     flattens the same lexicographic reduction domain across one 256-thread
     block and delegates the deterministic block combine to the shared tensor provider.
-    Small domains keep the historical source-major serial order.  Callers must
+    Small domains and providers without block reduction keep the historical
+    source-major serial order. Callers must
     opt in explicitly; independent physical replay therefore remains the
     serial acceptance oracle.
     """
@@ -1454,10 +1455,15 @@ def _parallel_scalar_reduction_kernel(
         else ""
     )
     return f"""__global__ void {prefix}_node_{number}({",".join(arguments)}){{
-{orbital_declaration}  using BlockReduce = generativeqc::tensor::StrictFp64BlockReduce<256>;
+{orbital_declaration}#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE
+  using BlockReduce = generativeqc::tensor::StrictFp64BlockReduce<256>;
   __shared__ BlockReduce::TempStorage temp_storage;
+#endif
   const std::size_t reduction_count={reduction_count};
-  if(reduction_count<32){{
+#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE
+  if(reduction_count<32)
+#endif
+  {{
     if(threadIdx.x==0){{
       double sum=0.0;
       for(std::size_t r=0;r<reduction_count;++r){{
@@ -1467,6 +1473,7 @@ def _parallel_scalar_reduction_kernel(
     }}
     return;
   }}
+#if GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE
   double sum=0.0;
   for(std::size_t r=threadIdx.x;r<reduction_count;r+=blockDim.x){{
 {parallel}
@@ -1474,6 +1481,7 @@ def _parallel_scalar_reduction_kernel(
   sum=BlockReduce::sum(sum,temp_storage);
   if(threadIdx.x==0)
     out[0]=generativeqc_tensor::finite({result},error,{number});
+#endif
 }}"""
 
 

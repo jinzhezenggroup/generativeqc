@@ -1,5 +1,13 @@
 #pragma once
 
+// CuMetal does not provide CUB. Callers use their original source-major serial
+// reduction when this capability is absent; do not substitute a new tree or
+// weaken the provider's strict-FP64 arithmetic contract.
+#if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL) && GENERATIVEQC_CUDA_PROVIDER_CUMETAL
+#define GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE 0
+#else
+#define GENERATIVEQC_TENSOR_HAS_STRICT_FP64_BLOCK_REDUCE 1
+
 #include <cub/block/block_reduce.cuh>
 
 namespace generativeqc::tensor {
@@ -19,3 +27,5 @@ struct StrictFp64BlockReduce {
 };
 
 }  // namespace generativeqc::tensor
+
+#endif

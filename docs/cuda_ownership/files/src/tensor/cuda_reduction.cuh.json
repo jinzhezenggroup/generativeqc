@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_reduction.cuh",
+  "reason": "Shared strict-FP64 block-reduction provider and provider capability boundary. NVIDIA uses CUB with explicit rounded FP64 addition; CuMetal declines the capability so generated consumers retain source-major serial reduction. No scientific equations or method-specific contraction arithmetic are owned here.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
