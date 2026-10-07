@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include "model/gfn2/eigensolver.hpp"
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -166,21 +168,9 @@ struct MemoryRange {
   std::size_t size_bytes = 0u;
 };
 
-bool checked_add(std::size_t left, std::size_t right, std::size_t& result) {
-  if (left > std::numeric_limits<std::size_t>::max() - right) {
-    return false;
-  }
-  result = left + right;
-  return true;
-}
+using ::generativeqc::runtime::checked_add;
 
-bool checked_multiply(std::size_t left, std::size_t right, std::size_t& result) {
-  if (right != 0u && left > std::numeric_limits<std::size_t>::max() / right) {
-    return false;
-  }
-  result = left * right;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 bool align_up(std::size_t value, std::size_t& result) {
   const std::size_t remainder = value % kEigensolverWorkspaceAlignment;

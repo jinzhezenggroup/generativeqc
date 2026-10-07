@@ -1,3 +1,5 @@
+#include "runtime/bounded_workspace.hpp"
+
 #include <cuda_runtime_api.h>
 // xtbloom's CUDA/MKL additional permission is in CUDA_MKL_LINKING_EXCEPTION.
 
@@ -50,17 +52,9 @@ Diagnostic restore_boundary(ScopedCudaDevice& guard, Diagnostic intended,
                                           : failure(status, Error::kCudaError, Field::kNone);
 }
 
-bool checked_add(std::size_t first, std::size_t second, std::size_t& output) noexcept {
-  if (first > std::numeric_limits<std::size_t>::max() - second) return false;
-  output = first + second;
-  return true;
-}
+using ::generativeqc::runtime::checked_add;
 
-bool checked_multiply(std::size_t first, std::size_t second, std::size_t& output) noexcept {
-  if (first != 0u && second > std::numeric_limits<std::size_t>::max() / first) return false;
-  output = first * second;
-  return true;
-}
+using ::generativeqc::runtime::checked_multiply;
 
 bool align_cursor(std::size_t cursor, std::size_t alignment, std::size_t& output) noexcept {
   const std::size_t remainder = cursor % alignment;
