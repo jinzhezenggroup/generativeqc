@@ -508,9 +508,14 @@ def test_h3_plus_exercises_diis_and_force_invariants() -> None:
 
 def test_single_system_cuda_executes_full_scientific_path_when_available() -> None:
     atoms = [("H", (-1.0, 0.0, 0.0)), ("H", (0.0, 0.0, 0.0)), ("H", (1.0, 0.0, 0.0))]
-    reference = Calculator(device="cpu").singlepoint(atoms, charge=1)
+    # Iteration parity compares identical seeds; automatic CPU HF now uses MINAO.
+    reference = Calculator(device="cpu", initial_guess=None).singlepoint(
+        atoms, charge=1
+    )
     try:
-        candidate = Calculator(device="cuda").singlepoint(atoms, charge=1)
+        candidate = Calculator(device="cuda", initial_guess=None).singlepoint(
+            atoms, charge=1
+        )
     except RuntimeError as error:
         pytest.skip(f"CUDA device unavailable: {error}")
     assert candidate.executed_backend == "cuda"

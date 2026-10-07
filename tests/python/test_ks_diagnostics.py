@@ -45,6 +45,7 @@ def test_physical_components_and_history_match_independent_state(
         max_iterations=150,
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
+        initial_guess=None,
     )
     labels = [f"H{i}" for i in range(3)]
     basis = {label: [] for label in labels}

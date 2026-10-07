@@ -721,6 +721,18 @@ typedef struct generativeqc_initial_guess_diagnostic {
 } generativeqc_initial_guess_diagnostic;
 
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_options_version(void);
+/** Additive provider capabilities, independent of the options-struct schema.
+ * A provider bit does not waive its backend, spin, basis or resource admission.
+ * Older libraries may omit this query, including schema-1 HF/LDA-only builds.
+ * Callers must ignore unknown bits and require positive provider support before
+ * automatically selecting a guess. The query does not allocate or initialize
+ * a device. */
+enum {
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_HF = 1U << 0,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA = 1U << 1,
+  GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO = 1U << 2
+};
+GENERATIVEQC_API uint32_t generativeqc_initial_guess_capabilities_v1(void);
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_initial_guess_diagnostic* out);
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
