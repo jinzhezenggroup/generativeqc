@@ -1,7 +1,7 @@
 # Native structured materialization source receipt
 
-Source commit: `300c6da529e03211433613605c8cf999e0de5e4c`.
-Source tree: `288681eccf56868c193df85ab26b2dd20001a08b`.
+Source commit: `e5d3573aa98f95f1b2fb8a5c4296095204136708`.
+Source tree: `56b648a812a65d57a875bb30abbdd80c06754b1f`.
 The scanned files are unchanged from that source commit. The scanner correction
 was uncommitted during receipt generation; `scan.json` binds its exact bytes
 and both imported scanner modules with SHA-256. This is a local Windows source
@@ -44,7 +44,8 @@ The PR uses **Refs #1631** and leaves the parent issue open.
 This corrected receipt supersedes the initial scanner snapshot after repairing
 immutable extent alias/full-domain equality, constant-domain growth, zero-offset
 alias classification, recursive source-link containment/deduplication and
-canonical-source dirty-state provenance. The
+canonical-source dirty-state provenance, including resolved directory selections
+and the scope of ignored-file checks. The
 initial receipt is retained in commit `a947a002f`; its scientific-source commit
 was `d2593148661f0b491b6254a59779017c21ac74f4`. All four MP2 files are identical
 across those source commits; only a real scanner change caused regeneration.
@@ -57,7 +58,8 @@ the same suite passed **159 tests and 40 subtests**. After the recursive-source
 correction, it passed **162 tests and 40 subtests** with all three real-symlink
 regressions executed. After the zero-offset correction, it passed **164 tests and
 43 subtests**. After the canonical provenance correction, it passed **168 tests
-and 48 subtests** (28 new-tool unittest cases), including real Git/symlink probes
+and 48 subtests**, followed by **170 tests and 48 subtests** for resolved directory
+selections and ignored-file scope (30 new-tool unittest cases). These include real Git/symlink probes
 for modified, untracked and ignored canonical files, clean alias uncertainty,
 broken descendant links and unavailable Git. The first rerun hit a Windows
 permission error in pytest's shared temporary directory; a fresh task-specific

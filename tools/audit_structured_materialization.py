@@ -634,12 +634,13 @@ def audit_tree(
     sources: dict[str, str] = {}
     findings = []
     candidates: set[Path] = set()
+    resolved_selections: set[str] = set()
     alias_topology_unverified = False
     for path in paths:
         selected = root / path
         target = selected.resolve()
         alias_topology_unverified |= selected != target
-        target.relative_to(root)
+        resolved_selections.add(target.relative_to(root).as_posix())
         if not target.exists():
             raise ValueError(f"missing input path: {path}")
         for candidate in [target] if target.is_file() else target.rglob("*"):
@@ -690,20 +691,24 @@ def audit_tree(
     source_dirty: bool | None = (
         None if dirty is None or alias_topology_unverified else False
     )
-    status_paths = sorted(set(paths) | sources.keys())
-    for begin in range(0, len(status_paths), 32):
-        status = git(
-            "status",
-            "--porcelain",
-            "--untracked-files=all",
-            "--ignored",
-            "--",
-            *status_paths[begin : begin + 32],
-        )
-        if status:
-            source_dirty = True
-        elif status is None and source_dirty is not True:
-            source_dirty = None
+    status_checks = (
+        (sorted(set(paths) | resolved_selections | sources.keys()), ()),
+        (sorted(sources), ("--ignored",)),
+    )
+    for status_paths, extra_options in status_checks:
+        for begin in range(0, len(status_paths), 32):
+            status = git(
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                *extra_options,
+                "--",
+                *status_paths[begin : begin + 32],
+            )
+            if status:
+                source_dirty = True
+            elif status is None and source_dirty is not True:
+                source_dirty = None
     return {
         "schema": "generativeqc.native-structured-materialization.v1",
         "advisory_only": True,

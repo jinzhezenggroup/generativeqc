@@ -82,3 +82,10 @@ literal-pathspec batches with ignored/untracked status. Known changes remain
 unless a change is known. Endpoint identities cannot prove intermediate alias
 topology unchanged. Strict descendant resolution rejects broken links before
 inventory filtering.
+
+Retain resolved selection roots in the ordinary status check so deleted files
+under a directory alias remain known changes even after disappearing from the
+canonical file set. Restrict the extra ignored-file query to actual scanned
+files; unrelated ignored logs under a selected directory do not taint clean
+source provenance. Both boundaries have real Git-backed failure-before-repair
+regressions.

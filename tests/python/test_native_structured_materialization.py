@@ -358,7 +358,7 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
 
     def _symlink(self, link: Path, target: Path) -> None:
         try:
-            link.symlink_to(target)
+            link.symlink_to(target, target_is_directory=target.is_dir())
         except (NotImplementedError, OSError) as error:
             self.skipTest(f"source symlinks unavailable: {error}")
 
@@ -416,6 +416,8 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
                 "user.name=Provenance fixture",
                 "-c",
                 "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
                 *args,
             ],
             check=True,
@@ -475,6 +477,39 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
             self._symlink(source_dir / "broken.cpp", source_dir / "missing.cpp")
             with self.assertRaises(ValueError):
                 audit_tree(root, ("src",))
+
+    def test_directory_alias_detects_deleted_canonical_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            canonical = root / "canonical"
+            canonical.mkdir()
+            source = canonical / "actual.cpp"
+            source.write_text(producer(OV), encoding="utf-8")
+            self._symlink(root / "directory-alias", canonical)
+            self._git(root, "init", "-q")
+            self._git(root, "add", "--", "canonical", "directory-alias")
+            self._git(root, "commit", "-qm", "provenance fixture")
+            source.unlink()
+            report = audit_tree(root, ("directory-alias",))
+            self.assertEqual(report["scanned_files"], 0)
+            self.assertIs(report["provenance"]["scanned_source_dirty"], True)
+
+    def test_unscanned_ignored_files_do_not_taint_clean_source_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_dir = root / "src"
+            source_dir.mkdir()
+            (source_dir / "actual.cpp").write_text(producer(OV), encoding="utf-8")
+            (source_dir / "ignored.log").write_text("unused", encoding="utf-8")
+            (root / ".gitignore").write_text("/src/ignored.log\n", encoding="utf-8")
+            self._git(root, "init", "-q")
+            self._git(root, "add", "--", "src/actual.cpp", ".gitignore")
+            self._git(root, "commit", "-qm", "provenance fixture")
+            report = audit_tree(root, ("src",))
+            self.assertEqual(
+                set(report["provenance"]["source_hashes"]), {"src/actual.cpp"}
+            )
+            self.assertIs(report["provenance"]["scanned_source_dirty"], False)
 
     def test_missing_git_preserves_hashes_with_unknown_git_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
