@@ -516,7 +516,7 @@ def _getitem_generic(value: VibeArray, key: object) -> VibeArray:
             )
         start, stop, step = item.indices(extent)
         positions = tuple(range(start, stop, step))
-        if step == 1:
+        if step == 1 and positions:
             ranges = tuple(
                 (start, stop) if axis == source_axis else (0, node.spec.shape[axis])
                 for axis in range(len(node.spec.shape))
