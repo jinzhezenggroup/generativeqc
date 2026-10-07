@@ -127,9 +127,14 @@ print(json.dumps({"before": before, "after": after}))
 """
     result = subprocess.run(
         [sys.executable, "-I", "-c", script, str(ROOT), str(checkout)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
+    )
+    assert result.returncode == 0, (
+        f"captured-source subprocess exited {result.returncode}\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
     )
     observed = json.loads(result.stdout)
     assert observed["before"]["work"]["executed_elements"] == 16
