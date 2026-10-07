@@ -34,6 +34,8 @@ struct CudaDensityFittingIntegralSourceImpl {
   unsigned value_math{};   // Frozen with mapping; only qualified generated math for auxiliary g.
   bool has_auxiliary_g{};  // Immutable basis domain; auxiliary g uses explicit polynomial
                            // value/response lowering.
+  integrals::CoulombRange range{integrals::CoulombRange::Full};
+  double omega{};
   std::size_t batch_size{};
   std::size_t public_nbf{};
   std::size_t public_naux{};
@@ -67,6 +69,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems,
     CudaDensityFittingIntegralSourceImpl** source, std::vector<double>& metrics, std::size_t& nbf,
-    std::size_t& naux, std::string& detail, const CudaDfSourcePolicy& policy);
+    std::size_t& naux, std::string& detail, const CudaDfSourcePolicy& policy,
+    integrals::CoulombRange range = integrals::CoulombRange::Full, double omega = 0.0);
 
 }  // namespace generativeqc::scf::cuda_execution
