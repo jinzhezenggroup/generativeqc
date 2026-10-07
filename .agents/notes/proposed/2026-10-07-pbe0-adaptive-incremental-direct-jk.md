@@ -56,6 +56,27 @@ GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK_DENSITY_RMS_THRESHOLD=<nonnegative finit
 
 Production defaults remain unchanged.
 
+## Public capacity-planning boundary
+
+Public KS resource planning fails closed when either incremental selector is
+enabled. Inventory v1 has no mode argument and describes the ordinary state and
+history only. For two default-grid H2/STO-3G owners at max_iterations=1, actual
+source layout/ABI probes found ordinary exact device budgets short by 104 bytes
+for RKS and 168 bytes for UKS, even after including the retained 512 MiB force
+arena. The ordinary host history bound also omits incremental final-closure
+capacity. An unrelated conservative force allowance must not stand in for these
+missing allocations.
+
+The narrow repair rejects budgeted incremental preparation, including an old
+ordinary ResourcePlan reused after enabling the selector, without extending the
+ABI or changing native scientific execution. Both selectors use native strict
+0/off/1/on parsing and OR semantics. Explicit unbudgeted experiments retain the
+existing native eligibility checks; they do not acquire a public capacity
+guarantee. Revisit this boundary only when a mode-bound public inventory covers
+all retained anchor/delta buffers, closure history and preparation lifetimes.
+Host regression tests establish admission and identity behavior, not GPU
+allocation, numerical parity or endpoint performance.
+
 ## Qualification plan
 
 PBE0 remains the first performance gate because retained cold/warm/moved evidence already exists. Use one frozen source/library and the complete 48/96-atom PBE0/def2-SVP protocol. Retain cold, five warm, moved and five moved-warm endpoints, exact vectors, actual SCF histories and incremental work diagnostics. Compare:

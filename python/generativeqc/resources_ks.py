@@ -39,6 +39,20 @@ from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 
 
+def _incremental_direct_jk_controls() -> dict[str, bool]:
+    """Match both native benchmark selectors, including legacy OR semantics."""
+    controls = {}
+    for name in (
+        "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK",
+        "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK",
+    ):
+        value = os.environ.get(name)
+        if value not in (None, "0", "off", "1", "on"):
+            raise ValueError(f"{name} must be 0/off or 1/on")
+        controls[name] = value in ("1", "on")
+    return controls
+
+
 def _item_host_inventory(
     item: typing.Any,
     *,
@@ -316,6 +330,8 @@ def ks_resource_request(
         raise NotImplementedError(
             "CUDA KS planning does not claim scaled/global-hybrid execution"
         )
+    incremental_controls = _incremental_direct_jk_controls()
+    incremental_requested = any(incremental_controls.values())
     systems = tuple(tuple(Atom.from_value(a) for a in atoms) for atoms in systems)
     if not systems or any(not atoms for atoms in systems):
         raise ValueError("KS resource planning requires nonempty systems")
@@ -416,6 +432,8 @@ def ks_resource_request(
                 "GENERATIVEQC_ONE_ELECTRON_VALUE_MAPPING"
             ),
         )
+    if incremental_requested:
+        controls["incremental_direct_jk"] = incremental_controls
     # AUTO runs two separately bounded nonlinear stages. Reserve the native
     # owner and exported history for both stages plus strict closure corrections.
     history_iterations = max_iterations
@@ -438,6 +456,23 @@ def ks_resource_request(
     if backend == "cuda":
         exclusions += (
             "CUDA driver/context/modules, compiler-managed stacks and pool/page retention",
+        )
+    if incremental_requested:
+        # Inventory v1 has no incremental-mode input. Its ordinary device
+        # layout and strict host-history bound omit the anchor/delta buffers
+        # and final-closure records. Fail before querying/loading a library;
+        # never admit that experimental owner under an ordinary resource plan.
+        return ResourceRequest(
+            name,
+            identity,
+            (),
+            exclusions,
+            unsupported_reason=(
+                "KS resource planning does not support experimental incremental "
+                "Direct-J/K storage and closure history; unset "
+                "GENERATIVEQC_KS_INCREMENTAL_DIRECT_JK and "
+                "GENERATIVEQC_PBE0_INCREMENTAL_DIRECT_JK or set both to 0/off"
+            ),
         )
     host = [
         _item_host_inventory(
