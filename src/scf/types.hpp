@@ -32,7 +32,8 @@ struct IncrementalDirectJkDiagnostic {
   std::uint64_t anchor_full_builds{};
   /** Exact provider applications to delta-D for accepted SCF iterates. */
   std::uint64_t delta_builds{};
-  /** Periodic accepted-iterate rebuilds after an existing anchor. */
+  /** Accepted full refreshes after an existing anchor. The stable ABI field
+   * name is historical; this includes cadence- and density-RMS-driven rebuilds. */
   std::uint64_t periodic_rebuilds{};
   /** Full proposal/audit builds that never mutate the accepted anchor. */
   std::uint64_t bypass_full_builds{};
