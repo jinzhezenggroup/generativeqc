@@ -403,19 +403,17 @@ def _certificate(
                     offset, coordinate = axis.left.id, axis.right
                 if not isinstance(coordinate, ast.Name) or coordinate.id not in loops:
                     raise Unsupported("unsupported index axis")
+                if not _polynomial(extent(offset)):
+                    offset = "0"
                 variable = coordinate.id
                 lower, operator, upper = loops[variable]
                 if offset != "0":
-                    expected = ast.BinOp(
-                        ast.Name(dimension, ast.Load()),
-                        ast.Sub(),
-                        ast.Name(offset, ast.Load()),
-                    )
                     if (
                         lower != "0"
                         or operator != "<"
                         or upper not in aliases
-                        or _key(aliases[upper]) != _key(expected)
+                        or _polynomial(extent(upper))
+                        != _polynomial(extent(f"{dimension} - {offset}"))
                     ):
                         raise Unsupported("unproved occupied/virtual offset partition")
                 elif lower != "0" and (

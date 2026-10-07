@@ -67,3 +67,9 @@ duplicate same-root aliases and aliases bypassing the vendored-tree exclusion.
 Resolve and root-check each discovered candidate, then apply canonical-path
 deduplication and exclusion before reading bytes. Three filesystem regressions
 fail before that repair and execute with real symlinks afterward.
+
+Delta review found that a zero-offset alias still hid a full dense domain because
+offsets were compared by spelling. Use the same bounded polynomial equality for
+offset partitions and canonicalize proved-zero offsets before full-domain and
+triangle decisions. Dense alias regressions check the classification and absence
+of storage advice, with independent small-shape address enumeration.

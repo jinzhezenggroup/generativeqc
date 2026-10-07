@@ -106,6 +106,38 @@ class NativeStructuredMaterializationTests(unittest.TestCase):
                 self.assertIn("all", finding["extent_aliases"])
                 self.assertIsNone(finding["recommendation"])
 
+    def test_zero_offset_alias_does_not_hide_a_dense_write_domain(self) -> None:
+        body = (
+            "for (std::size_t i=0; i<extent; ++i) "
+            "for (std::size_t j=0; j<n; ++j) weights[(zero+i)*n+j] = 1;"
+        )
+        for setup in (
+            "const auto zero = 0; const auto extent = n - zero;",
+            "const auto first = 0; const auto zero = first; const auto extent = n-zero;",
+            "const auto zero = n+n-2*n; const auto extent = n-zero;",
+        ):
+            with self.subTest(setup=setup):
+                finding = audit_native(producer(body, setup, shape="n*n"))[0]
+                self.assertEqual(finding["classification"], "dense-write-domain")
+                self.assertIsNone(finding["recommendation"])
+                self.assertIsNone(finding["expansion_ratio"])
+                self.assertEqual(finding["domains"][0]["axes"][0]["offset"], "0")
+        for n in (1, 2, 4, 7):
+            zero = 0
+            addresses = {(zero + i) * n + j for i in range(n - zero) for j in range(n)}
+            self.assertEqual(addresses, set(range(n * n)))
+
+    def test_zero_offset_alias_preserves_lower_triangle(self) -> None:
+        source = producer(
+            "for (std::size_t i=0; i<extent; ++i) "
+            "for (std::size_t j=0; j<=i; ++j) weights[(zero+i)*n+j] = 1;",
+            "const auto zero = n-n; const auto extent = n-zero;",
+            shape="n*n",
+        )
+        finding = audit_native(source)[0]
+        self.assertEqual(finding["domains"][0]["kind"], "lower-triangle")
+        self.assertEqual(finding["written_elements"], "n*(n+1)/2")
+
     def test_fixed_extent_write_and_allocation_have_constant_growth(self) -> None:
         source = producer(
             "for (std::size_t i=0; i<small; ++i) weights[i*n+i] = 1;",
