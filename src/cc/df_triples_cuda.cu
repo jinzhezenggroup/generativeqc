@@ -341,15 +341,13 @@ __global__ void audit_matrix(const double* c, std::size_t m, std::size_t n, std:
  * Scientific callers still supply the compiler-derived transpose/stride data.
  */
 inline void execute_strided_fp64_product(generativeqc_tensor::Context& context, char ta, char tb,
-                                         std::size_t m, std::size_t n, std::size_t k,
-                                         double alpha, const double* a, std::size_t lda,
-                                         const double* b, std::size_t ldb, double beta, double* c,
-                                         std::size_t ldc) {
-  generativeqc_tensor::blas_check(
-      cublasDgemm(context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                  tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(m),
-                  static_cast<int>(n), static_cast<int>(k), &alpha, a, static_cast<int>(lda), b,
-                  static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
+                                         std::size_t m, std::size_t n, std::size_t k, double alpha,
+                                         const double* a, std::size_t lda, const double* b,
+                                         std::size_t ldb, double beta, double* c, std::size_t ldc) {
+  generativeqc_tensor::blas_check(cublasDgemm(
+      context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
+      static_cast<int>(m), static_cast<int>(n), static_cast<int>(k), &alpha, a,
+      static_cast<int>(lda), b, static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
 }
 
 // Pure view packing/scatter. The scientific V products stay compiler-owned.
@@ -634,8 +632,7 @@ static DFCudaResponseResult pullback_df_cuda_impl(
     auto gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk, double alpha,
                     const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
                     double* c, std::size_t ldc) {
-      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta,
-                                   c, ldc);
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
       const auto count = checked_mul(m, n);
       const auto blocks =
           static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
@@ -884,8 +881,7 @@ static DFCudaFockResult fock_response_df_cuda_impl(
     auto gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk, double alpha,
                     const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
                     double* c, std::size_t ldc) {
-      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta,
-                                   c, ldc);
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
       const auto count = checked_mul(m, n);
       const auto blocks =
           static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
@@ -1100,8 +1096,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     auto forward_gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk,
                             double alpha, const double* a, std::size_t lda, const double* b,
                             std::size_t ldb, double beta, double* c, std::size_t ldc) {
-      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta,
-                                   c, ldc);
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
       const auto count = checked_mul(m, n);
       const auto blocks =
           static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
@@ -1113,8 +1108,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     auto reverse_gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk,
                             double alpha, const double* a, std::size_t lda, const double* b,
                             std::size_t ldb, double beta, double* c, std::size_t ldc) {
-      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta,
-                                   c, ldc);
+      execute_strided_fp64_product(context, ta, tb, m, n, kk, alpha, a, lda, b, ldb, beta, c, ldc);
       const auto count = checked_mul(m, n);
       const auto blocks =
           static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
