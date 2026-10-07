@@ -11,13 +11,20 @@ from generativeqc.checkpoint import CheckpointError
 from generativeqc.progressive import projected_singlepoint
 from generativeqc.projection import ProjectionPolicy, ProjectionRejected
 
+from benchmarks.df_component_ledger import aggregate_host, read_host_trace
+
 ATOMS = [("H", (0.0, 0.0, -0.7)), ("H", (0.1, 0.0, 0.7))]
 
 
 @pytest.mark.parametrize("method,charge,multiplicity", [("rhf", 0, 1), ("uhf", 1, 2)])
 @pytest.mark.parametrize("fitted", [False, True])
 def test_small_to_large_matches_independent_target_energy_force(
-    method: typing.Any, charge: typing.Any, multiplicity: typing.Any, fitted: typing.Any
+    method: typing.Any,
+    charge: typing.Any,
+    multiplicity: typing.Any,
+    fitted: typing.Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     options = {
         "method": method,
@@ -29,12 +36,45 @@ def test_small_to_large_matches_independent_target_energy_force(
     target = Calculator(
         basis="def2-svp", density_fitting="cpu" if fitted else "none", **options
     )
-    result = projected_singlepoint(
-        target, source, ATOMS, charge=charge, multiplicity=multiplicity
+    trace_path = tmp_path / "progressive.host.jsonl"
+    with monkeypatch.context() as trace:
+        trace.setenv("GENERATIVEQC_DF_HOST_TRACE", str(trace_path))
+        result = projected_singlepoint(
+            target, source, ATOMS, charge=charge, multiplicity=multiplicity
+        )
+    # The progressive call executes source, then target. Exclude preparation,
+    # projection and source work, and stop tracing before the independent solve.
+    executions = [
+        record
+        for record in read_host_trace(trace_path)
+        if record["regions"][0]["name"] == "batch_execute"
+    ]
+    assert len(executions) == 2
+    source_trace, target_trace = executions
+    finalizations = [
+        row for row in target_trace["regions"] if row["name"] == "host_finalization"
+    ]
+    assert len(finalizations) == 1
+    assert finalizations[0]["nbf"] == result.target_density.shape[-1]
+    assert all(
+        row["nbf"] != finalizations[0]["nbf"]
+        for row in source_trace["regions"]
+        if row["name"] == "host_finalization"
     )
+    phases = aggregate_host([target_trace])["exclusive_phases"]
+    physical = phases.get("final_state_fock_build", {}).get("calls", 0)
+    corrections = phases.get("strict_final_correction", {}).get("calls", 0)
     cold = target.singlepoint(ATOMS, charge=charge, multiplicity=multiplicity)
     assert result.target.restart_origin == "basis_projection"
-    assert result.target.fock_builds == result.target.iterations + 2
+    if method == "rhf":
+        assert physical == corrections == 0
+        assert result.target.fock_builds == result.target.iterations + 2
+    else:
+        # UHF forces rebuild once before selection, then evaluate the physical
+        # Fock at the candidate and every bounded strict correction.
+        assert 0 <= corrections <= 32
+        assert physical == 1 + corrections
+        assert result.target.fock_builds == result.target.iterations + 1 + physical
     assert (
         result.target.converged
         and result.diagnostics["target_verification"] == "executed"

@@ -511,6 +511,26 @@ void provider_failure_and_nonlinear_exhaustion() {
               result.fock_evaluations == 5 && result.eigen_solves == 4 &&
               result.density_updates == 4 && result.candidate_rejections == 4,
           "nonlinear correction cycle bypassed the strict physical residual");
+  // The CPU UHF force caller uses 32 corrections. A larger finite budget must
+  // still fail closed on a nonstationary two-cycle and report every failed step.
+  a.id.model = resolve_fock_build(make_hf_fock_spec(FockSpin::Unrestricted), FockBackend::Cpu);
+  a.id.occupied = {1, 1};
+  a.d = {{1, 0, 0, 0}, {1, 0, 0, 0}};
+  const PhysicalFockOperation spin_cycle = [](const auto& id, const auto& d) {
+    return PhysicalFockFrame{id, true, d};
+  };
+  for (unsigned budget : {0U, 32U}) {
+    a.limits.maximum_corrections = budget;
+    const auto failed = select_final_state(a.id, a.s, a.h, a.x, a.nuclear, a.d, nullptr, spin_cycle,
+                                           diagonal, a.limits, true, false, backend);
+    require(
+        !failed.state && failed.status == FinalStateStatus::NumericalFailure &&
+            failed.detail == "strict final-state correction exhausted without a consistent state" &&
+            failed.fock_evaluations == budget + 1 && failed.eigen_solves == 2 * budget &&
+            failed.density_updates == budget && failed.candidate_rejections == budget &&
+            failed.fixed_point_checks == 0 && failed.fixed_point_eigen_solves == 0,
+        "bounded UHF exhaustion published a state or miscounted failed work");
+  }
 }
 }  // namespace
 

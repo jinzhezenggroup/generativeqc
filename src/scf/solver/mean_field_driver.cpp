@@ -1,6 +1,7 @@
 #include "scf/solver/mean_field_driver.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -14,6 +15,7 @@
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/diis.hpp"
+#include "scf/solver/final_state.hpp"
 #include "scf/solver/proposal_control.hpp"
 #include "solver/self_consistent.hpp"
 
@@ -28,9 +30,9 @@ using reference::density_from_orbitals;
 using reference::density_rms;
 using reference::EigenResult;
 using reference::electronic_energy;
-using reference::energy_weighted_density;
 using reference::generalized_eigen;
 using reference::Matrix;
+using reference::multiply;
 using reference::residual_rms;
 using reference::split_spin_matrices;
 using reference::uhf_electronic_energy;
@@ -151,6 +153,17 @@ Matrix build_fock(const PreparedFockPlan& plan, const Matrix& hcore, const Matri
   return assemble_fock(plan.strategy(), hcore, plan.build(density)).alpha;
 }
 
+/** Build the Pulay energy-weighted density from the exact determinant returned
+ * to force consumers and the physical Fock evaluated at that same density.
+ * A frame obtained from F[D_old] may project the returned D, but its orbital
+ * energies must not be reused after rebuilding F[D]. */
+Matrix physical_weighted_density(const Matrix& density, const Matrix& fock, std::size_t n,
+                                 double occupation_weight) {
+  Matrix weighted = multiply(multiply(density, fock, n), density, n);
+  for (double& value : weighted) value /= occupation_weight;
+  return weighted;
+}
+
 /** Substitute only the provider of this actual matrix. Iterative matrices may
  * be DIIS-extrapolated, so their frames never authorize physical-state reuse. */
 EigenResult diagonalize(const PreparedFockPlan& plan, const Matrix& matrix,
@@ -183,18 +196,26 @@ void finalize_scf(const PreparedFockPlan& plan, const integrals::IntegralData& i
   final_fock = build_fock(plan, ints.hcore, density);
   result.energy = electronic_energy(density, ints.hcore, final_fock) + ints.nuclear_repulsion;
   if (compute_forces) {
-    const Matrix weighted = energy_weighted_density(orbitals.vectors, orbitals.values, n, occupied);
+    const Matrix weighted = physical_weighted_density(density, final_fock, n, 2.0);
     result.forces =
         gradient::analytic_forces(ints, density, weighted, plan.energy_derivative(density));
   }
   result.density = density;
 }
 
-void finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralData& ints,
-                  const Matrix& orthogonalizer, std::size_t alpha_occupied,
-                  std::size_t beta_occupied, Matrix& alpha_density, Matrix& beta_density,
-                  bool compute_forces, ScfResult& result,
-                  const initial_guess::EigenOperation& target_eigen) {
+std::uint64_t next_host_final_state_epoch() {
+  static std::atomic<std::uint64_t> next{1};
+  const auto epoch = next.fetch_add(1, std::memory_order_relaxed);
+  if (epoch == 0 || epoch == std::numeric_limits<std::uint64_t>::max())
+    throw std::runtime_error("host final-state epoch exhausted");
+  return epoch;
+}
+
+unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralData& ints,
+                      const Matrix& orthogonalizer, std::size_t alpha_occupied,
+                      std::size_t beta_occupied, Matrix& alpha_density, Matrix& beta_density,
+                      const ScfOptions& options, ScfResult& result,
+                      const initial_guess::EigenOperation& target_eigen) {
   const std::size_t n = ints.nbf;
   runtime::host_trace::Region final_trace("host_finalization", n);
   auto [alpha_fock, beta_fock] = build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
@@ -204,20 +225,53 @@ void finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralData& i
                                           PreparedFockPlan::EigenUse::Finalization, target_eigen);
   alpha_density = density_from_orbitals(alpha_orbitals.vectors, n, alpha_occupied, 1.0);
   beta_density = density_from_orbitals(beta_orbitals.vectors, n, beta_occupied, 1.0);
-  std::tie(alpha_fock, beta_fock) = build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
-  result.energy =
-      uhf_electronic_energy(alpha_density, beta_density, ints.hcore, alpha_fock, beta_fock) +
-      ints.nuclear_repulsion;
-  if (compute_forces) {
-    const Matrix alpha_weighted = energy_weighted_density(
-        alpha_orbitals.vectors, alpha_orbitals.values, n, alpha_occupied, 1.0);
-    const Matrix beta_weighted =
-        energy_weighted_density(beta_orbitals.vectors, beta_orbitals.values, n, beta_occupied, 1.0);
+  unsigned physical_fock_builds = 1;
+
+  if (options.compute_forces) {
+    const auto epoch = next_host_final_state_epoch();
+    FinalStateIdentity identity{
+        {epoch, epoch, 2, 2}, epoch, plan.strategy(), {alpha_occupied, beta_occupied}};
+    FinalFrameCandidate candidate{identity, 1, true, {alpha_orbitals, beta_orbitals}};
+    const PhysicalFockOperation physical = [&](const auto& current, const auto& densities) {
+      if (densities.size() != 2)
+        throw std::runtime_error("UHF final-state provider lost a spin density");
+      auto [alpha, beta] = build_uhf_focks(plan, ints.hcore, densities[0], densities[1]);
+      return PhysicalFockFrame{current, true, {std::move(alpha), std::move(beta)}};
+    };
+    const initial_guess::EigenOperation eigen = [&](const auto& fock, const auto*, const auto*,
+                                                    auto) {
+      return diagonalize(plan, fock, ints, orthogonalizer, PreparedFockPlan::EigenUse::Finalization,
+                         target_eigen);
+    };
+    // The #1790 standard-control determinant contracts by about 0.897 per
+    // physical projection and needs 24 corrections. Keep a finite margin:
+    // at most 33 selector evaluations plus the initial physical Fock above.
+    auto selected = select_final_state(
+        identity, ints.overlap, ints.hcore, orthogonalizer, ints.nuclear_repulsion,
+        {alpha_density, beta_density}, &candidate, physical, eigen,
+        {options.density_tolerance, options.energy_tolerance, 32, false, false}, true);
+    physical_fock_builds += selected.fock_evaluations;
+    if (!selected.state)
+      throw std::runtime_error("CPU UHF final-state correction failed: " + selected.detail);
+
+    alpha_density = std::move(selected.state->density[0]);
+    beta_density = std::move(selected.state->density[1]);
+    alpha_fock = std::move(selected.state->fock[0]);
+    beta_fock = std::move(selected.state->fock[1]);
+    result.energy = selected.state->diagnostic.energy;
     result.forces = gradient::analytic_uhf_forces(
-        ints, alpha_density, beta_density, alpha_weighted, beta_weighted,
-        plan.energy_derivative(alpha_density, beta_density));
+        ints, alpha_density, beta_density, selected.state->weighted_density[0],
+        selected.state->weighted_density[1], plan.energy_derivative(alpha_density, beta_density));
+  } else {
+    std::tie(alpha_fock, beta_fock) =
+        build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
+    ++physical_fock_builds;
+    result.energy =
+        uhf_electronic_energy(alpha_density, beta_density, ints.hcore, alpha_fock, beta_fock) +
+        ints.nuclear_repulsion;
   }
   result.density = concatenate(alpha_density, beta_density);
+  return physical_fock_builds;
 }
 
 }  // namespace
@@ -467,14 +521,17 @@ ScfResult run_uhf_host_plan(const core::System& system, const ScfOptions& option
     result.density = concatenate(alpha_density, beta_density);
     return result;
   }
-  result.fock_builds += 2;  // Physical rebuilds performed by finalization.
-  incremental_jk.note_post_scf_full_builds(2);
   const runtime::CpuRetainedCapacity anchor_capacity(incremental_jk.numeric_capacity());
 
-  // As in RHF, rebuild from the un-extrapolated converged spin Fock matrices
-  // before forming orbital-weighted Pulay densities and analytic forces.
-  finalize_uhf(plan, ints, orthogonalizer, alpha_occupied, beta_occupied, alpha_density,
-               beta_density, options.compute_forces, result, target_eigen);
+  // Rebuild from the un-extrapolated converged spin Fock matrices. Force
+  // publication then uses the shared bounded physical final-state correction,
+  // preserving the requested SCF controls while rejecting a nonstationary D/F
+  // pair before constructing Pulay weights.
+  const unsigned post_scf_builds =
+      finalize_uhf(plan, ints, orthogonalizer, alpha_occupied, beta_occupied, alpha_density,
+                   beta_density, options, result, target_eigen);
+  result.fock_builds += post_scf_builds;
+  incremental_jk.note_post_scf_full_builds(post_scf_builds);
   return result;
 }
 
