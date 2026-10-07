@@ -783,8 +783,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (range_correction->backend == scf::FockBackend::Cuda &&
          !range_correction->spec.coulomb.present && range_correction->spec.exchange.present &&
          range_correction->spec.exchange.approximation == scf::FockApproximation::Exact);
+    auto incremental_policy_options = options;
+    // The prepared provider owns the executed screening contract. Native callers
+    // may supply ScfOptions independently, so never let an options mismatch turn
+    // a screened lower into an unbounded exact-linear delta chain.
+    incremental_policy_options.screening_tolerance = strategy.screening_tolerance;
     incremental_direct_jk_policy = scf::resolve_incremental_direct_jk_policy(
-        options,
+        incremental_policy_options,
         {static_cast<bool>(fock_binding) && !fitted_coulomb &&
              scf::direct_jk_incremental_exact_eligible(strategy) && range_incremental_eligible,
          true, precision_schedule.any_lower_precision()});
@@ -858,7 +863,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto diagnostic_iterations =
         precision_schedule.any_lower_precision()
             ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
-            : options.max_iterations;
+            : (incremental_direct_jk ? sum(options.max_iterations, kMaximumFinalCorrections)
+                                     : options.max_iterations);
     output.dft_diagnostic.history.reserve(diagnostic_iterations);
     resource.retained_host_numeric_bytes =
         (host_xc_density.capacity() + host_xc_alpha.capacity() + host_xc_beta.capacity() +
