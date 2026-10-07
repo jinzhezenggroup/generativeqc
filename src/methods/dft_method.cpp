@@ -1229,10 +1229,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "density-fitted stationary derivative source is nonfinite";
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
-    // H'/S' were exported during provider preparation; their contractions here
-    // are host work and perform no force-time one-electron CUDA transfers.
-    // DF response has separate scratch/transfers which this compact publication
-    // bridge does not measure. Do not invent those counts from spin dimensions.
+    // H'/S' derivative tensors remain retained host provider data. CUDA may
+    // instead contract the exact final resident D/W with the paired device
+    // consumer; slots 2/4/5 report that consumer's device peak and actual
+    // metadata/output movement. DF J/K response scratch/transfers remain
+    // separate and are not inferred from spin dimensions.
     work[0] = fock_.diagnostic().device_bytes;
     work[2] = one_electron_device_bytes;
     work[3] = publication_peak_bytes;
