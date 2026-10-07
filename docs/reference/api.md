@@ -68,10 +68,15 @@ and activation rules.
 
 ## Programmable XC API
 
+`generativeqc.extensions.xc.FunctionalSpec` is the same canonical public class
+already documented as `generativeqc.FunctionalSpec`; the alias is excluded below
+only to avoid registering the same Sphinx object twice.
+
 ```{eval-rst}
 .. automodule:: generativeqc.extensions.xc
    :members:
    :imported-members:
+   :exclude-members: FunctionalSpec
    :undoc-members:
    :show-inheritance:
 ```
