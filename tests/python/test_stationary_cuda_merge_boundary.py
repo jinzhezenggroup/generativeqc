@@ -371,14 +371,16 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
     emitted = []
 
-    def emit(requests: object) -> str:
+    def emit(requests: object, **options: object) -> tuple[str, dict]:
         emitted.append(requests)
-        return "cuda"
+        return "cuda", {}
 
-    monkeypatch.setattr(runtime, "emit_first_derivative_cuda", emit)
-    monkeypatch.setattr(
-        runtime, "compile_stationary_cuda", lambda *_a, **_k: artifact("stationary")
-    )
+    def compile_stationary(provider: object, **options: object) -> SimpleNamespace:
+        provider()
+        return artifact("stationary")
+
+    monkeypatch.setattr(runtime, "cached_derivative_cuda_source", emit)
+    monkeypatch.setattr(runtime, "compile_stationary_cuda", compile_stationary)
     monkeypatch.setattr(runtime, "compile_grid", lambda *_a, **_k: artifact("grid"))
     monkeypatch.setattr(runtime, "compile_cuda", lambda *_a, **_k: artifact("tensor"))
 

@@ -11,10 +11,11 @@ Rationale: .agents/notes/implemented/architecture/2026-09-20-stationary-cuda-emi
 import json
 import os
 import typing
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import lru_cache
 from itertools import permutations
 from pathlib import Path
+from time import perf_counter
 
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_runtime import CudaArtifact
@@ -24,6 +25,7 @@ from generativeqc_compiler.common.native_runtime import (
 )
 from generativeqc_compiler.common.paths import asset_path, source_hashes
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
+from generativeqc_compiler.common.semantic_source_cache import cached_sources
 from generativeqc_compiler.common.source_cache import cache_source
 from generativeqc_compiler.method.stationary_resources import (
     BECKE_COOPERATIVE_CONTROL_BYTES,
@@ -1479,14 +1481,32 @@ def compile_stationary_cuda(
     compiler: typing.Any,
     cache: typing.Any,
     primitive_shard_width: int | None = None,
+    cache_generated_sources: bool = True,
 ) -> typing.Any:
-    """Compile strict-FP64 primitive and wrapper objects, then device-link them."""
+    """Reuse semantic lowering, then compile/link with unchanged binary witnesses.
+
+    A lazy integral-owned provider may return ``(source, work)`` after admission;
+    its semantic cache bypasses emission without introducing method-to-integral
+    dependencies. Explicit-source callers retain their exact source identity.
+    Wrapper hits bypass Becke IR/AD. Neither cache overrides binary identities.
+    """
 
     if not isinstance(compiler, CudaCompilerAdapter):
         raise TypeError("stationary CUDA requires an explicit CUDA compiler adapter")
     if os.environ.get("NVCC_PREPEND_FLAGS") or os.environ.get("NVCC_APPEND_FLAGS"):
         raise ValueError("stationary strict CUDA rejects NVCC flag overrides")
 
+    if not isinstance(plan, StationaryGradientPlan):
+        raise TypeError("stationary CUDA requires StationaryGradientPlan")
+    if type(cache_generated_sources) is not bool:
+        raise TypeError("stationary source cache selection must be boolean")
+    cache = Path(cache)
+    source_cache = cache if cache_generated_sources else None
+    primitive_work = None
+    if callable(primitive_source):
+        primitive_source, primitive_work = primitive_source()
+
+    recipe_started = perf_counter()
     sharded = not isinstance(primitive_source, str)
     primitive_sources = (
         tuple(primitive_source) if sharded else (typing.cast("str", primitive_source),)
@@ -1497,15 +1517,44 @@ def compile_stationary_cuda(
         raise ValueError("stationary CUDA requires nonempty primitive source")
     if sharded != (primitive_shard_width is not None):
         raise ValueError("stationary CUDA shard width must match primitive sources")
-    wrapper_source = emit_stationary_wrapper_cuda(
-        functional=functional,
-        pbe=pbe,
-        plan=plan,
-        iterations=iterations,
-        primitive_shards=len(primitive_sources) if sharded else None,
-        primitive_shard_width=primitive_shard_width,
+    wrapper_recipe = {
+        "dependencies": source_hashes(
+            "common",
+            "integral",
+            "tensor",
+            "xc",
+            "dft",
+            "method",
+            assets=STATIONARY_AOT_ASSETS,
+        ),
+        "target": asdict(compiler.target),
+        "precision": "FP64/strict/no-fmad",
+        "product": "stationary-wrapper-cuda.v1",
+        "plan": plan.to_payload(),
+        "method_manifest": plan.method.to_payload(),
+        "functional": functional,
+        "pbe": pbe,
+        "iterations": iterations,
+        "primitive_shards": len(primitive_sources) if sharded else None,
+        "primitive_shard_width": primitive_shard_width,
+    }
+    recipe_seconds = perf_counter() - recipe_started
+    wrapper_sources, wrapper_work = cached_sources(
+        source_cache,
+        wrapper_recipe,
+        lambda: (
+            emit_stationary_wrapper_cuda(
+                functional=functional,
+                pbe=pbe,
+                plan=plan,
+                iterations=iterations,
+                primitive_shards=len(primitive_sources) if sharded else None,
+                primitive_shard_width=primitive_shard_width,
+            ),
+        ),
     )
-    cache = Path(cache)
+    wrapper_source = wrapper_sources[0]
+    binary_started = perf_counter()
     cache.mkdir(parents=True, exist_ok=True)
     wrapper_path = cache / (canonical_hash(wrapper_source) + ".stationary.cu")
     cache_source(wrapper_path, wrapper_source)
@@ -1560,9 +1609,21 @@ def compile_stationary_cuda(
         headers=wrapper_headers,
         options=("--fmad=false", "--expt-relaxed-constexpr", include),
     )
-    return link_cuda_objects(
+    artifact = link_cuda_objects(
         compiler,
         cache,
         (*primitives, wrapper),
         libraries=("cublas",),
+    )
+    return CudaArtifact(
+        artifact.library,
+        {
+            **artifact.metadata,
+            "source_cache": {
+                "primitive": primitive_work,
+                "wrapper": wrapper_work,
+                "recipe_seconds": recipe_seconds,
+                "binary_cache_seconds": perf_counter() - binary_started,
+            },
+        },
     )
