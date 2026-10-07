@@ -1273,7 +1273,8 @@ def test_generated_coulomb_streaming_uses_density_bounds() -> None:
     owner = (REPOSITORY_ROOT / "src" / "scf" / "cuda" / "direct_coulomb.cpp").read_text(
         encoding="utf-8"
     )
-    enqueue = owner.split(
+    # The owner declares this helper near the top; inspect its definition.
+    enqueue = owner.rsplit(
         "cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p",
         maxsplit=1,
     )[1].split("cudaError_t project_generated_coulomb", maxsplit=1)[0]
