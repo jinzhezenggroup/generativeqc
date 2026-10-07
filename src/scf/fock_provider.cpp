@@ -77,6 +77,17 @@ void CpuFockProviderView::validate(const ResolvedFockBuild& strategy) const {
             "DF Fock provider tensor shape/rank mismatch");
     require(fitted_->metric_relative_threshold == strategy.metric_relative_threshold,
             "DF value/response metric cutoff differs from the resolved provider");
+    const auto validate_operator = [&](const FockTermSpec& term) {
+      if (!term.present || term.approximation != FockApproximation::DensityFitted) return;
+      const auto expected = term.op == FockOperator::FullRange    ? integrals::CoulombRange::Full
+                            : term.op == FockOperator::ShortRange ? integrals::CoulombRange::Short
+                                                                  : integrals::CoulombRange::Long;
+      require(fitted_->range == expected &&
+                  fitted_->omega == (expected == integrals::CoulombRange::Full ? 0.0 : term.omega),
+              "DF Fock provider range/omega identity mismatch");
+    };
+    validate_operator(strategy.spec.coulomb);
+    validate_operator(strategy.spec.exchange);
     finite(raw.metric);
     finite(raw.three_center);
     finite(b.values);
