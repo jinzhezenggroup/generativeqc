@@ -106,7 +106,7 @@ def fused_tile_program() -> Program:
         if node.op == "input" and node.attrs["name"] != "denominator"
     )
     reverse = energy_scalar_vjp(names)
-    labels = {VP[label]: label for label in _LABELS}
+    labels: dict[tuple[int, ...], str] = {VP[label]: label for label in _LABELS}
 
     def bind(program: Program, coordinates: tuple[int, ...]) -> dict[str, Node]:
         replacements = {}
