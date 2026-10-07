@@ -3,6 +3,10 @@
 Status: implemented (qualification-only; default remains one tile)
 Date: 2026-10-07
 
+The initial opt-in policy recorded here is superseded by
+`2026-10-07-xc-point-batch-default.md`. Retain this note's original measurement
+identities and evidence limitations; promotion does not relabel those binaries.
+
 ## Problem
 
 #2073 records an eight-CTA physical-PBE point launch repeated for each of

@@ -39,6 +39,7 @@ class GridXcCompiledResourceShape:
     nao: int
     spins: int
     ao_radial_reuse: bool = False
+    point_batching: bool = True
 
     def __post_init__(self) -> None:
         for name in ("npoint", "tile_points", "nao", "spins"):
@@ -47,6 +48,8 @@ class GridXcCompiledResourceShape:
                 raise ValueError(f"{name} must be a positive integer")
         if type(self.ao_radial_reuse) is not bool:
             raise TypeError("AO radial-reuse selector must be boolean")
+        if type(self.point_batching) is not bool:
+            raise TypeError("point-batching selector must be boolean")
         if self.spins not in (1, 2):
             raise ValueError("grid/XC compiled resource spin count must be one or two")
 
@@ -175,8 +178,8 @@ def _active_scopes(
     feature_token = (
         "density_features<true>" if shape.nao >= 32 else "density_features<false>"
     )
-    # Default-region evidence must select the current, unbatched instantiation.
-    # A compiled qualification-only batch must not fill a missing active scope.
+    # Automatic batching can fall back on resource rejection. Account both
+    # reachable point specializations, never allowing either to replace the other.
     point_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,false>"
 
     validation = _matching(
@@ -232,6 +235,13 @@ def _active_scopes(
         lambda name: re.fullmatch(point_pattern, name) is not None,
         "functional-specific XC point kernel",
     )
+    if shape.point_batching and shape.npoint > shape.tile_points:
+        batch_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,true>"
+        points += _matching(
+            resources,
+            lambda name: re.fullmatch(batch_pattern, name) is not None,
+            "functional-specific batched XC point kernel",
+        )
 
     potential_parts: list[KernelResources] = []
     if True in tiled_modes:

@@ -101,6 +101,7 @@ def _compiled_evidence(*, spins: int = 2) -> GridXcCompiledRegionEvidence:
         KernelResources("density_product<false>(double*)", 61, 0, 0, 0, 0),
         KernelResources("density_features<false>(double*)", 62, 0, 0, 0, 0),
         KernelResources("evaluate_points<4, false, false>(double*)", 80, 0, 16, 0, 0),
+        KernelResources("evaluate_points<4, false, true>(double*)", 80, 0, 0, 0, 0),
         KernelResources("assemble_potential(double*)", 64, 0, 0, 0, 0),
         KernelResources("accumulate_totals(double*)", 8, 0, 0, 0, 0),
     )

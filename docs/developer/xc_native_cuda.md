@@ -118,12 +118,13 @@ Unsupported functional/response pairs fail during preparation. See the
 
 ### Bounded independent point submissions
 
-`GENERATIVEQC_CUDA_XC_BATCH_TILES=N` explicitly requests the scheduling-only
-qualification route for ordinary native KS. The default is one tile; values zero
-or one retain that route. `GENERATIVEQC_CUDA_XC_BATCH_BYTES` caps the **additional**
-per-owner device allocation (default 32 MiB when batching is requested); zero
-retains the incumbent. These are experiments, not an automatically promoted
-endpoint policy or a method-qualified point-source specialization.
+Ordinary native KS defaults to bounded batching of independent XC point domains:
+it requests up to 32 original tiles within a 32-MiB **additional** per-owner device
+allowance. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+overrides the request; zero or one explicitly retains the one-tile executor.
+`GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
+also retains the incumbent. This scheduling policy does not prune or specialize
+the canonical scientific point source.
 
 The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
 the original tile domains and selected AO counts. Admission reduces the requested
@@ -165,8 +166,12 @@ samples; those diagnostic densities do not qualify complete SCF/force timing.
 For complete interleaved warm and moved-warm PBE0 E+F populations, use
 `python -m benchmarks.pbe0_xc_tile_pairs --point-batch-tiles 32` with the usual
 basis/reference/output arguments. This keeps both arms' SCF/force tiles at 256
-and reapplies the arm's policy when geometry rebuilds the owner. Cold fresh-
-process E+F and separate profiling are still required before default promotion;
+and reapplies the arm's policy when geometry rebuilds the owner. Both comparison
+arms explicitly set their policy, so a changed default cannot contaminate the
+one-tile baseline. Compiled-resource evidence includes both the batched point
+kernel and its retained fallback for multi-tile automatic execution. The
+[default decision](../../.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md)
+records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
 source-specialization/composed ablations belong to the independent #2072 arm.
 
 The resident contraction block is currently compiler-emitted maintained CUDA
