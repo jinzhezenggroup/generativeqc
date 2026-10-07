@@ -126,15 +126,15 @@ def _packed_restricted_k_block(
               component_integral;
         }}
         if (swapped_pair_unique && second_pair_distinct) {{
-          storage.exchange_block[{offsets[5]}U + {third} * {second_count}U + {second}] +=
-              density[task.density_offset +
-                      generated_dppp_matrix_index(l, i, matrix_order)] *
-              component_integral;
-        }}
-        if (swapped_pair_unique && first_pair_distinct) {{
           storage.exchange_block[{offsets[6]}U + {fourth} * {first_count}U + {first}] +=
               density[task.density_offset +
                       generated_dppp_matrix_index(k, j, matrix_order)] *
+              component_integral;
+        }}
+        if (swapped_pair_unique && first_pair_distinct) {{
+          storage.exchange_block[{offsets[5]}U + {third} * {second_count}U + {second}] +=
+              density[task.density_offset +
+                      generated_dppp_matrix_index(l, i, matrix_order)] *
               component_integral;
         }}
         if (swapped_pair_unique && first_pair_distinct && second_pair_distinct) {{
