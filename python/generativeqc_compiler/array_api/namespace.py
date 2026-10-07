@@ -240,18 +240,20 @@ def multiply(x1: object, x2: object) -> VibeArray:
         left, right = operands if operands is not None else (x1, x2)
         return _canonical_generic(VibeArray(tensor_ir.multiply(left.node, right.node)))
     if isinstance(x1, VibeArray):
-        factor = (
-            _generic_scalar(x2, "multiply scalar")
-            if _is_generic_array(x1)
-            else _exact(x2)
-        )
+        if _is_generic_array(x1):
+            left, right = _generic_array_and_scalar(x1, x2, name="multiply")
+            return _canonical_generic(
+                VibeArray(tensor_ir.multiply(left.node, right.node))
+            )
+        factor = _exact(x2)
         return VibeArray(tensor_ir.add(x1.node, coefficients=(factor,)))
     if isinstance(x2, VibeArray):
-        factor = (
-            _generic_scalar(x1, "multiply scalar")
-            if _is_generic_array(x2)
-            else _exact(x1)
-        )
+        if _is_generic_array(x2):
+            right, left = _generic_array_and_scalar(x2, x1, name="multiply")
+            return _canonical_generic(
+                VibeArray(tensor_ir.multiply(left.node, right.node))
+            )
+        factor = _exact(x1)
         return VibeArray(tensor_ir.add(x2.node, coefficients=(factor,)))
     raise TypeError("multiply requires at least one symbolic VibeArray")
 
@@ -263,11 +265,10 @@ def divide(x1: object, x2: object) -> VibeArray:
         left, right = operands if operands is not None else (x1, x2)
         return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
     if isinstance(x1, VibeArray):
-        denominator = (
-            _generic_scalar(x2, "divisor")
-            if _is_generic_array(x1)
-            else _exact(x2, "divisor")
-        )
+        if _is_generic_array(x1):
+            left, right = _generic_array_and_scalar(x1, x2, name="divide")
+            return _canonical_generic(VibeArray(tensor_ir.divide(left.node, right.node)))
+        denominator = _exact(x2, "divisor")
         if denominator == 0:
             raise ZeroDivisionError("exact scalar divisor cannot be zero")
         return VibeArray(
