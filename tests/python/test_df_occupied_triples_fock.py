@@ -387,6 +387,22 @@ def test_combined_response_reuses_one_input_upload(
     assert counts[4] <= 1 << 30 and counts[5] <= 1 << 30
     assert counts[5] >= standalone_counts[0]
 
+    exact_budget = int(max(counts[4], counts[5]))
+    status, exact, _, exact_counts, error = run_combined(
+        native_combined_probe, inputs, budget=exact_budget, caller_bytes=caller
+    )
+    assert status == 0, error
+    for actual, expected in zip(exact, combined, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    assert max(exact_counts[4], exact_counts[5]) == exact_budget
+
+    status, refused, refused_values, refused_counts, error = run_combined(
+        native_combined_probe, inputs, budget=exact_budget - 1, caller_bytes=caller
+    )
+    assert status != 0 and "budget" in error
+    assert all(np.isnan(x).all() for x in (*refused, refused_values))
+    np.testing.assert_array_equal(refused_counts, 19)
+
 
 @pytest.mark.parametrize(
     "o,v,q,rows,panels",
