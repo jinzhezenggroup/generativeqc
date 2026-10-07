@@ -63,12 +63,26 @@ extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size
       throw std::runtime_error("combined gap-free response published epsilon cotangents");
     std::copy(r.fock.foo.begin(), r.fock.foo.end(), output[0]);
     std::copy(r.fock.fvv.begin(), r.fock.fvv.end(), output[1]);
+    const std::array response{&r.pullback.bov, &r.pullback.bvv, &r.pullback.ovoo, &r.pullback.ovov,
+                              &r.pullback.fov, &r.pullback.t1,  &r.pullback.t2};
+    for (std::size_t x = 0; x < response.size(); ++x)
+      std::copy(response[x]->begin(), response[x]->end(), output[x + 2]);
     const double scalars[]{r.pullback.diagnostic.energy, r.seconds,
                            r.fock.minimum_absolute_denominator};
-    const std::size_t work[]{r.shared_input_device_bytes,       r.shared_h2d_bytes,
-                             r.pullback.diagnostic.h2d_bytes,   r.fock.h2d_bytes,
-                             r.pullback.numeric_capacity_bytes, r.fock.numeric_capacity_bytes,
-                             r.pullback.borrowed_host_bytes,    r.fock.borrowed_host_bytes};
+    const std::size_t work[]{r.shared_input_device_bytes,
+                             r.shared_h2d_bytes,
+                             r.pullback.diagnostic.h2d_bytes,
+                             r.fock.h2d_bytes,
+                             r.pullback.numeric_capacity_bytes,
+                             r.fock.numeric_capacity_bytes,
+                             r.pullback.borrowed_host_bytes,
+                             r.fock.borrowed_host_bytes,
+                             r.shared_response_cubes,
+                             r.avoided_w_gemms,
+                             r.fock.vector_cubes,
+                             r.fock.w_gemms,
+                             r.pullback.diagnostic.occupied_tiles,
+                             r.pullback.diagnostic.moment_gemms};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

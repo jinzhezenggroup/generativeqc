@@ -69,7 +69,7 @@
       "contract": "#1890",
       "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
       "references": {
-        "cublasDgemm": 2
+        "cublasDgemm": 1
       }
     },
     "src/posthf/cuda_low_rank.cu": {
