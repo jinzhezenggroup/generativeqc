@@ -198,6 +198,8 @@ inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfO
          first.incremental_direct_jk == second.incremental_direct_jk &&
          first.incremental_direct_jk_rebuild_interval ==
              second.incremental_direct_jk_rebuild_interval &&
+         first.incremental_direct_jk_density_rms_threshold ==
+             second.incremental_direct_jk_density_rms_threshold &&
          first.resolved_fock_build == second.resolved_fock_build;
 }
 
