@@ -61,7 +61,10 @@ def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
     assert "++output.incremental_direct_jk.post_scf_full_builds;" in ks
     assert "incremental_anchor_range_exchange" in ks
     assert "output.incremental_direct_jk.anchor_updates" in ks
-    assert "incremental_policy_options.screening_tolerance = strategy.screening_tolerance;" in ks
+    assert (
+        "incremental_policy_options.screening_tolerance = strategy.screening_tolerance;"
+        in ks
+    )
     assert "sum(options.max_iterations, kMaximumFinalCorrections)" in ks
 
 

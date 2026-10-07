@@ -299,10 +299,11 @@ void run_exact_exchange_case(bool restricted) {
   {
     auto short_options = options;
     short_options.max_iterations = 2;
-    dft::CudaKsPlan ordinary_budget(gpu, basis, grid, short_options, dft::SemilocalFamily::Pbe, 257);
+    dft::CudaKsPlan ordinary_budget(gpu, basis, grid, short_options, dft::SemilocalFamily::Pbe,
+                                    257);
     short_options.incremental_direct_jk = true;
-    dft::CudaKsPlan incremental_budget(gpu, basis, grid, short_options,
-                                       dft::SemilocalFamily::Pbe, 257);
+    dft::CudaKsPlan incremental_budget(gpu, basis, grid, short_options, dft::SemilocalFamily::Pbe,
+                                       257);
     require(incremental_budget.resources().retained_host_numeric_bytes >=
                 ordinary_budget.resources().retained_host_numeric_bytes +
                     4U * sizeof(dft::ScfIteration),
@@ -383,8 +384,8 @@ void run_exact_exchange_case(bool restricted) {
     auto mismatched_options = incremental_options;
     mismatched_options.screening_tolerance = 0.0;
     mismatched_options.incremental_direct_jk_rebuild_interval = 0;
-    dft::CudaKsPlan mismatched_plan(gpu, basis, grid, mismatched_options,
-                                    dft::SemilocalFamily::Pbe, 257);
+    dft::CudaKsPlan mismatched_plan(gpu, basis, grid, mismatched_options, dft::SemilocalFamily::Pbe,
+                                    257);
     const auto mismatched = mismatched_plan.run(nullptr, false);
     const auto& mismatched_work = mismatched.incremental_direct_jk;
     require(mismatched.converged && !mismatched_plan.failed() &&
