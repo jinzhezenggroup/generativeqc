@@ -46,38 +46,43 @@ A `VibeArray` wraps an ordinary TensorIR node. Therefore capture preserves:
 - input/parameter role and differentiability;
 - TensorIR logical identity, serialization, optimization and JVP/VJP behavior.
 
-Equal numerical shapes do not make different scientific domains compatible.
-Elementwise operations currently require identical TensorIR domains.
+The public facade has two deliberately different modes. Generic arrays created by
+the inferred public `compile` path use ordinary shape semantics, including
+broadcasting. Scientifically annotated arrays keep TensorIR domain identity:
+equal numerical shapes do not make AO/occupied/virtual/auxiliary domains
+compatible.
 
 ## Initial capability subset
 
 | Surface | Initial contract |
 | --- | --- |
-| `+ - * /` | Equal-domain arrays; `* /` also accept exact scalar scaling |
+| `+ - * /` | Generic arrays use shape broadcasting; scientific arrays require compatible TensorIR domains |
 | unary `-` | Exact coefficient lowering |
 | `pow/exp/log/sqrt` | Existing TensorIR real-valued contracts |
-| `sum` | Explicit reduction, `keepdims=False`, no dtype conversion |
-| `permute_dims` | Full TensorIR axis permutation |
-| `reshape` | Requires explicit target TensorIR `Index` metadata |
-| `broadcast_to` | Requires explicit target indices and source-axis map |
-| `slice` | Static unit-step half-open ranges; populations are retained |
-| `take` | Static integer gather along one axis; source domain is retained |
-| `matmul` | Rank-2 only |
+| `sum` | Explicit reduction, `keepdims=False`, no implicit dtype conversion |
+| `permute_dims`, `.T`, `.mT` | Array-style axis and matrix transpose |
+| `reshape` | Shape-only for generic arrays, including one `-1`; scientific arrays require explicit target metadata |
+| `broadcast_to` | Shape-only for generic arrays; scientific arrays require explicit indices/axis map |
+| indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
+| `take` | Static integer gather along one axis |
+| `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
+| `asarray` | CPU/NumPy float32/float64 host values; no silent external-device transfer |
+| `compile` | Shape/dtype-specialized public TensorIR capture with reference execution |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
-| implicit broadcasting | Not yet supported |
-| dtype promotion/casts | Not yet supported |
-| implicit reshape/domain inference | Not supported; target indices must be explicit |
-| dynamic shapes/control flow | Not supported |
+| dtype promotion | Not yet supported |
+| dynamic Python control flow | Not supported |
 
 Exact scalar spelling accepts `int`, `Fraction`, or a rational string.
 Python floating-point spellings such as `0.5` are deliberately rejected so a
 frontend convenience cannot weaken TensorIR scientific identity.
 
-Shape-changing operations follow the same rule: integer extents alone never
-define AO/occupied/virtual/auxiliary meaning. `reshape` therefore requires
-explicit target `Index` objects, while `broadcast_to` additionally requires
-an explicit source-to-target axis map. TensorIR then validates preserved
-domains on every mapped axis; equal extents cannot authorize relabeling.
+Generic public inputs are assigned compiler-owned anonymous array dimensions
+whose identity is intentionally shape-based. This lets ordinary broadcasting,
+reshape, indexing, transpose and matmul lower to explicit TensorIR view/
+contraction nodes. Scientific inputs are different: integer extents alone never
+define AO/occupied/virtual/auxiliary meaning. Their reshape/broadcast operations
+continue to require explicit metadata, and TensorIR still rejects equal-sized
+but scientifically distinct populations.
 
 Internal compiler consumers continue to import
 `generativeqc_compiler.array_api.namespace` explicitly. The public facade
@@ -91,27 +96,21 @@ the advertised namespace meets the corresponding standard version.
 ```python
 from generativeqc.experimental import array_api as xp
 
-program = xp.trace(
-    lambda coefficients, occupations: {
-        "density": xp.einsum(
-            "bspi,bsi,bsqi->bspq",
-            coefficients,
-            occupations,
-            coefficients,
-        )
-    },
-    {
-        "coefficients": coefficients_spec,
-        "occupations": occupations_spec,
-    },
-)
+@xp.compile
+def observable(C, occupation, O):
+    density = (C * occupation) @ C.T
+    return xp.sum(density * O)
+
+value = observable(C, occupation, O)
+program = observable.lower(C, occupation, O)
 ```
 
-The resulting object is the ordinary compiler-owned TensorIR `Program`; no
-frontend-only node survives lowering and no Python callback is needed for
-prepared native execution. Public callers can pass that program to
-`generativeqc.extensions.tensor` for inspection, AD, interpretation or the
-existing explicit CPU JIT path.
+No TensorIR type declarations are needed on this ordinary path. The concrete
+shape/dtype signature constructs a cached generic TensorIR specialization.
+`lower` exposes the ordinary compiler-owned `Program`; there is still no
+frontend-only runtime node or second mathematical IR. The first compiled-call
+backend is the independent NumPy TensorIR reference interpreter. Native CPU/CUDA
+execution remains a separate explicit lowering/qualification step.
 
 ## Native SCF adoption
 
