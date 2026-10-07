@@ -674,6 +674,12 @@ def ks_resource_request(
             ("item_host_inventory", json.dumps(host, sort_keys=True)),
             ("item_device_inventory", json.dumps(device, sort_keys=True)),
             (
+                "xc_ao_selection",
+                "dense under the public device ledger; no optional map allowance"
+                if backend == "cuda"
+                else "not applicable",
+            ),
+            (
                 "xc_point_batching",
                 "one-tile under the public device ledger; no optional panel allowance"
                 if backend == "cuda"

@@ -836,7 +836,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
-    bool admit_ao = select_ao && ao_selection_bound.host_peak_bytes <= ao_map_host_budget;
+    // Public ledgers reserve dense XC, later fleet owners and force storage,
+    // not optional retained maps. Spare capacity is not a map allowance, even
+    // for an explicit request or an unlimited public ResourceBudget().
+    bool admit_ao = select_ao && !runtime::active_device_resource_ledger &&
+                    ao_selection_bound.host_peak_bytes <= ao_map_host_budget;
     if (host_unfused &&
         (options.semilocal_exchange_scale != 1.0 || options.semilocal_correlation_scale != 1.0))
       throw std::invalid_argument("scaled CUDA XC requires device-fused execution");

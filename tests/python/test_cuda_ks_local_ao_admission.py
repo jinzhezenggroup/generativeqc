@@ -95,6 +95,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/semilocal_family.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/resource_ledger.hpp"
 #include "tensor/cuda_symmetric_product.hpp"
 #include "generated_split_hybrid_registry.cuh"
 using namespace generativeqc;
@@ -137,6 +138,8 @@ int main(int argc, char** argv) {
     if (mode == "zero-nao") xc_layout.nao = 0;
     if (mode == "zero-points") xc_layout.npoint = 0;
     if (mode == "zero-tile") xc_layout.tile_points = 0;
+    if (mode == "ledger")
+      runtime::active_device_resource_ledger=std::make_shared<runtime::DeviceResourceLedger>();
 """
         + guard
         + r"""
@@ -279,3 +282,16 @@ def test_host_budget_decline_keeps_dense_arithmetic_capability(
 @pytest.mark.parametrize("selection", ["", "yes", "2", "-1", "01"])
 def test_unknown_selection_fails_closed(admission_probe: Path, selection: str) -> None:
     assert _run(admission_probe, selection) == "rejected"
+
+
+@pytest.mark.parametrize("selection", ["unset", "1"])
+@pytest.mark.parametrize("family", ["1", "3"])
+@pytest.mark.parametrize("spin", ["rks", "uks"])
+@pytest.mark.parametrize("precision", ["fp64", "auto"])
+def test_public_ledger_fallback_keeps_dense_arithmetic_capability(
+    admission_probe: Path, selection: str, family: str, spin: str, precision: str
+) -> None:
+    automatic = precision == "auto"
+    assert _run(admission_probe, selection, family, spin, "ledger", precision) == (
+        f"dense:{int(automatic)}:{int(automatic and family == '1')}"
+    )

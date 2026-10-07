@@ -17,6 +17,7 @@ from generativeqc import ResourceBudget, resources_ks
 from generativeqc.ks import KsOptions
 from generativeqc.resources_native import NativeDeviceLedger
 from generativeqc_compiler.common.resources import plan_resources
+from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
 from generativeqc_compiler.dft.grid import GridSpec
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
@@ -143,8 +144,23 @@ std::size_t product(std::size_t a,std::size_t b) { return size_mul(a,b); }
     source += (
         "namespace cuda_xc_detail {\n" + emit_native_xc_point_batch_plan() + "\n}\n}\n"
     )
-    source += 'extern "C" {\n'
+    source += "namespace generativeqc::dft { namespace cuda_xc_detail {\n"
+    source += (
+        _definition(
+            emit_native_xc_point_dispatch(),
+            "CudaXcPointCapabilities resolve_point_capabilities(",
+        )
+        + "\n}\n"
+    )
     for signature in (
+        "CudaXcExecutionCapabilities cuda_xc_execution_capabilities(",
+        "CudaXcAoSelectionResources cuda_xc_ao_selection_resources(",
+    ):
+        source += _definition(xc, signature) + "\n"
+    source += '}\nextern "C" {\n'
+    for signature in (
+        "int generativeqc_resource_tracking_begin_v1(",
+        "int generativeqc_resource_tracking_end_v1(",
         "void* generativeqc_resource_ledger_create_v1(",
         "void generativeqc_resource_ledger_destroy_v1(",
         "int generativeqc_resource_ledger_bind_v1(",
@@ -267,6 +283,74 @@ extern "C" int grid_shapes(std::size_t points,std::size_t spins,std::size_t func
 }
 """
     )
+    start = ks.index("    const char* ao_selection = std::getenv(")
+    end = ks.index("    if (host_unfused &&", start)
+    arena = ks.index("    resource.xc_device_bytes =")
+    arena_end = ks.index(";", arena) + 1
+    diagnostic = ks.index("        prepared_ao_work.requested = select_ao;")
+    diagnostic_end = ks.index("\n      }", diagnostic)
+    source += (
+        r"""
+extern "C" int active_policy(std::size_t spins, bool host_unfused, std::uint64_t* out) {
+  using namespace dft;
+  try {
+    const auto xc_layout=cuda_xc_layout_shape(2,6,2,49152,1,spins==2,256,
+                                             false,CudaXcAoPrecision::Fp64,1,1,true);
+    CudaKsResources resource;
+    CudaXcAoSelectionWork prepared_ao_work;
+"""
+        + ks[start:end]
+        + ks[arena:arena_end]
+        + ks[diagnostic:diagnostic_end]
+        + r"""
+    out[0]=select_ao; out[1]=admit_ao;
+    out[2]=xc_layout.device_bytes; out[3]=resource.xc_device_bytes;
+    out[4]=prepared_ao_work.requested; out[5]=prepared_ao_work.selected;
+    out[6]=prepared_ao_work.discovery_ao_jet_values;
+    out[7]=prepared_ao_work.point_ao_square_sum;
+    out[8]=prepared_ao_work.reserved_device_bytes;
+    return 0;
+  } catch (const std::invalid_argument&) { return 1; }
+}
+extern "C" void active_fleet(void* handle,std::size_t count,std::size_t mandatory,
+                             std::size_t force_bytes,std::size_t spins,
+                             std::size_t cycles,std::uint64_t* out) {
+  using namespace runtime;
+  assert(!active_device_resource_ledger);
+  auto ledger=*static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
+  std::fill_n(out,6,0);
+  std::vector<void*> arenas(count), panels;
+  void* force=nullptr;
+  for (std::size_t cycle=0;cycle<cycles;++cycle) {
+    assert(generativeqc_resource_tracking_begin_v1(1)==0);
+    assert(generativeqc_resource_ledger_bind_v1(handle)==0);
+    for (auto*& arena:arenas) {
+      if (arena) { assert(resource_cuda_free(arena)==cudaSuccess); arena=nullptr; }
+      std::uint64_t policy[9]{};
+      assert(active_policy(spins,false,policy)==0);
+      const auto extra=policy[3]-policy[2];
+      if (resource_cuda_malloc(&arena,mandatory+extra)!=cudaSuccess) break;
+      out[1]+=extra+prepare_optional(panels);
+      ++out[0];
+    }
+    if (out[0]==count*(cycle+1) && !force) {
+      if (resource_cuda_malloc(&force,force_bytes)==cudaSuccess) out[2]=force_bytes;
+    }
+    out[3]=ledger->live;
+    out[4]+=ledger->rejected;
+    std::uint64_t peak{},samples{};
+    assert(generativeqc_resource_tracking_end_v1(&peak,&samples)==0);
+    assert(!active_device_resource_ledger && !ledger->active);
+    assert(ledger->live==out[3]); // Charges survive observation scope changes.
+    if (out[0]!=count*(cycle+1) || !force) break;
+  }
+  for (auto* arena:arenas) if (arena) assert(resource_cuda_free(arena)==cudaSuccess);
+  for (auto* arena:panels) assert(resource_cuda_free(arena)==cudaSuccess);
+  if (force) assert(resource_cuda_free(force)==cudaSuccess);
+  out[5]=ledger->live;
+}
+"""
+    )
     unit = folder / "probe.cpp"
     unit.write_text(source)
     library = native_cxx.build_shared(
@@ -295,6 +379,16 @@ extern "C" int grid_shapes(std::size_t points,std::size_t spins,std::size_t func
         ctypes.POINTER(ctypes.c_uint64)
     ]
     probe.grid_shapes.restype = ctypes.c_int
+    probe.active_policy.argtypes = [
+        ctypes.c_size_t,
+        ctypes.c_bool,
+        ctypes.POINTER(ctypes.c_uint64),
+    ]
+    probe.active_policy.restype = ctypes.c_int
+    probe.active_fleet.argtypes = (
+        [ctypes.c_void_p] + [ctypes.c_size_t] * 5 + [ctypes.POINTER(ctypes.c_uint64)]
+    )
+    probe.active_fleet.restype = None
     return probe
 
 

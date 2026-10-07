@@ -260,6 +260,16 @@ program layouts do not admit discovery.
 Invalid switch values are rejected. An automatic request keeps dense execution
 when the layout or execution schedule does not support selection.
 
+Public `resource_budget` and `resource_plan` execution retains dense AO work
+under the active native device ledger: its inventory reserves dense XC, later
+fleet owners and force workspace, with no separate optional-map allowance.
+Unused ledger capacity cannot fund retained maps. This includes an explicitly
+supplied unlimited `ResourceBudget()` and `GENERATIVEQC_CUDA_KS_ACTIVE_AO=1`;
+the explicit request still rejects an incompatible layout. Unbudgeted selection
+and `=0` are unchanged. Plan decisions report this budget fallback; the AO work
+diagnostic preserves `requested` separately from `selected` and reports dense
+work with no discovery when a requested map is not admitted.
+
 Selected physical layouts propagate back from the XC owner. The shared
 iteration precision schedule intersects that layout's arithmetic capabilities:
 local density contraction remains FP64 while independently qualified Coulomb J
