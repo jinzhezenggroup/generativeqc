@@ -1,0 +1,464 @@
+"""Independent fresh-density PBE0 endpoints and optional diagnostic NVTX ranges.
+
+The complete timer follows the README: preparation plus first energy/force call,
+excluding imports, CUDA context initialization and native Calculator construction.
+No warm density, density fitting, grid pruning or non-default native policy is used.
+Diagnostic ranges and CPU profiling are never used as clean wall-clock samples.
+"""
+
+from __future__ import annotations
+
+import argparse
+import cProfile
+import ctypes
+import functools
+import hashlib
+import importlib.metadata
+import json
+import os
+import socket
+from collections import defaultdict
+from contextlib import contextmanager
+from pathlib import Path
+from time import perf_counter
+from typing import TYPE_CHECKING, Any
+
+import cupy as cp
+import numpy as np
+from generativeqc import Calculator, GridSpec, InitialGuessSpec, KsOptions, _native
+from generativeqc.checkpoint import _descriptor, _pointer
+
+from benchmarks._cases import BenchmarkCase
+from benchmarks.compare_df_direct_endpoint import check_endpoint, reference_work_counter
+from benchmarks.compare_gpu4pyscf_batch import (
+    gpu_convergence_payload,
+    load_comparison_basis,
+    native_build_metadata,
+    require_tuned_native_build,
+)
+from benchmarks.ks_preliminary_density import read_ao_work
+from benchmarks.readme_hf_scaling import scaling_cases
+from benchmarks.readme_omol25 import protocol
+from benchmarks.readme_pbe0 import PBE0
+from benchmarks.readme_wb97mv import reference_engine
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+
+def peroxide_holdout() -> BenchmarkCase:
+    """Use four fixed non-water molecules; no geometry is method-optimized.
+
+    All coordinates are in Bohr, with the existing offline H/O basis. The
+    separated molecular centers avoid turning this into another water-series
+    member while keeping the same admitted element and basis domain.
+    """
+    molecule = (
+        ("O", (-1.3984, 0.0, 0.0)),
+        ("O", (1.3984, 0.0, 0.0)),
+        ("H", (-1.5509, 1.8267, 0.0)),
+        ("H", (1.5509, -0.6698, 1.6990)),
+    )
+    atoms = tuple(
+        (symbol, (position[0] + center[0], position[1] + center[1], position[2]))
+        for center in ((0.0, 0.0), (9.0, 0.0), (0.0, 9.0), (9.0, 9.0))
+        for symbol, position in molecule
+    )
+    return BenchmarkCase(
+        "four hydrogen peroxide molecules",
+        atoms,
+        "def2-svp",
+        "def2-svp",
+        basis_representation="spherical",
+    )
+
+
+def export_density(owner: Any, path: Path) -> dict[str, Any]:
+    """Retain the target density after the timed endpoint, without seeding a peer.
+
+    Both native arms use the same AO convention. This enables direct paired
+    density comparisons; independent cross-engine gates still use E and forces.
+    """
+    state = _descriptor()
+    query = owner._library.generativeqc_batch_get_hf_warm_state
+    _native.check(owner._library, query(owner._batch, 0, ctypes.byref(state)))
+    if not state.present or not 0 < state.density_count <= 4_000_000:
+        raise RuntimeError("missing or unexpectedly large final density")
+    density = np.empty(state.density_count, dtype=np.float64)
+    coordinates = np.empty(state.coordinate_count, dtype=np.float64)
+    state.density, state.coordinates = _pointer(density), _pointer(coordinates)
+    _native.check(owner._library, query(owner._batch, 0, ctypes.byref(state)))
+    if not np.isfinite(density).all():
+        raise RuntimeError("nonfinite final density")
+    np.save(path, density)
+    return {
+        "path": str(path),
+        "count": int(density.size),
+        "sha256": hashlib.sha256(density.tobytes()).hexdigest(),
+    }
+
+
+def main() -> None:
+    """Measure one independent process, retaining science, work counts and gates."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("engine", choices=("native", "reference"))
+    parser.add_argument(
+        "--atoms", type=int, choices=(3, 6, 12, 24, 48, 96), required=True
+    )
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reference", type=Path)
+    parser.add_argument("--annotate", action="store_true")
+    parser.add_argument("--cpu-profile", type=Path)
+    parser.add_argument("--reference-stock", action="store_true")
+    parser.add_argument("--reference-core-guess", action="store_true")
+    parser.add_argument("--guess", choices=("core", "minao", "default"), default="core")
+    parser.add_argument("--holdout", action="store_true")
+    parser.add_argument("--warm-probe", action="store_true")
+    args = parser.parse_args()
+    if not os.environ.get("SLURM_JOB_ID") or "CUDA_VISIBLE_DEVICES" not in os.environ:
+        parser.error(
+            "a finite Slurm GPU allocation with assigned visibility is required"
+        )
+    if args.engine == "native" and not args.reference:
+        parser.error("native needs an independently measured reference")
+    case = (
+        peroxide_holdout() if args.holdout else scaling_cases()[f"water-{args.atoms}"]
+    )
+    basis_path = Path("benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json")
+    basis, reference_basis = load_comparison_basis(
+        basis_path, case, role="orbital", compute_forces=True
+    )
+    grid = GridSpec(radial_points=48, angular_polar=16, angular_azimuth=32)
+    science = protocol(args.atoms, basis, grid, 5, benchmark=PBE0)
+    if args.holdout:
+        science.update(
+            case="peroxide-16",
+            atoms=len(case.atoms),
+            aos=152,
+            geometries_bohr=[case.atoms],
+            repeats=3,
+        )
+        science = json.loads(json.dumps(science))
+    if args.reference_stock:
+        science["reference_fock_policy"] = "incremental"
+    if args.reference_core_guess:
+        science["reference_initial_guess"] = "1e"
+    record: dict[str, Any] = {
+        "schema": "pbe0-cold-profile.v1",
+        "source": os.environ.get("QUEUE_SOURCE_LABEL", "f05015e7c+queue-worktree"),
+        "engine": args.engine,
+        "guess": args.guess if args.engine == "native" else "reference-minao",
+        "status": "running",
+        "protocol": science,
+        "annotated": args.annotate,
+        "cpu_profile": str(args.cpu_profile) if args.cpu_profile else None,
+        "cold_definition": "fresh owner/density; persistent compiler and runtime caches reused",
+        "host": socket.gethostname(),
+        "slurm_job_id": os.environ["SLURM_JOB_ID"],
+        "cuda_visible_devices": os.environ["CUDA_VISIBLE_DEVICES"],
+        "versions": {
+            name: importlib.metadata.version(name)
+            for name in ("gpu4pyscf-cuda12x", "cupy-cuda12x", "pyscf", "numpy")
+        },
+        "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "basis_sha256": hashlib.sha256(basis_path.read_bytes()).hexdigest(),
+        "environment": {
+            name: value
+            for name, value in os.environ.items()
+            if name.startswith(("GENERATIVEQC_", "OMP_", "OPENBLAS_", "MKL_"))
+        },
+    }
+    spans: dict[str, list[float]] = defaultdict(list)
+    owner = None
+    profiler = cProfile.Profile() if args.cpu_profile else None
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+
+    def save() -> None:
+        args.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+
+    @contextmanager
+    def span(name: str) -> Iterator[None]:
+        """Record inclusive host spans; only the endpoint boundaries synchronize."""
+        if args.annotate:
+            cp.cuda.nvtx.RangePush(name)
+        started = perf_counter()
+        try:
+            yield
+        finally:
+            spans[name].append(perf_counter() - started)
+            if args.annotate:
+                cp.cuda.nvtx.RangePop()
+
+    def wrap(target: Any, attribute: str, name: str) -> None:
+        """Add a diagnostic span without changing a function's arguments or result."""
+        original = getattr(target, attribute)
+
+        @functools.wraps(original)
+        def observed(*arguments: Any, **keywords: Any) -> Any:
+            with span(name):
+                return original(*arguments, **keywords)
+
+        setattr(target, attribute, observed)
+
+    try:
+        cp.cuda.runtime.deviceSynchronize()
+        properties = cp.cuda.runtime.getDeviceProperties(cp.cuda.runtime.getDevice())
+        record["gpu"] = {
+            "name": properties["name"].decode(),
+            "major": properties["major"],
+            "minor": properties["minor"],
+            "multiprocessors": properties["multiProcessorCount"],
+            "memory_bytes": properties["totalGlobalMem"],
+            "driver": cp.cuda.runtime.driverGetVersion(),
+            "runtime": cp.cuda.runtime.runtimeGetVersion(),
+        }
+        if args.engine == "native":
+            started = perf_counter()
+            guess_options = (
+                {}
+                if args.guess == "default"
+                else {
+                    "initial_guess": InitialGuessSpec("minao")
+                    if args.guess == "minao"
+                    else None
+                }
+            )
+            calculator = Calculator(
+                method="pbe0-rks",
+                basis=basis,
+                device="cuda",
+                basis_representation="spherical",
+                ks_options=KsOptions(grid=grid),
+                energy_tolerance=1e-12,
+                density_tolerance=1e-10,
+                screening_tolerance=1e-12,
+                max_iterations=100,
+                **guess_options,
+            )
+            record["calculator_construct_seconds_excluded"] = perf_counter() - started
+            record["native_build"] = native_build_metadata(calculator)
+            require_tuned_native_build(record["native_build"])
+            if args.annotate:
+                from generativeqc import _stationary_composite_cuda, _stationary_cuda
+                from generativeqc._snapshot_grid_cache import SnapshotGridCache
+
+                wrap(SnapshotGridCache, "resolve", "native.force.snapshot_grid")
+                wrap(
+                    _stationary_composite_cuda.PreparedCompositeStationaryCudaGradient,
+                    "execute",
+                    "native.force.composite",
+                )
+                wrap(
+                    _stationary_cuda.PreparedStationaryCudaExecution,
+                    "ensure",
+                    "native.force.prepare",
+                )
+                wrap(
+                    _stationary_cuda,
+                    "complete_rks_cuda_gradient_diagnostic",
+                    "native.force.stationary",
+                )
+            if profiler:
+                profiler.enable()
+            started = perf_counter()
+            with span("native.prepare"):
+                owner = calculator.prepare_batch([case.atoms], warm_start=True)
+                cp.cuda.runtime.deviceSynchronize()
+            record["prepare_seconds"] = perf_counter() - started
+            original_force = owner._public_dft_cuda_force
+            force_work: list[dict[str, Any]] = []
+
+            def observed_force(*arguments: Any, **keywords: Any) -> Any:
+                """Time the already-synchronous force API without adding any GPU fence."""
+                with span("native.force"):
+                    result = original_force(*arguments, **keywords)
+                force_work.append(result[1])
+                return result
+
+            owner._public_dft_cuda_force = observed_force
+            if args.annotate:
+                wrap(owner._library, "generativeqc_batch_execute", "native.scf")
+            record["stage"] = "execute"
+            save()
+            started = perf_counter()
+            with span("native.execute"):
+                item = owner.execute(
+                    strict=False, properties=("energy", "forces")
+                ).items[0]
+                cp.cuda.runtime.deviceSynchronize()
+            record["execute_seconds"] = perf_counter() - started
+            record["force_seconds"] = sum(spans["native.force"])
+            record["scf_and_publication_seconds"] = (
+                record["execute_seconds"] - record["force_seconds"]
+            )
+            record["force_work"] = force_work
+            record.update(
+                energy=item.energy,
+                forces=item.forces.tolist() if item.forces is not None else None,
+                converged=item.converged,
+                status_code=item.status,
+                status_message=item.status_message,
+                iterations=item.iterations,
+                fock_builds=item.fock_builds,
+                density_rms=item.density_rms,
+                physical_residual_rms=item.physical_residual_rms,
+                warm_start_used=item.warm_start_used,
+                warm_start_fallback=item.warm_start_fallback,
+                incremental_direct_jk=item.incremental_direct_jk,
+                ks_diagnostic=item.ks_diagnostic.to_payload()
+                if item.ks_diagnostic
+                else None,
+                ao_work=read_ao_work(owner) if item.status == 0 else None,
+                resource_diagnostics=owner.resource_diagnostics,
+                initial_guess_diagnostic=item.initial_guess,
+            )
+            reference = json.loads(args.reference.read_text())
+            if reference["protocol"] != science:
+                raise ValueError("reference protocol does not match")
+            record["acceptance"] = check_endpoint(item, reference)
+        else:
+            if profiler:
+                profiler.enable()
+            started = perf_counter()
+            with span("reference.prepare"):
+                engine = reference_engine(
+                    case.atoms,
+                    reference_basis,
+                    grid,
+                    xc="PBE0",
+                    full_fock=not args.reference_stock,
+                )
+                if args.reference_core_guess:
+                    engine.init_guess = "1e"
+                engine.conv_tol = 1e-12
+                engine.conv_tol_grad = 1e-10
+                engine.direct_scf_tol = 1e-14
+                engine.max_cycle = 100
+                cp.cuda.runtime.deviceSynchronize()
+            record["prepare_seconds"] = perf_counter() - started
+            if args.annotate:
+                for method in (
+                    "get_veff",
+                    "get_jk",
+                    "get_fock",
+                    "eig",
+                    "make_rdm1",
+                    "get_hcore",
+                    "get_ovlp",
+                    "get_init_guess",
+                ):
+                    wrap(engine, method, "reference.scf." + method)
+                wrap(engine._numint, "nr_rks", "reference.scf.nr_rks")
+                from gpu4pyscf.grad import rhf, rks
+
+                for module, functions in (
+                    (rks, ("get_exc_full_response",)),
+                    (rhf, ("get_grad_hcore", "_grad_nuc_without_ecp")),
+                ):
+                    for method in functions:
+                        wrap(module, method, "reference.force." + method)
+            with reference_work_counter(engine) as work:
+                cp.cuda.runtime.deviceSynchronize()
+                started = perf_counter()
+                with span("reference.scf"):
+                    energy = float(engine.kernel())
+                    cp.cuda.runtime.deviceSynchronize()
+                scf_seconds = perf_counter() - started
+                gradient = engine.nuc_grad_method()
+                gradient.grid_response = True
+                if args.annotate:
+                    wrap(
+                        gradient, "jk_energy_per_atom", "reference.force.jk_derivatives"
+                    )
+                force_started = perf_counter()
+                with span("reference.force"):
+                    forces = cp.asnumpy(-gradient.kernel())
+                    cp.cuda.runtime.deviceSynchronize()
+                force_seconds = perf_counter() - force_started
+                record["execute_seconds"] = perf_counter() - started
+                record["scf_seconds"] = scf_seconds
+                record["force_seconds"] = force_seconds
+                convergence = gpu_convergence_payload([engine], [work["tracker"]])[0]
+            record.update(
+                energy=energy,
+                forces=forces.tolist(),
+                converged=bool(engine.converged),
+                iterations=convergence["iterations"],
+                final_residuals=convergence["final_residuals"],
+                fock_builds=work["scf_jk_builds"],
+                grid_points=len(engine.grids.weights),
+                full_fock=not args.reference_stock,
+                initial_guess=engine.init_guess,
+                reference_xc_backend=engine._numint.libxc.__version__,
+            )
+            if not engine.converged:
+                raise RuntimeError("independent reference did not converge")
+            if args.reference:
+                oracle = json.loads(args.reference.read_text())
+                energy_error = abs(energy - oracle["energy"])
+                force_error = float(
+                    np.max(np.abs(forces - np.asarray(oracle["forces"])))
+                )
+                record["control_acceptance"] = {
+                    "energy_error": energy_error,
+                    "force_error": force_error,
+                    "gate": energy_error <= 1e-8 and force_error <= 1e-7,
+                }
+        if profiler:
+            profiler.disable()
+            profiler.dump_stats(str(args.cpu_profile))
+        record["complete_seconds"] = (
+            record["prepare_seconds"] + record["execute_seconds"]
+        )
+        if args.engine == "native" and item.succeeded:
+            record["final_density"] = export_density(
+                owner, args.output.with_suffix(".density.npy")
+            )
+        if args.engine == "native" and args.warm_probe and item.succeeded:
+            warm_started = perf_counter()
+            warm_item = owner.execute(
+                strict=False, properties=("energy", "forces")
+            ).items[0]
+            cp.cuda.runtime.deviceSynchronize()
+            record["warm_probe"] = {
+                "seconds_excluded_from_cold": perf_counter() - warm_started,
+                "initial_guess_diagnostic": warm_item.initial_guess,
+                "warm_start_used": warm_item.warm_start_used,
+                "acceptance": check_endpoint(warm_item, reference),
+            }
+        record["host_spans_inclusive_seconds"] = dict(spans)
+        record["status"] = "measured"
+        save()
+        print(
+            json.dumps(
+                {
+                    name: record.get(name)
+                    for name in (
+                        "engine",
+                        "complete_seconds",
+                        "prepare_seconds",
+                        "scf_seconds",
+                        "force_seconds",
+                        "iterations",
+                        "fock_builds",
+                        "converged",
+                        "acceptance",
+                        "initial_guess_diagnostic",
+                    )
+                }
+            ),
+            flush=True,
+        )
+        if args.engine == "native" and not record["acceptance"]["gate"]:
+            raise RuntimeError("native energy/force acceptance failed")
+    except BaseException as error:
+        record.update(status="failed", error=f"{type(error).__name__}: {error}")
+        save()
+        raise
+    finally:
+        if owner:
+            owner.close()
+
+
+if __name__ == "__main__":
+    main()

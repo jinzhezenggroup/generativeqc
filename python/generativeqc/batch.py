@@ -365,6 +365,7 @@ class PreparedBatch:
                 auxiliary_handle if auxiliary_handle.value else None,
                 resource_plan=self.resource_plan,
                 ks_options=self._effective_ks_options,
+                systems=self._systems,
             )
             flags = _native.BATCH_ENABLE_WARM_STARTS if warm_start else 0
             if shell_class_profiling:

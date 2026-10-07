@@ -82,7 +82,9 @@ def test_cuda_retained_force_owner_coexists_with_next_setup(
 def test_calculator_forwards_mixed_policy_to_ks_capacity_planner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calculator = Calculator(method="pbe-rks")
+    # This test mutates a CPU facade into mixed CUDA after construction, so
+    # avoid retaining the CPU constructor's automatic MINAO candidate.
+    calculator = Calculator(method="pbe-rks", initial_guess=None)
     calculator._device_name = "cuda"
     calculator._precision_mode = _native.PRECISION_AUTO
     captured = {}
