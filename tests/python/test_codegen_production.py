@@ -1252,6 +1252,38 @@ def test_bounded_streaming_uses_monotonic_system_density_tail() -> None:
     assert "topology.generated_overflow[{shell_class}U]" in generator
 
 
+def test_generated_coulomb_streaming_uses_density_bounds() -> None:
+    """Density-screen generated J without changing its public threshold contract."""
+
+    generator = (
+        REPOSITORY_ROOT
+        / "python"
+        / "generativeqc_compiler"
+        / "integral"
+        / "production_emission.py"
+    ).read_text(encoding="utf-8")
+    survives = generator.split(
+        "/** Apply the exact bounded RHF/UHF Fock screening predicate. */", maxsplit=1
+    )[1].split("/** Find the first coarse-screened ket", maxsplit=1)[0]
+    assert "public pure-J provider uses geometry-only screening" not in survives
+    assert "topology.shell_pair_density_bounds == nullptr" in survives
+    assert "quartet_bound * fmax(ab.coulomb, cd.coulomb)" in survives
+    assert "coulomb_system_density_bound" in generator
+
+    owner = (REPOSITORY_ROOT / "src" / "scf" / "cuda" / "direct_coulomb.cpp").read_text(
+        encoding="utf-8"
+    )
+    # The owner declares this helper near the top; inspect its definition.
+    enqueue = owner.rsplit(
+        "cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p",
+        maxsplit=1,
+    )[1].split("cudaError_t project_generated_coulomb", maxsplit=1)[0]
+    assert "launch_reduce_shell_pair_density_bounds_kernel(" in enqueue
+    assert "launch_reduce_bounded_system_density_bounds_kernel(" in enqueue
+    assert "p.shell_pair_density_bounds" in enqueue
+    assert "p.system_pair_density_bounds" in enqueue
+
+
 def test_bounded_streaming_profiles_executed_precision_per_shell_class() -> None:
     """Count actual retained quartets without changing normal kernel work."""
 

@@ -2316,6 +2316,52 @@ void bounded_schwarz_schedule_budget() {
   std::cout << "CUDA indexed Schwarz full/LR batch and prefix-budget gates PASS\n";
 }
 
+/** Qualify the shape-only budget without paying for dense reference ERIs.
+ * The query must admit the generated spd owner, including its density metadata,
+ * while keeping unsupported through-f values on their existing fallback.
+ */
+void generated_coulomb_budget() {
+  for (unsigned angular : {0U, 1U, 2U, 3U})
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      generativeqc::core::System first;
+      first.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+      first.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, angular, {{0.6, 1.0}}}};
+      if (angular == 2) first.shells.push_back({0, 1, {{1.1, 0.6}, {0.3, 0.4}}});
+      first.electron_count = 2;
+      first.basis_representation = representation;
+      auto second = first;
+      second.atoms[1].position[2] += 0.13;
+      second.shells[1].primitives[0].exponent = 0.9;
+      std::string detail;
+      for (auto* system : {&first, &second})
+        require(generativeqc::molecule::validate_and_normalize(*system, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+      const auto dimension = generativeqc::molecule::ao_count(first);
+      const auto shells = first.shells.size() + second.shells.size();
+      std::size_t primitives = 0;
+      for (const auto* system : {&first, &second})
+        for (const auto& shell : system->shells) primitives += shell.primitives.size();
+      for (unsigned derivative_order : {0U, 1U}) {
+        const auto capacity =
+            cuda_direct_coulomb_device_bytes(2, dimension, 4, shells, primitives, derivative_order);
+        CudaDirectJkPlan* raw{};
+        CudaDirectJkDiagnostic diagnostic;
+        require(create_cuda_direct_jk_plan(0, {first, second}, derivative_order, 0.0, capacity,
+                                           &raw, diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+            raw, destroy_cuda_direct_jk_plan);
+        require(diagnostic.device_bytes <= capacity,
+                "generated J density metadata exceeded the shape-only budget");
+        require((std::string(diagnostic.schedule).find("generated-shell") != std::string::npos) ==
+                    (angular <= 2),
+                "shape-only J budget lost generated admission or changed through-f fallback");
+      }
+    }
+  std::cout << "CUDA generated J shape-only density budget gates PASS\n";
+}
+
 void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
@@ -2566,6 +2612,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--generated-j-budget-only") {
+      generated_coulomb_budget();
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--spd-range-only") {
       spd_optional_allocation_fallback();
       spd_canonical_range_values();

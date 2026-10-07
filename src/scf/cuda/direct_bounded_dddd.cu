@@ -103,12 +103,15 @@ __launch_bounds__(kDdddStreamThreads<MaterializedValues>) void bounded_direct_dd
         bool keep = (active == nullptr || active[system] != 0U) &&
                     topology.shell_pair_bounds[bra_pair] * topology.shell_pair_bounds[ket_pair] >=
                         screening_tolerance;
-        if (keep && topology.fock_consumer != detail::GeneratedFockConsumer::Coulomb) {
+        if (keep && density_bounds != nullptr) {
+          const bool coulomb_only =
+              topology.fock_consumer == detail::GeneratedFockConsumer::Coulomb;
+          const bool exchange_only =
+              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange ||
+              topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange;
           keep = direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
               batch, bra_pair, ket_pair, screening_tolerance, topology.shell_pair_bounds,
-              density_bounds, nullptr,
-              topology.fock_consumer == detail::GeneratedFockConsumer::Exchange ||
-                  topology.fock_consumer == detail::GeneratedFockConsumer::HartreeFockExchange);
+              density_bounds, nullptr, exchange_only, coulomb_only);
         }
         stream_state = keep ? kConsume : kSkip;
         if (keep) {

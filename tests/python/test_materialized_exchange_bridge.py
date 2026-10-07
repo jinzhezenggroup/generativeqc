@@ -67,7 +67,7 @@ def test_materialized_exchange_bridge_matches_dense_contraction(
         [str(binary)], capture_output=True, text=True, check=False, timeout=15
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "1320 independent bridge comparisons passed" in result.stdout
+    assert "2640 independent bridge comparisons passed" in result.stdout
 
 
 PREFIX = r"""
@@ -145,8 +145,11 @@ void decode_lower_triangle(std::size_t ordinal, std::size_t& row, std::size_t& c
 }
 template<bool Unrestricted, DirectScreeningPurpose Purpose>
 bool direct_shell_quartet_survives_screening(DeviceBatch, unsigned, unsigned, double,
-    const double*, const ShellPairDensityBounds*, double*, bool exchange_only) {
+    const double*, const ShellPairDensityBounds* density_bounds, double*,
+    bool exchange_only, bool coulomb_only) {
+  assert(density_bounds != nullptr);
   assert(exchange_only == (expected_mode == 2 || expected_mode == 3));
+  assert(coulomb_only == (expected_mode == 1));
   ++screening_calls;
   return true;
 }
@@ -187,6 +190,7 @@ template<bool Unrestricted> unsigned qualify() {
   unsigned class_offsets[18]{};
   class_offsets[17]=1;
   GeneratedShellPairStream topology{2,class_offsets,order,bound,nullptr,{}};
+  const ShellPairDensityBounds density_bounds{};
   std::vector<double> density(80);
   for(std::size_t i=0;i<density.size();++i)
     density[i]=0.013*(int(i%11)-4)+0.002*double(i);
@@ -194,10 +198,13 @@ template<bool Unrestricted> unsigned qualify() {
     return ((a*n+b)*n+c)*n+d;
   };
   unsigned cases=0;
+  // Cover density-aware admission and the metadata-free Schwarz fallback.
+  for(bool with_density_bounds:{false,true})
   for(std::size_t i=0;i<n;++i) for(std::size_t j=0;j<=i;++j)
   for(std::size_t k=0;k<n;++k) for(std::size_t l=0;l<=k;++l) {
     if(i*(i+1)/2+j < k*(k+1)/2+l) continue;
     quartet={i,j,k,l};
+    topology.shell_pair_density_bounds=with_density_bounds ? &density_bounds : nullptr;
     const std::set<std::array<std::size_t,4>> orbit{
       {i,j,k,l},{j,i,k,l},{i,j,l,k},{j,i,l,k},
       {k,l,i,j},{l,k,i,j},{k,l,j,i},{l,k,j,i}};
@@ -251,7 +258,7 @@ template<bool Unrestricted> unsigned qualify() {
                 false,false>(batch,&topology,0.0,bound,density.data(),active,actual.data(),
                              &cursor,nullptr,&census,1.0,-0.5,&work);
           assert(cursor==2 && census==1);
-          assert(screening_calls==(mode==1 ? 0U : 1U));
+          assert(screening_calls==(with_density_bounds ? 1U : 0U));
           assert(fallback_calls==(route==2 ? 8U : 0U));
         }
         assert(work.coulomb_preparations==(route==2 ? 0U : 1U));
@@ -273,7 +280,7 @@ template<bool Unrestricted> unsigned qualify() {
 int main() {
   using namespace generativeqc::scf::cuda_execution;
   const unsigned cases=qualify<false>()+qualify<true>();
-  assert(cases==1320);
+  assert(cases==2640);
   std::cout << cases << " independent bridge comparisons passed\n";
 }
 """

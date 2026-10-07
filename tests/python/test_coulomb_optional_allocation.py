@@ -100,6 +100,12 @@ struct HostBatch {
   std::vector<double> ao_to_direct_transform, ao_term_coefficients{1}, direct_ao_coefficients{1};
 };
 struct PrimitivePairData { double value; };
+struct ShellPairDensityBounds {
+  double coulomb{}, exchange_alpha{}, exchange_beta{};
+};
+namespace detail {
+using GeneratedShellPairDensityBounds = ShellPairDensityBounds;
+}
 struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
   unsigned direct_coulomb_reachable=0;
@@ -128,6 +134,8 @@ struct GeneratedCoulombPlan {
   unsigned worker_blocks{};
   double screening{};
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{}, *shell_bounds{};
+  ShellPairDensityBounds* shell_pair_density_bounds{};
+  double *system_density_bounds{}, *system_pair_density_bounds{};
   std::uint8_t* active{};
   std::uint32_t* heads{};
   const std::uint32_t* pair_order{};
