@@ -11,9 +11,12 @@ The first production adapter calls
 and enumerates outer and prefix panel visits independently of its
 `generated_rows` formula. It rejects disagreement, including the final short
 row block, and binds the exact source file SHA-256. The policy requires the
-loaded module to come from the declared source root. The native owner uses the
-generated `visit_projected_exchange` two-slot traversal; its project callback
-increments `streamed_occupied_raw_generation_rows`; a successful host
+loaded package to come from the declared source root. It reads the schedule
+source once, then hashes and executes that same captured byte string in an
+isolated module namespace. A long-lived process therefore cannot combine a
+stale imported function with a newer on-disk source identity. The native owner
+uses the generated `visit_projected_exchange` two-slot traversal; its project
+callback increments `streamed_occupied_raw_generation_rows`; a successful host
 traversal then records `streamed_occupied_row_blocks`.
 
 Generate a shape census from a source checkout, with a separately reviewed

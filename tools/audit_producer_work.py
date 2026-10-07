@@ -7,6 +7,7 @@ import hashlib
 import inspect
 import json
 import sys
+import types
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -188,6 +189,50 @@ def source_digest(path: Path) -> str:
         raise ReceiptError(f"cannot bind source {path}: {exc}") from exc
 
 
+def _captured_schedule(root: Path) -> tuple[Any, str]:
+    source_path = (root / SCHEDULE_SOURCE).resolve()
+    source_package = str((root / "python").resolve())
+    if source_package not in sys.path:
+        sys.path.insert(0, source_package)
+    from generativeqc_compiler.method.df_exchange_schedule import (
+        projected_exchange_schedule,
+    )
+
+    if Path(inspect.getfile(projected_exchange_schedule)).resolve() != source_path:
+        raise ReceiptError(
+            "loaded production schedule is outside the bound source root"
+        )
+    try:
+        source_bytes = source_path.read_bytes()
+    except OSError as exc:
+        raise ReceiptError(f"cannot bind source {source_path}: {exc}") from exc
+    digest = hashlib.sha256(source_bytes).hexdigest()
+    module_name = (
+        "generativeqc_compiler.method._producer_work_schedule_"
+        f"{digest}_{id(source_bytes)}"
+    )
+    module = types.ModuleType(module_name)
+    module.__file__ = str(source_path)
+    module.__package__ = "generativeqc_compiler.method"
+    sys.modules[module_name] = module
+    try:
+        # This is the root-bound source snapshot whose bytes define the receipt.
+        exec(  # noqa: S102
+            compile(source_bytes, str(source_path), "exec"), module.__dict__
+        )
+        captured = getattr(module, "projected_exchange_schedule", None)
+        if not callable(captured):
+            raise ReceiptError("captured source has no production schedule")
+    except ReceiptError:
+        raise
+    except Exception as exc:
+        raise ReceiptError(f"cannot execute captured schedule source: {exc}") from exc
+    finally:
+        if sys.modules.get(module_name) is module:
+            del sys.modules[module_name]
+    return captured, digest
+
+
 def compare(
     baseline: dict[str, Any],
     candidate: dict[str, Any],
@@ -260,21 +305,8 @@ def schedule_receipt(
     dependency_identity: str,
     build_sha256: str,
 ) -> dict[str, Any]:
-    # The policy is the production compiler schedule; count visits independently.
-    source_package = str((root / "python").resolve())
-    if source_package not in sys.path:
-        sys.path.insert(0, source_package)
-    from generativeqc_compiler.method.df_exchange_schedule import (
-        projected_exchange_schedule,
-    )
-
-    if (
-        Path(inspect.getfile(projected_exchange_schedule)).resolve()
-        != (root / SCHEDULE_SOURCE).resolve()
-    ):
-        raise ReceiptError(
-            "loaded production schedule is outside the bound source root"
-        )
+    # Execute the same captured source bytes that define the receipt identity.
+    projected_exchange_schedule, source = _captured_schedule(root)
     for label, value in (
         ("n", n),
         ("auxiliaries", auxiliaries),
@@ -287,7 +319,6 @@ def schedule_receipt(
     _bool(triangular, "triangular")
     if capacity > UINT64_MAX // 8:
         raise ReceiptError("memory budget byte count overflows")
-    source = source_digest(root / SCHEDULE_SOURCE)
     shape = projected_exchange_schedule(
         n,
         auxiliaries,

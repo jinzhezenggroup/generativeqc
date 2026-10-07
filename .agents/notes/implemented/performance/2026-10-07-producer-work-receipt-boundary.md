@@ -13,10 +13,13 @@ amplification or establish whether a completed endpoint executed it.
 
 The receipt consumer has a strict, generic scientific/problem/resource/producer
 identity and exact work counts. Its first static adapter uses the production
-compiler schedule and enumerates its visits independently. Its diagnostic
-adapter reads the existing CUDA component trace and native streamed-row
-counters. The trace remains incomplete execution evidence because those
-counters occur before final endpoint success can be established.
+compiler schedule captured from the declared source root and enumerates its
+visits independently. The same captured bytes are hashed and executed in an
+isolated module namespace so process-wide import caching cannot relabel stale
+schedule work with a newer source digest. Its diagnostic adapter reads the
+existing CUDA component trace and native streamed-row counters. The trace
+remains incomplete execution evidence because those counters occur before final
+endpoint success can be established.
 
 ## Rejected alternatives
 
@@ -29,6 +32,8 @@ legitimate bounded-resource recomputation without reusable-dependency proof.
 
 - Compare only identical scientific, resource, producer, dependency, reuse, and
   invalidation domains, with each source receipt bound to its own source bytes.
+- Execute the exact captured schedule bytes named by the receipt; reject a
+  loaded compiler package outside the declared source root.
 - Keep memory budget and peak separate from semantic work.
 - Reject partial, invalid, duplicate, overflowing, or stale evidence.
 - A static PASS cannot become a runtime or numerical PASS.

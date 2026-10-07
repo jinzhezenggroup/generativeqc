@@ -7,6 +7,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,80 @@ def test_production_schedule_census_and_source_bound_ratchet(tmp_path: Path) -> 
         changed_source.read_bytes()
     ).hexdigest()
     assert compare(baseline, candidate, SOURCE, changed_source)["status"] == "FAIL"
+
+
+def test_schedule_census_executes_captured_bytes_after_same_path_change(
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    package = checkout / "python/generativeqc_compiler"
+    method = package / "method"
+    method.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (method / "__init__.py").write_text("")
+    shutil.copy2(SOURCE, method / SOURCE.name)
+    shutil.copy2(
+        ROOT / "python/generativeqc_compiler/method/df_occupied_gram_cuda.py",
+        method / "df_occupied_gram_cuda.py",
+    )
+    script = r"""
+import json
+import sys
+from pathlib import Path
+
+repository, checkout = map(Path, sys.argv[1:])
+sys.path.insert(0, str(repository))
+from tools.audit_producer_work import schedule_receipt
+
+sys.path.insert(0, str(checkout / "python"))
+arguments = {
+    "root": checkout,
+    "n": 12,
+    "auxiliaries": 5,
+    "rank": 2,
+    "capacity": 48,
+    "dense_row_blocks": 3,
+    "dense_output_blocks": 3,
+    "triangular": True,
+    "scientific_problem": "same-path-change",
+    "dependency_identity": "fixture",
+    "build_sha256": "a" * 64,
+}
+before = schedule_receipt(**arguments)
+source = checkout / "python/generativeqc_compiler/method/df_exchange_schedule.py"
+text = source.read_text()
+needle = "maximum_rows = min(n, capacity // (auxiliaries * rank), capacity // n)"
+assert needle in text
+source.write_text(text.replace(needle, "maximum_rows = min(n, 2)"))
+after = schedule_receipt(**arguments)
+print(json.dumps({"before": before, "after": after}))
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, str(ROOT), str(checkout)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    observed = json.loads(result.stdout)
+    assert observed["before"]["work"]["executed_elements"] == 16
+    assert observed["before"]["work"]["producer_callbacks"] == 4
+    assert observed["after"]["work"]["executed_elements"] == 32
+    assert observed["after"]["work"]["producer_callbacks"] == 16
+    assert (
+        observed["before"]["identity"]["source_sha256"]
+        != observed["after"]["identity"]["source_sha256"]
+    )
+
+
+def test_schedule_census_rejects_a_loaded_package_outside_source_root(
+    tmp_path: Path,
+) -> None:
+    wrong_root = tmp_path / "other-checkout"
+    wrong_source = wrong_root / SOURCE.relative_to(ROOT)
+    wrong_source.parent.mkdir(parents=True)
+    shutil.copy2(SOURCE, wrong_source)
+    with pytest.raises(ReceiptError, match="outside the bound source root"):
+        schedule(root=wrong_root)
 
 
 def test_source_driven_once_and_nested_consumer_amplification() -> None:
