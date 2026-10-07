@@ -10,10 +10,10 @@
 #include <stdexcept>
 
 #include "cc/df_plan.hpp"
+#include "cc/iteration_driver.hpp"
 #include "generated_df_ccsd_core_cpu.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "solver/diis.hpp"
-#include "solver/iteration_control.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -333,9 +333,6 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   current.insert(current.end(), p.initial_t1.begin(), p.initial_t1.end());
   current.insert(current.end(), p.initial_t2.begin(), p.initial_t2.end());
   generativeqc::solver::Diis diis(options.diis_size, elements);
-  generated::IterationOutputs carried_output{};
-  bool has_carried_output = false;
-  double previous = std::numeric_limits<double>::quiet_NaN();
   SolverResult result;
   result.diagnostic.denominator_identity = denominator_identity(p);
   result.diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, capacity);
@@ -496,37 +493,35 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     return {out.energy, out.r1, out.r2};
   };
 
-  const unsigned iteration_budget = options.max_iterations == std::numeric_limits<unsigned>::max()
-                                        ? options.max_iterations
-                                        : options.max_iterations + 1;
-  generativeqc::solver::run_bounded_iterations(iteration_budget, [&](unsigned ordinal) {
-    const unsigned iteration = ordinal - 1;
-    try {
-      auto in = inputs(p, current.data(), current.data() + n1);
-      const auto iteration_started = std::chrono::steady_clock::now();
-      generated::IterationOutputs out{};
-      if (has_carried_output) {
-        out = carried_output;
-        has_carried_output = false;
-      } else {
-        out = run_iteration(in);
-        ++result.diagnostic.iteration_graph_calls;
-        if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
-      }
-      result.diagnostic.iteration_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
-              .count();
-      const double r1 = max_abs(out.r1, n1), r2 = max_abs(out.r2, n2);
-      const double delta = std::isfinite(previous) ? std::abs(out.energy - previous)
-                                                   : std::numeric_limits<double>::infinity();
-      result.correlation_energy = out.energy;
-      result.total_energy = p.reference_energy + out.energy;
-      result.diagnostic.iterations = iteration + 1;
-      result.diagnostic.energy_change = delta;
-      result.diagnostic.r1_max = r1;
-      result.diagnostic.r2_max = r2;
-      if (std::isfinite(previous) && delta <= options.energy_tolerance &&
-          std::max(r1, r2) <= options.residual_tolerance) {
+  run_cc_iterations<generated::IterationOutputs>(
+      options,
+      [&](const std::optional<generated::IterationOutputs>& carried) {
+        auto in = inputs(p, current.data(), current.data() + n1);
+        const auto iteration_started = std::chrono::steady_clock::now();
+        generated::IterationOutputs out{};
+        if (carried) {
+          out = *carried;
+        } else {
+          out = run_iteration(in);
+          ++result.diagnostic.iteration_graph_calls;
+          if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
+        }
+        result.diagnostic.iteration_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
+                .count();
+        const double r1 = max_abs(out.r1, n1), r2 = max_abs(out.r2, n2);
+        return std::pair{out, IterationMetrics{out.energy, r1, r2}};
+      },
+      [&](unsigned observations, IterationMetrics status, double delta) {
+        result.correlation_energy = status.energy;
+        result.total_energy = p.reference_energy + status.energy;
+        result.diagnostic.iterations = observations;
+        result.diagnostic.energy_change = delta;
+        result.diagnostic.r1_max = status.r1;
+        result.diagnostic.r2_max = status.r2;
+      },
+      [&]() {
+        auto in = inputs(p, current.data(), current.data() + n1);
         const auto replay_started = std::chrono::steady_clock::now();
         const auto replay = run_replay(in);
         result.diagnostic.replay_seconds +=
@@ -535,58 +530,52 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
         ++result.diagnostic.replay_graph_calls;
         result.diagnostic.replay_r1_max = max_abs(replay.r1, n1);
         result.diagnostic.replay_r2_max = max_abs(replay.r2, n2);
-        if (std::max(result.diagnostic.replay_r1_max, result.diagnostic.replay_r2_max) <=
-                options.residual_tolerance &&
-            std::abs(replay.energy - out.energy) <= options.energy_tolerance) {
-          result.status = SolveStatus::Converged;
-          result.reason = "energy change and expanded physical R1/R2 passed";
-          return false;
+        return IterationMetrics{replay.energy, result.diagnostic.replay_r1_max,
+                                result.diagnostic.replay_r2_max};
+      },
+      [&](const generated::IterationOutputs& out) -> std::optional<generated::IterationOutputs> {
+        const auto update_started = std::chrono::steady_clock::now();
+        std::vector<double> trial(elements);
+        const double jacobi = 1.0 - options.damping;
+        for (std::size_t k = 0; k < n1; ++k)
+          trial[k] = current[k] + jacobi * (out.next_t1[k] - current[k]);
+        for (std::size_t k = 0; k < n2; ++k)
+          trial[n1 + k] = current[n1 + k] + jacobi * (out.next_t2[k] - current[n1 + k]);
+        result.diagnostic.update_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started)
+                .count();
+        ++result.diagnostic.update_calls;
+        if (!options.diis_size) {
+          current = std::move(trial);
+          return std::nullopt;
         }
-      }
-      if (iteration == options.max_iterations) return false;
-      const auto update_started = std::chrono::steady_clock::now();
-      std::vector<double> trial(elements);
-      const double jacobi = 1.0 - options.damping;
-      for (std::size_t k = 0; k < n1; ++k)
-        trial[k] = current[k] + jacobi * (out.next_t1[k] - current[k]);
-      for (std::size_t k = 0; k < n2; ++k)
-        trial[n1 + k] = current[n1 + k] + jacobi * (out.next_t2[k] - current[n1 + k]);
-      result.diagnostic.update_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
-      ++result.diagnostic.update_calls;
-      if (!options.diis_size) {
-        current = std::move(trial);
-        previous = out.energy;
-        return true;
-      }
-      auto trial_in = inputs(p, trial.data(), trial.data() + n1);
-      const auto trial_started = std::chrono::steady_clock::now();
-      const auto trial_out = run_iteration(trial_in);
-      result.diagnostic.iteration_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
-      ++result.diagnostic.iteration_graph_calls;
-      if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
-      std::vector<double> error;
-      error.reserve(elements);
-      error.insert(error.end(), trial_out.r1, trial_out.r1 + n1);
-      error.insert(error.end(), trial_out.r2, trial_out.r2 + n2);
-      const auto diis_started = std::chrono::steady_clock::now();
-      auto update = diis.update_with_status(std::move(trial), std::move(error));
-      current = std::move(update.vector);
-      if (!update.modified) {
-        carried_output = trial_out;
-        has_carried_output = true;
-      }
-      result.diagnostic.diis_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
-      previous = out.energy;
-      return true;
-    } catch (const std::runtime_error& error) {
-      result.status = SolveStatus::NumericalFailure;
-      result.reason = error.what();
-      return false;
-    }
-  });
+        auto trial_in = inputs(p, trial.data(), trial.data() + n1);
+        const auto trial_started = std::chrono::steady_clock::now();
+        const auto trial_out = run_iteration(trial_in);
+        result.diagnostic.iteration_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
+        ++result.diagnostic.iteration_graph_calls;
+        if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
+        std::vector<double> error;
+        error.reserve(elements);
+        error.insert(error.end(), trial_out.r1, trial_out.r1 + n1);
+        error.insert(error.end(), trial_out.r2, trial_out.r2 + n2);
+        const auto diis_started = std::chrono::steady_clock::now();
+        auto update = diis.update_with_status(std::move(trial), std::move(error));
+        current = std::move(update.vector);
+        result.diagnostic.diis_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
+        if (!update.modified) return trial_out;
+        return std::nullopt;
+      },
+      [&]() {
+        result.status = SolveStatus::Converged;
+        result.reason = "energy change and expanded physical R1/R2 passed";
+      },
+      [&](const std::runtime_error& error) {
+        result.status = SolveStatus::NumericalFailure;
+        result.reason = error.what();
+      });
   result.diagnostic.diis_restarts = diis.restarts();
   result.diagnostic.tensor_seconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - solve_started).count();
