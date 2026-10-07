@@ -9,10 +9,14 @@ import shutil
 import subprocess
 from pathlib import Path
 from types import CodeType, FunctionType, SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 from generativeqc._ks_snapshot import NativeKsSnapshot
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -294,10 +298,8 @@ def test_cuda_outward_record_discloses_unmeasured_df_transfers() -> None:
 
 def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(
     tmp_path: Path,
+    native_cxx: NativeCxx,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     provider = (ROOT / "src/scf/cuda_fock_provider.cpp").read_text()
     selection = provider[
         provider.index("  const double cj = spec.coulomb.present") : provider.index(
@@ -305,9 +307,7 @@ def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(
         )
     ]
     bridge = (ROOT / "src/scf/cuda/df_gradient_bridge.cu").read_text()
-    start = bridge.index(
-        "      auto* densities = static_cast<double*>(arena.allocate(terms.size() * n * n * sizeof(double)));"
-    )
+    start = bridge.index("      const double* densities = nullptr;")
     uploads = bridge[
         start : bridge.index("      const auto workspace_elements =", start)
     ]
@@ -315,6 +315,8 @@ def test_real_cuda_response_terms_require_nonzero_distinct_density_uploads(
         r"""
 #include <cassert>
 #include <cstddef>
+#include <cstring>
+#include <stdexcept>
 #include <vector>
 enum class FockSpin { Restricted, Unrestricted };
 struct FockBuildSpec {
@@ -326,28 +328,50 @@ struct DensityFittingDensityResponse {
   double coulomb_coefficient, exchange_coefficient;
 };
 struct Arena {
-  struct { std::size_t host_to_device_bytes{}, density_host_to_device_bytes{}, uploads{}; } stats;
+  struct {
+    std::size_t host_to_device_bytes{}, density_host_to_device_bytes{}, uploads{},
+                borrowed_device_bytes{};
+  } stats;
   void* stream{};
   double buffer[16]{};
-  void* allocate(std::size_t bytes) { assert(bytes <= sizeof(buffer)); return buffer; }
+  std::size_t allocations{};
+  void* allocate(std::size_t bytes) {
+    assert(bytes <= sizeof(buffer)); ++allocations; return buffer;
+  }
 };
+struct BorrowedDensity { const double* density; };
+namespace runtime::cuda_trace {
+void trace_counter(const char*, std::size_t) {}
+}
 constexpr int cudaMemcpyHostToDevice=1;
-int cudaMemcpyAsync(void*,const void*,std::size_t,int,void*) { return 0; }
+int cudaMemcpyAsync(void* destination,const void* source,std::size_t bytes,int,void*) {
+  std::memcpy(destination,source,bytes); return 0;
+}
 void check(int code) { assert(code==0); }
-std::vector<double> density_upload(bool unrestricted, bool coulomb) {
+std::vector<double> density_upload(bool unrestricted, bool coulomb, bool borrow=false) {
   const FockBuildSpec spec{unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted,
                           {coulomb,1.0},{!coulomb,-0.25}};
   const std::size_t n=2;
   std::vector<double> density(n*n,1.0),beta(n*n,2.0),out(1);
+  const auto resident=density;
+  const BorrowedDensity lease{resident.data()};
+  const auto* borrowed_response_density=borrow ? &lease : nullptr;
 """
         + selection
         + r"""
   Arena arena;
+  const auto* borrowed_density=borrowed_response_density;
 """
         + uploads
         + r"""
-  assert(arena.stats.uploads==terms.size());
+  assert(arena.stats.uploads==(borrow ? 0 : terms.size()));
+  assert(arena.allocations==(borrow ? 0 : 1));
+  assert(arena.stats.borrowed_device_bytes==(borrow ? n*n*sizeof(double) : 0));
   assert(arena.stats.host_to_device_bytes==arena.stats.density_host_to_device_bytes);
+  assert(densities==(borrow ? resident.data() : arena.buffer));
+  for(std::size_t term=0;term<terms.size();++term)
+    for(std::size_t item=0;item<n*n;++item)
+      assert(densities[term*n*n+item]==terms[term].density[item]);
   return {static_cast<double>(arena.stats.density_host_to_device_bytes)};
 }
 int main() {
@@ -355,26 +379,27 @@ int main() {
   const auto uks_j=density_upload(true,true)[0], uks_k=density_upload(true,false)[0];
   assert(rks_j==32 && rks_k==32 && uks_j==32 && uks_k==64);
   assert(rks_j+rks_k==64 && uks_j+uks_k==96);
+  assert(density_upload(false,true,true)[0]==0);
+  for(const auto mode : {0,1,2}) {
+    bool rejected=false;
+    try { density_upload(mode!=0,mode==1,true); }
+    catch(const std::invalid_argument&) { rejected=true; }
+    assert(rejected);
+  }
 }
 """
     )
     cpp, executable = tmp_path / "terms.cpp", tmp_path / "terms"
     cpp.write_text(unit)
-    result = subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=(
             "-std=c++17",
             "-Wall",
             "-Wextra",
             "-Werror",
-            str(cpp),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+        ),
+        compile_timeout=30,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
     subprocess.run([str(executable)], check=True, timeout=10)
