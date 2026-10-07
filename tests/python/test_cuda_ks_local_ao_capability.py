@@ -140,6 +140,10 @@ def test_prepared_density_preserves_local_ao_component_precision(
     unit.write_text(
         r"""
 #include <cassert>
+#include <charconv>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "runtime/bounded_workspace.hpp"
@@ -167,6 +171,13 @@ struct Xc {
   bool qualified{};
   std::size_t reserved{};
   tensor::PanelProductDiagnostic diagnostic{};
+  struct BatchPlan { std::size_t device_bytes{}; } batch;
+  std::size_t batch_calls{}, batch_tiles{}, batch_budget{};
+  void prepare_point_batches(std::size_t tiles, std::size_t budget) {
+    ++batch_calls; batch_tiles = tiles; batch_budget = budget;
+    batch.device_bytes = admitted.precision.arithmetic.is_strict_fp64() && budget >= 64 ? 64 : 0;
+  }
+  const BatchPlan& point_batch_plan() const { return batch; }
   void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
                        std::size_t budget) {
     assert(replays == 50);
@@ -186,6 +197,13 @@ struct Xc {
   }
 };
 int main() {
+  for (unsigned batching = 0; batching < 4; ++batching) {
+    unsetenv("GENERATIVEQC_CUDA_XC_BATCH_TILES");
+    unsetenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES");
+    if (batching) {
+      setenv("GENERATIVEQC_CUDA_XC_BATCH_TILES", batching == 1 ? "1" : "4", 1);
+      setenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES", batching == 2 ? "0" : "4096", 1);
+    }
   for (bool capable : {false, true}) for (bool automatic : {false, true})
     for (bool nonlocal : {false, true})
       for (auto qualification : {CudaXcCapability::Unavailable,
@@ -221,7 +239,11 @@ int main() {
     const bool admitted = host >= tensor::PreparedPanelProduct::host_reservation;
     assert(owner.reserved == (admitted ? device : 0));
     const bool selected = admitted && device >= 160 && qualified;
-    assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0));
+    const bool batched = batching == 3 && !mixed_density;
+    assert(owner.batch_calls == (batching >= 2 ? 1 : 0));
+    assert(owner.batch_tiles == (batching >= 2 ? 4 : 0));
+    assert(owner.batch_budget == (batching == 3 ? 4096 : 0));
+    assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0) + (batched ? 64 : 0));
     assert(resource.provider_device_bytes == 2000 + (selected ? 96 : 0));
     assert(resource.retained_host_numeric_bytes ==
            3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
@@ -233,6 +255,7 @@ int main() {
       assert(pending_mixed_coulomb == (automatic && !strict_refinement));
       assert(pending_mixed_density == (mixed_density && !strict_refinement));
     }
+  }
   }
 }
 """
@@ -324,6 +347,7 @@ void launch_density_product(int,const double*,const double*,I,I,I,I,double*,int*
 struct CudaXcPlan {
   Layout layout_;
   bool evaluation_started_{};
+  double* point_batch_arena_{};
   int stream_{};
   std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
   std::unique_ptr<tensor::PreparedPanelProduct> density_provider_;

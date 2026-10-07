@@ -1,10 +1,12 @@
-"""Complete PBE0 E+F A/B pairs changing only the prepared SCF XC tile.
+"""Complete PBE0 E+F A/B pairs changing only SCF XC scheduling.
 
 Both arms use the same binary, scientific inputs and fixed 256-point force
 policy. Each prepared owner independently converges and then publicly freezes
 its warm snapshot; this is not a claim of identical density bytes. Setup and
 priming are retained outside replay timing, and every timed solver call must
 perform one physical iteration and one Fock build without warm fallback.
+With --point-batch-tiles both arms retain 256-point AO maps/contractions and
+only the candidate batches independent point domains within an explicit cap.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import argparse
 import hashlib
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -53,11 +56,19 @@ def main() -> None:
     parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--feasibility", action="store_true")
+    parser.add_argument("--point-batch-tiles", type=int)
+    parser.add_argument("--point-batch-bytes", type=int, default=32 * 1024 * 1024)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
         parser.error("real-GPU execution requires a finite Slurm allocation")
     if args.repeats < 5 and not (args.feasibility and args.repeats == 1):
         parser.error("at least five pairs required unless explicitly feasibility-only")
+    if args.point_batch_tiles is not None and (
+        args.point_batch_tiles < 2 or args.point_batch_bytes < 0
+    ):
+        parser.error(
+            "point batching needs at least two tiles and a nonnegative byte cap"
+        )
     os.environ["GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE"] = "off"
     case = scaling_cases()[f"water-{args.atoms}"]
     basis, _ = load_comparison_basis(
@@ -67,12 +78,44 @@ def main() -> None:
     scientific = protocol(args.atoms, basis, grid, 5, benchmark=PBE0)
     reference = json.loads(args.reference.read_text())
     assert reference["protocol"] == scientific and reference["stage"] == "complete"
-    tiles = {"baseline": 256, "candidate": 512}
+    tiles = {"baseline": 256, "candidate": 256 if args.point_batch_tiles else 512}
+
+    @contextmanager
+    def point_batch_selection(arm: str) -> Any:
+        """Reapply each arm when moved coordinates rebuild the native owner."""
+        values = {
+            "GENERATIVEQC_CUDA_XC_BATCH_TILES": str(
+                args.point_batch_tiles
+                if arm == "candidate" and args.point_batch_tiles
+                else 1
+            ),
+            "GENERATIVEQC_CUDA_XC_BATCH_BYTES": str(args.point_batch_bytes),
+        }
+        previous = {name: os.environ.get(name) for name in values}
+        os.environ.update(values)
+        try:
+            yield
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
     root = Path(__file__).resolve().parents[1]
     record: dict[str, Any] = {
-        "schema": "generativeqc.pbe0-xc-tile-pairs.v1",
+        "schema": (
+            "generativeqc.pbe0-xc-point-batch-pairs.v1"
+            if args.point_batch_tiles
+            else "generativeqc.pbe0-xc-tile-pairs.v1"
+        ),
         "protocol": scientific,
         "scf_tiles": tiles,
+        "point_batch_request": (
+            {"tiles": args.point_batch_tiles, "device_bytes": args.point_batch_bytes}
+            if args.point_batch_tiles is not None
+            else None
+        ),
         "force_tile_points": 256,
         "density_scope": "separate independently converged publicly frozen warm snapshots",
         "scope": "complete E+F replays; setup/prime excluded and retained; not cold/moved acceleration",
@@ -160,9 +203,10 @@ def main() -> None:
             record["native_build"] = native_build
             cp.cuda.Stream.null.synchronize()
             started = perf_counter()
-            owner = calculator.prepare_batch(
-                [scientific["geometries_bohr"][0]], warm_start=True
-            )
+            with point_batch_selection(arm):
+                owner = calculator.prepare_batch(
+                    [scientific["geometries_bohr"][0]], warm_start=True
+                )
             owners[arm] = owner
             cp.cuda.Stream.null.synchronize()
             record["preparation"].append(
@@ -184,9 +228,10 @@ def main() -> None:
                 owner.set_warm_start_updates(True)
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
-                item = owner.execute(
-                    coords, strict=False, properties=("energy", "forces")
-                ).items[0]
+                with point_batch_selection(arm):
+                    item = owner.execute(
+                        coords, strict=False, properties=("energy", "forces")
+                    ).items[0]
                 cp.cuda.Stream.null.synchronize()
                 record["setup"].append(
                     {
@@ -201,9 +246,10 @@ def main() -> None:
                 owner.set_warm_start_updates(False)
                 cp.cuda.Stream.null.synchronize()
                 started = perf_counter()
-                primed = owner.execute(
-                    coords, strict=False, properties=("energy", "forces")
-                ).items[0]
+                with point_batch_selection(arm):
+                    primed = owner.execute(
+                        coords, strict=False, properties=("energy", "forces")
+                    ).items[0]
                 cp.cuda.Stream.null.synchronize()
                 record["priming"].append(
                     {
@@ -226,13 +272,14 @@ def main() -> None:
                 results: list[tuple[Any, Any, Any]] = completed,
             ) -> dict[str, int]:
                 assert owners[arm]._warm_updates is False
-                item = (
-                    owners[arm]
-                    .execute(
-                        replay_coords, strict=False, properties=("energy", "forces")
+                with point_batch_selection(arm):
+                    item = (
+                        owners[arm]
+                        .execute(
+                            replay_coords, strict=False, properties=("energy", "forces")
+                        )
+                        .items[0]
                     )
-                    .items[0]
-                )
                 results.append((item, force_work[arm], read_ao_work(owners[arm])))
                 return {"call_index": len(results) - 1}
 

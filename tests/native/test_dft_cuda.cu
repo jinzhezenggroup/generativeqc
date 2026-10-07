@@ -707,9 +707,11 @@ void variational_and_state(const AoBasis& basis, const MolecularGrid& grid,
 }
 
 void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned functional,
-                   bool unrestricted, std::size_t tile = 9, const CudaXcAoTiles* maps = nullptr) {
+                   bool unrestricted, std::size_t tile = 9, const CudaXcAoTiles* maps = nullptr,
+                   std::size_t point_batch_tiles = 1) {
   Fixture captured(basis, grid, functional, unrestricted, tile, CudaXcAoPrecision::Fp64, false, 1.0,
                    1.0, maps);
+  captured.plan->prepare_point_batches(point_batch_tiles, 32 * 1024 * 1024);
   auto d = density(basis.nao, unrestricted ? 2 : 1);
   check(cudaMemcpyAsync(captured.density, d.data(), d.size() * sizeof(double),
                         cudaMemcpyHostToDevice, captured.stream));
@@ -861,6 +863,7 @@ void matrix_schedule_cases() {
 // tests; these in-namespace test fragments must retain dependency order.
 // clang-format off
 #include "dft_local_ao_cases.cuh"
+#include "dft_point_batch_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
 #include "dft_potential_lowering_cases.cuh"
@@ -870,6 +873,7 @@ void matrix_schedule_cases() {
 #include "dft_density_provider_benchmark.cuh"
 #include "dft_indexed_density_cases.cuh"
 #include "dft_mapped_density_benchmark.cuh"
+#include "dft_point_batch_benchmark.cuh"
 // clang-format on
 }  // namespace
 
@@ -877,6 +881,16 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--point-batches") {
+      point_batch_cases();
+      std::cout
+          << "CUDA XC point batches: independent E/V, ordered maps, tails and replay passed\n";
+      return 0;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--point-batch-benchmark") {
+      point_batch_benchmark(argv[2], argv[3]);
+      return 0;
+    }
     if (argc == 4 && std::string(argv[1]) == "--indexed-potential-benchmark") {
       mapped_potential_benchmark(argv[2], argv[3]);
       return 0;
