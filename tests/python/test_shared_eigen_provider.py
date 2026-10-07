@@ -62,6 +62,7 @@ def provider_probe(
     return required_native_cxx.build_executable(
         [
             LOWERER,
+            ROOT / "src/solver/cuda/symmetric_eigen_handles.cpp",
             ROOT / "tests/native/test_shared_eigen_provider.cpp",
             ROOT / "tests/native/test_shared_eigen_private_abi.cpp",
         ],
@@ -202,6 +203,7 @@ def _consumer_definitions() -> str:
     parts.append("} // namespace scf")
     parts.append(
         "namespace df { namespace eigen_provider = ::generativeqc::solver::cuda;"
+        "namespace solver = ::generativeqc::solver;"
     )
     df_state = (ROOT / "src/scf/cuda/df_scf_state.hpp").read_text()
     df_runtime = (ROOT / "src/scf/cuda/df_runtime.cpp").read_text()

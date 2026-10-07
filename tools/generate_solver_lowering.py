@@ -22,6 +22,8 @@ def main() -> None:
         "src/solver/cuda/symmetric_eigen_provider.hpp",
         "src/solver/cuda/cusolver_compat.hpp",
         "src/solver/cuda/symmetric_eigen_provider.cpp",
+        "src/solver/cuda/symmetric_eigen_handles.hpp",
+        "src/solver/cuda/symmetric_eigen_handles.cpp",
         "src/scf/cuda_eigensolver_policy.hpp",
         "src/scf/cuda/eigensolver.hpp",
         "src/scf/cuda/eigensolver_kernels.cu",

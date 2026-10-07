@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <cuda_runtime_api.h>
+
 struct cusolverDnContext;
 struct cusolverDnParams;
 struct syevjInfo;
@@ -25,6 +27,17 @@ enum cusolverStatus_t {
 enum cusolverEigMode_t { CUSOLVER_EIG_MODE_NOVECTOR = 0, CUSOLVER_EIG_MODE_VECTOR = 1 };
 enum cublasFillMode_t { CUBLAS_FILL_MODE_LOWER = 0, CUBLAS_FILL_MODE_UPPER = 1 };
 enum cudaDataType { CUDA_R_32F = 0, CUDA_R_64F = 1 };
+
+cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t*);
+cusolverStatus_t cusolverDnDestroy(cusolverDnHandle_t);
+cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t, cudaStream_t);
+cusolverStatus_t cusolverDnCreateParams(cusolverDnParams_t*);
+cusolverStatus_t cusolverDnDestroyParams(cusolverDnParams_t);
+cusolverStatus_t cusolverDnCreateSyevjInfo(syevjInfo_t*);
+cusolverStatus_t cusolverDnDestroySyevjInfo(syevjInfo_t);
+cusolverStatus_t cusolverDnXsyevjSetTolerance(syevjInfo_t, double);
+cusolverStatus_t cusolverDnXsyevjSetMaxSweeps(syevjInfo_t, int);
+cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t, int);
 
 cusolverStatus_t cusolverDnDsyevjBatched_bufferSize(cusolverDnHandle_t, cusolverEigMode_t,
                                                     cublasFillMode_t, int, const double*, int,

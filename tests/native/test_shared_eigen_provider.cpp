@@ -15,6 +15,7 @@
 #include "generativeqc/generativeqc.h"
 #include "scf/cuda/eigensolver_types.hpp"
 #include "scf/cuda/launch_geometry.hpp"
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 
 namespace shared = generativeqc::solver::cuda;
@@ -347,6 +348,31 @@ TRACE_KERNEL(launch_symmetric_eigen_graph_maximum_pivot_kernel, "graph")
 #undef TRACE_KERNEL
 // DF's solver owner type and adapter are real; these independent tracing and
 // destruction services do no CUDA work in this host harness.
+shared::SymmetricEigenResources handle_tokens;
+cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t* handle) {
+  *handle = static_cast<cusolverDnHandle_t>(handle_tokens.solver);
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t, cudaStream_t) {
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnCreateParams(cusolverDnParams_t* parameters) {
+  *parameters = static_cast<cusolverDnParams_t>(handle_tokens.parameters);
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnCreateSyevjInfo(syevjInfo_t* jacobi) {
+  *jacobi = static_cast<syevjInfo_t>(handle_tokens.jacobi);
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnXsyevjSetTolerance(syevjInfo_t, double) {
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnXsyevjSetMaxSweeps(syevjInfo_t, int) {
+  return CUSOLVER_STATUS_SUCCESS;
+}
+cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t, int) {
+  return CUSOLVER_STATUS_SUCCESS;
+}
 cusolverStatus_t cusolverDnDestroyParams(cusolverDnParams_t) { return CUSOLVER_STATUS_SUCCESS; }
 cusolverStatus_t cusolverDnDestroySyevjInfo(syevjInfo_t) { return CUSOLVER_STATUS_SUCCESS; }
 cusolverStatus_t cusolverDnDestroy(cusolverDnHandle_t) { return CUSOLVER_STATUS_SUCCESS; }
@@ -616,9 +642,10 @@ void test_df_launch(shared::SymmetricEigenFamily family) {
   Fixture fixture;
   CudaDensityFittingJkPlan plan;
   df::DeviceSolver solver;
-  solver.handle = static_cast<cusolverDnHandle_t>(fixture.resources.solver);
-  solver.jacobi = static_cast<syevjInfo_t>(fixture.resources.jacobi);
-  solver.parameters = static_cast<cusolverDnParams_t>(fixture.resources.parameters);
+  handle_tokens = fixture.resources;
+  assert(solver.handles.create() == 0);
+  assert(solver.handles.create_parameters() == 0);
+  assert(solver.handles.configure_jacobi(1.0e-13, 100, 1) == 0);
   solver.workspace = fixture.device.data();
   solver.workspace_bytes = fixture.resources.device_workspace_bytes;
   // The real owner's destructor frees host storage; preserve that contract.

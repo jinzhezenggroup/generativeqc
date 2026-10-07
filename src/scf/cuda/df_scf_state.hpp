@@ -10,6 +10,7 @@
 
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda_density_fitting_final_state.hpp"
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace generativeqc::scf::cuda_df {
 
@@ -30,9 +31,7 @@ struct RhfWarmState {
  * incompatible topology/options require rebuilding. Teardown selects its device.
  */
 struct DeviceSolver {
-  cusolverDnHandle_t handle{};
-  syevjInfo_t jacobi{};
-  cusolverDnParams_t parameters{};
+  solver::cuda::PreparedSymmetricEigenHandles handles;
   double* workspace{};
   void* host_workspace{};
   std::size_t workspace_bytes{};
@@ -42,9 +41,7 @@ struct DeviceSolver {
   ~DeviceSolver() {
     (void)runtime::resource_cuda_free(workspace);
     std::free(host_workspace);
-    if (parameters != nullptr) (void)cusolverDnDestroyParams(parameters);
-    if (jacobi != nullptr) (void)cusolverDnDestroySyevjInfo(jacobi);
-    if (handle != nullptr) (void)cusolverDnDestroy(handle);
+    handles.reset();
   }
 };
 

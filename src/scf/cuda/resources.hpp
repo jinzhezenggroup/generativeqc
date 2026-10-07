@@ -8,6 +8,7 @@
 
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/matrix_library.hpp"
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -31,9 +32,7 @@ class CudaResources {
   int device_id_{-1};
   cudaStream_t stream_{};
   cublasHandle_t blas_{};
-  cusolverDnHandle_t solver_{};
-  cusolverDnParams_t solver_parameters_{};
-  syevjInfo_t jacobi_{};
+  solver::cuda::PreparedSymmetricEigenHandles eigen_handles_;
   void* arena_{};
   DirectTileValidationRecord* direct_tile_validation_{};
   void* solver_workspace_{};

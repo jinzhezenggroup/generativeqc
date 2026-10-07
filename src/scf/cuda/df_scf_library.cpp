@@ -87,24 +87,15 @@ generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::siz
                                         std::size_t batch_size, double* eigensystem,
                                         double* eigenvalues, DeviceSolver& solver,
                                         std::string& detail) {
-  cusolverStatus_t status = cusolverDnCreate(&solver.handle);
+  cusolverStatus_t status = static_cast<cusolverStatus_t>(solver.handles.create());
   if (status == CUSOLVER_STATUS_SUCCESS) {
-    status = cusolverDnSetStream(solver.handle, plan.stream);
+    status = static_cast<cusolverStatus_t>(solver.handles.bind_stream(plan.stream));
   }
   solver.xsyev = nbf > 32;
   if (status == CUSOLVER_STATUS_SUCCESS && !solver.xsyev) {
-    status = cusolverDnCreateSyevjInfo(&solver.jacobi);
-    if (status == CUSOLVER_STATUS_SUCCESS) {
-      status = cusolverDnXsyevjSetTolerance(solver.jacobi, 1.0e-13);
-    }
-    if (status == CUSOLVER_STATUS_SUCCESS) {
-      status = cusolverDnXsyevjSetMaxSweeps(solver.jacobi, 100);
-    }
-    if (status == CUSOLVER_STATUS_SUCCESS) {
-      status = cusolverDnXsyevjSetSortEig(solver.jacobi, 1);
-    }
+    status = static_cast<cusolverStatus_t>(solver.handles.configure_jacobi(1.0e-13, 100, 1));
   } else if (status == CUSOLVER_STATUS_SUCCESS) {
-    status = cusolverDnCreateParams(&solver.parameters);
+    status = static_cast<cusolverStatus_t>(solver.handles.create_parameters());
   }
   if (status != CUSOLVER_STATUS_SUCCESS) {
     return solver_failure(status, "initialize CUDA DF SCF eigensolver", detail);
@@ -112,8 +103,7 @@ generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::siz
   if (!solver.xsyev) {
     eigen_provider::SymmetricEigenWorkspace queried{0, 0, solver.lwork};
     status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-        {solver.handle, nullptr, solver.jacobi},
-        eigen_provider::SymmetricEigenFamily::jacobi_batched,
+        solver.handles.view(), eigen_provider::SymmetricEigenFamily::jacobi_batched,
         {static_cast<std::int64_t>(nbf), static_cast<std::int64_t>(batch_size),
          eigen_provider::Eigenvectors::values_and_vectors},
         eigensystem, eigenvalues, queried));
@@ -138,7 +128,7 @@ generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::siz
   }
   eigen_provider::SymmetricEigenWorkspace queried;
   status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-      {solver.handle, solver.parameters}, eigen_provider::SymmetricEigenFamily::xsyev_batched,
+      solver.handles.view(), eigen_provider::SymmetricEigenFamily::xsyev_batched,
       {static_cast<std::int64_t>(nbf), static_cast<std::int64_t>(batch_size),
        eigen_provider::Eigenvectors::values_and_vectors},
       eigensystem, eigenvalues, queried));
@@ -194,8 +184,9 @@ generativeqc_status solve_device_batch(CudaDensityFittingJkPlan& plan, DeviceSol
   // events: their difference is not an unmeasured CPU eigenframe validation.
   runtime::host_trace::Region provider("compact_eigensolve_provider", nbf);
   status = static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
-      {solver.handle, solver.parameters, solver.jacobi, solver.workspace, solver.workspace_bytes,
-       solver.host_workspace, solver.host_workspace_bytes},
+      {solver.handles.view().solver, solver.handles.view().parameters, solver.handles.view().jacobi,
+       solver.workspace, solver.workspace_bytes, solver.host_workspace,
+       solver.host_workspace_bytes},
       solver.xsyev ? eigen_provider::SymmetricEigenFamily::xsyev_batched
                    : eigen_provider::SymmetricEigenFamily::jacobi_batched,
       {static_cast<std::int64_t>(nbf), static_cast<std::int64_t>(batch_size),

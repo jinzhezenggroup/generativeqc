@@ -86,13 +86,12 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
       if (written <= 0 || std::size_t(written) >= provider_version_.size())
         throw std::runtime_error("cuSOLVER runtime version is unavailable");
       diagnostic_.candidates[1].provider_version = provider_version_.data();
-      checked(solver_status(cusolverDnCreate(&resources_.solver_)));
-      checked(solver_status(cusolverDnSetStream(resources_.solver_, stream)));
-      checked(solver_status(cusolverDnCreateParams(&resources_.solver_parameters_)));
+      checked(solver_status(static_cast<cusolverStatus_t>(handles_.create())));
+      checked(solver_status(static_cast<cusolverStatus_t>(handles_.bind_stream(stream))));
+      checked(solver_status(static_cast<cusolverStatus_t>(handles_.create_parameters())));
       eigen_provider::SymmetricEigenWorkspace queried;
       checked(solver_status(static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-          {resources_.solver_, resources_.solver_parameters_},
-          eigen_provider::SymmetricEigenFamily::xsyevd,
+          handles_.view(), eigen_provider::SymmetricEigenFamily::xsyevd,
           {n, 1, eigen_provider::Eigenvectors::values_and_vectors}, matrix, eigenvalues,
           queried))));
       resources_.solver_workspace_bytes_ = queried.device_bytes;
@@ -142,8 +141,7 @@ void OrdinaryStreamEigensolver::cleanup() noexcept {
   (void)cudaSetDevice(device_);
   if (resources_.stream_) (void)cudaStreamSynchronize(resources_.stream_);
   if (resources_.solver_workspace_) (void)runtime::resource_cuda_free(resources_.solver_workspace_);
-  if (resources_.solver_parameters_) (void)cusolverDnDestroyParams(resources_.solver_parameters_);
-  if (resources_.solver_) (void)cusolverDnDestroy(resources_.solver_);
+  handles_.reset();
   resources_ = {};
   (void)cudaSetDevice(previous);
 }
@@ -165,7 +163,10 @@ generativeqc_status OrdinaryStreamEigensolver::launch(int batch, double* matrice
   if (capture != cudaStreamCaptureStatusNone &&
       !diagnostic_.candidates[diagnostic_.selected].capture_safe)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return launch_solver(resources_, family_, n_, batch, matrices, native_workspace, eigenvalues, 0,
+  auto borrowed = resources_;
+  borrowed.solver_ = static_cast<cusolverDnHandle_t>(handles_.view().solver);
+  borrowed.solver_parameters_ = static_cast<cusolverDnParams_t>(handles_.view().parameters);
+  return launch_solver(borrowed, family_, n_, batch, matrices, native_workspace, eigenvalues, 0,
                        info, active);
 }
 
