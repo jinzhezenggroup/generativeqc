@@ -16,7 +16,9 @@ def test_restricted_raw_k_block_mapping_matches_eightfold_scatter() -> None:
     """The shell-block K map must preserve every canonical symmetry channel."""
 
     n = 4
-    density = [[0.031 * (1 + row + 3 * column) for column in range(n)] for row in range(n)]
+    density = [
+        [0.031 * (1 + row + 3 * column) for column in range(n)] for row in range(n)
+    ]
 
     def permutation(
         p: int, i: int, j: int, k: int, l: int
