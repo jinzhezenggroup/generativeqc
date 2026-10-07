@@ -24,6 +24,7 @@ def test_identical_grid_preserves_public_identity_and_owned_storage() -> None:
         weights,
         tuple(map(int, owners)),
         {"source": "native-ks-snapshot-v1", "owner": 7},
+        identity_version=2,
     )
     assert not reused and first.identity == expected.identity
     second, reused = cache.resolve(
@@ -87,3 +88,19 @@ def test_invalid_replacement_drops_cached_entry_and_still_fails() -> None:
     with pytest.raises(ValueError, match="finite"):
         cache.resolve(points, weights, owners, owner=7)
     assert cache.grid is None
+
+
+@pytest.mark.parametrize("budget", [0, 128 << 20])
+def test_fresh_binding_and_budget_fallback_never_materialize_json(
+    monkeypatch: pytest.MonkeyPatch, budget: int
+) -> None:
+    """Both retained and uncached exact grids must select typed identity."""
+
+    def forbidden(self: ExplicitGrid) -> None:
+        raise AssertionError("snapshot binding materialized interchange")
+
+    monkeypatch.setattr(ExplicitGrid, "record", forbidden)
+    cache = SnapshotGridCache(max_bytes=budget)
+    grid, reused = cache.resolve(*inputs(), owner=7)
+    assert not reused and grid.identity_version == 2
+    assert (cache.grid is None) == (budget == 0)
