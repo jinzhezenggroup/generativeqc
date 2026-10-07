@@ -1,3 +1,4 @@
+#include "cc/iteration_driver.hpp"
 #include "cc/solver.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
@@ -809,39 +810,37 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
   result.reason = "maximum RCCSD iterations reached";
   result.correlation_energy = std::numeric_limits<double>::quiet_NaN();
   result.total_energy = std::numeric_limits<double>::quiet_NaN();
-  double previous = std::numeric_limits<double>::quiet_NaN();
   bool use_last = false;
-  generated::DeviceIterationOutputs carried_output{};
-  bool has_carried_output = false;
   const auto started = std::chrono::steady_clock::now();
 
-  for (unsigned iteration = 0; iteration <= options.max_iterations; ++iteration) {
-    try {
-      const auto iteration_started = std::chrono::steady_clock::now();
-      generated::DeviceIterationOutputs output{};
-      if (has_carried_output) {
-        output = carried_output;
-        has_carried_output = false;
-      } else {
-        output = owner.iteration();
-        ++owner.diagnostic.iteration_graph_calls;
-        if (owner.state.canonical_eps)
-          owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
-      }
-      const auto status = owner.read_status(output);
-      owner.diagnostic.iteration_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
-              .count();
-      const double delta = std::isfinite(previous) ? std::abs(status[0] - previous)
-                                                   : std::numeric_limits<double>::infinity();
-      result.correlation_energy = status[0];
-      result.total_energy = p.reference_energy + status[0];
-      owner.diagnostic.iterations = iteration + 1;
-      owner.diagnostic.energy_change = delta;
-      owner.diagnostic.r1_max = status[1];
-      owner.diagnostic.r2_max = status[2];
-      if (std::isfinite(previous) && delta <= options.energy_tolerance &&
-          std::max(status[1], status[2]) <= options.residual_tolerance) {
+  run_cc_iterations<generated::DeviceIterationOutputs>(
+      options,
+      [&](const std::optional<generated::DeviceIterationOutputs>& carried) {
+        const auto iteration_started = std::chrono::steady_clock::now();
+        generated::DeviceIterationOutputs output{};
+        if (carried) {
+          output = *carried;
+        } else {
+          output = owner.iteration();
+          ++owner.diagnostic.iteration_graph_calls;
+          if (owner.state.canonical_eps)
+            owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
+        }
+        const auto status = owner.read_status(output);
+        owner.diagnostic.iteration_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
+                .count();
+        return std::pair{output, IterationMetrics{status[0], status[1], status[2]}};
+      },
+      [&](unsigned observations, IterationMetrics status, double delta) {
+        result.correlation_energy = status.energy;
+        result.total_energy = p.reference_energy + status.energy;
+        owner.diagnostic.iterations = observations;
+        owner.diagnostic.energy_change = delta;
+        owner.diagnostic.r1_max = status.r1;
+        owner.diagnostic.r2_max = status.r2;
+      },
+      [&]() {
         const auto replay_started = std::chrono::steady_clock::now();
         const auto replay = owner.replay();
         const auto replay_status = owner.read_status(replay);
@@ -851,59 +850,56 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         ++owner.diagnostic.replay_graph_calls;
         owner.diagnostic.replay_r1_max = replay_status[1];
         owner.diagnostic.replay_r2_max = replay_status[2];
-        if (std::max(replay_status[1], replay_status[2]) <= options.residual_tolerance &&
-            std::abs(replay_status[0] - status[0]) <= options.energy_tolerance) {
-          result.status = SolveStatus::Converged;
-          result.reason = "energy change and freshly expanded physical R1/R2 passed on GPU";
-          break;
-        }
-      }
-      if (iteration == options.max_iterations) break;
-      const auto update_started = std::chrono::steady_clock::now();
-      owner.advance(output, 1.0 - options.damping);
-      owner.check_generated_error();
-      owner.diagnostic.update_seconds +=
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
-      ++owner.diagnostic.update_calls;
-      if (owner.history.capacity()) {
-        const auto trial_diis_started = std::chrono::steady_clock::now();
-        cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
-        const auto trial = owner.iteration();
-        cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
-        ++owner.diagnostic.iteration_graph_calls;
-        if (owner.state.canonical_eps)
-          owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
-        const bool diis_modified_state = run_diis(owner, options, trial);
-        if (!diis_modified_state) {
-          carried_output = trial;
-          has_carried_output = true;
-        }
-        // Every successful DIIS path, including the first history push, has
-        // already drained this stream past both events. Do not add a timing
-        // fence: the trial's completed device interval belongs to iteration,
-        // not to DIIS merely because DIIS performs the existing host drain.
-        const double trial_diis_seconds =
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_diis_started)
+        return IterationMetrics{replay_status[0], replay_status[1], replay_status[2]};
+      },
+      [&](const generated::DeviceIterationOutputs& output)
+          -> std::optional<generated::DeviceIterationOutputs> {
+        const auto update_started = std::chrono::steady_clock::now();
+        owner.advance(output, 1.0 - options.damping);
+        owner.check_generated_error();
+        owner.diagnostic.update_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started)
                 .count();
-        float trial_ms = 0.0F;
-        cuda_check(cudaEventElapsedTime(&trial_ms, owner.trial_begin, owner.trial_end));
-        // The remainder includes host enqueue/history/control overhead. Clamp
-        // across clock domains so neither phase is negative or double counted.
-        const double trial_seconds =
-            std::clamp(static_cast<double>(trial_ms) * 1e-3, 0.0, trial_diis_seconds);
-        owner.diagnostic.iteration_seconds += trial_seconds;
-        owner.diagnostic.diis_seconds += trial_diis_seconds - trial_seconds;
-      }
-      previous = status[0];
-    } catch (const std::runtime_error& error) {
-      const std::string message = error.what();
-      if (message.find("nonfinite RCCSD") == std::string::npos) throw;
-      result.status = SolveStatus::NumericalFailure;
-      result.reason = message;
-      use_last = true;
-      break;
-    }
-  }
+        ++owner.diagnostic.update_calls;
+        if (owner.history.capacity()) {
+          const auto trial_diis_started = std::chrono::steady_clock::now();
+          cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
+          const auto trial = owner.iteration();
+          cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
+          ++owner.diagnostic.iteration_graph_calls;
+          if (owner.state.canonical_eps)
+            owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
+          const bool diis_modified_state = run_diis(owner, options, trial);
+          // Every successful DIIS path, including the first history push, has
+          // already drained this stream past both events. Do not add a timing
+          // fence: the trial's completed device interval belongs to iteration,
+          // not to DIIS merely because DIIS performs the existing host drain.
+          const double trial_diis_seconds =
+              std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_diis_started)
+                  .count();
+          float trial_ms = 0.0F;
+          cuda_check(cudaEventElapsedTime(&trial_ms, owner.trial_begin, owner.trial_end));
+          // The remainder includes host enqueue/history/control overhead. Clamp
+          // across clock domains so neither phase is negative or double counted.
+          const double trial_seconds =
+              std::clamp(static_cast<double>(trial_ms) * 1e-3, 0.0, trial_diis_seconds);
+          owner.diagnostic.iteration_seconds += trial_seconds;
+          owner.diagnostic.diis_seconds += trial_diis_seconds - trial_seconds;
+          if (!diis_modified_state) return trial;
+        }
+        return std::nullopt;
+      },
+      [&]() {
+        result.status = SolveStatus::Converged;
+        result.reason = "energy change and freshly expanded physical R1/R2 passed on GPU";
+      },
+      [&](const std::runtime_error& error) {
+        const std::string message = error.what();
+        if (message.find("nonfinite RCCSD") == std::string::npos) throw;
+        result.status = SolveStatus::NumericalFailure;
+        result.reason = message;
+        use_last = true;
+      });
   owner.diagnostic.diis_restarts = owner.restarts;
   owner.diagnostic.tensor_seconds =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
