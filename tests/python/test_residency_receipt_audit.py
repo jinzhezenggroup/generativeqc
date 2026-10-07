@@ -332,6 +332,14 @@ def test_historical_production_trace_is_source_matched_but_incomplete() -> None:
     }
     assert result["diagnostic_profiler_events"] == 1562
     assert result["diagnostic_final_waits"] == 8
+    water = (
+        OLD
+        / "diagnosis/control-diagnosis-v1/water-tetramer-def2-svp-spherical-occupied.jsonl"
+    )
+    assert audit_df_trace(historical, water, manifest) == {
+        "status": "INCOMPLETE",
+        "reason": "historical trace path differs from the contract",
+    }
     historical["identity"]["native_source"] = "3" * 64
     assert audit_df_trace(historical, trace, manifest)["status"] == "INCOMPLETE"
 
@@ -361,6 +369,11 @@ def test_historical_trace_sha_tampering_and_empty_stream_are_incomplete(
     empty = tmp_path / "empty.jsonl"
     empty.write_bytes(b"")
     blank_hash = hashlib.sha256(b"").hexdigest()
+    empty_contract = copy.deepcopy(historical)
+    empty_contract["historical_trace"] = {
+        "retained": empty.as_posix(),
+        "sha256": blank_hash,
+    }
     altered["records"] = [
         {
             "retained": empty.as_posix(),
@@ -368,11 +381,16 @@ def test_historical_trace_sha_tampering_and_empty_stream_are_incomplete(
             "original_sha256": blank_hash,
         }
     ]
-    assert audit_df_trace(historical, empty, altered) == {
+    assert audit_df_trace(empty_contract, empty, altered) == {
         "status": "INCOMPLETE",
         "reason": "empty DF trace",
     }
     missing = tmp_path / "missing.jsonl"
+    missing_contract = copy.deepcopy(historical)
+    missing_contract["historical_trace"] = {
+        "retained": missing.as_posix(),
+        "sha256": "0" * 64,
+    }
     altered["records"] = [
         {
             "retained": missing.as_posix(),
@@ -380,7 +398,7 @@ def test_historical_trace_sha_tampering_and_empty_stream_are_incomplete(
             "original_sha256": "0" * 64,
         }
     ]
-    assert audit_df_trace(historical, missing, altered)["status"] == "INCOMPLETE"
+    assert audit_df_trace(missing_contract, missing, altered)["status"] == "INCOMPLETE"
 
 
 def test_cli_bad_json_reports_incomplete(tmp_path: Path) -> None:
@@ -421,4 +439,51 @@ def test_cli_bad_json_reports_incomplete(tmp_path: Path) -> None:
     assert json.loads(result.stdout) == {
         "status": "INCOMPLETE",
         "reason": "receipt must be an object",
+    }
+    observed.write_text('{"event_count":' + "9" * 5000 + "}", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/audit_residency_receipts.py"),
+            "--contract",
+            str(expected),
+            "--receipt",
+            str(observed),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "INCOMPLETE"
+    assert "Exceeds the limit" in payload["reason"]
+
+
+def test_cli_rejects_duplicate_members_before_a_false_pass(tmp_path: Path) -> None:
+    expected = tmp_path / "contract.json"
+    observed = tmp_path / "receipt.json"
+    value = contract()
+    expected.write_text(json.dumps(value), encoding="utf-8")
+    dangerous = json.dumps(receipt(value, [sync(0, "force_response")]))
+    observed.write_text(
+        dangerous[:-1] + ', "events": [], "event_count": 0}', encoding="utf-8"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/audit_residency_receipts.py"),
+            "--contract",
+            str(expected),
+            "--receipt",
+            str(observed),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {
+        "status": "INCOMPLETE",
+        "reason": "duplicate JSON member: events",
     }

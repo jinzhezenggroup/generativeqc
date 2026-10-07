@@ -4,7 +4,8 @@ This is a source-matched consumer check against an existing production diagnosti
 not a current-device run or an acceptance claim for #1629. The retained source is
 `benchmarks/results/issue206-practical-auxiliary/diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto.jsonl`.
 Its historical `vibeqc.df_trace` format is identified by the retention manifest in
-that directory. The manifest's SHA-256 of LF-normalized bytes is
+that directory. The adapter contract selects this exact retained record and its
+SHA-256 of LF-normalized bytes:
 `4a57178922c890bf16830087c26a3971f4970ea6d267d1ab62508dd84e35c6c0`.
 The Windows checkout may contain CRLF bytes; no record contents were altered.
 

@@ -37,6 +37,19 @@ HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 
 
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON member: {key}")
+        result[key] = value
+    return result
+
+
+def _decode_json(value: str | bytes) -> Any:
+    return json.loads(value, object_pairs_hook=_unique_object)
+
+
 def _count(value: Any, label: str) -> int:
     if type(value) is not int or not 0 <= value <= MAX_COUNT:
         raise ValueError(f"{label} must be a uint64")
@@ -286,6 +299,15 @@ def audit_df_trace(
         if contract.get("schema") != SCHEMA or contract.get("version") != 1:
             raise ValueError("unsupported contract schema/version")
         _regions(contract)
+        selection = _object(contract.get("historical_trace"), "historical_trace")
+        if set(selection) != {"retained", "sha256"}:
+            raise ValueError("historical_trace fields differ from the contract")
+        if type(selection["retained"]) is not str or not selection["retained"]:
+            raise ValueError("historical_trace.retained must be a nonempty string")
+        if type(selection["sha256"]) is not str or not HEX64.fullmatch(
+            selection["sha256"]
+        ):
+            raise ValueError("historical_trace.sha256 must be a lowercase SHA-256")
         if manifest.get("schema") != "vibeqc.issue206.practical-auxiliary.retention.v1":
             raise ValueError("unexpected historical retention manifest schema")
         if (
@@ -299,11 +321,15 @@ def audit_df_trace(
         relative = path.as_posix().split(
             "benchmarks/results/issue206-practical-auxiliary/", 1
         )[-1]
+        if relative != selection["retained"]:
+            raise ValueError("historical trace path differs from the contract")
         retained = next(
             row for row in manifest["records"] if row["retained"] == relative
         )
         raw = path.read_bytes().replace(b"\r\n", b"\n")
         digest = hashlib.sha256(raw).hexdigest()
+        if digest != selection["sha256"]:
+            raise ValueError("historical trace SHA-256 differs from the contract")
         if digest != retained["stored_sha256"] or digest != retained["original_sha256"]:
             raise ValueError("retained trace SHA-256 mismatch")
         totals = dict.fromkeys(COUNTERS, 0)
@@ -312,7 +338,7 @@ def audit_df_trace(
         for line in raw.splitlines():
             if not line:
                 raise ValueError("empty trace record")
-            row = _object(json.loads(line), "DF trace record")
+            row = _object(_decode_json(line), "DF trace record")
             if row.get("schema") != "vibeqc.df_trace" or row.get("version") != 1:
                 raise ValueError("unexpected historical DF trace schema")
             if (
@@ -385,18 +411,18 @@ def main() -> int:
     if args.df_trace and not args.trace_manifest:
         parser.error("--df-trace requires --trace-manifest")
     try:
-        contract = json.loads(args.contract.read_text(encoding="utf-8"))
+        contract = _decode_json(args.contract.read_text(encoding="utf-8"))
         if args.receipt:
             result = audit(
-                contract, json.loads(args.receipt.read_text(encoding="utf-8"))
+                contract, _decode_json(args.receipt.read_text(encoding="utf-8"))
             )
         else:
             result = audit_df_trace(
                 contract,
                 args.df_trace,
-                json.loads(args.trace_manifest.read_text(encoding="utf-8")),
+                _decode_json(args.trace_manifest.read_text(encoding="utf-8")),
             )
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         result = {"status": "INCOMPLETE", "reason": str(exc)}
     print(json.dumps(result, indent=2, sort_keys=True))
     return {"PASS": 0, "FAIL": 1, "INCOMPLETE": 2}[result["status"]]

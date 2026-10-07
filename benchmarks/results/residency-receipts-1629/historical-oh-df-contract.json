@@ -13,6 +13,10 @@
     "owner": "DF force component trace",
     "domain": "OH prepared DF force"
   },
+  "historical_trace": {
+    "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto.jsonl",
+    "sha256": "4a57178922c890bf16830087c26a3971f4970ea6d267d1ab62508dd84e35c6c0"
+  },
   "regions": [
     {
       "name": "force_response",

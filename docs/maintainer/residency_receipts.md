@@ -24,9 +24,10 @@ ordered `seq` stream, and every event's declared role/owner/domain. A transfer
 records direction, byte count, payload identity, and dependency domain. An H2D
 claiming a round trip must cite a preceding D2H sequence with the same payload
 and dependency domain. Equal or summed byte counts alone never prove a pair.
-Unknown, duplicated or reordered events, overflow, capture-only execution and
-partial coverage return `INCOMPLETE`. A complete stream exceeding a hot ratchet
-returns `FAIL`; only a complete stream within every ratchet returns `PASS`.
+Unknown, duplicated or reordered events, duplicate JSON members, integer decode
+overflow, capture-only execution and partial coverage return `INCOMPLETE`. A
+complete stream exceeding a hot ratchet returns `FAIL`; only a complete stream
+within every ratchet returns `PASS`.
 Receipts are assertions from a producer and must be evaluated with that
 producer's coverage and provenance, not inferred from absence of events.
 
@@ -40,9 +41,10 @@ separates `candidate_replay_syncs` from the `publication` role totals.
 ## Existing DF Trace Adapter
 
 The historical adapter reads real `vibeqc.df_trace` JSONL with its retained
-manifest. It checks source/build identity and the LF-normalized retained SHA-256,
-rejects invalid, dropped, or capture records, and aggregates only explicitly
-named owner counters. `profiler_event_count` counts diagnostic CUDA events, not
+manifest. It checks the manifest schema, source/build identity,
+contract-selected retained record, and LF-normalized SHA-256; rejects invalid,
+dropped, or capture records; and aggregates only explicitly named owner counters.
+`profiler_event_count` counts diagnostic CUDA events, not
 production synchronization. The trace itself synchronizes its final event at
 operation teardown, and optional progress tracing adds diagnostic region fences.
 Those waits are separate from `explicit_synchronizations`,
