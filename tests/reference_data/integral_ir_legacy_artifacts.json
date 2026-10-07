@@ -511,10 +511,10 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2560a952cc334b168a10f9e7f35c03cb9a8fc0fa93ff35a4669e1e3fed14631e",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "e5846c3f9a74a2f8322d38de30698ee1a870fb62d3daa132ac5b0eb18cfd8f49",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "9ed4ec4e2b770fa1fc250cc4d417f32e34176da3c2713199d6a9cf7f2063c59b",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "903751f53c2f706e8c1517624b205dfe32fc9c37259d3be18dd62510da70a777",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "65d797727e1a0650d3f1f99445b962962c9595f89226a947867d0205afedae0f",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "1eb667a185e07b79d6a5ee7bd03f94f014756bc29278d9314701f1447db963f4",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "8e065e83021e82131b6bf068b1f091b82efe40e91d85544b1f91b003240beba7",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "573a56a754b9f38eb56a513867cec228836a7db453bb8cb107ca1c7158058b5c",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "688207cc0d4fa84fceb5d6ffc53e876900239300e6a32e6d1d9462c15e7d2cb8",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
     "generativeqc_generated_shell_registry.cu": "ed66611d109bc003e1baabc91c0e591664993b89966d98aa0032e9ee823e5fed"
   },
@@ -641,6 +641,17 @@
         "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
         "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
         "sm_90/generativeqc_generated_shell_sm90_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 2050,
+      "source_revision": "0659f65921e9297108780414815716cc9fb6924e",
+      "reason": "Density-screen generated Coulomb J with the existing Direct tolerance: exact admission uses the larger bra/ket Coulomb density bound, and coarse tails use their pair-class maxima. Optional/manual topologies without density metadata retain Schwarz-only admission. Regeneration from the PR base exactly reproduces the previous fixture; all 117 changed hunks in the four tuned sm_120 shards are the intended screening updates across 39 streaming class instances. All four portable sm_90 shards, both registry artifacts, the manifest and shell catalog remain byte-identical. Real-device numerical and complete-endpoint performance qualification remain separate gates.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
       ]
     }
   ]
