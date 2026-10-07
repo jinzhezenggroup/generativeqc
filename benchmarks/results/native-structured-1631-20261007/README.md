@@ -1,7 +1,7 @@
 # Native structured materialization source receipt
 
-Source commit: `a947a002f7fd5999dbe1c72cfc508ff24fa025ed`.
-Source tree: `d2d95b591b4292fe73bce525f6903d0edfb4863c`.
+Source commit: `0679f7ce92402a78a5bbb3d25b679e277a35e089`.
+Source tree: `08e26f54186aa065bca4442ba835b520ac951a53`.
 The scanned files are unchanged from that source commit. The scanner correction
 was uncommitted during receipt generation; `scan.json` binds its exact bytes
 and both imported scanner modules with SHA-256. This is a local Windows source
@@ -42,7 +42,8 @@ not runtime reachability, memory counters, timings or scientific acceptance.
 The PR uses **Refs #1631** and leaves the parent issue open.
 
 This corrected receipt supersedes the initial scanner snapshot after repairing
-immutable extent alias/full-domain equality and constant-domain growth. The
+immutable extent alias/full-domain equality, constant-domain growth and recursive
+source-link containment/deduplication. The
 initial receipt is retained in commit `a947a002f`; its scientific-source commit
 was `d2593148661f0b491b6254a59779017c21ac74f4`. All four MP2 files are identical
 across those source commits; only a real scanner change caused regeneration.
@@ -51,8 +52,12 @@ across those source commits; only a real scanner change caused regeneration.
 
 The focused suite plus consumed native-work/complexity/Python-audit regressions
 initially passed: **156 tests and 34 subtests**. After the alias/growth correction,
-the same suite passed **159 tests and 40 subtests**. The new tool has 19 unittest
-cases and can run without pytest or a native build. The default CLI also completed an
+the same suite passed **159 tests and 40 subtests**. After the recursive-source
+correction, it passed **162 tests and 40 subtests** with all three real-symlink
+regressions executed (22 new-tool unittest cases). The first rerun hit a Windows
+permission error in pytest's shared temporary directory; a fresh task-specific
+temporary directory resolved it. The tool can run without pytest or a native
+build. The default CLI also completed an
 actual 606-file scan (123 unknown inventory candidates), retained as an ignored
 local qualification artifact rather than adding a second large tracked receipt.
 

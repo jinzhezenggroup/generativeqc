@@ -322,6 +322,54 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
         self.assertTrue(report["provenance"]["source_hashes"])
         self.assertEqual(len(report["provenance"]["scanner_hashes"]), 3)
 
+    def _symlink(self, link: Path, target: Path) -> None:
+        try:
+            link.symlink_to(target)
+        except (NotImplementedError, OSError) as error:
+            self.skipTest(f"source symlinks unavailable: {error}")
+
+    def test_recursive_outside_root_source_link_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            root = folder / "root"
+            source_dir = root / "src"
+            source_dir.mkdir(parents=True)
+            outside = folder / "outside.cpp"
+            outside.write_text(producer(OV), encoding="utf-8")
+            self._symlink(source_dir / "leak.cpp", outside)
+            with self.assertRaises(ValueError):
+                audit_tree(root, ("src",))
+
+    def test_recursive_same_root_source_aliases_are_deduplicated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_dir = root / "src"
+            source_dir.mkdir()
+            source = source_dir / "actual.cpp"
+            source.write_text(producer(OV), encoding="utf-8")
+            self._symlink(source_dir / "alias.cpp", source)
+            report = audit_tree(root, ("src", "src/alias.cpp"))
+            self.assertEqual(report["scanned_files"], 1)
+            self.assertEqual(len(report["findings"]), 1)
+            self.assertEqual(report["findings"][0]["path"], "src/actual.cpp")
+            self.assertEqual(
+                report["provenance"]["source_hashes"],
+                {"src/actual.cpp": hashlib.sha256(source.read_bytes()).hexdigest()},
+            )
+
+    def test_recursive_alias_of_excluded_native_source_is_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vendor = root / "src" / "xtb" / "native"
+            vendor.mkdir(parents=True)
+            source = vendor / "vendor.cpp"
+            source.write_text(producer(OV), encoding="utf-8")
+            self._symlink(root / "src" / "alias.cpp", source)
+            report = audit_tree(root, ("src", "src/alias.cpp"))
+            self.assertEqual(report["scanned_files"], 0)
+            self.assertEqual(report["findings"], [])
+            self.assertEqual(report["provenance"]["source_hashes"], {})
+
     def test_cli_identities_duplicate_inputs_and_missing_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

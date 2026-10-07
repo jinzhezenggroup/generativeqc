@@ -10,7 +10,9 @@ python -m unittest tests.python.test_native_structured_materialization
 
 The default scan inventories native files under `src/` and `include/`, excluding
 vendored `src/xtb/native/`. Repeat `--path` for individual files or directories;
-missing or outside-root inputs are errors. Overlapping inputs are deduplicated.
+missing or outside-root inputs are errors, including recursively discovered
+links. Sources are resolved before containment checks, vendored exclusions and
+deduplication; overlapping inputs and same-root symlink aliases are scanned once.
 The JSON includes byte SHA-256 identities for all scanned sources and all three
 consumed scanner modules, Git commit/tree, and source/working-tree dirty state.
 Line endings affect byte identities; compare receipts using their recorded bytes.

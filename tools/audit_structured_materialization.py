@@ -641,7 +641,10 @@ def audit_tree(
         target.relative_to(root)
         if not target.exists():
             raise ValueError(f"missing input path: {path}")
-        candidates.update([target] if target.is_file() else target.rglob("*"))
+        for candidate in [target] if target.is_file() else target.rglob("*"):
+            resolved = candidate.resolve()
+            resolved.relative_to(root)
+            candidates.add(resolved)
     for source in sorted(candidates):
         relative = source.relative_to(root).as_posix()
         if (
