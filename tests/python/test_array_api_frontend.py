@@ -155,7 +155,7 @@ def test_preview_unsupported_conveniences_fail_closed() -> None:
     vector = input_array("vector", vector_spec)
     matrix = input_array("matrix", matrix_spec)
 
-    with pytest.raises(TypeError, match="scalar / VibeArray"):
+    with pytest.raises(TypeError, match="scientific domains"):
         xp.divide(1, vector)
     with pytest.raises(ValueError, match="dtype conversions"):
         xp.sum(vector, dtype="float32")
@@ -323,10 +323,13 @@ def test_capability_report_does_not_claim_full_conformance() -> None:
     assert report["surface"] == "array-api-shaped-internal-preview"
     assert report["array_api_version"] is None
     assert report["array_namespace_protocol"] is False
-    assert report["implicit_broadcast"] is False
+    assert report["implicit_broadcast"] == "generic-arrays"
     assert report["dtype_promotion"] is False
-    assert report["reshape_requires_explicit_indices"] is True
-    assert report["broadcast_requires_explicit_indices_and_axes"] is True
+    assert report["reshape_requires_explicit_indices"] == "scientific-arrays-only"
+    assert (
+        report["broadcast_requires_explicit_indices_and_axes"]
+        == "scientific-arrays-only"
+    )
     assert report["take_indices"] == "static-int-tuple"
     assert report["slice_ranges"] == "static-half-open-unit-step"
     assert "einsum_extension" in report["functions"]
