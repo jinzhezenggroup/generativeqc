@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..k_block import packed_restricted_k_block_eligible
 from .common import _emitted_component_names, _generic_task_component_setup
 
 if TYPE_CHECKING:
@@ -13,9 +14,6 @@ if TYPE_CHECKING:
     from ..shell_spec import (
         ShellClassSpec,
     )
-
-
-_PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES = 32
 
 
 def _packed_restricted_k_block(
@@ -50,7 +48,7 @@ def _packed_restricted_k_block(
     for _, _, rows, columns in blocks:
         offsets.append(total)
         total += rows * columns
-    if total > _PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES:
+    if not packed_restricted_k_block_eligible(spec):
         return "", ""
 
     first, second, third, fourth = component_names
@@ -157,6 +155,8 @@ def _emit_packed_fock_consumer_cuda(
     spec: ShellClassSpec,
     plan: FusedShellPlan,
     minimum_blocks_per_sm: int,
+    *,
+    k_block: bool = False,
 ) -> str:
     """Emit packed low-order Fock kernels using the shared value recurrence."""
 
@@ -169,8 +169,10 @@ def _emit_packed_fock_consumer_cuda(
         if plan.schedule.maximum_registers
         else f"__launch_bounds__(32, {minimum_blocks_per_sm})"
     )
-    exchange_block_storage, exchange_block_body = _packed_restricted_k_block(
-        spec, task_component_setup, component_names
+    exchange_block_storage, exchange_block_body = (
+        _packed_restricted_k_block(spec, task_component_setup, component_names)
+        if k_block
+        else ("", "")
     )
     return f"""struct GeneratedDpppPackedFockLaneStorage {{
   GeneratedDpppVec3 positions[4];
