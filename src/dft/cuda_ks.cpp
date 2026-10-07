@@ -36,6 +36,8 @@
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
+#include "tensor/cuda_contraction.cuh"
+#include "tensor/cuda_runtime.cuh"
 #include "xc_cpu_generated.hpp"
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
@@ -52,6 +54,10 @@ namespace {
 using namespace scf::cuda_execution;
 constexpr unsigned kMaximumFinalCorrections = 4;
 constexpr unsigned kCudaKsChunkCapacity = 2;
+// Preserve the already-qualified SCF matrix crossover while routing execution
+// through the shared TensorIR CUDA matrix adapter. Small AO spaces retain the
+// launch-light generated kernel; larger spaces borrow one prepared BLAS owner.
+constexpr std::size_t kCudaKsMatrixLibraryAoThreshold = 17;
 
 constexpr bool curated_cuda_ks_functional(std::uint32_t functional) noexcept {
   const auto* metadata = semilocal_family_metadata_from_code(functional);
@@ -201,6 +207,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
   scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
+  tensor::CudaContractionContext matrix_contractions;
   cudaStream_t stream{};
   int device{};
   std::size_t n{}, matrix{}, elements{};
@@ -230,7 +237,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::unique_ptr<OrdinaryStreamEigensolver> eigensolver;
   scf::ScfResult output;
   bool is_active{}, is_pending{}, is_failed{}, warm_ready{}, warm_orbitals_ready{}, started{};
-  bool warm_updates{true}, device_chunk_mode{};
+  bool warm_updates{true}, device_chunk_mode{}, matrix_library{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
   bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
   bool pending_fitted_occupied{}, final_fitted_projection_ready{};
@@ -255,6 +262,49 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::SolverRegionCudaExecutor solver_region_executor;
   runtime::CompiledExecutionRegion device_chunk_region;
 
+  void multiply_matrix(const double* left, bool transpose_left, const double* right,
+                       const std::uint8_t* active, double* output) {
+    if (!matrix_library) {
+      const auto blocks = static_cast<unsigned>((matrix + 127) / 128);
+      launch_matrix_product_kernel(blocks, 128, 0, stream, 1, n, left, transpose_left, right,
+                                   active, output, 1.0);
+      check(cudaGetLastError());
+      return;
+    }
+    (void)active;
+    const auto order = static_cast<int>(n);
+    const auto stride = static_cast<generativeqc_tensor::I>(matrix);
+    generativeqc_tensor::gemm(matrix_contractions.handle(), transpose_left ? 'T' : 'N', 'N', order,
+                              order, order, left, right, output, stride, stride, stride, 1, 1.0,
+                              0.0);
+  }
+
+  void multiply_spin(unsigned spin_count, const double* left, bool left_is_spin,
+                     bool transpose_left, const double* right, bool right_is_spin,
+                     const std::uint8_t* active, double* output) {
+    if (!matrix_library) {
+      const auto count = product(static_cast<std::size_t>(spin_count), matrix);
+      const auto blocks = static_cast<unsigned>((count + 127) / 128);
+      launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1,
+                                        static_cast<std::int32_t>(spin_count), n, left,
+                                        left_is_spin, transpose_left, right, right_is_spin, active,
+                                        output);
+      check(cudaGetLastError());
+      return;
+    }
+    (void)active;
+    const auto order = static_cast<int>(n);
+    const auto stride = static_cast<generativeqc_tensor::I>(matrix);
+    for (unsigned spin = 0; spin < spin_count; ++spin) {
+      const auto offset = static_cast<std::size_t>(spin) * matrix;
+      const double* spin_left = left + (left_is_spin ? offset : 0);
+      const double* spin_right = right + (right_is_spin ? offset : 0);
+      generativeqc_tensor::gemm(matrix_contractions.handle(), transpose_left ? 'T' : 'N', 'N',
+                                order, order, order, spin_left, spin_right, output + offset, stride,
+                                stride, stride, 1, 1.0, 0.0);
+    }
+  }
+
   void retain_final_fitted_projection() {
     final_fitted_projection_ready = false;
     if (!pending_fitted_occupied || spins != 1 || !warm_orbitals_ready || !occupations[0]) return;
@@ -268,10 +318,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // warm_orbitals is the orthonormal-basis C that generated the exact current
     // density consumed by the final K. Preserve its AO representation in the
     // now-dead proposal slot; final-state canonicalization uses separate storage.
-    const auto blocks = static_cast<unsigned>((matrix + 127) / 128);
-    launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, 1, n, x, false, false,
-                                      warm_orbitals, true, final_enabled, proposal);
-    check(cudaGetLastError());
+    multiply_spin(1, x, false, false, warm_orbitals, true, final_enabled, proposal);
     final_fitted_projection_scratch_generation = projection.scratch_generation;
     final_fitted_projection_ready = true;
     ++movement.fitted_final_projection_leases;
@@ -540,14 +587,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
    * reference eigen fallback. */
   void prepare_initial_state() {
     runtime::host_trace::Region trace("cuda_ks_initial_state", n);
-    const auto matrix_blocks = (matrix + 127) / 128;
-    if (matrix_blocks > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-      throw std::invalid_argument("CUDA KS setup matrix launch exceeds the device grid domain");
-    const auto blocks = static_cast<unsigned>(matrix_blocks);
     const auto multiply = [&](const double* a, bool transpose, const double* b, double* c) {
-      launch_matrix_product_kernel(blocks, 128, 0, stream, 1, n, a, transpose, b, final_enabled, c,
-                                   1.0);
-      check(cudaGetLastError());
+      multiply_matrix(a, transpose, b, final_enabled, c);
     };
     const auto solve = [&] {
       check(eigensolver->launch(1, tmp2, effective, eigenvalues, solver_info, final_enabled),
@@ -817,6 +858,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // Admit mandatory solver/VV10 storage before optional maps. A device
       // budget/allocation miss may retry the smaller dense XC arena; host
       // registry failures and other runtime errors must still propagate.
+      if (n >= kCudaKsMatrixLibraryAoThreshold && matrix_contractions.prepare(stream)) {
+        matrix_library = true;
+        resource.provider_device_bytes =
+            sum(resource.provider_device_bytes, tensor::CudaContractionContext::kProviderAllowance);
+      } else {
+        matrix_contractions.prepare_generated(stream);
+      }
       eigensolver = std::make_unique<OrdinaryStreamEigensolver>(stream, n, tmp2, eigenvalues);
       resource.state_device_bytes = sum(resource.state_device_bytes, eigensolver->device_bytes());
       resource.retained_host_numeric_bytes =
@@ -908,6 +956,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (stream) cudaStreamSynchronize(stream);
     xc.reset();
     eigensolver.reset();
+    matrix_contractions.reset();
+    matrix_library = false;
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
     if (xc_arena) runtime::resource_cuda_free(xc_arena);
     if (arena) runtime::resource_cuda_free(arena);
@@ -1179,9 +1229,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto blocks = static_cast<unsigned>((elements + 127) / 128);
     const auto multiply = [&](const double* a, bool a_spin, bool transpose, const double* b,
                               bool b_spin, const std::uint8_t* mask, double* c) {
-      launch_spin_matrix_product_kernel(blocks, 128, 0, stream, 1, spins, n, a, a_spin, transpose,
-                                        b, b_spin, mask, c);
-      check(cudaGetLastError());
+      multiply_spin(spins, a, a_spin, transpose, b, b_spin, mask, c);
     };
     multiply(fock, true, false, density, true, enabled, tmp1);
     multiply(tmp1, true, false, overlap, false, enabled, residual);
