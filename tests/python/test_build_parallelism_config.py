@@ -8,33 +8,43 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_generated_aot_shares_native_pool_until_explicitly_split() -> None:
+def test_cuda_compile_pools_are_opt_in_and_aot_can_split() -> None:
     cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
     cuda = (ROOT / "cmake" / "GenerativeQCCuda.cmake").read_text(encoding="utf-8")
 
+    assert 'set(GENERATIVEQC_CUDA_COMPILE_JOBS "" CACHE STRING' in cmake
     assert 'set(GENERATIVEQC_AOT_COMPILE_JOBS "" CACHE STRING' in cmake
-    assert "set(_generativeqc_aot_compile_pool generativeqc_cuda_compile)" in cmake
+    assert 'set(_generativeqc_cuda_compile_pool "")' in cmake
+    assert 'set(_generativeqc_aot_compile_pool "")' in cmake
     assert "generativeqc_cuda_compile=${GENERATIVEQC_CUDA_COMPILE_JOBS}" in cmake
     assert "generativeqc_aot_compile=${GENERATIVEQC_AOT_COMPILE_JOBS}" in cmake
+    assert "set(_generativeqc_aot_compile_pool generativeqc_cuda_compile)" in cmake
     assert "set(_generativeqc_aot_compile_pool generativeqc_aot_compile)" in cmake
+    assert "function(generativeqc_set_cuda_compile_pool target pool)" in cuda
 
     native = cuda.split("if(GENERATIVEQC_ENABLE_AOT_SHELLS)", 1)[0]
     aot = cuda.split("if(GENERATIVEQC_ENABLE_AOT_SHELLS)", 1)[1]
-    assert "JOB_POOL_COMPILE generativeqc_cuda_compile" in native
-    assert "JOB_POOL_COMPILE ${_generativeqc_aot_compile_pool}" in aot
+    assert '"${_generativeqc_cuda_compile_pool}"' in native
+    assert '"${_generativeqc_aot_compile_pool}"' in aot
+    assert "JOB_POOL_COMPILE generativeqc_cuda_compile" not in cuda
+    for target in (
+        "generativeqc_stationary_sp_primitives",
+        "generativeqc_stationary_spd_primitives",
+        "${_generativeqc_stationary_target}",
+        "${_generativeqc_stationary_spd_target}",
+    ):
+        assert f'{target} "${{_generativeqc_aot_compile_pool}}")' in aot
 
 
-def test_fast_cuda_preset_uses_wider_aot_pool() -> None:
+def test_cuda_presets_follow_ninja_parallelism() -> None:
     presets = json.loads((ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
-    fast = next(
-        preset
-        for preset in presets["configurePresets"]
-        if preset["name"] == "cuda-dev-fast"
-    )
-    variables = fast["cacheVariables"]
-
-    assert variables["GENERATIVEQC_CUDA_COMPILE_JOBS"] == "2"
-    assert variables["GENERATIVEQC_AOT_COMPILE_JOBS"] == "4"
+    for name in ("cuda-dev-fast", "cuda-release-sm120"):
+        preset = next(
+            item for item in presets["configurePresets"] if item["name"] == name
+        )
+        variables = preset["cacheVariables"]
+        assert "GENERATIVEQC_CUDA_COMPILE_JOBS" not in variables
+        assert "GENERATIVEQC_AOT_COMPILE_JOBS" not in variables
 
 
 def test_host_pch_is_opt_in_and_cxx_only() -> None:

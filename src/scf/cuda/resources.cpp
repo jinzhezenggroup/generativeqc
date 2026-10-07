@@ -19,6 +19,8 @@ CudaResources::~CudaResources() {
     if (reference_eri_ != nullptr) {
       (void)runtime::resource_cuda_free_async(reference_eri_, stream_);
     }
+    if (reference_fock_correction_ != nullptr)
+      (void)runtime::resource_cuda_free_async(reference_fock_correction_, stream_);
     if (solver_workspace_ != nullptr) {
       (void)runtime::resource_cuda_free_async(solver_workspace_, stream_);
     }

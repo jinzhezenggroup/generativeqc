@@ -1,0 +1,52 @@
+{
+  "schema": "generativeqc.residency_receipt",
+  "version": 1,
+  "identity": {
+    "source_commit": "67b35f3a0a236de39ebbdb2876908a3c2da78c6c",
+    "native_source": "06fa1f9d7108f86edfaa4ba9285df58c20a1d191b3c20785a2500cad1798730d",
+    "build_sha256": "ea39fae62486240a98021726d970ec80c965e8f4a687056e59636a7179faf5be",
+    "backend": "cuda",
+    "device": "RTX 5090 (historical)",
+    "endpoint": "OH UHF energy-and-force diagnostic",
+    "problem": "OH, cc-pVDZ/cc-pVDZ-JKFIT spherical, 19/93 AO",
+    "resource": "Slurm 9905, historical untimed diagnostic",
+    "owner": "DF force component trace",
+    "domain": "OH prepared DF force"
+  },
+  "historical_trace": {
+    "retained": "diagnosis/control-diagnosis-v1/oh-def2-svp-spherical-uhf-auto.jsonl",
+    "sha256": "4a57178922c890bf16830087c26a3971f4970ea6d267d1ab62508dd84e35c6c0"
+  },
+  "regions": [
+    {
+      "name": "force_response",
+      "role": "replay",
+      "owner": "DF force component trace",
+      "domain": "OH prepared DF force",
+      "hot": true,
+      "ratchet": {
+        "h2d_bytes": 0,
+        "d2h_bytes": 0,
+        "d2d_bytes": 0,
+        "syncs": 0,
+        "event_waits": 0,
+        "round_trips": 0
+      }
+    },
+    {
+      "name": "final_state_validation",
+      "role": "publication",
+      "owner": "DF force component trace",
+      "domain": "OH prepared DF force",
+      "hot": false,
+      "ratchet": {
+        "h2d_bytes": 0,
+        "d2h_bytes": 0,
+        "d2d_bytes": 0,
+        "syncs": 0,
+        "event_waits": 0,
+        "round_trips": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+*.json text eol=lf linguist-generated=true
+*.json.gz binary linguist-generated=true

@@ -78,6 +78,7 @@ struct CudaResources {
   cublasHandle_t blas_{};
   shared::PreparedSymmetricEigenHandles eigen_handles_;
   void *reference_eri_{}, *solver_workspace_{}, *direct_tile_validation_{}, *arena_{};
+  void* reference_fock_correction_{};
   void* solver_host_workspace_{};
   ~CudaResources();
 };
@@ -131,6 +132,7 @@ void private_scf_lifetime(const std::string& mode, void* stream) {
     CudaResources owner;
     owner.stream_ = static_cast<cudaStream_t>(stream);
     owner.reference_eri_ = reinterpret_cast<void*>(0x100);
+    owner.reference_fock_correction_ = reinterpret_cast<void*>(0x500);
     owner.solver_workspace_ = reinterpret_cast<void*>(0x200);
     owner.direct_tile_validation_ = reinterpret_cast<void*>(0x300);
     owner.arena_ = reinterpret_cast<void*>(0x400);

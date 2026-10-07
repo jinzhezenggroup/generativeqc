@@ -42,15 +42,16 @@ inline std::size_t payload_bytes(std::size_t density_count, std::size_t coordina
 }
 
 inline std::size_t reservation_bytes(const core::System& system,
-                                     const scf::HfWarmState* initial_state, bool retain_candidate) {
+                                     const scf::HfWarmState* initial_state, bool retain_candidate,
+                                     std::size_t spin_channels = 1) {
   std::size_t result = 0;
   if (initial_state)
     result = payload_bytes(initial_state->density.size(), initial_state->coordinates.size());
   if (retain_candidate) {
     const auto n = molecule::ao_count(system);
     result = posthf::checked_add(
-        result,
-        payload_bytes(posthf::checked_mul(n, n), posthf::checked_mul(3, system.atoms.size())));
+        result, payload_bytes(posthf::checked_mul(spin_channels, posthf::checked_mul(n, n)),
+                              posthf::checked_mul(3, system.atoms.size())));
   }
   return result;
 }
@@ -75,9 +76,11 @@ inline scf::HfWarmState capture(const core::System& system, const hf::PhysicalRe
 }
 
 inline void validate_checkpoint(const core::System& template_system, const scf::HfWarmState& state,
-                                std::string_view method_name) {
+                                std::string_view method_name,
+                                generativeqc_method hf_method = GENERATIVEQC_METHOD_RHF) {
   const auto n = molecule::ao_count(template_system);
-  const auto expected_density = posthf::checked_mul(n, n);
+  const auto spins = hf_method == GENERATIVEQC_METHOD_UHF ? 2U : 1U;
+  const auto expected_density = posthf::checked_mul(spins, posthf::checked_mul(n, n));
   if (state.density.size() != expected_density ||
       !valid_coordinates(state.coordinates, template_system) || state.iterations < 0 ||
       !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
@@ -86,7 +89,7 @@ inline void validate_checkpoint(const core::System& template_system, const scf::
                                 " checkpoint state dimensions or diagnostics");
   auto source = template_system;
   set_coordinates(source, state.coordinates);
-  scf::validate_hf_warm_density(source, GENERATIVEQC_METHOD_RHF, state.density);
+  scf::validate_hf_warm_density(source, hf_method, state.density);
 }
 
 }  // namespace generativeqc::methods::warm_reference

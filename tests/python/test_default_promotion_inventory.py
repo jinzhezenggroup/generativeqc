@@ -299,8 +299,8 @@ def test_preliminary_initial_guess_default_is_audited(tmp_path: Path) -> None:
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "python/generativeqc/calculator.py"
     changed = source.read_text().replace(
-        "initial_guess: InitialGuessSpec | None = None",
-        "initial_guess: InitialGuessSpec | None = InitialGuessSpec()",
+        'initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = "auto"',
+        'initial_guess: InitialGuessSpec | typing.Literal["auto"] | None = None',
         1,
     )
     source.write_text(changed)

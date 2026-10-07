@@ -8,9 +8,10 @@ correction. No empirical angular/radius tables or runtime downloads are used.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import typing
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -567,18 +568,27 @@ class MolecularGrid:
 
 @dataclass(frozen=True, eq=False)
 class ExplicitGrid:
-    """Portable exact point/weight data; it makes no grid-convergence claim."""
+    """Portable exact quadrature with versioned content identity.
+
+    Version 1 retains the historical canonical-JSON hash. Version 2 hashes
+    immutable typed buffers in bounded chunks; JSON is only materialized for
+    explicit interchange. Both versions preserve signed zeros and normalize
+    numerical inputs to finite FP64, independent of their original layout or
+    endianness. Neither identity makes a grid-convergence claim.
+    """
 
     points: np.ndarray
     weights: np.ndarray
     owners: tuple[int, ...]
     provenance: dict[str, object]
+    identity_version: int = field(default=1, kw_only=True)
 
     if TYPE_CHECKING:
         _provenance_json: ClassVar[str]
         identity: ClassVar[str]
 
     def __post_init__(self) -> None:
+        checked_int(self.identity_version, "explicit grid identity version", high=2)
         points, weights = immutable(self.points), immutable(self.weights)
         owners = tuple(self.owners)
         if (
@@ -596,12 +606,53 @@ class ExplicitGrid:
         object.__setattr__(self, "owners", owners)
         # Preserve identity even if the caller later mutates its metadata dict.
         object.__setattr__(self, "_provenance_json", provenance)
-        object.__setattr__(self, "identity", canonical_hash(self.record()))
+        identity = (
+            canonical_hash(self.record())
+            if self.identity_version == 1
+            else self._typed_identity()
+        )
+        object.__setattr__(self, "identity", identity)
+
+    def _typed_identity(self) -> str:
+        """Hash owned FP64/i32 contents with at most 1 MiB conversion scratch.
+
+        The fixed metadata digest domains the hash by schema, units, shapes,
+        representation and frozen provenance. Payloads follow in point, weight,
+        owner order. Little-endian encoding makes identity host-independent;
+        byte hashing deliberately distinguishes positive and negative zero.
+        """
+        metadata = {
+            "schema": "generativeqc.explicit-grid",
+            "version": 2,
+            "points": {"shape": self.points.shape, "dtype": "<f8", "unit": "bohr"},
+            "weights": {
+                "shape": self.weights.shape,
+                "dtype": "<f8",
+                "unit": "bohr^3",
+            },
+            "owners": {"shape": (len(self.owners),), "dtype": "<i4"},
+            "order": "C",
+            "provenance": json.loads(self._provenance_json),
+        }
+        digest = hashlib.sha256(canonical_hash(metadata).encode("ascii"))
+        chunk_values = (1 << 20) // 8
+        for array in (self.points, self.weights):
+            flat = array.reshape(-1)
+            for start in range(0, len(flat), chunk_values):
+                chunk = flat[start : start + chunk_values].astype("<f8", copy=False)
+                digest.update(memoryview(chunk).cast("B"))
+                del chunk
+        for start in range(0, len(self.owners), chunk_values):
+            chunk = np.asarray(self.owners[start : start + chunk_values], dtype="<i4")
+            digest.update(memoryview(chunk).cast("B"))
+            del chunk
+        return digest.hexdigest()
 
     def record(self) -> typing.Any:
+        """Materialize the versioned JSON interchange record only on request."""
         return {
             "schema": "generativeqc.explicit-grid",
-            "version": 1,
+            "version": self.identity_version,
             "points_bohr": self.points.tolist(),
             "weights_bohr3": self.weights.tolist(),
             "owners": self.owners,
@@ -618,13 +669,17 @@ class ExplicitGrid:
     def read(cls, path: typing.Any) -> typing.Any:
         """Import only versioned, hash-verified Bohr point/weight arrays."""
         data = json.loads(Path(path).read_text())
-        if data["schema"] != "generativeqc.explicit-grid" or data["version"] != 1:
+        if data["schema"] != "generativeqc.explicit-grid" or data["version"] not in (
+            1,
+            2,
+        ):
             raise ValueError("unsupported explicit-grid schema")
         result = cls(
             data["points_bohr"],
             data["weights_bohr3"],
             tuple(data["owners"]),
             data["provenance"],
+            identity_version=data["version"],
         )
         if result.identity != data["sha256"]:
             raise ValueError("explicit grid hash mismatch")

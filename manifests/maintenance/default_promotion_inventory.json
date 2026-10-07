@@ -657,6 +657,26 @@
       ]
     },
     {
+      "id": "initial.minao-auto",
+      "classification": "already-default",
+      "controls": [
+        "initial-guess:minao-auto"
+      ],
+      "owner_issues": [2052],
+      "sources": [
+        "python/generativeqc/calculator.py",
+        "python/generativeqc/initial_guess.py",
+        ".agents/notes/implemented/performance/2026-10-07-minao-default.md"
+      ],
+      "rationale": "Automatic MINAO is guarded to FP64 all-electron H-Ar restricted exact CPU HF/KS and CUDA KS. Existing densities take precedence, unsupported batches retain Hcore, the additional-phase numeric cap and single Hcore retry remain bounded, and explicit None rolls back. CUDA complete cold E+force evidence supports measured benefit; CPU uses the same scientifically admitted construction without claiming the CUDA speedup.",
+      "revisit_condition": "Revisit for root/state regressions, complete-endpoint regressions, or broader provider/domain qualification. Do not turn on HF/LDA preliminary solves, DF, UKS, ECP, mixed precision, or unsupported elements through this default.",
+      "evidence": [
+        "pr:#2068",
+        "note:.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md",
+        "note:.agents/notes/implemented/performance/2026-10-07-minao-default.md"
+      ]
+    },
+    {
       "id": "initial.basis-projection",
       "classification": "scientific-choice",
       "controls": [

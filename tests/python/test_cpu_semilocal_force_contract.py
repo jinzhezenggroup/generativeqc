@@ -22,6 +22,7 @@ from generativeqc import (
     Calculator,
     ElementBasis,
     GridSpec,
+    InitialGuessSpec,
     KsOptions,
     MethodCapabilities,
     ResourceBudget,
@@ -154,6 +155,124 @@ def fake_native(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 
     state.force = force
     return state
+
+
+@pytest.mark.parametrize("method", ["rhf", "pbe-rks"])
+@pytest.mark.parametrize(
+    "schema,capabilities",
+    [(None, None), (0, 7), (2, 7), (1, None), (1, 0), (1, 3), (1, 1 << 31)],
+)
+@pytest.mark.parametrize("selection", ["omitted", "auto"])
+def test_automatic_guess_preserves_older_native_library(
+    fake_native: typing.Any,
+    method: str,
+    schema: int | None,
+    capabilities: int | None,
+    selection: str,
+) -> None:
+    if schema is not None:
+        fake_native.library.generativeqc_initial_guess_options_version = Mock(
+            return_value=schema
+        )
+    if capabilities is not None:
+        fake_native.library.generativeqc_initial_guess_capabilities_v1 = Mock(
+            return_value=capabilities
+        )
+    options = {} if selection == "omitted" else {"initial_guess": "auto"}
+    automatic = Calculator(method=method, **options)
+    core = Calculator(method=method, initial_guess=None)
+    assert automatic.initial_guess is None
+    assert automatic.capabilities == core.capabilities
+    for systems in ([WATER], [[("Ca", (0.0, 0.0, 0.0))]]):
+        assert not automatic._method_descriptor(systems=systems).initial_guess
+    target = object()
+    from generativeqc.initial_guess import with_initial_guess_resources
+
+    assert (
+        with_initial_guess_resources(target, automatic, [WATER], None, None) is target
+    )
+    for kind in ("minao", "hf", "lda"):
+        if schema == 1:
+            # A pre-query library may already support an explicit provider;
+            # preserve its existing native parser/domain rejection contract.
+            explicit = Calculator(method=method, initial_guess=InitialGuessSpec(kind))
+            assert explicit.initial_guess == InitialGuessSpec(kind)
+        else:
+            with pytest.raises(NotImplementedError, match="preliminary SCF"):
+                Calculator(method=method, initial_guess=InitialGuessSpec(kind))
+
+
+@pytest.mark.parametrize("method", ["rhf", "pbe-rks"])
+@pytest.mark.parametrize("capabilities", [4, 7, 4 | (1 << 31)])
+@pytest.mark.parametrize("selection", ["omitted", "auto"])
+def test_automatic_guess_uses_supported_native_schema(
+    fake_native: typing.Any, method: str, capabilities: int, selection: str
+) -> None:
+    fake_native.library.generativeqc_initial_guess_options_version = Mock(
+        return_value=1
+    )
+    fake_native.library.generativeqc_initial_guess_capabilities_v1 = Mock(
+        return_value=capabilities
+    )
+    options = {} if selection == "omitted" else {"initial_guess": "auto"}
+    automatic = Calculator(method=method, **options)
+    assert automatic.initial_guess == InitialGuessSpec("minao")
+    assert (
+        automatic._method_descriptor(systems=[WATER]).initial_guess.contents.kind == 3
+    )
+    assert not automatic._method_descriptor(
+        systems=[[("Ca", (0.0, 0.0, 0.0))]]
+    ).initial_guess
+    assert Calculator(method=method, initial_guess=None).initial_guess is None
+    explicit = Calculator(method=method, initial_guess=InitialGuessSpec("minao"))
+    assert automatic._resource_request([WATER]) == explicit._resource_request([WATER])
+
+
+@pytest.mark.parametrize(
+    "method,options",
+    [
+        ("uhf", {}),
+        ("pbe-uks", {}),
+        ("rhf", {"device": "cuda"}),
+        ("pbe-rks", {"device": "cuda", "precision": "auto"}),
+        ("rhf", {"density_fitting": "cpu"}),
+    ],
+)
+def test_positive_capability_does_not_expand_automatic_domains(
+    fake_native: typing.Any, method: str, options: dict
+) -> None:
+    fake_native.library.generativeqc_initial_guess_options_version = Mock(
+        return_value=1
+    )
+    fake_native.library.generativeqc_initial_guess_capabilities_v1 = Mock(
+        return_value=7
+    )
+    automatic = Calculator(method=method, **options)
+    core = Calculator(method=method, initial_guess=None, **options)
+    assert automatic.initial_guess is None
+    assert automatic.capabilities == core.capabilities
+    fake_native.library.generativeqc_initial_guess_capabilities_v1.assert_not_called()
+
+
+@pytest.mark.parametrize("query", ["options_version", "capabilities_v1"])
+@pytest.mark.parametrize("error", [RuntimeError, NotImplementedError])
+def test_automatic_guess_does_not_hide_unexpected_native_query_failure(
+    fake_native: typing.Any, query: str, error: type[Exception]
+) -> None:
+    fake_native.library.generativeqc_initial_guess_options_version = Mock(
+        return_value=1
+    )
+    setattr(
+        fake_native.library,
+        f"generativeqc_initial_guess_{query}",
+        Mock(side_effect=error("native feature query failed")),
+    )
+    with pytest.raises(error, match="native feature query failed"):
+        Calculator(method="pbe-rks")
+    assert Calculator(method="pbe-rks", initial_guess=None).initial_guess is None
+    if query == "capabilities_v1":
+        explicit = Calculator(method="pbe-rks", initial_guess=InitialGuessSpec("minao"))
+        assert explicit.initial_guess == InitialGuessSpec("minao")
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])

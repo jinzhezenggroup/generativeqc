@@ -1138,6 +1138,13 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOpti
   if (strategy.spec.spin == FockSpin::Restricted &&
       (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1))
     throw std::invalid_argument("restricted Fock SCF requires a closed-shell electron count");
+  if (options.export_physical_reference && strategy.spec.spin == FockSpin::Unrestricted &&
+      (strategy.backend != FockBackend::Cpu ||
+       strategy.spec.coulomb.approximation != FockApproximation::Exact ||
+       strategy.spec.exchange.approximation != FockApproximation::Exact ||
+       options.screening_tolerance != 0))
+    throw std::invalid_argument(
+        "physical UHF reference requires exact unscreened CPU Fock execution");
   if (options.preliminary_guess) {
     ScfOptions target_options = options;
     target_options.preliminary_guess.reset();
@@ -1217,6 +1224,13 @@ static ScfResult run_cpu_fock_strategy_impl(const core::System& system,
     if (capacity > options.reference_memory_budget_bytes)
       throw std::length_error("bounded RHF reference exceeds numeric memory budget");
   }
+  if (options.export_physical_reference && strategy.spec.spin == FockSpin::Unrestricted &&
+      options.reference_memory_budget_bytes != 0 &&
+      posthf::uhf_reference_capacity(
+          system, options.diis_history,
+          strategy.spec.coulomb.approximation == FockApproximation::Exact) >
+          options.reference_memory_budget_bytes)
+    throw std::length_error("bounded UHF reference exceeds numeric memory budget");
   const PreparedFockPlan plan(system, auxiliary, strategy);
   // Physical-reference generation, including post-HF consumers, preserves its
   // independent reference state. Ordinary primary HF getters retain this solve.
@@ -1275,6 +1289,7 @@ ScfResult run_rhf_density_fitting(const core::System& system, const core::System
 ScfResult run_uhf(const core::System& system, const ScfOptions& options,
                   const std::vector<double>* initial_density) {
   ScfOptions execution = options;
+  if (execution.export_physical_reference) execution.compute_forces = false;
   if (!execution.resolved_fock_build)
     execution.resolved_fock_build = resolve_fock_build(
         make_hf_fock_spec(FockSpin::Unrestricted), FockBackend::Cpu, options.screening_tolerance);

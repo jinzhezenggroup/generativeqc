@@ -135,6 +135,8 @@ extern "C" int rhf_linear_jk_probe(void* opaque, const double* density, double t
       runtime::OwnedCudaBuffer<double> storage(0, 3 * nn, stream);
       runtime::OwnedCudaBuffer<int> flag(0, 1, stream);
       runtime::OwnedCudaBuffer<std::uint64_t> census(0, 2, stream);
+      runtime::OwnedCudaBuffer<double> correction(
+          0, scf::cuda_direct_jk_compensation_elements(plan), stream);
       auto* d = storage.get();
       auto* j = d + nn;
       auto* k = j + nn;
@@ -142,8 +144,21 @@ extern "C" int rhf_linear_jk_probe(void* opaque, const double* density, double t
           cudaMemcpyAsync(d, density, nn * sizeof(double), cudaMemcpyHostToDevice, stream));
       auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
       spec.derivative_order = 0;
-      check(scf::enqueue_cuda_direct_jk_linear_device(plan, spec, d, nn, j, k, flag.get(),
-                                                      threshold, census.get(), detail));
+      // Refusals must occur before resetting outputs or launching any writer.
+      for (const auto bad_elements : {correction.size() - 1, correction.size() + 1})
+        if (scf::enqueue_cuda_direct_jk_compensated_device(
+                plan, spec, d, nn, j, k, correction.get(), bad_elements, flag.get(), threshold,
+                census.get(), detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+          throw std::runtime_error("accepted wrong-sized J/K correction plane");
+      for (auto* aliased : {d, j, k, reinterpret_cast<double*>(flag.get()),
+                            reinterpret_cast<double*>(census.get())})
+        if (scf::enqueue_cuda_direct_jk_compensated_device(
+                plan, spec, d, nn, j, k, aliased, correction.size(), flag.get(), threshold,
+                census.get(), detail) != GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+          throw std::runtime_error("accepted aliased J/K correction plane");
+      check(scf::enqueue_cuda_direct_jk_compensated_device(
+          plan, spec, d, nn, j, k, correction.get(), correction.size(), flag.get(), threshold,
+          census.get(), detail));
       runtime::cuda_resource_check(
           cudaMemcpyAsync(output, j, 2 * nn * sizeof(double), cudaMemcpyDeviceToHost, stream));
       runtime::cuda_resource_check(cudaMemcpyAsync(counts, census.get(), 2 * sizeof(std::uint64_t),
@@ -242,6 +257,8 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
     const std::size_t output_matrices = unrestricted ? 3 : 2;
     {
       runtime::OwnedCudaBuffer<double> storage(0, (input_matrices + output_matrices) * nn, stream);
+      runtime::OwnedCudaBuffer<double> correction(
+          0, unrestricted ? 0 : scf::cuda_direct_jk_compensation_elements(plan), stream);
       runtime::OwnedCudaBuffer<int> flag(0, 1, stream);
       runtime::OwnedCudaBuffer<std::uint64_t> census(0, 2, stream);
       struct Events {
@@ -263,17 +280,19 @@ extern "C" int rhf_resident_jk_probe(void* opaque, const double* densities,
         for (unsigned uncached = 0; uncached < 2; ++uncached) {
           const auto started = std::chrono::steady_clock::now();
           runtime::cuda_resource_check(cudaEventRecord(events.start, stream));
-          if (uncached && !unrestricted)
-            check(scf::enqueue_cuda_direct_jk_linear_device(
-                plan, spec, density, nn, coulomb, exchange, flag.get(), 0.0, census.get(), detail));
-          else {
+          {
             const auto retained = plan->resident_values;
             if (uncached) plan->resident_values = nullptr;
             try {
-              check(scf::enqueue_cuda_direct_jk_device(
-                  plan, spec, density, unrestricted ? density + nn : nullptr, nn, coulomb, exchange,
-                  unrestricted ? exchange + nn : nullptr, flag.get(), detail,
-                  counts[7] ? census.get() : nullptr));
+              if (correction.size())
+                check(scf::enqueue_cuda_direct_jk_compensated_device(
+                    plan, spec, density, nn, coulomb, exchange, correction.get(), correction.size(),
+                    flag.get(), 0.0, counts[7] ? census.get() : nullptr, detail));
+              else
+                check(scf::enqueue_cuda_direct_jk_device(
+                    plan, spec, density, unrestricted ? density + nn : nullptr, nn, coulomb,
+                    exchange, unrestricted ? exchange + nn : nullptr, flag.get(), detail,
+                    counts[7] ? census.get() : nullptr));
             } catch (...) {
               plan->resident_values = retained;
               throw;

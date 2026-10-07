@@ -5,6 +5,7 @@
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
+#include <utility>
 
 #include "df_mo_source_generated.hpp"
 #include "integrals/density_fitting_metric.hpp"
@@ -18,7 +19,9 @@ NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSou
                                          const hf::PhysicalReference& reference, std::size_t budget,
                                          unsigned axis_tile, AOTileDomain tile_domain)
     : source_(source),
-      ref_(reference),
+      restricted_ref_(&reference),
+      reference_view_(reference.electronic_reference()),
+      nbf_(reference.nbf),
       budget_(budget),
       source_bytes_(source.retained_numeric_bytes()),
       reference_bytes_(checked_mul(
@@ -26,7 +29,7 @@ NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSou
           checked_add(checked_mul(5, checked_mul(reference.nbf, reference.nbf)), reference.nbf))) {
   if (!source_.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("native MO provider requires AO ERI source capability");
-  if (!axis_tile || ref_.nbf != source_.nbf() || ref_.coefficients.size() != ref_.nbf * ref_.nbf)
+  if (!axis_tile || nbf_ != source_.nbf() || reference.coefficients.size() != nbf_ * nbf_)
     throw std::invalid_argument("native MO provider/reference dimensions mismatch");
   std::size_t largest_shell = 0;
   for (const auto& shell : source_.orbital().shells) {
@@ -39,9 +42,51 @@ NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSou
   // Source reads already accept arbitrary public-AO ranges. Cross-shell tiles
   // avoid repeating a full MO-output transformation for each shell-sized tile;
   // the existing checked block/batch plans charge their larger intermediates.
-  const auto maximum = tile_domain == AOTileDomain::Basis ? ref_.nbf : largest_shell;
+  const auto maximum = tile_domain == AOTileDomain::Basis ? nbf_ : largest_shell;
   tile_.fill(std::min<std::size_t>(axis_tile, maximum));
   if (!tile_[0]) throw std::invalid_argument("empty native AO source");
+}
+
+NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
+                                         const hf::UnrestrictedPhysicalReference& reference,
+                                         std::size_t budget, unsigned axis_tile,
+                                         AOTileDomain tile_domain)
+    : source_(source),
+      reference_view_(reference.electronic_reference()),
+      nbf_(reference.nbf),
+      budget_(budget),
+      source_bytes_(source.retained_numeric_bytes()),
+      reference_bytes_(checked_add(
+          checked_mul(8, checked_add(checked_mul(9, checked_mul(reference.nbf, reference.nbf)),
+                                     checked_mul(2, reference.nbf))),
+          reference.source_identity ? reference.source_identity->storage_bytes() : 0)) {
+  if (!source_.supports(integrals::ElectronInteractionOperator::eri) || !axis_tile ||
+      nbf_ != source_.nbf() || reference_view_.spin_channels != 2 ||
+      !core::electronic_reference_shape_valid(reference_view_))
+    throw std::invalid_argument("native unrestricted MO provider/source mismatch");
+  const auto& system = source_.orbital();
+  if (!reference.source_identity || !reference.source_identity->matches(system) ||
+      reference.source_charge != system.charge ||
+      reference.source_electrons != system.electron_count ||
+      reference.source_multiplicity != system.multiplicity)
+    throw std::invalid_argument("native unrestricted MO provider/source identity mismatch");
+  std::size_t largest_shell = 0;
+  for (const auto& shell : source_.orbital().shells) {
+    const auto l = shell.angular_momentum;
+    const auto count = source_.orbital().basis_representation == GENERATIVEQC_BASIS_SPHERICAL
+                           ? 2 * l + 1
+                           : (l + 1) * (l + 2) / 2;
+    largest_shell = std::max(largest_shell, static_cast<std::size_t>(count));
+  }
+  const auto maximum = tile_domain == AOTileDomain::Basis ? nbf_ : largest_shell;
+  tile_.fill(std::min<std::size_t>(axis_tile, maximum));
+  if (!tile_[0]) throw std::invalid_argument("empty native AO source");
+}
+
+const hf::PhysicalReference& NativeBlockProvider::reference() const {
+  if (!restricted_ref_)
+    throw std::logic_error("unrestricted native MO provider has no RHF reference");
+  return *restricted_ref_;
 }
 
 std::size_t NativeBlockProvider::common_host_bytes() const {
@@ -54,8 +99,8 @@ std::size_t NativeBlockProvider::common_host_bytes() const {
 NumericBlockPlan NativeBlockProvider::plan(const std::array<std::size_t, 4>& shape,
                                            bool cuda) const {
   for (auto n : shape)
-    if (!n || n > ref_.nbf) throw std::invalid_argument("native MO block shape out of bounds");
-  auto p = numeric_block_plan(ref_.nbf, reference_bytes_, source_bytes_, shape, tile_, cuda);
+    if (!n || n > nbf_) throw std::invalid_argument("native MO block shape out of bounds");
+  auto p = numeric_block_plan(nbf_, reference_bytes_, source_bytes_, shape, tile_, cuda);
   if (cuda && p.stage_elements > INT32_MAX)
     throw std::length_error("MO stage exceeds cuBLAS int32 range");
   if (checked_add(p.host_bytes, p.device_bytes) > budget_)
@@ -95,7 +140,38 @@ std::size_t NativeBlockProvider::batch_capacity(const std::array<std::size_t, 4>
 std::vector<std::vector<double>> NativeBlockProvider::get_many(
     const std::vector<MOSlots>& requests, bool cuda, int device,
     generativeqc_tensor::Metrics* metrics, ProviderWork* work) const {
+  if (reference_view_.spin_channels != 1)
+    throw std::invalid_argument("unrestricted MO requests require four explicit spin owners");
+  std::vector<SpinMORequestView> views;
+  views.reserve(requests.size());
+  for (const auto& slots : requests) views.push_back({&slots, {0, 0, 0, 0}});
+  return get_many_impl(views, cuda, device, metrics, work);
+}
+
+std::vector<std::vector<double>> NativeBlockProvider::get_many_spin(
+    const std::vector<SpinMOSlots>& requests, ProviderWork* work) const {
+  if (reference_view_.spin_channels != 2)
+    throw std::invalid_argument("spin-owned MO requests require a UHF reference");
+  std::vector<SpinMORequestView> views;
+  views.reserve(requests.size());
+  for (const auto& request : requests) views.push_back({&request.slots, request.spins});
+  return get_many_impl(views, false, 0, nullptr, work);
+}
+
+std::vector<double> NativeBlockProvider::get_spin(const SpinMOSlots& request,
+                                                  ProviderWork* work) const {
+  if (reference_view_.spin_channels != 2)
+    throw std::invalid_argument("spin-owned MO request requires a UHF reference");
+  auto values = get_many_impl({{&request.slots, request.spins}}, false, 0, nullptr, work);
+  return std::move(values.front());
+}
+
+std::vector<std::vector<double>> NativeBlockProvider::get_many_impl(
+    const std::vector<SpinMORequestView>& requests, bool cuda, int device,
+    generativeqc_tensor::Metrics* metrics, ProviderWork* work) const {
   if (requests.empty()) return {};
+  if (cuda && reference_view_.spin_channels != 1)
+    throw std::invalid_argument("unrestricted native MO CUDA transform is unavailable");
   const auto provider_started = std::chrono::steady_clock::now();
 
   std::vector<std::array<std::size_t, 4>> shapes;
@@ -106,9 +182,13 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
   auto batch_memory = host_common;
   std::size_t shared_device_fixed = 0;
   bool shared_device_fixed_set = false;
-  for (const auto& slots : requests) {
+  for (const auto& request : requests) {
     std::array<std::size_t, 4> shape{};
-    for (unsigned k = 0; k < 4; ++k) shape[k] = slots[k].size();
+    for (unsigned k = 0; k < 4; ++k) {
+      if (request.spins[k] >= reference_view_.spin_channels)
+        throw std::invalid_argument("native MO slot spin owner out of range");
+      shape[k] = (*request.slots)[k].size();
+    }
     const auto p = plan(shape, cuda);
     if (p.host_bytes < host_common)
       throw std::logic_error("native MO batch host accounting underflow");
@@ -133,12 +213,14 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
   if (batch_memory > budget_) throw std::length_error("native MO batch exceeds memory budget");
 
   std::vector<std::array<std::size_t, 4>> prefix_keys(requests.size());
-  std::vector<std::vector<std::size_t>> slot_keys;
+  std::vector<std::pair<std::vector<std::size_t>, unsigned>> slot_keys;
   for (std::size_t request = 0; request < requests.size(); ++request) {
     for (unsigned axis = 0; axis < 4; ++axis) {
       std::size_t key = 0;
-      while (key < slot_keys.size() && slot_keys[key] != requests[request][axis]) ++key;
-      if (key == slot_keys.size()) slot_keys.push_back(requests[request][axis]);
+      const auto wanted =
+          std::pair{(*requests[request].slots)[axis], requests[request].spins[axis]};
+      while (key < slot_keys.size() && slot_keys[key] != wanted) ++key;
+      if (key == slot_keys.size()) slot_keys.push_back(wanted);
       prefix_keys[request][axis] = key;
     }
   }
@@ -158,19 +240,21 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
     State state;
     state.shape = shapes[request];
     state.plan = plans[request];
-    const auto& slots = requests[request];
+    const auto& slots = *requests[request].slots;
     for (unsigned k = 0; k < 4; ++k) {
       auto& c = state.coefficients[k];
-      c.resize(ref_.nbf * state.shape[k]);
+      c.resize(nbf_ * state.shape[k]);
+      const auto owner = requests[request].spins[k];
+      const auto coefficients = reference_view_.channels[owner].coefficients;
       for (std::size_t mo = 0; mo < state.shape[k]; ++mo) {
         const auto column = slots[k][mo];
-        if (column != padded_mo && column >= ref_.nbf)
+        if (column != padded_mo && column >= nbf_)
           throw std::invalid_argument("native MO index out of range");
         if (column == padded_mo) continue;
         if (std::find(slots[k].begin(), slots[k].begin() + mo, column) != slots[k].begin() + mo)
           throw std::invalid_argument("native MO slots require unique real columns");
-        for (std::size_t mu = 0; mu < ref_.nbf; ++mu) {
-          const auto value = ref_.coefficients[mu * ref_.nbf + column];
+        for (std::size_t mu = 0; mu < nbf_; ++mu) {
+          const auto value = coefficients[mu * nbf_ + column];
           if (!std::isfinite(value)) throw std::invalid_argument("nonfinite MO coefficient");
           c[mu * state.shape[k] + mo] = value;
         }
@@ -222,7 +306,7 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
     if (panels.size() != coefficient_elements)
       throw std::logic_error("native MO batch coefficient accounting mismatch");
     check(posthf_cuda_batch_create_v1(
-        device, ref_.nbf, states.size(), batch_shapes.data(), prefix_leaders.data(), tile_.data(),
+        device, nbf_, states.size(), batch_shapes.data(), prefix_leaders.data(), tile_.data(),
         panels.data(), maximum_allocation_bytes, &device_batch.pointer, error, sizeof(error)));
     if (work)
       work->h2d_bytes =
@@ -246,15 +330,15 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
     work->source_scans = checked_add(work->source_scans, 1);
     work->mo_blocks = checked_add(work->mo_blocks, requests.size());
   }
-  for (std::size_t u = 0; u < ref_.nbf; u += tile_[0])
-    for (std::size_t v = 0; v < ref_.nbf; v += tile_[1])
-      for (std::size_t w = 0; w < ref_.nbf; w += tile_[2])
-        for (std::size_t x = 0; x < ref_.nbf; x += tile_[3]) {
+  for (std::size_t u = 0; u < nbf_; u += tile_[0])
+    for (std::size_t v = 0; v < nbf_; v += tile_[1])
+      for (std::size_t w = 0; w < nbf_; w += tile_[2])
+        for (std::size_t x = 0; x < nbf_; x += tile_[3]) {
           const std::array<std::size_t, 4> begin{u, v, w, x};
           std::array<std::size_t, 4> current{};
           std::size_t elements = 1;
           for (unsigned k = 0; k < 4; ++k) {
-            current[k] = std::min(tile_[k], ref_.nbf - begin[k]);
+            current[k] = std::min(tile_[k], nbf_ - begin[k]);
             elements = checked_mul(elements, current[k]);
           }
           const auto source_started = std::chrono::steady_clock::now();

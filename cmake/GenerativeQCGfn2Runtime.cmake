@@ -160,8 +160,11 @@ function(generativeqc_add_gfn2_runtime target)
       CUDA_STANDARD_REQUIRED ON
       CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
       CUDA_SEPARABLE_COMPILATION ON
-      CUDA_RESOLVE_DEVICE_SYMBOLS ON
-      JOB_POOL_COMPILE generativeqc_cuda_compile)
+      CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+    if(NOT "${_generativeqc_cuda_compile_pool}" STREQUAL "")
+      set_property(TARGET generativeqc_gfn2_cuda PROPERTY JOB_POOL_COMPILE
+                   "${_generativeqc_cuda_compile_pool}")
+    endif()
     set_source_files_properties(
       ${_gfn2_root}/src/backends/cuda/gfn2_pairlist.cu
       ${_gfn2_root}/src/backends/cuda/gfn2_geometry.cu

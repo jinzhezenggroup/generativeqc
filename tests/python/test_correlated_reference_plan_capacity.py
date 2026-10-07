@@ -269,10 +269,12 @@ void accounting() {
   p.resources.arena_=&p; p.layout.bytes=4096;
   p.resources.solver_workspace_=&p; p.resources.solver_workspace_bytes_=256;
   p.resources.reference_eri_=reinterpret_cast<double*>(&p); p.resources.reference_eri_bytes_=128;
+  p.resources.reference_fock_correction_=reinterpret_cast<double*>(&p);
+  p.resources.reference_fock_correction_bytes_=512;
   p.resources.direct_tile_validation_=reinterpret_cast<DirectTileValidationRecord*>(&p);
   p.resources.solver_host_workspace_=&p; p.resources.solver_host_workspace_bytes_=1024;
   p.resources.provider_retained_bytes_=2048;
-  const auto device=4096+256+128+sizeof(DirectTileValidationRecord);
+  const auto device=4096+256+128+512+sizeof(DirectTileValidationRecord);
   require(hf_cuda_owned_device_bytes(&p)==device,"device-only accounting changed");
   std::size_t expected=device+1024+2048;
   auto charge=[&](auto& v) { v.reserve(3); expected+=v.capacity()*sizeof(typename std::decay_t<decltype(v)>::value_type); };
@@ -285,6 +287,8 @@ void accounting() {
   require(hf_cuda_owned_device_bytes(&p)==device,"host bytes polluted device diagnostic");
   p.resources.solver_host_workspace_=nullptr;
   require(hf_cuda_retained_numeric_bytes(&p)==expected-1024,"unallocated host workspace charged");
+  p.resources.reference_fock_correction_=nullptr;
+  require(hf_cuda_owned_device_bytes(&p)==device-512,"unallocated correction plane charged");
 }
 void warm() {
   Owner owner; auto cold_options=options(); auto cold=run(owner,cold_options);

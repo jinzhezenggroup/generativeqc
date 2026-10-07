@@ -160,6 +160,7 @@ def resolve_model_identity(request: ModelResolutionInput) -> typing.Any:
     if request.method_id not in (
         *_method_manifest.HF_METHOD_IDS,
         _method_manifest.METHOD_MP2,
+        _method_manifest.METHOD_UMP2,
         _method_manifest.METHOD_RCCSD,
         _method_manifest.METHOD_RCCSD_T,
         _method_manifest.METHOD_DF_RCCSD_T,

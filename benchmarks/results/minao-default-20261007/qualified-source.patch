@@ -1,0 +1,503 @@
+diff --git a/docs/user/initial_guesses.md b/docs/user/initial_guesses.md
+index 5eec237c2..e3adbaabc 100644
+--- a/docs/user/initial_guesses.md
++++ b/docs/user/initial_guesses.md
+@@ -46,6 +46,15 @@ capabilities are unchanged.
+   therefore differ from the raw PySCF MINAO seed; explicit/imported densities
+   still undergo the unchanged validation without this repair
+ 
++For CUDA MINAO, overlap and occupation decompositions, including strict target
++seed admission, use the prepared target's GPU eigensolver and existing charged
++workspace. Native cross-overlap construction, matrix assembly and occupation
++projection remain on the host; bounded synchronous transfers are part of the
++charged cold endpoint. This is not a fully device-resident MINAO implementation.
++CPU targets retain the independent reference decompositions. A failing GPU
++preparation keeps the existing bounded Hcore fallback, not a hidden CPU MINAO
++retry.
++
+ HF/LDA use at most 32 preliminary iterations by default, DIIS history 8, energy
+ tolerance `1e-6` and density tolerance `1e-4`. These are **preparation controls**.
+ The target calculation retains its requested method, basis, quadrature,
+diff --git a/src/dft/cuda_ks.cpp b/src/dft/cuda_ks.cpp
+index f5bb24386..c34fbd3f7 100644
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -564,16 +564,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
+     return frame;
+   }
+ 
+-  std::vector<double> seed(const std::vector<double>* input) const {
++  std::vector<double> seed(const std::vector<double>* input) {
+     using namespace scf::reference;
+     if (!input) throw std::logic_error("CUDA cold guesses must use resident setup state");
+     const auto& ints = provider.one_electron();
+     if (options.strict_initial_density && input) {
+       const std::vector<unsigned> counts =
+-          spins == 2 ? std::vector<unsigned>{static_cast<unsigned>(occupations[0]),
+-                                             static_cast<unsigned>(occupations[1])}
+-                     : std::vector<unsigned>{static_cast<unsigned>(occupations[0])};
+-      scf::solver::validate_seed(ints.overlap, *input, n, counts, spins == 2 ? 1.0 : 2.0);
++          spins == 2
++              ? std::vector<unsigned>{static_cast<unsigned>(occupations[0]),
++                                      static_cast<unsigned>(occupations[1])}
++              : std::vector<unsigned>{static_cast<unsigned>(provider.system().electron_count)};
++      // RKS stores the spin-summed density, not the number of occupied orbitals.
++      // begin() has not submitted an iteration yet. Strict seeded admission
++      // uses the same charged GPU solver as checkpoint and MINAO construction.
++      const scf::initial_guess::EigenOperation eigen = [this](const auto& matrix, const auto*,
++                                                              const auto*, std::size_t dimension) {
++        return seed_eigen(matrix, dimension);
++      };
++      scf::solver::validate_seed(ints.overlap, *input, n, counts, spins == 2 ? 1.0 : 2.0, eigen);
+       return *input;
+     }
+     if (spins == 2) {
+diff --git a/src/methods/dft_method.cpp b/src/methods/dft_method.cpp
+index 946270ff0..601fde5e2 100644
+--- a/src/methods/dft_method.cpp
++++ b/src/methods/dft_method.cpp
+@@ -941,8 +941,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
+     const auto started = std::chrono::steady_clock::now();
+     try {
+       runtime::CpuRetainedCapacity retained(host_numeric_capacity());
++      scf::initial_guess::EigenOperation eigen;
++#if GENERATIVEQC_HAS_CUDA
++      // The prepared CUDA owner already charges its idle solver workspace.
++      // Borrow it synchronously rather than running CPU Jacobi for a CUDA seed.
++      if (cuda_) eigen = cuda_->seed_eigen_operation();
++#endif
+       auto density = scf::initial_guess::prepare_preliminary_density(
+-          fock_, *options_.preliminary_guess, diagnostic);
++          fock_, *options_.preliminary_guess, diagnostic, eigen);
+       diagnostic.preparation_seconds =
+           std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+       return density;
+diff --git a/src/scf/initial_guess/minao.cpp b/src/scf/initial_guess/minao.cpp
+index d501d4c4d..af4b640c8 100644
+--- a/src/scf/initial_guess/minao.cpp
++++ b/src/scf/initial_guess/minao.cpp
+@@ -91,7 +91,8 @@ MinaoDensityResult minao_density(const core::System& system, const integrals::In
+ }
+ 
+ Matrix admissible_minao_density(const core::System& system, const integrals::IntegralData& target,
+-                                const Matrix& target_orthogonalizer, const Matrix& raw_density) {
++                                const Matrix& target_orthogonalizer, const Matrix& raw_density,
++                                const EigenOperation& eigen) {
+   const auto n = target.nbf;
+   if (!n || n > std::numeric_limits<std::size_t>::max() / n)
+     throw std::invalid_argument("MINAO target dimensions overflow");
+@@ -118,7 +119,10 @@ Matrix admissible_minao_density(const core::System& system, const integrals::Int
+       metric_density[i * n + j] = metric_density[j * n + i] = value;
+     }
+   if (!finite(metric_density)) throw std::runtime_error("nonfinite MINAO metric density");
+-  auto spectrum = reference::symmetric_eigen(std::move(metric_density), n);
++  auto spectrum = eigen ? eigen(metric_density, nullptr, nullptr, n)
++                        : reference::symmetric_eigen(std::move(metric_density), n);
++  if (spectrum.values.size() != n || spectrum.vectors.size() != n2)
++    throw std::runtime_error("MINAO provider returned an invalid eigenframe shape");
+   if (!finite(spectrum.values) || !finite(spectrum.vectors))
+     throw std::runtime_error("nonfinite MINAO metric spectrum");
+ 
+diff --git a/src/scf/initial_guess/minao.hpp b/src/scf/initial_guess/minao.hpp
+index 5df1e3926..4aa6ab7af 100644
+--- a/src/scf/initial_guess/minao.hpp
++++ b/src/scf/initial_guess/minao.hpp
+@@ -35,9 +35,12 @@ MinaoDensityResult minao_density(const core::System& system, const integrals::In
+  * spectrum onto 0<=f<=2, sum(f)=N and reconstruct in the target AO metric.
+  * This does not change the raw projection or the global explicit-seed gate.
+  * The caller must still run strict seed validation before using the result.
++ * A borrowed backend eigen operation replaces only the symmetric decomposition;
++ * an absent operation retains the independent CPU reference implementation.
+  */
+ Matrix admissible_minao_density(const core::System& system, const integrals::IntegralData& target,
+-                                const Matrix& target_orthogonalizer, const Matrix& raw_density);
++                                const Matrix& target_orthogonalizer, const Matrix& raw_density,
++                                const EigenOperation& eigen = {});
+ 
+ std::size_t minao_source_ao_count(const core::System& system);
+ std::size_t minao_source_primitive_count(const core::System& system);
+diff --git a/src/scf/preliminary_guess.cpp b/src/scf/preliminary_guess.cpp
+index 48faf23f8..e2cf497c2 100644
+--- a/src/scf/preliminary_guess.cpp
++++ b/src/scf/preliminary_guess.cpp
+@@ -13,6 +13,7 @@
+ #include "runtime/resource_usage.hpp"
+ #include "scf/fock_prepared.hpp"
+ #include "scf/initial_guess/minao.hpp"
++#include "scf/initial_guess/overlap.hpp"
+ #include "scf/mean_field.hpp"
+ #include "scf/reference/linalg.hpp"
+ #include "scf/solver/proposal_control.hpp"
+@@ -26,7 +27,8 @@ double elapsed(Clock::time_point start) {
+ 
+ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
+                                                 const PreliminaryOptions& policy,
+-                                                PreliminaryDiagnostic& diagnostic) {
++                                                PreliminaryDiagnostic& diagnostic,
++                                                const EigenOperation& eigen) {
+   const auto& system = target.system();
+   // The CPU integral provider admits g, but the LDA AO-grid primitive only
+   // admits through f. Decline before building an unusable extra integral owner.
+@@ -43,12 +45,12 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
+   }
+   if (policy.kind == PreliminaryKind::Minao) {
+     const auto& ints = target.one_electron();
+-    const auto x = reference::symmetric_orthogonalizer(ints.overlap, ints.nbf);
++    const auto x = symmetric_overlap(ints.overlap, ints.nbf, eigen);
+     auto projected = minao_density(system, ints, x);
+-    auto density = admissible_minao_density(system, ints, x, projected.density);
++    auto density = admissible_minao_density(system, ints, x, projected.density, eigen);
+     diagnostic.preliminary_iterations = 0;
+     diagnostic.preliminary_fock_builds = 0;
+-    density = admit_preliminary_density(target, std::move(density));
++    density = admit_preliminary_density(target, std::move(density), eigen);
+     diagnostic.outcome = PreliminaryOutcome::Used;
+     return density;
+   }
+@@ -92,14 +94,16 @@ std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
+ 
+ std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
+                                                                const PreliminaryOptions& policy,
+-                                                               PreliminaryDiagnostic& diagnostic) {
+-  return prepare_impl(target, policy, diagnostic);
++                                                               PreliminaryDiagnostic& diagnostic,
++                                                               const EigenOperation& eigen) {
++  return prepare_impl(target, policy, diagnostic, eigen);
+ }
+ 
+ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
+-                                              std::vector<double> density) {
++                                              std::vector<double> density,
++                                              const EigenOperation& eigen) {
+   solver::validate_seed(target.one_electron().overlap, density, target.one_electron().nbf,
+-                        {static_cast<unsigned>(target.system().electron_count)}, 2.0);
++                        {static_cast<unsigned>(target.system().electron_count)}, 2.0, eigen);
+   return density;
+ }
+ 
+diff --git a/src/scf/preliminary_guess.hpp b/src/scf/preliminary_guess.hpp
+index f13ac5ef8..6cba04d43 100644
+--- a/src/scf/preliminary_guess.hpp
++++ b/src/scf/preliminary_guess.hpp
+@@ -4,6 +4,7 @@
+ #include <functional>
+ #include <optional>
+ 
++#include "scf/initial_guess/eigen_operation.hpp"
+ #include "scf/types.hpp"
+ 
+ namespace generativeqc::scf {
+@@ -24,12 +25,18 @@ void validate_preliminary_target(const core::System& system, const ResolvedFockB
+ /** Strict same-basis admission. No symmetry/trace repair or metric transport.
+  * Ownership moves only after the raw candidate passes the existing ensemble gate. */
+ std::vector<double> admit_preliminary_density(const PreparedFockPlan& target,
+-                                              std::vector<double> density);
++                                              std::vector<double> density,
++                                              const EigenOperation& eigen = {});
+ 
+-/** Prepare one bounded cold seed without executing the immutable target. */
++/** Prepare one bounded cold seed without executing the immutable target.
++ * MINAO borrows the target's idle eigen operation for overlap, occupation
++ * construction and strict admission. CPU callers retain the reference default;
++ * a failing supplied operation never silently retries on the reference backend.
++ */
+ std::optional<std::vector<double>> prepare_preliminary_density(const PreparedFockPlan& target,
+                                                                const PreliminaryOptions& policy,
+-                                                               PreliminaryDiagnostic& diagnostic);
++                                                               PreliminaryDiagnostic& diagnostic,
++                                                               const EigenOperation& eigen = {});
+ 
+ using TargetSolve = std::function<ScfResult(const std::vector<double>*)>;
+ /** The callback executes immutable target equations with fresh iterative state.
+diff --git a/tests/native/test_ks_cuda.cpp b/tests/native/test_ks_cuda.cpp
+index e39eb360d..4a87f45d1 100644
+--- a/tests/native/test_ks_cuda.cpp
++++ b/tests/native/test_ks_cuda.cpp
+@@ -25,7 +25,9 @@
+ #include "runtime/resource_ledger.hpp"
+ #include "scf/cuda_fock_execution.hpp"
+ #include "scf/mean_field.hpp"
++#include "scf/preliminary_guess.hpp"
+ #include "scf/reference/mean_field.hpp"
++#include "scf/reference/observation.hpp"
+ 
+ extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
+ extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
+@@ -2142,6 +2144,78 @@ void rejected_api_requests_revoke_tokens() {
+               "rejected C batch request retained a previous token");
+   }
+ }
++std::size_t minao_reference_solves = 0;
++std::size_t observe_minao_reference(const char* name, std::size_t) noexcept {
++  if (std::strcmp(name, "reference_eigensolve") == 0) ++minao_reference_solves;
++  return 0;
++}
++void finish_minao_reference(std::size_t, int) noexcept {}
++
++void minao_gpu_case() {
++  using namespace scf::initial_guess;
++  const auto system = water();
++  const dft::AoBasis basis(system);
++  const dft::MolecularGrid grid(system, {1, 16, 8, 16, 3, 1e-12});
++  const scf::PreparedFockPlan cpu(system, nullptr,
++                                  exact_exchange_strategy(true, scf::FockBackend::Cpu));
++  const scf::PreparedFockPlan gpu(system, nullptr,
++                                  exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
++  scf::ScfOptions options;
++  options.compute_forces = false;
++  options.strict_initial_density = true;
++  options.precision_mode = GENERATIVEQC_PRECISION_FP64;
++  options.semilocal_exchange_scale = .75;
++  options.energy_tolerance = 1e-12;
++  options.density_tolerance = 1e-10;
++  options.max_iterations = 100;
++  dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
++  const auto eigen = plan.seed_eigen_operation();
++  PreliminaryOptions policy;
++  policy.kind = PreliminaryKind::Minao;
++  PreliminaryDiagnostic diagnostic;
++  const auto initial_movement = plan.transfers();
++  scf::reference::observation::Observer observer{observe_minao_reference, finish_minao_reference};
++  const auto* previous_observer = scf::reference::observation::active;
++  scf::reference::observation::active = &observer;
++  std::optional<std::vector<double>> density;
++  try {
++    density = prepare_preliminary_density(gpu, policy, diagnostic, eigen);
++    require(density && diagnostic.outcome == PreliminaryOutcome::Used &&
++                diagnostic.preliminary_fock_builds == 0 && minao_reference_solves == 0,
++            "CUDA MINAO preparation fell back to CPU reference diagonalization");
++    const auto movement = plan.transfers();
++    require(movement.setup_h2d_bytes - initial_movement.setup_h2d_bytes ==
++                4 * basis.nao * basis.nao * sizeof(double),
++            "CUDA MINAO preparation did not execute its four GPU decompositions");
++    plan.begin(&*density, false);
++    require(minao_reference_solves == 0,
++            "strict CUDA MINAO upload revalidated its density on the CPU");
++  } catch (...) {
++    scf::reference::observation::active = previous_observer;
++    throw;
++  }
++  scf::reference::observation::active = previous_observer;
++  while (plan.active()) {
++    plan.enqueue_iteration();
++    plan.finish_iteration();
++  }
++  const auto seeded = plan.result();
++  const auto reference = scf::run_pbe_rks(cpu, basis, grid, options);
++  require(seeded.converged && reference.converged &&
++              std::abs(seeded.energy - reference.energy) < 1e-8 &&
++              seeded.density.size() == reference.density.size(),
++          "GPU MINAO target failed its independent CPU endpoint gate");
++  for (std::size_t index = 0; index < seeded.density.size(); ++index)
++    require(std::abs(seeded.density[index] - reference.density[index]) < 1e-7,
++            "GPU MINAO changed the final target density");
++  policy.maximum_numeric_bytes = preliminary_numeric_capacity(system, policy) - 1;
++  diagnostic = {};
++  require(!prepare_preliminary_density(gpu, policy, diagnostic, eigen) &&
++              diagnostic.outcome == PreliminaryOutcome::BudgetSkipped,
++          "GPU MINAO did not preserve its preflight numeric cap");
++  std::cout << "CUDA MINAO GPU preparation and strict seed gates passed\n";
++}
++
+ #include "ks_density_provider_cases.hpp"
+ }  // namespace
+ 
+@@ -2149,6 +2223,10 @@ int main(int argc, char** argv) {
+   int devices = 0;
+   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
+   try {
++    if (argc == 2 && std::string(argv[1]) == "--minao") {
++      minao_gpu_case();
++      return 0;
++    }
+     if (argc == 2 && std::string(argv[1]) == "--incremental") {
+       run_exact_exchange_case(true);
+       run_exact_exchange_case(false);
+@@ -2159,6 +2237,7 @@ int main(int argc, char** argv) {
+       ks_density_provider_cases();
+       return 0;
+     }
++    minao_gpu_case();
+     ks_density_provider_cases();
+     prepared_cuda_fock_seam();
+     registered_functional_code_seam();
+diff --git a/tests/native/test_preliminary_initial_guess.cpp b/tests/native/test_preliminary_initial_guess.cpp
+index 34e16743c..2900fa69d 100644
+--- a/tests/native/test_preliminary_initial_guess.cpp
++++ b/tests/native/test_preliminary_initial_guess.cpp
+@@ -168,6 +168,31 @@ void check() {
+           "MINAO construction did not satisfy the unchanged strict seed gate");
+   require(std::abs(raw_minao.projected_electrons - 9.860917687841592) < 1e-10,
+           "raw pinned MINAO projection changed");
++  unsigned eigen_calls = 0;
++  const EigenOperation observed_eigen = [&](const auto& matrix, const auto* overlap,
++                                            const auto* orthogonalizer, std::size_t dimension) {
++    require(!overlap && !orthogonalizer && dimension == ints.nbf,
++            "MINAO requested an incompatible backend eigen operation");
++    ++eigen_calls;
++    return scf::reference::symmetric_eigen(matrix, dimension);
++  };
++  PreliminaryDiagnostic injected_diagnostic;
++  const auto injected = prepare_preliminary_density(plan, *controls.preliminary_guess,
++                                                    injected_diagnostic, observed_eigen);
++  require(injected && eigen_calls == 4 && injected_diagnostic.outcome == PreliminaryOutcome::Used &&
++              injected_diagnostic.preliminary_fock_builds == 0,
++          "MINAO did not route every construction and validation solve through its backend");
++  for (std::size_t index = 0; index < admitted_minao.size(); ++index)
++    require(std::abs((*injected)[index] - admitted_minao[index]) < 1e-10,
++            "backend eigen injection changed the admitted MINAO density");
++  const EigenOperation invalid_eigen = [](const auto&, const auto*, const auto*, std::size_t) {
++    return scf::reference::EigenResult{};
++  };
++  try {
++    admissible_minao_density(system, ints, x, raw_minao.density, invalid_eigen);
++    throw std::logic_error("MINAO accepted a malformed backend eigenframe");
++  } catch (const std::runtime_error&) {
++  }
+   const auto minao = scf::run_pbe_rks(plan, basis, grid, controls);
+   matched(baseline, minao);
+   require(minao.preliminary_guess.outcome == PreliminaryOutcome::Used &&
+@@ -185,10 +210,10 @@ void check() {
+   scf::reference::observation::Observer observer{observe_preparation, finish_observation};
+   scf::reference::observation::active = &observer;
+   PreliminaryDiagnostic skipped_diagnostic;
+-  const auto skipped =
+-      prepare_preliminary_density(plan, *controls.preliminary_guess, skipped_diagnostic);
++  const auto skipped = prepare_preliminary_density(plan, *controls.preliminary_guess,
++                                                   skipped_diagnostic, observed_eigen);
+   scf::reference::observation::active = nullptr;
+-  require(!skipped && observed_preparation_calls == 0 &&
++  require(!skipped && eigen_calls == 4 && observed_preparation_calls == 0 &&
+               skipped_diagnostic.outcome == PreliminaryOutcome::BudgetSkipped &&
+               skipped_diagnostic.preparation_numeric_capacity == minao_cap,
+           "MINAO budget was not checked before numeric preparation");
+diff --git a/tests/python/test_preliminary_warm_retry_control.py b/tests/python/test_preliminary_warm_retry_control.py
+index 576d33216..09dc1afb2 100644
+--- a/tests/python/test_preliminary_warm_retry_control.py
++++ b/tests/python/test_preliminary_warm_retry_control.py
+@@ -76,7 +76,28 @@ def test_retry_seams_keep_preparation_opt_in_and_raw_seed_admission() -> None:
+     )
+     assert "solver::validate_seed(target.one_electron().overlap, density" in admission
+     assert "normalized_warm_density" not in admission
+-    assert "admissible_minao_density(system, ints, x, projected.density)" in preparation
++    assert (
++        "admissible_minao_density(system, ints, x, projected.density, eigen)"
++        in preparation
++    )
++    assert "admit_preliminary_density(target, std::move(density), eigen)" in preparation
++    assert "symmetric_overlap(ints.overlap, ints.nbf, eigen)" in preparation
++
++
++def test_cuda_minao_borrows_owner_eigen_operation() -> None:
++    """Construction and strict upload must not re-enter CPU reference Jacobi."""
++    source = (ROOT / "src/methods/dft_method.cpp").read_text()
++    preparation = between(
++        source,
++        "  std::optional<std::vector<double>> prepare_cold_initial_guess",
++        "\n  void invalidate_result()",
++    )
++    assert "if (cuda_) eigen = cuda_->seed_eigen_operation();" in preparation
++    assert "fock_, *options_.preliminary_guess, diagnostic, eigen" in preparation
++    cuda = (ROOT / "src/dft/cuda_ks.cpp").read_text()
++    admission = between(cuda, "  std::vector<double> seed(", "\n  /** Construct X")
++    assert "return seed_eigen(matrix, dimension);" in admission
++    assert "n, counts, spins == 2 ? 1.0 : 2.0, eigen" in admission
+ 
+ 
+ HARNESS = r"""
+diff --git a/.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md b/.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md
+new file mode 100644
+index 000000000..9c6beb60f
+--- /dev/null
++++ b/.agents/notes/implemented/performance/2026-10-07-cuda-minao-eigen-owner.md
+@@ -0,0 +1,90 @@
++# Decision: CUDA MINAO borrows its target's idle GPU eigensolver
++
++Status: implemented
++Date: 2026-10-07
++
++## Problem
++
++The opt-in MINAO provider from #2068 constructs no preliminary Fock, but its
++overlap, ensemble construction and strict admission called independent CPU
++Jacobi decompositions even for CUDA targets. Strict CUDA initial-density upload
++also repeated CPU decomposition. The reference eigensolver scans the whole
++upper triangle for every pivot, so iterations saved alone cannot establish a
++cheap seed or net cold benefit.
++
++## Decision
++
++Pass a borrowed `EigenOperation` through the method owner, MINAO preparation,
++occupation construction and unchanged shared validator. CUDA supplies its
++existing synchronous `seed_eigen_operation`, using the charged idle solver
++workspace and dead DIIS buffers. Strict CUDA upload uses the same operation.
++CPU callers keep the default independent reference implementation. MINAO never
++retains the callback and allocates no separate GPU owner or solver workspace.
++Strict RKS upload checks the total electron count of its spin-summed density,
++not the half-sized occupied-orbital count; the real-device regression exposes
++the previous mismatch without changing the shared validator or its tolerances.
++
++Native rectangular overlap, host matrix products and bounded occupation
++projection remain host operations. This moves decompositions to the GPU; it
++does not claim fully resident projection or eliminate transfers. Construction,
++transfers, validation, target attempts and forces all remain charged to the
++complete cold endpoint.
++
++## Invariants
++
++- Preserve pinned ANO projection, electron count and ensemble constraints.
++- Preserve the overlap singularity cutoff, shared seed gate, target scientific
++  settings and independent final-state/derivative gates.
++- Check the narrow numeric cap before backend invocation. Retain conservative
++  host inventory and already charged CUDA solver resources.
++- Preserve warm/checkpoint precedence and one fresh Hcore target retry.
++- A failing GPU operation does not silently retry CPU MINAO Jacobi.
++- Keep `initial_guess=None` as the default while measuring profitability.
++
++## Evidence
++
++Native callback tests require all four preparation decompositions to use the
++injected operation and preserve the fixture density. A real-device case checks
++zero reference decompositions during preparation and strict upload, transfer
++accounting, independent CPU PBE0 energy/density and budget preflight. Existing
++retry control tests protect failure bounds and warm precedence.
++
++Complete profitability is measured separately on frozen-source, same-binary
++Hcore/MINAO CUDA cold endpoints with independent GPU4PySCF energy/force gates.
++Retain source/binary identities and negative samples with any speedup claim;
++test design alone is not a performance win or default qualification.
++
++The 2026-10-07 n1 RTX 5090 run uses frozen parent
++`2b0feff1d5577e58f3a44fbecbc1974be92df4e3` plus this repair, one identical
++binary for both arms, strict FP64 exact PBE0/def2-SVP, and three interleaved
++fresh-owner E+force samples per arm. Complete cold medians are:
++
++| Domain | Hcore seconds | GPU MINAO seconds | Wall reduction |
++| --- | ---: | ---: | ---: |
++| 48-atom water / 384 AOs | 99.047145 | 86.841994 | 12.32% |
++| 96-atom water / 768 AOs | 211.832632 | 181.389462 | 14.37% |
++| 16-atom peroxide holdout / 152 AOs | 40.162046 | 35.969546 | 10.44% |
++
++MINAO preparation medians are 0.318152, 2.337477 and 0.034897 seconds,
++respectively. Every cold sample converges and passes independent E/force gates;
++all seeded attempts report zero preliminary Fock builds, one target attempt
++and a complete work census. Warm replay skips preparation. Maximum paired
++native density difference is 3.10e-11. The repaired source passes 178 focused
++Python tests and the CPU-preliminary/native-GPU contract executables.
++
++Raw records, densities, harnesses and source/binary identities are retained in
++`/data/jzzeng/qc-2068-minao-profit-20261007` on n1, mirrored in
++`/home/jzzeng/codes/qc-branch-audit-20260922/evidence-2068`. These finite-domain
++samples do not qualify blanket CPU/HF/UKS/DF defaults or whole-process peak
++resources. No default changes or molecule/GPU-name selection are introduced.
++
++## Rejected Alternatives
++
++Do not relax occupation validation, replace MINAO with preliminary SCF, create
++an unrelated solver owner, or seed the native target from another engine.
++Do not promote a default solely from iterations saved.
++
++## References
++
++#2068, #2052; the prior MINAO ensemble-admission note retains numerical
++construction rationale and conservative numeric-cap inventory.

@@ -365,6 +365,7 @@ class PreparedBatch:
                 auxiliary_handle if auxiliary_handle.value else None,
                 resource_plan=self.resource_plan,
                 ks_options=self._effective_ks_options,
+                systems=self._systems,
             )
             flags = _native.BATCH_ENABLE_WARM_STARTS if warm_start else 0
             if shell_class_profiling:
@@ -391,6 +392,7 @@ class PreparedBatch:
                         if calculator._method
                         in (
                             _native.METHOD_MP2,
+                            _native.METHOD_UMP2,
                             _native.METHOD_RCCSD,
                             _native.METHOD_RCCSD_T,
                         )
@@ -599,6 +601,14 @@ class PreparedBatch:
     ) -> typing.Any:
         """Execute a compiler-selected stationary CUDA force composition."""
         from generativeqc_compiler.dft import NativeAO
+        from generativeqc_compiler.method.stationary_cuda import (
+            stationary_aot_profile_for_plan,
+        )
+        from generativeqc_compiler.method.stationary_gradient import (
+            SCF_POINT_MODEL,
+            StationaryGradientPlan,
+            StationaryMeanField,
+        )
 
         from ._dft_gradient import StationaryKsState
         from ._force_active_ao import (
@@ -725,8 +735,19 @@ class PreparedBatch:
                     self._stationary_cuda_execution = prepared
                 native_library = Path(str(self._library._name)).resolve()
                 all_electron = source.hamiltonian == "all-electron"
+                # A point code alone does not identify an exchange composition.
+                # Use the actual plan and spin; the loader remains responsible
+                # for domain/target/precision/binary admission and fails closed.
                 packaged = (
-                    all_electron and not source.method_ir.full_range_exact_exchange
+                    all_electron
+                    and stationary_aot_profile_for_plan(
+                        int(source.metadata[6]),
+                        state.identity.spin,
+                        StationaryGradientPlan(
+                            source.method_ir, StationaryMeanField(SCF_POINT_MODEL)
+                        ),
+                    )
+                    is not None
                 )
                 kwargs = {
                     "tile_points": policy_tile_points,
@@ -1313,6 +1334,7 @@ class PreparedBatch:
             correlation = None
             if self._calculator._method in (
                 _native.METHOD_MP2,
+                _native.METHOD_UMP2,
                 _native.METHOD_RCCSD,
                 _native.METHOD_RCCSD_T,
             ):
