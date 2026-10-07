@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "data/parameters/gfn2.hpp"
-#include "dft/dispersion/d4_data.hpp"
+#include "dft/dispersion/d4_element_data.hpp"
 #include "dft/dispersion/d4_reference.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {

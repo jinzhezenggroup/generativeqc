@@ -113,6 +113,7 @@ int main() {
             "-I" + str(ROOT / "src"),
             "-I" + str(tmp_path),
             str(path),
+            str(ROOT / "src/dft/dispersion/d4_table_data.cpp"),
             "-o",
             str(binary),
         ],

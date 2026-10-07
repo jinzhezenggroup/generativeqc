@@ -137,7 +137,7 @@ int run_cases(Eval& evaluate) {
     D4_CHECK(el.status == D4Status::success && std::isfinite(el.total()));
   }
   auto boundary = m;
-  boundary.q[0] = -data::kElements[7].effective_charge;
+  boundary.q[0] = -gfn2_d4_host_tables().elements[7].effective_charge;
   const auto bd = evaluate(boundary, p);
   D4_CHECK(bd.status == D4Status::success && std::isfinite(bd.total()) && bd.dq[0] == 0.0);
   boundary.q[0] -= 0.01;
