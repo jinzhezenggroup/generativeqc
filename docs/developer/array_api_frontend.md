@@ -1,13 +1,15 @@
 # Array API frontend for TensorIR
 
-Issue #633 introduces a bounded, compiler-internal symbolic array frontend.  Its
-purpose is developer ergonomics and interoperability: normal array expressions
-are captured once and lowered to the existing TensorIR.  TensorIR remains the
-scientific IR and keeps the stronger quantum-chemistry type system.
+Issue #633 introduced a bounded symbolic array frontend owned by the compiler.
+Normal array expressions are captured once and lowered to the existing TensorIR;
+TensorIR remains the scientific IR and keeps the stronger quantum-chemistry type
+system. The compiler owner remains `generativeqc_compiler.array_api`, while
+advanced users access the curated experimental facade at
+`generativeqc.experimental.array_api`.
 
-The frontend does **not** currently claim Array API conformance. It provides an
-Array-API-shaped internal preview and fails closed outside the declared subset.
-In particular, `VibeArray` deliberately does not implement
+The frontend does **not** currently claim Array API conformance. The public
+facade is an Array-API-shaped experimental preview and fails closed outside the
+declared subset. In particular, `VibeArray` deliberately does not implement
 `__array_namespace__` yet: the Array API standard uses that method as a
 compliance discovery signal and requires the returned namespace to provide the
 standard's top-level API. Advertising the protocol for this bounded subset
@@ -16,10 +18,10 @@ would therefore misidentify a preview object as conforming.
 ## Layering
 
 ```text
-symbolic array expression
+generativeqc.experimental.array_api
         |
         v
-VibeArray / namespace
+compiler-owned VibeArray / namespace
         |
         v
 existing TensorIR nodes
@@ -30,12 +32,12 @@ existing TensorIR nodes
 ```
 
 MethodIR, IntegralIR, ProgramIR, stationary/implicit solves and integral
-providers retain their existing ownership.  The frontend does not turn ERI,
+providers retain their existing ownership. The frontend does not turn ERI,
 J/K, XC, SCF iteration or eigensolvers into generic array primitives.
 
 ## Preserved scientific semantics
 
-A `VibeArray` wraps an ordinary TensorIR node.  Therefore capture preserves:
+A `VibeArray` wraps an ordinary TensorIR node. Therefore capture preserves:
 
 - AO / occupied / virtual / auxiliary / batch / spin index-space identity;
 - selected index ranges and ordered gathers;
@@ -77,18 +79,19 @@ explicit target `Index` objects, while `broadcast_to` additionally requires
 an explicit source-to-target axis map. TensorIR then validates preserved
 domains on every mapped axis; equal extents cannot authorize relabeling.
 
-Compiler code imports `generativeqc_compiler.array_api.namespace` explicitly.
-`__array_namespace__` and a versioned Array API declaration will only be added
-after a dedicated conformance matrix proves that the advertised namespace meets
-the corresponding standard version.
+Internal compiler consumers continue to import
+`generativeqc_compiler.array_api.namespace` explicitly. The public facade
+re-exports the same canonical operations rather than constructing a second IR
+or mathematical identity. `__array_namespace__` and a versioned Array API
+declaration will only be added after a dedicated conformance matrix proves that
+the advertised namespace meets the corresponding standard version.
 
-## Example
+## Public experimental example
 
 ```python
-from generativeqc_compiler.array_api import namespace as xp
-from generativeqc_compiler.array_api import trace
+from generativeqc.experimental import array_api as xp
 
-program = trace(
+program = xp.trace(
     lambda coefficients, occupations: {
         "density": xp.einsum(
             "bspi,bsi,bsqi->bspq",
@@ -104,9 +107,11 @@ program = trace(
 )
 ```
 
-The resulting object is an ordinary `generativeqc_compiler.tensor.Program`; no
+The resulting object is the ordinary compiler-owned TensorIR `Program`; no
 frontend-only node survives lowering and no Python callback is needed for
-prepared native execution.
+prepared native execution. Public callers can pass that program to
+`generativeqc.extensions.tensor` for inspection, AD, interpretation or the
+existing explicit CPU JIT path.
 
 ## Native SCF adoption
 
@@ -128,19 +133,23 @@ the historical FP64 reduction order.
 
 Resident CUDA SCF density and DIIS kernels retain their existing device ownership
 for now; moving those kernels requires separate stream/layout and performance
-qualification. This is still an internal preview and does not add an Array API
-conformance claim.
+qualification. Exposing the frontend as an experimental public facade does not
+change production execution ownership or add an Array API conformance claim.
 
 ## Ownership
 
-`generativeqc_compiler.array_api` is a separate compiler owner above
+`generativeqc_compiler.array_api` remains the compiler owner above
 `generativeqc_compiler.tensor`. Its dependency direction is deliberately one-way:
 the frontend may import TensorIR, while TensorIR cannot import the frontend.
-This keeps TensorIR usable by hand-built/generated equations and avoids making
-array syntax part of mathematical IR identity.
+`generativeqc.experimental.array_api` is only a curated public facade over that
+owner. This keeps TensorIR usable by hand-built/generated equations, avoids a
+second array implementation, and keeps array syntax out of mathematical IR
+identity.
 
 The design rationale, rejected alternatives and invariants are retained in the
 [Array API frontend architecture note](../../.agents/notes/implemented/architecture/2026-09-20-array-api-tensorir-frontend.md).
+The public-preview boundary is recorded in the
+[experimental Array API note](../../.agents/notes/implemented/architecture/2026-10-07-experimental-array-api-public-preview.md).
 
 The native cutover is a checked specialization, not a general C++ graph emitter.
 Its topology, FP64 order and source-identity contract are recorded in the
