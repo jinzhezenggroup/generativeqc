@@ -242,9 +242,11 @@ def test_cpu_arena_planning_and_bindings_are_unchanged() -> None:
         "    const std::size_t maximum = static_cast<std::size_t>(created.maximum_orbitals);"
     )
     end = source.index("generativeqc_xtb_status_t factor_overlap_cpu(", begin)
+    # Shared prepared-eigen metadata now supplies the same maximum-order work
+    # counts; retain the reviewed arena planning and binding body as the guard.
     assert (
         hashlib.sha256(source[begin:end].encode()).hexdigest()
-        == "17800b9651783b580e5328c4b2b6b787502cfe9726d70e9ce6842908988207b3"
+        == "cff9a47ed1f0005f9163f0f469e1fd794cae259ff7ed1f58140fb3fd3c9c050e"
     )
 
 
@@ -256,7 +258,10 @@ def test_native_executor_consumes_the_selected_candidate_type(
     generated = emitter.emit_native_header()
     native = (ROOT / "src/tensor/weighted_gram.hpp").read_text()
     assert "using CpuExecution = ColumnScaleDgemmLp64;" in generated
-    assert "template <class Algorithm = generated::CpuExecution>" in native
+    assert (
+        "template <class Algorithm = generated::CpuExecution, "
+        "class Provider = CblasDgemmLp64>" in native
+    )
     assert "std::is_same_v<Algorithm, generated::ColumnScaleDgemmLp64>" in native
     original = emitter.retained_candidate
     monkeypatch.setattr(

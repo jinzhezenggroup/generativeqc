@@ -10,11 +10,14 @@ allocation contract, not a GPU or full force qualification.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -51,6 +54,7 @@ PREFIX = r"""
 #include <string>
 #include <utility>
 #include <vector>
+#include "solver/cpu/symmetric_eigen.hpp"
 namespace trace {
 struct alignas(std::max_align_t) Header { std::size_t bytes, epoch; };
 std::size_t epoch=0, live=0, peak=0, gemms=0, eigensolves=0;
@@ -78,21 +82,13 @@ void operator delete[](void* p) noexcept { ::operator delete(p); }
 void operator delete[](void* p, std::size_t) noexcept { ::operator delete(p); }
 namespace generativeqc::tensor {
 enum class SymmetricMatrixFunction { pseudoinverse, inverse_sqrt };
-enum class CpuLinalgProvider { automatic, scalar };
-enum class CpuLinalgThreadOwnership { task_parallel, provider_parallel };
-struct CpuLinalgPlan {
-  CpuLinalgProvider provider;
-  CpuLinalgThreadOwnership thread_ownership;
-  int provider_threads;
-};
-struct CpuSymmetricEigenResult { std::vector<double> values, vectors; };
 """
 
 DISPATCH = r"""
 CpuSymmetricEigenResult cpu_symmetric_eigen(std::vector<double> m, std::size_t n,
                                            const CpuLinalgPlan&) {
   ++trace::eigensolves;
-  return scalar_symmetric_eigen(std::move(m),n);
+  return solver::cpu::detail::scalar_symmetric_eigen(std::move(m),n);
 }
 void cpu_gemm(char ta,char tb,std::size_t m,std::size_t n,std::size_t k,
               const double* a,const double* b,double* c,double alpha,double beta,
@@ -264,17 +260,15 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def reverse_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def reverse_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     linalg = (ROOT / "src/tensor/cpu_linalg.cpp").read_text()
     reverse = (ROOT / "src/posthf/mp2_gradient.cpp").read_text()
     source = "\n".join(
         (
             PREFIX,
             _function(linalg, "void scalar_gemm("),
-            _function(linalg, "CpuSymmetricEigenResult scalar_symmetric_eigen("),
             DISPATCH,
             _without_includes("src/tensor/symmetric_matrix_function.cpp"),
             _without_includes("src/integrals/density_fitting_metric.cpp"),
@@ -289,15 +283,12 @@ def reverse_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("ri-reverse-memory")
     path, executable = directory / "probe.cpp", directory / "probe"
     path.write_text(source)
-    process = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
+    return native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=["-std=c++20", "-O0", "-I", str(ROOT / "src")],
+        compile_timeout=60,
     )
-    assert process.returncode == 0, process.stdout + process.stderr
-    return executable
 
 
 @pytest.mark.parametrize(
