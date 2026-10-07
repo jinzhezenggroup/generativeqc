@@ -268,6 +268,8 @@ struct ScfResult {
    * partial even when the aggregate provenance above is available. */
   PrecisionWork precision_work{};
   std::shared_ptr<const PhysicalReference> reference;
+  /** Present only after a validated CPU UHF physical-reference export. */
+  std::shared_ptr<const hf::UnrestrictedPhysicalReference> unrestricted_reference;
   /** Current immutable RKS factor when explicitly requested, including on a
    * nonconverged return. Its witness matches the returned density exactly. */
   std::shared_ptr<const OccupiedDensityFactor> xc_density_factor;

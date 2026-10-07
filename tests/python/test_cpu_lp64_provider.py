@@ -248,6 +248,16 @@ def _definition(source: str, prefix: str, occurrence: int) -> str:
     return source[start:end]
 
 
+def _contract_region(source: str, region: dict[str, object]) -> str:
+    prefix, occurrence = region["prefix"], region["occurrence"]
+    assert isinstance(prefix, str) and isinstance(occurrence, int)
+    body = _definition(source, prefix, occurrence)
+    if marker := region.get("suffix_from"):
+        assert isinstance(marker, str) and body.count(marker) == 1
+        body = body[body.index(marker) :]
+    return body
+
+
 def test_reviewed_scientific_and_admission_contracts() -> None:
     contract = json.loads(
         (ROOT / "tests/data/cpu_lp64_source_contract.json").read_text()
@@ -257,7 +267,7 @@ def test_reviewed_scientific_and_admission_contracts() -> None:
         assert hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == expected, path
     for region in contract["regions"]:
         source = (ROOT / region["path"]).read_text()
-        body = _definition(source, region["prefix"], region["occurrence"])
+        body = _contract_region(source, region)
         assert hashlib.sha256(body.encode()).hexdigest() == region["sha256"], region
 
 
@@ -271,6 +281,31 @@ def test_cpu_bindings_are_not_gpu_consumers() -> None:
                 "tensor/weighted_gram.hpp",
             ):
                 assert f'#include "{header}"' not in source, path
+
+
+def test_rhf_contract_tracks_eigen_selection_without_freezing_other_admission() -> None:
+    contract = json.loads(
+        (ROOT / "tests/data/cpu_lp64_source_contract.json").read_text()
+    )
+    region = next(
+        item for item in contract["regions"] if item["path"] == "src/scf/rhf.cpp"
+    )
+    source = (ROOT / region["path"]).read_text()
+    selected = _contract_region(source, region)
+    assert source.count(selected) == 1
+    # Independent physical-reference budget checks may evolve before this boundary.
+    outside = source.replace(
+        selected, "/* independent reference admission */\n" + selected, 1
+    )
+    assert _contract_region(outside, region) == selected
+    for before, after in (
+        ("!options.export_physical_reference", "options.export_physical_reference"),
+        ("solver::cpu_target_eigen", "reference::generalized_eigen"),
+        ("nullptr, target_eigen", "nullptr, initial_guess::EigenOperation{}"),
+    ):
+        assert before in selected
+        altered = source.replace(selected, selected.replace(before, after, 1), 1)
+        assert _contract_region(altered, region) != selected
 
 
 @pytest.fixture(scope="module")

@@ -12,6 +12,7 @@
 #include "methods/mp2_method.hpp"
 #include "methods/rccsd_method.hpp"
 #include "methods/rccsdt_method.hpp"
+#include "methods/ump2_method.hpp"
 #include "methods/xtb_method.hpp"
 #include "runtime/provider_registry.hpp"
 
@@ -51,6 +52,11 @@ constexpr MethodDefinition register_method(const generated::MethodManifestEntry&
       validate = detail::validate_mp2_system;
       prepare = detail::prepare_mp2_calculation;
       batch = detail::prepare_mp2_batch;
+      break;
+    case generated::PublicProvider::Ump2:
+      validate = detail::validate_ump2_system;
+      prepare = detail::prepare_ump2_calculation;
+      batch = detail::prepare_ump2_batch;
       break;
     case generated::PublicProvider::Rccsd:
       validate = detail::validate_rccsd_system;
