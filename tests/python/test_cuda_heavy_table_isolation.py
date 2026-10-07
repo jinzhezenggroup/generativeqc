@@ -14,6 +14,11 @@ INCLUDE_ROOTS = (
     SRC / "xtb/native",
     SRC / "xtb/native/src",
 )
+CUDA_SOURCE_ROOTS = (
+    SRC,
+    ROOT / "tests",
+    ROOT / "benchmarks",
+)
 
 
 def _resolve_include(owner: Path, include: str) -> Path | None:
@@ -44,10 +49,11 @@ def _heavy_chain(root: Path) -> list[Path] | None:
     return None
 
 
-def test_production_cuda_does_not_parse_large_immutable_d4_tables() -> None:
+def test_cuda_translation_units_do_not_parse_large_immutable_d4_tables() -> None:
     offenders = []
-    for source in SRC.rglob("*.cu"):
-        chain = _heavy_chain(source)
-        if chain is not None:
-            offenders.append(" -> ".join(path.relative_to(ROOT).as_posix() for path in chain))
+    for root in CUDA_SOURCE_ROOTS:
+        for source in root.rglob("*.cu"):
+            chain = _heavy_chain(source)
+            if chain is not None:
+                offenders.append(" -> ".join(path.relative_to(ROOT).as_posix() for path in chain))
     assert offenders == []
