@@ -981,7 +981,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         }
         // Default batching retains the compiler's bounded admission and the
         // one-tile fallback. Overrides keep the incumbent available for ablations;
-        // the resource ledger charges only the optional storage actually retained.
+        // the public inventory currently reserves only incumbent XC storage.
         const auto point_batch_size = [](const char* name, std::size_t fallback) {
           const char* value = std::getenv(name);
           if (!value) return fallback;
@@ -996,7 +996,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         if (point_batch_tiles > 1) {
           const auto point_batch_budget =
               point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024);
-          xc->prepare_point_batches(point_batch_tiles, point_batch_budget);
+          // A live public ledger also reserves later fleet owners and force
+          // workspace. Its currently unused bytes are not an optional allowance,
+          // even with an unlimited user budget. Keep the incumbent until a plan
+          // explicitly accounts for optional panels across those lifetimes.
+          xc->prepare_point_batches(
+              point_batch_tiles, runtime::active_device_resource_ledger ? 0 : point_batch_budget);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }

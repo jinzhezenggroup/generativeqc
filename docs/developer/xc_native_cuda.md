@@ -126,6 +126,15 @@ overrides the request; zero or one explicitly retains the one-tile executor.
 also retains the incumbent. This scheduling policy does not prune or specialize
 the canonical scientific point source.
 
+Public `resource_budget` and `resource_plan` execution retains one-tile XC under
+the active native device ledger. Its current inventory reserves incumbent storage,
+later fleet owners and force workspace, with no separate optional-panel allowance.
+Unused ledger capacity therefore cannot fund point batches. This also applies to
+an explicitly supplied `ResourceBudget()` with unlimited user caps and to explicit
+batch environment overrides. Ordinary calls without a public resource ledger
+retain the default bounded batching above; budgets and their estimates are not
+silently enlarged.
+
 The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
 the original tile domains and selected AO counts. Admission reduces the requested
 batch size until complete retained panels fit; tiny domains, response, mixed
