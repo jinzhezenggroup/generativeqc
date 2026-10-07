@@ -30,15 +30,17 @@ def _literal_all(source: Path) -> tuple[str, ...] | None:
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
     value: ast.expr | None = None
     for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "__all__"
-            for target in node.targets
-        ):
-            value = node.value
-        elif (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "__all__"
+        if (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            )
+            or (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.target.id == "__all__"
+            )
         ):
             value = node.value
     if value is None:
@@ -77,8 +79,7 @@ def public_api_modules(package: Path | None = None) -> tuple[PublicModule, ...]:
         if source.name == "__main__.py":
             continue
         if any(
-            part.startswith("_") and part != "__init__.py"
-            for part in relative.parts
+            part.startswith("_") and part != "__init__.py" for part in relative.parts
         ):
             continue
         exports = _literal_all(source)

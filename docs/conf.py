@@ -66,9 +66,7 @@ autodoc_typehints_format = "fully-qualified"
 autodoc_mock_imports = ["torch"]
 
 
-def _render_generated_sources(
-    app: typing.Any, docname: str, source: list[str]
-) -> None:
+def _render_generated_sources(app: typing.Any, docname: str, source: list[str]) -> None:
     render_public_methods_source(app, docname, source)
     render_python_api_source(app, docname, source)
 

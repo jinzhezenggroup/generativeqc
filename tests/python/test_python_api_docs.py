@@ -70,7 +70,9 @@ class PythonApiDocumentationTests(unittest.TestCase):
             _write(package / "future.py", '__all__ = ["Thing"]\n')
 
             registered: list[str] = []
-            app = SimpleNamespace(env=SimpleNamespace(note_dependency=registered.append))
+            app = SimpleNamespace(
+                env=SimpleNamespace(note_dependency=registered.append)
+            )
             source = ["source shell"]
             with mock.patch.object(renderer, "PACKAGE", package):
                 renderer.render_python_api_source(app, "reference/api", source)
