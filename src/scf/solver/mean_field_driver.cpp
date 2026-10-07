@@ -229,23 +229,20 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
 
   if (options.compute_forces) {
     const auto epoch = next_host_final_state_epoch();
-    FinalStateIdentity identity{{epoch, epoch, 2, 2},
-                                epoch,
-                                plan.strategy(),
-                                {alpha_occupied, beta_occupied}};
+    FinalStateIdentity identity{
+        {epoch, epoch, 2, 2}, epoch, plan.strategy(), {alpha_occupied, beta_occupied}};
     FinalFrameCandidate candidate{identity, 1, true, {alpha_orbitals, beta_orbitals}};
     const PhysicalFockOperation physical = [&](const auto& current, const auto& densities) {
       if (densities.size() != 2)
         throw std::runtime_error("UHF final-state provider lost a spin density");
-      auto [alpha, beta] =
-          build_uhf_focks(plan, ints.hcore, densities[0], densities[1]);
+      auto [alpha, beta] = build_uhf_focks(plan, ints.hcore, densities[0], densities[1]);
       return PhysicalFockFrame{current, true, {std::move(alpha), std::move(beta)}};
     };
-    const initial_guess::EigenOperation eigen =
-        [&](const auto& fock, const auto*, const auto*, auto) {
-          return diagonalize(plan, fock, ints, orthogonalizer,
-                             PreparedFockPlan::EigenUse::Finalization, target_eigen);
-        };
+    const initial_guess::EigenOperation eigen = [&](const auto& fock, const auto*, const auto*,
+                                                    auto) {
+      return diagonalize(plan, fock, ints, orthogonalizer, PreparedFockPlan::EigenUse::Finalization,
+                         target_eigen);
+    };
     auto selected = select_final_state(
         identity, ints.overlap, ints.hcore, orthogonalizer, ints.nuclear_repulsion,
         {alpha_density, beta_density}, &candidate, physical, eigen,
@@ -261,8 +258,7 @@ unsigned finalize_uhf(const PreparedFockPlan& plan, const integrals::IntegralDat
     result.energy = selected.state->diagnostic.energy;
     result.forces = gradient::analytic_uhf_forces(
         ints, alpha_density, beta_density, selected.state->weighted_density[0],
-        selected.state->weighted_density[1],
-        plan.energy_derivative(alpha_density, beta_density));
+        selected.state->weighted_density[1], plan.energy_derivative(alpha_density, beta_density));
   } else {
     std::tie(alpha_fock, beta_fock) =
         build_uhf_focks(plan, ints.hcore, alpha_density, beta_density);
