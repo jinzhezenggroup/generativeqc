@@ -845,7 +845,11 @@ def test_complete_open_shell_uks_analytic_and_reconverged_fd(
 def independent_global_hybrid_gradient(
     basis: typing.Any, state: typing.Any, method: typing.Any, xc: typing.Any = "PBE0"
 ) -> typing.Any:
-    """Independent PySCF global-hybrid SCF plus full moving-grid analytic gradient."""
+    """Independent hybrid SCF/moving-grid gradient in the endpoint's AO space.
+
+    Preserve spherical versus Cartesian shells; their variational spaces differ
+    from d onward, even when the atom-centered quadrature is identical.
+    """
     from pyscf import dft, gto, lib
     from pyscf.data.elements import ELEMENTS
 
@@ -864,7 +868,7 @@ def independent_global_hybrid_gradient(
         atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
         basis=shells,
         unit="Bohr",
-        cart=True,
+        cart=basis.representation == "cartesian",
         charge=basis.charge,
         spin=basis.multiplicity - 1,
         verbose=0,

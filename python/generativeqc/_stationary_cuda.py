@@ -3423,8 +3423,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         # Validate actual coverage before the complete reduction. All-electron
         # plan-owned work reduces inside the stationary owner; ECP retains the
         # generated TensorIR sum because its two extra sources are separate owners.
-        plan.reduction_program(
-            atoms=na,
+        plan.validate_source_coverage(
             sources=components,
             combined_two_electron=native_combined_integrals,
         )
@@ -3628,15 +3627,19 @@ def _complete_rks_cuda_gradient_diagnostic(
         tensor_work=tensor_work,
         stationary_weight_lowering="generated-tensorir/device-pointwise-v1",
         stationary_weight_plan_identity=plan.identity,
-        stationary_weight_programs={
-            name: plan.integral_block(name, terms=1).weights.logical_hash
-            for name in (
-                "one_electron",
-                "overlap_pulay",
-                "coulomb",
-                *(("exact_exchange",) if has_exchange else ()),
-            )
-        },
+        stationary_weight_programs=(
+            dict(artifact.metadata["weight_programs"])
+            if artifact.metadata.get("artifact_kind") == "packaged-aot"
+            else {
+                name: plan.integral_block(name, terms=1).weights.logical_hash
+                for name in (
+                    "one_electron",
+                    "overlap_pulay",
+                    "coulomb",
+                    *(("exact_exchange",) if has_exchange else ()),
+                )
+            }
+        ),
         stationary_weight_tensor_executions=0,
         stationary_weight_roundtrip_bytes=0,
         stationary_final_reduction=(
