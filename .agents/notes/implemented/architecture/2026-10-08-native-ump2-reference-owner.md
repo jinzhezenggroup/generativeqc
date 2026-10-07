@@ -50,12 +50,12 @@ execution; successful UMP2 publication still requires a new physical UHF solve.
 
 ## Evidence
 
-The source-matched CPU build on 2026-10-08 used GCC 11.4, CMake 4.4.4,
-`sccache 0.16.0`, strict FP64 and the scalar CPU linear-algebra fallback.
+The clean fork-commit Release CPU build on 2026-10-08 used GCC 11.4,
+CMake 4.4.4, `sccache 0.16.0`, strict FP64 and the scalar CPU linear-algebra fallback.
 The compiled and checkout source identities both equalled
-`cca8ae40dae35477304a6c69c8a05eab723d1d7b047e111b83aacf8337aa9533`;
+`3216231aade22e4c2bd22173969e568d2a9936d665c7193f7161a12fff64957c`;
 the native library SHA-256 was
-`eae5bb8130ac5195f2ea4d4376c450dd13cced40bb88059d88566c029bf8d4fc`.
+`434c0fce3d17a59e71ab20a7bb48f2b0aaea0a65fd8a8377030db506934c2fd7`.
 
 The focused public/core/manifest suite reported 36 passed and four CUDA-only
 skips. `test_ump2_public.py` compares native Li to pinned PySCF 2.14.0 using
