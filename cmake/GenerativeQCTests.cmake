@@ -222,7 +222,11 @@ macro(generativeqc_add_native_tests)
       ${_generativeqc_d4_production_test} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
   endforeach()
   generativeqc_native_test(generativeqc_d4_reference_tests tests/native/test_d4_reference.cpp NO_GENERATIVEQC)
+  target_sources(generativeqc_d4_reference_tests PRIVATE
+    src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_d4_eeq_tests tests/native/test_d4_eeq.cpp NO_GENERATIVEQC)
+  target_sources(generativeqc_d4_eeq_tests PRIVATE
+    src/dft/dispersion/d4_table_data.cpp)
   generativeqc_native_test(generativeqc_gcp_r2scan3c_tests tests/native/test_gcp_r2scan3c.cpp NO_GENERATIVEQC)
   foreach(_generativeqc_parameter_test IN ITEMS
           generativeqc_d4_reference_tests generativeqc_d4_eeq_tests generativeqc_gcp_r2scan3c_tests)
