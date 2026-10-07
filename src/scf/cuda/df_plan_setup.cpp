@@ -427,6 +427,10 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   candidate->flat_dense_exchange = df_flat_dense_exchange_requested();
   candidate->cooperative_diis = df_cooperative_diis_requested();
   candidate->metric_relative_threshold = relative_threshold;
+  if (integral_source) {
+    candidate->range = cuda_density_fitting_integral_source_range(integral_source);
+    candidate->omega = cuda_density_fitting_integral_source_omega(integral_source);
+  }
   candidate->batch_size = batch_size;
   candidate->nbf = nbf;
   candidate->naux = naux;
