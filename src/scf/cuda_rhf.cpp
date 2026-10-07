@@ -1456,6 +1456,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       incremental_direct_jk
           ? arena_pointer<std::uint8_t>(resources.arena_, layout.incremental_full_build)
           : nullptr;
+  unsigned long long* incremental_full_build_count =
+      incremental_direct_jk ? arena_pointer<unsigned long long>(
+                                  resources.arena_, layout.incremental_full_build_count)
+                            : nullptr;
+  unsigned long long* incremental_delta_build_count =
+      incremental_direct_jk ? arena_pointer<unsigned long long>(
+                                  resources.arena_, layout.incremental_delta_build_count)
+                            : nullptr;
   double* incremental_max_abs_delta_density =
       incremental_direct_jk
           ? arena_pointer<double>(resources.arena_, layout.incremental_max_abs_delta_density)
@@ -2986,6 +2994,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     cuda_error = cudaMemsetAsync(incremental_delta_updates, 0xff,
                                  batch_size * sizeof(std::uint32_t), resources.stream_);
     if (cuda_error == cudaSuccess) {
+      cuda_error = cudaMemsetAsync(incremental_full_build_count, 0,
+                                   batch_size * sizeof(unsigned long long), resources.stream_);
+    }
+    if (cuda_error == cudaSuccess) {
+      cuda_error = cudaMemsetAsync(incremental_delta_build_count, 0,
+                                   batch_size * sizeof(unsigned long long), resources.stream_);
+    }
+    if (cuda_error == cudaSuccess) {
       cuda_error = cudaMemsetAsync(incremental_max_abs_delta_density, 0,
                                    batch_size * sizeof(double), resources.stream_);
     }
@@ -3021,9 +3037,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     launch_prepare_incremental_direct_jk_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
-        static_cast<std::int32_t>(nbf), incremental_rebuild_interval, density_input, hcore, active,
-        incremental_anchor_density, incremental_anchor_fock, next_density,
-        incremental_delta_updates, incremental_full_build, incremental_max_abs_delta_density);
+        static_cast<std::int32_t>(nbf), incremental_rebuild_interval,
+        incremental_direct_jk_policy.density_rms_threshold, density_rms, density_input, hcore,
+        active, incremental_anchor_density, incremental_anchor_fock, next_density,
+        incremental_delta_updates, incremental_full_build, incremental_full_build_count,
+        incremental_delta_build_count, incremental_max_abs_delta_density);
     cudaError_t error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
     // Existing Direct-J/K shell-pair density bounds and quartet compaction now
@@ -4838,6 +4856,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   std::vector<std::uint8_t> host_failed(batch_size);
   std::vector<std::uint32_t> host_iterations(batch_size);
   std::vector<double> host_incremental_max_abs_delta_density(batch_size, 0.0);
+  std::vector<unsigned long long> host_incremental_full_build_count(batch_size, 0ULL);
+  std::vector<unsigned long long> host_incremental_delta_build_count(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_full_admitted_shell_quartets(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_delta_admitted_shell_quartets(batch_size, 0ULL);
   std::vector<unsigned long long> host_incremental_full_admitted_quartet_tiles(batch_size, 0ULL);
@@ -4871,6 +4891,14 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       {host_incremental_max_abs_delta_density.data(),
        incremental_direct_jk ? incremental_max_abs_delta_density : density,
        incremental_direct_jk ? batch_size * sizeof(double) : 0U},
+      {host_incremental_full_build_count.data(),
+       incremental_direct_jk ? static_cast<const void*>(incremental_full_build_count)
+                             : static_cast<const void*>(iterations),
+       incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
+      {host_incremental_delta_build_count.data(),
+       incremental_direct_jk ? static_cast<const void*>(incremental_delta_build_count)
+                             : static_cast<const void*>(iterations),
+       incremental_direct_jk ? batch_size * sizeof(unsigned long long) : 0U},
       {host_incremental_full_admitted_shell_quartets.data(),
        incremental_direct_jk ? static_cast<const void*>(incremental_full_admitted_shell_quartets)
                              : static_cast<const void*>(iterations),
@@ -5119,13 +5147,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     result.incremental_direct_jk.active = incremental_iteration_enabled;
     if (incremental_iteration_enabled) {
       const std::uint64_t builds = host_iterations[system];
-      const std::uint64_t interval = incremental_rebuild_interval;
-      const std::uint64_t full_builds =
-          builds == 0U ? 0U : (interval == 0U ? 1U : 1U + (builds - 1U) / (interval + 1U));
+      const std::uint64_t full_builds = host_incremental_full_build_count[system];
+      const std::uint64_t delta_builds = host_incremental_delta_build_count[system];
       result.incremental_direct_jk.anchor_full_builds = full_builds;
-      result.incremental_direct_jk.delta_builds = builds - full_builds;
+      result.incremental_direct_jk.delta_builds = delta_builds;
+      // The public ABI keeps the historical field name. It now counts every
+      // accepted full refresh after the first anchor, including density-RMS
+      // refreshes as well as cadence-driven refreshes.
       result.incremental_direct_jk.periodic_rebuilds = full_builds == 0U ? 0U : full_builds - 1U;
-      result.incremental_direct_jk.anchor_updates = result.incremental_direct_jk.delta_builds;
+      result.incremental_direct_jk.anchor_updates = delta_builds;
       result.incremental_direct_jk.max_abs_delta_density =
           host_incremental_max_abs_delta_density[system];
       result.incremental_direct_jk.bypass_full_builds = 0U;
@@ -5146,7 +5176,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         result.incremental_direct_jk.full_admitted_quartet_tiles =
             host_incremental_full_admitted_quartet_tiles[system];
         result.incremental_direct_jk.delta_candidate_shell_quartets =
-            result.incremental_direct_jk.delta_builds * candidate_shell_quartets;
+            delta_builds * candidate_shell_quartets;
         result.incremental_direct_jk.delta_admitted_shell_quartets =
             host_incremental_delta_admitted_shell_quartets[system];
         result.incremental_direct_jk.delta_rejected_shell_quartets =
