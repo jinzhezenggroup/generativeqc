@@ -519,6 +519,20 @@ def test_packed_restricted_raw_k_contracts_shell_blocks(
         "      return;", maxsplit=1
     )[0]
     assert block.count("atomicAdd(\n              fock + task.density_offset") == 8
+    assert re.findall(
+        r"output_row = task.ao_begin\[(\d)\] \+ row;\s*"
+        r"const std::size_t output_column = task.ao_begin\[(\d)\] \+ column;",
+        block,
+    ) == [
+        ("0", "2"),
+        ("1", "2"),
+        ("0", "3"),
+        ("1", "3"),
+        ("2", "0"),
+        ("2", "1"),
+        ("3", "0"),
+        ("3", "1"),
+    ]
     # UHF, HF-weighted K, J, and every unsupported runtime identity retain the
     # incumbent canonical component scatter below the restricted raw-K return.
     assert f"generated_{spec.name}_accumulate_fock<Unrestricted>" in source

@@ -1,9 +1,15 @@
 """Compiler inventory and native dispatch contracts for independent J/K choices."""
 
+from dataclasses import replace
 from pathlib import Path
 
-from generativeqc_compiler.integral import KernelConsumer
+from generativeqc_compiler.integral import (
+    KernelConsumer,
+    TranslationInvariant,
+    specialize_fock_integral,
+)
 from generativeqc_compiler.integral.capabilities import query_integral_capability
+from generativeqc_compiler.integral.production_emission import emit_profile_shard
 from generativeqc_compiler.integral.production_k_block import direct_k_block_candidates
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 from generativeqc_compiler.integral.production_registry import (
@@ -12,6 +18,7 @@ from generativeqc_compiler.integral.production_registry import (
 from generativeqc_compiler.integral.production_rys_values import (
     direct_rys_value_candidates,
 )
+from generativeqc_compiler.integral.production_selection import _selection_integral
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "python/generativeqc_compiler/integral/production_shell_classes.json"
@@ -55,16 +62,59 @@ def test_k_block_candidates_are_bounded_packed_value_alternatives() -> None:
     candidates = direct_k_block_candidates(profile)
     assert candidates
     compiled = {item.spec.name for item in profile.selections}
+    incumbents = {item.spec.name: item for item in profile.selections}
     names = {item.spec.name for item in candidates}
     assert {"psss", "ppss", "psps", "dsss"} <= names
     for item in candidates:
+        incumbent = incumbents[item.spec.name]
+        expected = specialize_fock_integral(_selection_integral(incumbent))
         assert item.spec.name in compiled
         assert item.consumers == (KernelConsumer.FOCK,)
         assert item.integral.derivative is None
+        assert item.integral == expected
+        assert item.recurrence == expected.recurrence == "subset_wick"
+        assert item.schedule == (incumbent.fock_schedule or incumbent.schedule)
+        assert query_integral_capability(item.integral).supported
         assert item.schedule.kind.value == "packed_tasks"
         assert item.has_capability("k_block_fock")
         assert item.has_capability("streaming_fock")
         assert not item.tuned
+
+
+def test_k_block_candidates_preserve_explicit_integral_records() -> None:
+    """Specialize the supplied scientific IR instead of rebuilding defaults."""
+    profile = resolve_production_profile(MANIFEST, "sm_120")
+    incumbent = next(item for item in profile.selections if item.spec.name == "ppss")
+    integral = _selection_integral(incumbent)
+    operator = replace(
+        integral.operator, invariants=(TranslationInvariant(dependent_center=1),)
+    )
+    integral = replace(
+        integral, operator=operator, derivative=operator.nuclear_derivative()
+    )
+    incumbent = replace(incumbent, integral=integral)
+    profile = replace(profile, selections=(incumbent,))
+    (candidate,) = direct_k_block_candidates(profile)
+    assert candidate.integral.operator is operator
+    assert candidate.integral.contractions == tuple(
+        item
+        for item in integral.contractions
+        if item.kernel_consumer == KernelConsumer.FOCK
+    )
+    assert candidate.integral.derivative is None
+    assert candidate.integral.recurrence == "subset_wick"
+
+
+def test_k_block_shard_emits_incumbent_value_producers() -> None:
+    """Mixed scalar-Rys force plans retain the accepted packed Fock producer."""
+    profile = resolve_production_profile(MANIFEST, "sm_120")
+    candidates = direct_k_block_candidates(profile)
+    source = emit_profile_shard(profile, candidates, variant="_k_block")
+    for item in candidates:
+        assert (
+            f"generativeqc_launch_sm120_k_block_generated_{item.spec.name}_streaming_fock"
+            in source
+        )
 
 
 def test_registry_resolves_k_block_alternatives_separately() -> None:
