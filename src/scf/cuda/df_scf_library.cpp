@@ -18,6 +18,7 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/symmetric_eigen_workspace.hpp"
 
 namespace generativeqc::scf::cuda_df {
 namespace eigen_provider = ::generativeqc::solver::cuda;
@@ -100,54 +101,45 @@ generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::siz
   if (status != CUSOLVER_STATUS_SUCCESS) {
     return solver_failure(status, "initialize CUDA DF SCF eigensolver", detail);
   }
-  if (!solver.xsyev) {
-    eigen_provider::SymmetricEigenWorkspace queried{0, 0, solver.lwork};
-    status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-        solver.handles.view(), eigen_provider::SymmetricEigenFamily::jacobi_batched,
-        {static_cast<std::int64_t>(nbf), static_cast<std::int64_t>(batch_size),
-         eigen_provider::Eigenvectors::values_and_vectors},
-        eigensystem, eigenvalues, queried));
-    solver.lwork = queried.jacobi_elements;
-    if (status != CUSOLVER_STATUS_SUCCESS || solver.lwork <= 0) {
-      return solver_failure(
-          status == CUSOLVER_STATUS_SUCCESS ? CUSOLVER_STATUS_INTERNAL_ERROR : status,
-          "size CUDA DF SCF eigensolver", detail);
-    }
-    const auto bytes = static_cast<std::size_t>(solver.lwork) * sizeof(double);
-    // Retain the byte count for solve-time diagnostics on the Jacobi path too.
-    solver.workspace_bytes = bytes;
-    runtime::df_progress::number("compact_solver_workspace_bytes", bytes);
-    runtime::df_progress::number("compact_solver_workspace_allowance",
-                                 df_scf_workspace_allowance(nbf, batch_size));
-    if (bytes > df_scf_workspace_allowance(nbf, batch_size)) {
-      detail = "CUDA DF SCF eigensolver query exceeds its planned workspace";
-      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-    }
-    return allocate_device(reinterpret_cast<void**>(&solver.workspace), bytes,
-                           "allocate CUDA DF SCF eigensolver workspace", detail);
-  }
-  eigen_provider::SymmetricEigenWorkspace queried;
-  status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-      solver.handles.view(), eigen_provider::SymmetricEigenFamily::xsyev_batched,
-      {static_cast<std::int64_t>(nbf), static_cast<std::int64_t>(batch_size),
-       eigen_provider::Eigenvectors::values_and_vectors},
-      eigensystem, eigenvalues, queried));
-  const auto device_bytes = queried.device_bytes;
-  const auto host_bytes = queried.host_bytes;
-  if (status != CUSOLVER_STATUS_SUCCESS || device_bytes == 0) {
+  const auto family = solver.xsyev ? eigen_provider::SymmetricEigenFamily::xsyev_batched
+                                   : eigen_provider::SymmetricEigenFamily::jacobi_batched;
+  const eigen_provider::SymmetricEigenQueryRange range{
+      static_cast<std::int64_t>(batch_size), static_cast<std::int64_t>(batch_size),
+      eigen_provider::Eigenvectors::values_and_vectors};
+  eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+  const auto queried = eigen_provider::prepare_symmetric_eigen_workspace(
+      solver.handles.view(), {family, static_cast<std::int64_t>(nbf), &range, 1}, eigensystem,
+      eigenvalues, prepared);
+  eigen_provider::EigenWorkspaceLimits limits;
+  limits.require_device = true;
+  if (!queried.success() ||
+      prepared.admit(limits) != eigen_provider::EigenWorkspaceAdmission::accepted) {
     return solver_failure(
-        status == CUSOLVER_STATUS_SUCCESS ? CUSOLVER_STATUS_INTERNAL_ERROR : status,
-        "size CUDA DF SCF generic eigensolver", detail);
+        queried.error == eigen_provider::EigenWorkspaceError::provider_failure
+            ? static_cast<cusolverStatus_t>(queried.provider_status)
+            : CUSOLVER_STATUS_INTERNAL_ERROR,
+        solver.xsyev ? "size CUDA DF SCF generic eigensolver" : "size CUDA DF SCF eigensolver",
+        detail);
   }
+  const auto device_bytes = prepared.required().device_bytes;
+  const auto host_bytes = prepared.required().host_bytes;
+  solver.lwork = prepared.required().jacobi_elements;
   solver.workspace_bytes = device_bytes;
   solver.host_workspace_bytes = host_bytes;
   runtime::df_progress::number("compact_solver_workspace_bytes", device_bytes);
   runtime::df_progress::number("compact_solver_workspace_allowance",
                                df_scf_workspace_allowance(nbf, batch_size));
-  if (device_bytes > df_scf_workspace_allowance(nbf, batch_size)) {
-    detail = "CUDA DF SCF generic eigensolver query exceeds its planned workspace";
+  // Compact DF historically bounds device workspace only; host allocation and
+  // its diagnostics remain explicit rather than silently adding a new cap.
+  limits.device_bytes = df_scf_workspace_allowance(nbf, batch_size);
+  if (prepared.admit(limits) != eigen_provider::EigenWorkspaceAdmission::accepted) {
+    detail = solver.xsyev ? "CUDA DF SCF generic eigensolver query exceeds its planned workspace"
+                          : "CUDA DF SCF eigensolver query exceeds its planned workspace";
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
+  if (!solver.xsyev)
+    return allocate_device(reinterpret_cast<void**>(&solver.workspace), device_bytes,
+                           "allocate CUDA DF SCF eigensolver workspace", detail);
   generativeqc_status allocation =
       allocate_device(reinterpret_cast<void**>(&solver.workspace), device_bytes,
                       "allocate CUDA DF SCF generic eigensolver workspace", detail);
@@ -183,15 +175,23 @@ generativeqc_status solve_device_batch(CudaDensityFittingJkPlan& plan, DeviceSol
   // orchestration. Keep its host interval separate from the eigensolve's GPU
   // events: their difference is not an unmeasured CPU eigenframe validation.
   runtime::host_trace::Region provider("compact_eigensolve_provider", nbf);
+  const auto family = solver.xsyev ? eigen_provider::SymmetricEigenFamily::xsyev_batched
+                                   : eigen_provider::SymmetricEigenFamily::jacobi_batched;
+  eigen_provider::SymmetricEigenWorkspaceBinding binding;
+  if (!eigen_provider::bind_symmetric_eigen_workspace(
+          {solver.handles.view().solver, solver.handles.view().parameters,
+           solver.handles.view().jacobi, solver.workspace, solver.workspace_bytes,
+           solver.host_workspace, solver.host_workspace_bytes},
+          {0, 0, solver.lwork}, family, eigen_provider::JacobiWorkspaceExtent::queried_elements,
+          binding)) {
+    detail = "invalid CUDA DF SCF eigensolver workspace binding";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   status = static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
-      {solver.handles.view().solver, solver.handles.view().parameters, solver.handles.view().jacobi,
-       solver.workspace, solver.workspace_bytes, solver.host_workspace,
-       solver.host_workspace_bytes},
-      solver.xsyev ? eigen_provider::SymmetricEigenFamily::xsyev_batched
-                   : eigen_provider::SymmetricEigenFamily::jacobi_batched,
+      binding.resources, family,
       {static_cast<std::int64_t>(nbf), static_cast<std::int64_t>(batch_size),
        eigen_provider::Eigenvectors::values_and_vectors},
-      eigensystem, eigenvalues, info, solver.lwork));
+      eigensystem, eigenvalues, info, binding.jacobi_elements));
   return status == CUSOLVER_STATUS_SUCCESS
              ? GENERATIVEQC_STATUS_SUCCESS
              : solver_failure(status, "CUDA DF SCF eigensolve", detail);

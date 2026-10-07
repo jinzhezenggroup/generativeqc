@@ -12,6 +12,7 @@
 
 #include "backends/cuda/gfn2_eigensolver.cuh"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/symmetric_eigen_workspace.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace eigen_provider = ::generativeqc::solver::cuda;
@@ -2324,25 +2325,21 @@ Gfn2EigensolverLaunchResult symmetric_eigensolve(
   if (jacobi_requested && submission.orbital_count > kGfn2JacobiProviderMaximumOrbitals) {
     return invalid_argument();
   }
-  int jacobi_elements = 0;
-  if (jacobi_requested) {
-    const std::size_t workspace_elements = workspace.solver_device_workspace_bytes / sizeof(double);
-    if (options.jacobi == nullptr ||
-        workspace_elements > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-      return invalid_argument();
-    }
-    jacobi_elements = static_cast<int>(workspace_elements);
-  }
+  const auto family = jacobi_requested ? eigen_provider::SymmetricEigenFamily::jacobi_batched
+                                       : eigen_provider::SymmetricEigenFamily::xsyev_batched;
+  eigen_provider::SymmetricEigenWorkspaceBinding binding;
+  if (!eigen_provider::bind_symmetric_eigen_workspace(
+          {solver, parameters, options.jacobi, workspace.solver_device_workspace,
+           workspace.solver_device_workspace_bytes, workspace.solver_host_workspace,
+           workspace.solver_host_workspace_bytes},
+          {}, family, eigen_provider::JacobiWorkspaceExtent::device_capacity, binding))
+    return invalid_argument();
   const auto status = static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
-      {solver, parameters, options.jacobi, workspace.solver_device_workspace,
-       workspace.solver_device_workspace_bytes, workspace.solver_host_workspace,
-       workspace.solver_host_workspace_bytes},
-      jacobi_requested ? eigen_provider::SymmetricEigenFamily::jacobi_batched
-                       : eigen_provider::SymmetricEigenFamily::xsyev_batched,
+      binding.resources, family,
       {submission.orbital_count, submission.system_count,
        vectors == CUSOLVER_EIG_MODE_NOVECTOR ? eigen_provider::Eigenvectors::values_only
                                            : eigen_provider::Eigenvectors::values_and_vectors},
-      matrices, eigenvalues, info, jacobi_elements));
+      matrices, eigenvalues, info, binding.jacobi_elements));
   return status == CUSOLVER_STATUS_SUCCESS ? launch_success() : cusolver_failure(status);
 }
 
@@ -3077,31 +3074,23 @@ Gfn2EigensolverLaunchResult query_gfn2_eigensolver_bucket_workspace_cuda(
       matrix_span > std::numeric_limits<int>::max()) {
     return invalid_argument();
   }
-  std::size_t maximum_device = 0u;
-  std::size_t maximum_host = 0u;
-  /* Exact-capacity Graph bodies can submit any count in [1, system_count].
-   * cuSOLVER does not promise monotonic workspace sizes across batch counts,
-   * so setup queries every reachable body and retains the true maximum. */
-  for (const cusolverEigMode_t mode : {CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR}) {
-    for (int capacity = 1; capacity <= bucket.system_count; ++capacity) {
-      eigen_provider::SymmetricEigenWorkspace queried;
-      const auto status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-          {solver, parameters}, eigen_provider::SymmetricEigenFamily::xsyev_batched,
-          {bucket.orbital_count, capacity,
-           mode == CUSOLVER_EIG_MODE_NOVECTOR ? eigen_provider::Eigenvectors::values_only
-                                            : eigen_provider::Eigenvectors::values_and_vectors},
-          device_matrix, device_eigenvalues, queried));
-      if (status != CUSOLVER_STATUS_SUCCESS) {
-        return cusolver_failure(status);
-      }
-      maximum_device = std::max(maximum_device, queried.device_bytes);
-      maximum_host = std::max(maximum_host, queried.host_bytes);
-    }
+  // Every exact-capacity graph body is reachable, in both eigenvector modes.
+  const eigen_provider::SymmetricEigenQueryRange ranges[]{
+      {1, bucket.system_count, eigen_provider::Eigenvectors::values_only},
+      {1, bucket.system_count, eigen_provider::Eigenvectors::values_and_vectors}};
+  eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+  const auto queried = eigen_provider::prepare_symmetric_eigen_workspace(
+      {solver, parameters},
+      {eigen_provider::SymmetricEigenFamily::xsyev_batched, bucket.orbital_count, ranges, 2},
+      device_matrix, device_eigenvalues, prepared,
+      {requirements.solver_device_workspace_bytes, requirements.solver_host_workspace_bytes});
+  if (!queried.success()) {
+    return queried.error == eigen_provider::EigenWorkspaceError::provider_failure
+               ? cusolver_failure(static_cast<cusolverStatus_t>(queried.provider_status))
+               : invalid_argument();
   }
-  requirements.solver_device_workspace_bytes =
-      std::max(requirements.solver_device_workspace_bytes, maximum_device);
-  requirements.solver_host_workspace_bytes =
-      std::max(requirements.solver_host_workspace_bytes, maximum_host);
+  requirements.solver_device_workspace_bytes = prepared.required().device_bytes;
+  requirements.solver_host_workspace_bytes = prepared.required().host_bytes;
   return launch_success();
 }
 
@@ -3131,30 +3120,21 @@ Gfn2EigensolverLaunchResult query_gfn2_jacobi_bucket_workspace_cuda(
   if (bucket.orbital_count > kGfn2JacobiProviderMaximumOrbitals) {
     return launch_success();
   }
-  std::size_t maximum_device = 0u;
-  for (const cusolverEigMode_t mode : {CUSOLVER_EIG_MODE_NOVECTOR, CUSOLVER_EIG_MODE_VECTOR}) {
-    for (int capacity = 1; capacity <= bucket.system_count; ++capacity) {
-      eigen_provider::SymmetricEigenWorkspace queried;
-      const auto status = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-          {solver, nullptr, jacobi}, eigen_provider::SymmetricEigenFamily::jacobi_batched,
-          {bucket.orbital_count, capacity,
-           mode == CUSOLVER_EIG_MODE_NOVECTOR ? eigen_provider::Eigenvectors::values_only
-                                            : eigen_provider::Eigenvectors::values_and_vectors},
-          device_matrix, device_eigenvalues, queried));
-      const int workspace_elements = queried.jacobi_elements;
-      if (status != CUSOLVER_STATUS_SUCCESS) {
-        return cusolver_failure(status);
-      }
-      if (workspace_elements < 0 || static_cast<std::size_t>(workspace_elements) >
-                                        std::numeric_limits<std::size_t>::max() / sizeof(double)) {
-        return invalid_argument();
-      }
-      maximum_device =
-          std::max(maximum_device, static_cast<std::size_t>(workspace_elements) * sizeof(double));
-    }
+  const eigen_provider::SymmetricEigenQueryRange ranges[]{
+      {1, bucket.system_count, eigen_provider::Eigenvectors::values_only},
+      {1, bucket.system_count, eigen_provider::Eigenvectors::values_and_vectors}};
+  eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+  const auto queried = eigen_provider::prepare_symmetric_eigen_workspace(
+      {solver, nullptr, jacobi},
+      {eigen_provider::SymmetricEigenFamily::jacobi_batched, bucket.orbital_count, ranges, 2},
+      device_matrix, device_eigenvalues, prepared,
+      {requirements.solver_device_workspace_bytes, requirements.solver_host_workspace_bytes});
+  if (!queried.success()) {
+    return queried.error == eigen_provider::EigenWorkspaceError::provider_failure
+               ? cusolver_failure(static_cast<cusolverStatus_t>(queried.provider_status))
+               : invalid_argument();
   }
-  requirements.solver_device_workspace_bytes =
-      std::max(requirements.solver_device_workspace_bytes, maximum_device);
+  requirements.solver_device_workspace_bytes = prepared.required().device_bytes;
   return launch_success();
 }
 
