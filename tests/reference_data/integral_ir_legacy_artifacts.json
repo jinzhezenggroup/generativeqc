@@ -512,8 +512,8 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
     "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "da7d8d522bdb004ee786b7494458f39656cfa9d54ed8d1b26904e8b88a0faa5b",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "ed12818de872b7a4efd35c025e8b91f1952f12a636ba02cff8bf9852bb497cc7",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "f13f6f00f61faf8b6e9c4e92e6c8bb8189f0c43606c81e5c27de4ad065abc837",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c8b96762479a945189cdc0add5abf0e7e657d5ac8c074297dc074e6a563d9a5d",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "977ed001cda8f1ad24835833fe09b96c07facd2110771fd38688dd9b2bcc510c",
     "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "a16724489de7e99f32d9907dd9575011dbce46110a65dd6d2effc78edd2cadf5",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
     "generativeqc_generated_shell_registry.cu": "b85e51c3080ebb4c62f090fcfaca4d8cd2a697d60a29f79b29c5d1914efd7ebc"
@@ -692,6 +692,26 @@
         "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
         "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
         "sm_90/generativeqc_generated_shell_sm90_shard_3.cu"
+      ]
+    },
+    {
+      "issue": 2078,
+      "source_revision": "d9dbd34c506af353d140abebf8ebfe2161501cbb",
+      "integrated_base_revision": "0ad23e7919ac632b4ecb680cec409198dc0343d4",
+      "reason": "Preserve the incumbent explicit lane-private storage capability in optional restricted raw-K block candidates. Independent regeneration of the parent reproduces all ten previous fixture hashes. Only sm_120 shards 1 and 2 change: the psss/psps _k_block streaming workers use private task/storage declarations, populate the private task, and pass its address at index zero with the lane-private storage reference. All recurrence, contraction, scatter and synchronization code is byte-identical; the other eight artifacts, every incumbent/Rys section, the generic K-block workers, manifest and catalog are unchanged. This refresh records the deliberate storage-policy source identity change without promoting the opt-in block lowering or changing numerical acceptance gates.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu"
+      ]
+    },
+    {
+      "issue": 2078,
+      "source_revision": "dc989fad31d9046ed743db4d7a3d3471fce6f7ec",
+      "integrated_base_revision": "7c07fa309cf7f9123cde697e460169e481bfca01",
+      "reason": "Integrate the lane-private K-block storage correction with landed #2076 cross-chunk exchange queues, retaining the prior standalone #2078 correction record. Independent generation of master 7c07fa309cf7f9123cde697e460169e481bfca01 reproduces all ten master fixture hashes. Relative to that master, only sm_120 shards 1 and 2 change: psss/psps K-block streaming workers use private task/storage declarations and matching task-pointer, index-zero and storage references. Exact generated-source transforms leave every recurrence, contraction, scatter, queue, synchronization, generic block worker and incumbent/Rys section unchanged. The other eight artifacts, manifest and catalog retain master identities. Shards 0 and 3 preserve the landed queue hashes; the two changed hashes are regenerated from the combined source rather than selected from either merge parent. This identity reconciliation does not change lowering defaults or numerical acceptance gates.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu"
       ]
     }
   ]

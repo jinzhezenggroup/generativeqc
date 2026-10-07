@@ -10,6 +10,7 @@
 
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
+#include "solver/cuda/symmetric_eigen_handles.hpp"
 #include "tensor/cuda_vector_contraction.hpp"
 
 namespace generativeqc::scf {
@@ -73,8 +74,7 @@ struct CudaDensityFittingJkPlan {
       count += bool(metric_charge[i]) + bool(metric_potential[i]);
     return count * sizeof(tensor::CudaVectorContraction);
   }
-  cusolverDnHandle_t solver{};
-  cusolverDnParams_t solver_parameters{};
+  ::generativeqc::solver::cuda::PreparedSymmetricEigenHandles eigen_handles;
   double* three_center{};
   double* primary_density{};
   double* secondary_density{};

@@ -15,8 +15,15 @@ classifies each file explicitly:
 
 The DF SCF adapter in `src/scf/cuda/df_scf_library.hpp` is retained as a reusable
 matrix/eigensolver implementation. Its callers specify operands, strides,
-alpha/beta and eigensystem work; its `DeviceSolver` owns provider workspace and
-lifetime. Retaining this adapter does not complete canonical binding integration
+alpha/beta and eigensystem work; its `DeviceSolver` owns numeric workspace and
+retains the shared `solver::cuda::PreparedSymmetricEigenHandles` owner. That
+move-only service uniquely owns solver/Params/Jacobi lifetime for GFN2, RHF/UHF,
+ordinary KS and DF. Staged setup preserves the caller's stream order and Jacobi
+settings. The enclosing device/stream owner settles work and explicitly resets
+handles before releasing its stream or restoring the caller's device. The shared
+service neither allocates numeric workspace nor synchronizes.
+
+Retaining this adapter does not complete canonical binding integration
 for its surrounding callers. Other SCF adapters with upstream implementation
 selectors remain classified as migration work.
 

@@ -79,6 +79,20 @@ selection, workspace/cache lifetime, per-system errors and public method
 admission remain native runtime responsibilities. Generation needs no installed
 GenerativeQC runtime, GPU, or scientific oracle.
 
+CUDA symmetric-eigen setup uses the method-neutral
+`solver/cuda/symmetric_eigen_workspace.*` service. GFN2 declares both vector
+modes and every reachable exact capacity; the shared service performs those
+queries in order, normalizes Jacobi elements, and publishes componentwise byte
+maxima only after the whole domain succeeds. RHF/UHF and DF declare their actual
+ordered capacities, while ordinary KS/DF use singleton domains. Each adapter
+retains its existing device/host allowance and zero-workspace policy. The
+service validates borrowed bindings without allocating or retaining buffers.
+GFN2 derives Jacobi lwork from its padded device capacity; SCF/DF keep the
+explicit queried element count. Device subarenas, pinned host storage,
+stream-ordered pools, synchronous allocations and host vectors retain their
+original owners and lifetimes. Generalized transforms and graph orchestration
+remain method-specific.
+
 CPU S/D/Q generation evaluates a complete Cartesian shell block per primitive
 pair, sharing the Gaussian prefactor and recurrence intermediates across its
 up to 36 outputs. Native contraction order, screening and spherical transforms

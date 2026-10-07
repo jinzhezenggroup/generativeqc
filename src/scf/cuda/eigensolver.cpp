@@ -11,6 +11,7 @@
 #include "scf/cuda/launch_geometry.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/symmetric_eigen_workspace.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 namespace eigen_provider = ::generativeqc::solver::cuda;
@@ -86,19 +87,22 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
       if (written <= 0 || std::size_t(written) >= provider_version_.size())
         throw std::runtime_error("cuSOLVER runtime version is unavailable");
       diagnostic_.candidates[1].provider_version = provider_version_.data();
-      checked(solver_status(cusolverDnCreate(&resources_.solver_)));
-      checked(solver_status(cusolverDnSetStream(resources_.solver_, stream)));
-      checked(solver_status(cusolverDnCreateParams(&resources_.solver_parameters_)));
-      eigen_provider::SymmetricEigenWorkspace queried;
-      checked(solver_status(static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-          {resources_.solver_, resources_.solver_parameters_},
-          eigen_provider::SymmetricEigenFamily::xsyevd,
-          {n, 1, eigen_provider::Eigenvectors::values_and_vectors}, matrix, eigenvalues,
-          queried))));
-      resources_.solver_workspace_bytes_ = queried.device_bytes;
-      resources_.solver_host_workspace_bytes_ = queried.host_bytes;
-      if (resources_.solver_workspace_bytes_ > allowance ||
-          resources_.solver_host_workspace_bytes_ > allowance)
+      checked(solver_status(static_cast<cusolverStatus_t>(handles_.create())));
+      checked(solver_status(static_cast<cusolverStatus_t>(handles_.bind_stream(stream))));
+      checked(solver_status(static_cast<cusolverStatus_t>(handles_.create_parameters())));
+      const eigen_provider::SymmetricEigenQueryRange range{
+          1, 1, eigen_provider::Eigenvectors::values_and_vectors};
+      eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+      const auto queried = eigen_provider::prepare_symmetric_eigen_workspace(
+          handles_.view(), {eigen_provider::SymmetricEigenFamily::xsyevd, n, &range, 1}, matrix,
+          eigenvalues, prepared);
+      if (queried.error == eigen_provider::EigenWorkspaceError::provider_failure)
+        checked(solver_status(static_cast<cusolverStatus_t>(queried.provider_status)));
+      if (!queried.success()) checked(GENERATIVEQC_STATUS_CUDA_ERROR);
+      resources_.solver_workspace_bytes_ = prepared.required().device_bytes;
+      resources_.solver_host_workspace_bytes_ = prepared.required().host_bytes;
+      if (prepared.admit({allowance, allowance}) !=
+          eigen_provider::EigenWorkspaceAdmission::accepted)
         throw std::bad_alloc();
       diagnostic_.candidates[1].workspace_bytes = resources_.solver_workspace_bytes_;
       diagnostic_.candidates[1].host_bytes += resources_.solver_host_workspace_bytes_;
@@ -142,8 +146,7 @@ void OrdinaryStreamEigensolver::cleanup() noexcept {
   (void)cudaSetDevice(device_);
   if (resources_.stream_) (void)cudaStreamSynchronize(resources_.stream_);
   if (resources_.solver_workspace_) (void)runtime::resource_cuda_free(resources_.solver_workspace_);
-  if (resources_.solver_parameters_) (void)cusolverDnDestroyParams(resources_.solver_parameters_);
-  if (resources_.solver_) (void)cusolverDnDestroy(resources_.solver_);
+  handles_.reset();
   resources_ = {};
   (void)cudaSetDevice(previous);
 }
@@ -165,7 +168,10 @@ generativeqc_status OrdinaryStreamEigensolver::launch(int batch, double* matrice
   if (capture != cudaStreamCaptureStatusNone &&
       !diagnostic_.candidates[diagnostic_.selected].capture_safe)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return launch_solver(resources_, family_, n_, batch, matrices, native_workspace, eigenvalues, 0,
+  auto borrowed = resources_;
+  borrowed.solver_ = static_cast<cusolverDnHandle_t>(handles_.view().solver);
+  borrowed.solver_parameters_ = static_cast<cusolverDnParams_t>(handles_.view().parameters);
+  return launch_solver(borrowed, family_, n_, batch, matrices, native_workspace, eigenvalues, 0,
                        info, active);
 }
 
@@ -213,13 +219,19 @@ generativeqc_status launch_solver(const EigensolverResources& resources,
                                  : family == CudaEigensolverFamily::xsyev_batched
                                      ? eigen_provider::SymmetricEigenFamily::xsyev_batched
                                      : eigen_provider::SymmetricEigenFamily::xsyevd;
-    const auto provider_status =
-        static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
+    eigen_provider::SymmetricEigenWorkspaceBinding binding;
+    if (!eigen_provider::bind_symmetric_eigen_workspace(
             {resources.solver_, resources.solver_parameters_, resources.jacobi_,
              resources.solver_workspace_, resources.solver_workspace_bytes_,
              resources.solver_host_workspace_, resources.solver_host_workspace_bytes_},
-            provider_family, {nbf, batch_size, eigen_provider::Eigenvectors::values_and_vectors},
-            matrices, eigenvalues, info, lwork));
+            {0, 0, lwork}, provider_family, eigen_provider::JacobiWorkspaceExtent::queried_elements,
+            binding))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    const auto provider_status =
+        static_cast<cusolverStatus_t>(eigen_provider::launch_symmetric_eigen(
+            binding.resources, provider_family,
+            {nbf, batch_size, eigen_provider::Eigenvectors::values_and_vectors}, matrices,
+            eigenvalues, info, binding.jacobi_elements));
     if (provider_status != CUSOLVER_STATUS_SUCCESS) return solver_status(provider_status);
   } else {
     // API-ineligible or Graph-rejected signatures retain the unbounded native

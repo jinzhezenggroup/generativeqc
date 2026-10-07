@@ -61,6 +61,28 @@ those are tracked under C.
 `AmplitudeSnapshot` still forbids shape-only reuse across reference changes, and
 cross-geometry amplitude transport remains unsupported.
 
+## Native iteration scalar reductions
+
+The conventional, DF-core, and DF-hoisted scalar/packed native CUDA iteration
+programs opt in to scalar block reduction through
+`src/tensor/cuda_reduction.cuh`. On NVIDIA CUDA, the shared provider uses
+`cub::BlockReduce<double, 256, cub::BLOCK_REDUCE_WARP_REDUCTIONS>` with explicit
+`__dadd_rn` addition. Generated terms retain strict FP64 multiplication and
+addition. Reductions with fewer than 32 terms keep source-major serial order.
+
+The shared provider declares block reduction unavailable for CuMetal, which
+does not supply CUB. Generated consumers then use the same source-major serial
+path for the complete reduction domain, on device thread zero. They require no
+CUB headers, block-reduction scratch, or block collective on that path. Backend
+selection stays in the shared provider; CC generators consume only its
+capability and continue to own the TensorIR-derived arithmetic.
+
+Independent final physical replay and callers that do not opt in retain the
+historical serial lowering. Provider compilation and host-shim regression tests
+do not establish device numerical acceptance or an endpoint speedup. CUDA and
+CuMetal still require their existing energy, residual, convergence, finite-value,
+and replay gates; CuMetal makes no parallel-reduction performance claim.
+
 ## Canonical native denominator representation
 
 Native molecular CUDA RCCSD retains canonical occupied/virtual orbital energies

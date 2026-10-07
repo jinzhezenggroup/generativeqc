@@ -402,7 +402,7 @@ def test_large_matrix_stream_fallback_matches_gpu4pyscf_solver_contract() -> Non
     source = _direct_cuda_source()
     assert "CudaEigensolverFamily::xsyevd" in source
     assert "SymmetricEigenFamily::xsyevd" in source
-    assert "query_symmetric_eigen(" in source
+    assert "prepare_symmetric_eigen_workspace(" in source
     eigensolver = (REPOSITORY_ROOT / "src/scf/cuda/eigensolver.cpp").read_text()
     assert "launch_symmetric_eigen(" in eigensolver
     provider = (

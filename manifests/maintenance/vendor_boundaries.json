@@ -218,9 +218,7 @@
       "contract": "#1890",
       "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
       "references": {
-        "cublasDestroy": 1,
-        "cusolverDnDestroy": 1,
-        "cusolverDnDestroyParams": 1
+        "cublasDestroy": 1
       }
     },
     "src/scf/cuda/df_plan_setup.cpp": {
@@ -232,10 +230,7 @@
         "cublasDgemm": 6,
         "cublasDgemmStridedBatched": 1,
         "cublasSetPointerMode": 1,
-        "cublasSetStream": 1,
-        "cusolverDnCreate": 1,
-        "cusolverDnCreateParams": 1,
-        "cusolverDnSetStream": 1
+        "cublasSetStream": 1
       }
     },
     "src/scf/cuda/df_response_weights.cu": {
@@ -260,26 +255,9 @@
     "src/scf/cuda/df_scf_library.cpp": {
       "classification": "provider",
       "contract": "src/scf/cuda/df_scf_library.hpp",
-      "reason": "Retained reusable DF SCF matrix/eigensolver adapter: semantic strides, alpha/beta and solve requests; provider workspace and lifetime belong to DeviceSolver. Keep this implementation while its surrounding callers migrate to canonical bindings.",
+      "reason": "Reusable DF SCF matrix/eigensolver adapter retains semantic strides, alpha/beta and solve requests. DeviceSolver retains numeric workspace and the shared prepared handle owner; raw cuSOLVER setup/submission ownership is retired.",
       "references": {
-        "cublasDgemmStridedBatched": 1,
-        "cusolverDnCreate": 1,
-        "cusolverDnCreateParams": 1,
-        "cusolverDnCreateSyevjInfo": 1,
-        "cusolverDnSetStream": 1,
-        "cusolverDnXsyevjSetMaxSweeps": 1,
-        "cusolverDnXsyevjSetSortEig": 1,
-        "cusolverDnXsyevjSetTolerance": 1
-      }
-    },
-    "src/scf/cuda/df_scf_state.hpp": {
-      "classification": "provider",
-      "contract": "src/scf/cuda/df_scf_library.hpp",
-      "reason": "Retained reusable DF SCF matrix/eigensolver adapter: semantic strides, alpha/beta and solve requests; provider workspace and lifetime belong to DeviceSolver. Keep this implementation while its surrounding callers migrate to canonical bindings.",
-      "references": {
-        "cusolverDnDestroy": 1,
-        "cusolverDnDestroyParams": 1,
-        "cusolverDnDestroySyevjInfo": 1
+        "cublasDgemmStridedBatched": 1
       }
     },
     "src/scf/cuda/direct_jk_kernels.cu": {
@@ -304,11 +282,6 @@
       "contract": "#1890",
       "reason": "Ordinary DFT/KS solves now use a canonical prepared binding with queried cuSOLVER provenance. RHF and DF launch_solver selectors remain migration debt; classification stays partial.",
       "references": {
-        "cusolverDnCreate": 1,
-        "cusolverDnCreateParams": 1,
-        "cusolverDnDestroy": 1,
-        "cusolverDnDestroyParams": 1,
-        "cusolverDnSetStream": 1,
         "cusolverGetProperty": 3
       }
     },
@@ -332,10 +305,7 @@
       "contract": "#1890",
       "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
       "references": {
-        "cublasDestroy": 1,
-        "cusolverDnDestroy": 1,
-        "cusolverDnDestroyParams": 1,
-        "cusolverDnDestroySyevjInfo": 1
+        "cublasDestroy": 1
       }
     },
     "src/scf/cuda_eigensolver_policy.hpp": {
@@ -370,14 +340,7 @@
         "cublasCreate": 1,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1,
-        "cublasSetWorkspace": 1,
-        "cusolverDnCreate": 1,
-        "cusolverDnCreateParams": 1,
-        "cusolverDnCreateSyevjInfo": 1,
-        "cusolverDnSetStream": 1,
-        "cusolverDnXsyevjSetMaxSweeps": 1,
-        "cusolverDnXsyevjSetSortEig": 1,
-        "cusolverDnXsyevjSetTolerance": 1
+        "cublasSetWorkspace": 1
       }
     },
     "src/solver/cuda/cusolver_compat.hpp": {
@@ -389,6 +352,23 @@
         "cusolverDnXsyevBatched_bufferSize": 1
       }
     },
+    "src/solver/cuda/symmetric_eigen_handles.cpp": {
+      "classification": "provider",
+      "contract": "src/solver/cuda/symmetric_eigen_handles.hpp",
+      "reason": "Shared move-only prepared solver/Params/Jacobi owner used by GFN2, RHF/UHF, ordinary KS and DF; staged setup preserves caller policy, stream order and settings while lifetime is uniquely owned here. Numeric workspace/device/stream ownership remains with existing resource services.",
+      "references": {
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnCreateSyevjInfo": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnDestroySyevjInfo": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevjSetMaxSweeps": 1,
+        "cusolverDnXsyevjSetSortEig": 1,
+        "cusolverDnXsyevjSetTolerance": 1
+      }
+    },
     "src/solver/cuda/symmetric_eigen_provider.cpp": {
       "classification": "provider",
       "contract": "src/solver/cuda/symmetric_eigen_provider.hpp",
@@ -398,6 +378,15 @@
         "cusolverDnDsyevjBatched_bufferSize": 1,
         "cusolverDnXsyevd": 1,
         "cusolverDnXsyevd_bufferSize": 1
+      }
+    },
+    "src/tensor/cuda_reduction.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/cuda_reduction.py",
+      "reason": "Shared strict-FP64 CUDA block reduction provider centralizes CUB ownership so scientific generators consume a backend-neutral tensor primitive.",
+      "references": {
+        "cub::BLOCK_REDUCE_WARP_REDUCTIONS": 1,
+        "cub::BlockReduce": 1
       }
     },
     "src/tensor/cuda_contraction.cuh": {
@@ -561,21 +550,11 @@
     "src/xtb/native/src/runtime/gfn2_cuda_execution.cu": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "GFN prepared execution owns handles and generalized eigensolve work; migrate solver/tensor choices without changing occupation or precision admission.",
+      "reason": "GFN context retains BLAS setup and method-specific generalized-eigen/graph work; shared prepared symmetric-eigen service now uniquely owns solver/Params/Jacobi lifetime. Migrate remaining tensor and generalized setup contracts without changing scientific admission.",
       "references": {
         "cublasCreate": 1,
         "cublasDestroy": 2,
-        "cublasSetStream": 1,
-        "cusolverDnCreate": 1,
-        "cusolverDnCreateParams": 1,
-        "cusolverDnCreateSyevjInfo": 1,
-        "cusolverDnDestroy": 2,
-        "cusolverDnDestroyParams": 2,
-        "cusolverDnDestroySyevjInfo": 2,
-        "cusolverDnSetStream": 1,
-        "cusolverDnXsyevjSetMaxSweeps": 1,
-        "cusolverDnXsyevjSetSortEig": 1,
-        "cusolverDnXsyevjSetTolerance": 1
+        "cublasSetStream": 1
       }
     },
     "src/xtb/native/src/runtime/nvidia_host_api.h": {

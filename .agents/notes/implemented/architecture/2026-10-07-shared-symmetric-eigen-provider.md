@@ -111,3 +111,10 @@ ownership remain under #1240/#1890. Density/weighted-density and Broyden follow-
 remain under #1879/#1882. Method policy and persistent resource/graph owners still
 exist in the embedded runtime. They require real consumer cutovers before that
 runtime can be deleted; this slice does not claim wholesale retirement.
+
+## Prepared handle ownership follow-up
+
+The subsequent `2026-10-07-shared-prepared-eigen-handles.md` cutover transfers
+provider handle/descriptor lifetime out of the five method owners. Numeric
+workspace, generalized transforms and method graph/state ownership remain with
+the original owners; the query/submission contract above is unchanged.

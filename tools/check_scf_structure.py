@@ -89,6 +89,8 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
     ),
     "cuda_eigensolver": (
         "solver/cuda/symmetric_eigen_provider.hpp",
+        "solver/cuda/symmetric_eigen_workspace.hpp",
+        "solver/cuda/symmetric_eigen_handles.hpp",
         "scf/cuda/eigensolver.",
         "scf/cuda/eigensolver_kernels.",
         "scf/cuda/eigensolver_types.",
@@ -155,6 +157,8 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
     "solver/cuda/symmetric_eigen_provider.hpp",
+    "solver/cuda/symmetric_eigen_workspace.hpp",
+    "solver/cuda/symmetric_eigen_handles.hpp",
     "runtime/cuda_component_trace.hpp",
     "tensor/cuda_vector_contraction.hpp",
     "scf/cuda/df_metric_kernels.",
@@ -211,6 +215,7 @@ CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
 ) + ("scf/cuda/matrix_index.",)
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
+    "solver/cuda/symmetric_eigen_handles.hpp",
     "scf/cuda/resources.",
     "scf/cuda/eigensolver.",
     "scf/cuda/matrix_library.",
@@ -525,6 +530,7 @@ CUDA_ALLOWED["cuda_hf_graph"] = (
 CUDA_MODULES["cuda_hf_driver"] = ("scf/cuda_rhf.cpp",)
 CUDA_ALLOWED["cuda_hf_driver"] = (
     "solver/cuda/symmetric_eigen_provider.hpp",
+    "solver/cuda/symmetric_eigen_workspace.hpp",
     # Public ECP device consumer only; quadrature kernels remain in integrals.
     "integrals/ecp_cuda.hpp",
     "molecule/basis.hpp",
