@@ -367,12 +367,8 @@ cusolverStatus_t cusolverDnCreateSyevjInfo(syevjInfo_t* jacobi) {
 cusolverStatus_t cusolverDnXsyevjSetTolerance(syevjInfo_t, double) {
   return CUSOLVER_STATUS_SUCCESS;
 }
-cusolverStatus_t cusolverDnXsyevjSetMaxSweeps(syevjInfo_t, int) {
-  return CUSOLVER_STATUS_SUCCESS;
-}
-cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t, int) {
-  return CUSOLVER_STATUS_SUCCESS;
-}
+cusolverStatus_t cusolverDnXsyevjSetMaxSweeps(syevjInfo_t, int) { return CUSOLVER_STATUS_SUCCESS; }
+cusolverStatus_t cusolverDnXsyevjSetSortEig(syevjInfo_t, int) { return CUSOLVER_STATUS_SUCCESS; }
 cusolverStatus_t cusolverDnDestroyParams(cusolverDnParams_t) { return CUSOLVER_STATUS_SUCCESS; }
 cusolverStatus_t cusolverDnDestroySyevjInfo(syevjInfo_t) { return CUSOLVER_STATUS_SUCCESS; }
 cusolverStatus_t cusolverDnDestroy(cusolverDnHandle_t) { return CUSOLVER_STATUS_SUCCESS; }

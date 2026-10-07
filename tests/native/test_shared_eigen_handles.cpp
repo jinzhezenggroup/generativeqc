@@ -85,8 +85,7 @@ void empty_view(const Handles& owner) {
   assert(!view.host_workspace && !view.host_workspace_bytes);
 }
 
-void same_view(const shared::SymmetricEigenResources& a,
-               const shared::SymmetricEigenResources& b) {
+void same_view(const shared::SymmetricEigenResources& a, const shared::SymmetricEigenResources& b) {
   assert(a.solver == b.solver && a.parameters == b.parameters && a.jacobi == b.jacobi);
   assert(!a.device_workspace && !a.host_workspace);
   assert(!a.device_workspace_bytes && !a.host_workspace_bytes);
@@ -112,8 +111,7 @@ std::uint32_t prepare(Handles& owner, const std::string& mode) {
 std::vector<std::string> preparation_calls(const std::string& mode) {
   if (mode == "gfn2")
     return {"create", "parameters", "jacobi", "tolerance", "sweeps", "sort", "stream"};
-  if (mode == "scf-jacobi")
-    return {"create", "stream", "jacobi", "tolerance", "sweeps", "sort"};
+  if (mode == "scf-jacobi") return {"create", "stream", "jacobi", "tolerance", "sweeps", "sort"};
   assert(mode == "scf-generic");
   return {"create", "stream", "parameters"};
 }
@@ -259,22 +257,23 @@ void gfn2_lifetime(int failed) {
   std::string error;
   const auto status = private_gfn2_ensure(owner, error);
   const std::vector<std::string> initialization{
-      "set-device-3", "gfn2-parameters", "create", "parameters", "jacobi", "tolerance",
-      "sweeps", "sort", "blas-create", "stream", "blas-stream"};
+      "set-device-3", "gfn2-parameters", "create", "parameters", "jacobi", "tolerance", "sweeps",
+      "sort",         "blas-create",     "stream", "blas-stream"};
   if (failed) {
     assert(status == 2 && private_gfn2_empty(owner));
     std::vector<std::string> expected(initialization.begin(),
-                                       initialization.begin() + (failed == 8 ? 11 : 2 + failed));
+                                      initialization.begin() + (failed == 8 ? 11 : 2 + failed));
     if (failed > 7) expected.emplace_back("destroy-blas");
     if (failed > 3) expected.emplace_back("destroy-jacobi");
     if (failed > 2) expected.emplace_back("destroy-parameters");
     if (failed > 1) expected.emplace_back("destroy");
     expect_calls(expected);
-    assert(error == (failed == 1 ? "cusolverDnCreate failed"
+    assert(error == (failed == 1   ? "cusolverDnCreate failed"
                      : failed == 2 ? "cusolverDnCreateParams failed"
                      : failed <= 6 ? "failed to configure the CUDA small-matrix Jacobi eigensolver"
-                     : failed == 7 ? "cublasCreate failed"
-                                   : "failed to bind CUDA linear-algebra handles to the context stream"));
+                     : failed == 7
+                         ? "cublasCreate failed"
+                         : "failed to bind CUDA linear-algebra handles to the context stream"));
     assert(live_solvers.empty() && live_parameters.empty() && live_jacobi.empty() &&
            live_blas.empty());
     calls.clear();
@@ -293,8 +292,8 @@ void gfn2_lifetime(int failed) {
   calls.clear();
   current_device = 11;
   private_gfn2_destroy(owner);
-  expect_calls({"get-device", "set-device-3", "sync", "prepared", "destroy-blas",
-                "destroy-jacobi", "destroy-parameters", "destroy", "set-device-11"});
+  expect_calls({"get-device", "set-device-3", "sync", "prepared", "destroy-blas", "destroy-jacobi",
+                "destroy-parameters", "destroy", "set-device-11"});
   assert(current_device == 11);  // Member destruction after restoration is a no-op.
 }
 
@@ -302,13 +301,13 @@ void scf_lifetime(const std::string& mode) {
   enforce_device = true;
   private_scf_lifetime(mode, stream);
   if (mode == "ordinary") {
-    expect_calls({"get-device", "set-device-3", "sync", "free-512", "destroy-parameters",
-                  "destroy", "set-device-11"});
+    expect_calls({"get-device", "set-device-3", "sync", "free-512", "destroy-parameters", "destroy",
+                  "set-device-11"});
     assert(current_device == 11);
   } else {
     expect_calls({"set-device-3", mode == "rhf-jacobi" ? "destroy-jacobi" : "destroy-parameters",
-                  "destroy", "destroy-blas", "free-async-256", "free-async-512",
-                  "free-async-768", "free-async-1024", "sync", "destroy-stream"});
+                  "destroy", "destroy-blas", "free-async-256", "free-async-512", "free-async-768",
+                  "free-async-1024", "sync", "destroy-stream"});
     assert(current_device == 3);  // RHF deliberately preserves its existing selection contract.
   }
 }
@@ -334,9 +333,7 @@ cudaError_t cudaStreamDestroy(cudaStream_t input) {
   calls.emplace_back("destroy-stream");
   return cudaSuccess;
 }
-std::uint32_t trace_blas_create(void** handle) {
-  return acquire("blas-create", handle, live_blas);
-}
+std::uint32_t trace_blas_create(void** handle) { return acquire("blas-create", handle, live_blas); }
 std::uint32_t trace_blas_bind(void* handle, void* input) {
   assert(live_blas.count(handle) == 1 && input == stream);
   return record("blas-stream");
@@ -419,5 +416,6 @@ int main(int argc, char** argv) {
   } else {
     return 2;
   }
-  assert(live_solvers.empty() && live_parameters.empty() && live_jacobi.empty() && live_blas.empty());
+  assert(live_solvers.empty() && live_parameters.empty() && live_jacobi.empty() &&
+         live_blas.empty());
 }

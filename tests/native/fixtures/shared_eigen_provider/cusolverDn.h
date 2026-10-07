@@ -2,10 +2,10 @@
 
 // Host-only provider tracing ABI. Distinct opaque pointers and enum status match
 // the official CUDA headers; void* aliases would hide missing production casts.
+#include <cuda_runtime_api.h>
+
 #include <cstddef>
 #include <cstdint>
-
-#include <cuda_runtime_api.h>
 
 struct cusolverDnContext;
 struct cusolverDnParams;
