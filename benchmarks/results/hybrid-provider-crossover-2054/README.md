@@ -127,6 +127,8 @@ and never converts a platform `SUCCEEDED` state into scientific acceptance.
 The small retained JSON records under `evidence/` keep LF bytes and their
 original SHA-256; grid NPZ exports and full trace streams stay in the ignored
 task-owned qz experiment directory.
+GitHub may collapse these generated JSON diffs; expand an individual record or
+run `verify_evidence.py` to inspect/check every full-precision value.
 `evidence/platform/job-metrics.json` retains the platform's one-minute Pod
 samples, including GPU memory usage rate. Its sampled maximum is not a
 per-process measured peak and cannot replace the provider allocation ledger.
