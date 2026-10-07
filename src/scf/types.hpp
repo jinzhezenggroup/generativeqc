@@ -111,6 +111,10 @@ struct ScfOptions {
   /** Accepted delta updates before refreshing the full anchor. Zero disables
    * periodic refresh; strict post-SCF full rebuilds are never disabled. */
   unsigned incremental_direct_jk_rebuild_interval{8};
+  /** For screened CUDA lowers, require the previous accepted density RMS to be
+   * at or below this positive threshold before using a ΔD build. Zero preserves
+   * the cadence-only controller. */
+  double incremental_direct_jk_density_rms_threshold{};
   /** Select the DF solver; direct four-center remains the default. */
   generativeqc_density_fitting_mode density_fitting_mode{GENERATIVEQC_DENSITY_FITTING_NONE};
   /** Relative cutoff used when factoring the auxiliary Coulomb metric. */
@@ -187,6 +191,7 @@ struct IncrementalDirectJkPolicy {
   bool active{};
   unsigned requested_rebuild_interval{};
   unsigned effective_rebuild_interval{};
+  double density_rms_threshold{};
 };
 
 inline bool direct_jk_incremental_exact_eligible(const ResolvedFockBuild& strategy) noexcept {
@@ -209,6 +214,7 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
   IncrementalDirectJkPolicy policy;
   policy.requested = options.incremental_direct_jk;
   policy.requested_rebuild_interval = options.incremental_direct_jk_rebuild_interval;
+  policy.density_rms_threshold = options.incremental_direct_jk_density_rms_threshold;
   policy.effective_rebuild_interval =
       capabilities.density_weighted_screening && options.screening_tolerance != 0.0
           ? 1U
