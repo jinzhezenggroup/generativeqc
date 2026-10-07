@@ -1020,8 +1020,14 @@ class Calculator:
                 self._ks_options is not None
                 and self._ks_options.method_ir.spin == "unpolarized"
             )
+            minao = self._initial_guess.kind == "minao"
+            backend_ok = self._device_name == "cpu" or (
+                minao
+                and self._device_name == "cuda"
+                and self._capabilities.family == "density_functional"
+            )
             if (
-                self._device_name != "cpu"
+                not backend_ok
                 or self._precision_mode != _native.PRECISION_FP64
                 or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
                 or not restricted
@@ -1030,12 +1036,18 @@ class Calculator:
                 not in ("hartree_fock", "density_functional")
             ):
                 raise NotImplementedError(
-                    "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
+                    "MINAO requires FP64 all-electron restricted exact CPU HF/KS or CUDA KS"
+                    if minao
+                    else "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
                 )
             require_initial_guess_library(self._library)
             self._capabilities = replace(
                 self._capabilities,
-                supported_properties=frozenset({"energy"}),
+                supported_properties=(
+                    self._capabilities.supported_properties
+                    if minao
+                    else frozenset({"energy"})
+                ),
                 supported_second_order=frozenset(),
             )
 

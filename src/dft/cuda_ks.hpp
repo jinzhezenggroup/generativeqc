@@ -224,6 +224,8 @@ class CudaKsPlan {
   /** Energy-only adapters leave the final density resident by disabling export. */
   scf::ScfResult run(const std::vector<double>* initial_density = nullptr, bool reuse_warm = true,
                      bool export_density = true);
+  /** Read-only last-good seed availability; no CUDA call or density export. */
+  bool has_warm_start() const noexcept;
   /** Export only the last converged state for a changed-geometry rebuild. */
   std::vector<double> warm_density();
   /** Borrow the ordinary GPU eigen provider for synchronous input admission.

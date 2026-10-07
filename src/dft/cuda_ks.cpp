@@ -70,7 +70,8 @@ void check(cudaError_t status) {
 }
 void check(generativeqc_status status, const std::string& detail) {
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
-  if (status == GENERATIVEQC_STATUS_CUDA_ERROR) throw generativeqc::Error(status, detail);
+  if (status == GENERATIVEQC_STATUS_CUDA_ERROR || status == GENERATIVEQC_STATUS_NUMERICAL_FAILURE)
+    throw generativeqc::Error(status, detail);
   if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT) throw std::invalid_argument(detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error(detail);
 }
@@ -546,7 +547,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     movement.matrix_d2h_bytes += matrix * sizeof(double);
     movement.scalar_d2h_bytes += n * sizeof(double) + sizeof(info);
     ++movement.synchronizations;
-    if (info) throw std::runtime_error("CUDA KS seed eigensolver did not converge");
+    if (info < 0) throw std::invalid_argument("CUDA KS seed eigensolver rejected an argument");
+    if (info > 0)
+      throw generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                                "CUDA KS seed eigensolver did not converge");
     // The solver emits column-major orbitals; the common admission algebra
     // uses row-major C[ao, orbital]. Symmetric input needs no packing copy.
     for (std::size_t row = 0; row < n; ++row)
@@ -556,7 +560,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     std::string detail;
     if (!scf::solver::validate_eigen_frame(input, nullptr, frame.values, frame.vectors, n,
                                            diagnostic, detail))
-      throw std::runtime_error(detail);
+      throw generativeqc::Error(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, detail);
     return frame;
   }
 
@@ -2331,6 +2335,7 @@ scf::ScfResult CudaKsPlan::run(const std::vector<double>* seed, bool reuse_warm,
   }
   return result(export_density);
 }
+bool CudaKsPlan::has_warm_start() const noexcept { return impl_->warm_ready; }
 std::vector<double> CudaKsPlan::warm_density() {
   if (impl_->is_pending)
     throw std::logic_error("cannot export warm state during a pending iteration");

@@ -1,0 +1,16 @@
+{
+  "legacy_reports": [
+    "benchmarks/results/pbe0-def2-svp-20261003/water3.json.gz",
+    "benchmarks/results/pbe0-def2-svp-20261003/water6.json.gz",
+    "benchmarks/results/pbe0-def2-svp-20261003/water12.json.gz",
+    "benchmarks/results/pbe0-def2-svp-20261003/water24.json.gz",
+    "benchmarks/results/pbe0-def2-svp-20261003/water48.json.gz",
+    "benchmarks/results/pbe0-def2-svp-20261003/water96.json.gz",
+    "benchmarks/results/pbe0-grid-reuse-20261003/water3-native.json.gz",
+    "benchmarks/results/pbe0-grid-reuse-20261003/water6-native.json.gz",
+    "benchmarks/results/pbe0-grid-reuse-20261003/water12-native.json.gz",
+    "benchmarks/results/pbe0-grid-reuse-20261003/water24-native.json.gz",
+    "benchmarks/results/pbe0-grid-reuse-20261003/water48-native.json.gz",
+    "benchmarks/results/pbe0-grid-reuse-20261003/water96-native.json.gz"
+  ]
+}
