@@ -296,6 +296,19 @@ void run_exact_exchange_case(bool restricted) {
   require(incremental_hybrid_bytes > hybrid_bytes,
           "CUDA KS incremental Direct-J/K state is missing from resource admission");
 
+  {
+    auto short_options = options;
+    short_options.max_iterations = 2;
+    dft::CudaKsPlan ordinary_budget(gpu, basis, grid, short_options, dft::SemilocalFamily::Pbe, 257);
+    short_options.incremental_direct_jk = true;
+    dft::CudaKsPlan incremental_budget(gpu, basis, grid, short_options,
+                                       dft::SemilocalFamily::Pbe, 257);
+    require(incremental_budget.resources().retained_host_numeric_bytes >=
+                ordinary_budget.resources().retained_host_numeric_bytes +
+                    4U * sizeof(dft::ScfIteration),
+            "strict incremental CUDA KS omitted bounded final-closure history from resources");
+  }
+
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
   const auto result = plan.run(nullptr, false);
   require(result.converged && !plan.failed(), "CUDA exact-exchange KS did not converge");
@@ -365,6 +378,20 @@ void run_exact_exchange_case(bool restricted) {
               gated_work.anchor_full_builds >= incremental_work.anchor_full_builds &&
               gated_work.post_scf_full_builds > 0,
           "CUDA KS density-RMS gate did not replace early delta J/K with full builds");
+
+  if (restricted) {
+    auto mismatched_options = incremental_options;
+    mismatched_options.screening_tolerance = 0.0;
+    mismatched_options.incremental_direct_jk_rebuild_interval = 0;
+    dft::CudaKsPlan mismatched_plan(gpu, basis, grid, mismatched_options,
+                                    dft::SemilocalFamily::Pbe, 257);
+    const auto mismatched = mismatched_plan.run(nullptr, false);
+    const auto& mismatched_work = mismatched.incremental_direct_jk;
+    require(mismatched.converged && !mismatched_plan.failed() &&
+                std::abs(mismatched.energy - result.energy) < 1e-10 &&
+                mismatched_work.delta_builds > 0 && mismatched_work.periodic_rebuilds > 0,
+            "native CUDA KS options bypassed the prepared provider screening cadence");
+  }
 }
 
 void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true) {
