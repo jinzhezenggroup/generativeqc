@@ -51,7 +51,6 @@ from generativeqc_compiler.integral import (
     evaluate_fused_shell_value,
     schedule_candidates,
 )
-from generativeqc_compiler.integral.capabilities import CAPABILITY_K_BLOCK_FOCK
 from generativeqc_compiler.integral.autotune import (
     _production_fock_schedule_index,
     _requested_schedule_kinds,
@@ -67,6 +66,7 @@ from generativeqc_compiler.integral.benchmark import (
     emit_dppp_benchmark_cuda,
     emit_shell_class_benchmark_cuda,
 )
+from generativeqc_compiler.integral.capabilities import CAPABILITY_K_BLOCK_FOCK
 from generativeqc_compiler.integral.production import (
     _schedule_from_payload,
     load_production_kernel_selections,
