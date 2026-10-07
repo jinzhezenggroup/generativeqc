@@ -11,6 +11,7 @@ from __future__ import annotations
 import functools
 import inspect
 import typing
+
 import numpy as np
 from generativeqc_compiler.array_api import (
     DLPACK_INTEROP_VERSION,
