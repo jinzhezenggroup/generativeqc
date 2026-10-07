@@ -94,8 +94,9 @@ ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& ba
 /** Generic RSH lowering. Fractions are physical exact-exchange weights. */
 FockBuildSpec make_global_hybrid_fock_spec(FockSpin spin, double exact_exchange);
 FockBuildSpec make_rsh_primary_fock_spec(FockSpin spin, double short_range_exchange);
-FockBuildSpec make_rsh_correction_fock_spec(FockSpin spin, double short_range_exchange,
-                                            double long_range_exchange, double omega);
+FockBuildSpec make_rsh_correction_fock_spec(
+    FockSpin spin, double short_range_exchange, double long_range_exchange, double omega,
+    FockApproximation approximation = FockApproximation::Exact);
 
 ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                         const dft::MolecularGrid& grid, const ScfOptions& options,
