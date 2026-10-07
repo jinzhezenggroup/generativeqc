@@ -1483,6 +1483,7 @@ __global__ void {prefix}_node_{number}({",".join(arguments)}){{
     out[0]=generativeqc_tensor::finite({result},error,{number});
 }}"""
 
+
 def _cuda_kernel(
     node: typing.Any,
     number: int,
