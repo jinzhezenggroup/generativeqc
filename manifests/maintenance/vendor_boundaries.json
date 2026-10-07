@@ -401,6 +401,15 @@
         "cusolverDnXsyevjSetTolerance": 1
       }
     },
+    "src/tensor/cuda_reduction.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/cuda_reduction.py",
+      "reason": "Shared strict-FP64 CUDA block reduction provider centralizes CUB ownership so scientific generators consume a backend-neutral tensor primitive.",
+      "references": {
+        "cub::BLOCK_REDUCE_WARP_REDUCTIONS": 1,
+        "cub::BlockReduce": 1
+      }
+    },
     "src/tensor/cuda_contraction.cuh": {
       "classification": "provider",
       "contract": "src/tensor/native_contraction.hpp",
