@@ -377,6 +377,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
   plan->rys_fock_mask = prepare_direct_fock_rys_mask(true) & shared->value_class_mask;
+  const auto exchange_task_schedule = prepare_direct_exchange_task_schedule();
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
   plan->angular_force_opt_in = angular_force;
@@ -499,7 +500,8 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
       plan->system_pair_density_bounds,
       nullptr,
       plan->shared->active,
-      detail::GeneratedFockConsumer::Exchange};
+      detail::GeneratedFockConsumer::Exchange,
+      exchange_task_schedule};
   plan->topology = static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
   if (bounded_resources) {
     launch_reduce_bounded_shell_pair_block_bounds_kernel(
