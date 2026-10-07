@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "generativeqc/generativeqc.h"
+#include "methods/dft_method.hpp"
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/mman.h>
@@ -116,6 +117,27 @@ generativeqc_method_descriptor lda_method() {
           nullptr,
           1.0e-10,
           0};
+}
+
+void dft_result_adapter_preserves_incremental_direct_jk() {
+  generativeqc::scf::ScfResult native;
+  native.fock_builds = 6;
+  native.incremental_direct_jk.requested = true;
+  native.incremental_direct_jk.active = true;
+  native.incremental_direct_jk.anchor_full_builds = 3;
+  native.incremental_direct_jk.delta_builds = 2;
+  native.incremental_direct_jk.post_scf_full_builds = 1;
+  native.incremental_direct_jk.anchor_updates = 2;
+  native.incremental_direct_jk.max_abs_delta_density = 0.125;
+
+  const auto result = generativeqc::methods::detail::adapt_dft_result(
+      std::move(native), GENERATIVEQC_BACKEND_CPU_REFERENCE);
+  const auto& diagnostic = result.incremental_direct_jk;
+  require(result.fock_builds == 6 && diagnostic.requested && diagnostic.active &&
+              diagnostic.anchor_full_builds == 3 && diagnostic.delta_builds == 2 &&
+              diagnostic.post_scf_full_builds == 1 && diagnostic.anchor_updates == 2 &&
+              diagnostic.max_abs_delta_density == 0.125,
+          "DFT result adapter dropped incremental Direct-J/K diagnostics");
 }
 
 void ks_short_method_descriptor_rejected() {
@@ -625,6 +647,7 @@ void mixed_df_rsh_cpu_endpoints() {
 
 int main() {
   try {
+    dft_result_adapter_preserves_incremental_direct_jk();
     ks_short_method_descriptor_rejected();
     ks_option_snapshot();
     ks_option_semantic_plan();
