@@ -18,6 +18,7 @@
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/symmetric_eigen_workspace.hpp"
 
 namespace generativeqc::scf::cuda_df {
 namespace eigen_provider = ::generativeqc::solver::cuda;
@@ -98,20 +99,23 @@ generativeqc_status prepare(CudaDensityFittingJkPlan& plan, OrdinaryEigensystem*
     status = allocate(reinterpret_cast<void**>(&candidate->active), sizeof(std::uint8_t),
                       "allocate ordinary CUDA DF active mask");
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-  eigen_provider::SymmetricEigenWorkspace queried;
-  const auto sized = static_cast<cusolverStatus_t>(eigen_provider::query_symmetric_eigen(
-      plan.eigen_handles.view(), eigen_provider::SymmetricEigenFamily::xsyevd,
-      {static_cast<std::int64_t>(n), 1, eigen_provider::Eigenvectors::values_and_vectors},
-      candidate->matrix, candidate->values, queried));
-  candidate->workspace_bytes = queried.device_bytes;
-  candidate->host_workspace_bytes = queried.host_bytes;
-  if (sized != CUSOLVER_STATUS_SUCCESS)
-    return solver_failure(sized, "size ordinary CUDA DF AO eigensolver", detail);
-  // The shape planner reserves this allowance without querying a GPU. Check
-  // both actual provider requests before either allocation; never borrow an
-  // opaque-library allowance or silently exceed the admitted numeric capacity.
+  const eigen_provider::SymmetricEigenQueryRange range{
+      1, 1, eigen_provider::Eigenvectors::values_and_vectors};
+  eigen_provider::PreparedSymmetricEigenWorkspace prepared;
+  const auto sized = eigen_provider::prepare_symmetric_eigen_workspace(
+      plan.eigen_handles.view(),
+      {eigen_provider::SymmetricEigenFamily::xsyevd, static_cast<std::int64_t>(n), &range, 1},
+      candidate->matrix, candidate->values, prepared);
+  if (!sized.success())
+    return solver_failure(sized.error == eigen_provider::EigenWorkspaceError::provider_failure
+                              ? static_cast<cusolverStatus_t>(sized.provider_status)
+                              : CUSOLVER_STATUS_INTERNAL_ERROR,
+                          "size ordinary CUDA DF AO eigensolver", detail);
+  candidate->workspace_bytes = prepared.required().device_bytes;
+  candidate->host_workspace_bytes = prepared.required().host_bytes;
+  // Both provider requests are bounded before either workspace allocation.
   const auto allowance = df_eigen_workspace_allowance(n);
-  if (candidate->workspace_bytes > allowance || candidate->host_workspace_bytes > allowance) {
+  if (prepared.admit({allowance, allowance}) != eigen_provider::EigenWorkspaceAdmission::accepted) {
     detail = "ordinary CUDA DF eigensolver exceeds its admitted workspace allowance: device=" +
              std::to_string(candidate->workspace_bytes) +
              ", host=" + std::to_string(candidate->host_workspace_bytes) +

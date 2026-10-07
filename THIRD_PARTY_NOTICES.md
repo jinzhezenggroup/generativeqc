@@ -43,8 +43,9 @@ third-party notices remain in that directory. See
 and adapted CUDA source hashes. Native identity and compiler replacements do
 not remove the attribution or change the licenses of retained source/data.
 The shared prepared provider-handle lifecycle in
-`src/solver/cuda/symmetric_eigen_handles.cpp` also consolidates lifecycle code
-from that adaptation. The original GPL-3.0-or-later and scoped additional
+`src/solver/cuda/symmetric_eigen_handles.cpp` and workspace preparation in
+`src/solver/cuda/symmetric_eigen_workspace.cpp` also consolidate lifecycle and
+workspace-sizing code from that adaptation. The original GPL-3.0-or-later and scoped additional
 permission remain applicable to the xTBloom portions; this ownership cutover
 does not relicense them.
 

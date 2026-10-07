@@ -40,9 +40,10 @@ struct SymmetricEigenWorkspace {
 };
 
 /** Query exactly one shape/mode/capacity. Jacobi reports elements, generic
- * providers report bytes; callers retain their existing conversion/validation
- * and capacity aggregation order. No new shape query is introduced. An unknown
- * internal family returns provider invalid-value status without submission. */
+ * providers report bytes. The prepared workspace service owns checked conversion
+ * and ordered domain aggregation above this one-query ABI. No new shape query
+ * is introduced. An unknown internal family returns provider invalid-value
+ * status without submission. */
 std::uint32_t query_symmetric_eigen(const SymmetricEigenResources& resources,
                                     SymmetricEigenFamily family,
                                     const SymmetricEigenProblem& problem, const double* matrix,
