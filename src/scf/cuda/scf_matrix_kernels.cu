@@ -163,16 +163,19 @@ __global__ void subtract_matrix_batches_kernel(std::int32_t batch_size,
 
 /**
  * Build ΔD against the last accepted exact-linear anchor. A 0xffffffff update
- * count denotes the first build; later full rebuilds happen only after the
- * configured number of delta applications. Resetting the Fock anchor to hcore
- * makes the downstream builder usable for both cases: it always computes
- * hcore + G(input).
+ * count denotes the first build. Later full rebuilds happen after the configured
+ * number of delta applications or while the previous accepted density RMS is
+ * still above the late-SCF gate. Resetting the Fock anchor to hcore makes the
+ * downstream builder usable for both cases: it always computes hcore + G(input).
  */
 __global__ void prepare_incremental_direct_jk_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf,
-    std::uint32_t rebuild_interval, const double* density, const double* hcore,
-    const std::uint8_t* active, double* anchor_density, double* anchor_fock, double* delta_density,
-    std::uint32_t* delta_updates, std::uint8_t* full_build, double* max_abs_delta_density) {
+    std::uint32_t rebuild_interval, double density_rms_threshold, const double* density_rms,
+    const double* density, const double* hcore, const std::uint8_t* active,
+    double* anchor_density, double* anchor_fock, double* delta_density,
+    std::uint32_t* delta_updates, std::uint8_t* full_build,
+    unsigned long long* full_build_count, unsigned long long* delta_build_count,
+    double* max_abs_delta_density) {
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = static_cast<std::size_t>(spin_count) * matrix_size;
   const std::size_t total = static_cast<std::size_t>(batch_size) * vector_size;
@@ -183,9 +186,22 @@ __global__ void prepare_incremental_direct_jk_kernel(
   const std::size_t local = element % vector_size;
   const std::size_t physical_element = element % matrix_size;
   const std::uint32_t updates = delta_updates[system];
-  const bool rebuild =
-      updates == 0xffffffffU || (rebuild_interval != 0U && updates >= rebuild_interval);
-  if (local == 0U) full_build[system] = rebuild ? 1U : 0U;
+  const bool first_build = updates == 0xffffffffU;
+  const bool periodic_rebuild =
+      !first_build && rebuild_interval != 0U && updates >= rebuild_interval;
+  bool density_rebuild = false;
+  if (!first_build && density_rms_threshold > 0.0) {
+    const double previous_rms = density_rms[system];
+    density_rebuild = !isfinite(previous_rms) || previous_rms > density_rms_threshold;
+  }
+  const bool rebuild = first_build || periodic_rebuild || density_rebuild;
+  if (local == 0U) {
+    full_build[system] = rebuild ? 1U : 0U;
+    if (rebuild)
+      full_build_count[system] += 1ULL;
+    else
+      delta_build_count[system] += 1ULL;
+  }
 
   const double current = density[element];
   const double delta = rebuild ? current : current - anchor_density[element];
@@ -305,12 +321,15 @@ void launch_subtract_matrix_batches_kernel(dim3 grid, dim3 block, std::size_t sh
 void launch_prepare_incremental_direct_jk_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
     std::int32_t spin_count, std::int32_t nbf, std::uint32_t rebuild_interval,
-    const double* density, const double* hcore, const std::uint8_t* active, double* anchor_density,
-    double* anchor_fock, double* delta_density, std::uint32_t* delta_updates,
-    std::uint8_t* full_build, double* max_abs_delta_density) {
+    double density_rms_threshold, const double* density_rms, const double* density,
+    const double* hcore, const std::uint8_t* active, double* anchor_density, double* anchor_fock,
+    double* delta_density, std::uint32_t* delta_updates, std::uint8_t* full_build,
+    unsigned long long* full_build_count, unsigned long long* delta_build_count,
+    double* max_abs_delta_density) {
   prepare_incremental_direct_jk_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, rebuild_interval, density, hcore, active, anchor_density,
-      anchor_fock, delta_density, delta_updates, full_build, max_abs_delta_density);
+      batch_size, spin_count, nbf, rebuild_interval, density_rms_threshold, density_rms, density,
+      hcore, active, anchor_density, anchor_fock, delta_density, delta_updates, full_build,
+      full_build_count, delta_build_count, max_abs_delta_density);
 }
 
 void launch_finalize_incremental_direct_jk_kernel(
