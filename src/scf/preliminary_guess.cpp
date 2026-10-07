@@ -155,11 +155,13 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   if (options.kind == PreliminaryKind::Minao) {
     const auto source_n = minao_source_ao_count(system);
     const auto source_primitives = minao_source_primitive_count(system);
-    // X + output density, two rectangular projection buffers, occupations and
-    // raw source primitive pairs. Target S/Hcore/provider storage is retained
-    // by the immutable target owner and intentionally excluded here.
-    auto doubles = checked_add(checked_mul(2, n2), checked_mul(2, checked_mul(n, source_n)));
+    // X, raw projected D and normalized output D can coexist at the seed
+    // admission boundary. Two rectangular projection buffers, occupations,
+    // source coordinates and raw source primitive pairs complete the numeric
+    // payload. Target S/Hcore/provider storage belongs to the target owner.
+    auto doubles = checked_add(checked_mul(3, n2), checked_mul(2, checked_mul(n, source_n)));
     doubles = checked_add(doubles, source_n);
+    doubles = checked_add(doubles, checked_mul(3, system.atoms.size()));
     auto bytes = checked_mul(sizeof(double), doubles);
     bytes = checked_add(bytes, checked_mul(2 * sizeof(double), source_primitives));
     if (bytes > static_cast<std::uint64_t>(INT64_MAX))
