@@ -250,15 +250,15 @@ def compile(
     *,
     backend: str = "reference",
     differentiable: tuple[str, ...] = (),
-) -> CompiledFunction | typing.Callable[[typing.Callable[..., object]], CompiledFunction]:
+) -> (
+    CompiledFunction | typing.Callable[[typing.Callable[..., object]], CompiledFunction]
+):
     """Capture a normal array function lazily from its first concrete signature."""
     if function is None:
         return lambda target: CompiledFunction(
             target, backend=backend, differentiable=differentiable
         )
-    return CompiledFunction(
-        function, backend=backend, differentiable=differentiable
-    )
+    return CompiledFunction(function, backend=backend, differentiable=differentiable)
 
 
 def capabilities() -> dict[str, object]:
