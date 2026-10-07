@@ -158,8 +158,9 @@ MinaoDensityResult minao_density(const core::System& system,
                    [](double value) { return std::isfinite(value); }))
     throw std::runtime_error("MINAO projection produced a nonfinite density");
 
+  const double projected_electrons = electron_trace(density, target.overlap, n);
   return {std::move(density), ns, source.primitive_count, source_electrons,
-          electron_trace(density, target.overlap, n)};
+          projected_electrons};
 }
 
 }  // namespace generativeqc::scf::initial_guess
