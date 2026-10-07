@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,11 +25,12 @@ def test_compact_source_admission(tmp_path: Path) -> None:
         '#pragma once\n#include "cuda_runtime_api.h"\nstruct dim3 { unsigned x=1,y=1,z=1; };\n'
     )
     (tmp_path / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t=void*;\n")
-    (tmp_path / "cusolverDn.h").write_text(SOLVER_API)
+    eigen_units = empty_eigen_owner_units(tmp_path)
     objects = []
     for name, source in (
         ("handoff", ROOT / "src/scf/cuda/rhf_source_handoff.cpp"),
         ("probe", ROOT / "tests/native/test_rhf_compact_source_admission.cpp"),
+        *((unit.stem, unit) for unit in eigen_units),
     ):
         obj = tmp_path / f"{name}.o"
         result = subprocess.run(
@@ -90,12 +92,4 @@ const char* cudaGetErrorString(cudaError_t);
 cudaError_t cudaStreamCreateWithFlags(cudaStream_t*,unsigned);
 cudaError_t cudaStreamSynchronize(cudaStream_t);
 cudaError_t cudaMemcpyAsync(void*,const void*,std::size_t,cudaMemcpyKind,cudaStream_t);
-"""
-
-SOLVER_API = r"""
-#pragma once
-using cusolverDnHandle_t=void*; using cusolverDnParams_t=void*; using syevjInfo_t=void*;
-using cusolverStatus_t=int; using cusolverEigMode_t=int; using cublasFillMode_t=int;
-using cudaDataType=int;
-int cusolverDnXsyevBatched(...); int cusolverDnXsyevBatched_bufferSize(...);
 """

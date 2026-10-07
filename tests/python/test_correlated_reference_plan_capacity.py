@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -39,12 +40,7 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     (directory / "cublas_v2.h").write_text(
         "#pragma once\nusing cublasHandle_t=void*;\n"
     )
-    (directory / "cusolverDn.h").write_text(
-        "#pragma once\nusing cusolverDnHandle_t=void*; using cusolverDnParams_t=void*; "
-        "using syevjInfo_t=void*; using cusolverStatus_t=int; using cusolverEigMode_t=int; "
-        "using cublasFillMode_t=int; using cudaDataType=int; "
-        "int cusolverDnXsyevBatched(...); int cusolverDnXsyevBatched_bufferSize(...);\n"
-    )
+    eigen_units = empty_eigen_owner_units(directory)
     # The actual topology packer consumes this compiler-owned schedule.
     from generativeqc_compiler.integral.direct_resident_schedule import (
         emit_direct_resident_psss_schedule_header,
@@ -99,6 +95,7 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ROOT / "src/scf/cuda/rhf_bucket.cpp",
         ROOT / "src/scf/cuda/topology.cpp",
         ROOT / "src/molecule/basis.cpp",
+        *eigen_units,
     ):
         target = directory / (unit.stem + ".o")
         result = subprocess.run(
