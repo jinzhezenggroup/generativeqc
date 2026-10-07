@@ -80,6 +80,10 @@ source, runs Direct/DF-JK ABBA processes for 48-atom water and formaldehyde,
 and collects separate intrusive profiles. Its terminal `NATIVE_RECORDED` is
 only a work-completeness statement; independent PySCF E+force oracles and
 fail-closed pair summaries are required afterward.
+`qualify_oracles.py` runs each eligible native record's PySCF reference in a
+fresh bounded CPU process, writes `NOT_RUN` for failed Direct 48 attempts,
+retains timeouts/crashes and all per-pair `INCOMPLETE` or accepted summaries,
+and never converts a platform `SUCCEEDED` state into scientific acceptance.
 
 ```bash
 python tools/benchmark_hybrid_provider_crossover.py run-campaign \
