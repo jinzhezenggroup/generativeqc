@@ -405,19 +405,24 @@ int main(int argc, char** argv) {
 }
 """
     )
+    object_file = directory / "callbacks.o"
     executable = directory / "callbacks"
-    command = [
+    compile_command = [
         launcher,
         compiler,
         "-std=c++20",
         "-O0",
         "-I" + str(directory),
+        "-c",
         str(source),
         "-o",
-        str(executable),
+        str(object_file),
     ]
-    print("compiler-cache command:", " ".join(command))
-    subprocess.run(command, check=True, capture_output=True, text=True)
+    print("compiler-cache command:", " ".join(compile_command))
+    subprocess.run(compile_command, check=True, capture_output=True, text=True)
+    link_command = [compiler, str(object_file), "-o", str(executable)]
+    print("link command:", " ".join(link_command))
+    subprocess.run(link_command, check=True, capture_output=True, text=True)
     after = subprocess.run(
         [launcher, "--show-stats"], check=True, capture_output=True, text=True
     ).stdout
