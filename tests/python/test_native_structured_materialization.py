@@ -2,9 +2,11 @@
 
 import hashlib
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.audit_structured_materialization import audit_native, audit_tree, main
 
@@ -402,6 +404,100 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
             self.assertEqual(report["findings"], [])
             self.assertEqual(report["provenance"]["source_hashes"], {})
 
+    def _git(self, root: Path, *args: str) -> None:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.symlinks=true",
+                "-c",
+                "user.name=Provenance fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                *args,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_alias_scan_detects_modified_untracked_and_ignored_canonical_sources(
+        self,
+    ) -> None:
+        for state in ("modified", "untracked", "ignored"):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source = root / "actual.cpp"
+                source.write_text(producer(OV), encoding="utf-8")
+                self._symlink(root / "alias.cpp", source)
+                self._git(root, "init", "-q")
+                self._git(root, "add", "--", "alias.cpp")
+                if state == "modified":
+                    self._git(root, "add", "--", "actual.cpp")
+                elif state == "ignored":
+                    (root / ".gitignore").write_text("actual.cpp\n", encoding="utf-8")
+                    self._git(root, "add", "--", ".gitignore")
+                self._git(root, "commit", "-qm", "provenance fixture")
+                if state == "modified":
+                    source.write_text(producer(OV) + "\n// changed\n", encoding="utf-8")
+                report = audit_tree(root, ("alias.cpp",))
+                self.assertIs(report["provenance"]["scanned_source_dirty"], True)
+                self.assertEqual(
+                    report["provenance"]["source_hashes"]["actual.cpp"],
+                    hashlib.sha256(source.read_bytes()).hexdigest(),
+                )
+
+    def test_clean_ordinary_source_is_false_but_alias_topology_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "actual.cpp"
+            source.write_text(producer(OV), encoding="utf-8")
+            self._symlink(root / "alias.cpp", source)
+            self._symlink(root / "chain.cpp", root / "alias.cpp")
+            self._git(root, "init", "-q")
+            self._git(root, "add", "--", "actual.cpp", "alias.cpp", "chain.cpp")
+            self._git(root, "commit", "-qm", "provenance fixture")
+            ordinary = audit_tree(root, ("actual.cpp",))["provenance"]
+            self.assertIs(ordinary["scanned_source_dirty"], False)
+            for selected in ("alias.cpp", "chain.cpp"):
+                with self.subTest(selected=selected):
+                    alias = audit_tree(root, (selected,))["provenance"]
+                    self.assertIsNone(alias["scanned_source_dirty"])
+                    self.assertIs(alias["alias_topology_unverified"], True)
+
+    def test_broken_recursive_source_link_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_dir = root / "src"
+            source_dir.mkdir()
+            self._symlink(source_dir / "broken.cpp", source_dir / "missing.cpp")
+            with self.assertRaises(ValueError):
+                audit_tree(root, ("src",))
+
+    def test_missing_git_preserves_hashes_with_unknown_git_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "actual.cpp"
+            source.write_text(producer(OV), encoding="utf-8")
+            with patch(
+                "tools.audit_structured_materialization.subprocess.run",
+                side_effect=FileNotFoundError("git unavailable"),
+            ):
+                provenance = audit_tree(root, ("actual.cpp",))["provenance"]
+            for field in (
+                "commit",
+                "tree",
+                "working_tree_dirty",
+                "scanned_source_dirty",
+            ):
+                self.assertIsNone(provenance[field])
+            self.assertEqual(
+                provenance["source_hashes"]["actual.cpp"],
+                hashlib.sha256(source.read_bytes()).hexdigest(),
+            )
+
     def test_cli_identities_duplicate_inputs_and_missing_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -423,6 +519,8 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
             )
             report = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(report["scanned_files"], 1)
+            self.assertIsNone(report["provenance"]["scanned_source_dirty"])
+            self.assertIs(report["provenance"]["alias_topology_unverified"], False)
             self.assertEqual(
                 report["provenance"]["source_hashes"]["fixture.cpp"],
                 hashlib.sha256(source.read_bytes()).hexdigest(),

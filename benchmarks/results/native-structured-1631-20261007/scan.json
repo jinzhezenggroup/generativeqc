@@ -582,14 +582,15 @@
     "No runtime bytes, timings, speedup, production role or dense-oracle size gate is inferred."
   ],
   "provenance": {
-    "commit": "8475863d08ff2ebb86247d5fc9dd5176ca16caed",
+    "alias_topology_unverified": false,
+    "commit": "300c6da529e03211433613605c8cf999e0de5e4c",
     "scanned_source_digest": "5880d2d5676b60af84e97d5601828ec15640a62f37b51d6722d7299e17a8b625",
     "scanned_source_dirty": false,
-    "scanner_digest": "82c41a3c9333013651c30681c9f3304243493f81aa3c3148d653d63a3f4a07c3",
+    "scanner_digest": "3317783704a3abb15922273a9ec5521e913ce4cb683c4da3746c0590f732fae2",
     "scanner_hashes": {
       "audit_native_complexity.py": "12c30a1446d106459326f23c46e26d68a66f20434e12b4cd7d73f4b7f725425b",
       "audit_native_work.py": "d70ab323fbaab31ad9feef8941e28390edd1a84e622dedbe099f121a2f5cfb90",
-      "audit_structured_materialization.py": "a8bcd156abccb3ca82641821b595716d24217328a949444d44716d2bd69a29e7"
+      "audit_structured_materialization.py": "74ec10d77c13a8f7bfa1cb5bd581c4e7518f157dd1c2028c8be3389b47b9b6fc"
     },
     "source_hashes": {
       "src/posthf/mp2_derivative_common.cpp": "27eaade6f2d323082c641901196fb2ebbb1a233890a6e21a18a66485b758d3ae",
@@ -603,7 +604,7 @@
       "src/posthf/mp2_force.cpp",
       "src/posthf/mp2_derivative_common.cpp"
     ],
-    "tree": "96152a42844989bfffb9d178c8b7738a0411eac9",
+    "tree": "288681eccf56868c193df85ab26b2dd20001a08b",
     "working_tree_dirty": true
   },
   "scanned_files": 4,

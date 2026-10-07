@@ -73,3 +73,12 @@ offsets were compared by spelling. Use the same bounded polynomial equality for
 offset partitions and canonicalize proved-zero offsets before full-domain and
 triangle decisions. Dense alias regressions check the classification and absence
 of storage advice, with independent small-shape address enumeration.
+
+Git-backed probes independently reproduced clean claims for a committed alias
+whose canonical source was modified, untracked or ignored, plus silent omission
+of a broken descendant link. Check selected and canonical paths in bounded
+literal-pathspec batches with ignored/untracked status. Known changes remain
+`true`; any unverified alias topology or unavailable Git evidence stays `null`
+unless a change is known. Endpoint identities cannot prove intermediate alias
+topology unchanged. Strict descendant resolution rejects broken links before
+inventory filtering.

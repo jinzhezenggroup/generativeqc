@@ -1,7 +1,7 @@
 # Native structured materialization source receipt
 
-Source commit: `8475863d08ff2ebb86247d5fc9dd5176ca16caed`.
-Source tree: `96152a42844989bfffb9d178c8b7738a0411eac9`.
+Source commit: `300c6da529e03211433613605c8cf999e0de5e4c`.
+Source tree: `288681eccf56868c193df85ab26b2dd20001a08b`.
 The scanned files are unchanged from that source commit. The scanner correction
 was uncommitted during receipt generation; `scan.json` binds its exact bytes
 and both imported scanner modules with SHA-256. This is a local Windows source
@@ -43,7 +43,8 @@ The PR uses **Refs #1631** and leaves the parent issue open.
 
 This corrected receipt supersedes the initial scanner snapshot after repairing
 immutable extent alias/full-domain equality, constant-domain growth, zero-offset
-alias classification and recursive source-link containment/deduplication. The
+alias classification, recursive source-link containment/deduplication and
+canonical-source dirty-state provenance. The
 initial receipt is retained in commit `a947a002f`; its scientific-source commit
 was `d2593148661f0b491b6254a59779017c21ac74f4`. All four MP2 files are identical
 across those source commits; only a real scanner change caused regeneration.
@@ -55,7 +56,10 @@ initially passed: **156 tests and 34 subtests**. After the alias/growth correcti
 the same suite passed **159 tests and 40 subtests**. After the recursive-source
 correction, it passed **162 tests and 40 subtests** with all three real-symlink
 regressions executed. After the zero-offset correction, it passed **164 tests and
-43 subtests** (24 new-tool unittest cases). The first rerun hit a Windows
+43 subtests**. After the canonical provenance correction, it passed **168 tests
+and 48 subtests** (28 new-tool unittest cases), including real Git/symlink probes
+for modified, untracked and ignored canonical files, clean alias uncertainty,
+broken descendant links and unavailable Git. The first rerun hit a Windows
 permission error in pytest's shared temporary directory; a fresh task-specific
 temporary directory resolved it. The tool can run without pytest or a native
 build. The default CLI also completed an

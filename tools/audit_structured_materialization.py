@@ -634,14 +634,21 @@ def audit_tree(
     sources: dict[str, str] = {}
     findings = []
     candidates: set[Path] = set()
+    alias_topology_unverified = False
     for path in paths:
-        target = (root / path).resolve()
+        selected = root / path
+        target = selected.resolve()
+        alias_topology_unverified |= selected != target
         target.relative_to(root)
         if not target.exists():
             raise ValueError(f"missing input path: {path}")
         for candidate in [target] if target.is_file() else target.rglob("*"):
-            resolved = candidate.resolve()
+            try:
+                resolved = candidate.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                raise ValueError(f"unresolved input path: {candidate}") from error
             resolved.relative_to(root)
+            alias_topology_unverified |= candidate != resolved
             candidates.add(resolved)
     for source in sorted(candidates):
         relative = source.relative_to(root).as_posix()
@@ -656,9 +663,17 @@ def audit_tree(
         findings.extend(audit_native(data.decode("utf-8", errors="replace"), relative))
 
     def git(*args: str) -> str | None:
-        result = subprocess.run(
-            ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
-        )
+        try:
+            result = subprocess.run(
+                ["git", "--literal-pathspecs", "-C", str(root), *args],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError:
+            return None
         return result.stdout.strip() if result.returncode == 0 else None
 
     scanners = {
@@ -670,7 +685,25 @@ def audit_tree(
         )
     }
     dirty = git("status", "--porcelain")
-    source_dirty = git("status", "--porcelain", "--", *paths)
+    # Endpoint status cannot prove the intermediate symlink topology unchanged.
+    # Known changes still take precedence over that uncertainty or a failed query.
+    source_dirty: bool | None = (
+        None if dirty is None or alias_topology_unverified else False
+    )
+    status_paths = sorted(set(paths) | sources.keys())
+    for begin in range(0, len(status_paths), 32):
+        status = git(
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--ignored",
+            "--",
+            *status_paths[begin : begin + 32],
+        )
+        if status:
+            source_dirty = True
+        elif status is None and source_dirty is not True:
+            source_dirty = None
     return {
         "schema": "generativeqc.native-structured-materialization.v1",
         "advisory_only": True,
@@ -678,9 +711,8 @@ def audit_tree(
             "commit": git("rev-parse", "HEAD"),
             "tree": git("rev-parse", "HEAD^{tree}"),
             "working_tree_dirty": None if dirty is None else bool(dirty),
-            "scanned_source_dirty": None
-            if source_dirty is None
-            else bool(source_dirty),
+            "scanned_source_dirty": source_dirty,
+            "alias_topology_unverified": alias_topology_unverified,
             "source_hashes": sources,
             "scanner_hashes": scanners,
             "scanned_source_digest": hashlib.sha256(

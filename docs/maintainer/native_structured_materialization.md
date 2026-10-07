@@ -16,6 +16,11 @@ deduplication; overlapping inputs and same-root symlink aliases are scanned once
 The JSON includes byte SHA-256 identities for all scanned sources and all three
 consumed scanner modules, Git commit/tree, and source/working-tree dirty state.
 Line endings affect byte identities; compare receipts using their recorded bytes.
+Source dirty state checks both selected paths and canonical source paths, including
+ignored and untracked sources. Known changes yield `true`. Unverified symlink
+topology or unavailable Git evidence yields `null` unless a change is already
+known; `false` requires clean ordinary paths. `alias_topology_unverified` records
+that topology boundary. Broken descendant links are errors.
 
 ## Supported certificates
 
