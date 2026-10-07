@@ -5,9 +5,16 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
+import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
+from generativeqc_compiler.method.df_exchange_schedule import (
+    native_header,
+    projected_exchange_schedule,
+)
 
 from tools.audit_producer_work import (
     ReceiptError,
@@ -77,6 +84,11 @@ def test_source_driven_once_and_nested_consumer_amplification() -> None:
     assert once["work"]["executed_elements"] == once["work"]["logical_elements"]
     assert nested["work"]["executed_elements"] > nested["work"]["logical_elements"]
     assert nested["work"]["outer_consumer_multiplicity"] > 1
+
+
+def test_unadmitted_budget_fails_closed() -> None:
+    with pytest.raises(ReceiptError, match="not admitted"):
+        schedule(capacity=1)
 
 
 @pytest.mark.parametrize(
@@ -331,3 +343,133 @@ def test_exact_ratio_and_legitimate_recomputation() -> None:
     assert result["status"] == "FAIL"
     assert result["executed_ratio"] == "1/1"
     assert result["callback_ratio"] == "5/4"
+
+
+@pytest.fixture(scope="module")
+def native_callbacks(tmp_path_factory: Any) -> Any:
+    compiler = shutil.which("c++")
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if not compiler or not launcher:
+        pytest.skip(
+            "host C++ and verified sccache/ccache required for native callback census"
+        )
+    subprocess.run([launcher, "--version"], check=True, capture_output=True, text=True)
+    before = subprocess.run(
+        [launcher, "--show-stats"], check=True, capture_output=True, text=True
+    ).stdout
+    directory = tmp_path_factory.mktemp("producer-work-native")
+    (directory / "generated_df_exchange_schedule.hpp").write_text(native_header())
+    source = directory / "callbacks.cpp"
+    source.write_text(
+        r"""
+#include <algorithm>
+#include <cstddef>
+#include <cstdlib>
+#include <iostream>
+#include <vector>
+#include "generated_df_exchange_schedule.hpp"
+
+int main(int argc, char** argv) {
+  if (argc != 4) return 1;
+  const auto n = static_cast<std::size_t>(std::strtoull(argv[1], nullptr, 10));
+  const auto rows = static_cast<std::size_t>(std::strtoull(argv[2], nullptr, 10));
+  const bool triangular = argv[3][0] == '1';
+  std::size_t begins[2] = {n, n}, counts[2] = {0, 0};
+  std::size_t generated = 0, callbacks = 0;
+  std::vector<int> coverage(n * n, 0);
+  const bool ok = generativeqc::scf::generated::visit_projected_exchange(
+      n, rows, triangular,
+      [&](std::size_t begin, std::size_t count, std::size_t slot) {
+        if (slot >= 2 || !count || begin + count > n) return false;
+        begins[slot] = begin;
+        counts[slot] = count;
+        generated += count;
+        ++callbacks;
+        return true;
+      },
+      [&](std::size_t r, std::size_t nr, std::size_t c, std::size_t nc,
+          std::size_t left, std::size_t right, bool) {
+        if (left >= 2 || right >= 2 || begins[left] != r || counts[left] != nr ||
+            begins[right] != c || counts[right] != nc) return false;
+        for (std::size_t i = r; i < r + nr; ++i)
+          for (std::size_t j = c; j < c + nc; ++j) {
+            if (++coverage[i * n + j] != 1) return false;
+            if (triangular && r != c && ++coverage[j * n + i] != 1) return false;
+          }
+        return true;
+      });
+  if (!ok || std::any_of(coverage.begin(), coverage.end(),
+                         [](int value) { return value != 1; })) return 2;
+  std::cout << generated << ' ' << callbacks << '\n';
+  return 0;
+}
+"""
+    )
+    executable = directory / "callbacks"
+    command = [
+        launcher,
+        compiler,
+        "-std=c++20",
+        "-O0",
+        "-I" + str(directory),
+        str(source),
+        "-o",
+        str(executable),
+    ]
+    print("compiler-cache command:", " ".join(command))
+    subprocess.run(command, check=True, capture_output=True, text=True)
+    after = subprocess.run(
+        [launcher, "--show-stats"], check=True, capture_output=True, text=True
+    ).stdout
+    print("compiler-cache before:\n", before)
+    print("compiler-cache after:\n", after)
+
+    def query(n: int, rows: int, triangular: bool) -> tuple[int, int]:
+        result = subprocess.run(
+            [str(executable), str(n), str(rows), str(int(triangular))],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return tuple(map(int, result.stdout.split()))
+
+    return query
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (12, 5, 2, 120, True),
+        (12, 5, 2, 48, True),
+        (12, 5, 2, 48, False),
+        (13, 7, 3, 84, True),
+    ],
+)
+def test_native_callback_census_matches_production_schedule(
+    native_callbacks: Any, shape: tuple[int, int, int, int, bool]
+) -> None:
+    n, auxiliaries, rank, capacity, triangular = shape
+    receipt = schedule(
+        n=n,
+        auxiliaries=auxiliaries,
+        rank=rank,
+        capacity=capacity,
+        dense_row_blocks=4,
+        dense_output_blocks=4,
+        triangular=triangular,
+    )
+    policy = projected_exchange_schedule(
+        n, auxiliaries, rank, capacity, 4, 4, triangular
+    )
+    assert native_callbacks(n, policy.rows, triangular) == (
+        receipt["work"]["executed_elements"],
+        receipt["work"]["producer_callbacks"],
+    )
+
+
+def test_native_callback_rejects_invalid_rows(native_callbacks: Any) -> None:
+    # The production visitor must reject invalid widths before any callback.
+    with pytest.raises(subprocess.CalledProcessError):
+        native_callbacks(12, 0, True)
+    with pytest.raises(subprocess.CalledProcessError):
+        native_callbacks(12, 13, True)

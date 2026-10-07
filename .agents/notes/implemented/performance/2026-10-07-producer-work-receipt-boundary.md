@@ -40,7 +40,10 @@ source-bound work-growth detection, exact ratios, ownership mismatch,
 legitimate unproven recomputation, and incomplete native-counter adaptation.
 The existing `test_df_projected_exchange_schedule.py` separately exercises
 the emitted native callback traversal and two-slot lifetime when a host C++
-compiler is available.
+compiler is available. The producer-work test also compiles and runs the
+generated callback visitor through a verified compiler-cache launcher, and
+checks full/triangular tails, two-slot residence, invalid widths, and the
+production census.
 
 ## Revisit when
 
