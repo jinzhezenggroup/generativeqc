@@ -166,6 +166,14 @@ def audit(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-sha", required=True)
+    parser.add_argument(
+        "--fail-on-work-growth",
+        action="store_true",
+        help=(
+            "Fail CI for comparable source-bound increases in DF producer work; "
+            "retain INCOMPLETE as a visible advisory result, never a PASS."
+        ),
+    )
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -188,6 +196,12 @@ def main(argv: list[str] | None = None) -> int:
             f"::warning::Static DF producer-work ratchet {report['status']} "
             "(see artifact); not a numerical or runtime result"
         )
+    # A normal standalone invocation fails closed on INCOMPLETE. The opt-in CI
+    # mode blocks only a proven *comparison* of source-bound static work counts;
+    # changed imports, missing Git history and unsupported schedules cannot be
+    # silently called PASS or used to reject an unrelated PR.
+    if args.fail_on_work_growth:
+        return 1 if report["status"] == "FAIL" else 0
     return 0 if report["status"] == "PASS" else 1
 
 
