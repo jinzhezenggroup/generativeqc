@@ -25,17 +25,17 @@ from .ir import TRANSCENDENTALS
 from .scaled_arithmetic import emit_scaled_bilinear
 
 
-def _integer(value: typing.Any) -> typing.Any:
+def _integer(value: typing.Any) -> str:
     return f"{value}LL"
 
 
-def _coordinate(linear: typing.Any, shape: typing.Any, axis: typing.Any) -> typing.Any:
+def _coordinate(linear: typing.Any, shape: typing.Any, axis: typing.Any) -> str:
     # Empty kernels/accessors are never executed, but CUDA still compiles
     # their bodies. Avoid constant division by zero even in unreachable code.
     return f"(({linear}) / {_integer(max(1, prod(shape[axis + 1 :])))} % {_integer(max(1, shape[axis]))})"
 
 
-def _flat(coordinates: typing.Any, shape: typing.Any) -> typing.Any:
+def _flat(coordinates: typing.Any, shape: typing.Any) -> str:
     return (
         " + ".join(
             f"({coord}) * {_integer(stride)}"
@@ -101,7 +101,7 @@ def _reduce_source_index(
         else:
             source.append(output_coordinates[cursor])
             cursor += 1
-    return _flat(source, source_shape), prod(reduction_shape)
+    return _flat(source, source_shape), int(prod(reduction_shape))
 
 
 def _einsum_reduction_term(
@@ -150,7 +150,7 @@ def _einsum_reduction_term(
     term = values[0]
     for value in values[1:]:
         term = f"{mul}({term}, {value})"
-    return term, prod(reduction_shape)
+    return term, int(prod(reduction_shape))
 
 
 def _convert(value: str, source: typing.Any, target: typing.Any) -> str:
@@ -407,6 +407,8 @@ def _packing_kernels(
 ) -> typing.Any:
     step = plan.steps[i]
     g = gemm_contract(step.node)
+    if g is None:
+        raise ValueError("packing requires a GEMM contract")
     scalar = scalar_type(step.node.spec.dtype)
     ty, mul = scalar.ctype, scalar.intrinsic("mul")
     width = plan.schedule.staging_width
@@ -621,6 +623,8 @@ def _launch(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.
         work_items = (node.spec.size + width - 1) // width
         return f"ctx.section(profile, metrics.kernel_ms, [&] {{ {prefix}kernel_{i}<<<blocks({work_items}LL, {threads}), {threads}, 0, ctx.stream>>>(p, ctx.error); cuda_check(cudaGetLastError()); }});"
     g = gemm_contract(node)
+    if g is None:
+        raise ValueError("GEMM step requires a valid contraction")
     if not g.k:
         return f"ctx.section(profile, metrics.kernel_ms, [&] {{ cuda_check(cudaMemsetAsync({pointer}, 0, {node.spec.size * node.spec.itemsize}ULL, ctx.stream)); }});"
     if step.gemm.startswith("direct-"):
@@ -698,7 +702,11 @@ def emit_cuda(
         ):
             raise ValueError("materialized tensor layout must match its logical shape")
     for i in (*plan.inputs, *(index for _, index in plan.outputs)):
-        if plan.steps[i].virtual or not plan.steps[i].layout.is_c_contiguous:
+        if (
+            plan.steps[i].virtual
+            or plan.steps[i].layout is None
+            or not plan.steps[i].layout.is_c_contiguous
+        ):
             raise ValueError("tensor ABI inputs and outputs must use logical C-order")
 
     if not isinstance(symbol_prefix, str) or (
@@ -734,6 +742,8 @@ def emit_cuda(
         scalar = None if node.spec.dtype == "int64" else scalar_type(node.spec.dtype)
         ty = "I" if scalar is None else scalar.ctype
         if embed_static_data and node.op == "constant" and node.spec.size:
+            if scalar is None:
+                raise ValueError("CUDA static constants require a floating scalar")
             values = ", ".join(scalar.literal(pair) for pair in node.attrs["values"])
             parts.append(f"static const {ty} {prefix}constant_{i}[] = {{{values}}};")
             initialize.append(
@@ -797,7 +807,10 @@ __global__ void {prefix}kernel_{i}(unsigned char* p, int* error) {{
                 f'if (!outputs[{slot}]) throw std::runtime_error("null tensor output");\ncuda_check(cudaMemcpyAsync(outputs[{slot}], p + {step.offset}, {step.node.spec.size * step.node.spec.itemsize}ULL, cudaMemcpyDeviceToHost, ctx.stream));'
             )
     needs_blas = any(
-        s.gemm != "none" and gemm_contract(s.node).k and s.node.spec.size
+        s.gemm != "none"
+        and (g := gemm_contract(s.node)) is not None
+        and g.k
+        and s.node.spec.size
         for s in plan.steps
     )
     fp32_blas = any(
