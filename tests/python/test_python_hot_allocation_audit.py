@@ -89,6 +89,24 @@ def f(n):
     assert rows[0]["details"]["phase_hint"] == "per-iteration-candidate"
 
 
+def test_numpy_stack_and_concat_explicit_out_are_not_guaranteed_allocations() -> None:
+    source = """
+import numpy as np
+def f(n, workspace, values):
+    for tile in range(n):
+        np.stack(values, out=workspace)
+        np.concatenate(values, out=workspace)
+        np.stack(values, **{'out': workspace})
+        np.stack(values, out=None)
+        np.empty(n)
+"""
+    rows = hot(source)
+    assert [row["details"]["numpy_operation"] for row in rows] == [
+        "stack",
+        "empty",
+    ]
+
+
 def test_for_else_and_iterable_setup_are_not_per_iteration() -> None:
     source = """
 import numpy as np
