@@ -83,19 +83,25 @@ def _contract_density_feature_arrays(
 ) -> typing.Any:
     """Contract one already-normalized two-spin density without revalidating it."""
     value, derivatives = jets[0], jets[1:4]
-    rho, gradient, tau = [], [], []
-    for spin in density:
+    rho, tau = [], []
+    # The two returned spin-gradient panels have fixed extent: write directly
+    # into their final array instead of stacking a new panel per spin and then
+    # copying both through np.asarray.
+    gradient = (
+        np.empty((len(density), value.shape[0], 3), dtype=np.float64)
+        if need_gradient
+        else np.asarray([])
+    )
+    for spin_index, spin in enumerate(density):
         if "rho" in requested or need_gradient:
             w = value @ spin
         if "rho" in requested:
             rho.append(np.sum(value * w, axis=1))
         if need_gradient:
-            gradient.append(
-                np.stack(
-                    [2 * np.sum(derivative * w, axis=1) for derivative in derivatives],
-                    axis=-1,
+            for axis, derivative in enumerate(derivatives):
+                gradient[spin_index, :, axis] = 2 * np.sum(
+                    derivative * w, axis=1
                 )
-            )
         if "tau" in requested:
             tau.append(
                 0.5
@@ -262,7 +268,12 @@ def orbital_features(
     """
     jets, requested, need_gradient = _feature_request(jets, ingredients)
     c, occ = _spin_orbitals(coefficients, occupations, jets.shape[2])
-    rho, gradient, tau = [], [], []
+    rho, tau = [], []
+    gradient = (
+        np.empty((2, jets.shape[1], 3), dtype=np.float64)
+        if need_gradient
+        else []
+    )
     for spin in range(2):
         # Weight before collocation: a zero occupation must remain zero even
         # when squaring an unweighted coefficient would overflow. This also
@@ -275,15 +286,10 @@ def orbital_features(
         if need_gradient or "tau" in requested:
             derivatives = jets[1:4] @ factor
         if need_gradient:
-            gradient.append(
-                np.stack(
-                    [
-                        np.sum(2 * value * derivative, axis=1)
-                        for derivative in derivatives
-                    ],
-                    axis=-1,
+            for axis, derivative in enumerate(derivatives):
+                gradient[spin, :, axis] = np.sum(
+                    2 * value * derivative, axis=1
                 )
-            )
         if "tau" in requested:
             tau.append(0.5 * np.sum(derivatives**2, axis=(0, 2)))
     return _publish(requested, rho, gradient, tau)
