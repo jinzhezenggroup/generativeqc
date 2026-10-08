@@ -257,22 +257,22 @@ def test_public_preview_exports_array_style_operations() -> None:
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
 @pytest.mark.parametrize("axis", (None, 0, -1, (0, 2), ()))
 @pytest.mark.parametrize("keepdims", (False, True))
+@pytest.mark.parametrize("operation, oracle", ((xp.sum, np.sum), (xp.mean, np.mean)))
 def test_mean_and_sum_keepdims_eager_compiled_numpy_parity(
-    dtype: object, axis: object, keepdims: bool
+    dtype: object, axis: object, keepdims: bool, operation: object, oracle: object
 ) -> None:
     values = np.arange(1, 25, dtype=dtype).reshape(2, 3, 4)
-    for operation, oracle in ((xp.sum, np.sum), (xp.mean, np.mean)):
 
-        def expression(x: object) -> object:
-            return operation(x, axis=axis, keepdims=keepdims)
+    def expression(x: object) -> object:
+        return operation(x, axis=axis, keepdims=keepdims)
 
-        eager = expression(values)
-        compiled = xp.compile(expression)(values)
-        expected = oracle(values, axis=axis, keepdims=keepdims)
-        assert eager.dtype == compiled.dtype == expected.dtype
-        assert eager.shape == compiled.shape == expected.shape
-        np.testing.assert_allclose(eager, expected, rtol=2e-6, atol=2e-6)
-        np.testing.assert_allclose(compiled, expected, rtol=2e-6, atol=2e-6)
+    eager = expression(values)
+    compiled = xp.compile(expression)(values)
+    expected = oracle(values, axis=axis, keepdims=keepdims)
+    assert eager.dtype == compiled.dtype == expected.dtype
+    assert eager.shape == compiled.shape == expected.shape
+    np.testing.assert_allclose(eager, expected, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(compiled, expected, rtol=2e-6, atol=2e-6)
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
