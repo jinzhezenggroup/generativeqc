@@ -126,7 +126,8 @@ after = schedule_receipt(**arguments)
 print(json.dumps({"before": before, "after": after}))
 """
     result = subprocess.run(
-        [sys.executable, "-I", "-c", script, str(ROOT), str(checkout)],
+        # This child binds the fixture checkout, so exclude the CI editable install.
+        [sys.executable, "-I", "-S", "-c", script, str(ROOT), str(checkout)],
         check=False,
         capture_output=True,
         text=True,
