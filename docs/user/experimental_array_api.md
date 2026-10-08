@@ -118,14 +118,29 @@ The eager namespace and reference compiled-call path currently accept CPU/NumPy
 dimensions and axes. Captured `flip` builds explicit gather index maps and
 rejects reversed axes larger than 65,536 elements to avoid unbounded source
 materialization. Static creation is capture-aware but does not
-supply the standard's full dtype defaults, devices or constructor set. There is no implicit dtype promotion, dynamic Python control
-flow, or implicit external-device transfer. `xp.asarray` refuses to silently
+supply the standard's full dtype defaults, devices or constructor set. Generic
+float32/float64 array arithmetic, matmul and explicit-output einsum now promote
+mixed floating operands to float64 through a canonical TensorIR `cast`.
+Scientific annotated arrays retain strict dtype identity and need explicit
+`xp.astype` to change precision. Dynamic Python control flow and implicit
+external-device transfer remain unsupported. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
 same-device handoff. Every eager namespace operation checks this host boundary
 before NumPy dispatch, including nested host containers and foreign DLPack/CUDA
 array protocols. Exact scalar literals (`int`, `Fraction`, or rational
 strings) and finite Python floats are converted to the array operand dtype;
-array operands of different dtypes are rejected.
+mixed supported array dtypes promote according to the float32/float64 subset.
+
+The dtype-introspection subset includes `astype` (explicit float32/float64
+cast), `can_cast` (promotion-safe), `finfo`, `isdtype`, and `result_type`
+(with weak Python numeric scalars). `astype(x, dtype, copy=False)` returns the
+same eager array if the dtype is unchanged; default `copy=True` produces a new
+host array. Symbolic `astype` lowers through the existing TensorIR cast,
+rather than asserting a physical aliasing policy for generated native programs.
+Its `device` argument currently only accepts `None`.
+Integer/bool/complex dtypes, their promotion rules, IEEE non-finite values,
+and standardized discovery remain unsupported, so this is **not** standard
+conformance.
 
 Eager functions retain the bounded compiled contract: `sum` does not yet
 accept a `dtype` conversion; `mean` rejects reductions over zero elements
