@@ -301,7 +301,7 @@ def run_combined(
         *(np.full_like(x, np.nan) for x in arrays[:7]),
     ]
     values = np.full(3, np.nan)
-    counts = np.full(14, 19, dtype=np.uintp)
+    counts = np.full(24, 19, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     dp = ct.POINTER(ct.c_double)
     status = call(
@@ -379,11 +379,16 @@ def run_native(
     return status, output, values, counts, error.value.decode()
 
 
+@pytest.mark.parametrize("fused", [False, True])
 def test_combined_response_reuses_one_input_upload(
-    native_fock_probe: typing.Any, native_combined_probe: typing.Any
+    native_fock_probe: typing.Any,
+    native_combined_probe: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    fused: bool,
 ) -> None:
     from test_df_occupied_triples_response import reverse
 
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", str(int(fused)))
     inputs, _ = case(2, 3, 4)
     caller = 12345
     status, combined, values, counts, error = run_combined(
@@ -418,6 +423,11 @@ def test_combined_response_reuses_one_input_upload(
 
     input_bytes = sum(x.nbytes for x in inputs)
     assert counts[1] == counts[2] == input_bytes
+    assert counts[14] == counts[15] == int(fused)
+    assert counts[16] == 0
+    assert counts[17] == counts[12]
+    assert counts[18] == (1 if fused else 8) * counts[12]
+    assert counts[19] == (7 if fused else 0) * counts[12]
     assert counts[3] == 0
     assert input_bytes <= counts[0] < input_bytes + 10 * 256
     assert counts[6] == counts[7] == input_bytes
@@ -436,6 +446,8 @@ def test_combined_response_reuses_one_input_upload(
     assert counts[11] + counts[9] == 12 * (fock_cubes + tiles)
     assert counts[11] < 12 * (fock_cubes + tiles)
 
+    # The original minimum-budget gate belongs to the retained unfused fallback.
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
     status, minimal, _, minimal_counts, error = run_combined(
         native_combined_probe, inputs, caller_bytes=caller, rows=1, panels=1
     )
@@ -457,6 +469,50 @@ def test_combined_response_reuses_one_input_upload(
     )
     assert status != 0 and "budget" in error
     assert all(np.isnan(x).all() for x in (*refused, refused_values))
+    np.testing.assert_array_equal(refused_counts, 19)
+
+
+def test_fused_scalar_storage_has_exact_admission_and_bounded_fallback(
+    native_combined_probe: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs, _ = case(2, 3, 4)
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    status, legacy, _, legacy_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1
+    )
+    assert status == 0, error
+    legacy_budget = int(legacy_counts[4])
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "1")
+    status, fused, _, counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1
+    )
+    assert status == 0, error
+    fused_budget = int(counts[4])
+    assert fused_budget > legacy_budget
+    assert counts[15] == 1 and counts[16] == 0
+    assert counts[21] < legacy_counts[21] / 2
+    assert counts[22] == legacy_counts[22]
+    assert counts[23] < legacy_counts[23] / 2
+    for actual, expected in zip(fused, legacy, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+    status, _, _, exact_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1, budget=fused_budget
+    )
+    assert status == 0 and exact_counts[15] == 1, error
+    assert exact_counts[4] == fused_budget
+    status, fallback, _, fallback_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1, budget=legacy_budget
+    )
+    assert status == 0, error
+    assert fallback_counts[15] == 0 and fallback_counts[16] == 1
+    assert fallback_counts[4] == legacy_budget
+    for actual, expected in zip(fallback, legacy, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    status, outputs, values, refused_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1, budget=legacy_budget - 1
+    )
+    assert status != 0 and "budget" in error
+    assert all(np.isnan(value).all() for value in (*outputs, values))
     np.testing.assert_array_equal(refused_counts, 19)
 
 
@@ -677,7 +733,7 @@ def test_combined_reverse_work_preflight_precedes_null_input_access(
     dp = ct.POINTER(ct.c_double)
     nulls = (dp * 9)()
     values = np.full(3, np.nan)
-    counts = np.full(14, 19, dtype=np.uintp)
+    counts = np.full(24, 19, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = native_combined_probe(
         100,

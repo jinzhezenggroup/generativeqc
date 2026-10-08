@@ -30,6 +30,7 @@ from generativeqc_compiler.cc.occupied_triples_fock import (
 from generativeqc_compiler.cc.occupied_triples_lowering import emit_w_portfolio
 from generativeqc_compiler.cc.occupied_triples_response import (
     energy_scalar_vjp,
+    fused_tile_program,
     gap_vjp,
     moment_vjp,
     panel_vjp,
@@ -45,6 +46,7 @@ from generativeqc_compiler.tensor.indexed_cuda_reduction import (
 )
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 from tools.generate_rccsd_native import _cuda_program, _dim, _required_function, _size
@@ -291,6 +293,70 @@ def _response_scalars() -> dict[str, Program]:
 def response_scalar_header() -> str:
     lines = []
     scalars = _response_scalars()
+    fused = fused_tile_program()
+    fusion_identity = canonical_hash(
+        {
+            "schema": "generativeqc.occupied-triples-scalar-fusion.v1",
+            "equation": fused.logical_hash,
+            "threads": 256,
+            "coordinate_order": _LABELS,
+            "denominators": "six-ordered-inverse-permutations",
+            "seed_storage": "six-w-and-six-v-cubes",
+            "arithmetic": "fp64-ordered-native-sums-no-reassociation",
+            "scalar_emission": "output-dependency-order",
+            "energy_reduction": "unchanged-grid-stride-and-256-thread-tree",
+            "gap_cotangents": "unrequested",
+        }
+    )
+    lines += [
+        f'inline constexpr const char* scalar_fusion_equation_identity="{fused.logical_hash}";',
+        f'inline constexpr const char* scalar_fusion_identity="{fusion_identity}";',
+        emit_scalar_cpp(
+            fused,
+            function_name="fused_response_element",
+            ordered_native_sums=True,
+            output_dependency_order=True,
+        ).replace("inline bool ", "GQC_DF_TRIPLES_HD inline bool "),
+    ]
+    # Count logical scalar arithmetic and source reads, not hardware instructions
+    # or cache traffic. Native owners multiply these receipts by executed tiles.
+    separate = [
+        energy_scalar_program(),
+        *[program for name, program in scalars.items() if name != "denominator"],
+    ]
+    for label, programs in (("fused", [fused]), ("unfused", separate)):
+        inputs = arithmetic = 0
+        for program in programs:
+            lowered = prepare_for_backend(program, "scalar")
+            for node in lowered.live_nodes:
+                if node.op == "add":
+                    arithmetic += (
+                        len(node.inputs)
+                        - 1
+                        + sum(
+                            coefficient not in ((1, 1), (-1, 1))
+                            for coefficient in node.attrs["coefficients"]
+                        )
+                    )
+                elif node.op in ("multiply", "divide"):
+                    arithmetic += 1
+                elif node.op not in ("input", "constant"):
+                    raise ValueError(
+                        "unexpected primitive in scalar fusion work receipt"
+                    )
+            for name in _inputs(program):
+                if name.startswith("v_"):
+                    arithmetic += 3  # Two products and their sum in v_scalar_program.
+                    inputs += 4
+                elif name.startswith("w_"):
+                    inputs += 1
+                elif name.startswith("denominator"):
+                    arithmetic += 6
+                    inputs += 6
+        lines += [
+            f"inline constexpr std::size_t scalar_{label}_value_reads={inputs};",
+            f"inline constexpr std::size_t scalar_{label}_arithmetic_ops={arithmetic};",
+        ]
     for name, program in scalars.items():
         lines.append(
             emit_scalar_cpp(
@@ -497,6 +563,81 @@ def response_cuda_source() -> str:
         parallel_source,
         "GapOutputs gap_response_cuda(GapCudaState& s){",
         "return gap_response_parallel_selected(s.v,s.parallel_reduction)?run_gap_response_parallel(s):run_gap_response(s);}",
+    ]
+    return "\n".join(lines) + "\n" + fused_response_cuda_source()
+
+
+def fused_response_cuda_source() -> str:
+    """One bounded traversal publishes primal energy plus packed W/V seeds."""
+    program = fused_tile_program()
+    outputs = tuple(sorted(program.outputs))
+    lines = [
+        "__global__ void fused_response_kernel(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,",
+        " double degeneracy,double threshold,Inputs in,const double* moments,double* bar_w,double* bar_v,double* partials,int* error){",
+        " const auto v3=v*v*v; const std::size_t occupied[3]={i,j,k}; double accumulated=0.0;",
+        " for(std::size_t flat=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;flat<v3;flat+=std::size_t(blockDim.x)*gridDim.x){",
+        " const std::size_t coordinates[3]={flat/(v*v),(flat/v)%v,flat%v};",
+    ]
+    bindings = {}
+    for name in _inputs(program):
+        if name == "bar_energy":
+            bindings[name] = "1.0"
+        elif name.startswith("denominator_"):
+            virtual = name.split("_")[1]
+            a, b, c = (f"coordinates[{axis}]" for axis in VP[virtual])
+            lines += [
+                f"const double gap_{virtual}=in.eps_o[i]+in.eps_o[j]+in.eps_o[k]-in.eps_v[{a}]-in.eps_v[{b}]-in.eps_v[{c}];",
+                f"const double {name}=gap_{virtual}*degeneracy;",
+                f"if(!isfinite(gap_{virtual})||gap_{virtual}>=0.0||fabs(gap_{virtual})<=threshold||!isfinite({name})) atomicCAS(error,0,1);",
+            ]
+            bindings[name] = name
+        else:
+            kind, occupied, virtual = name.split("_")
+            a, b, c = (f"coordinates[{axis}]" for axis in VP[virtual])
+            if kind == "w":
+                bindings[name] = (
+                    f"moments[{_LABELS.index(occupied)}*v3+({a}*v+{b})*v+{c}]"
+                )
+            elif kind == "v":
+                I, J, K = (f"occupied[{axis}]" for axis in VP[occupied])
+                lines += [
+                    f"double {name}=0.0;",
+                    _call(
+                        v_scalar_program(),
+                        "v_element",
+                        {
+                            "ovov": f"in.ovov[((({I})*v+{a})*o+({J}))*v+{b}]",
+                            "t1": f"in.t1[({K})*v+{c}]",
+                            "t2": f"in.t2[((({I})*o+({J}))*v+{a})*v+{b}]",
+                            "fov": f"in.fov[({K})*v+{c}]",
+                        },
+                        name,
+                    ),
+                ]
+                bindings[name] = name
+            else:
+                raise ValueError("unexpected fused scalar boundary input")
+    lines += [f"double {name}=0.0;" for name in outputs]
+    call = _call(
+        program, "fused_response_element", bindings, ",".join(outputs)
+    ).removesuffix(";")
+    lines.append(f"if(!{call}) atomicCAS(error,0,2);")
+    for index, label in enumerate(_LABELS):
+        lines += [
+            f"bar_w[{index}*v3+flat]=generativeqc_tensor::finite(bar_w_{label},error,3);",
+            f"bar_v[{index}*v3+flat]=generativeqc_tensor::finite(bar_v_{label},error,4);",
+        ]
+    lines += [
+        "accumulated+=generativeqc_tensor::finite(energy,error,1); }",
+        "__shared__ double sums[256]; sums[threadIdx.x]=accumulated; __syncthreads();",
+        "for(unsigned stride=blockDim.x/2;stride;stride/=2){",
+        "if(threadIdx.x<stride) sums[threadIdx.x]+=sums[threadIdx.x+stride]; __syncthreads(); }",
+        "if(threadIdx.x==0) partials[blockIdx.x]=generativeqc_tensor::finite(sums[0],error,2); }",
+        "void fused_response_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,",
+        " double degeneracy,double threshold,const Inputs& in,const double* moments,unsigned blocks,",
+        " double* bar_w,double* bar_v,double* partials,int* error,cudaStream_t stream){",
+        "fused_response_kernel<<<blocks,256,0,stream>>>(o,v,i,j,k,degeneracy,threshold,in,moments,bar_w,bar_v,partials,error);",
+        "generativeqc_tensor::cuda_check(cudaGetLastError()); }",
     ]
     return "\n".join(lines)
 
@@ -1017,6 +1158,9 @@ void energy_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::si
 void response_w_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
                      double degeneracy,double threshold,const Inputs& in,const double* moments,
                      unsigned blocks,double* output,int* error,cudaStream_t stream);
+void fused_response_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
+                         double degeneracy,double threshold,const Inputs& in,const double* moments,
+                         unsigned blocks,double* bar_w,double* bar_v,double* partials,int* error,cudaStream_t stream);
 void response_v_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
                      unsigned permutation,double degeneracy,double threshold,const Inputs& in,const double* moments,
                      unsigned blocks,double* output,int* error,cudaStream_t stream);

@@ -2,7 +2,9 @@
 // succeeds. Failed preflight or arithmetic leaves the caller's sentinels intact.
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
+#include <string>
 
 #include "cc/df_triples.hpp"
 
@@ -56,9 +58,11 @@ extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size
                                          double* const* output, double* values, std::size_t* counts,
                                          char* error, std::size_t error_size) noexcept {
   try {
+    const auto* selected = std::getenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS");
+    const bool fused = selected && std::string(selected) == "1";
     const auto r = generativeqc::cc::triples::pullback_and_fock_df_cuda(
         o, v, q, inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6],
-        inputs[7], inputs[8], threshold, budget, 0, caller_bytes, rows, panels, true, false);
+        inputs[7], inputs[8], threshold, budget, 0, caller_bytes, rows, panels, true, false, fused);
     if (r.pullback.gap.requested || !r.pullback.eps_o.empty() || !r.pullback.eps_v.empty())
       throw std::runtime_error("combined gap-free response published epsilon cotangents");
     std::copy(r.fock.foo.begin(), r.fock.foo.end(), output[0]);
@@ -82,7 +86,17 @@ extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size
                              r.fock.vector_cubes,
                              r.fock.w_gemms,
                              r.pullback.diagnostic.occupied_tiles,
-                             r.pullback.diagnostic.moment_gemms};
+                             r.pullback.diagnostic.moment_gemms,
+                             std::size_t(r.pullback.scalar_fusion.requested),
+                             std::size_t(r.pullback.scalar_fusion.selected),
+                             std::size_t(r.pullback.scalar_fusion.resource_fallback),
+                             r.pullback.scalar_fusion.tiles,
+                             r.pullback.scalar_fusion.kernels,
+                             r.pullback.scalar_fusion.avoided_kernels,
+                             r.pullback.scalar_fusion.workspace_bytes,
+                             r.pullback.scalar_fusion.value_reads,
+                             r.pullback.scalar_fusion.value_writes,
+                             r.pullback.scalar_fusion.arithmetic_ops};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

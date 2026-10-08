@@ -41,6 +41,14 @@ struct DFGapReductionDiagnostic {
   std::size_t materialized_elements{}, value_reads{}, value_writes{}, reduction_summands{};
 };
 
+/** Compiler-owned scalar-region execution and logical work, not measured traffic. */
+struct DFScalarFusionDiagnostic {
+  bool requested{}, selected{}, resource_fallback{};
+  std::string_view schedule;
+  std::size_t tiles{}, kernels{}, avoided_kernels{}, workspace_bytes{};
+  std::size_t value_reads{}, value_writes{}, arithmetic_ops{};
+};
+
 /** Complete fixed-canonical-input triples pullback; all arrays are detached.
  * Bvv is an unprojected dense Frobenius cotangent on the symmetric physical
  * factor domain. eps_o/eps_v describe canonical denominator derivatives;
@@ -49,6 +57,7 @@ struct DFGapReductionDiagnostic {
 struct DFCudaResponseResult {
   DFCudaResult diagnostic;
   DFGapReductionDiagnostic gap;
+  DFScalarFusionDiagnostic scalar_fusion;
   std::vector<double> bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v;
   std::size_t numeric_capacity_bytes{}, borrowed_host_bytes{};
   std::size_t reverse_gemms{}, reverse_kernels{}, audit_kernels{}, scalar_response_evaluations{};
@@ -145,6 +154,11 @@ DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t
  * immutable device copy of B_ov/B_vv, retained blocks, amplitudes and orbital
  * energies. max_bytes remains a complete simultaneously-live numeric bound;
  * standalone APIs remain available as independent qualification or fallback.
+ * fused_scalar_response opts into one compiler-derived primal/W/V seed region
+ * when epsilon outputs are unrequested. Its six V seeds add five virtual cubes
+ * to the admitted arena; insufficient capacity retains the original schedule
+ * before reducing panel/page residency. The default remains unfused pending
+ * complete-endpoint qualification. Full rank-six T3 is never retained.
  */
 DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     std::size_t o, std::size_t v, std::size_t q, const double* bov, const double* bvv,
@@ -152,7 +166,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     const double* eps_o, const double* eps_v, double denominator_threshold, std::size_t max_bytes,
     int device, std::size_t caller_bytes = 0, std::size_t max_page_rows = 0,
     std::size_t max_panel_buffers = 3, bool parallel_gap_reduction = true,
-    bool include_gap_response = true);
+    bool include_gap_response = true, bool fused_scalar_response = false);
 #endif
 
 }  // namespace generativeqc::cc::triples

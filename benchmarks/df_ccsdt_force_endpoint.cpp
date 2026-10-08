@@ -35,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 22)
+    if (argc < 4 || argc > 23)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
@@ -43,7 +43,8 @@ int main(int argc, char** argv) {
           "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
           "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO "
-          "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE]]]]]]]]]]]]]]]]]]");
+          "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO "
+          "[FUSED_SCALAR_RESPONSE_0_OR_1]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -93,8 +94,9 @@ int main(int argc, char** argv) {
       frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
     const bool parallel_gap_reduction = argc <= 19 || selector(19);
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
+    const bool fused_triples_scalar_response = argc > 22 && selector(22);
     double reference_energy_tolerance = 1e-12, reference_density_tolerance = 1e-11;
-    if (argc > 21) {
+    if (argc > 21 && std::string(argv[21]) != "auto") {
       const std::string token(argv[21]);
       std::size_t consumed = 0;
       const double tolerance = std::stod(token, &consumed);
@@ -143,7 +145,7 @@ int main(int argc, char** argv) {
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
-          parallel_gap_reduction, request_triples_gap_cotangents);
+          parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -302,6 +304,22 @@ int main(int argc, char** argv) {
       work_field("triples_gap_value_reads", result.triples_gap.value_reads);
       work_field("triples_gap_value_writes", result.triples_gap.value_writes);
       work_field("triples_gap_reduction_summands", result.triples_gap.reduction_summands);
+      field("triples_scalar_fusion_requested", result.triples_scalar_fusion.requested);
+      field("triples_scalar_fusion_selected", result.triples_scalar_fusion.selected);
+      field("triples_scalar_fusion_resource_fallback",
+            result.triples_scalar_fusion.resource_fallback);
+      output << "  \"triples_scalar_fusion_schedule\": "
+             << std::quoted(result.triples_scalar_fusion.schedule) << ",\n";
+      work_field("triples_scalar_fusion_tiles", result.triples_scalar_fusion.tiles);
+      work_field("triples_scalar_fusion_kernels", result.triples_scalar_fusion.kernels);
+      work_field("triples_scalar_fusion_avoided_kernels",
+                 result.triples_scalar_fusion.avoided_kernels);
+      work_field("triples_scalar_fusion_workspace_bytes",
+                 result.triples_scalar_fusion.workspace_bytes);
+      work_field("triples_scalar_fusion_value_reads", result.triples_scalar_fusion.value_reads);
+      work_field("triples_scalar_fusion_value_writes", result.triples_scalar_fusion.value_writes);
+      work_field("triples_scalar_fusion_arithmetic_ops",
+                 result.triples_scalar_fusion.arithmetic_ops);
       work_field("fock_response_work", result.triples_fock.contraction_summands);
       work_field("lambda_work", result.lambda.df_contraction_terms);
       field("lambda_matrix_gemm", result.lambda.df_matrix_gemm);

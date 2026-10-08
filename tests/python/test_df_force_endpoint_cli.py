@@ -51,7 +51,7 @@ def invoke(endpoint_binary: str, *trailing: str) -> subprocess.CompletedProcess[
     )
 
 
-@pytest.mark.parametrize("trailing", [(), ("1e-12",), ("1e-13",)])
+@pytest.mark.parametrize("trailing", [(), ("auto",), ("1e-12",), ("1e-13",)])
 def test_reference_tolerance_accepts_defaults_or_tighter_values(
     endpoint_binary: str, trailing: tuple[str, ...]
 ) -> None:
@@ -70,6 +70,24 @@ def test_reference_tolerance_rejects_invalid_or_looser_values(
 
 
 def test_reference_tolerance_rejects_extra_arguments(endpoint_binary: str) -> None:
-    completed = invoke(endpoint_binary, "1e-13", "1e-13")
+    completed = invoke(endpoint_binary, "auto", "1", "extra")
     assert completed.returncode != 0
     assert "usage: df-force-endpoint" in completed.stderr
+
+
+@pytest.mark.parametrize("selector", ["0", "1"])
+def test_fused_scalar_selector_accepts_explicit_default_reference(
+    endpoint_binary: str, selector: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", selector)
+    assert completed.returncode != 0
+    assert "invalid molecular probe dimensions" in completed.stderr
+
+
+@pytest.mark.parametrize("selector", ["", "2", "true", "1x"])
+def test_fused_scalar_selector_rejects_invalid_values(
+    endpoint_binary: str, selector: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", selector)
+    assert completed.returncode != 0
+    assert "invalid endpoint selector" in completed.stderr
