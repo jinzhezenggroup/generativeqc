@@ -55,11 +55,15 @@ def _resolve_export(
     if definition := definitions.get(symbol):
         return path, bool(ast.get_docstring(definition))
 
-    package = module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
+    package = (
+        module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
+    )
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom):
             continue
-        matches = [alias for alias in node.names if (alias.asname or alias.name) == symbol]
+        matches = [
+            alias for alias in node.names if (alias.asname or alias.name) == symbol
+        ]
         if not matches:
             continue
         imported_module = "." * node.level + (node.module or "")

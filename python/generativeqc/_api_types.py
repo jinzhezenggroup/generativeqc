@@ -53,6 +53,7 @@ class Atom:
 @dataclass(frozen=True)
 class Primitive:
     "One Gaussian primitive with exponent and contraction coefficient."
+
     exponent: float
     coefficient: float
 
@@ -60,6 +61,7 @@ class Primitive:
 @dataclass(frozen=True)
 class Shell:
     "A basis shell assigned to a zero-based atom index and angular momentum."
+
     atom_index: int
     angular_momentum: int
     primitives: tuple[Primitive, ...]

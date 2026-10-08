@@ -382,6 +382,7 @@ class ScfForceErrorEstimator:
 @dataclass(frozen=True)
 class ScfEffortTransition:
     "One recorded change between force-aware SCF effort levels."
+
     from_level: str
     to_level: str
     step_index: int
@@ -398,6 +399,7 @@ class ScfEffortTransition:
 @dataclass(frozen=True)
 class ScfEffortState:
     "Selected SCF effort index, safe-streak counter, and transition history."
+
     level_index: int
     safe_streak: int = 0
     transitions: tuple[ScfEffortTransition, ...] = ()
@@ -406,6 +408,7 @@ class ScfEffortState:
 @dataclass(frozen=True)
 class ScfEffortDecision:
     "Suggested SCF effort and associated error bounds for the next step."
+
     action: str
     level: ScfEffortLevel
     state: ScfEffortState
@@ -418,6 +421,7 @@ class ScfEffortDecision:
 @dataclass(frozen=True)
 class OptimizationFinalVerification:
     "Final optimization check against the requested model and tolerances."
+
     status: str
     reasons: tuple[str, ...]
     target_model_id: str

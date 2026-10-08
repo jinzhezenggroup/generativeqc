@@ -676,6 +676,7 @@ class DiscreteTransition:
 @dataclass(frozen=True)
 class AdaptiveNumericsState:
     "Selected numerical level and hysteresis history for one geometry sequence."
+
     level_index: int
     safe_streak: int = 0
     transitions: tuple[DiscreteTransition, ...] = ()
@@ -685,6 +686,7 @@ class AdaptiveNumericsState:
 @dataclass(frozen=True)
 class NumericalDecision:
     "Proposed numerical policy action, resulting state, and error-budget evidence."
+
     action: str
     state: AdaptiveNumericsState
     reason: str

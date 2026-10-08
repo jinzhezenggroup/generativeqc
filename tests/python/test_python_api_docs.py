@@ -124,7 +124,6 @@ class PythonApiDocumentationTests(unittest.TestCase):
             self.assertEqual(source, ["unrelated"])
             self.assertFalse(registered)
 
-
     def test_public_docstring_audit_follows_reexports(self) -> None:
         from tools.check_public_api_docstrings import missing_public_docstrings
 
@@ -139,7 +138,7 @@ class PythonApiDocumentationTests(unittest.TestCase):
             _write(
                 package / "impl.py",
                 'class Documented:\n    """Documented class."""\n'
-                'class Missing:\n    pass\n',
+                "class Missing:\n    pass\n",
             )
             failures = missing_public_docstrings(package)
             self.assertEqual(len(failures), 1)
@@ -155,7 +154,7 @@ class PythonApiDocumentationTests(unittest.TestCase):
             _write(
                 package / "fresh.py",
                 '"""Future public module."""\n'
-                'def undocumented():\n    return 1\n'
+                "def undocumented():\n    return 1\n"
                 '__all__ = ["undocumented"]\n',
             )
             failures = missing_public_docstrings(package)
@@ -169,8 +168,7 @@ class PythonApiDocumentationTests(unittest.TestCase):
             package = Path(directory) / "generativeqc"
             _write(
                 package / "__init__.py",
-                '"""Public facade."""\nfrom .impl import Entry\n'
-                '__all__ = ["Entry"]\n',
+                '"""Public facade."""\nfrom .impl import Entry\n__all__ = ["Entry"]\n',
             )
             _write(
                 package / "impl.py",
