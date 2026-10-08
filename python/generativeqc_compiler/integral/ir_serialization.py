@@ -371,7 +371,10 @@ def integral_from_payload(payload: dict[str, object]) -> IntegralIR:
             _coordinates(derivative_record["centers"]),
             tuple(_invariant(i) for i in derivative_record["invariants"]),
         )
-    consumers = tuple(_consumer(c) for c in payload["contractions"])
+    consumer_payloads = payload["contractions"]
+    if not isinstance(consumer_payloads, (list, tuple)):
+        raise TypeError("IR contractions must be a sequence")
+    consumers = tuple(_consumer(c) for c in consumer_payloads)
     if any(isinstance(c, SecondDerivative) for c in consumers) != (
         payload["schema_version"] == SECOND_INTEGRAL_SCHEMA_VERSION
     ):
