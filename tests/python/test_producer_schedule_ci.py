@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -51,12 +52,13 @@ def checkout(tmp_path: Path) -> tuple[Path, str]:
     for path in (*DEPENDENCIES, SCHEDULE):
         destination = root / path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(
-            SCHEDULE_FIXTURE if path == SCHEDULE
-            else "def emit_occupied_gram():\n    return ''\n" if path.endswith("df_occupied_gram_cuda.py")
-            else "",
-            encoding="utf-8",
-        )
+        if path == SCHEDULE:
+            source = SCHEDULE_FIXTURE
+        elif path.endswith("df_occupied_gram_cuda.py"):
+            source = "def emit_occupied_gram():\n    return ''\n"
+        else:
+            source = ""
+        destination.write_text(source, encoding="utf-8")
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "cpu-qa@example.invalid")
     _git(root, "config", "user.name", "CPU Fixture")
@@ -98,14 +100,18 @@ def test_nested_producer_replay_is_flagged_not_declared_a_bug(
 
 def test_transitive_import_mutation_fails_closed(checkout: tuple[Path, str]) -> None:
     root, base = checkout
-    (root / DEPENDENCIES[-1]).write_text("def emit_occupied_gram():\n    return 'changed'\n")
+    (root / DEPENDENCIES[-1]).write_text(
+        "def emit_occupied_gram():\n    return 'changed'\n"
+    )
     result = audit(root, base)
     assert result["status"] == "INCOMPLETE"
     assert "import dependency changed" in result["reason"]
     assert result["cases"] == []
 
 
-def test_production_schedule_rejection_is_not_a_pass(checkout: tuple[Path, str]) -> None:
+def test_production_schedule_rejection_is_not_a_pass(
+    checkout: tuple[Path, str],
+) -> None:
     root, base = checkout
     path = root / SCHEDULE
     path.write_text(
@@ -123,3 +129,14 @@ def test_requires_full_base_sha(checkout: tuple[Path, str]) -> None:
     root, _ = checkout
     with pytest.raises(ReceiptError, match="full 40-character"):
         audit(root, "HEAD")
+
+def test_cli_imports_without_editable_install() -> None:
+    script = Path(__file__).resolve().parents[2] / "tools/ratchet_producer_schedule.py"
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", str(script), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--base-sha" in result.stdout
