@@ -75,6 +75,20 @@ class DiagnosticStationaryGradient:
     execution: str = "native-cpu-primitives/compiler-interpreter-diagnostic-v1"
 
 
+def _xc_gradient_argument(
+    features: typing.Mapping[str, typing.Any], point_count: int
+) -> typing.Any:
+    """Reuse gradient jets; create zero fallback only when the key is absent.
+
+    Python evaluates the default expression of dict.get eagerly, previously
+    allocating an unused zero tensor on every GGA/MGGA point tile.
+    Present keys, even a value of None, keep their original semantics.
+    """
+    if "gradient" in features:
+        return features["gradient"]
+    return np.zeros((2, point_count, 3))
+
+
 def _publish_source(path: typing.Any, source: typing.Any) -> None:
     """Publish complete immutable compiler input before hashing or compilation.
 
@@ -733,6 +747,10 @@ def complete_rks_gradient_diagnostic(
         else None
     )
     ao_atoms = _native_ao_atoms(basis)
+    # The reference Becke JVP path uses one impulse direction at a time.
+    # Retain one scratch buffer across point tiles and coordinates rather than
+    # constructing a new (natom, 3) array for every response invocation.
+    fallback_motion = np.zeros((natom, 3)) if grid_consumer is None else None
     for begin in range(0, len(grid.points), tile_points):
         end = min(begin + tile_points, len(grid.points))
         points, weights, atoms = (
@@ -745,7 +763,7 @@ def complete_rks_gradient_diagnostic(
         coefficients = state._source.evaluate_xc_points(
             functional,
             features["rho"],
-            features.get("gradient", np.zeros((2, end - begin, 3))),
+            _xc_gradient_argument(features, end - begin),
             features.get("tau"),
         )
         partials = program.geometry_from_cartesian_coefficients(
@@ -774,15 +792,15 @@ def complete_rks_gradient_diagnostic(
             continue
         # One coordinate at a time bounds storage; this interpreter boundary
         # explicitly costs 3*natom partition traversals per point tile.
+        assert fallback_motion is not None
         for a in range(natom):
             for axis in range(3):
-                motion = np.zeros((natom, 3))
-                motion[a, axis] = 1
+                fallback_motion[a, axis] = 1.0
                 response = partition_response(
                     points,
                     native.centers,
-                    point_motion=motion[atoms],
-                    center_motion=motion,
+                    point_motion=fallback_motion[atoms],
+                    center_motion=fallback_motion,
                     iterations=spec.partition_iterations,
                     coincident_tolerance=spec.coincident_tolerance,
                 )
@@ -794,6 +812,7 @@ def complete_rks_gradient_diagnostic(
                     partials.weights,
                     state._source.atomic_weights[begin:end] * derivative,
                 )
+                fallback_motion[a, axis] = 0.0
     nonlocal_primitive = next(
         (
             primitive
@@ -832,18 +851,18 @@ def complete_rks_gradient_diagnostic(
                 coincident_tolerance=spec.coincident_tolerance,
             )
         else:
+            assert fallback_motion is not None
             for a in range(natom):
                 for axis in range(3):
-                    motion = np.zeros((natom, 3))
-                    motion[a, axis] = 1
+                    fallback_motion[a, axis] = 1.0
                     for begin in range(0, len(grid.points), tile_points):
                         end = min(begin + tile_points, len(grid.points))
                         atoms = owners[begin:end]
                         response = partition_response(
                             grid.points[begin:end],
                             native.centers,
-                            point_motion=motion[atoms],
-                            center_motion=motion,
+                            point_motion=fallback_motion[atoms],
+                            center_motion=fallback_motion,
                             iterations=spec.partition_iterations,
                             coincident_tolerance=spec.coincident_tolerance,
                         )
@@ -853,6 +872,7 @@ def complete_rks_gradient_diagnostic(
                             state._source.atomic_weights[begin:end]
                             * response.directional[selected],
                         )
+                    fallback_motion[a, axis] = 0.0
     gradient = (
         NativeTensorProgram(
             plan.reduction_program(atoms=natom, sources=components.keys()),
