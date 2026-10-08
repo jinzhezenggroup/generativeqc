@@ -27,6 +27,16 @@ if typing.TYPE_CHECKING:
 
 ShellComponent = tuple[str, str, str, str]
 CoulombState = tuple[int, int, int]
+
+
+def _vector3(values: Sequence[float]) -> tuple[float, float, float]:
+    """Preserve the fixed Cartesian axis shape through comprehensions."""
+    return values[0], values[1], values[2]
+
+
+def _sum_states(first: CoulombState, second: CoulombState) -> CoulombState:
+    return first[0] + second[0], first[1] + second[1], first[2] + second[2]
+
 _AXIS_INDEX = {axis: index for index, axis in enumerate(AXES)}
 
 
@@ -141,7 +151,7 @@ def _axis_wick_multiplicity(order: int, pairs: int) -> int:
     denominator = 2**pairs
     for value in range(2, pairs + 1):
         denominator *= value
-    return numerator // denominator
+    return int(numerator // denominator)
 
 
 def _coulomb_value(state: CoulombState, variables: Mapping[str, float]) -> float:
@@ -169,7 +179,7 @@ def _coulomb_value(state: CoulombState, variables: Mapping[str, float]) -> float
                     * variables["difference_z"] ** (z_order - 2 * z_pairs)
                     * variables[f"boys_{boys_order}"]
                 )
-    return value
+    return float(value)
 
 
 def _matching_masks(axes: Sequence[int]) -> tuple[tuple[int, int], ...]:
@@ -248,7 +258,7 @@ def _pair_terms(
                     if quantum != differentiated:
                         derivative *= shifts[quantum]
                 gradient[axes[differentiated]] += derivative
-        terms.append((state, coefficient, tuple(gradient)))
+        terms.append(((state[0], state[1], state[2]), float(coefficient), _vector3(gradient)))
     return tuple(terms)
 
 
@@ -383,7 +393,7 @@ def evaluate_fused_shell_observables(
     for first_state, first_coefficient, _ in value_first_terms:
         for second_state, second_coefficient, _ in value_second_terms:
             sign = -1.0 if sum(second_state) % 2 else 1.0
-            state = tuple(first_state[axis] + second_state[axis] for axis in range(3))
+            state = _sum_states(first_state, second_state)
             value += sign * first_coefficient * second_coefficient * coulomb[state]
 
     difference_scales = {
@@ -401,18 +411,19 @@ def evaluate_fused_shell_observables(
         for first_state, first_coefficient, first_gradient in first_terms:
             for second_state, second_coefficient, second_gradient in second_terms:
                 sign = -1.0 if sum(second_state) % 2 else 1.0
-                state = tuple(
-                    first_state[axis] + second_state[axis] for axis in range(3)
-                )
+                state = _sum_states(first_state, second_state)
                 state_value = coulomb[state]
                 coefficient = sign * first_coefficient * second_coefficient
                 for coordinate in range(3):
-                    derivative_state = list(state)
-                    derivative_state[coordinate] += 1
+                    derivative_state = (
+                        state[0] + int(coordinate == 0),
+                        state[1] + int(coordinate == 1),
+                        state[2] + int(coordinate == 2),
+                    )
                     scaled_derivative = (
                         coefficient
                         * difference_scale
-                        * coulomb[tuple(derivative_state)]
+                        * coulomb[derivative_state]
                     )
                     coefficient_gradient = sign * (
                         first_gradient[coordinate] * second_coefficient
@@ -424,7 +435,7 @@ def evaluate_fused_shell_observables(
 
     prefactor = variables["prefactor"]
     gradients_by_center = {
-        center: tuple(
+        center: _vector3(tuple(
             prefactor
             * (
                 value_gradients[center][coordinate]
@@ -434,17 +445,17 @@ def evaluate_fused_shell_observables(
                 ]
             )
             for coordinate in range(3)
-        )
+        ))
         for center in selected_integral.independent_derivative_centers
     }
     for center in selected_integral.recovered_derivative_centers:
-        gradients_by_center[center] = tuple(
+        gradients_by_center[center] = _vector3(tuple(
             -sum(
                 gradients_by_center[independent][axis]
                 for independent in selected_integral.independent_derivative_centers
             )
             for axis in range(3)
-        )
+        ))
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(center, (0.0, 0.0, 0.0))
