@@ -829,6 +829,9 @@ def rks_hessian(
         )
         del result, directions
 
+    # The output budget admits matrix + one full-size publication/symmetry
+    # temporary, not an extra retained directions panel at that boundary.
+    del directions_workspace
     operator.validate_current()
     if not np.isfinite(matrix).all():
         raise FloatingPointError("nonfinite RKS Hessian; no result published")
