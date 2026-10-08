@@ -115,9 +115,7 @@ def test_nonlocal_geometry_reuses_three_tile_buffers(
     with NativeAO(**basis_arguments(meta)) as basis:
         # A full-span tile exercises the same formulas without intermediate
         # scratch reuse between ragged tiles and atom/coordinate visits.
-        full = executor.geometry(
-            basis, grid, density, tile_points=len(grid.points)
-        )
+        full = executor.geometry(basis, grid, density, tile_points=len(grid.points))
         with monkeypatch.context() as patch:
             patch.setattr(np, "empty", tracked_empty)
             tiled = executor.geometry(basis, grid, density, tile_points=3)
@@ -134,6 +132,7 @@ def test_nonlocal_geometry_reuses_three_tile_buffers(
             getattr(tiled, field), getattr(full, field), rtol=2e-12, atol=3e-13
         )
         assert not getattr(tiled, field).flags.writeable
+
 
 def test_nonlocal_reference_execution_has_explicit_grid_admission_gate() -> None:
     meta, data, grid = load_integration_fixture("h2")
