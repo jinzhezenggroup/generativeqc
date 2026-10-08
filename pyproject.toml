@@ -15,6 +15,7 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "LICENSES/*.txt", "THIRD_PARTY_NOTICES.md"]
 dependencies = [
   "numpy>=1.24",
+  "typing-extensions>=4.4",
   "sccache>=0.16.0",
   "tomli>=2; python_version < '3.11'",
   "nvidia-cublas-cu12>=12.9.1.4; sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')",
@@ -167,10 +168,7 @@ ignore = ["ANN401", "S101", "S603", "S607"]
 "tools/**/*.py" = ["S108"]
 "tools/generativeqc_validation/retention.py" = ["S314"]
 
-# Python compiler type checking with Astral ty.
-# Files in the override contain remaining pre-existing type debt as of 2026-09-20.
-# Diagnostics stay visible as warnings; clean files must return to normal strict checking.
-
+# Enforce type-checking errors and warnings for the complete scientific compiler.
 [tool.ty.environment]
 root = ["python"]
 
@@ -178,32 +176,5 @@ root = ["python"]
 include = ["python/generativeqc_compiler"]
 
 [tool.ty.terminal]
-error-on-warning = false
+error-on-warning = true
 output-format = "github"
-
-[[tool.ty.overrides]]
-include = [
-  "python/generativeqc_compiler/common/resources.py",
-  "python/generativeqc_compiler/integral/batch_benchmark.py",
-  "python/generativeqc_compiler/integral/capabilities.py",
-  "python/generativeqc_compiler/integral/df_rys_shell.py",
-  "python/generativeqc_compiler/integral/expr.py",
-  "python/generativeqc_compiler/integral/fused_schedule.py",
-  "python/generativeqc_compiler/integral/ir.py",
-  "python/generativeqc_compiler/integral/ir_serialization.py",
-  "python/generativeqc_compiler/integral/rys.py",
-  "python/generativeqc_compiler/integral/second_derivatives_execute.py",
-  "python/generativeqc_compiler/integral/shell_class.py",
-  "python/generativeqc_compiler/integral/tuning/analysis.py",
-  "python/generativeqc_compiler/integral/tuning/driver.py",
-  "python/generativeqc_compiler/integral/weighted_eri_execute.py",
-  "python/generativeqc_compiler/integral/weighted_eri_native.py",
-  "python/generativeqc_compiler/tensor/cuda_emit.py",
-  "python/generativeqc_compiler/tensor/cuda_plan.py",
-  "python/generativeqc_compiler/tensor/cuda_resident.py",
-  "python/generativeqc_compiler/tensor/cuda_tune.py",
-  "python/generativeqc_compiler/xc/prepared.py",
-]
-
-[tool.ty.overrides.rules]
-all = "warn"
