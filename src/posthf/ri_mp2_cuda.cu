@@ -1,4 +1,3 @@
-#include <cublas_v2.h>
 #include <cuda_runtime.h>
 
 #include <algorithm>
@@ -20,6 +19,7 @@
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
+#include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::mp2 {
 namespace {
@@ -30,12 +30,6 @@ void cuda_check(cudaError_t status, const char* what) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
     throw std::runtime_error(std::string(what) + ": " + cudaGetErrorString(status));
-}
-
-void blas_check(cublasStatus_t status, const char* what) {
-  if (status != CUBLAS_STATUS_SUCCESS)
-    throw std::runtime_error(std::string(what) + " failed with cuBLAS status " +
-                             std::to_string(static_cast<int>(status)));
 }
 
 std::size_t bytes(std::size_t elements) { return posthf::checked_mul(elements, sizeof(double)); }
@@ -349,8 +343,20 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
                "clear RI-MP2 pair sums");
   });
 
-  const double one = 1.0;
-  const double zero = 0.0;
+  // Only scientific matrix shapes and batch broadcasts live here. The shared
+  // Tensor adapter owns vendor submission through the borrowed DF plan handle.
+  auto submit = [&](const char* operation, char left_t, char right_t, int rows, int columns,
+                    int contracted, const double* left, const double* right, double* output,
+                    std::int64_t left_stride, std::int64_t right_stride,
+                    std::int64_t output_stride, int batches) {
+    try {
+      generativeqc_tensor::gemm(plan.blas, left_t, right_t, rows, columns, contracted, left, right,
+                                output, left_stride, right_stride, output_stride, batches, 1.0,
+                                0.0);
+    } catch (const std::exception& error) {
+      throw std::runtime_error(std::string(operation) + " failed with " + error.what());
+    }
+  };
   std::size_t source_passes = 0;
   std::size_t source_row_generations = 0;
   std::size_t transform_gemms = 0;
@@ -363,23 +369,19 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
           row_device.get(), detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS)
         throw std::runtime_error(detail.empty() ? "CUDA RI-MP2 transformed DF row failed" : detail);
-      blas_check(
-          cublasDgemm(plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(na),
-                      static_cast<int>(count), static_cast<int>(n), &one, row_device.get(),
-                      static_cast<int>(na), cvir_device.get() + begin * n, static_cast<int>(n),
-                      &zero, tmp_device.get() + mu * na * count, static_cast<int>(na)),
-          "RI-MP2 virtual AO-to-MO transform");
+      // Original column-major (na,count,n) GEMM, viewed row-major without packing.
+      submit("RI-MP2 virtual AO-to-MO transform", 'N', 'N', static_cast<int>(count),
+             static_cast<int>(na), static_cast<int>(n), cvir_device.get() + begin * n,
+             row_device.get(), tmp_device.get() + mu * na * count, 0, 0, 0, 1);
       ++source_row_generations;
       ++transform_gemms;
     }
     const std::size_t rows = elements2(na, count);
     if (rows > static_cast<std::size_t>(std::numeric_limits<int>::max()))
       throw std::invalid_argument("CUDA RI-MP2 transformed B exceeds cuBLAS int32 indexing");
-    blas_check(cublasDgemm(plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(rows),
-                           static_cast<int>(no), static_cast<int>(n), &one, tmp_device.get(),
-                           static_cast<int>(rows), cocc_device.get(), static_cast<int>(n), &zero,
-                           output, static_cast<int>(rows)),
-               "RI-MP2 occupied AO-to-MO transform");
+    submit("RI-MP2 occupied AO-to-MO transform", 'N', 'N', static_cast<int>(no),
+           static_cast<int>(rows), static_cast<int>(n), cocc_device.get(), tmp_device.get(),
+           output, 0, 0, 0, 1);
     ++transform_gemms;
   };
 
@@ -408,26 +410,20 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
       for (std::size_t i = 0; i < no; ++i) {
         for (std::size_t j_begin = 0; j_begin < no; j_begin += j_batch) {
           const std::size_t j_count = std::min(j_batch, no - j_begin);
-          blas_check(cublasDgemmStridedBatched(
-                         plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(a_count),
-                         static_cast<int>(b_count), static_cast<int>(na), &one,
-                         first_b.get() + i * a_stride, static_cast<int>(na), 0,
-                         b_values + j_begin * b_stride, static_cast<int>(na),
-                         static_cast<long long>(b_stride), &zero, direct_device.get(),
-                         static_cast<int>(a_count), static_cast<long long>(g_stride),
-                         static_cast<int>(j_count)),
-                     "RI-MP2 direct fitted-integral batch");
+          // A is broadcast (zero stride); B advances per occupied j.
+          // Row-major B * A^T reverses the original column-major A^T * B.
+          submit("RI-MP2 direct fitted-integral batch", 'N', 'T', static_cast<int>(b_count),
+                 static_cast<int>(a_count), static_cast<int>(na),
+                 b_values + j_begin * b_stride, first_b.get() + i * a_stride,
+                 direct_device.get(), static_cast<std::int64_t>(b_stride), 0,
+                 static_cast<std::int64_t>(g_stride), static_cast<int>(j_count));
           ++energy_gemms;
           if (!same) {
-            blas_check(
-                cublasDgemmStridedBatched(
-                    plan.blas, CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(b_count),
-                    static_cast<int>(a_count), static_cast<int>(na), &one, b_values + i * b_stride,
-                    static_cast<int>(na), 0, first_b.get() + j_begin * a_stride,
-                    static_cast<int>(na), static_cast<long long>(a_stride), &zero,
-                    exchange_device.get(), static_cast<int>(b_count),
-                    static_cast<long long>(g_stride), static_cast<int>(j_count)),
-                "RI-MP2 exchange fitted-integral batch");
+            submit("RI-MP2 exchange fitted-integral batch", 'N', 'T',
+                   static_cast<int>(a_count), static_cast<int>(b_count), static_cast<int>(na),
+                   first_b.get() + j_begin * a_stride, b_values + i * b_stride,
+                   exchange_device.get(), static_cast<std::int64_t>(a_stride), 0,
+                   static_cast<std::int64_t>(g_stride), static_cast<int>(j_count));
             ++energy_gemms;
           }
           reduce_ri_mp2_block<<<static_cast<unsigned>(j_count), kThreads, 0, stream>>>(
