@@ -1,11 +1,14 @@
-# Analytic HF Hessians and HVPs (issue #180)
+# Analytic HF Hessians and HVPs
 
-This document is the second-derivative dependency graph requested by step 1 of
-issue #180: it maps every term of the RHF energy to the Hessian contribution it
-produces, and records which layer supplies that term. It is deliberately
-written before any assembly code exists, so the term list and the sign
-conventions are fixed in one place instead of being reverse-engineered from
-three different providers later.
+This is the conventional RHF second-derivative term map, provider
+boundary and bounded reference/HVP integration contract. Its
+derivation preceded the implementation; it is no longer accurate
+to describe this as a plan written before any assembly code exists.
+The structural umbrella [issue #180](https://github.com/jinzhezenggroup/generativeqc/issues/180)
+is closed, but public Hessian support remains specific to an
+admitted method, basis, backend and property.
+The [DFT Hessian/HVP guide](dft_hessian.md) separately owns the
+MethodIR source planning and qualified CPU LDA/PBE RKS execution.
 
 ## Current implementation status
 
@@ -26,88 +29,27 @@ Krylov vectors/orthogonalization to remain on that direct-J/K CUDA stream via
 response_execution="cuda-resident". Nuclear/metric RHS construction and
 final D/W reconstruction remain host-side, while the B3 second-integral HVP
 and relaxation contractions are still CPU consumers. The result is therefore
-a mixed host/device HVP, not an all-device HVP. There is still no public
-Calculator Hessian/HVP API or production-size global-memory claim. See
+a mixed host/device HVP, not an all-device HVP. There is no RHF Calculator Hessian/HVP API or production-size global-memory
+claim for this bounded tools path. See
 [the matrix-free RHF HVP decision note](../../.agents/notes/implemented/numerics/2026-09-19-rhf-matrix-free-hvp.md).
 
 ## Generic DFT HVP planning
 
-DFT Hessian support is derived from resolved `MethodIR` primitive capabilities,
-not from functional-name branches. `StationaryHVPPlan` is the first compiler
-boundary for this rule. Its initial admitted topology is direct all-electron
-FP64 LDA/GGA RKS/UKS with the native SCF point model: LDA and GGA share the
-same one-electron, Coulomb, XC AO/grid/partition, overlap/Pulay and nuclear
-directional source inventory, while their active `rho`/`sigma` features come
-from the method graph.
+The current primitive-typed DFT source inventory, installed
+second-order executor, shared response contracts and public
+CPU LDA/PBE RKS Hessian/HVP domain are documented in
+[DFT Hessian and HVP execution](dft_hessian.md).
+Neither a DFT force nor a compiled Hessian constituent alone
+establishes complete molecular or public API support.
 
-The planner binds the shared #179 CPKS contract, #161/#236 XC feature-Hessian
-action and #178 weighted second-integral HVP contract. Its integral blocks
-execute only the bounded source algebra; native CPKS and XC/grid consumers
-remain separate owners. Second-order support is now admitted through an exact
-primitive-type rule registry rather than a fixed "one semilocal primitive"
-condition. Each rule declares its required derivative capabilities, supported
-ingredients, directional sources and any response inputs needed by bounded
-integral HVP lowering. The plan derives its source inventory by composing those
-rules with the stationary mean-field envelope. It fails closed when an active
-primitive has no registered second-order rule. Therefore full/range-separated
-exchange, `tau`, nonlocal correlation, DF and ECP do not inherit Hessian
-support merely from energy or gradient support. Adding another functional
-inside an already qualified LDA/GGA primitive family must not add
-Hessian-specific scientific source code.
+## Qualified scope and exclusions
 
-Molecular execution is a separate method-neutral layer. Its canonical
-installed owner is now `generativeqc.second_order`; the former
-`tools.generativeqc_hessian.stationary_executor` module is a compatibility re-export
-and contains no second implementation. `StationarySecondOrderExecutor` accepts
-only a plan identity and complete ordered source inventory, one perturbation
-provider, one opaque stationary response driver and exactly one contributor per
-declared source. It performs one response solve, passes the same response object
-to every contribution and publishes a result only after every source returns a
-finite Cartesian HVP. There is no HF/RKS/UKS or functional-name dispatch in
-this executor. A MethodIR-derived DFT plan and an HF second-order plan can
-therefore share the same orchestration while retaining their own perturbation,
-response and primitive providers. Missing or extra contributors fail before
-execution.
-
-The plan now exposes bounded `integral_block` programs for the one-electron,
-Coulomb and overlap/Pulay sources. Each block reuses the stationary-gradient
-source energy and derives its fixed integral weights, then generates an exact
-TensorIR JVP for a supplied
-density or weighted-density response, and contracts that response with the
-first-integral directional tile plus #178's fixed-weight second-integral HVP
-vector. This is an executable source-level algebra slice for both RKS and UKS;
-native shell/center recovery, shared CPKS execution, XC/grid/partition motion
-and molecular assembly remain owned by their qualified consumers.
-
-The closed-shell nuclear-perturbation consumer follows the same rule. Its
-canonical installed owner is now `generativeqc.stationary_nuclear`: metric-density
-RHS construction, occupied-orbital/density reconstruction and the single-/multi-
-RHS consumer contract live there without importing repository `tools.*`.
-Method-specific Fock physics remains injected through the response operator's
-`induced_fock(delta_density)` contract. The shared #179 GMRES implementation
-is now installed as `generativeqc.response_solver`; tools response/Hessian
-imports are compatibility aliases or wrappers around the same production
-objects. Existing `solve_rhf_nuclear_perturbation[s]` names remain strict RHF
-compatibility wrappers.
-
-The CPU direct all-electron Cartesian LDA/PBE RKS path now has installed
-production owners for the live CPKS state/J/XC binding, nuclear-direction
-response, NativeAO-owned generated first/second integral response, complete
-seven-source molecular HVP, shared multi-RHS CPKS and raw bounded full-Hessian
-assembly. The existing finite-difference, raw-symmetry and resource-admission
-tests continue to qualify this same scientific slice. Repository
-`tools.generativeqc_hessian.rks_directional` and `rks_molecular` are module
-aliases to those installed consumers. The same owner is now exposed through
-`Calculator.hessian_vector_product()` and `Calculator.hessian()` for CPU direct
-all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS. Public calls retain
-explicit integral/output budgets and report the executed public endpoint in
-result diagnostics. Wider method/backend support remains separate.
-
-## Scope of this slice
-
-Slice A targets a **tiny dense analytic RHF Hessian** with component checks, on
-systems small enough for the existing reference exporter (`nbf <= 12`). It is
-CPU-only.
+The tiny analytic RHF reference and the bounded `NativeRHFState`
+HVP/Hessian tools retain their all-electron conventional RHF scope
+(at most 12 Cartesian AOs/four atoms). Separately, a qualified
+public Calculator Hessian/HVP endpoint exists for CPU direct
+all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS;
+see [DFT Hessians](dft_hessian.md).
 
 Explicitly outside this slice, and left fail-closed rather than approximated:
 
@@ -120,7 +62,9 @@ Explicitly outside this slice, and left fail-closed rather than approximated:
 - **DF, ECP, range-separated and meta-GGA Hessians** — each needs its own
   complete second-derivative/response chain and is *not* inherited from energy
   or first-force support;
-- **CUDA execution** and any performance claim.
+- **Public CUDA molecular Hessian/HVP execution** — existing
+CUDA integral/response components do not establish a public
+CUDA Calculator Hessian endpoint or a complete-endpoint speedup.
 
 ## What the providers do and do not supply
 
