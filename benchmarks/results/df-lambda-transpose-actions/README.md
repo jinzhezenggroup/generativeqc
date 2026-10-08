@@ -18,7 +18,9 @@ GPU `GPU-4b4be14f-ec84-6736-a7d8-968d62900c72`, driver 595.91.07, 600 W limit.
 Slurm assigned `CUDA_VISIBLE_DEVICES=1`, retained unchanged. Each variant has six
 fresh-process observations per case, alternating baseline/candidate and
 candidate/baseline order. All 24 measured observations and four excluded
-qualification/cache-prime observations are retained in [samples.json](samples.json).
+qualification/cache-prime observations are retained by workload in
+[water24.samples.json](water24.samples.json) and
+[methane34.samples.json](methane34.samples.json).
 
 Conventional unscreened RHF supplies Fock/orbitals; only correlation is fitted.
 Both bases are spherical: cc-pVDZ / cc-pVDZ-RI. Water has `(o,v,q)=(5,19,84)`;
