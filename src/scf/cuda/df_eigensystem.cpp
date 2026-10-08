@@ -213,9 +213,8 @@ generativeqc_status solve_cuda_density_fitting_eigen(
     if (error != cudaSuccess) return cuda_failure(error, "upload ordinary DF eigen inputs", detail);
     if (orthogonalizer) {
       trace::TraceRegion transform("generalized_transform", plan->stream);
-      status = scf_gemm(*plan, false, 1, n, state->matrix, state->x, state->temporary, detail);
-      if (status == GENERATIVEQC_STATUS_SUCCESS)
-        status = scf_gemm(*plan, true, 1, n, state->x, state->temporary, state->matrix, detail);
+      status = scf_generalized_transform(*plan, false, 1, n, state->matrix, state->x,
+                                         state->temporary, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     }
     const cuda_execution::EigensolverResources resources{
@@ -244,7 +243,8 @@ generativeqc_status solve_cuda_density_fitting_eigen(
     auto* output = state->matrix;
     if (orthogonalizer) {
       trace::TraceRegion transform("coefficient_backtransform", plan->stream);
-      status = scf_gemm(*plan, false, 1, n, state->x, state->matrix, state->temporary, detail);
+      status = scf_generalized_transform(*plan, true, 1, n, state->matrix, state->x,
+                                         state->temporary, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       output = state->temporary;
     }

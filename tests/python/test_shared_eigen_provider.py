@@ -222,10 +222,15 @@ def _consumer_definitions() -> str:
 
 GFN2_TRIDIAGONAL_STUB = r"""
 int tridiagonal_calls = 0;
-Gfn2EigensolverLaunchResult tridiagonal_symmetric_eigensolve(
+Gfn2EigensolverLaunchResult (*tridiagonal_hook)(
     cusolverDnHandle_t, const Gfn2EigensolverBucket&, double*, double*,
-    const Gfn2EigensolverDeviceWorkspace&, int*, cudaStream_t) noexcept {
+    const Gfn2EigensolverDeviceWorkspace&, int*, cudaStream_t) = nullptr;
+Gfn2EigensolverLaunchResult tridiagonal_symmetric_eigensolve(
+    cusolverDnHandle_t solver, const Gfn2EigensolverBucket& bucket, double* matrix, double* values,
+    const Gfn2EigensolverDeviceWorkspace& workspace, int* info, cudaStream_t stream) noexcept {
   ++tridiagonal_calls;
+  if (tridiagonal_hook != nullptr)
+    return tridiagonal_hook(solver, bucket, matrix, values, workspace, info, stream);
   return launch_success();
 }
 """

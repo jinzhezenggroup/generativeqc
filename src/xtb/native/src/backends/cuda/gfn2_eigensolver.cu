@@ -12,6 +12,7 @@
 
 #include "backends/cuda/gfn2_eigensolver.cuh"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
+#include "solver/cuda/generalized_eigen.hpp"
 #include "solver/cuda/symmetric_eigen_workspace.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
@@ -2343,16 +2344,28 @@ Gfn2EigensolverLaunchResult symmetric_eigensolve(
   return status == CUSOLVER_STATUS_SUCCESS ? launch_success() : cusolver_failure(status);
 }
 
-Gfn2EigensolverLaunchResult triangular_solve(cublasHandle_t blas, cublasSideMode_t side,
-                                             cublasOperation_t operation,
-                                             const Gfn2EigensolverBucket& bucket,
-                                             double** factor_pointers,
-                                             double** matrix_pointers) noexcept {
-  const auto factors = reinterpret_cast<const double* const*>(factor_pointers);
-  const cublasStatus_t status = cublasDtrsmBatched(
-      blas, side, CUBLAS_FILL_MODE_LOWER, operation, CUBLAS_DIAG_NON_UNIT, bucket.orbital_count,
-      bucket.orbital_count, &kOne, factors, bucket.orbital_count, matrix_pointers,
-      bucket.orbital_count, bucket.system_count);
+Gfn2EigensolverLaunchResult generalized_transform(
+    cublasHandle_t blas, bool recovery, const Gfn2EigensolverBucket& policy_bucket,
+    const Gfn2EigensolverBucket& submission, const Gfn2EigensolverDeviceWorkspace& workspace,
+    std::int64_t pointer_offset) noexcept {
+  namespace shared = ::generativeqc::solver;
+  if (pointer_offset < 0 || pointer_offset > workspace.factor_pointer_elements ||
+      pointer_offset > workspace.matrix_pointer_elements) return invalid_argument();
+  const auto factor_capacity = workspace.factor_pointer_elements - pointer_offset;
+  const auto matrix_capacity = workspace.matrix_pointer_elements - pointer_offset;
+  const shared::GeneralizedEigenDomain domain{
+      static_cast<std::size_t>(submission.orbital_count),
+      static_cast<std::size_t>(submission.system_count),
+      static_cast<std::size_t>(std::min(factor_capacity, matrix_capacity)),
+      shared::GeneralizedEigenLayout::column_major,
+      static_cast<std::size_t>(policy_bucket.system_count)};
+  const eigen_provider::GeneralizedEigenPointerMatrices matrices{
+      workspace.factor_pointers + pointer_offset, workspace.matrix_pointers + pointer_offset,
+      static_cast<std::size_t>(factor_capacity), static_cast<std::size_t>(matrix_capacity)};
+  const eigen_provider::GeneralizedEigenLowering lowering{domain, blas, matrices};
+  constexpr auto basis = shared::GeneralizedEigenBasis::lower_cholesky;
+  const cublasStatus_t status = recovery ? shared::recover_generalized_eigen(basis, lowering)
+                                          : shared::reduce_generalized_eigen(basis, lowering);
   return status == CUBLAS_STATUS_SUCCESS ? launch_success() : cublas_failure(status);
 }
 
@@ -2476,14 +2489,7 @@ Gfn2EigensolverLaunchResult enqueue_capacity_eigensolver_body(
     result = configure_blas(blas, capture_stream, workspace, options.deterministic_debug);
   }
   if (result.success()) {
-    result = triangular_solve(blas, CUBLAS_SIDE_LEFT, CUBLAS_OP_N, submission,
-                              workspace.factor_pointers + bucket.system_index_offset,
-                              workspace.matrix_pointers + bucket.system_index_offset);
-  }
-  if (result.success()) {
-    result = triangular_solve(blas, CUBLAS_SIDE_RIGHT, CUBLAS_OP_T, submission,
-                              workspace.factor_pointers + bucket.system_index_offset,
-                              workspace.matrix_pointers + bucket.system_index_offset);
+    result = generalized_transform(blas, false, bucket, submission, workspace, bucket.system_index_offset);
   }
   if (result.success()) {
     validate_compacted_transformed_bucket_kernel<<<capacity, 1, 0, capture_stream>>>(
@@ -2547,9 +2553,7 @@ Gfn2EigensolverLaunchResult enqueue_capacity_backtransform_body(
     result = configure_blas(blas, capture_stream, workspace, deterministic_debug);
   }
   if (result.success()) {
-    result = triangular_solve(blas, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, submission,
-                              workspace.factor_pointers + bucket.system_index_offset,
-                              workspace.matrix_pointers + bucket.system_index_offset);
+    result = generalized_transform(blas, true, bucket, submission, workspace, bucket.system_index_offset);
   }
   if (result.success()) {
     scatter_compacted_eigensystems_kernel<<<capacity, kThreadsPerSystem, 0, capture_stream>>>(
@@ -3480,15 +3484,7 @@ static Gfn2EigensolverLaunchResult solve_eigensystems_impl(
     if (!result.success()) {
       return result;
     }
-    result = triangular_solve(blas, CUBLAS_SIDE_LEFT, CUBLAS_OP_N, bucket,
-                              workspace.factor_pointers + info_begin,
-                              workspace.matrix_pointers + info_begin);
-    if (!result.success()) {
-      return result;
-    }
-    result = triangular_solve(blas, CUBLAS_SIDE_RIGHT, CUBLAS_OP_T, bucket,
-                              workspace.factor_pointers + info_begin,
-                              workspace.matrix_pointers + info_begin);
+    result = generalized_transform(blas, false, bucket, bucket, workspace, info_begin);
     if (!result.success()) {
       return result;
     }
@@ -3506,9 +3502,7 @@ static Gfn2EigensolverLaunchResult solve_eigensystems_impl(
     if (!result.success()) {
       return result;
     }
-    result = triangular_solve(blas, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, bucket,
-                              workspace.factor_pointers + info_begin,
-                              workspace.matrix_pointers + info_begin);
+    result = generalized_transform(blas, true, bucket, bucket, workspace, info_begin);
     if (!result.success()) {
       return result;
     }
@@ -3669,15 +3663,7 @@ static Gfn2EigensolverLaunchResult solve_spin_eigensystems_impl(
     if (!result.success()) {
       return result;
     }
-    result = triangular_solve(blas, CUBLAS_SIDE_LEFT, CUBLAS_OP_N, submission,
-                              workspace.factor_pointers + bucket.solve_index_offset,
-                              workspace.matrix_pointers + bucket.solve_index_offset);
-    if (!result.success()) {
-      return result;
-    }
-    result = triangular_solve(blas, CUBLAS_SIDE_RIGHT, CUBLAS_OP_T, submission,
-                              workspace.factor_pointers + bucket.solve_index_offset,
-                              workspace.matrix_pointers + bucket.solve_index_offset);
+    result = generalized_transform(blas, false, bucket, submission, workspace, bucket.solve_index_offset);
     if (!result.success()) {
       return result;
     }
@@ -3696,9 +3682,7 @@ static Gfn2EigensolverLaunchResult solve_spin_eigensystems_impl(
     if (!result.success()) {
       return result;
     }
-    result = triangular_solve(blas, CUBLAS_SIDE_LEFT, CUBLAS_OP_T, submission,
-                              workspace.factor_pointers + bucket.solve_index_offset,
-                              workspace.matrix_pointers + bucket.solve_index_offset);
+    result = generalized_transform(blas, true, bucket, submission, workspace, bucket.solve_index_offset);
     if (!result.success()) {
       return result;
     }
