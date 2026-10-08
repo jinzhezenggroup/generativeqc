@@ -2,7 +2,8 @@
  *
  * Raw integral columns and pivot/PSD decisions are supplied by the existing
  * host provider. No shell/operator formula is implemented here. Packing and
- * cuBLAS implement B[P] D B[P] and B[P] trace(B[P] D), reusing the common owned
+ * the shared Tensor matrix/dot provider implement B[P] D B[P] and
+ * B[P] trace(B[P] D), reusing the common owned
  * CUDA context/arena/provider workspace. Execution allocates no device memory.
  */
 #include <climits>
@@ -227,25 +228,22 @@ int posthf_cholesky_jk_v1(void* handle, size_t rank, const double* density, unsi
       total_density<<<blocks(square, 128), 128, 0, p.context.stream>>>(p.density, p.total, square,
                                                                        spins);
     });
-    const double one = 1.0, zero = 0.0;
+    const int n = static_cast<int>(p.n);
     for (size_t k = 0; k < rank; ++k) {
       p.context.section(true, p.context.metrics.packing_ms, [&] {
         expand_pair<<<blocks(square, 128), 128, 0, p.context.stream>>>(p.factors, p.physical, p.n,
                                                                        p.pairs, k);
       });
       p.context.section(true, p.context.metrics.library_ms, [&] {
-        blas_check(cublasSetPointerMode(p.context.handle, CUBLAS_POINTER_MODE_DEVICE));
-        blas_check(cublasDdot(p.context.handle, static_cast<int>(square), p.physical, 1, p.total, 1,
-                              p.scalar));
-        blas_check(cublasSetPointerMode(p.context.handle, CUBLAS_POINTER_MODE_HOST));
+        dot_to_device(p.context, static_cast<int>(square), p.physical, p.total, p.scalar);
         for (unsigned spin = 0; spin < spins; ++spin) {
-          // Symmetric host matrices also represent the same column-major
-          // matrices. The intermediate B*D is column-major, then (B*D)*B.
-          const int n = static_cast<int>(p.n);
-          blas_check(cublasDgemm(p.context.handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &one,
-                                 p.physical, n, p.density + spin * square, n, &zero, p.stage, n));
-          blas_check(cublasDgemm(p.context.handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &one, p.stage,
-                                 n, p.physical, n, &one, p.output + (spin + 1) * square, n));
+          // The shared row-major GEMM adapter reverses the original
+          // column-major operands: B*D -> D^T*B^T, then (B*D)*B ->
+          // B^T*(B*D)^T. Physical storage and FP64 submission stay identical.
+          gemm(p.context, 'N', 'N', n, n, n, p.density + spin * square, p.physical, p.stage,
+               0, 0, 0, 1, 0.0);
+          gemm(p.context, 'N', 'N', n, n, n, p.physical, p.stage,
+               p.output + (spin + 1) * square, 0, 0, 0, 1, 1.0);
         }
       });
       p.context.section(true, p.context.metrics.kernel_ms, [&] {
