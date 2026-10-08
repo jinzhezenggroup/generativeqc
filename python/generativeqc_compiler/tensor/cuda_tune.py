@@ -418,7 +418,7 @@ def tune_cuda(
                         profitability_rejections=profitability_rejections,
                         max_absolute_error=max(errors),
                     )
-                    score = min(g["median_speedup"] for g in gates)
+                    score = min(typing.cast(float, g["median_speedup"]) for g in gates)
                     if passed:
                         row["promotion_profiles"] = _promotion_profiles(
                             plan,
