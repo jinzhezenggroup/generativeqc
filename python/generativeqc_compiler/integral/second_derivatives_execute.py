@@ -702,9 +702,7 @@ class PreparedSecondDerivative:
                     None,
                     int(profile),
                 )
-                pointer = library.generativeqc_second_result_device_v1(
-                    self._handle
-                )
+                pointer = library.generativeqc_second_result_device_v1(self._handle)
                 if not pointer:
                     raise RuntimeError("second derivative device result is unavailable")
                 consumer(int(pointer), self.artifact.output_indices)

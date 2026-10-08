@@ -370,7 +370,9 @@ class TensorPlan:
                     {
                         "shape": s.node.spec.shape,
                         "inputs": s.inputs,
-                        "layout": None if s.virtual else _materialized_layout(s).to_payload(),
+                        "layout": None
+                        if s.virtual
+                        else _materialized_layout(s).to_payload(),
                         "view_map": s.node.attrs if s.virtual else None,
                     }
                     for s in self.steps
@@ -520,8 +522,12 @@ class TensorPlan:
                     "shape": s.node.spec.shape,
                     "dtype": s.node.spec.dtype,
                     "itemsize": s.node.spec.itemsize,
-                    "strides": None if s.virtual else _materialized_layout(s).element_strides,
-                    "layout": None if s.virtual else _materialized_layout(s).to_payload(),
+                    "strides": None
+                    if s.virtual
+                    else _materialized_layout(s).element_strides,
+                    "layout": None
+                    if s.virtual
+                    else _materialized_layout(s).to_payload(),
                     "view_map": s.node.attrs if s.virtual else None,
                     "donated_from": s.donated_from,
                 }
@@ -1000,8 +1006,7 @@ def plan_cuda(
         "host tensor bytes",
     )
     needs_blas = any(
-        s.gemm != "none" and s.node.spec.size and _require_gemm(s.node).k
-        for s in steps
+        s.gemm != "none" and s.node.spec.size and _require_gemm(s.node).k for s in steps
     )
     if needs_blas and provider_bytes < MIN_PROVIDER_BYTES:
         raise ValueError("cuBLAS plans require at least a 96 MiB provider allowance")

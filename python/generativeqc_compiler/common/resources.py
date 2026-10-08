@@ -144,7 +144,7 @@ class ResourceIdentity:
         observables = tuple(sorted(set(self.observables)))
         if not observables or any(
             not isinstance(x, str) or not x
-            for x in typing.cast(tuple[object, ...], observables)
+            for x in typing.cast("tuple[object, ...]", observables)
         ):
             raise ValueError("resource identity requires requested observables")
         object.__setattr__(self, "observables", observables)

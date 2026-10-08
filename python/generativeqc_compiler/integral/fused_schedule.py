@@ -37,6 +37,7 @@ def _vector3(values: Sequence[float]) -> tuple[float, float, float]:
 def _sum_states(first: CoulombState, second: CoulombState) -> CoulombState:
     return first[0] + second[0], first[1] + second[1], first[2] + second[2]
 
+
 _AXIS_INDEX = {axis: index for index, axis in enumerate(AXES)}
 
 
@@ -258,7 +259,9 @@ def _pair_terms(
                     if quantum != differentiated:
                         derivative *= shifts[quantum]
                 gradient[axes[differentiated]] += derivative
-        terms.append(((state[0], state[1], state[2]), float(coefficient), _vector3(gradient)))
+        terms.append(
+            ((state[0], state[1], state[2]), float(coefficient), _vector3(gradient))
+        )
     return tuple(terms)
 
 
@@ -421,9 +424,7 @@ def evaluate_fused_shell_observables(
                         state[2] + int(coordinate == 2),
                     )
                     scaled_derivative = (
-                        coefficient
-                        * difference_scale
-                        * coulomb[derivative_state]
+                        coefficient * difference_scale * coulomb[derivative_state]
                     )
                     coefficient_gradient = sign * (
                         first_gradient[coordinate] * second_coefficient
@@ -435,27 +436,31 @@ def evaluate_fused_shell_observables(
 
     prefactor = variables["prefactor"]
     gradients_by_center = {
-        center: _vector3(tuple(
-            prefactor
-            * (
-                value_gradients[center][coordinate]
-                + value
-                * variables[
-                    f"decay_{('first', 'second', 'third', 'fourth')[center]}_{AXES[coordinate]}"
-                ]
+        center: _vector3(
+            tuple(
+                prefactor
+                * (
+                    value_gradients[center][coordinate]
+                    + value
+                    * variables[
+                        f"decay_{('first', 'second', 'third', 'fourth')[center]}_{AXES[coordinate]}"
+                    ]
+                )
+                for coordinate in range(3)
             )
-            for coordinate in range(3)
-        ))
+        )
         for center in selected_integral.independent_derivative_centers
     }
     for center in selected_integral.recovered_derivative_centers:
-        gradients_by_center[center] = _vector3(tuple(
-            -sum(
-                gradients_by_center[independent][axis]
-                for independent in selected_integral.independent_derivative_centers
+        gradients_by_center[center] = _vector3(
+            tuple(
+                -sum(
+                    gradients_by_center[independent][axis]
+                    for independent in selected_integral.independent_derivative_centers
+                )
+                for axis in range(3)
             )
-            for axis in range(3)
-        ))
+        )
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(center, (0.0, 0.0, 0.0))

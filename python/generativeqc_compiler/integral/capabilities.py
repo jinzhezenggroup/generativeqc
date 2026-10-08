@@ -237,7 +237,9 @@ def query_integral_capability(
 
         try:
             if integral.derivative is None:
-                raise ValueError("one-electron derivative backend requires a derivative")
+                raise ValueError(
+                    "one-electron derivative backend requires a derivative"
+                )
             components = tuple(
                 cartesian_components(l)[0] for l in integral.signature.angular
             )
@@ -594,8 +596,7 @@ def build_capability_report(
     }
     force_derivative_supported = {
         str(order): sum(
-            dict(report.force_derivative_orders)[order].supported
-            for report in reports
+            dict(report.force_derivative_orders)[order].supported for report in reports
         )
         for order in (1, 2)
     }

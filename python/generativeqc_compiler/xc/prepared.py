@@ -740,7 +740,9 @@ class PreparedXCContractions:
                 options = {}
                 if observable == "response":
                     if dd is None:
-                        raise ValueError("response request requires a density direction")
+                        raise ValueError(
+                            "response request requires a density direction"
+                        )
                     options["delta_density"] = (
                         dd
                         if active is None

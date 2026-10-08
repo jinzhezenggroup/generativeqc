@@ -41,6 +41,7 @@ from .shell_spec import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+
 def _report_float(value: object) -> float:
     """Validate a numeric report field before converting it to binary64."""
     if isinstance(value, bool) or not isinstance(value, (str, int, float)):
@@ -253,8 +254,8 @@ def pareto_front(
     ):
         raise ValueError("timing_noise must be in [0, 1)")
     rows = tuple(
-        cast(dict[str, object], row)
-        for row in cast(Iterable[object], candidates)
+        cast("dict[str, object]", row)
+        for row in cast("Iterable[object]", candidates)
         if isinstance(row, dict)
     )
 
@@ -346,7 +347,9 @@ def rank_compile_aware_candidates(
                 and not isinstance(value, bool)
                 and math.isfinite(float(value))
             ):
-                item["primitive_work"] = _report_float(item["primitive_work"]) + float(value)
+                item["primitive_work"] = _report_float(item["primitive_work"]) + float(
+                    value
+                )
                 break
         for key in (
             "runtime_seconds",
@@ -789,7 +792,9 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
             if not isinstance(resources, tuple) or not all(
                 isinstance(item, KernelResources) for item in resources
             ):
-                raise TypeError("compiled candidate must provide kernel resource records")
+                raise TypeError(
+                    "compiled candidate must provide kernel resource records"
+                )
             resource_ok, reasons = _resource_gate(
                 resources,
                 maximum_registers=arguments.max_registers,

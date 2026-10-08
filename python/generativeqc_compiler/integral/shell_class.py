@@ -249,14 +249,18 @@ def build_packed_force_geometry_algebra() -> PackedForceGeometryAlgebra:
     inverse_two_p = 0.5 / p
     inverse_two_q = 0.5 / q
     pair_shifts = tuple(
-        _triple(tuple(
-            (product_p if center_index < 2 else product_q)[axis_index]
-            - coordinates[center][axis_index]
-            for axis_index in range(3)
-        ))
+        _triple(
+            tuple(
+                (product_p if center_index < 2 else product_q)[axis_index]
+                - coordinates[center][axis_index]
+                for axis_index in range(3)
+            )
+        )
         for center_index, center in enumerate(CENTERS)
     )
-    difference = _triple(tuple(product_p[index] - product_q[index] for index in range(3)))
+    difference = _triple(
+        tuple(product_p[index] - product_q[index] for index in range(3))
+    )
     first_separation = tuple(
         coordinates["first"][index] - coordinates["second"][index] for index in range(3)
     )
@@ -266,8 +270,12 @@ def build_packed_force_geometry_algebra() -> PackedForceGeometryAlgebra:
     decay_gradients = (
         _triple(tuple(-2 * first_reduced_exponent * item for item in first_separation)),
         _triple(tuple(2 * first_reduced_exponent * item for item in first_separation)),
-        _triple(tuple(-2 * second_reduced_exponent * item for item in second_separation)),
-        _triple(tuple(2 * second_reduced_exponent * item for item in second_separation)),
+        _triple(
+            tuple(-2 * second_reduced_exponent * item for item in second_separation)
+        ),
+        _triple(
+            tuple(2 * second_reduced_exponent * item for item in second_separation)
+        ),
     )
     argument_squared_distance = graph.sum(item.pow(2) for item in difference)
     boys_argument = rho * argument_squared_distance
@@ -498,9 +506,9 @@ def _shell_component_value(
     terms = []
     for first_orders, first_coefficient in first_expansion:
         for second_orders, second_coefficient in second_expansion:
-            orders = _triple(tuple(
-                first_orders[axis] + second_orders[axis] for axis in range(3)
-            ))
+            orders = _triple(
+                tuple(first_orders[axis] + second_orders[axis] for axis in range(3))
+            )
             sign = -1.0 if sum(second_orders) % 2 else 1.0
             terms.append(
                 sign * first_coefficient * second_coefficient * coulomb(orders)
@@ -601,13 +609,15 @@ def build_psss_kernel(
         independent_gradients[center_index] = _triple(center_gradients)
     gradients_by_center = dict(independent_gradients)
     for center in selected_integral.recovered_derivative_centers:
-        gradients_by_center[center] = _triple(tuple(
-            -graph.sum(
-                independent_gradients[independent][axis]
-                for independent in selected_integral.independent_derivative_centers
+        gradients_by_center[center] = _triple(
+            tuple(
+                -graph.sum(
+                    independent_gradients[independent][axis]
+                    for independent in selected_integral.independent_derivative_centers
+                )
+                for axis in range(3)
             )
-            for axis in range(3)
-        ))
+        )
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(
@@ -761,13 +771,15 @@ def build_shell_class_component_kernel(
         independent_gradients[center_index] = _triple(center_gradients)
     gradients_by_center = dict(independent_gradients)
     for center in selected_integral.recovered_derivative_centers:
-        gradients_by_center[center] = _triple(tuple(
-            -graph.sum(
-                independent_gradients[independent][axis]
-                for independent in selected_integral.independent_derivative_centers
+        gradients_by_center[center] = _triple(
+            tuple(
+                -graph.sum(
+                    independent_gradients[independent][axis]
+                    for independent in selected_integral.independent_derivative_centers
+                )
+                for axis in range(3)
             )
-            for axis in range(3)
-        ))
+        )
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(
@@ -955,13 +967,15 @@ def build_shell_class_contraction_kernel(
     recovered_centers = selected_integral.recovered_derivative_centers
     gradients_by_center = dict(independent_gradients)
     for center in recovered_centers:
-        gradients_by_center[center] = _triple(tuple(
-            -graph.sum(
-                independent_gradients[independent][axis]
-                for independent in independent_centers
+        gradients_by_center[center] = _triple(
+            tuple(
+                -graph.sum(
+                    independent_gradients[independent][axis]
+                    for independent in independent_centers
+                )
+                for axis in range(3)
             )
-            for axis in range(3)
-        ))
+        )
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(

@@ -14,6 +14,7 @@ from itertools import product
 from math import comb
 from typing import TYPE_CHECKING
 
+from ..blocks import RawBlock, SecondDerivative, WeightDescriptor, WeightedDerivative
 from ..cuda_schedule import (
     AlgebraForm,
     AlgebraFusion,
@@ -21,7 +22,6 @@ from ..cuda_schedule import (
     AlgebraPlacement,
     ScheduleKind,
 )
-from ..blocks import RawBlock, SecondDerivative, WeightDescriptor, WeightedDerivative
 from ..expr import Expr, PowerLowering
 from ..ir import (
     ContractionConsumer,
@@ -138,9 +138,7 @@ def _contraction_signature(
     """Keep non-HF block descriptors distinct without changing HF identities."""
     if isinstance(item, ContractionSpec):
         density_items = (
-            item.density.split("|")
-            if isinstance(item.density, str)
-            else item.density
+            item.density.split("|") if isinstance(item.density, str) else item.density
         )
         return {
             "consumer": ContractionConsumer(item.consumer).value,
@@ -219,7 +217,9 @@ def _integral_signature(integral: IntegralIR) -> str:
                     "slot": shell.slot,
                     "center": shell.center,
                     "angular": shell.angular,
-                    "role": str(shell.role.value if hasattr(shell.role, "value") else shell.role),
+                    "role": str(
+                        shell.role.value if hasattr(shell.role, "value") else shell.role
+                    ),
                     "convention": str(
                         shell.convention.value
                         if hasattr(shell.convention, "value")

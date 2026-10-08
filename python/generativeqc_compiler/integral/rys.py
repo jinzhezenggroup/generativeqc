@@ -322,11 +322,13 @@ def boys_values(argument: float, count: int) -> tuple[float, ...]:
     # and remains accurate throughout the complete small-argument interval.
     if argument < 1.0:
         return tuple(
-            float(sum(
-                (-argument) ** term
-                / (math.factorial(term) * (2 * order + 2 * term + 1))
-                for term in range(32)
-            ))
+            float(
+                sum(
+                    (-argument) ** term
+                    / (math.factorial(term) * (2 * order + 2 * term + 1))
+                    for term in range(32)
+                )
+            )
             for order in range(count)
         )
     values: list[float] = [
@@ -334,7 +336,9 @@ def boys_values(argument: float, count: int) -> tuple[float, ...]:
     ]
     exponential = math.exp(-argument)
     for order in range(count - 1):
-        values.append(float(((2 * order + 1) * values[-1] - exponential) / (2.0 * argument)))
+        values.append(
+            float(((2 * order + 1) * values[-1] - exponential) / (2.0 * argument))
+        )
     return tuple(values)
 
 
@@ -1213,7 +1217,9 @@ def evaluate_rys_component(
     )
     return FusedShellResult(
         value=prefactor * value,
-        gradients=tuple((gradient[0], gradient[1], gradient[2]) for gradient in all_gradients),
+        gradients=tuple(
+            (gradient[0], gradient[1], gradient[2]) for gradient in all_gradients
+        ),
     )
 
 

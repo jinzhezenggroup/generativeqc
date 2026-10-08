@@ -742,7 +742,7 @@ class Graph:
         assumptions = dict(variable_domains)
         if any(
             not isinstance(value, ScalarDomain)
-            for value in cast(dict[str, object], assumptions).values()
+            for value in cast("dict[str, object]", assumptions).values()
         ):
             raise TypeError("variable domains must use ScalarDomain values")
         memo: dict[int, ScalarDomain] = {}

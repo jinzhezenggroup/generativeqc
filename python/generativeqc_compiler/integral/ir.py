@@ -216,7 +216,7 @@ class EcpCenter:
         object.__setattr__(self, "terms", tuple(self.terms))
         if not self.terms or any(
             not isinstance(t, EcpRadialTerm)
-            for t in cast(tuple[object, ...], self.terms)
+            for t in cast("tuple[object, ...]", self.terms)
         ):
             raise ValueError("ECP center requires explicit scalar Gaussian terms")
 
@@ -501,7 +501,7 @@ class IntegralIR:
             not isinstance(
                 c, (ContractionSpec, RawBlock, WeightedDerivative, SecondDerivative)
             )
-            for c in cast(tuple[object, ...], self.contractions)
+            for c in cast("tuple[object, ...]", self.contractions)
         ):
             raise TypeError(
                 "integral consumers must use a declared contraction contract"
