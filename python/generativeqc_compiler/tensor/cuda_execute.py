@@ -742,7 +742,7 @@ class PreparedCuda:
                 observed_layout_conversion_bytes=traffic["layout_conversion_bytes"],
                 observed_host_to_device_bytes=traffic["host_to_device_bytes"],
                 observed_device_to_host_bytes=traffic["device_to_host_bytes"],
-                observed_traffic_scope=traffic["scope"]
+                observed_traffic_scope=str(traffic["scope"])
                 + "; bound to a successfully executed endpoint, not a hardware DRAM counter",
                 profiled=bool(profile),
                 **graph_metrics,
