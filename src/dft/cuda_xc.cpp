@@ -369,7 +369,8 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
   prepare_potential();
 }
 
-void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget) {
+void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget,
+                                       bool compact) {
   check_device();
   if (evaluation_started_ || point_batch_arena_)
     throw std::logic_error("XC point batching requires an unused unbatched owner");
@@ -378,8 +379,12 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
   if (capture != cudaStreamCaptureStatusNone)
     throw std::invalid_argument("XC point batch preparation cannot capture");
   if (!admitted_density_[0].precision.arithmetic.is_strict_fp64()) return;
+  // Optional providers keep their qualified materialization/epilogue. This
+  // candidate must never silently replace a selected library execution path.
+  compact = compact && !(density_provider_ && density_provider_->enabled()) &&
+            !(potential_binding_ && potential_binding_->diagnostic().provider_allowance);
   const auto plan = cuda_xc_detail::prepare_point_batch_plan(layout_, ao_offsets_, requested_tiles,
-                                                             device_budget);
+                                                             device_budget, compact);
   if (plan.tiles == 1) return;
   const auto launcher = cuda_xc_detail::resolve_point_batch_launcher(layout_.functional);
   double* arena = nullptr;
@@ -393,9 +398,51 @@ void CudaXcPlan::prepare_point_batches(std::size_t requested_tiles, std::size_t 
     return;
   }
   check(status);
+  // Keep staging alive through the failure drain as well as the success fence.
+  std::vector<CudaXcCompactTile> tiles;
+  try {
+    if (plan.compact) {
+      const auto tile_count = 1 + (layout_.npoint - 1) / layout_.tile_points;
+      tiles.reserve(tile_count);
+      std::size_t ao_offset = 0, work_offset = 0, potential_offset = 0;
+      bool grouped = false;
+      for (std::size_t tile = 0; tile < tile_count; ++tile) {
+        if (tile % plan.tiles == 0) {
+          ao_offset = work_offset = potential_offset = 0;
+          grouped = cuda_xc_detail::compact_point_batch_admitted(
+              layout_, ao_offsets_, tile, std::min(tile_count, tile + plan.tiles));
+        }
+        const auto begin = tile * layout_.tile_points;
+        const auto count = std::min(layout_.tile_points, layout_.npoint - begin);
+        const auto active =
+            layout_.local_ao ? ao_offsets_[tile + 1] - ao_offsets_[tile] : layout_.nao;
+        tiles.push_back({begin, count, active, layout_.local_ao ? ao_offsets_[tile] : 0, ao_offset,
+                         work_offset, potential_offset});
+        ao_offset += count * active * layout_.jets;
+        if (grouped) {
+          work_offset += count * active * layout_.spins * layout_.work_jets;
+          potential_offset += active * active * layout_.spins;
+        }
+      }
+      auto* descriptors = arena + plan.ao_elements + 2 * plan.feature_elements +
+                          plan.total_elements + plan.work_elements + plan.potential_elements;
+      check(cudaMemcpyAsync(descriptors, tiles.data(), plan.descriptor_bytes,
+                            cudaMemcpyHostToDevice, stream_));
+      // The setup-only staging vector cannot outlive an unfinished H2D copy.
+      check(cudaStreamSynchronize(stream_));
+    }
+  } catch (...) {
+    cudaStreamSynchronize(stream_);
+    generativeqc::runtime::resource_cuda_free(arena);
+    throw;
+  }
   point_batch_arena_ = arena;
   point_batch_plan_ = plan;
   point_batch_launcher_ = launcher;
+  if (plan.compact) {
+    transfers_.setup_h2d_bytes += plan.descriptor_bytes;
+    ++transfers_.synchronizations;
+  }
 }
 
 void CudaXcPlan::prepare_potential(std::size_t provider_budget) {

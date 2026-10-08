@@ -20,7 +20,14 @@ CudaXcAoTiles local_maps(std::size_t points, std::size_t tile_points, std::size_
 void local_ao_reference(Fixture& fixture, const AoBasis& basis, const MolecularGrid& grid,
                         const CudaXcAoTiles& maps, const std::vector<double>& d) {
   const auto count = grid.point_count(), n = basis.nao;
-  const auto captured = fixture.submit_density_features(d);
+  // Density-gradient export is deliberately GGA-only. LDA still uses the same
+  // independently masked AO bilinears, without weakening that production guard.
+  const bool export_features = fixture.layout.functional != 0U;
+  std::pair<std::vector<double>, std::vector<double>> captured;
+  if (export_features)
+    captured = fixture.submit_density_features(d);
+  else
+    fixture.submit(d);
   const auto result = fixture.scalars();
   require(result.error == 0, "local AO XC reported a device error");
   std::vector<double> ao(4 * count * n), expected(d.size(), 0.0);
@@ -51,11 +58,30 @@ void local_ao_reference(Fixture& fixture, const AoBasis& basis, const MolecularG
         }
       electrons[spin] += grid.weights()[p] * rho[spin];
     }
-    close(captured.first[p], rho[0] + rho[1], "local AO captured density", 2e-12);
-    for (unsigned k = 0; k < 3; ++k)
-      close(captured.second[3 * p + k], gradient[0][k] + gradient[1][k],
-            "local AO captured gradient", 2e-12);
-    const auto xc = evaluate_wb97mv_point(rho, gradient, tau);
+    if (export_features) {
+      close(captured.first[p], rho[0] + rho[1], "local AO captured density", 2e-12);
+      for (unsigned k = 0; k < 3; ++k)
+        close(captured.second[3 * p + k], gradient[0][k] + gradient[1][k],
+              "local AO captured gradient", 2e-12);
+    }
+    SemilocalPointValue xc;
+    if (fixture.layout.functional == 4U)
+      xc = evaluate_wb97mv_point(rho, gradient, tau);
+    else if (fixture.layout.functional == 3U)
+      xc = evaluate_b3lyp_point(rho, gradient);
+    else if (fixture.layout.functional == 2U)
+      xc = evaluate_r2scan_point(rho, gradient, tau);
+    else {
+      const auto point_value =
+          point::evaluate(fixture.layout.functional == 1U, rho, gradient,
+                          fixture.layout.exchange_scale, fixture.layout.correlation_scale);
+      require(point_value.valid, "local AO CPU point reference rejected valid features");
+      xc.energy = point_value.energy;
+      for (unsigned spin = 0; spin < 2; ++spin) {
+        xc.rho[spin] = point_value.rho[spin];
+        for (unsigned k = 0; k < 3; ++k) xc.gradient[spin][k] = point_value.gradient[spin][k];
+      }
+    }
     require(std::isfinite(xc.energy), "local AO CPU point reference rejected valid features");
     energy += grid.weights()[p] * xc.energy;
     for (unsigned spin = 0; spin < fixture.layout.spins; ++spin)

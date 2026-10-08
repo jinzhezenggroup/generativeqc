@@ -11,6 +11,10 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/generalized_eigen.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/generalized_eigen.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/generalized_eigen.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_square_linalg.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/cusolver_compat.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.cpp"
@@ -1096,6 +1100,10 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_GRID_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_grid_policy.cu")
+  set(_generativeqc_grid_ao_schedule_args)
+  if(GENERATIVEQC_CUDA_AO_RADIAL_REUSE)
+    list(APPEND _generativeqc_grid_ao_schedule_args --ao-radial-reuse)
+  endif()
   # The r2SCAN minority-spin derivative is sensitive to contraction of 1-zeta
   # near the work-density floor. Match the compiler XC FP64 policy and the
   # independent Libxc boundary qualification; do not introduce FMA. CuMetal's
@@ -1117,7 +1125,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${GENERATIVEQC_WB97MV_CUDA_HEADER}"
       "${GENERATIVEQC_SPLIT_HYBRID_CUDA_HEADER}"
     COMPILE_OPTIONS "${_generativeqc_grid_fp_contract_option}"
-    ARGS --output "${GENERATIVEQC_GRID_SOURCE}")
+    ARGS --output "${GENERATIVEQC_GRID_SOURCE}" ${_generativeqc_grid_ao_schedule_args})
 
   set(GENERATIVEQC_RCCSD_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cuda.cu")

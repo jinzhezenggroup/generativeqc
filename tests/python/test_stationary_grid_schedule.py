@@ -69,6 +69,50 @@ def test_ordinary_automatic_choice_obeys_unchanged_host_and_device_budgets(
     )
 
 
+@pytest.mark.parametrize("tile_points", [256, 512])
+@pytest.mark.parametrize("requested_bytes", [0, 32 << 20, 64 << 20])
+def test_optional_csr_preserves_native_integral_provider_budget(
+    tile_points: int, requested_bytes: int
+) -> None:
+    """Exercise the full ordinary allocation model, including geometry scratch."""
+    layout = _ordinary(96, tile_points=tile_points, max_host_bytes=512 << 20)
+    device_budget = 512 << 20
+    reserve = runtime._stationary_device_ao_map_reserve(
+        layout, requested_bytes, device_budget
+    )
+    dense_peak = (
+        layout.grid_plan.peak_bytes
+        + layout.source_resources.allocation_bytes
+        + sum(value.peak_bytes for value in layout.tensor_plans.values())
+    )
+    assert 0 <= reserve <= requested_bytes
+    assert device_budget - dense_peak - reserve >= layout.native_geometry_reserve > 0
+
+
+def test_optional_csr_cannot_consume_the_entire_remaining_device_budget() -> None:
+    """Reproduce the 96-atom refusal without launching or mocking a GPU."""
+    layout = SimpleNamespace(
+        grid_plan=SimpleNamespace(peak_bytes=400 << 20),
+        source_resources=SimpleNamespace(allocation_bytes=100 << 20),
+        tensor_plans={},
+        native_geometry_reserve=12 << 20,
+    )
+    assert runtime._stationary_device_ao_map_reserve(layout, 64 << 20, 512 << 20) == 0
+
+
+def test_optional_csr_uses_only_space_above_provider_reserve() -> None:
+    layout = SimpleNamespace(
+        grid_plan=SimpleNamespace(peak_bytes=400 << 20),
+        source_resources=SimpleNamespace(allocation_bytes=50 << 20),
+        tensor_plans={"tensor": SimpleNamespace(peak_bytes=10 << 20)},
+        native_geometry_reserve=20 << 20,
+    )
+    assert (
+        runtime._stationary_device_ao_map_reserve(layout, 64 << 20, 512 << 20)
+        == 32 << 20
+    )
+
+
 @pytest.mark.parametrize("device_budget", [512 << 20, 1 << 30])
 def test_96_atom_explicit_1024_does_not_silently_raise_either_budget(
     device_budget: int,

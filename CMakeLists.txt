@@ -19,6 +19,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCTests.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerativeQCSourceIdentity.cmake")
 
 option(GENERATIVEQC_ENABLE_CUDA "Build the CUDA runtime backend" ON)
+option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE
+       "Reuse compiler-owned AO radial and axis work for 4/10 jets" ON)
 option(GENERATIVEQC_ENABLE_CUTENSOR "Link the optional native cuTENSOR provider" OFF)
 option(GENERATIVEQC_ENABLE_CUBLASLT "Link the optional prepared cuBLASLt provider" OFF)
 option(GENERATIVEQC_ENABLE_CUTLASS "Enable the optional CUTLASS AOT provider headers" OFF)

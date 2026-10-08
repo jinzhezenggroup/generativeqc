@@ -40,6 +40,7 @@ class GridXcCompiledResourceShape:
     spins: int
     ao_radial_reuse: bool = False
     point_batching: bool = True
+    compact_batching: bool | None = None
 
     def __post_init__(self) -> None:
         for name in ("npoint", "tile_points", "nao", "spins"):
@@ -50,6 +51,20 @@ class GridXcCompiledResourceShape:
             raise TypeError("AO radial-reuse selector must be boolean")
         if type(self.point_batching) is not bool:
             raise TypeError("point-batching selector must be boolean")
+        # Automatic execution can reach compact kernels or the allocation/map
+        # fallback. Normalize the request so both share a stable evidence key.
+        if self.compact_batching is None:
+            object.__setattr__(
+                self,
+                "compact_batching",
+                self.point_batching and self.npoint > self.tile_points,
+            )
+        if type(self.compact_batching) is not bool:
+            raise TypeError("compact-batching selector must be boolean")
+        if self.compact_batching and (
+            not self.point_batching or self.npoint <= self.tile_points
+        ):
+            raise ValueError("compact batching requires multiple point tiles")
         if self.spins not in (1, 2):
             raise ValueError("grid/XC compiled resource spin count must be one or two")
 
@@ -276,6 +291,30 @@ def _active_scopes(
         )
     potential = tuple(potential_parts)
 
+    if shape.compact_batching:
+        # Optional allocation/shape/provider rejection can still execute the
+        # incumbent. Keep both arms, and fail closed on missing batch evidence.
+        density += _matching(
+            resources,
+            lambda name: name.startswith("batch_density_products"),
+            "batched mapped density-product kernel",
+        )
+        features += _matching(
+            resources,
+            lambda name: name.startswith("batch_density_features"),
+            "batched mapped density-feature kernel",
+        )
+        for token in (
+            "batch_potential_panels",
+            "batch_local_potentials",
+            "batch_ordered_scatter",
+        ):
+            potential += _matching(
+                resources,
+                lambda name, token=token: name.startswith(token),
+                f"{token} kernel",
+            )
+
     return (
         ("ao_jets", ao),
         ("density_product", density),
@@ -287,7 +326,14 @@ def _active_scopes(
 
 def _kernel_threads(function: str, functional: str) -> int:
     name = _leaf(function)
-    if name.startswith(("tiled_density_product", "tiled_potential")):
+    if name.startswith(
+        (
+            "tiled_density_product",
+            "tiled_potential",
+            "batch_density_products",
+            "batch_local_potentials",
+        )
+    ):
         return DEFAULT_XC_MATRIX_SCHEDULE.threads
     if name.startswith("accumulate_totals"):
         return 32

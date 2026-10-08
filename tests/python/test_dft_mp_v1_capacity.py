@@ -339,10 +339,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "c4d9a037cee42a996325d5c8b0e02ef1fe93c3682a56a610f4444d5e6ba06b53"
+            "b3f70cbe30432a9e998622f42e513bfa2e8fbb0d16513abbfc3cddf71479dfe1"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
+        ),
+        "device_ao_map_reserve_sha256": (
+            "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
         ),
         "resident_ao_cache_sha256": (
             "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
@@ -3184,8 +3187,32 @@ def test_local_ao_capacity_stays_global_and_pair_work_stays_complete() -> None:
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",
-            "max(0, max_device_bytes - dense_device_bound)",
-            "max_device_bytes",
+            'if resident_ao_producer == "pre-ao-envelope-native-csr":',
+            "if False:",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "layout, ao_map_reserve, max_device_bytes",
+            "layout, ao_map_reserve, max_device_bytes + 1",
+        ),
+        *[
+            ("_stationary_device_ao_map_reserve", old, new)
+            for old, new in (
+                ("layout.grid_plan.peak_bytes", "0"),
+                ("layout.source_resources.allocation_bytes", "0"),
+                (
+                    "sum(value.peak_bytes for value in layout.tensor_plans.values())",
+                    "0",
+                ),
+                (" - layout.native_geometry_reserve", ""),
+                ("min(requested_bytes, max(0, available))", "max(0, available)"),
+                ("max(0, available)", "available"),
+            )
+        ],
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "ao_map_reserve = _stationary_device_ao_map_reserve(",
+            "ao_map_reserve = max(",
         ),
         (
             "_complete_rks_cuda_gradient_diagnostic",

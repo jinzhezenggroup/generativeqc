@@ -15,6 +15,7 @@
 
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
+#include "dft/xc_point.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
@@ -708,10 +709,10 @@ void variational_and_state(const AoBasis& basis, const MolecularGrid& grid,
 
 void graph_capture(const AoBasis& basis, const MolecularGrid& grid, unsigned functional,
                    bool unrestricted, std::size_t tile = 9, const CudaXcAoTiles* maps = nullptr,
-                   std::size_t point_batch_tiles = 1) {
+                   std::size_t point_batch_tiles = 1, bool compact = false) {
   Fixture captured(basis, grid, functional, unrestricted, tile, CudaXcAoPrecision::Fp64, false, 1.0,
                    1.0, maps);
-  captured.plan->prepare_point_batches(point_batch_tiles, 32 * 1024 * 1024);
+  captured.plan->prepare_point_batches(point_batch_tiles, 32 * 1024 * 1024, compact);
   auto d = density(basis.nao, unrestricted ? 2 : 1);
   check(cudaMemcpyAsync(captured.density, d.data(), d.size() * sizeof(double),
                         cudaMemcpyHostToDevice, captured.stream));
@@ -889,6 +890,10 @@ int main(int argc, char** argv) {
     }
     if (argc == 4 && std::string(argv[1]) == "--point-batch-benchmark") {
       point_batch_benchmark(argv[2], argv[3]);
+      return 0;
+    }
+    if (argc == 4 && std::string(argv[1]) == "--compact-batch-benchmark") {
+      point_batch_benchmark(argv[2], argv[3], true);
       return 0;
     }
     if (argc == 4 && std::string(argv[1]) == "--indexed-potential-benchmark") {

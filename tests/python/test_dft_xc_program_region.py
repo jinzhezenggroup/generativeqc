@@ -104,6 +104,16 @@ def _compiled_evidence(*, spins: int = 2) -> GridXcCompiledRegionEvidence:
         KernelResources("evaluate_points<4, false, true>(double*)", 80, 0, 0, 0, 0),
         KernelResources("assemble_potential(double*)", 64, 0, 0, 0, 0),
         KernelResources("accumulate_totals(double*)", 8, 0, 0, 0, 0),
+        *(
+            KernelResources(f"{token}(double*)", 32, 0, 0, 0, 0)
+            for token in (
+                "batch_density_products",
+                "batch_density_features",
+                "batch_potential_panels",
+                "batch_local_potentials",
+                "batch_ordered_scatter",
+            )
+        ),
     )
     return native_grid_xc_compiled_region_evidence(
         rows,
