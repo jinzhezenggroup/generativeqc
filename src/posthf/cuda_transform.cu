@@ -22,6 +22,14 @@ struct Transform {
 };
 using generativeqc::runtime::size_add;
 using generativeqc::runtime::size_mul;
+
+// One row-major AO-axis contraction for both single and shared-prefix batches.
+// [dim, rest]^T @ [dim, columns] -> [rest, columns].
+void transform_axis(Context& context, int dim, int rest, int columns, const double* input,
+                    const double* coefficients, double* output) {
+  gemm(context, 'T', 'N', rest, columns, dim, input, coefficients, output, 0, 0, 0, 1, 0.0);
+}
+
 template <class F>
 int guarded(char* error, size_t size, F fn) noexcept {
   try {
@@ -152,23 +160,19 @@ void accumulate_batch_device(BatchTransform& p, const size_t* begin,
         const int dim = static_cast<int>(transformed_shape[0]);
         const int rest = static_cast<int>(transformed_elements / transformed_shape[0]);
         const int columns = static_cast<int>(state.m[k]);
-        const double alpha = 1, beta = 0;
         const double* in = p.raw;
         if (k) {
           const auto& parent = p.states[state.prefix_leader[k - 1]];
           in = (k & 1U) ? parent.first : parent.second;
         }
         double* out_state = (k & 1U) ? state.second : state.first;
-        blas_check(cublasDgemm(ctx.handle, CUBLAS_OP_N, CUBLAS_OP_T, columns, rest, dim, &alpha,
-                               state.c + state.c_offset[k] + begin[k] * state.m[k], columns, in,
-                               rest, &beta, out_state, columns));
+        transform_axis(ctx, dim, rest, columns, in,
+                       state.c + state.c_offset[k] + begin[k] * state.m[k], out_state);
       }
     }
-    const double one = 1;
     for (auto& state : p.states) {
       const auto& leaf = p.states[state.prefix_leader[3]];
-      blas_check(cublasDaxpy(ctx.handle, static_cast<int>(state.output), &one, leaf.second, 1,
-                             state.result, 1));
+      add_vector_in_place(ctx, static_cast<int>(state.output), leaf.second, state.result);
     }
   });
 }
@@ -256,19 +260,14 @@ int posthf_cuda_add_v1(void* pointer, const double* values, const size_t* begin,
     ctx.section(true, ctx.metrics.library_ms, [&] {
       for (unsigned k = 0; k < 4; ++k) {
         const int dim = shape[0], rest = elements / shape[0], columns = p.m[k];
-        const double alpha = 1, beta = 0;
-        // Row-major input[AO,rest]^T @ C[AO,MO] -> output[rest,MO].
-        // Column-major views reverse the product and transpose only input.
-        blas_check(cublasDgemm(ctx.handle, CUBLAS_OP_N, CUBLAS_OP_T, columns, rest, dim, &alpha,
-                               p.c + p.c_offset[k] + begin[k] * p.m[k], columns, in, rest, &beta,
-                               out, columns));
+        transform_axis(ctx, dim, rest, columns, in,
+                       p.c + p.c_offset[k] + begin[k] * p.m[k], out);
         elements = size_mul(rest, p.m[k]);
         for (unsigned axis = 0; axis < 3; ++axis) shape[axis] = shape[axis + 1];
         shape[3] = p.m[k];
         std::swap(in, out);
       }
-      const double one = 1;
-      blas_check(cublasDaxpy(ctx.handle, p.output, &one, in, 1, p.result, 1));
+      add_vector_in_place(ctx, static_cast<int>(p.output), in, p.result);
     });
     p.failed = false;
     accumulation_drain.active = false;
@@ -333,7 +332,7 @@ int posthf_cuda_versions_v1(void* pointer, int* values, char* error, size_t size
     ctx.check_device();
     cuda_check(cudaRuntimeGetVersion(values));
     cuda_check(cudaDriverGetVersion(values + 1));
-    blas_check(cublasGetVersion(ctx.handle, values + 2));
+    values[2] = ctx.provider_version();
   });
 }
 

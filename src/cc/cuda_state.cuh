@@ -19,10 +19,10 @@ inline void diis_gram(generativeqc_tensor::Context& context, const double* error
   if (elements < 1 || history < 2 || history > 20 || !errors || !gram || !context.handle)
     throw std::invalid_argument("invalid CC DIIS storage/dimensions/handle");
   context.check_device();
-  const double one = 1.0, zero = 0.0;
-  generativeqc_tensor::blas_check(cublasDgemm(context.handle, CUBLAS_OP_T, CUBLAS_OP_N, history,
-                                              history, elements, &one, errors, elements, errors,
-                                              elements, &zero, gram, history));
+  // Dense histories are row-major [history, elements]: Gram = E * E^T.
+  // The shared prepared Tensor provider owns the library submission.
+  generativeqc_tensor::gemm(context, 'N', 'T', history, history, elements, errors, errors, gram,
+                            0, 0, 0, 1, 0.0);
 }
 
 // Only the bounded (<=21)^2 augmented DIIS system uses a serial GPU solve.

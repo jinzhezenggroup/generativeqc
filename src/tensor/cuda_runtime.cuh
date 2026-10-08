@@ -111,6 +111,12 @@ struct Context {
     cuda_check(cudaGetDevice(&current));
     if (current != device) throw std::runtime_error("tensor plan/current device mismatch");
   }
+  // The prepared provider owns its version query, not the post-HF method.
+  int provider_version() const {
+    int version = 0;
+    blas_check(cublasGetVersion(handle, &version));
+    return version;
+  }
   template <class F>
   void section(bool profile, double& ms, F operation) {
     if (profile) cuda_check(cudaEventRecord(section_begin, stream));
@@ -214,6 +220,14 @@ inline void accumulate_fp32_into_fp64(Context& context, const float* source, dou
   accumulate_fp32_into_fp64_kernel<<<blocks(count, 256), 256, 0, context.stream>>>(
       source, target, count, alpha, beta, context.error, node);
   cuda_check(cudaGetLastError());
+}
+
+// Reusable prepared-provider vector accumulation: target += source.
+// Borrow the same handle/stream as GEMM; no new allocation or selector.
+inline void add_vector_in_place(Context& context, int count, const double* source,
+                                double* target) {
+  constexpr double one = 1.0;
+  blas_check(cublasDaxpy(context.handle, count, &one, source, 1, target, 1));
 }
 
 // Row-major C = op(A) op(B) is column-major C^T = op(B)^T op(A)^T.

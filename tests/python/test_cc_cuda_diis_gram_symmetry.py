@@ -46,3 +46,8 @@ def test_history_wrap_retirement_and_restart(cuda: bool, tmp_path: Path) -> None
         timeout=30,
     )
     subprocess.run([str(executable)], check=True, capture_output=True, timeout=120)
+
+def test_cc_diis_gram_submits_only_semantic_tensor_gemm() -> None:
+    source = (ROOT / "src/cc/cuda_state.cuh").read_text(encoding="utf-8")
+    assert "cublasDgemm" not in source
+    assert "gemm(context, 'N', 'T', history, history, elements, errors, errors, gram," in source
