@@ -130,7 +130,7 @@ def _eager_operands(*values: object, scalars: bool = False) -> tuple[np.ndarray,
 
 def add(x1: object, x2: object) -> typing.Any:
     """Add two arrays elementwise, with eager NumPy or symbolic TensorIR dispatch.
-    
+
     Host scalar operands must be exact arithmetic values; array dtypes must agree.
     """
     if _symbolic(x1, x2):
@@ -140,7 +140,7 @@ def add(x1: object, x2: object) -> typing.Any:
 
 def subtract(x1: object, x2: object) -> typing.Any:
     """Subtract the second array from the first elementwise.
-    
+
     Use symbolic values to build TensorIR; concrete inputs execute on the host.
     """
     if _symbolic(x1, x2):
@@ -157,7 +157,7 @@ def multiply(x1: object, x2: object) -> typing.Any:
 
 def divide(x1: object, x2: object) -> typing.Any:
     """Divide the first array by the second elementwise.
-    
+
     Non-finite eager results raise ValueError instead of being returned silently.
     """
     if _symbolic(x1, x2):
@@ -174,7 +174,7 @@ def negative(x: object) -> typing.Any:
 
 def pow(x: object, exponent: object) -> typing.Any:
     """Raise an array to an exact scalar exponent.
-    
+
     Inputs must be strictly positive; unrepresentable exponents are rejected.
     """
     if isinstance(x, VibeArray):
@@ -223,7 +223,7 @@ def reshape(
     indices: tuple[Index, ...] | None = None,
 ) -> typing.Any:
     """Reshape an array, preserving its element count.
-    
+
     Explicit TensorIR indices are only supported for symbolic arrays.
     """
     if isinstance(x, VibeArray):
@@ -242,7 +242,7 @@ def broadcast_to(
     axes: tuple[int, ...] | None = None,
 ) -> typing.Any:
     """Broadcast an array to a requested shape.
-    
+
     Explicit indices and axes are reserved for symbolic TensorIR values.
     """
     if isinstance(x, VibeArray):
@@ -256,7 +256,7 @@ def broadcast_to(
 
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
-    
+
     Ranges must lie inside the input shape; slicing never changes the axis rank.
     """
     if isinstance(x, VibeArray):
@@ -302,7 +302,7 @@ def sum(
     keepdims: bool = False,
 ) -> typing.Any:
     """Reduce over selected axes without retaining reduced dimensions.
-    
+
     Dtype conversion and keepdims=True are not supported in this preview.
     """
     if isinstance(x, VibeArray):
@@ -362,7 +362,7 @@ def einsum(
     coefficient: ExactScalar = 1,
 ) -> typing.Any:
     """Evaluate an Einstein-summation expression with an exact coefficient.
-    
+
     Concrete operands follow the NumPy eager reference implementation.
     """
     if _symbolic(*operands):

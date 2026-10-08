@@ -133,13 +133,13 @@ class PythonApiDocumentationTests(unittest.TestCase):
             package = root / "generativeqc"
             _write(
                 package / "__init__.py",
-                '"""Public facade."""\\nfrom .impl import Documented, Missing\\n'
-                '__all__ = ["Documented", "Missing"]\\n',
+                '"""Public facade."""\nfrom .impl import Documented, Missing\n'
+                '__all__ = ["Documented", "Missing"]\n',
             )
             _write(
                 package / "impl.py",
-                'class Documented:\\n    """Documented class."""\\n'
-                'class Missing:\\n    pass\\n',
+                'class Documented:\n    """Documented class."""\n'
+                'class Missing:\n    pass\n',
             )
             failures = missing_public_docstrings(package)
             self.assertEqual(len(failures), 1)
@@ -151,12 +151,12 @@ class PythonApiDocumentationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             package = Path(directory) / "generativeqc"
-            _write(package / "__init__.py", '"""Public facade."""\\n__all__ = []\\n')
+            _write(package / "__init__.py", '"""Public facade."""\n__all__ = []\n')
             _write(
                 package / "fresh.py",
-                '"""Future public module."""\\n'
-                'def undocumented():\\n    return 1\\n'
-                '__all__ = ["undocumented"]\\n',
+                '"""Future public module."""\n'
+                'def undocumented():\n    return 1\n'
+                '__all__ = ["undocumented"]\n',
             )
             failures = missing_public_docstrings(package)
             self.assertEqual(len(failures), 1)
@@ -169,12 +169,12 @@ class PythonApiDocumentationTests(unittest.TestCase):
             package = Path(directory) / "generativeqc"
             _write(
                 package / "__init__.py",
-                '"""Public facade."""\\nfrom .impl import Entry\\n'
-                '__all__ = ["Entry"]\\n',
+                '"""Public facade."""\nfrom .impl import Entry\n'
+                '__all__ = ["Entry"]\n',
             )
             _write(
                 package / "impl.py",
-                'class Entry:\\n    """A documented entry point."""\\n',
+                'class Entry:\n    """A documented entry point."""\n',
             )
             self.assertEqual(missing_public_docstrings(package), ())
 
