@@ -239,9 +239,9 @@ class _BaseResponseOperator:
         # than allocating a fresh full-length array for every oracle action.
         basis = np.zeros(self.dimension)
         for column in range(self.dimension):
+            basis.fill(0.0)
             basis[column] = 1.0
             result[:, column] = self.apply(basis)
-            basis[column] = 0.0
         return result
 
 
