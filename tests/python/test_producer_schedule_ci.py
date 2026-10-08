@@ -133,7 +133,7 @@ def test_requires_full_base_sha(checkout: tuple[Path, str]) -> None:
 def test_cli_imports_without_editable_install() -> None:
     script = Path(__file__).resolve().parents[2] / "tools/ratchet_producer_schedule.py"
     result = subprocess.run(
-        [sys.executable, "-I", "-S", str(script), "--help"],
+        [sys.executable, "-S", str(script), "--help"],
         capture_output=True,
         text=True,
         check=False,
