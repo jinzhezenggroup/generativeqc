@@ -32,7 +32,9 @@ jobs:
         uses: pantheongpu/pantheonsim@0cd395b000d2bd499d22f364fb48e2b68435ca7e
         with:
           gpu: nvidia/h100
-          cuda-toolkit: "12.9"
+          # This simulator pin handles cuBLAS emulation enums with CUDA 13;
+          # CUDA 12.9 exposes them before its version guard expects them.
+          cuda-toolkit: "13.0"
 
       - name: Build one real GenerativeQC CUDA primitive
         shell: bash

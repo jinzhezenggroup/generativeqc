@@ -7,7 +7,7 @@ It is not a substitute for native CUDA correctness and performance qualification
 
 ## What is exercised
 
-- CUDA 12.9 NVCC compiles [`test_cuda_cpu_sim.cu`](../../tests/native/test_cuda_cpu_sim.cu)
+- CUDA 13.0 NVCC compiles [`test_cuda_cpu_sim.cu`](../../tests/native/test_cuda_cpu_sim.cu)
   for virtual `compute_80`, linking the shared CUDA runtime.
 - The test includes the **production**
   [`compensated_atomic.cuh`](../../src/runtime/compensated_atomic.cuh)
@@ -25,6 +25,9 @@ The workflow is intentionally separate from the required CUDA 12.9 **compile**
 job and the physical-GPU scientific acceptance suite. It runs on pull
 requests that change the probe, its workflow, or the tested production header;
 it also supports manual dispatch once the workflow exists on the default branch.
+The simulator is pinned to `0cd395b000d2bd499d22f364fb48e2b68435ca7e` and
+uses CUDA 13.0 because that pin's cuBLAS shim does not build with CUDA 12.9.
+This probe's toolkit selection does not change the required CUDA 12.9 compile gate.
 
 ## What a passing result does *not* establish
 
@@ -38,7 +41,7 @@ it also supports manual dispatch once the workflow exists on the default branch.
 
 ## Reproduce locally
 
-With NVIDIA's CUDA 12.9 compiler, a Linux build of PantheonSim and no
+With NVIDIA's CUDA 13.0 compiler, the pinned Linux build of PantheonSim and no
 physical GPU:
 
 ```sh
