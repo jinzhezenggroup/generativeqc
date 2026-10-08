@@ -202,15 +202,16 @@ generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
   // independent correction must retain exactly its original radial identity,
   // screening/omega/coefficients and first-derivative device capability.
   const bool isolated_lr =
-      model.backend == FockBackend::Cuda && spec.derivative_order == 0 &&
-      !spec.coulomb.present && spec.exchange.present &&
-      spec.exchange.approximation == FockApproximation::Exact &&
+      model.backend == FockBackend::Cuda && spec.derivative_order == 0 && !spec.coulomb.present &&
+      spec.exchange.present && spec.exchange.approximation == FockApproximation::Exact &&
       spec.exchange.op == FockOperator::LongRange && spec.exchange.omega > 0.0 &&
       std::isfinite(spec.exchange.omega) && std::isfinite(spec.exchange.coefficient);
   if (!binding || !source || !isolated_lr || density == nullptr ||
       matrix_elements != binding.nbf * binding.nbf ||
       (spec.spin == FockSpin::Unrestricted ? beta == nullptr : beta != nullptr)) {
-    detail = "prepared LR derivative requires an isolated exact CUDA correction with a first-order lease";
+    detail =
+        "prepared LR derivative requires an isolated exact CUDA correction with a first-order "
+        "lease";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 

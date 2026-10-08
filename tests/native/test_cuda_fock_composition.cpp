@@ -447,17 +447,16 @@ void retained_lr_only_derivative() {
   for (const auto& shell : system.shells) primitives += shell.primitives.size();
   const auto n = generativeqc::molecule::ao_count(system);
   const auto budget = cuda_direct_coulomb_device_bytes(1, n, system.atoms.size(),
-                                                        system.shells.size(), primitives, 1);
+                                                       system.shells.size(), primitives, 1);
   for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted})
     for (const double omega : {0.3, 0.45}) {
-      const auto model = resolve_fock_build(make_rsh_correction_fock_spec(
-          spin, 0.15, 1.0, omega), FockBackend::Cuda, 0.0);
+      const auto model = resolve_fock_build(make_rsh_correction_fock_spec(spin, 0.15, 1.0, omega),
+                                            FockBackend::Cuda, 0.0);
       const PreparedFockPlan correction(system, nullptr, model, 0, budget, 1);
       const auto retained = prepared_cuda_direct_derivative_binding(correction);
       require(retained && retained.maximum_derivative_order == 1,
               "isolated LR source did not retain first derivatives");
-      require(!model.spec.coulomb.present &&
-                  model.spec.exchange.op == FockOperator::LongRange,
+      require(!model.spec.coulomb.present && model.spec.exchange.op == FockOperator::LongRange,
               "isolated LR test fixture changed scientific identity");
 
       std::vector<double> density(n * n), beta;
@@ -477,8 +476,8 @@ void retained_lr_only_derivative() {
                              density.size() * sizeof(double)) == cudaSuccess,
               "isolated LR test failed to allocate resident density");
       if (!beta.empty())
-        require(cudaMalloc(reinterpret_cast<void**>(&device_beta),
-                           beta.size() * sizeof(double)) == cudaSuccess,
+        require(cudaMalloc(reinterpret_cast<void**>(&device_beta), beta.size() * sizeof(double)) ==
+                    cudaSuccess,
                 "isolated LR test failed to allocate beta density");
       require(cudaMemcpyAsync(device_alpha, density.data(), density.size() * sizeof(double),
                               cudaMemcpyHostToDevice, retained.stream) == cudaSuccess,
@@ -491,8 +490,8 @@ void retained_lr_only_derivative() {
       std::string detail;
       std::vector<double> actual;
       require(execute_prepared_cuda_direct_long_range_derivatives_device(
-                  correction, device_alpha, device_beta, density.size(), actual,
-                  detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  correction, device_alpha, device_beta, density.size(), actual, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       require(actual.size() == 3 * system.atoms.size(),
               "isolated LR derivative did not publish exactly one coordinate row");
@@ -502,9 +501,9 @@ void retained_lr_only_derivative() {
       auto spec = model.spec;
       spec.derivative_order = 1;
       std::vector<double> reference;
-      require(execute_cuda_direct_energy_derivative(
-                  correction.cuda_direct_source(), spec, density, beta, reference,
-                  detail) == GENERATIVEQC_STATUS_SUCCESS,
+      require(execute_cuda_direct_energy_derivative(correction.cuda_direct_source(), spec, density,
+                                                    beta, reference,
+                                                    detail) == GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
       matrix(actual, reference, "isolated LR derivative differs from Direct LR oracle");
       for (const auto value : actual)
@@ -512,24 +511,28 @@ void retained_lr_only_derivative() {
 
       actual.assign(2, 999.);
       require(execute_prepared_cuda_direct_long_range_derivatives_device(
-                  correction, device_alpha, device_beta, density.size() + 1,
-                  actual, detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+                  correction, device_alpha, device_beta, density.size() + 1, actual, detail) ==
+                      GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                  actual.empty(),
               "isolated LR derivative accepted a mismatched resident matrix");
       if (spin == FockSpin::Unrestricted)
         require(execute_prepared_cuda_direct_long_range_derivatives_device(
-                    correction, device_alpha, nullptr, density.size(), actual,
-                    detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+                    correction, device_alpha, nullptr, density.size(), actual, detail) ==
+                        GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                    actual.empty(),
                 "isolated LR derivative accepted missing beta density");
       else
         require(execute_prepared_cuda_direct_long_range_derivatives_device(
-                    correction, device_alpha, device_alpha, density.size(), actual,
-                    detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+                    correction, device_alpha, device_alpha, density.size(), actual, detail) ==
+                        GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                    actual.empty(),
                 "isolated LR derivative accepted a forged beta density");
 
       const PreparedFockPlan value_only(system, nullptr, model, 0, budget);
       require(execute_prepared_cuda_direct_long_range_derivatives_device(
-                  value_only, device_alpha, device_beta, density.size(), actual,
-                  detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+                  value_only, device_alpha, device_beta, density.size(), actual, detail) ==
+                      GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                  actual.empty(),
               "value-only LR source silently acquired a derivative lease");
       require(cudaFree(device_alpha) == cudaSuccess &&
                   (!device_beta || cudaFree(device_beta) == cudaSuccess),
