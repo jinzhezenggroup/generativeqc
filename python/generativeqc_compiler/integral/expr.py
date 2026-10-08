@@ -43,7 +43,12 @@ def _numeric_payload(node: Node) -> float:
     """Extract an exponent only from nodes with a present scalar payload."""
     if node.payload is None:
         raise TypeError("power node requires a numeric exponent")
-    return cast("float", float(node.payload))
+    return float(node.payload)
+
+
+def _is_integral_exponent(value: float) -> bool:
+    """Match float.is_integer without requiring a float-only attribute."""
+    return math.isfinite(value) and math.modf(value)[0] == 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -653,7 +658,7 @@ class Graph:
                 # rational suffix only resolves distinct exact values that
                 # lower to the same double.
                 payload = (
-                    _numeric_payload(node).hex(),
+                    float(node.payload).hex(),
                     f"{node.payload.numerator}/{node.payload.denominator}",
                 )
             elif isinstance(node.payload, float):
@@ -853,15 +858,15 @@ class Graph:
                 exponent = _numeric_payload(node)
                 source = children[0]
                 if exponent < 0.0:
-                    requirement = "nonzero" if exponent.is_integer() else "positive"
+                    requirement = "nonzero" if _is_integral_exponent(exponent) else "positive"
                     require(identifier, node.arguments[0], requirement)
-                elif not exponent.is_integer():
+                elif not _is_integral_exponent(exponent):
                     require(identifier, node.arguments[0], "nonnegative")
                 if source == ScalarDomain.POSITIVE:
                     result = ScalarDomain.POSITIVE
                 elif exponent > 0.0 and source == ScalarDomain.NONNEGATIVE:
                     result = ScalarDomain.NONNEGATIVE
-                elif exponent.is_integer() and source == ScalarDomain.NONZERO:
+                elif _is_integral_exponent(exponent) and source == ScalarDomain.NONZERO:
                     result = ScalarDomain.NONZERO
                 else:
                     result = ScalarDomain.UNKNOWN
@@ -1013,7 +1018,7 @@ class Graph:
             elif node.operation == "power":
                 exponent = _numeric_payload(node)
                 if (
-                    exponent.is_integer()
+                    _is_integral_exponent(exponent)
                     and 1 <= abs(exponent) <= maximum_absolute_power
                 ):
                     integer_exponent = int(exponent)
@@ -1130,7 +1135,7 @@ class Graph:
         node = self.node(value)
         if node.operation == "constant":
             constant = self._constant_value(node)
-            if isinstance(constant, Fraction) and exponent.is_integer():
+            if isinstance(constant, Fraction) and _is_integral_exponent(exponent):
                 return self._intern_constant(constant ** int(exponent))
             return self.approximate_constant(float(constant) ** exponent)
         return self._intern(Node("power", (value.identifier,), exponent))
