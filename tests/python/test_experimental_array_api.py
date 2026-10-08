@@ -237,18 +237,100 @@ def test_public_preview_exports_array_style_operations() -> None:
         "log",
         "matmul",
         "matrix_transpose",
+        "mean",
         "multiply",
         "negative",
         "permute_dims",
         "pow",
+        "reciprocal",
         "reshape",
         "slice",
         "sqrt",
+        "square",
         "subtract",
         "sum",
         "take",
     ):
         assert callable(getattr(xp, name))
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+@pytest.mark.parametrize("axis", (None, 0, -1, (0, 2), ()))
+@pytest.mark.parametrize("keepdims", (False, True))
+@pytest.mark.parametrize("operation, oracle", ((xp.sum, np.sum), (xp.mean, np.mean)))
+def test_mean_and_sum_keepdims_eager_compiled_numpy_parity(
+    dtype: object, axis: object, keepdims: bool, operation: object, oracle: object
+) -> None:
+    values = np.arange(1, 25, dtype=dtype).reshape(2, 3, 4)
+
+    def expression(x: object) -> object:
+        return operation(x, axis=axis, keepdims=keepdims)
+
+    eager = expression(values)
+    compiled = xp.compile(expression)(values)
+    expected = oracle(values, axis=axis, keepdims=keepdims)
+    assert eager.dtype == compiled.dtype == expected.dtype
+    assert eager.shape == compiled.shape == expected.shape
+    np.testing.assert_allclose(eager, expected, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(compiled, expected, rtol=2e-6, atol=2e-6)
+
+
+@pytest.mark.parametrize("dtype", (np.float32, np.float64))
+def test_square_and_reciprocal_eager_compiled_negative_values(dtype: object) -> None:
+    values = np.asarray([-4.0, -2.0, 0.5, 2.0], dtype=dtype)
+    for operation, oracle in (
+        (xp.square, np.square),
+        (xp.reciprocal, np.reciprocal),
+    ):
+        expected = oracle(values)
+        eager = operation(values)
+        compiled = xp.compile(operation)(values)
+        assert eager.dtype == compiled.dtype == values.dtype
+        np.testing.assert_allclose(eager, expected)
+        np.testing.assert_allclose(compiled, expected)
+
+
+def test_mean_empty_reduction_is_explicitly_unsupported() -> None:
+    values = np.empty((0, 2), dtype=np.float64)
+    for operation in (
+        lambda x: xp.mean(x, axis=0),
+        lambda x: xp.mean(x, keepdims=True),
+    ):
+        with pytest.raises(ValueError, match="empty reduction"):
+            operation(values)
+        with pytest.raises(ValueError, match="empty reduction"):
+            xp.compile(operation).lower(values)
+
+    # The empty sum is well-defined and its singleton dimension is preserved.
+    np.testing.assert_array_equal(
+        xp.compile(lambda x: xp.sum(x, axis=0, keepdims=True))(values),
+        np.zeros((1, 2), dtype=np.float64),
+    )
+
+
+def test_mean_keeps_tensorir_autodiff_and_scientific_guards() -> None:
+    @xp.compile(differentiable=("x",))
+    def expression(x: object) -> object:
+        return xp.mean(xp.square(x), axis=-1, keepdims=True)
+
+    values = np.asarray([[1.0, 2.0, 3.0], [2.0, 4.0, 6.0]])
+    tangent = np.asarray([[1.0, 0.0, -1.0], [1.0, 2.0, -2.0]])
+    program = expression.lower(values)
+    response = tensor.jvp(program, {"x": values}, {"x": tangent})
+    np.testing.assert_allclose(
+        response.output_tangents["output"],
+        np.mean(2 * values * tangent, axis=-1, keepdims=True),
+    )
+
+    annotated = xp.input_array("x", _vector_spec())
+    for operation in (
+        lambda x: xp.sum(x, keepdims=True),
+        lambda x: xp.mean(x, keepdims=True),
+    ):
+        with pytest.raises(ValueError, match="explicit TensorIR index metadata"):
+            operation(annotated)
+    with pytest.raises(TypeError, match="scientifically annotated"):
+        xp.reciprocal(annotated)
 
 
 def test_asarray_rejects_implicit_external_device_transfer() -> None:
@@ -265,6 +347,9 @@ _EAGER_ARRAY_OPERATIONS = (
     xp.exp,
     xp.log,
     xp.sqrt,
+    xp.square,
+    xp.reciprocal,
+    xp.mean,
     lambda x: xp.pow(x, 2),
     lambda x: xp.reshape(x, (4,)),
     lambda x: xp.broadcast_to(x, (3, 2, 2)),
@@ -434,8 +519,10 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
 @pytest.mark.parametrize(
     "operation",
     (
-        lambda x: xp.sum(x, keepdims=True),
         lambda x: xp.sum(x, keepdims=0),
+        lambda x: xp.mean(x, keepdims=0),
+        lambda x: xp.mean(x, axis=[0]),
+        lambda x: xp.mean(x, axis=(0, 0)),
         lambda x: xp.sum(x, dtype=xp.float64),
         lambda x: xp.sum(x, axis=[0]),
         lambda x: xp.sum(x, axis=True),
