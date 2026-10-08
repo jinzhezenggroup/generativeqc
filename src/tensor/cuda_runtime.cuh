@@ -111,6 +111,9 @@ struct Context {
     cuda_check(cudaGetDevice(&current));
     if (current != device) throw std::runtime_error("tensor plan/current device mismatch");
   }
+  // Method owners inspect provider capability without borrowing its vendor handle.
+  bool has_matrix_provider() const noexcept { return handle != nullptr; }
+
   // The prepared provider owns its version query, not the post-HF method.
   int provider_version() const {
     int version = 0;
