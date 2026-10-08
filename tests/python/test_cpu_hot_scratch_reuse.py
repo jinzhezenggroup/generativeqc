@@ -6,7 +6,6 @@ import inspect
 import typing
 
 import numpy as np
-
 from generativeqc import response_solver
 from generativeqc._stationary_cpu import _xc_gradient_argument
 
@@ -20,7 +19,10 @@ class _MatrixOperator:
         self.problem = type(
             "Problem",
             (),
-            {"compatibility_identity": "cpu-scratch", "validate_rhs": self._validate_rhs},
+            {
+                "compatibility_identity": "cpu-scratch",
+                "validate_rhs": self._validate_rhs,
+            },
         )()
 
     def _validate_rhs(self, rhs: typing.Any) -> np.ndarray:
@@ -40,7 +42,9 @@ def test_xc_gradient_present_does_not_allocate_default(monkeypatch: typing.Any) 
     original = np.zeros
     allocation_shapes: list[object] = []
 
-    def traced_zeros(shape: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> np.ndarray:
+    def traced_zeros(
+        shape: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> np.ndarray:
         allocation_shapes.append(shape)
         return original(shape, *args, **kwargs)
 
@@ -69,7 +73,9 @@ def test_scalar_gmres_allocates_one_arnoldi_matrix_across_restarts(
     original = np.zeros
     arnoldi_allocations = 0
 
-    def traced_zeros(shape: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> np.ndarray:
+    def traced_zeros(
+        shape: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> np.ndarray:
         nonlocal arnoldi_allocations
         caller = inspect.currentframe().f_back
         if caller is not None and caller.f_code.co_name == "_solve_single":
@@ -91,17 +97,15 @@ def test_block_gmres_reuses_one_projected_rhs_buffer(
 ) -> None:
     matrix = np.diag(np.linspace(1.0, 4.0, 12))
     operator = _MatrixOperator(matrix)
-    rhs = np.column_stack((
-        np.linspace(0.1, 1.0, 12), np.linspace(-1.0, 0.5, 12)
-    ))
-    options = response_solver.GMRESOptions(
-        rtol=1e-12, restart=8, max_iterations=100
-    )
+    rhs = np.column_stack((np.linspace(0.1, 1.0, 12), np.linspace(-1.0, 0.5, 12)))
+    options = response_solver.GMRESOptions(rtol=1e-12, restart=8, max_iterations=100)
     max_columns = min(operator.dimension, rhs.shape[1] + options.max_iterations)
     original = np.zeros
     rhs_allocations: list[int] = []
 
-    def traced_zeros(shape: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> np.ndarray:
+    def traced_zeros(
+        shape: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> np.ndarray:
         caller = inspect.currentframe().f_back
         if caller is not None and caller.f_code.co_name == "_block_solve":
             if isinstance(shape, int):

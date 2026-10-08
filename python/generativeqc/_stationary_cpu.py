@@ -88,6 +88,7 @@ def _xc_gradient_argument(
         return features["gradient"]
     return np.zeros((2, point_count, 3))
 
+
 def _publish_source(path: typing.Any, source: typing.Any) -> None:
     """Publish complete immutable compiler input before hashing or compilation.
 
