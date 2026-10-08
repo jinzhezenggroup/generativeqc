@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
 from functools import cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from generativeqc_compiler.common.compiler_work import charge_symbolic_intern
 from generativeqc_compiler.common.value_numbering import (
@@ -37,6 +37,13 @@ class Node:
     operation: str
     arguments: tuple[int, ...] = ()
     payload: str | Coefficient | None = None
+
+
+def _numeric_payload(node: Node) -> float:
+    """Extract an exponent only from nodes with a present scalar payload."""
+    if node.payload is None:
+        raise TypeError("power node requires a numeric exponent")
+    return float(node.payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -646,7 +653,7 @@ class Graph:
                 # rational suffix only resolves distinct exact values that
                 # lower to the same double.
                 payload = (
-                    float(node.payload).hex(),
+                    _numeric_payload(node).hex(),
                     f"{node.payload.numerator}/{node.payload.denominator}",
                 )
             elif isinstance(node.payload, float):
@@ -706,7 +713,7 @@ class Graph:
             elif node.operation == "power":
                 result = target.power(
                     visit(node.arguments[0]),
-                    float(node.payload),
+                    _numeric_payload(node),
                 )
             else:
                 raise ValueError(f"unsupported operation {node.operation!r}")
@@ -733,7 +740,10 @@ class Graph:
         for root in normalized_roots:
             self._require_graph(root)
         assumptions = dict(variable_domains)
-        if any(not isinstance(value, ScalarDomain) for value in assumptions.values()):
+        if any(
+            not isinstance(value, ScalarDomain)
+            for value in cast(dict[str, object], assumptions).values()
+        ):
             raise TypeError("variable domains must use ScalarDomain values")
         memo: dict[int, ScalarDomain] = {}
         violations: dict[tuple[int, str, int], DomainViolation] = {}
@@ -840,7 +850,7 @@ class Graph:
                 else:
                     result = ScalarDomain.UNKNOWN
             elif node.operation == "power":
-                exponent = float(node.payload)
+                exponent = _numeric_payload(node)
                 source = children[0]
                 if exponent < 0.0:
                     requirement = "nonzero" if exponent.is_integer() else "positive"
@@ -1001,7 +1011,7 @@ class Graph:
             elif node.operation in ("atan", "asinh", "erf"):
                 result = target.transcendental_unary(node.operation, arguments[0])
             elif node.operation == "power":
-                exponent = float(node.payload)
+                exponent = _numeric_payload(node)
                 if (
                     exponent.is_integer()
                     and 1 <= abs(exponent) <= maximum_absolute_power
@@ -1232,12 +1242,13 @@ class Graph:
                     )
             elif node.operation == "power":
                 operand = Expr(self, node.arguments[0])
-                exponent = float(node.payload)
+                exponent = _numeric_payload(node)
                 derivative = (
                     exponent * operand.pow(exponent - 1.0) * visit(operand.identifier)
                 )
             else:
                 raise ValueError(f"unsupported operation {node.operation!r}")
+            assert isinstance(derivative, Expr)
             memo[identifier] = derivative
             return derivative
 
@@ -1708,7 +1719,7 @@ class Graph:
             if identifier in materialized:
                 return frozenset((identifier,))
             if node.operation in ("constant", "variable"):
-                return frozenset()
+                return frozenset[int]()
             references: set[int] = set()
             for argument in node.arguments:
                 references.update(referenced_values(argument))
@@ -1804,13 +1815,13 @@ class Graph:
                 ):
                     result = getattr(math, node.operation)(values[node.arguments[0]])
                 elif node.operation == "power":
-                    result = values[node.arguments[0]] ** float(node.payload)
+                    result = values[node.arguments[0]] ** _numeric_payload(node)
                 else:
                     raise ValueError(f"unsupported operation {node.operation!r}")
                 values[identifier] = result
             return values[expression.identifier]
 
-        values = {}
+        values: dict[int, float] = {}
 
         def visit(identifier: int) -> float:
             if identifier in values:
@@ -1835,11 +1846,12 @@ class Graph:
                 branch = if_true if visit(left) <= visit(right) else if_false
                 result = visit(branch)
             elif node.operation == "power":
-                result = visit(node.arguments[0]) ** float(node.payload)
+                result = visit(node.arguments[0]) ** _numeric_payload(node)
             else:
                 raise ValueError(f"unsupported operation {node.operation!r}")
-            values[identifier] = result
-            return result
+            numeric_result = float(result)
+            values[identifier] = numeric_result
+            return numeric_result
 
         return visit(expression.identifier)
 
