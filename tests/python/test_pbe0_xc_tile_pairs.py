@@ -28,10 +28,12 @@ def run_fake_campaign(
     mutation: str | None = None,
     *,
     point_batch_tiles: int | None = None,
+    compact: bool = False,
+    atoms: int = 48,
 ) -> tuple[dict[str, Any], list[Any]]:
     """Exercise orchestration without a CUDA library, device or reference solve."""
     scientific = {
-        "atoms": 48,
+        "atoms": atoms,
         "geometries_bohr": [[["H", [0.0, 0.0, 0.0]]]] * 2,
     }
     reference = {
@@ -57,6 +59,8 @@ def run_fake_campaign(
             self.tile = tile
             self.batch_tiles = os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"]
             self.batch_policies = []
+            self.compact_policy = os.environ["GENERATIVEQC_CUDA_XC_COMPACT_BATCH"]
+            self.compact_policies = []
             self._warm_updates = True
             self.closed = False
             self.calls = []
@@ -71,6 +75,9 @@ def run_fake_campaign(
             assert strict is False and properties == ("energy", "forces")
             self.calls.append((coords, self._warm_updates))
             self.batch_policies.append(os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"])
+            self.compact_policies.append(
+                os.environ["GENERATIVEQC_CUDA_XC_COMPACT_BATCH"]
+            )
             forces, _ = self._public_dft_cuda_force()
             candidate = self.tile == 512
             replay = not self._warm_updates
@@ -125,7 +132,7 @@ def run_fake_campaign(
         ),
     )
     monkeypatch.setattr(benchmark, "Calculator", Calculator)
-    monkeypatch.setattr(benchmark, "scaling_cases", lambda: {"water-48": {}})
+    monkeypatch.setattr(benchmark, "scaling_cases", lambda: {f"water-{atoms}": {}})
     monkeypatch.setattr(
         benchmark, "load_comparison_basis", lambda *args, **kwargs: ({}, None)
     )
@@ -147,7 +154,7 @@ def run_fake_campaign(
         [
             "pbe0_xc_tile_pairs",
             "--atoms",
-            "48",
+            str(atoms),
             "--basis-file",
             str(tmp_path / "basis.json"),
             "--reference",
@@ -158,6 +165,8 @@ def run_fake_campaign(
     )
     if point_batch_tiles is not None:
         sys.argv.extend(["--point-batch-tiles", str(point_batch_tiles)])
+    if compact:
+        sys.argv.append("--compact-xc-batches")
     try:
         benchmark.main()
     finally:
@@ -166,22 +175,41 @@ def run_fake_campaign(
 
 
 @pytest.mark.parametrize("point_batch_tiles", [None, 32])
+@pytest.mark.parametrize("compact", [False, True])
 def test_batch_policy_overrides_default_during_owner_rebuilds(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, point_batch_tiles: int | None
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    point_batch_tiles: int | None,
+    compact: bool,
 ) -> None:
     """Promotion cannot contaminate baseline, moved owners or the caller's policy."""
     monkeypatch.setenv("GENERATIVEQC_CUDA_XC_BATCH_TILES", "99")
+    monkeypatch.setenv("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", "99")
+    if compact and point_batch_tiles is None:
+        with pytest.raises(SystemExit):
+            run_fake_campaign(monkeypatch, tmp_path, compact=True)
+        return
     record, owners = run_fake_campaign(
-        monkeypatch, tmp_path, point_batch_tiles=point_batch_tiles
+        monkeypatch, tmp_path, point_batch_tiles=point_batch_tiles, compact=compact
     )
     assert record["stage"] == "complete"
     assert os.environ["GENERATIVEQC_CUDA_XC_BATCH_TILES"] == "99"
+    assert os.environ["GENERATIVEQC_CUDA_XC_COMPACT_BATCH"] == "99"
+    assert record["compact_xc_batch_request"] is compact
     assert {owner.batch_tiles for owner in owners} == (
-        {"1", "32"} if point_batch_tiles else {"1"}
+        {"32"} if compact else ({"1", "32"} if point_batch_tiles else {"1"})
     )
-    for owner in owners:
+    for index, owner in enumerate(owners):
         assert len(owner.batch_policies) == 14
         assert set(owner.batch_policies) == {owner.batch_tiles}
+        expected = "1" if compact and index % 2 == 1 else "0"
+        assert owner.compact_policy == expected
+        assert set(owner.compact_policies) == {expected}
+    assert (
+        "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py"
+        in record["source_file_sha256"]
+    )
+    assert "src/dft/cuda_xc_kernels.cuh" in record["source_file_sha256"]
 
 
 def test_tiles_force_policy_and_frozen_replays(
@@ -208,6 +236,20 @@ def test_tiles_force_policy_and_frozen_replays(
             assert diagnostic["native_force_work_raw"]["tile_points"] == 256
             assert diagnostic["native_scf_ao_work"]["tiles"] == 256 // (tile // 256)
             assert diagnostic["iterations"] == diagnostic["fock_builds"] == 1
+
+
+def test_compact_campaign_covers_small_ao_endpoint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Small mapped domains use complete E+F, not an isolated XC timing gate."""
+    record, owners = run_fake_campaign(
+        monkeypatch, tmp_path, atoms=12, point_batch_tiles=32, compact=True
+    )
+    assert record["protocol"]["atoms"] == 12
+    assert record["scf_tiles"] == {"baseline": 256, "candidate": 256}
+    assert len(record["samples"]) == 20
+    assert {owner.batch_tiles for owner in owners} == {"32"}
+    assert {owner.compact_policy for owner in owners} == {"0", "1"}
 
 
 @pytest.mark.parametrize("mutation", ["tile", "iterations", "fallback", "forces"])

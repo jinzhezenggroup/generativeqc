@@ -183,6 +183,64 @@ kernel and its retained fallback for multi-tile automatic execution. The
 records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
 source-specialization/composed ablations belong to the independent #2072 arm.
 
+**Resource-guarded compact contractions (default).**
+Ordinary native KS additionally requests batched mapped
+density products, density features, weighted AO panels and local Vxc
+contractions. The compiler keeps each original active-AO map throughout; it
+does not union maps or expand intermediate AO/density tensors to the full
+basis. Only the final public potential is full-basis. A compact group needs at
+least two tiles, with each nonempty tile having 32–128 active AOs and at least
+32 points. Empty tiles remain legal. Other original groups keep point-only
+batching; one large or tiny AO domain does not disable independent small groups.
+Response, mixed arithmetic and optional library-provider
+execution retain their existing paths. `GENERATIVEQC_CUDA_XC_COMPACT_BATCH=0`
+disables compact contractions while preserving point batching. The small-domain
+bound is a resource/ordered-scatter constraint, not a universal profitability
+threshold. The automatic compiled-resource envelope includes every compact
+stage and its retained fallback; explicit incumbent-only evidence cannot qualify
+automatic execution.
+
+The candidate reuses the incumbent FP64 bodies but masks density output-tail
+lanes and non-authoritative/padded Vxc pairs while all lanes continue to reach
+shared-memory barriers. Authoritative reduction order, coefficients, weights
+and selected scientific summands are unchanged. One CTA per spin performs
+ordered scatter; consecutive equal AO maps keep the running potential in
+registers and write once per map group, preserving every per-tile addition.
+Different overlapping maps are separated by a block barrier, never atomics.
+For `G` compact groups, density/features each submit `G` kernels and weighted
+panels/local Vxc/scatter each submit `G`. The incumbent submits density and
+Vxc once per nonempty tile, weighted panels once per tiled-contraction tile,
+and features once per tile, including empty tiles. AO collocation still submits
+once per nonempty original tile. Noncompact groups
+retain the original density/feature/Vxc submission counts; the native work census
+reports actual `compact_groups`, `compact_tiles` and `compact_nonempty_tiles`.
+
+Retained work panels, compact local matrices and immutable device descriptors
+share the same **additional** XC byte cap as point batching. Descriptors are
+uploaded once during preparation; transient host descriptor staging is bounded
+by that cap and drained before destruction. Evaluation and capture allocate
+nothing and upload no descriptors. Unsupported shapes or insufficient compact
+workspace preserve point-only batching; an optional allocation failure retains
+the one-tile executor. Public resource-ledger execution still admits no optional
+batch allocation. Report actual `point_batch_plan().compact` and bytes, not just
+the requested environment switch.
+
+`--point-batches` also covers the compact candidate with independent CPU E/V,
+empty/overlapping maps, partial tiles, both spin layouts, density replacement,
+canaries and graph replay. `--compact-batch-benchmark ORIGINAL MOVED` reports
+fixed-density preparation, actual contraction/scatter submissions and retained
+storage. For complete E+F pairs, add `--compact-xc-batches` to the existing
+`benchmarks.pbe0_xc_tile_pairs --point-batch-tiles 32` command. The benchmark
+resets and restores this control separately for both arms, including moved-owner
+rebuilds. Both compact benchmark arms use the same point-batch request so only
+the compact contraction policy differs. Complete E+F qualification includes
+12-atom small-AO and 48/96-atom larger domains. Numerical, sanitizer, resource
+and complete-endpoint gates remain required when extending the admitted domain;
+host simulation or reduced launch counts do not establish speedup. See the
+[compact-batch decision](../../.agents/notes/implemented/performance/2026-10-08-xc-compact-contraction-batches.md).
+The [default decision](../../.agents/notes/implemented/performance/2026-10-08-xc-compact-batch-default.md)
+records complete cold/warm/moved E+F evidence and the larger-domain noise boundary.
+
 The resident contraction block is currently compiler-emitted maintained CUDA
 text, not a complete typed grid/XC IR lowering. The native header's runtime-only
 ownership classification does not remove this remaining scientific-text owner.
