@@ -26,6 +26,9 @@ from generativeqc_compiler.method import original_nonlocal_correlation
 from generativeqc_compiler.tensor.autodiff import _vjp_einsum
 from generativeqc_compiler.xc.reference import exchange_reference
 
+if typing.TYPE_CHECKING:
+    from typing_extensions import Self
+
 
 def _count_numpy_calls(
     monkeypatch: pytest.MonkeyPatch,
@@ -195,8 +198,8 @@ def test_lda_exchange_reference_shares_constant_coefficients(
         zeros = _count_numpy_calls(patch, "zeros", "exchange_reference")
         energy, gradient, hessian = exchange_reference(features, spin=True, gga=False)
     assert ones == [2]
-    # One output energy + one shared LDA zero derivative buffer.
-    assert zeros == [2, 2]
+    # Output energy and Hessian + one shared LDA zero derivative buffer.
+    assert zeros == [2, (5, 5, 2), 2]
     q = 4 / 3
     cx = 0.75 * (6 / np.pi) ** (1 / 3)
     np.testing.assert_allclose(
@@ -290,7 +293,7 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
         def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
             pass
 
-        def __enter__(self) -> Plan:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *args: object) -> None:
