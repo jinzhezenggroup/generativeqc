@@ -8,6 +8,7 @@ at its exact base SHA. Missing proof is advisory, not a regression.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.metadata
 import json
 import os
@@ -17,7 +18,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-_SCHEMA = "generativeqc.codspeed-cpu-baseline.v1"
+_SCHEMA = "generativeqc.codspeed-cpu-baseline.v2"
 _SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 _REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
@@ -56,6 +57,45 @@ def environment_fingerprint() -> dict[str, object]:
         "packages": packages,
         "simulation": "CodSpeedHQ/action-v5.0.1/pytest-codspeed-5.0.3",
     }
+
+
+def benchmark_selection() -> dict[str, object]:
+    """Bind selector settings to the benchmark source that interprets them."""
+    source = Path(__file__).resolve().parents[1] / "benchmarks/test_cpu_codspeed.py"
+    return {
+        "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "tier": os.environ.get("GENERATIVEQC_CODSPEED_TIER", "full"),
+        "extra_cases": sorted(
+            {
+                item.strip()
+                for item in os.environ.get(
+                    "GENERATIVEQC_CODSPEED_EXTRA_CASES", ""
+                ).split(",")
+                if item.strip()
+            }
+        ),
+    }
+
+
+def _selection_covers(recorded: object, requested: dict[str, object]) -> bool:
+    if not isinstance(recorded, dict):
+        return False
+    digest = requested.get("source_sha256")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return False
+    if recorded.get("source_sha256") != digest:
+        return False
+    # Only PR-tier receipts are published. Fail closed if another tier is added
+    # until its selection semantics are explicitly qualified here.
+    if recorded.get("tier") != "pr" or requested.get("tier") != "pr":
+        return False
+    available = recorded.get("extra_cases")
+    needed = requested.get("extra_cases")
+    if not isinstance(available, list) or not isinstance(needed, list):
+        return False
+    if not all(isinstance(item, str) for item in [*available, *needed]):
+        return False
+    return set(needed) <= set(available)
 
 
 def _baseline_name(sha: str) -> str:
@@ -106,17 +146,25 @@ def _lookup_baseline(repo: str, sha: str) -> dict[str, object]:
             "-R",
             repo,
         )
-        return json.loads(
+        receipt = json.loads(
             (Path(directory) / "baseline.json").read_text(encoding="utf-8")
         )
+        if not isinstance(receipt, dict):
+            raise TypeError("baseline receipt must be a JSON object")
+        return receipt
 
 
 def qualify(
-    baseline: dict[str, object], sha: str, current: dict[str, object]
+    baseline: dict[str, object],
+    sha: str,
+    current: dict[str, object],
+    selection: dict[str, object],
 ) -> tuple[bool, str]:
     """Fail closed on an old schema, stale source, or different CPU/runtime."""
     if baseline.get("schema") != _SCHEMA or baseline.get("sha") != sha:
         return False, "baseline identity/schema mismatch"
+    if not _selection_covers(baseline.get("benchmark_selection"), selection):
+        return False, "baseline does not cover the requested benchmark source/selection"
     recorded = baseline.get("environment")
     if not isinstance(recorded, dict):
         return False, "baseline environment missing"
@@ -162,6 +210,7 @@ def main() -> None:
             "schema": _SCHEMA,
             "sha": args.sha,
             "environment": environment_fingerprint(),
+            "benchmark_selection": benchmark_selection(),
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(
@@ -172,9 +221,12 @@ def main() -> None:
     try:
         current = environment_fingerprint()
         baseline = _lookup_baseline(args.repo, args.base_sha)
-        matched, reason = qualify(baseline, args.base_sha, current)
+        matched, reason = qualify(
+            baseline, args.base_sha, current, benchmark_selection()
+        )
     except (
         OSError,
+        TypeError,
         ValueError,
         KeyError,
         LookupError,

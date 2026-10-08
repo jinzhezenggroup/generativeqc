@@ -2,7 +2,7 @@ name: CI
 
 on:
   # Pull requests and merge groups own correctness. Master pushes remain only
-  # to publish stable caches that ephemeral queue refs can consume.
+  # to publish stable caches and exact-source CPU performance baselines.
   push:
     branches: [master]
   pull_request:
@@ -1399,6 +1399,8 @@ jobs:
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       NUMEXPR_NUM_THREADS: 1
+      # Master must cover every endpoint selectable by a PR at this source.
+      GENERATIVEQC_CODSPEED_EXTRA_CASES: ${{ github.event_name == 'push' && 'wb97mv' || '' }}
       GENERATIVEQC_CODSPEED_TIER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'pr' || 'full' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
