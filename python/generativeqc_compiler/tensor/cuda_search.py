@@ -459,7 +459,9 @@ def estimate_schedule(plan: TensorPlan) -> dict:
         source_bytes=source_bytes,
         precision_cast_read_bytes=traffic_bytes("precision_cast_read_bytes"),
         precision_cast_write_bytes=traffic_bytes("precision_cast_write_bytes"),
-        precision_cast_simultaneous_bytes=traffic_bytes("precision_cast_simultaneous_bytes"),
+        precision_cast_simultaneous_bytes=traffic_bytes(
+            "precision_cast_simultaneous_bytes"
+        ),
         precision_widened_accumulation_terms=widened_accumulation_terms,
     )
     batch = plan.batch_schedule
