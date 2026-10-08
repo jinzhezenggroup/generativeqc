@@ -147,6 +147,7 @@ def test_prepared_density_preserves_local_ao_component_precision(
 #include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/resource_ledger.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
 namespace generativeqc::tensor {
@@ -197,13 +198,18 @@ struct Xc {
   }
 };
 int main() {
-  for (unsigned batching = 0; batching < 4; ++batching) {
+  for (bool budgeted : {false, true}) {
+    runtime::active_device_resource_ledger = budgeted
+        ? std::make_shared<runtime::DeviceResourceLedger>() : nullptr;
+  for (unsigned batching = 0; batching < 6; ++batching) {
     unsetenv("GENERATIVEQC_CUDA_XC_BATCH_TILES");
     unsetenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES");
-    if (batching) {
+    if (batching && batching < 4) {
       setenv("GENERATIVEQC_CUDA_XC_BATCH_TILES", batching == 1 ? "1" : "4", 1);
       setenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES", batching == 2 ? "0" : "4096", 1);
     }
+    if (batching == 4) setenv("GENERATIVEQC_CUDA_XC_BATCH_TILES", "0", 1);
+    if (batching == 5) setenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES", "0", 1);
   for (bool capable : {false, true}) for (bool automatic : {false, true})
     for (bool nonlocal : {false, true})
       for (auto qualification : {CudaXcCapability::Unavailable,
@@ -239,10 +245,11 @@ int main() {
     const bool admitted = host >= tensor::PreparedPanelProduct::host_reservation;
     assert(owner.reserved == (admitted ? device : 0));
     const bool selected = admitted && device >= 160 && qualified;
-    const bool batched = batching == 3 && !mixed_density;
-    assert(owner.batch_calls == (batching >= 2 ? 1 : 0));
-    assert(owner.batch_tiles == (batching >= 2 ? 4 : 0));
-    assert(owner.batch_budget == (batching == 3 ? 4096 : 0));
+    const bool requested = batching != 1 && batching != 4;
+    const bool batched = !budgeted && (batching == 0 || batching == 3) && !mixed_density;
+    assert(owner.batch_calls == (requested ? 1 : 0));
+    assert(owner.batch_tiles == (batching == 0 || batching == 5 ? 32 : requested ? 4 : 0));
+    assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? 32 * 1024 * 1024 : batching == 3 ? 4096 : 0));
     assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0) + (batched ? 64 : 0));
     assert(resource.provider_device_bytes == 2000 + (selected ? 96 : 0));
     assert(resource.retained_host_numeric_bytes ==
@@ -257,6 +264,8 @@ int main() {
     }
   }
   }
+  }
+  runtime::active_device_resource_ledger.reset();
 }
 """
     )

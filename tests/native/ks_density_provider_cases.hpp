@@ -5,16 +5,17 @@ void ks_density_provider_cases() {
   const bool had_previous = previous != nullptr;
   const std::string saved = previous ? previous : "";
   struct Restore {
+    const char* variable;
     bool present;
     std::string value;
     ~Restore() {
       if (present)
-        ::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", value.c_str(), 1);
+        ::setenv(variable, value.c_str(), 1);
       else
-        ::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
+        ::unsetenv(variable);
       xc_density_provider_for_test(false, false);
     }
-  } restore{had_previous, saved};
+  } restore{"GENERATIVEQC_CUDA_KS_ACTIVE_AO", had_previous, saved};
   scf::ScfOptions options;
   options.compute_forces = false;
   options.energy_tolerance = 1e-12;
@@ -39,6 +40,13 @@ void ks_density_provider_cases() {
       require(::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", "0", 1) == 0, "set dense XC");
       std::size_t baseline_bytes{};
       {
+        // Exhaustion must reserve incumbent storage only: optional point panels
+        // would otherwise create headroom for the density cache under test.
+        const auto* previous_budget = std::getenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES");
+        Restore budget_restore{"GENERATIVEQC_CUDA_XC_BATCH_BYTES", previous_budget != nullptr,
+                               previous_budget ? previous_budget : ""};
+        require(::setenv("GENERATIVEQC_CUDA_XC_BATCH_BYTES", "0", 1) == 0,
+                "disable optional residency in the ledger baseline");
         dft::CudaKsPlan baseline(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
         baseline_bytes =
             baseline.resources().state_device_bytes + baseline.resources().xc_device_bytes;

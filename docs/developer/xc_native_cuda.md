@@ -118,12 +118,22 @@ Unsupported functional/response pairs fail during preparation. See the
 
 ### Bounded independent point submissions
 
-`GENERATIVEQC_CUDA_XC_BATCH_TILES=N` explicitly requests the scheduling-only
-qualification route for ordinary native KS. The default is one tile; values zero
-or one retain that route. `GENERATIVEQC_CUDA_XC_BATCH_BYTES` caps the **additional**
-per-owner device allocation (default 32 MiB when batching is requested); zero
-retains the incumbent. These are experiments, not an automatically promoted
-endpoint policy or a method-qualified point-source specialization.
+Ordinary native KS defaults to bounded batching of independent XC point domains:
+it requests up to 32 original tiles within a 32-MiB **additional** per-owner device
+allowance. The admitted count may be smaller. `GENERATIVEQC_CUDA_XC_BATCH_TILES=N`
+overrides the request; zero or one explicitly retains the one-tile executor.
+`GENERATIVEQC_CUDA_XC_BATCH_BYTES` overrides the additional allocation cap; zero
+also retains the incumbent. This scheduling policy does not prune or specialize
+the canonical scientific point source.
+
+Public `resource_budget` and `resource_plan` execution retains one-tile XC under
+the active native device ledger. Its current inventory reserves incumbent storage,
+later fleet owners and force workspace, with no separate optional-panel allowance.
+Unused ledger capacity therefore cannot fund point batches. This also applies to
+an explicitly supplied `ResourceBudget()` with unlimited user caps and to explicit
+batch environment overrides. Ordinary calls without a public resource ledger
+retain the default bounded batching above; budgets and their estimates are not
+silently enlarged.
 
 The compiler's `xc_point_batch_cuda.py` prepares a bounded residency plan from
 the original tile domains and selected AO counts. Admission reduces the requested
@@ -165,8 +175,12 @@ samples; those diagnostic densities do not qualify complete SCF/force timing.
 For complete interleaved warm and moved-warm PBE0 E+F populations, use
 `python -m benchmarks.pbe0_xc_tile_pairs --point-batch-tiles 32` with the usual
 basis/reference/output arguments. This keeps both arms' SCF/force tiles at 256
-and reapplies the arm's policy when geometry rebuilds the owner. Cold fresh-
-process E+F and separate profiling are still required before default promotion;
+and reapplies the arm's policy when geometry rebuilds the owner. Both comparison
+arms explicitly set their policy, so a changed default cannot contaminate the
+one-tile baseline. Compiled-resource evidence includes both the batched point
+kernel and its retained fallback for multi-tile automatic execution. The
+[default decision](../../.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md)
+records complete cold/warm/moved E+F evidence and remaining diagnostic limits;
 source-specialization/composed ablations belong to the independent #2072 arm.
 
 The resident contraction block is currently compiler-emitted maintained CUDA
@@ -245,6 +259,16 @@ program layouts do not admit discovery.
 `=1` explicitly requests it and rejects layouts that cannot select local maps.
 Invalid switch values are rejected. An automatic request keeps dense execution
 when the layout or execution schedule does not support selection.
+
+Public `resource_budget` and `resource_plan` execution retains dense AO work
+under the active native device ledger: its inventory reserves dense XC, later
+fleet owners and force workspace, with no separate optional-map allowance.
+Unused ledger capacity cannot fund retained maps. This includes an explicitly
+supplied unlimited `ResourceBudget()` and `GENERATIVEQC_CUDA_KS_ACTIVE_AO=1`;
+the explicit request still rejects an incompatible layout. Unbudgeted selection
+and `=0` are unchanged. Plan decisions report this budget fallback; the AO work
+diagnostic preserves `requested` separately from `selected` and reports dense
+work with no discovery when a requested map is not admitted.
 
 Selected physical layouts propagate back from the XC owner. The shared
 iteration precision schedule intersects that layout's arithmetic capabilities:

@@ -20,6 +20,7 @@
       "python/generativeqc_compiler/tensor/cuda_execute.py",
       "python/generativeqc_compiler/tensor/cuda_plan.py",
       "src/cc/solver.hpp",
+      "src/dft/cuda_ks.cpp",
       "src/hf/rhf_frame_response.hpp",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp"
@@ -511,6 +512,31 @@
       "evidence": [
         "issue:#507",
         "issue:#1598"
+      ]
+    },
+    {
+      "id": "dft.xc-point-batches",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:xc-point-batch-auto"
+      ],
+      "owner_issues": [
+        2073,
+        1598
+      ],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_xc.cpp",
+        "python/generativeqc_compiler/dft/xc_point_batch_cuda.py"
+      ],
+      "rationale": "Ordinary native KS requests up to 32 independent original XC tiles within an additional 32-MiB per-owner allowance. Compiler residency admission and the shared numeric resource ledger retain one-tile execution on tiny/response/mixed/resource-rejected domains; explicit zero/one tile or zero-byte overrides retain the incumbent. Independent E/V and complete cold/warm/moved PBE0 E/F gates pass, and retained endpoint populations show reduced time without added per-build AO/jet/contraction work. Point algebra and ordered accumulation are unchanged.",
+      "revisit_condition": "Refine resource/profitability admission using additional devices and workloads, not device or molecule-size whitelists. Retain opt-out, constrained-memory fallback and ordered E/V semantics. The small cold population, differing cold trajectories, hardware-counter permissions and separate #2072 composition remain disclosed follow-up qualification, not claims of universal profitability.",
+      "evidence": [
+        "issue:#2073",
+        "pr:#2081",
+        "note:.agents/notes/implemented/performance/2026-10-07-xc-point-batches.md",
+        "note:.agents/notes/implemented/performance/2026-10-07-xc-point-batch-default.md",
+        "docs:docs/developer/xc_native_cuda.md"
       ]
     },
     {

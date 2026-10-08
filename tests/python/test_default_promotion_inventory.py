@@ -43,6 +43,35 @@ def test_current_default_promotion_inventory_is_complete() -> None:
     assert len(payload["entries"]) >= 10
 
 
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            '"GENERATIVEQC_CUDA_XC_BATCH_TILES", 32',
+            '"GENERATIVEQC_CUDA_XC_BATCH_TILES", 1',
+        ),
+        (
+            '"GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024',
+            '"GENERATIVEQC_CUDA_XC_BATCH_BYTES", 64 * 1024 * 1024',
+        ),
+    ],
+)
+def test_native_xc_batch_defaults_are_audited(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Changing either default limit requires revisiting the recorded decision."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/dft/cuda_ks.cpp"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "XC point-batch default drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_fixture_copies_registered_sources_outside_the_audited_scope(
     tmp_path: Path,
 ) -> None:

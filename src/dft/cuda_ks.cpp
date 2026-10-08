@@ -844,7 +844,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
-    bool admit_ao = select_ao && ao_selection_bound.host_peak_bytes <= ao_map_host_budget;
+    // Public ledgers reserve dense XC, later fleet owners and force storage,
+    // not optional retained maps. Spare capacity is not a map allowance, even
+    // for an explicit request or an unlimited public ResourceBudget().
+    bool admit_ao = select_ao && !runtime::active_device_resource_ledger &&
+                    ao_selection_bound.host_peak_bytes <= ao_map_host_budget;
     if (host_unfused &&
         (options.semilocal_exchange_scale != 1.0 || options.semilocal_correlation_scale != 1.0))
       throw std::invalid_argument("scaled CUDA XC requires device-fused execution");
@@ -987,10 +991,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
           resource.retained_host_numeric_bytes =
               sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
         }
-        // This explicit qualification switch does not promote a new default.
-        // The compiler qualifies residency against a finite per-owner cap;
-        // the native resource ledger charges the allocation actually retained.
-        const auto qualification_size = [](const char* name, std::size_t fallback) {
+        // Default batching retains the compiler's bounded admission and the
+        // one-tile fallback. Overrides keep the incumbent available for ablations;
+        // the public inventory currently reserves only incumbent XC storage.
+        const auto point_batch_size = [](const char* name, std::size_t fallback) {
           const char* value = std::getenv(name);
           if (!value) return fallback;
           std::size_t result = 0;
@@ -1000,11 +1004,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
             throw std::invalid_argument(std::string(name) + " requires a nonnegative integer");
           return result;
         };
-        const auto point_batch_tiles = qualification_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 1);
+        const auto point_batch_tiles = point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_TILES", 32);
         if (point_batch_tiles > 1) {
           const auto point_batch_budget =
-              qualification_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024);
-          xc->prepare_point_batches(point_batch_tiles, point_batch_budget);
+              point_batch_size("GENERATIVEQC_CUDA_XC_BATCH_BYTES", 32 * 1024 * 1024);
+          // A live public ledger also reserves later fleet owners and force
+          // workspace. Its currently unused bytes are not an optional allowance,
+          // even with an unlimited user budget. Keep the incumbent until a plan
+          // explicitly accounts for optional panels across those lifetimes.
+          xc->prepare_point_batches(
+              point_batch_tiles, runtime::active_device_resource_ledger ? 0 : point_batch_budget);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }
