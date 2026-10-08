@@ -97,7 +97,7 @@ python3 tools/ratchet_producer_schedule.py --base-sha "$BASE_SHA" \
 - A complete, source-bound, same-domain increase in producer elements **or**
   callback count is a CI failure. This flags a **work regression requiring
   review**, not a proven scientific bug or permission to change memory budgets.
-- Changed imported dependencies, unavailable base objects, unsupported shapes
+- Changed imported dependencies, changed producer-work analyzer bytes, unavailable base objects, unsupported shapes
   or missing receipts retain explicit `INCOMPLETE` JSON status and a warning;
   this scoped CI mode does not block on unknown observations or relabel them
   `PASS`. The default CLI still fails closed for both `FAIL` and
