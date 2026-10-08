@@ -1,46 +1,50 @@
 # Maintainer Guide
 
-Use this guide to keep GenerativeQC scientifically trustworthy, reproducible, performant, and maintainable.
+Maintain scientific correctness, reproducible performance, resource discipline, and repository health. Use the core workflows for recurring work; subsystem qualification documents define specific acceptance contracts.
 
-- [Validation gates](validation.md)
-- [Frozen DF factor precision](df_frozen_precision.md)
-- [Performance engineering](performance_engineering.md)
-- [PBE0 SCF XC tile qualification](pbe0_xc_tile_qualification.md)
-- [Large-domain stationary CUDA qualification](stationary_large_domain_qualification.md)
-- [Scientific evidence retention](evidence_retention.md)
-- [CUDA ownership](cuda_ownership.md)
-- [CUDA vendor boundaries](vendor_boundaries.md)
-- [Resource planning](resource_planning.md)
-- [CPU autotuning](cpu_autotuning.md)
-- [F-shell validation](f_shell_validation.md)
-- [Implementation roadmap](roadmap.md)
-- [Generated documentation/data](generated-files.md)
+Keep the distinction clear: the current rules and qualification procedures live here; raw measurements belong under `benchmarks/results/`, and historical investigation or discarded designs belong under `.agents/notes/`.
 
-Historical investigation belongs in `.agents/notes/`; current operational truth belongs here.
+## Core workflows
 
 ```{toctree}
-:hidden:
 :maxdepth: 1
+:caption: Core workflows
 
 validation
-df_frozen_precision
 performance_engineering
-pbe0_xc_tile_qualification
 evidence_retention
+resource_planning
+roadmap
+generated-files
+```
+
+## Scientific qualification
+
+```{toctree}
+:maxdepth: 1
+:caption: Scientific qualification
+
+df_frozen_precision
+dft_mp_v1_contract
+f_shell_validation
+hybrid_cuda_acceptance
+ccsdt_cpu_bundle_qualification
+pbe0_xc_tile_qualification
+stationary_large_domain_qualification
+```
+
+## Runtime and work evidence
+
+```{toctree}
+:maxdepth: 1
+:caption: Runtime and work evidence
+
 cuda_ownership
 vendor_boundaries
-resource_planning
 cpu_autotuning
-f_shell_validation
-ccsdt_cpu_bundle_qualification
-dft_mp_v1_contract
-hybrid_cuda_acceptance
-stationary_large_domain_qualification
 source_work_audit
 replay_allocation_receipts
 native_structured_materialization
 residency_receipts
 producer_work_receipts
-roadmap
-generated-files
 ```
