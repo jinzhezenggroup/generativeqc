@@ -191,10 +191,10 @@ class SecondPrimitive:
     Caller input ownership is excluded from the prepared numeric-buffer budget.
     """
 
-    exponents: tuple
-    centers: tuple
-    weights: tuple | None = None
-    direction: tuple | None = None
+    exponents: tuple[float, ...]
+    centers: tuple[tuple[float, ...], ...]
+    weights: tuple[float, ...] | None = None
+    direction: tuple[float, ...] | None = None
     scale: float = 1.0
     output_tile: int = 0
 
@@ -280,7 +280,7 @@ class SecondDerivativeExecution:
     """Detached coordinate tiles and provenance for later response assembly."""
 
     values: np.ndarray
-    diagnostics: dict
+    diagnostics: dict[str, typing.Any]
 
 
 class PreparedSecondDerivative:
@@ -550,6 +550,10 @@ class PreparedSecondDerivative:
                         resource_plan.diagnostic
                         or "combined second derivative resource budget exceeded"
                     )
+            records_buffer = self._records
+            chunk_buffer = self._chunk
+            if records_buffer is None or chunk_buffer is None:
+                raise RuntimeError("second derivative buffers are closed")
             result = np.zeros((tile_count, len(self.artifact.output_indices)))
             count = records = chunks = 0
             digest, started = hashlib.sha256(), time.perf_counter()
@@ -563,15 +567,15 @@ class PreparedSecondDerivative:
                 self._call(
                     "generativeqc_second_run_v1",
                     self._handle,
-                    self._records.ctypes.data,
+                    records_buffer.ctypes.data,
                     count,
                     self.artifact.record_format.size,
                     tile_count,
-                    self._chunk.ctypes.data,
+                    chunk_buffer.ctypes.data,
                     int(profile),
                 )
                 with np.errstate(over="raise", invalid="raise"):
-                    np.add(result, self._chunk[:tile_count], out=result)
+                    np.add(result, chunk_buffer[:tile_count], out=result)
                 chunks += 1
                 if profile and self.artifact.backend == "cuda":
                     metrics = _Metrics()
@@ -590,7 +594,7 @@ class PreparedSecondDerivative:
                         "second derivative primitive output tile exceeds requested rows"
                     )
                 digest.update(blob)
-                self._records[count] = np.frombuffer(blob, dtype=np.uint8)
+                records_buffer[count] = np.frombuffer(blob, dtype=np.uint8)
                 count, records = count + 1, records + 1
                 if count == self.record_capacity:
                     flush(count)
@@ -675,6 +679,10 @@ class PreparedSecondDerivative:
                         or "combined second derivative resource budget exceeded"
                     )
 
+            records_buffer = self._records
+            library = self._library
+            if records_buffer is None or library is None:
+                raise RuntimeError("second derivative device buffers are closed")
             count = records = chunks = 0
             digest, started = hashlib.sha256(), time.perf_counter()
             timing = {
@@ -687,14 +695,14 @@ class PreparedSecondDerivative:
                 self._call(
                     "generativeqc_second_run_v1",
                     self._handle,
-                    self._records.ctypes.data,
+                    records_buffer.ctypes.data,
                     count,
                     self.artifact.record_format.size,
                     tile_count,
                     None,
                     int(profile),
                 )
-                pointer = self._library.generativeqc_second_result_device_v1(
+                pointer = library.generativeqc_second_result_device_v1(
                     self._handle
                 )
                 if not pointer:
@@ -718,7 +726,7 @@ class PreparedSecondDerivative:
                         "second derivative primitive output tile exceeds requested rows"
                     )
                 digest.update(blob)
-                self._records[count] = np.frombuffer(blob, dtype=np.uint8)
+                records_buffer[count] = np.frombuffer(blob, dtype=np.uint8)
                 count, records = count + 1, records + 1
                 if count == self.record_capacity:
                     flush(count)
@@ -752,6 +760,8 @@ class PreparedSecondDerivative:
         """Release the shared native arena once, respecting its preparation lock."""
         with self._lock, _PREPARATION_LOCK:
             if self._handle.value:
+                if self._library is None:
+                    raise RuntimeError("second derivative library is unavailable")
                 self._library.generativeqc_second_destroy_v1(self._handle)
                 self._handle = ct.c_void_p()
             self._records = self._chunk = None
