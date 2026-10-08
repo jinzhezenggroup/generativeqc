@@ -92,6 +92,54 @@ def _generic_indices(shape: tuple[int, ...]) -> tuple[Index, ...]:
     )
 
 
+def _creation_shape(value: object) -> tuple[int, ...]:
+    """Validate scalar/tuple shapes without accepting bool or negative extents."""
+    if type(value) is int:
+        value = (value,)
+    return _shape(value, "creation")
+
+
+def full(
+    shape: int | tuple[int, ...], fill_value: object, *, dtype: str = "float64"
+) -> VibeArray:
+    """Construct a symbolic uniform array without expanding its literal payload."""
+    target = _creation_shape(shape)
+    if dtype not in ("float32", "float64"):
+        raise TypeError("symbolic full supports float32 or float64")
+    factor = _generic_scalar(fill_value, "full fill value")
+    scalar = tensor_ir.constant(factor, TensorSpec(dtype=dtype, role="constant"))
+    if not target:
+        return VibeArray(scalar)
+    return VibeArray(tensor_ir.broadcast(scalar, _generic_indices(target), ()))
+
+
+def zeros(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
+    return full(shape, 0, dtype=dtype)
+
+
+def ones(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
+    return full(shape, 1, dtype=dtype)
+
+
+def full_like(x: object, fill_value: object, *, dtype: str | None = None) -> VibeArray:
+    """Create a generic constant with the same shape/dtype, not a QC relabeling."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise TypeError(
+            "full_like for scientifically annotated arrays requires explicit "
+            "TensorIR index and representation metadata"
+        )
+    return full(value.shape, fill_value, dtype=value.dtype if dtype is None else dtype)
+
+
+def zeros_like(x: object, *, dtype: str | None = None) -> VibeArray:
+    return full_like(x, 0, dtype=dtype)
+
+
+def ones_like(x: object, *, dtype: str | None = None) -> VibeArray:
+    return full_like(x, 1, dtype=dtype)
+
+
 def _is_generic_array(value: VibeArray) -> bool:
     return all(
         index.space.kind == "matrix"
@@ -128,6 +176,26 @@ def _broadcast_shape(left: tuple[int, ...], right: tuple[int, ...]) -> tuple[int
                 f"operands with shapes {left} and {right} cannot be broadcast together"
             )
     return tuple(result)
+
+
+def broadcast_shapes(*shapes: tuple[int, ...]) -> tuple[int, ...]:
+    """Static-shape broadcasting without creating arrays or runtime work."""
+    result: tuple[int, ...] = ()
+    for shape in shapes:
+        result = _broadcast_shape(result, _shape(shape, "broadcast_shapes"))
+    return result
+
+
+def broadcast_arrays(*arrays: object) -> tuple[VibeArray, ...]:
+    """Broadcast each generic symbolic input explicitly, keeping its own dtype."""
+    values = tuple(_array(item, "broadcast_arrays operand") for item in arrays)
+    if any(not _is_generic_array(item) for item in values):
+        raise TypeError(
+            "broadcast_arrays needs generic arrays; scientific domains require "
+            "explicit TensorIR axis mappings"
+        )
+    target = broadcast_shapes(*(value.shape for value in values))
+    return tuple(_broadcast_generic(value, target) for value in values)
 
 
 def _broadcast_generic(value: VibeArray, target_shape: tuple[int, ...]) -> VibeArray:
@@ -328,6 +396,99 @@ def reciprocal(x: object) -> VibeArray:
     return divide(1, value)
 
 
+def _normalized_axes(axis: object, rank: int, operation: str) -> tuple[int, ...]:
+    """Normalize unique signed axes, rejecting bools and duplicate positions."""
+    if type(axis) is int:
+        axes = (axis,)
+    elif isinstance(axis, tuple) and all(type(item) is int for item in axis):
+        axes = axis
+    else:
+        raise TypeError(f"{operation} axis must be an integer or tuple of integers")
+    normalized = tuple(_axis(item, rank, operation) for item in axes)
+    if len(set(normalized)) != len(normalized):
+        raise ValueError(f"{operation} axes must be unique")
+    return normalized
+
+
+def _expand_shape(shape: tuple[int, ...], axis: object) -> tuple[int, ...]:
+    count = 1 if type(axis) is int else len(axis) if isinstance(axis, tuple) else 0
+    new_rank = len(shape) + count
+    inserted = set(_normalized_axes(axis, new_rank, "expand_dims"))
+    if len(inserted) != count:
+        raise ValueError("expand_dims axis count is inconsistent")
+    original = iter(shape)
+    return tuple(
+        1 if position in inserted else next(original) for position in range(new_rank)
+    )
+
+
+def expand_dims(x: object, axis: int | tuple[int, ...]) -> VibeArray:
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError(
+            "expand_dims scientific arrays require explicit TensorIR indices"
+        )
+    return reshape(value, _expand_shape(value.shape, axis))
+
+
+def _squeezed_shape(
+    shape: tuple[int, ...], axis: int | tuple[int, ...]
+) -> tuple[int, ...]:
+    axes = set(_normalized_axes(axis, len(shape), "squeeze"))
+    if any(shape[position] != 1 for position in axes):
+        raise ValueError("squeeze requires singleton dimensions at specified axes")
+    return tuple(
+        extent for position, extent in enumerate(shape) if position not in axes
+    )
+
+
+def squeeze(x: object, axis: int | tuple[int, ...]) -> VibeArray:
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("squeeze scientific arrays require explicit TensorIR indices")
+    return reshape(value, _squeezed_shape(value.shape, axis))
+
+
+def _moveaxis_order(
+    rank: int, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+) -> tuple[int, ...]:
+    src = _normalized_axes(source, rank, "moveaxis source")
+    dst = _normalized_axes(destination, rank, "moveaxis destination")
+    if len(src) != len(dst):
+        raise ValueError("moveaxis source and destination must have matching lengths")
+    order = [axis for axis in range(rank) if axis not in src]
+    for target, original in sorted(zip(dst, src, strict=True)):
+        order.insert(target, original)
+    return tuple(order)
+
+
+def moveaxis(
+    x: object, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+) -> VibeArray:
+    value = _array(x)
+    return permute_dims(value, _moveaxis_order(value.ndim, source, destination))
+
+
+def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
+    """Flip generic arrays using bounded, explicit TensorIR gather maps."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise ValueError("flip scientific arrays require explicit TensorIR index maps")
+    axes = (
+        tuple(range(value.ndim))
+        if axis is None
+        else _normalized_axes(axis, value.ndim, "flip")
+    )
+    if any(value.shape[position] > 65536 for position in axes):
+        raise ValueError("flip exceeds the bounded static gather index budget")
+    node = value.node
+    for position in sorted(axes):
+        node = tensor_ir.gather(
+            node, position, range(value.shape[position] - 1, -1, -1)
+        )
+    return _canonical_generic(VibeArray(node))
+
+
 def reshape(
     x: object,
     shape: tuple[int, ...],
@@ -475,9 +636,18 @@ def mean(
     )
 
 
+def _permutation(axes: object, rank: int) -> tuple[int, ...]:
+    if not isinstance(axes, tuple) or len(axes) != rank:
+        raise ValueError("permute_dims axes must be a full-rank tuple")
+    normalized = _normalized_axes(axes, rank, "permute_dims")
+    if len(normalized) != rank:
+        raise ValueError("permute_dims axes must be a full permutation")
+    return normalized
+
+
 def permute_dims(x: object, axes: tuple[int, ...]) -> VibeArray:
     value = _array(x)
-    result = VibeArray(tensor_ir.transpose(value.node, axes))
+    result = VibeArray(tensor_ir.transpose(value.node, _permutation(axes, value.ndim)))
     return _canonical_generic(result)
 
 

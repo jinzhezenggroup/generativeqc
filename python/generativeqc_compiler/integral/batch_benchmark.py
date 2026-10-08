@@ -21,7 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from generativeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
 from generativeqc_compiler.common.cuda_resources import (
@@ -40,6 +40,20 @@ from .shell_spec import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+
+def _report_float(value: object) -> float:
+    """Validate a numeric report field before converting it to binary64."""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise TypeError("benchmark field must be a numeric value")
+    return float(value)
+
+
+def _report_int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise TypeError("benchmark index must be numeric")
+    return int(value)
+
 
 _PRODUCTION_MANIFEST_PATH = Path(__file__).with_name("production_shell_classes.json")
 PRODUCTION_SHELL_CLASSES = frozenset(
@@ -239,7 +253,11 @@ def pareto_front(
         or not 0.0 <= timing_noise < 1.0
     ):
         raise ValueError("timing_noise must be in [0, 1)")
-    rows = tuple(row for row in candidates if isinstance(row, dict))
+    rows = tuple(
+        cast("dict[str, object]", row)
+        for row in cast("Iterable[object]", candidates)
+        if isinstance(row, dict)
+    )
 
     def numeric(row: dict[str, object], key: str) -> float | None:
         value = row.get(key)
@@ -329,7 +347,9 @@ def rank_compile_aware_candidates(
                 and not isinstance(value, bool)
                 and math.isfinite(float(value))
             ):
-                item["primitive_work"] = float(item["primitive_work"]) + float(value)
+                item["primitive_work"] = _report_float(item["primitive_work"]) + float(
+                    value
+                )
                 break
         for key in (
             "runtime_seconds",
@@ -352,14 +372,14 @@ def rank_compile_aware_candidates(
                     item[key] = (
                         float(value)
                         if previous is None
-                        else min(float(previous), float(value))
+                        else min(_report_float(previous), float(value))
                     )
                 else:
                     previous = item.get(key)
                     item[key] = (
                         float(value)
                         if previous is None
-                        else max(float(previous), float(value))
+                        else max(_report_float(previous), float(value))
                     )
     if not aggregated:
         raise ValueError("profile contains no uncovered compilable shell classes")
@@ -372,11 +392,11 @@ def rank_compile_aware_candidates(
     selected = sorted(
         selected,
         key=lambda row: (
-            float(row.get("runtime_seconds", math.inf)),
-            float(row.get("compile_seconds", math.inf)),
-            float(row.get("source_bytes", math.inf)),
-            -float(row.get("primitive_work", 0.0)),
-            int(row["first_index"]),
+            _report_float(row.get("runtime_seconds", math.inf)),
+            _report_float(row.get("compile_seconds", math.inf)),
+            _report_float(row.get("source_bytes", math.inf)),
+            -_report_float(row.get("primitive_work", 0.0)),
+            _report_int(row["first_index"]),
         ),
     )
     return tuple(
@@ -759,6 +779,8 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
                     row = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(row, dict):
+                    continue
                 name = row.get("shell_class")
                 if isinstance(name, str):
                     runtime_rows[name] = row
@@ -767,6 +789,12 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
         accepted = []
         for spec, compile_row in zip(specifications, compile_rows, strict=True):
             resources = compile_row["resources"]
+            if not isinstance(resources, tuple) or not all(
+                isinstance(item, KernelResources) for item in resources
+            ):
+                raise TypeError(
+                    "compiled candidate must provide kernel resource records"
+                )
             resource_ok, reasons = _resource_gate(
                 resources,
                 maximum_registers=arguments.max_registers,
@@ -780,8 +808,8 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
                 reasons.append("candidate did not produce a runtime result")
             else:
                 observable = selected_consumer.value
-                maximum_value = float(runtime[f"maximum_{observable}"])
-                maximum_error = float(runtime[f"maximum_{observable}_error"])
+                maximum_value = _report_float(runtime[f"maximum_{observable}"])
+                maximum_error = _report_float(runtime[f"maximum_{observable}_error"])
                 tolerance = arguments.absolute_tolerance + (
                     arguments.relative_tolerance * maximum_value
                 )
@@ -790,7 +818,7 @@ def _run_batch(arguments: argparse.Namespace) -> dict[str, object]:
                         f"{observable} error {maximum_error:.3e} exceeds "
                         f"{tolerance:.3e}"
                     )
-                if float(runtime["speedup"]) < arguments.minimum_speedup:
+                if _report_float(runtime["speedup"]) < arguments.minimum_speedup:
                     reasons.append(f"speedup is below {arguments.minimum_speedup:.3f}x")
             passed = resource_ok and not reasons
             if passed:

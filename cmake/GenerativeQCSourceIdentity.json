@@ -93,6 +93,7 @@
     "tools/generate_scf_density_cuda.py",
     "tools/generate_weighted_gram_native.py",
     "tools/generate_gfn2_density_cuda.py",
+    "tools/generate_ordered_history_native.py",
     "tools/generate_stationary_force_aot.py",
     "tools/generate_stationary_cpu_derivative_aot.py",
     "tools/generate_wb97mv_rsh_cpu_aot.py",

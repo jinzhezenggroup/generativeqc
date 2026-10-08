@@ -36,7 +36,7 @@ from .batch_schedule import (
     index_table_values,
 )
 from .cuda_dtype import program_precision, scalar_type
-from .cuda_gemm import gemm_contract
+from .cuda_gemm import GemmContract, gemm_contract
 from .cuda_layout import LayoutDecision, conversion_bytes, select_layouts
 from .ir import TRANSCENDENTALS, Node
 from .optimize import prepare_for_backend
@@ -57,9 +57,22 @@ ELEMENTWISE = (
 )
 
 
+def _require_gemm(node: Node) -> GemmContract:
+    result = gemm_contract(node)
+    if result is None:
+        raise ValueError("GEMM schedule requires a supported contraction")
+    return result
+
+
+def _materialized_layout(step: Step) -> DenseLayout:
+    if step.layout is None:
+        raise ValueError("materialized tensor step requires a physical layout")
+    return step.layout
+
+
 def strides(shape: typing.Any) -> tuple[int, ...]:
     """Element strides for the materialized logical C layout."""
-    return tuple(prod(shape[i + 1 :]) for i in range(len(shape)))
+    return tuple(int(prod(shape[i + 1 :])) for i in range(len(shape)))
 
 
 def aligned(size: int) -> int:
@@ -90,7 +103,7 @@ def _logical_node_flops(node: Node) -> int:
         domains = {}
         for child, labels in zip(node.inputs, node.attrs["labels"], strict=True):
             domains.update(zip(labels, child.spec.shape, strict=True))
-        return len(node.inputs) * prod(domains.values())
+        return int(len(node.inputs) * prod(domains.values()))
     if node.op == "runtime_cartesian_scatter_add":
         return node.inputs[0].spec.size
     if node.op not in VIEWS and node.op not in (
@@ -184,7 +197,7 @@ class Reservations:
 
     @property
     def total(self) -> int:
-        return sum(asdict(self).values())
+        return self.t + self.r + self.diis + self.concurrent
 
 
 @dataclass(frozen=True)
@@ -308,7 +321,7 @@ class TensorPlan:
         return _hash(self.to_payload())
 
     @property
-    def semantic_traffic(self) -> dict:
+    def semantic_traffic(self) -> dict[str, object]:
         """Deterministic semantic byte accounting for this execution topology.
 
         Declared host copies and pack/scatter conversions are exact byte counts;
@@ -357,7 +370,9 @@ class TensorPlan:
                     {
                         "shape": s.node.spec.shape,
                         "inputs": s.inputs,
-                        "layout": None if s.virtual else s.layout.to_payload(),
+                        "layout": None
+                        if s.virtual
+                        else _materialized_layout(s).to_payload(),
                         "view_map": s.node.attrs if s.virtual else None,
                     }
                     for s in self.steps
@@ -463,7 +478,7 @@ class TensorPlan:
             outputs=tuple(index for _, index in self.outputs),
         )
 
-    def to_payload(self) -> dict:
+    def to_payload(self) -> dict[str, object]:
         """Include layouts, aliases, lifetimes, shapes, schedule and reservations."""
         names = self.program.debug_names
         return {
@@ -507,8 +522,12 @@ class TensorPlan:
                     "shape": s.node.spec.shape,
                     "dtype": s.node.spec.dtype,
                     "itemsize": s.node.spec.itemsize,
-                    "strides": None if s.virtual else s.layout.element_strides,
-                    "layout": None if s.virtual else s.layout.to_payload(),
+                    "strides": None
+                    if s.virtual
+                    else _materialized_layout(s).element_strides,
+                    "layout": None
+                    if s.virtual
+                    else _materialized_layout(s).to_payload(),
                     "view_map": s.node.attrs if s.virtual else None,
                     "donated_from": s.donated_from,
                 }
@@ -630,11 +649,12 @@ def _fully_consumes_operand(parent: Node, child: Node) -> bool:
         return True
     if parent.op == "einsum":
         domains = {}
+        child_labels: tuple[int, ...] | None = None
         for operand, labels in zip(parent.inputs, parent.attrs["labels"], strict=True):
             domains.update(zip(labels, operand.spec.shape, strict=True))
             if operand is child:
                 child_labels = labels
-        if child not in parent.inputs:
+        if child_labels is None:
             return False
         # Repeated labels select a diagonal rather than the full tensor. An
         # empty sibling-only label also makes the contraction skip this child.
@@ -986,7 +1006,7 @@ def plan_cuda(
         "host tensor bytes",
     )
     needs_blas = any(
-        s.gemm != "none" and s.node.spec.size and gemm_contract(s.node).k for s in steps
+        s.gemm != "none" and s.node.spec.size and _require_gemm(s.node).k for s in steps
     )
     if needs_blas and provider_bytes < MIN_PROVIDER_BYTES:
         raise ValueError("cuBLAS plans require at least a 96 MiB provider allowance")
@@ -1020,7 +1040,7 @@ def plan_cuda(
         panel = aligned(
             max(
                 (
-                    gemm_contract(s.node).panel_bytes(*tile)
+                    _require_gemm(s.node).panel_bytes(*tile)
                     for s in steps
                     if s.gemm == "packed"
                 ),
@@ -1032,7 +1052,7 @@ def plan_cuda(
             break
         if max(tile) == 1 or fixed > max_bytes:
             raise ValueError(
-                f"infeasible tensor byte budget: at least {fixed + aligned(max((gemm_contract(s.node).panel_bytes(1, 1, 1) for s in steps if s.gemm == 'packed'), default=0))} bytes required, budget {max_bytes}"
+                f"infeasible tensor byte budget: at least {fixed + aligned(max((_require_gemm(s.node).panel_bytes(1, 1, 1) for s in steps if s.gemm == 'packed'), default=0))} bytes required, budget {max_bytes}"
             )
         axis = max(range(3), key=lambda k: tile[k])
         tile[axis] = max(1, tile[axis] // 2)

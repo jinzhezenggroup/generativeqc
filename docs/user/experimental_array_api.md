@@ -54,13 +54,35 @@ program = norm2.lower(x)
 This avoids silently treating every runtime array as a differentiable scientific
 parameter while still giving the inferred public path a supported JVP/VJP route.
 
+The preview also supports finite, uniform array creation through `zeros`, `ones`,
+`full`, and `zeros_like`, `ones_like`, `full_like`. Inside `@xp.compile`,
+these constructors lower **statically known** shapes to a single exact TensorIR
+scalar constant and broadcast (no size-proportional literal payload):
+
+```python
+@xp.compile
+def shifted(x):
+    return x + xp.ones_like(x) * xp.full(x.shape, 0.25, dtype=x.dtype)
+```
+
+Outside capture, creation executes eagerly on NumPy/CPU. Only the existing
+`float32` and `float64` dtypes and `device=None` are admitted: an explicit
+device request never triggers a hidden host transfer. `full(shape, integer)`
+without an explicit floating dtype is rejected rather than silently claiming
+the standard's unsupported default integer dtype. Scientific AO/occupied/etc.
+arrays cannot be passed to `*_like` without their explicit TensorIR metadata.
+
 The current preview supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
 dimension, and static indexing with integers, slices (including negative
 strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
 `square` and `reciprocal` lower to existing TensorIR multiply/divide nodes.
 `sum` and `mean` accept static axes, and generic arrays may use
-`keepdims=True` to retain reduced singleton axes. Generic arrays accept finite Python
+`keepdims=True` to retain reduced singleton axes. Shape utilities also include
+`broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,
+`moveaxis` and `flip`. `expand_dims` accepts the 2025.12 multi-axis tuple
+form, and `permute_dims` accepts negative axes; all reuse existing TensorIR
+reshape, transpose, broadcast and gather semantics. Generic arrays accept finite Python
 float literals as ordinary scalar values, so expressions such as `x + 0.5`
 have eager/compiled parity. The compiler records the exact binary value of that
 Python float. Negative-zero float literals are rejected because exact rational
@@ -92,7 +114,11 @@ shape/dtype semantics         AO/occ/vir/aux/spin semantics
 ## Current limits
 
 The eager namespace and reference compiled-call path currently accept CPU/NumPy
-`float32` and `float64` arrays. There is no implicit dtype promotion, dynamic Python control
+`float32` and `float64` arrays. Shape functions require static integer
+dimensions and axes. Captured `flip` builds explicit gather index maps and
+rejects reversed axes larger than 65,536 elements to avoid unbounded source
+materialization. Static creation is capture-aware but does not
+supply the standard's full dtype defaults, devices or constructor set. There is no implicit dtype promotion, dynamic Python control
 flow, or implicit external-device transfer. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
 same-device handoff. Every eager namespace operation checks this host boundary

@@ -59,7 +59,7 @@ def normalize_capabilities(name: str, raw: object | None) -> frozenset[str]:
     """
 
     if raw is None:
-        return frozenset()
+        return frozenset[str]()
     if not isinstance(raw, list):
         raise TypeError(f"{name} capabilities must be a list of strings")
     values: set[str] = set()
@@ -236,6 +236,10 @@ def query_integral_capability(
         from .shell_spec import cartesian_components
 
         try:
+            if integral.derivative is None:
+                raise ValueError(
+                    "one-electron derivative backend requires a derivative"
+                )
             components = tuple(
                 cartesian_components(l)[0] for l in integral.signature.angular
             )
@@ -285,7 +289,7 @@ def query_integral_capability(
         )
     if integral.operator.family != OperatorFamily.FOUR_CENTER_ERI:
         reasons.append(
-            f"CUDA lowering is unavailable for {integral.operator.family.value}"
+            f"CUDA lowering is unavailable for {OperatorFamily(integral.operator.family).value}"
         )
     if any(not isinstance(c, ContractionSpec) for c in integral.contractions):
         reasons.append(
@@ -534,7 +538,7 @@ def build_capability_report(
             raise ValueError("capability target and architecture disagree")
     selected_architecture = target.architecture
     production = _production_index(manifest, selected_architecture, profile)
-    rows = []
+    reports: list[ShellCapabilityReport] = []
     for spec in specifications:
         recurrence_rows = tuple(
             (
@@ -559,14 +563,14 @@ def build_capability_report(
             spec.name,
             _production_gap_payload(),
         )
-        rows.append(
+        reports.append(
             ShellCapabilityReport(
                 spec=spec,
                 generic_fused=generic,
                 recurrences=recurrence_rows,
                 force_derivative_orders=derivative_rows,
                 production=production_row,
-            ).to_payload()
+            )
         )
     manifest_label = None
     if manifest is not None:
@@ -587,13 +591,12 @@ def build_capability_report(
             except ValueError:
                 manifest_label = str(manifest)
     recurrence_supported = {
-        name: sum(bool(row["recurrences"][name]["supported"]) for row in rows)
+        name: sum(dict(report.recurrences)[name].supported for report in reports)
         for name in ("subset_wick", "rys2", "rys3", "rys4", "rys5")
     }
     force_derivative_supported = {
         str(order): sum(
-            bool(row["force_derivative_orders"][str(order)]["supported"])
-            for row in rows
+            dict(report.force_derivative_orders)[order].supported for report in reports
         )
         for order in (1, 2)
     }
@@ -619,17 +622,17 @@ def build_capability_report(
         ),
         "manifest": manifest_label,
         "profile": profile,
-        "total_shell_classes": len(rows),
+        "total_shell_classes": len(reports),
         "generic_fused_supported": sum(
-            bool(row["generic_fused"]["supported"]) for row in rows
+            report.generic_fused.supported for report in reports
         ),
         "production_selected": sum(
-            bool(row["production"].get("force")) or bool(row["production"].get("fock"))
-            for row in rows
+            bool(report.production.get("force")) or bool(report.production.get("fock"))
+            for report in reports
         ),
         "recurrence_supported": recurrence_supported,
         "force_derivative_supported": force_derivative_supported,
-        "shell_classes": rows,
+        "shell_classes": [report.to_payload() for report in reports],
     }
 
 

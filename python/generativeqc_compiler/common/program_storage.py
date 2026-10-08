@@ -136,7 +136,7 @@ class ProgramStoragePlan:
                 continue
             if item.alias_of not in buffers:
                 raise ValueError("view alias owner is unknown")
-            owner = buffers[typing.cast("str", item.alias_of)]
+            owner = buffers[item.alias_of]
             view = buffers[item.buffer]
             if owner.space != view.space or view.bytes > owner.bytes:
                 raise ValueError("view alias is incompatible with owner storage")

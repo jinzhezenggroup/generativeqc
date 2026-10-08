@@ -33,6 +33,7 @@ from generativeqc_compiler.array_api import (
     capabilities as _compiler_capabilities,
 )
 from generativeqc_compiler.array_api import namespace as _namespace
+from generativeqc_compiler.array_api.trace import active_capture as _active_capture
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
@@ -268,6 +269,71 @@ def broadcast_to(
     return np.broadcast_to(_eager_array(x), _namespace._shape(shape, "broadcast_to"))
 
 
+def broadcast_shapes(*shapes: tuple[int, ...]) -> tuple[int, ...]:
+    """Return the common broadcast shape without creating arrays."""
+    return _namespace.broadcast_shapes(*shapes)
+
+
+def broadcast_arrays(*arrays: object) -> tuple[typing.Any, ...]:
+    """Broadcast eager arrays or generic symbolic arrays to one common shape.
+
+    Preserve each input dtype. Symbolic inputs must all be VibeArray values
+    with generic index spaces; an empty argument list returns an empty tuple.
+    """
+    if not arrays:
+        return ()
+    if any(isinstance(value, VibeArray) for value in arrays):
+        return _namespace.broadcast_arrays(*arrays)
+    values = tuple(_eager_array(value) for value in arrays)
+    return tuple(np.broadcast_arrays(*values))
+
+
+def expand_dims(x: object, axis: int | tuple[int, ...]) -> typing.Any:
+    """Insert singleton dimensions at unique signed axes in eager or generic symbolic arrays."""
+    if isinstance(x, VibeArray):
+        return _namespace.expand_dims(x, axis)
+    array = _eager_array(x)
+    _namespace._expand_shape(array.shape, axis)
+    return np.expand_dims(array, axis)
+
+
+def squeeze(x: object, axis: int | tuple[int, ...]) -> typing.Any:
+    """Remove the specified singleton axes from an eager or generic symbolic array."""
+    if isinstance(x, VibeArray):
+        return _namespace.squeeze(x, axis)
+    array = _eager_array(x)
+    _namespace._squeezed_shape(array.shape, axis)
+    return np.squeeze(array, axis=axis)
+
+
+def moveaxis(
+    x: object, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+) -> typing.Any:
+    """Move selected axes to matching destinations, preserving the order of the others."""
+    if isinstance(x, VibeArray):
+        return _namespace.moveaxis(x, source, destination)
+    array = _eager_array(x)
+    order = _namespace._moveaxis_order(array.ndim, source, destination)
+    return np.transpose(array, order)
+
+
+def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
+    """Reverse the selected axes, or all axes when axis is None.
+
+    Symbolic inputs require generic index spaces and at most 65,536 elements
+    along each flipped axis to bound the static gather maps.
+    """
+    if isinstance(x, VibeArray):
+        return _namespace.flip(x, axis=axis)
+    array = _eager_array(x)
+    axes = (
+        tuple(range(array.ndim))
+        if axis is None
+        else _namespace._normalized_axes(axis, array.ndim, "flip")
+    )
+    return np.flip(array, axis=axes)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """Select a half-open (start, stop) range along every input axis.
 
@@ -359,13 +425,7 @@ def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.permute_dims(x, axes)
     array = _eager_array(x)
-    if (
-        not isinstance(axes, tuple)
-        or any(type(axis) is not int for axis in axes)
-        or sorted(axes) != list(range(array.ndim))
-    ):
-        raise ValueError("permutation requires each nonnegative axis exactly once")
-    return np.transpose(array, axes)
+    return np.transpose(array, _namespace._permutation(axes, array.ndim))
 
 
 def matrix_transpose(x: object) -> typing.Any:
@@ -462,6 +522,82 @@ def asarray(
             "experimental Array API runtime inputs must have float32 or float64 dtype"
         )
     return array
+
+
+def _creation_dtype(dtype: object) -> str:
+    return "float64" if dtype is None else _dtype_name(dtype)
+
+
+def _creation_device(device: object) -> None:
+    if device is not None:
+        raise ValueError(
+            "experimental creation only admits device=None (CPU reference); "
+            "device selection requires a qualified backend"
+        )
+
+
+def full(
+    shape: int | tuple[int, ...],
+    fill_value: object,
+    *,
+    dtype: object = None,
+    device: object = None,
+) -> typing.Any:
+    """Create a finite uniform array, or capture an exact TensorIR constant."""
+    _creation_device(device)
+    target = _namespace._creation_shape(shape)
+    name = _creation_dtype(dtype)
+    if dtype is None and type(fill_value) in (bool, int):
+        raise TypeError(
+            "full with integer/bool fill_value requires an integer/bool dtype "
+            "not supported by this preview; specify a floating dtype explicitly"
+        )
+    factor = _namespace._generic_scalar(fill_value, "full fill value")
+    if _active_capture():
+        return _namespace.full(target, factor, dtype=name)
+    return _eager_compute(np.full, target, float(factor), dtype=np.dtype(name))
+
+
+def zeros(
+    shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
+) -> typing.Any:
+    """Create floating zeros on the CPU reference path or capture a symbolic constant."""
+    return full(shape, 0, dtype=_creation_dtype(dtype), device=device)
+
+
+def ones(
+    shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
+) -> typing.Any:
+    """Create floating ones on the CPU reference path or capture a symbolic constant."""
+    return full(shape, 1, dtype=_creation_dtype(dtype), device=device)
+
+
+def full_like(
+    x: object,
+    fill_value: object,
+    *,
+    dtype: object = None,
+    device: object = None,
+) -> typing.Any:
+    """Create a uniform generic array inheriting the input's shape/dtype."""
+    _creation_device(device)
+    factor = _namespace._generic_scalar(fill_value, "full_like fill value")
+    if isinstance(x, VibeArray):
+        name = x.dtype if dtype is None else _dtype_name(dtype)
+        return _namespace.full_like(x, factor, dtype=name)
+    array = _eager_array(x)
+    name = array.dtype.name if dtype is None else _dtype_name(dtype)
+    return _eager_compute(np.full_like, array, float(factor), dtype=np.dtype(name))
+
+
+def zeros_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
+    """Create floating zeros with the input shape and dtype unless dtype is specified."""
+    return full_like(x, 0, dtype=dtype, device=device)
+
+
+def ones_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
+    """Create floating ones with the input shape and dtype unless dtype is specified."""
+    return full_like(x, 1, dtype=dtype, device=device)
 
 
 def _generic_spec(array: np.ndarray, *, differentiable: bool) -> TensorSpec:
@@ -648,6 +784,8 @@ __all__ = [
     "VibeArray",
     "add",
     "asarray",
+    "broadcast_arrays",
+    "broadcast_shapes",
     "broadcast_to",
     "capabilities",
     "compile",
@@ -655,16 +793,23 @@ __all__ = [
     "dlpack_device",
     "einsum",
     "exp",
+    "expand_dims",
+    "flip",
     "float32",
     "float64",
+    "full",
+    "full_like",
     "import_dlpack",
     "input_array",
     "log",
     "matmul",
     "matrix_transpose",
     "mean",
+    "moveaxis",
     "multiply",
     "negative",
+    "ones",
+    "ones_like",
     "permute_dims",
     "pow",
     "reciprocal",
@@ -672,8 +817,11 @@ __all__ = [
     "slice",
     "sqrt",
     "square",
+    "squeeze",
     "subtract",
     "sum",
     "take",
     "trace",
+    "zeros",
+    "zeros_like",
 ]

@@ -61,13 +61,18 @@ compatible.
 | unary `-` | Exact coefficient lowering |
 | `pow/exp/log/sqrt` | Existing TensorIR real-valued contracts |
 | `sum` | Explicit reduction, `keepdims=False`, no implicit dtype conversion |
-| `permute_dims`, `.T`, `.mT` | Array-style axis and matrix transpose |
+| `permute_dims`, `.T`, `.mT` | Array-style axis and matrix transpose, including 2025.12 signed axis positions |
 | `reshape` | Shape-only for generic arrays, including one `-1`; scientific arrays require explicit target metadata |
+| `expand_dims/squeeze` | Static singleton axis insertion/removal (including signed and multiple axes); scientific dimensions need explicit typed TensorIR metadata |
+| `moveaxis/flip` | Signed-axis reorder through transpose; generic flip through static gather up to 65,536 indices per reversed axis |
+| `broadcast_shapes/broadcast_arrays` | Static integer-shape calculus / individual explicit generic broadcasts; each input retains its dtype |
 | `broadcast_to` | Shape-only for generic arrays; scientific arrays require explicit indices/axis map |
 | indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
 | `take` | Static integer gather along one axis |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
 | `asarray` | CPU/NumPy float32/float64 eager arrays; no silent external-device transfer |
+| `zeros/ones/full` | Static shapes, finite float32/float64 values; symbolic creation uses one exact scalar + TensorIR broadcast; integer/bool default `full` dtypes remain unsupported |
+| `zeros_like/ones_like/full_like` | Generic arrays only, preserve shape/dtype by default; scientifically annotated axes require an explicit typed TensorIR construction |
 | `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
 | dtype promotion | Not yet supported |
@@ -126,6 +131,9 @@ No TensorIR type declarations are needed on this ordinary path. The same
 namespace functions execute eagerly when given NumPy-backed arrays and lower to
 symbolic TensorIR when `compile` supplies `VibeArray` inputs. The concrete
 shape/dtype signature constructs a cached generic TensorIR specialization.
+Creation inside the trace uses context-local capture admission (reset even on a
+failed trace); creation outside a trace stays eager. Uniform symbolic arrays are
+broadcasts of one exact scalar, not size-proportional constant payloads.
 `lower` exposes the ordinary compiler-owned `Program`; there is still no
 frontend-only runtime node or second mathematical IR. Inferred inputs are
 non-differentiable by default; `@xp.compile(differentiable=("x", ...))` promotes

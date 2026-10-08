@@ -117,3 +117,27 @@ def test_runtime_batch_queries_and_gemm_coverage() -> None:
         in generated
     )
     assert "staged_matrix_operator_hash" in generated
+
+
+def test_lambda_matrix_actions_avoid_redundant_operand_transposes() -> None:
+    """Protect reduced seed traffic without changing the independent actions."""
+    from tools.generate_df_lambda import matrix_programs
+    from tools.generate_rccsd_native import (
+        _packed_batched_matrix_gemm,
+        _packed_matrix_gemm,
+    )
+
+    programs = matrix_programs()
+    # The old NN-only layouts used 148/37/64 materialized permutations here.
+    for name, ceiling in (
+        ("staged_core", 120),
+        ("staged_auxiliary", 30),
+        ("staged_factors", 53),
+    ):
+        program = programs[name]
+        assert sum(node.op == "transpose" for node in program.live_nodes) <= ceiling
+        recipes = [
+            _packed_matrix_gemm(node) or _packed_batched_matrix_gemm(node)
+            for node in program.live_nodes
+        ]
+        assert any(recipe is not None and "T" in recipe[:2] for recipe in recipes)
