@@ -432,6 +432,13 @@ def estimate_schedule(plan: TensorPlan) -> dict:
     source_bytes = len(emit_cuda(plan, embed_static_data=False).encode("utf-8"))
     resident = _resident_blocks(plan, registers, shared_bytes)
     traffic = plan.semantic_traffic
+
+    def traffic_bytes(name: str) -> int:
+        value = traffic[name]
+        if type(value) is not int:
+            raise TypeError(f"tensor semantic traffic {name} must be an integer")
+        return value
+
     occupancy = resident * plan.schedule.threads / plan.target.maximum_threads_per_sm
     launches = estimated_cuda_launches(plan)
     widened_accumulation_terms = _fp64_accumulation_terms(plan)
@@ -442,7 +449,7 @@ def estimate_schedule(plan: TensorPlan) -> dict:
     peak_live_values = max(live_values, default=0)
     promotion_rejections = _scalar_reduction_promotion_rejections(plan)
     profitability = GpuProfitability(
-        semantic_traffic_bytes=traffic["total_bytes"],
+        semantic_traffic_bytes=traffic_bytes("total_bytes"),
         arithmetic_operation_count=effective_flops,
         peak_live_values=peak_live_values,
         rematerialized_value_count=rematerialized_values,
@@ -450,9 +457,9 @@ def estimate_schedule(plan: TensorPlan) -> dict:
         estimated_occupancy_upper_bound=occupancy,
         launch_count=launches,
         source_bytes=source_bytes,
-        precision_cast_read_bytes=traffic["precision_cast_read_bytes"],
-        precision_cast_write_bytes=traffic["precision_cast_write_bytes"],
-        precision_cast_simultaneous_bytes=traffic["precision_cast_simultaneous_bytes"],
+        precision_cast_read_bytes=traffic_bytes("precision_cast_read_bytes"),
+        precision_cast_write_bytes=traffic_bytes("precision_cast_write_bytes"),
+        precision_cast_simultaneous_bytes=traffic_bytes("precision_cast_simultaneous_bytes"),
         precision_widened_accumulation_terms=widened_accumulation_terms,
     )
     batch = plan.batch_schedule
