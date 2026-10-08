@@ -13,6 +13,7 @@
 
 namespace generativeqc {
 
+/** Exception retaining the native status associated with a failed call. */
 class Error : public std::runtime_error {
  public:
   Error(generativeqc_status status, const std::string& message)
@@ -46,6 +47,7 @@ inline MethodCapabilities method_capabilities(generativeqc_method method) {
           native.supports_batch != 0};
 }
 
+/** Move-only context owner; dependent native objects must be destroyed first. */
 class Context {
  public:
   explicit Context(const generativeqc_context_descriptor& descriptor) {
@@ -61,6 +63,7 @@ class Context {
   generativeqc_context* handle_ = nullptr;
 };
 
+/** Move-only system owner; its associated Context must outlive the system. */
 class System {
  public:
   System(Context& context, const generativeqc_system_descriptor& descriptor)
@@ -80,6 +83,7 @@ class System {
   std::uint32_t atom_count_{};
 };
 
+/** Native calculation values; analytic forces are optional and in Hartree/Bohr. */
 struct CalculationResult {
   double energy{};
   std::optional<std::vector<double>> forces;
@@ -159,6 +163,7 @@ class Calculation {
   MethodCapabilities capabilities_;
 };
 
+/** One input-indexed fleet result with independent success and diagnostics. */
 struct BatchItemResult {
   generativeqc_status status{GENERATIVEQC_STATUS_INTERNAL_ERROR};
   double energy{};
@@ -192,6 +197,7 @@ struct DensityFittingMetricDiagnostic {
   bool streamed{};
 };
 
+/** Move-only ragged-batch owner whose Context outlives it. */
 class Batch {
  public:
   Batch(Context& context, std::span<const System* const> systems,
