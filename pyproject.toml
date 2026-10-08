@@ -15,7 +15,6 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "LICENSES/*.txt", "THIRD_PARTY_NOTICES.md"]
 dependencies = [
   "numpy>=1.24",
-  "typing-extensions>=4.4",
   "sccache>=0.16.0",
   "tomli>=2; python_version < '3.11'",
   "nvidia-cublas-cu12>=12.9.1.4; sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')",

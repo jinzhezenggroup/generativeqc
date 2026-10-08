@@ -25,7 +25,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from typing_extensions import override
 
 from generativeqc_compiler.common.cuda_runtime import _Metrics
 from generativeqc_compiler.common.native_call import checked_native_call
@@ -43,6 +42,14 @@ from generativeqc_compiler.tensor.cuda_execute import (
     compile_cuda,
 )
 from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
+
+if typing.TYPE_CHECKING:
+    from typing_extensions import override as _override
+else:
+    # Keep source-checkout imports independent of optional typing backports.
+    def _override(method: typing.Any) -> typing.Any:
+        return method
+
 
 RESIDENT_SCHEMA = "generativeqc.tensor.resident/1"
 
@@ -433,7 +440,7 @@ class PreparedResident(PreparedCuda):
         """Upload one named input into an already-running resident owner."""
         self.upload({name: host_array})
 
-    @override
+    @_override
     def execute(
         self,
         feeds: typing.Mapping[str, typing.Any],
