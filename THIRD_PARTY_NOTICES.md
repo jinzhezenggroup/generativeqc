@@ -53,6 +53,14 @@ and prepared spectral work/submission in `src/solver/cpu/symmetric_eigen.hpp`
 likewise retain the original attribution and scoped additional permission for
 portions consolidated from the embedded runtime.
 
+The CPU Johnson-Broyden plan, binding, state and transaction owner in
+`src/solver/cpu/johnson_broyden.hpp` and
+`src/solver/cpu/johnson_broyden.cpp` retains the same xTBloom attribution and
+scoped CUDA/MKL linking permission. The frozen migration reference under
+`tests/native/fixtures/johnson_prechange_3b97c234/` retains that attribution as
+test-only code. This ownership extraction does not change the applicable
+license terms or the scope of the linking permission.
+
 ## xTBloom D3 qualification baseline
 
 The repository-only D3 tools under `tools/generativeqc_d3/native/` adapt GPL-3.0-or-later

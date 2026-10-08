@@ -87,6 +87,16 @@ column-major and owned row-major contracts. See
 [CPU linear algebra](cpu_linear_algebra.md) for the exact work-count, fallback,
 thread and status boundaries.
 
+CPU Johnson-Broyden plans, exact storage admission, persistent history and
+per-system transactions live in `solver/cpu/johnson_broyden.*`. The GFN2 adapter
+binds its ordered qsh/dipole/quadrupole fields and maps typed solver outcomes to
+method status records. Caller-owned storage and a sealed plan copy must outlive
+their bindings. Residual diagnostics do not authorize terminal publication:
+GFN2 retains its energy/RMS convergence decision and raw terminal multipoles.
+The generic CPU compiler binding and GFN2 CUDA binding consume the shared
+ordered-history algebra with their existing compact and capacity-strided
+schedules; CUDA admission and execution remain in the native GFN2 adapter.
+
 CUDA symmetric-eigen setup uses the method-neutral
 `solver/cuda/symmetric_eigen_workspace.*` service. GFN2 declares both vector
 modes and every reachable exact capacity; the shared service performs those

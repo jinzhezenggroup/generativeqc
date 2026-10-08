@@ -4,23 +4,9 @@ include_guard(GLOBAL)
 # live in GenerativeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(generativeqc_register_host_generated_sources target)
-  set(_generativeqc_history_outputs)
-  foreach(_backend cpu cuda)
-    foreach(_phase helpers window gram correction)
-      list(APPEND _generativeqc_history_outputs
-        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_history_${_backend}_${_phase}.inc")
-    endforeach()
-    list(APPEND _generativeqc_history_outputs
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_history_${_backend}_identity.json")
-  endforeach()
-  generativeqc_register_generated_sources(
-    NAME generativeqc_ordered_history_codegen
-    TARGET ${target}
-    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ordered_history_native.py"
-    OUTPUTS ${_generativeqc_history_outputs}
-    DEPENDS
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_history_lowering.py"
+  set(_generativeqc_history_dependencies
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history_artifacts.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history_emit.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history_gram.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
@@ -31,10 +17,40 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/lowering_provider.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/precision.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/provenance.py"
-      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/schedule.py"
-    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
-    COMMENT "Generating candidate-selected shared ordered-history algebra")
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/schedule.py")
+  set(_generativeqc_broyden_cpu_outputs)
+  foreach(_phase helpers window gram correction)
+    list(APPEND _generativeqc_broyden_cpu_outputs
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_broyden_cpu_${_phase}.inc")
+  endforeach()
+  list(APPEND _generativeqc_broyden_cpu_outputs
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_broyden_cpu_identity.json")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_broyden_cpu_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ordered_history_native.py"
+    OUTPUTS ${_generativeqc_broyden_cpu_outputs}
+    DEPENDS ${_generativeqc_history_dependencies}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/broyden_cpu_lowering.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated" --backend cpu
+    COMMENT "Generating shared CPU Johnson-Broyden algebra")
+
   if(TARGET generativeqc_gfn2_cuda)
+    set(_generativeqc_history_cuda_outputs)
+    foreach(_phase helpers window gram correction)
+      list(APPEND _generativeqc_history_cuda_outputs
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_history_cuda_${_phase}.inc")
+    endforeach()
+    list(APPEND _generativeqc_history_cuda_outputs
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_history_cuda_identity.json")
+    generativeqc_register_generated_sources(
+      NAME generativeqc_ordered_history_codegen
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ordered_history_native.py"
+      OUTPUTS ${_generativeqc_history_cuda_outputs}
+      DEPENDS ${_generativeqc_history_dependencies}
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_history_lowering.py"
+      ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated" --backend cuda
+      COMMENT "Generating retained GFN2 CUDA ordered-history algebra")
     add_dependencies(generativeqc_gfn2_cuda generativeqc_ordered_history_codegen)
   endif()
 

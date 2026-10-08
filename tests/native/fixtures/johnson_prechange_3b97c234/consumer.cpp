@@ -1,4 +1,4 @@
-// Independent public/internal API probe for the method-independent production CPU Johnson mixer.
+// Independent public/internal API probe for the production CPU SCC mixer.
 // The Python test supplies its own chronological Johnson oracle.
 #include <algorithm>
 #include <array>
@@ -12,13 +12,10 @@
 #include <string>
 #include <vector>
 
-#include "solver/cpu/johnson_broyden.hpp"
+#include "model/common/scc_mixer.hpp"
 
 namespace {
-using namespace generativeqc::solver::cpu;
-using generativeqc::solver::BroydenPolicy;
-using generativeqc::solver::BroydenResult;
-using generativeqc::solver::BroydenStatusEncoding;
+using namespace generativeqc::xtb::detail::common;
 constexpr std::size_t kTotal = 62;
 constexpr std::array<std::int64_t, 4> kVectorOffsets{0, 10, 31, 62};
 constexpr std::array<std::array<std::int64_t, 4>, 3> kFieldOffsets{
@@ -33,16 +30,16 @@ struct Aligned {
 };
 struct Fixture {
   int memory;
-  BroydenPlan plan;
+  SccMixerPlan plan;
   Aligned raw{576};
   std::unique_ptr<Aligned> state_memory, scratch_memory;
-  BroydenVectorView vector;
-  BroydenState state;
-  BroydenWorkspace scratch;
+  SccMixerVectorView vector;
+  SccMixerState state;
+  SccMixerWorkspace scratch;
   std::string error;
 
   explicit Fixture(int m) : memory(m) {
-    BroydenVectorLayoutView layout;
+    SccMixerVectorLayoutView layout;
     layout.batch_size = 3;
     layout.workspace_size_bytes = 576;
     layout.workspace_alignment = 64;
@@ -57,13 +54,12 @@ struct Fixture {
     vector.workspace_base = raw.p;
     vector.workspace_size_bytes = 576;
     vector.field_count = 3;
-    check(make_broyden_plan(layout, BroydenPolicy{memory, .3, .04, .08},
-                            BroydenStatusEncoding{0, 1, 6}, plan, error));
+    check(make_scc_mixer_plan(layout, memory, .3, .04, .08, plan, error));
     state_memory = std::make_unique<Aligned>(plan.state_size_bytes());
     scratch_memory = std::make_unique<Aligned>(plan.workspace_size_bytes());
-    check(bind_broyden_state(plan, state_memory->p, plan.state_size_bytes(), state, error));
-    check(bind_broyden_workspace(plan, scratch_memory->p, plan.workspace_size_bytes(), scratch,
-                                 error));
+    check(bind_scc_mixer_state(plan, state_memory->p, plan.state_size_bytes(), state, error));
+    check(bind_scc_mixer_workspace(plan, scratch_memory->p, plan.workspace_size_bytes(), scratch,
+                                   error));
     std::array<double, kTotal> initial{};
     for (std::size_t s = 0; s < 3; ++s) {
       for (auto c = kVectorOffsets[s]; c < kVectorOffsets[s + 1]; ++c) {
@@ -71,10 +67,10 @@ struct Fixture {
       }
     }
     put_raw(initial.data());
-    check(initialize_broyden_state(plan, vector, state, error));
+    check(initialize_scc_mixer_state_cpu(plan, vector, state, error));
   }
-  void check(BroydenResult result) {
-    if (result != BroydenResult::success) throw std::runtime_error(error);
+  void check(generativeqc_xtb_status_t result) {
+    if (result != GENERATIVEQC_XTB_STATUS_SUCCESS) throw std::runtime_error(error);
   }
   void put_raw(const double* packed) {
     for (std::size_t s = 0; s < 3; ++s) {
@@ -116,7 +112,7 @@ struct Fixture {
       const auto count = std::min<std::uint64_t>(memory, old);
       std::fill_n(scratch.beta, memory * memory, kCanary);
       std::fill_n(scratch.coefficients, memory, kCanary);
-      check(mix_broyden_system(plan, s, vector, state, scratch, error));
+      check(mix_scc_broyden_system_cpu(plan, s, vector, state, scratch, error));
       // CPU beta is compact in active history_count, not capacity-strided.
       for (std::size_t i = count * count; i < static_cast<std::size_t>(memory * memory); ++i)
         if (scratch.beta[i] != kCanary) throw std::runtime_error("CPU compact beta tail changed");
@@ -168,15 +164,16 @@ struct Fixture {
     std::memcpy(expected.data(), state.workspace_base, bytes);
     std::memcpy(raw_before.data(), raw.p, 576);
     const auto previous_status = state.system_statuses[0];
-    const auto result = mix_broyden_system(plan, 0, vector, state, scratch, error);
+    const auto result = mix_scc_broyden_system_cpu(plan, 0, vector, state, scratch, error);
     const auto failure_text = error;
     const char* expected_error[] = {"residual contains",    "coefficient is not finite",
                                     "result is not finite", "iteration counter",
                                     "residual difference",  "matrix overflowed",
                                     "system is not usable"};
     const bool failed = failure_text.find(expected_error[kind]) != std::string::npos &&
-                        result == BroydenResult::numerical_failure &&
-                        state.system_statuses[0] == 6 && !failure_text.empty();
+                        result == GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR &&
+                        state.system_statuses[0] == GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR &&
+                        !failure_text.empty();
     state.system_statuses[0] = previous_status;
     const bool retained_bytes = std::memcmp(expected.data(), state.workspace_base, bytes) == 0 &&
                                 std::memcmp(raw_before.data(), raw.p, 576) == 0;

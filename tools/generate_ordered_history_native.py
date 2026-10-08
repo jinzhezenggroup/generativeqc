@@ -10,10 +10,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
-from generativeqc_compiler.method.gfn2_history_lowering import (
-    emit_gfn2_history_artifacts,
-)
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -22,7 +18,19 @@ def main() -> None:
     args = parser.parse_args()
     args.output_directory.mkdir(parents=True, exist_ok=True)
     for backend in ("cpu", "cuda") if args.backend == "both" else (args.backend,):
-        for name, source in emit_gfn2_history_artifacts(backend).items():
+        if backend == "cpu":
+            from generativeqc_compiler.tensor.broyden_cpu_lowering import (
+                emit_broyden_cpu_artifacts,
+            )
+
+            artifacts = emit_broyden_cpu_artifacts()
+        else:
+            from generativeqc_compiler.method.gfn2_history_lowering import (
+                emit_gfn2_history_artifacts,
+            )
+
+            artifacts = emit_gfn2_history_artifacts("cuda")
+        for name, source in artifacts.items():
             (args.output_directory / name).write_text(source, encoding="utf-8")
 
 

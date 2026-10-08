@@ -1,0 +1,588 @@
+{
+  "candidate": {
+    "cost": null,
+    "execution": {
+      "algorithm": "compact-cpu",
+      "cache_bytes": 0,
+      "capture_safe": false,
+      "determinism": "exact-order",
+      "host_bytes": 0,
+      "layouts": [
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            2,
+            0
+          ],
+          "operand": "df_history",
+          "shape": [
+            4,
+            3
+          ],
+          "strides": [
+            3,
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            2,
+            0
+          ],
+          "operand": "u_history",
+          "shape": [
+            4,
+            3
+          ],
+          "strides": [
+            3,
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            2
+          ],
+          "operand": "weights",
+          "shape": [
+            4
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "tentative_df",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "tentative_u",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "residual",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "current",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [],
+          "operand": "tentative_weight",
+          "shape": [],
+          "strides": [],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [],
+          "operand": "damping",
+          "shape": [],
+          "strides": [],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [],
+          "operand": "omega_zero",
+          "shape": [],
+          "strides": [],
+          "triangle": "full"
+        },
+        {
+          "access": "write",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            1,
+            3
+          ],
+          "operand": "beta",
+          "shape": [
+            2,
+            2
+          ],
+          "strides": [
+            2,
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "write",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            1
+          ],
+          "operand": "coefficients",
+          "shape": [
+            2
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "write",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "mixed",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        }
+      ],
+      "precision": {
+        "audit": null,
+        "casts": [],
+        "input_dtypes": [
+          "float64",
+          "float64",
+          "float64",
+          "float64",
+          "float64",
+          "float64",
+          "float64",
+          "float64",
+          "float64",
+          "float64"
+        ],
+        "publication_dtype": "float64",
+        "refinement": null,
+        "region": "ordered-history",
+        "schedule": {
+          "audit_owner": "method-controller",
+          "math_mode": "ieee-rn-no-tf32",
+          "regions": [
+            {
+              "accumulation_dtype": "float64",
+              "compute_dtype": "float64",
+              "math_mode": "ieee-rn-no-tf32",
+              "name": "ordered-history",
+              "qualification": null,
+              "storage_dtype": "float64"
+            }
+          ],
+          "schema": "generativeqc.compiler.execution-precision.v1",
+          "strict_audit_dtype": "float64"
+        },
+        "schedule_identity": "d17bcd29e2387b8a3066eec267cf8fcb925ed0f53c88d37e4614f00adaf96aba"
+      },
+      "temporary_bytes": 0,
+      "topology": {
+        "bucket": null,
+        "cooperative": false,
+        "fusion": "incumbent-mixer-phases",
+        "materialization": "borrowed-scratch",
+        "page_size": null,
+        "persistent": false,
+        "reduction": "increasing-component-and-history",
+        "residency": "resident",
+        "staging_width": null,
+        "subgroup_size": null,
+        "tiles": [],
+        "workgroup_threads": null
+      }
+    },
+    "implementation": "compact-cpu",
+    "numerical_mode": "ieee-rn-no-tf32",
+    "provenance": {
+      "retained_schedule": "b5a1a0a5b64131f0571deaf4d72bb45c242d22950ea4ce78fc2739bd3fb69f75"
+    },
+    "provider_bytes": 0,
+    "providers": [
+      {
+        "implementation": "compact-cpu",
+        "kind": "generated",
+        "name": "generated.cpu",
+        "provenance": {},
+        "required_features": [],
+        "schema": "generativeqc.compiler.lowering-provider.v1",
+        "version": "ordered-history-v1"
+      }
+    ],
+    "reason": null,
+    "request": {
+      "accumulation_dtype": "float64",
+      "backend": "cpu",
+      "constraints": {
+        "additional_device_bytes": 0,
+        "capture_required": false,
+        "determinism": "exact-order",
+        "host_bytes": 0,
+        "maximum_candidates": 256,
+        "provider_bytes": 0,
+        "workspace_bytes": 0
+      },
+      "consumer": "tensor.ordered_history",
+      "dtype": "float64",
+      "effects": {
+        "arithmetic": "fp64-native-expression-retained-contraction-policy",
+        "dot_failure": "return",
+        "final_store": "check-before-store",
+        "publication": "partial-scratch;method-owned-persistent-commit",
+        "solve_checks": "after-inner-fold;positive-pivot;after-division",
+        "weight_failure": "short-circuit"
+      },
+      "input_dtypes": [
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64"
+      ],
+      "operands": [
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            2,
+            0
+          ],
+          "operand": "df_history",
+          "shape": [
+            4,
+            3
+          ],
+          "strides": [
+            3,
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            2,
+            0
+          ],
+          "operand": "u_history",
+          "shape": [
+            4,
+            3
+          ],
+          "strides": [
+            3,
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            2
+          ],
+          "operand": "weights",
+          "shape": [
+            4
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "tentative_df",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "tentative_u",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "residual",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "current",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [],
+          "operand": "tentative_weight",
+          "shape": [],
+          "strides": [],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [],
+          "operand": "damping",
+          "shape": [],
+          "strides": [],
+          "triangle": "full"
+        },
+        {
+          "access": "read",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [],
+          "operand": "omega_zero",
+          "shape": [],
+          "strides": [],
+          "triangle": "full"
+        },
+        {
+          "access": "write",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            1,
+            3
+          ],
+          "operand": "beta",
+          "shape": [
+            2,
+            2
+          ],
+          "strides": [
+            2,
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "write",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            1
+          ],
+          "operand": "coefficients",
+          "shape": [
+            2
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        },
+        {
+          "access": "write",
+          "alias_group": null,
+          "alignment": 1,
+          "modes": [
+            0
+          ],
+          "operand": "mixed",
+          "shape": [
+            3
+          ],
+          "strides": [
+            1
+          ],
+          "triangle": "full"
+        }
+      ],
+      "operation": "ordered-history",
+      "precisions": [
+        {
+          "audit": null,
+          "casts": [],
+          "input_dtypes": [
+            "float64",
+            "float64",
+            "float64",
+            "float64",
+            "float64",
+            "float64",
+            "float64",
+            "float64",
+            "float64",
+            "float64"
+          ],
+          "publication_dtype": "float64",
+          "refinement": null,
+          "region": "ordered-history",
+          "schedule": {
+            "audit_owner": "method-controller",
+            "math_mode": "ieee-rn-no-tf32",
+            "regions": [
+              {
+                "accumulation_dtype": "float64",
+                "compute_dtype": "float64",
+                "math_mode": "ieee-rn-no-tf32",
+                "name": "ordered-history",
+                "qualification": null,
+                "storage_dtype": "float64"
+              }
+            ],
+            "schema": "generativeqc.compiler.execution-precision.v1",
+            "strict_audit_dtype": "float64"
+          },
+          "schedule_identity": "d17bcd29e2387b8a3066eec267cf8fcb925ed0f53c88d37e4614f00adaf96aba"
+        }
+      ],
+      "schema": "generativeqc.compiler.lowering-request.v2",
+      "scientific_identity": "ca6e52e39b554ffa76e675e676bf63b9136a462106646d8cff6812b938dc739b",
+      "semantic_identity": "5f77cf8a27f1492e02f1f7f7d206472a928261377dedb215e555f164c5d452b1",
+      "semantics": {
+        "binding_domain": "runtime-positive-dimensions-h<=capacity-checked-native-storage",
+        "correction": "damped-seed;increasing-history-subtract;check-final",
+        "dot": "positive-zero-seed;increasing-component;check-each-update",
+        "gram": "full-row-column;weights-after-dot;diagonal-square-after-weight",
+        "ring": "h=min(k,m);new=(k-1)%m;slot(j)=(k-h+j)%m;tentative-overlay",
+        "solve": "lower-row-column-inner;forward-increasing;backward-decreasing",
+        "stage_graphs": "d62b256d0184ed9206f6eda169a1292648f98f2ccb682245c70888fb900433bd"
+      },
+      "shape": [
+        3,
+        2,
+        4
+      ]
+    },
+    "request_hash": "c26caf3d6da44f9ca7caaca9d1d471723890388d9c70c8a6b04c11b4fbd9924c",
+    "schema": "generativeqc.compiler.lowering-candidate.v2",
+    "status": "ready",
+    "target": null,
+    "workspace_bytes": 0
+  },
+  "schema": "generativeqc.ordered-history-source.v1",
+  "scientific_identity": "ca6e52e39b554ffa76e675e676bf63b9136a462106646d8cff6812b938dc739b",
+  "source_identity": "3d484097f5d6c9f0e50fdb3edda5e2039ba3cf5b4e6c7f4ff2dc209a97a7ce1e",
+  "sources": {
+    "generated_gfn2_history_cpu_correction.inc": "bfcf474ca03d3e743c7cee49244466a1a312c75655d4ccf29db50d78317be5ff",
+    "generated_gfn2_history_cpu_gram.inc": "94c32101290ddca63f29ef49dfdceb97756b488d37db232c60594def8b4a9db8",
+    "generated_gfn2_history_cpu_helpers.inc": "8cf75ee6691a0c2c56307dfcd437ff5b1620cb688dc0e8fdead072fdf064674d",
+    "generated_gfn2_history_cpu_window.inc": "e2a11063fd1a3e748f4d0122d688868d059bd5280e6367535c6496fc93ecf496"
+  }
+}

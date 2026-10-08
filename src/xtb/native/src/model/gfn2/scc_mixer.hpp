@@ -8,16 +8,18 @@
 #include <string>
 #include <vector>
 
-#include "model/common/scc_mixer.hpp"
 #include "model/gfn2/wavefunction.hpp"
+#include "solver/cpu/johnson_broyden.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 
-inline constexpr std::size_t kSccMixerWorkspaceAlignment = common::kSccMixerWorkspaceAlignment;
+namespace broyden = ::generativeqc::solver::cpu;
 
-using SccMixerPlanData = common::SccMixerPlanData;
-using SccMixerState = common::SccMixerState;
-using SccMixerWorkspace = common::SccMixerWorkspace;
+inline constexpr std::size_t kSccMixerWorkspaceAlignment = broyden::kBroydenWorkspaceAlignment;
+
+using SccMixerPlanData = broyden::BroydenPlanData;
+using SccMixerState = broyden::BroydenState;
+using SccMixerWorkspace = broyden::BroydenWorkspace;
 
 /*
  * GFN2 compatibility wrapper over the model-neutral ragged Broyden engine.
@@ -50,56 +52,63 @@ class SccMixerPlan {
   [[nodiscard]] const SccMixerPlanData* identity() const noexcept;
 
  private:
-  common::SccMixerPlan engine_;
+  broyden::BroydenPlan engine_;
 
   friend generativeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout,
+                                                       std::int64_t history_size, double damping,
+                                                       double rms_tolerance,
+                                                       double maximum_tolerance, SccMixerPlan& plan,
+                                                       std::string& error);
+  friend const broyden::BroydenPlan& solver_plan(const SccMixerPlan& plan) noexcept;
+};
+
+generativeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout,
                                               std::int64_t history_size, double damping,
                                               double rms_tolerance, double maximum_tolerance,
                                               SccMixerPlan& plan, std::string& error);
-  friend const common::SccMixerPlan& common_plan(const SccMixerPlan& plan) noexcept;
-};
-
-generativeqc_xtb_status_t make_scc_mixer_plan(const WavefunctionLayout& layout, std::int64_t history_size,
-                                     double damping, double rms_tolerance, double maximum_tolerance,
-                                     SccMixerPlan& plan, std::string& error);
 
 generativeqc_xtb_status_t bind_scc_mixer_state(const SccMixerPlan& plan, void* workspace,
-                                      std::size_t workspace_size, SccMixerState& state,
-                                      std::string& error);
+                                               std::size_t workspace_size, SccMixerState& state,
+                                               std::string& error);
 
 generativeqc_xtb_status_t bind_scc_mixer_workspace(const SccMixerPlan& plan, void* workspace,
-                                          std::size_t workspace_size, SccMixerWorkspace& view,
-                                          std::string& error);
+                                                   std::size_t workspace_size,
+                                                   SccMixerWorkspace& view, std::string& error);
 
 generativeqc_xtb_status_t initialize_scc_mixer_state_cpu(const SccMixerPlan& plan,
-                                                const WavefunctionView& wavefunction,
-                                                const SccMixerState& state, std::string& error);
+                                                         const WavefunctionView& wavefunction,
+                                                         const SccMixerState& state,
+                                                         std::string& error);
 
-generativeqc_xtb_status_t restart_scc_mixer_system_cpu(const SccMixerPlan& plan, std::int64_t system,
-                                              const WavefunctionView& wavefunction,
-                                              const SccMixerState& state, std::string& error);
+generativeqc_xtb_status_t restart_scc_mixer_system_cpu(const SccMixerPlan& plan,
+                                                       std::int64_t system,
+                                                       const WavefunctionView& wavefunction,
+                                                       const SccMixerState& state,
+                                                       std::string& error);
 
 generativeqc_xtb_status_t mix_scc_broyden_system_cpu(const SccMixerPlan& plan, std::int64_t system,
-                                            const WavefunctionView& wavefunction,
-                                            const SccMixerState& state,
-                                            const SccMixerWorkspace& workspace, std::string& error);
+                                                     const WavefunctionView& wavefunction,
+                                                     const SccMixerState& state,
+                                                     const SccMixerWorkspace& workspace,
+                                                     std::string& error);
 
 generativeqc_xtb_status_t mix_scc_broyden_batch_cpu(const SccMixerPlan& plan,
-                                           const WavefunctionView& wavefunction,
-                                           const SccMixerState& state,
-                                           const SccMixerWorkspace& workspace, std::string& error);
+                                                    const WavefunctionView& wavefunction,
+                                                    const SccMixerState& state,
+                                                    const SccMixerWorkspace& workspace,
+                                                    std::string& error);
 
 generativeqc_xtb_status_t prepare_scc_mixer_system_transaction_cpu(const SccMixerPlan& plan,
-                                                          std::int64_t system,
-                                                          const SccMixerState& source,
-                                                          const SccMixerState& staged,
-                                                          std::string& error);
+                                                                   std::int64_t system,
+                                                                   const SccMixerState& source,
+                                                                   const SccMixerState& staged,
+                                                                   std::string& error);
 
 generativeqc_xtb_status_t commit_scc_mixer_system_transaction_cpu(const SccMixerPlan& plan,
-                                                         std::int64_t system,
-                                                         const SccMixerState& staged,
-                                                         const SccMixerState& destination,
-                                                         std::string& error);
+                                                                  std::int64_t system,
+                                                                  const SccMixerState& staged,
+                                                                  const SccMixerState& destination,
+                                                                  std::string& error);
 
 }  // namespace generativeqc::xtb::detail::gfn2
 

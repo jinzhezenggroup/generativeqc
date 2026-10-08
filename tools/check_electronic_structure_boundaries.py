@@ -85,6 +85,10 @@ DUPLICATE_POLICIES = {
 # forwarding headers. This makes a silent method-local fork visible even when a
 # replacement uses different whitespace, comments or source layout.
 SHARED_INFRASTRUCTURE = {
+    "johnson_broyden": {
+        "owner": "solver/cpu/johnson_broyden.hpp",
+        "required_consumer_areas": ("xtb",),
+    },
     "bounded_iteration": {
         "owner": "solver/iteration_control.hpp",
         "required_consumer_areas": ("cc", "scf"),
