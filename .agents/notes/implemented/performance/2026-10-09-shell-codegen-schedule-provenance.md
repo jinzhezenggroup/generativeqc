@@ -1,6 +1,6 @@
 # Decision: retain shell-class CUDA scheduling trials as historical evidence
 
-Status: retrospective record — accepted and rejected schedules
+Status: implemented (retrospective record of accepted and rejected schedules)
 Date: 2026-10-09
 Original documentation snapshot: `fb9586569769fccac67bc23411d902e08119024d`
 
