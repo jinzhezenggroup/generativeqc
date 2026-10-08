@@ -985,9 +985,11 @@ class ContractionProgram:
             pullback += jet_pullback.evaluate(weighted, work)
         centers = np.zeros((natom, 3))
         points = np.zeros((jets.shape[1], 3))
+        # The directional AO panel is consumed by the current Cartesian
+        # component before advancing to the next axis.
+        panel = np.zeros(jets.shape[1:])
         for k in range(3):
-            # Retain only one point-by-AO directional panel at a time.
-            panel = np.zeros(jets.shape[1:])
+            panel.fill(0.0)
             for j, axis in enumerate(domain):
                 shifted = list(axis)
                 shifted[k] += 1
