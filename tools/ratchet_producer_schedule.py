@@ -151,6 +151,7 @@ def audit(
                 return report
         for case in CASES:
             label = case[0]
+            original = candidate = None
             try:
                 original = _schedule(baseline, case, audit_script=audit_script)
                 candidate = _schedule(root, case, audit_script=audit_script)
@@ -164,13 +165,15 @@ def audit(
                 row["candidate_callbacks"] = candidate["work"]["producer_callbacks"]
             except (ReceiptError, OSError) as exc:
                 row = {"case": label, "status": "INCOMPLETE", "reason": str(exc)}
+            row["baseline_receipt"] = original
+            row["candidate_receipt"] = candidate
             report["cases"].append(row)
         outcomes = {row["status"] for row in report["cases"]}
         report["status"] = (
-            "INCOMPLETE"
-            if "INCOMPLETE" in outcomes
-            else "FAIL"
+            "FAIL"
             if "FAIL" in outcomes
+            else "INCOMPLETE"
+            if "INCOMPLETE" in outcomes
             else "PASS"
         )
     return report

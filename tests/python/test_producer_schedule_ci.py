@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -190,6 +191,49 @@ def test_ci_growth_gate_blocks_comparable_production_work(
         for row in result["cases"]
     )
     assert all(row.get("classification") != "proven bug" for row in result["cases"])
+
+
+def test_ci_growth_gate_does_not_hide_growth_behind_an_unsupported_case(
+    checkout: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, base = checkout
+    source = root / SCHEDULE
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "maximum_rows = min(n, capacity // (auxiliaries * rank), capacity // n)",
+            "maximum_rows = 0 if n == 13 else min(n, 2)",
+        ),
+        encoding="utf-8",
+    )
+    report = tmp_path / "mixed.json"
+    assert (
+        main(
+            [
+                "--root",
+                str(root),
+                "--base-sha",
+                base,
+                "--output",
+                str(report),
+                "--fail-on-work-growth",
+            ]
+        )
+        == 1
+    )
+    result = json.loads(report.read_text(encoding="utf-8"))
+    assert result["status"] == "FAIL"
+    assert {row["status"] for row in result["cases"]} == {"FAIL", "INCOMPLETE"}
+    expected_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    for row in result["cases"]:
+        assert row["baseline_receipt"]["identity"]["source_sha256"]
+        if row["status"] == "INCOMPLETE":
+            assert row["candidate_receipt"] is None
+        else:
+            assert row["candidate_receipt"]["identity"]["source_sha256"] == expected_sha
+            assert (
+                row["candidate_receipt"]["work"]["executed_elements"]
+                == row["candidate_executed"]
+            )
 
 
 def test_ci_gate_keeps_unknown_source_dependency_explicit_and_nonblocking(
