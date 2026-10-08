@@ -11,6 +11,7 @@ Keep the distinction clear: the current rules and qualification procedures live 
 :caption: Core workflows
 
 validation
+oh_uhf_comparison
 performance_engineering
 evidence_retention
 resource_planning
