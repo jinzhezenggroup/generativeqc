@@ -210,7 +210,7 @@ def build_rys_axis_program(
 
 
 def _angular_counts(label: str) -> tuple[int, int, int]:
-    return tuple(label.count(axis) for axis in AXES)
+    return label.count(AXES[0]), label.count(AXES[1]), label.count(AXES[2])
 
 
 def build_rys_force_program(
@@ -322,17 +322,19 @@ def boys_values(argument: float, count: int) -> tuple[float, ...]:
     # and remains accurate throughout the complete small-argument interval.
     if argument < 1.0:
         return tuple(
-            sum(
+            float(sum(
                 (-argument) ** term
                 / (math.factorial(term) * (2 * order + 2 * term + 1))
                 for term in range(32)
-            )
+            ))
             for order in range(count)
         )
-    values = [0.5 * math.sqrt(math.pi / argument) * math.erf(math.sqrt(argument))]
+    values: list[float] = [
+        float(0.5 * math.sqrt(math.pi / argument) * math.erf(math.sqrt(argument)))
+    ]
     exponential = math.exp(-argument)
     for order in range(count - 1):
-        values.append(((2 * order + 1) * values[-1] - exponential) / (2.0 * argument))
+        values.append(float(((2 * order + 1) * values[-1] - exponential) / (2.0 * argument)))
     return tuple(values)
 
 
@@ -448,7 +450,7 @@ def _table_roots_weights(
             c3 = c0 + c1 * twice_transformed
             c1 = c2 + c3 * twice_transformed
             c0 = table[offset + interval + (polynomial_degree - 1) * intervals] - c3
-        return c0 + c1 * transformed
+        return float(c0 + c1 * transformed)
 
     values = tuple(interpolate(series) for series in range(2 * nroots))
     return values[::2], values[1::2]
@@ -960,11 +962,11 @@ def emit_rys_force_root_body_cuda(
                 used = tuple((axis, item) for item in instruction.dependencies)
             else:
                 base = event["base"]
-                derivatives = event["derivatives"]
+                contract_derivatives = event["derivatives"]
                 assert isinstance(base, tuple)
-                assert isinstance(derivatives, dict)
+                assert isinstance(contract_derivatives, dict)
                 used_list = list(base)
-                for _, raised, _, lowered in derivatives.values():
+                for _, raised, _, lowered in contract_derivatives.values():
                     used_list.append(raised)
                     if lowered is not None:
                         used_list.append(lowered)
@@ -1009,10 +1011,10 @@ def emit_rys_force_root_body_cuda(
 
             component_index = event["component"]
             base = event["base"]
-            derivatives = event["derivatives"]
+            contract_derivatives = event["derivatives"]
             assert isinstance(component_index, int)
             assert isinstance(base, tuple)
-            assert isinstance(derivatives, dict)
+            assert isinstance(contract_derivatives, dict)
             base_names = tuple(f"rys_state_{slots[key]}" for key in base)
             lines.extend(
                 [
@@ -1028,7 +1030,7 @@ def emit_rys_force_root_body_cuda(
             products = ("product_yz", "product_xz", "product_xy")
             for center in program.independent_derivative_centers:
                 for coordinate in range(3):
-                    exponent, raised, angular, lowered = derivatives[
+                    exponent, raised, angular, lowered = contract_derivatives[
                         (center, coordinate)
                     ]
                     expression = f"{exponent} * rys_state_{slots[raised]}"
@@ -1211,7 +1213,7 @@ def evaluate_rys_component(
     )
     return FusedShellResult(
         value=prefactor * value,
-        gradients=all_gradients,
+        gradients=tuple((gradient[0], gradient[1], gradient[2]) for gradient in all_gradients),
     )
 
 
