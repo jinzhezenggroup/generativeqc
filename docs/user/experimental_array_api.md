@@ -54,6 +54,24 @@ program = norm2.lower(x)
 This avoids silently treating every runtime array as a differentiable scientific
 parameter while still giving the inferred public path a supported JVP/VJP route.
 
+The preview also supports finite, uniform array creation through `zeros`, `ones`,
+`full`, and `zeros_like`, `ones_like`, `full_like`. Inside `@xp.compile`,
+these constructors lower **statically known** shapes to a single exact TensorIR
+scalar constant and broadcast (no size-proportional literal payload):
+
+```python
+@xp.compile
+def shifted(x):
+    return x + xp.ones_like(x) * xp.full(x.shape, 0.25, dtype=x.dtype)
+```
+
+Outside capture, creation executes eagerly on NumPy/CPU. Only the existing
+`float32` and `float64` dtypes and `device=None` are admitted: an explicit
+device request never triggers a hidden host transfer. `full(shape, integer)`
+without an explicit floating dtype is rejected rather than silently claiming
+the standard's unsupported default integer dtype. Scientific AO/occupied/etc.
+arrays cannot be passed to `*_like` without their explicit TensorIR metadata.
+
 The current preview supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
 dimension, and static indexing with integers, slices (including negative
@@ -89,7 +107,8 @@ shape/dtype semantics         AO/occ/vir/aux/spin semantics
 ## Current limits
 
 The eager namespace and reference compiled-call path currently accept CPU/NumPy
-`float32` and `float64` arrays. There is no implicit dtype promotion, dynamic Python control
+`float32` and `float64` arrays. Static creation is capture-aware but does not
+supply the standard's full dtype defaults, devices or constructor set. There is no implicit dtype promotion, dynamic Python control
 flow, or implicit external-device transfer. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
 same-device handoff. Every eager namespace operation checks this host boundary
