@@ -681,6 +681,7 @@ class PreparedXCContractions:
                 self.program, self.spatial, self.density_grid
             ):
                 raise ValueError("stale device-fused grid/XC schedule capability")
+            before_metrics: dict[str, float] | None = None
             if self.density_grid is not None:
                 before_metrics = self.density_grid.metrics()
                 if not device_xc:
@@ -690,6 +691,13 @@ class PreparedXCContractions:
                         self.spatial._start_execution(density, stamp=stamp, route=route)
                 self._execution_stamp = stamp
             nspin = 2 if self.program.spec.spin == "polarized" else 1
+            tiles = evaluated_tiles = 0
+            cpu_contraction_seconds = 0.0
+            centers: np.ndarray | None = None
+            points: np.ndarray | None = None
+            weights: np.ndarray | None = None
+            ao_atoms: np.ndarray | None = None
+            result: dict[str, typing.Any]
             if device_xc:
                 result, tiles, evaluated_tiles = self._device_xc(
                     density, stamp, route, nspin
@@ -731,12 +739,16 @@ class PreparedXCContractions:
                 local = d if active is None else d[:, active[:, None], active[None, :]]
                 options = {}
                 if observable == "response":
+                    if dd is None:
+                        raise ValueError("response request requires a density direction")
                     options["delta_density"] = (
                         dd
                         if active is None
                         else dd[:, active[:, None], active[None, :]]
                     )
                 elif observable == "geometry":
+                    if ao_atoms is None:
+                        raise RuntimeError("geometry AO atom mapping was not prepared")
                     options.update(
                         ao_atoms=ao_atoms if active is None else ao_atoms[active],
                         natom=self.basis.natom,
@@ -785,6 +797,8 @@ class PreparedXCContractions:
                             values[observable]
                         )
                 if observable == "geometry":
+                    if centers is None or points is None or weights is None:
+                        raise RuntimeError("geometry accumulators were not prepared")
                     partials = values["geometry"]
                     centers += partials.centers
                     points[ids] = partials.points
@@ -804,6 +818,8 @@ class PreparedXCContractions:
                 if name in result:
                     result[name] = immutable(result[name])
             if observable == "geometry":
+                if centers is None or points is None or weights is None:
+                    raise RuntimeError("geometry accumulators were not prepared")
                 result["geometry"] = GeometryPartials(
                     immutable(centers), immutable(points), immutable(weights)
                 )
@@ -908,6 +924,8 @@ class PreparedXCContractions:
                     + self.statistics["orbital_matrix_products"]
                     + self.statistics["matrix_assembly_products"]
                 )
+                if before_metrics is None:
+                    raise RuntimeError("CUDA XC initial metrics were not captured")
                 self.statistics.update(
                     collocation_backend="cuda",
                     xc_backend="native_cuda" if device_xc else "native_cpu",
