@@ -168,7 +168,7 @@
         "python/generativeqc_compiler/xc/rsh_maple.py": "f52b2453d5d0c18c1f54613540bb461a053b27f5b4ca6a77ac6e6000afac0cc1",
         "python/generativeqc_compiler/xc/scan_maple.py": "a1b567789e9f5d246f00189f9e7b5dcdf5fde2d1e069f52db1b343cc7a212cf3",
         "python/generativeqc_compiler/xc/semilocal_family.py": "bba1f8681f6610423a55efa426d61b59c3a10847ffc728d76bab46c8bd0e3636",
-        "python/generativeqc_compiler/xc/spec.py": "1dcb6bc0344d90543541e842ee5d082d3f452462617b91292b0858729afa30ca",
+        "python/generativeqc_compiler/xc/spec.py": "79529c7f375979c57f081f578deaeac7779f87b16301bd99167f843256b0d5a3",
         "python/generativeqc_compiler/xc/wb97mv_maple.py": "24499cc623efe00533263a47a06c8408313cea8247de3a1420db4161e1cb932d"
       },
       "generator": "python/generativeqc_compiler/xc/libxc_maple.py",
