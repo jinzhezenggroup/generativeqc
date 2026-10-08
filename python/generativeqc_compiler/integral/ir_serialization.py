@@ -27,7 +27,13 @@ from .ir import (
     OperatorSpec,
     TranslationInvariant,
 )
-from .shell_signature import BasisShell, CenterBinding, ShellSignature
+from .shell_signature import (
+    BasisConvention,
+    BasisShell,
+    CenterBinding,
+    ShellRole,
+    ShellSignature,
+)
 from .shell_spec import ShellClassSpec
 
 INTEGRAL_SCHEMA_VERSION = 1
@@ -211,8 +217,8 @@ def integral_to_payload(integral: IntegralIR) -> dict[str, object]:
                     "slot": s.slot,
                     "center": s.center,
                     "angular": s.angular,
-                    "role": s.role.value,
-                    "convention": s.convention.value,
+                    "role": ShellRole(s.role).value,
+                    "convention": BasisConvention(s.convention).value,
                 }
                 for s in signature.shells
             ],
@@ -234,7 +240,7 @@ def integral_to_payload(integral: IntegralIR) -> dict[str, object]:
         else INTEGRAL_SCHEMA_VERSION,
         "spec": spec,
         "operator": {
-            "family": operator.family.value,
+            "family": OperatorFamily(operator.family).value,
             "centers": list(operator.centers),
             "invariants": [_invariant_payload(i) for i in operator.invariants],
             "external_centers": [
@@ -359,11 +365,11 @@ def integral_from_payload(payload: dict[str, object]) -> IntegralIR:
     d = payload["derivative"]
     derivative = None
     if d is not None:
-        _record(d, ("order", "centers", "invariants"))
+        derivative_record = _record(d, ("order", "centers", "invariants"))
         derivative = DerivativeSpec(
-            d["order"],
-            _coordinates(d["centers"]),
-            tuple(_invariant(i) for i in d["invariants"]),
+            derivative_record["order"],
+            _coordinates(derivative_record["centers"]),
+            tuple(_invariant(i) for i in derivative_record["invariants"]),
         )
     consumers = tuple(_consumer(c) for c in payload["contractions"])
     if any(isinstance(c, SecondDerivative) for c in consumers) != (
@@ -372,10 +378,13 @@ def integral_from_payload(payload: dict[str, object]) -> IntegralIR:
         raise ValueError(
             "second derivative consumers require integral IR schema version 3"
         )
+    recurrence = payload["recurrence"]
+    if not isinstance(recurrence, str):
+        raise TypeError("IR recurrence must be a string")
     return IntegralIR(
         spec,
         operator,
         derivative,
         consumers,
-        payload["recurrence"],
+        recurrence,
     )
