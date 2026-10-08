@@ -11,7 +11,9 @@ python3 tools/audit_native_work.py --compare baseline.json --format json > compa
 The default scan covers native files under `src/` and `include/`, and Python
 ASTs under `python/`; vendored `src/xtb/native/` is excluded. Repeat `--path` to
 restrict the inputs or scan generated native output. Python-embedded C++ strings
-are not executable Python statements and are not parsed as native code.
+are not executable Python statements and are not parsed as native code. NumPy
+loop findings are included in the same advisory JSON/CI artifact, alongside
+the existing exact-zero materialization findings.
 
 ## What the inventory means
 
@@ -20,6 +22,22 @@ are not executable Python statements and are not parsed as native code.
   Storage created outside a loop and first resized inside it is omitted from
   the per-loop allocation inventory. Default and zero-sized vectors, known
   moved storage, iterator overloads and already-reserved capacity are omitted.
+- **Python NumPy loop allocations:** source-bound calls to `numpy.empty`,
+  `zeros`, `ones`, `full`, their `*_like` variants, `concatenate`, or
+  `stack` inside a `for`/`async for`/`while` body or repeated `while`
+  condition. Direct module aliases and `from numpy import ...` are recognized
+  only when the visible binding is unshadowed; conditional or later local
+  imports are not trusted. A loop's one-time iterable and `else` block are
+  excluded from that loop's repeated region; an enclosing loop can still make
+  them candidates. `asarray` and `reshape` can return views and are not
+  treated as guaranteed backing allocations. These are only **potential
+  executed sites**, not execution counts, byte totals, or proof that a function
+  is prepared replay. Phase hints from variable names are advisory.
+- **Native allocation/release roles:** lexical `realloc` is a possible host
+  capacity change; `free`/`cudaFree` are releases, not new allocations.
+  `cudaMallocHost` and `cudaHostAlloc` allocate pinned **host** storage, not
+  device storage. None of these API sightings proves positive size, runtime
+  reachability, or new backing storage per iteration.
 - **Loop-callee sites:** an allocation/transfer/synchronization site reachable
   through a bounded, unambiguous same-file symbol chain from a lexical loop.
   Every chain includes caller and callee locations. Conditional execution and
