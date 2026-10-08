@@ -227,8 +227,7 @@ inline void accumulate_fp32_into_fp64(Context& context, const float* source, dou
 
 // Reusable prepared-provider vector accumulation: target += source.
 // Borrow the same handle/stream as GEMM; no new allocation or selector.
-inline void add_vector_in_place(Context& context, int count, const double* source,
-                                double* target) {
+inline void add_vector_in_place(Context& context, int count, const double* source, double* target) {
   constexpr double one = 1.0;
   blas_check(cublasDaxpy(context.handle, count, &one, source, 1, target, 1));
 }

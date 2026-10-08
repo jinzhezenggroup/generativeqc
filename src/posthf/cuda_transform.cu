@@ -260,8 +260,7 @@ int posthf_cuda_add_v1(void* pointer, const double* values, const size_t* begin,
     ctx.section(true, ctx.metrics.library_ms, [&] {
       for (unsigned k = 0; k < 4; ++k) {
         const int dim = shape[0], rest = elements / shape[0], columns = p.m[k];
-        transform_axis(ctx, dim, rest, columns, in,
-                       p.c + p.c_offset[k] + begin[k] * p.m[k], out);
+        transform_axis(ctx, dim, rest, columns, in, p.c + p.c_offset[k] + begin[k] * p.m[k], out);
         elements = size_mul(rest, p.m[k]);
         for (unsigned axis = 0; axis < 3; ++axis) shape[axis] = shape[axis + 1];
         shape[3] = p.m[k];
