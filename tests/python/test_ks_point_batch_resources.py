@@ -98,6 +98,9 @@ def native_probe(
 #include "generated_split_hybrid_registry.cuh"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
+#define __host__
+#define __device__
+#include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/direct_task_layout.hpp"
@@ -351,6 +354,17 @@ extern "C" void active_fleet(void* handle,std::size_t count,std::size_t mandator
 }
 """
     )
+    source += r"""
+extern "C" std::size_t md_capacity(void* handle,bool reserve) {
+  using namespace runtime;
+  const auto previous=active_device_resource_ledger;
+  active_device_resource_ledger=handle
+      ? *static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle) : nullptr;
+  const auto bytes=scf::cuda_direct_coulomb_device_bytes(1,24,3,12,30,1,reserve);
+  active_device_resource_ledger=previous;
+  return bytes;
+}
+"""
     unit = folder / "probe.cpp"
     unit.write_text(source)
     library = native_cxx.build_shared(
@@ -389,6 +403,8 @@ extern "C" void active_fleet(void* handle,std::size_t count,std::size_t mandator
         [ctypes.c_void_p] + [ctypes.c_size_t] * 5 + [ctypes.POINTER(ctypes.c_uint64)]
     )
     probe.active_fleet.restype = None
+    probe.md_capacity.argtypes = [ctypes.c_void_p, ctypes.c_bool]
+    probe.md_capacity.restype = ctypes.c_size_t
     return probe
 
 

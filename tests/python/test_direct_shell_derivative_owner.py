@@ -3,8 +3,12 @@
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -431,11 +435,10 @@ def test_canonical_screening_fixture_preserves_default_and_opt_in_coverage() -> 
     assert "std::abs(actual[i] - expected[i]) < 3e-12" in source
 
 
-def test_channel_dispatch_is_independent(tmp_path: Path) -> None:
+def test_channel_dispatch_is_independent(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
     """All availability/precision masks select exactly one source per request."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
     header = _source("src/scf/cuda/direct_jk_plan.hpp")
     start = header.index("struct DirectJkValueDispatch")
     end = header.index("/** Own one exact public-AO provider", start)
@@ -450,7 +453,7 @@ def test_channel_dispatch_is_independent(tmp_path: Path) -> None:
         + r"""
 DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
     bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
-    bool canonical, bool fixed, bool resident = false) {
+    bool canonical, bool fixed, bool resident = false, bool md_coulomb = false) {
   struct Channel { bool present; };
   struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
   struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
@@ -487,6 +490,14 @@ int main() {
     assert(ordinary.canonical_exchange == both.canonical_exchange);
     assert(ordinary.generic_coulomb == both.generic_coulomb);
     assert(ordinary.generic_exchange == both.generic_exchange);
+    // MD owns J separately; normal dispatch must still select exactly the
+    // same K provider and must not compute J a second time.
+    const auto md = device_dispatch(generated_j, generated_k, j, k, mixed,
+                                   canonical, false, false, true);
+    assert(!md.generated_coulomb && !md.canonical_coulomb && !md.generic_coulomb);
+    assert(md.generated_exchange == both.generated_exchange);
+    assert(md.canonical_exchange == both.canonical_exchange);
+    assert(md.generic_exchange == both.generic_exchange);
     // Fixed-mask RHF response has canonical pairs and strict J precision.
     // Its geometry-only screen/census must not be bypassed by shell providers.
     if (canonical && !mixed) {
@@ -509,21 +520,11 @@ int main() {
     path = tmp_path / "canonical_value_policy.cpp"
     executable = tmp_path / "canonical_value_policy"
     path.write_text(harness)
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            str(path),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=("-std=c++20", "-Wall", "-Wextra", "-Werror"),
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

@@ -22,6 +22,8 @@
       "src/cc/solver.hpp",
       "src/dft/cuda_ks.cpp",
       "src/hf/rhf_frame_response.hpp",
+      "src/scf/cuda/direct_jk.cpp",
+      "src/scf/cuda/direct_md_j.hpp",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp"
     ],
@@ -555,7 +557,7 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
+      "rationale": "Public CUDA DFT forces use one method-name-free and architecture-agnostic active-AO policy keyed by execution composition, spin, derivative order, provider/resource identity and a continuous dense-work cost proxy. Ordinary all-electron Direct RKS/UKS force execution with supported AO-jet orders 1/2 admits map discovery once predicted dense point\u00d7AO\u00b2 work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. CUDA architecture is recorded as workload provenance only and is not a selection predicate.",
       "revisit_condition": "Refine the cost crossover with additional devices and workload shapes rather than adding architecture, molecule, atom-count, AO-count or grid-count windows. Broaden to composite execution, DF or ECP only with source/device-identified complete endpoint evidence; keep every unsupported or unprofitable case dense.",
       "evidence": [
         "issue:#1853",
@@ -662,7 +664,9 @@
       "controls": [
         "initial-guess:minao-auto"
       ],
-      "owner_issues": [2052],
+      "owner_issues": [
+        2052
+      ],
       "sources": [
         "python/generativeqc/calculator.py",
         "python/generativeqc/initial_guess.py",
@@ -849,6 +853,28 @@
         "issue:#1901",
         "issue:#1972",
         "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
+      ]
+    },
+    {
+      "id": "dft.md-j-default",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:md-j-default",
+        "dft-policy:GENERATIVEQC_DISABLE_MD_J"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_md_j.hpp",
+        "src/methods/dft_method.cpp"
+      ],
+      "rationale": "Unbudgeted strict-FP64 zero-order SPD Coulomb defaults to MD-J for at least eight AOs, within an optional 128-MiB cap after retained normal owners. Public active-ledger plans retain normal J because they reserve no optional MD allowance. Construction-time opt-out 1 retains normal J; K, mixed, response and derivatives keep existing consumers. Original source qualification retains three same-binary cold pairs with independent gates and explicit 17/16 Fock counts.",
+      "revisit_condition": "Broaden ledger admission only with an explicit optional candidate reserving future owners, rebuild and forces; broaden numerical/workload domains only with renewed independent gates and complete endpoints. Retained GPU receipts remain pinned to their measured source; host resource repairs do not claim new GPU qualification.",
+      "evidence": [
+        "pr:#2100",
+        "benchmarks/results/md-j-default-cold/README.md"
       ]
     }
   ]

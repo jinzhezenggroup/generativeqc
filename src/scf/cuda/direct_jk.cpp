@@ -1,9 +1,14 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 #include "runtime/bounded_workspace.hpp"
@@ -26,6 +31,9 @@ using namespace cuda_execution;
 CudaDirectJkPlan::~CudaDirectJkPlan() {
   if (device_id >= 0) (void)cudaSetDevice(device_id);
   if (stream) (void)cudaStreamSynchronize(stream);
+  if (std::getenv("GENERATIVEQC_MD_J_COUNTS"))
+    std::fprintf(stderr, "MD_J_NORMAL_COUNTS=%zu\nMD_J_RESIDUAL_CANDIDATES=%zu\n", md_j_calls,
+                 md_j.residual_candidate_count);
   generated_exchange.reset();
   generated_coulomb.reset();  // Release borrowers before their stream/metadata.
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
@@ -67,6 +75,84 @@ void direct_jk_require_disjoint(const void* a, std::size_t na, const void* b, st
                         (x + na <= y || y + nb <= x),
                     "device direct J/K writable buffers alias");
 }
+/** Optional descriptors admit MD only after retained normal owners are charged.
+ * Geometry transforms stay on the owning CUDA stream; host preparation only
+ * inventories shell/primitive metadata and enforces the resident byte cap. */
+struct MdJHost {
+  std::vector<MdJPair> pairs;
+  std::vector<MdJPrimitive> primitives;
+  std::vector<std::uint32_t> ordered;
+  std::array<std::size_t, 6> class_offsets{};
+  std::size_t transforms{}, hermites{}, bytes{};
+
+  bool prepare(const HostBatch& host, std::size_t available) {
+    const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
+    if ((disabled && std::strcmp(disabled, "1") == 0) || host.nbf < 8 ||
+        std::any_of(
+            host.shell_angular.begin(), host.shell_angular.end(),
+            [](unsigned angular) { return angular > 2; }))
+      return false;
+    available = std::min<std::size_t>(available, kMdJResidentCap);
+    const auto total_pairs = host.shell_pair_first.size();
+    if (total_pairs > std::numeric_limits<std::uint32_t>::max() ||
+        host.shell_pair_primitive_offsets.back() > std::numeric_limits<std::int32_t>::max())
+      return false;
+    bytes = kMdSourceFixedBytes +
+            direct_jk_product(total_pairs,
+                              sizeof(MdJPair) + 3 * sizeof(double) + sizeof(std::uint32_t));
+    bytes += direct_jk_product(host.shell_pair_primitive_offsets.back(),
+                               sizeof(MdJPrimitive) + sizeof(std::uint32_t));
+    bytes += direct_jk_product(host.system_shell_offsets.size(), 3 * sizeof(std::int64_t));
+    if (bytes > available) return false;
+    for (std::size_t index = 0; index < total_pairs; ++index) {
+      const auto first = host.shell_pair_first[index], second = host.shell_pair_second[index];
+      const auto system = host.shell_pair_systems[index];
+      const unsigned angular = host.shell_angular[first] + host.shell_angular[second];
+      const auto count = md_j_hermite_count(angular);
+      const auto first_count = host.shell_ao_offsets[first + 1] - host.shell_ao_offsets[first];
+      const auto second_count = host.shell_ao_offsets[second + 1] - host.shell_ao_offsets[second];
+      const auto component_count = direct_jk_product(first_count, second_count);
+      const auto primitive_count =
+          host.shell_pair_primitive_offsets[index + 1] - host.shell_pair_primitive_offsets[index];
+      const auto pair_hermites = direct_jk_product(primitive_count, count);
+      const auto pair_transforms = direct_jk_product(pair_hermites, component_count);
+      const auto extra_bytes =
+          direct_jk_product(pair_transforms + 2 * pair_hermites, sizeof(double));
+      if (extra_bytes > available - bytes) return false;
+      bytes += extra_bytes;
+      const auto ao_base = static_cast<std::int64_t>(system) * host.nbf;
+      pairs.push_back(
+          {system, first, second, static_cast<std::int32_t>(host.shell_ao_offsets[first] - ao_base),
+           static_cast<std::int32_t>(host.shell_ao_offsets[second] - ao_base),
+           static_cast<std::int32_t>(first_count), static_cast<std::int32_t>(second_count), angular,
+           count, static_cast<std::uint32_t>(primitives.size()),
+           static_cast<std::uint32_t>(primitives.size() + primitive_count)});
+      for (auto first_primitive = host.shell_primitive_offsets[first];
+           first_primitive < host.shell_primitive_offsets[first + 1]; ++first_primitive) {
+        for (auto second_primitive = host.shell_primitive_offsets[second];
+             second_primitive < host.shell_primitive_offsets[second + 1]; ++second_primitive) {
+          primitives.push_back({static_cast<std::uint32_t>(index),
+                                first_primitive,
+                                second_primitive,
+                                transforms,
+                                hermites,
+                                0.0,
+                                {}});
+          transforms += component_count * count;
+          hermites += count;
+        }
+      }
+    }
+    for (unsigned angular = 0; angular <= 4; ++angular) {
+      class_offsets[angular] = ordered.size();
+      for (std::size_t index = 0; index < primitives.size(); ++index)
+        if (pairs[primitives[index].pair].angular == angular)
+          ordered.push_back(static_cast<std::uint32_t>(index));
+    }
+    class_offsets[5] = ordered.size();
+    return true;
+  }
+};
 void direct_jk_finite(const std::vector<double>& values) {
   for (double value : values) direct_jk_require(std::isfinite(value), "nonfinite direct J/K data");
 }
@@ -232,7 +318,7 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
 
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
-                                             unsigned derivative_order) {
+                                             unsigned derivative_order, bool reserve_optional_md) {
   auto bytes = cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, derivative_order);
   const auto add = [&](std::size_t n, std::size_t width) {
     bytes = runtime::size_add(bytes, runtime::size_mul(n, width));
@@ -277,6 +363,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(batch + 1, 2 * sizeof(std::int64_t));
     add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
   }
+  const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
+  if (reserve_optional_md && !runtime::active_device_resource_ledger && nao >= 8 &&
+      (!disabled || std::strcmp(disabled, "1") != 0))
+    add(1, cuda_execution::kMdJResidentCap);
   return bytes;
 }
 
@@ -751,6 +841,54 @@ generativeqc_status create_cuda_direct_jk_plan(
             *plan, true, detail, [&] { plan->canonical_range_exchange = scratch(range_bytes); },
             [&] { plan->canonical_range_exchange = nullptr; });
     }
+    MdJHost md_host;
+    bool md_ready = false;
+    try {
+      // Public plans reserve incumbent owners and later force/rebuild capacity,
+      // not optional MD storage. Spare live bytes are not an admission allowance.
+      md_ready = !runtime::active_device_resource_ledger && derivative_order <= 1 &&
+                 budget > plan->device_bytes && md_host.prepare(host, budget - plan->device_bytes);
+    } catch (const std::bad_alloc&) {
+    }
+    if (md_ready) {
+      direct_jk_optional_storage(
+          *plan, true, detail,
+          [&] {
+            auto upload_vector = [&](const auto& values) {
+              using Value = typename std::decay_t<decltype(values)>::value_type;
+              return static_cast<Value*>(upload(values.data(), values.size() * sizeof(Value)));
+            };
+            auto& md = plan->md_j;
+            md.pairs = upload_vector(md_host.pairs);
+            md.primitives = upload_vector(md_host.primitives);
+            md.ordered_primitives = upload_vector(md_host.ordered);
+            md.shell_offsets = upload_vector(host.system_shell_offsets);
+            md.pair_offsets = upload_vector(host.system_shell_pair_offsets);
+            std::vector<std::int64_t> primitive_offsets;
+            for (const auto pair_offset : host.system_shell_pair_offsets)
+              primitive_offsets.push_back(host.shell_pair_primitive_offsets[pair_offset]);
+            md.primitive_offsets = upload_vector(primitive_offsets);
+            md.minimum_bounds = scratch(md_host.pairs.size() * sizeof(double));
+            md.maximum_bounds = scratch(md_host.pairs.size() * sizeof(double));
+            md.density_bounds = scratch(md_host.pairs.size() * sizeof(double));
+            md.maximum_bound = scratch(sizeof(double));
+            md.active_pairs = reinterpret_cast<std::uint32_t*>(
+                scratch(md_host.pairs.size() * sizeof(std::uint32_t)));
+            md.active_count = reinterpret_cast<std::uint32_t*>(scratch(sizeof(std::uint32_t)));
+            md.source_cursor =
+                reinterpret_cast<unsigned long long*>(scratch(sizeof(unsigned long long)));
+            md.transforms = scratch(md_host.transforms * sizeof(double));
+            md.density = scratch(md_host.hermites * sizeof(double));
+            md.potential = scratch(md_host.hermites * sizeof(double));
+            md.pair_count = md_host.pairs.size();
+            md.primitive_count = md_host.primitives.size();
+            std::copy(md_host.class_offsets.begin(), md_host.class_offsets.end(), md.class_offsets);
+            direct_jk_check(prepare_md_j(plan->stream, plan->batch, md, plan->bounds,
+                                         plan->screening_tolerance));
+            plan->diagnostic.schedule = "md-j-hermite-public-ao-with-source-ordered-jk";
+          },
+          [&] { plan->md_j = {}; });
+    }
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();
     info.nbf = host.nbf;
@@ -804,6 +942,12 @@ generativeqc_status create_cuda_direct_jk_plan(
                           : (plan->canonical_row_prefix
                                  ? "canonical-public-ao-jk/screened-rows/automatic"
                                  : "canonical-public-ao-jk/dense-angular-bucketed/automatic");
+    if (plan->md_j.minimum_bounds) {
+      info.schedule = "md-j-hermite/retained-k";
+      info.host_preparation_bytes +=
+          sizeof(md_host) +
+          runtime::vector_capacities(md_host.pairs, md_host.primitives, md_host.ordered);
+    }
     info.derivative_order = derivative_order;
     info.screening_tolerance = screening_tolerance;
     diagnostic = info;
@@ -1104,15 +1248,31 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     const bool resident = allow_resident && plan->resident_values &&
                           (!fixed || (correction && fixed_threshold == 0)) && !mixed_j &&
                           (!spec.exchange.present || spec.exchange.op == FockOperator::FullRange);
+    const bool md_coulomb = plan->md_j.minimum_bounds && spec.coulomb.present && !fixed &&
+                            !mixed_j && !census && spec.derivative_order == 0;
     const auto dispatch = direct_jk_value_dispatch(
         !fixed && !resident && generated_coulomb_available,
-        !fixed && !resident && generated_exchange_available, spec.coulomb.present,
+        !fixed && !resident && generated_exchange_available, spec.coulomb.present && !md_coulomb,
         spec.exchange.present, mixed_j, plan->canonical_pairs != nullptr);
     // The fixed-mask response requires canonical geometry-only screening and
     // its census even when a generated value provider is available.
     // Resolve and execute J/K independently over the same immutable ERI owner.
     // In particular, recurrence-only mixed J must not replace strict generated
     // K; a range-K fallback must not pull a qualified full-range J into it.
+    if (md_coulomb) {
+      ++plan->md_j_calls;
+      direct_jk_check(cudaMemsetAsync(coulomb, 0, bytes, plan->stream));
+      launch_md_j_density_bounds(plan->stream, plan->batch, plan->md_j, 0,
+                                 plan->diagnostic.batch_size, unrestricted, density, beta);
+      direct_jk_check(cudaGetLastError());
+      launch_md_source_jk(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
+                          true, false, unrestricted, plan->screening_tolerance, plan->bounds,
+                          density, beta, coulomb, nullptr, nullptr);
+      direct_jk_check(cudaGetLastError());
+      launch_md_j(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
+                  unrestricted, plan->screening_tolerance, density, beta, coulomb);
+      direct_jk_check(cudaGetLastError());
+    }
     if (dispatch.generated_coulomb) {
       if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
         direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted, density,

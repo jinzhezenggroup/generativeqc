@@ -1,0 +1,69 @@
+{
+  "kind": "md-j-default-cold-production-qualification",
+  "date": "2026-10-08",
+  "base_revision": "ed8d21684910f65b656f5bf42c8ef0248aa7d40f",
+  "branch": "perf/md-j-default-cold-96-20261008",
+  "library_sha256": "119fc921535b5e6d05d11c3f69616e047f348ef14a5b27d312d5e880637011e8",
+  "native_source_sha256": {
+    "cmake/GenerativeQCCuda.cmake": "caece60e5ff5fb677b853a4994a37d07f74f2c391123d9f3813b0fb17707a95f",
+    "src/scf/cuda/direct_jk.cpp": "c6f48ad105f711d8cb73af79f3944a648729fdea3d388f7cc4d99440e7869698",
+    "src/scf/cuda/direct_jk_plan.hpp": "ce06e7404046091b376e1a876a946422d0d1b30ec8ceac24e0fd62d5dac759b2",
+    "src/scf/cuda/direct_md_j.hpp": "a4afa4ca8befe65ab871c5e7754b0bdf87eec83fdff63978187c2a22813019e6",
+    "src/scf/cuda/direct_md_j.cu": "c38119632958b8e5dd440948a52bfe817b263f563c7daf125b549b9caa817af8",
+    "src/scf/cuda/direct_md_jk.cu": "833b6285ca8cf5d5e21b38090b90bfe1ae174183526300b644f2646a3ad1675b",
+    "src/scf/cuda/md_hermite_index.cuh": "dec0e0207deb00f488dc3922ef324a7d4dd3a5bb890c3d1bf19f815b636305bc"
+  },
+  "qualification_source_sha256": {
+    "benchmarks/md_j_normal_cold.py": "918e93d2ceac9e00eaba3316a7d4385bd7106c57ee49c89daaa473b696ca669f",
+    "benchmarks/_md_j_reference.py": "2d3854861bc8bf9288f615eb52c98783bef4dfda88d12c26e0b1fe4634f420b7",
+    "tests/python/test_md_j_normal_cuda.py": "26c022f5c3de8a9cbdb0ab94f06b927ad6fc5369ff9a170a43dfbb393d0a04b4"
+  },
+  "retained_members": {
+    "paired-cold.json": {
+      "sha256": "15afbb03ac89be6e697cde485e32256aa9c0ad31c2a287e0973a8a4caa7bf6fb",
+      "bytes": 8763
+    },
+    "input.json": {
+      "sha256": "e86792f534c18ff4cea80a91954da887a2283ccb049d2662df1aa4a500deb282",
+      "bytes": 46746
+    },
+    "independent-oracle.json": {
+      "sha256": "63a969890838804950131979cf6baa7872be7d3e56975c65ec9c5e930099a670",
+      "bytes": 5527
+    }
+  },
+  "input_and_oracle_normalization": "Retained input and oracle add one trailing LF to the exact execution bytes. Remove that one LF to reproduce the input_sha256 and oracle_record_sha256 in paired-cold.json.",
+  "build": {
+    "preset": "cuda-release-sm120",
+    "build_type": "Release",
+    "cuda_toolkit": "12.9.1",
+    "cuda_architecture": "120",
+    "cxx_compiler": "/usr/bin/c++",
+    "cxx_compiler_launcher": "ccache",
+    "cuda_compiler_launcher": "ccache",
+    "aot_split_compile_threads": 8,
+    "cuda_compile_jobs": 8,
+    "aot_compile_jobs": 2,
+    "cpu_linalg_provider": "auto"
+  },
+  "slurm": {
+    "node": "node1 (SSH host n1)",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "cold_job_id": "6548",
+    "assigned_cuda_visible_devices": "0",
+    "reproduction_cold_time_limit": "00:20:00",
+    "sanitizer_job_id": "6549",
+    "sanitizer_time_limit": "00:15:00",
+    "response_job_id": "6550",
+    "response_time_limit": "00:10:00"
+  },
+  "validation": {
+    "independent_raw_j_default_and_retained_k_and_budget_fallback": "14 passed",
+    "cpu_cold_gate_structure_and_ownership": "190 passed",
+    "cpu_optional_allocation": "1 passed",
+    "direct_cuda_response": "9 passed",
+    "memcheck": "spherical unrestricted partial-screening case: 1 passed, 0 errors",
+    "racecheck": "spherical unrestricted partial-screening case: 1 passed, 0 hazards, 0 warnings"
+  }
+}

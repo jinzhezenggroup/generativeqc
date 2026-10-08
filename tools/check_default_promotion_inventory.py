@@ -208,6 +208,27 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
     return {"dft-policy:xc-point-batch-auto": relative.as_posix()}
 
 
+def _discover_md_j_default(root: Path) -> dict[str, str]:
+    """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
+    relative = Path("src/scf/cuda/direct_jk.cpp")
+    source = _read(root / relative)
+    layout = _read(root / "src/scf/cuda/direct_md_j.hpp")
+    if not re.search(r"kMdJResidentCap\s*=\s*128U\s*<<\s*20", layout):
+        raise ValueError("MD-J default resident cap drifted from 128 MiB")
+    if (
+        'std::getenv("GENERATIVEQC_DISABLE_MD_J")' not in source
+        or 'std::strcmp(disabled, "1") == 0' not in source
+        or "host.nbf < 8" not in source
+        or "return angular > 2;" not in source
+        or "md_ready = !runtime::active_device_resource_ledger" not in source
+    ):
+        raise ValueError("MD-J default admission/opt-out guard drifted")
+    return {
+        "dft-policy:md-j-default": relative.as_posix(),
+        "dft-policy:GENERATIVEQC_DISABLE_MD_J": relative.as_posix(),
+    }
+
+
 def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
 
@@ -312,6 +333,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
+        _discover_md_j_default(root),
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
         _discover_response_options(root),

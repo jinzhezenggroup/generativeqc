@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_md_jk.cu",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Bounded angular source pages preserve per-orientation public-AO quartet screening. The production MD-J caller requests only the partial Coulomb residual; normal generated/canonical K ownership is not replaced.",
+  "regions": []
+}

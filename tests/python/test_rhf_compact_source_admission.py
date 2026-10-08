@@ -74,6 +74,8 @@ def test_compact_source_admission(tmp_path: Path) -> None:
 CUDA_API = r"""
 #pragma once
 #include <cstddef>
+#define __host__
+#define __device__
 using cudaStream_t=void*; using cudaGraph_t=void*; using cudaGraphExec_t=void*;
 using cudaError_t=int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaErrorMemoryAllocation=2;
