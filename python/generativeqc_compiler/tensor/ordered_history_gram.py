@@ -197,7 +197,7 @@ def emit_history_gram(
     integer, zero, ns = schedule.index_type, schedule.zero, schedule.math_namespace
     lines = [] if cpu else list(_first_iteration())
 
-    def failure(effect: FailureEffect, indent: int) -> list[str]:
+    def failure(effect: FailureEffect | None, indent: int) -> list[str]:
         return [
             " " * indent + line
             for line in _failure_lines(schedule, "checked-value", effect)

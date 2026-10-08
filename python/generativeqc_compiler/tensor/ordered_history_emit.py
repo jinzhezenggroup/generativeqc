@@ -67,7 +67,7 @@ FailureEffect = ReturnFalseFailure | ReturnStatusFailure | CudaFlagFailure
 
 
 def _failure_lines(
-    schedule: RetainedHistorySchedule, phase: str, failure: FailureEffect
+    schedule: RetainedHistorySchedule, phase: str, failure: FailureEffect | None
 ) -> tuple[str, ...]:
     if schedule.name == "compact-cpu":
         if phase == "dot" and isinstance(failure, ReturnFalseFailure):
