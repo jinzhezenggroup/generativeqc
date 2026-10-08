@@ -43,7 +43,7 @@ def _numeric_payload(node: Node) -> float:
     """Extract an exponent only from nodes with a present scalar payload."""
     if node.payload is None:
         raise TypeError("power node requires a numeric exponent")
-    return float(node.payload)
+    return cast(float, float(node.payload))
 
 
 @dataclass(frozen=True, slots=True)
