@@ -120,11 +120,17 @@ def _eager_operands(*values: object, scalars: bool = False) -> tuple[np.ndarray,
         else _eager_array(value)
         for value in values
     )
-    dtype = next((array.dtype for array in arrays if array is not None), float64)
-    if any(array is not None and array.dtype != dtype for array in arrays):
-        raise ValueError("operand dtypes must agree; implicit promotion is unsupported")
+    dtype = (
+        float64
+        if any(array is not None and array.dtype == float64 for array in arrays)
+        else float32
+        if any(array is not None for array in arrays)
+        else float64
+    )
     return tuple(
-        _eager_scalar(value, dtype, "arithmetic scalar") if array is None else array
+        _eager_scalar(value, dtype, "arithmetic scalar")
+        if array is None
+        else np.asarray(array, dtype=dtype)
         for value, array in zip(values, arrays, strict=True)
     )
 
@@ -423,6 +429,87 @@ def _dtype_name(dtype: object) -> str:
     return name
 
 
+def _dtype_of(value: object) -> np.dtype:
+    """Read an admitted real dtype without converting external array objects."""
+    if isinstance(value, VibeArray):
+        return np.dtype(_dtype_name(value.dtype))
+    if isinstance(value, np.ndarray):
+        _check_host_values(value)
+        return np.dtype(_dtype_name(value.dtype))
+    _check_host_values(value)
+    return np.dtype(_dtype_name(value))
+
+
+def astype(
+    x: object,
+    dtype: object,
+    /,
+    *,
+    copy: bool = True,
+    device: object = None,
+) -> typing.Any:
+    """Explicit float32/float64 conversion with no implicit device transfer."""
+    if type(copy) is not bool:
+        raise TypeError("astype copy must be a bool")
+    if device is not None:
+        raise ValueError("astype currently supports device=None only")
+    target = _dtype_name(dtype)
+    if isinstance(x, VibeArray):
+        return _namespace.astype(x, target, copy=copy)
+    array = _eager_array(x)
+    if not copy and array.dtype.name == target:
+        return array
+    return _eager_compute(np.array, array, dtype=np.dtype(target), copy=True)
+
+
+def can_cast(from_: object, to: object, /) -> bool:
+    """Check safe promotion within the admitted real floating-point dtype lattice."""
+    source, target = _dtype_of(from_), _dtype_of(to)
+    return source == target or (source == float32 and target == float64)
+
+
+def finfo(type: object, /) -> np.finfo:
+    """Describe IEEE machine limits for the admitted real floating-point dtypes."""
+    return np.finfo(_dtype_of(type))
+
+
+def isdtype(dtype: object, kind: object) -> bool:
+    """Inspect admitted dtypes using the standard dtype category vocabulary."""
+    source = _dtype_of(dtype)
+    categories = {
+        "bool",
+        "signed integer",
+        "unsigned integer",
+        "integral",
+        "real floating",
+        "complex floating",
+        "numeric",
+    }
+
+    def matches(value: object) -> bool:
+        if isinstance(value, str):
+            if value not in categories:
+                raise ValueError(f"unsupported dtype kind {value!r}")
+            return value in ("real floating", "numeric")
+        return source == _dtype_of(value)
+
+    if isinstance(kind, tuple):
+        return any(matches(item) for item in kind)
+    return matches(kind)
+
+
+def result_type(*arrays_and_dtypes: object) -> np.dtype:
+    """Infer the float32/float64 common dtype, treating Python scalars as weak."""
+    dtypes: list[np.dtype] = []
+    for value in arrays_and_dtypes:
+        if type(value) in (int, float):
+            continue
+        dtypes.append(_dtype_of(value))
+    if not dtypes:
+        raise TypeError("result_type requires at least one array or dtype")
+    return float64 if float64 in dtypes else float32
+
+
 def asarray(
     value: object,
     *,
@@ -675,7 +762,9 @@ def capabilities() -> dict[str, object]:
     """Return the detached capability contract for this public preview."""
     report = _compiler_capabilities()
     functions = set(typing.cast("tuple[str, ...]", report["functions"]))
-    functions.update({"asarray", "compile", "matrix_transpose"})
+    functions.update(
+        {"asarray", "compile", "matrix_transpose", "can_cast", "finfo", "isdtype", "result_type"}
+    )
     report.update(
         {
             "public_api_version": API_VERSION,
@@ -698,24 +787,26 @@ def capabilities() -> dict[str, object]:
 
 __all__ = [
     "API_VERSION",
-    "DLPACK_INTEROP_VERSION",
-    "FRONTEND_VERSION",
-    "SUPPORTED_FUNCTIONS",
     "CompiledFunction",
+    "DLPACK_INTEROP_VERSION",
     "DLPackDevice",
     "DLPackImport",
     "DLPackInteropError",
     "ExactScalar",
+    "FRONTEND_VERSION",
     "Index",
     "IndexSpace",
     "Program",
+    "SUPPORTED_FUNCTIONS",
     "TensorSpec",
     "VibeArray",
     "add",
     "asarray",
+    "astype",
     "broadcast_arrays",
     "broadcast_shapes",
     "broadcast_to",
+    "can_cast",
     "capabilities",
     "compile",
     "divide",
@@ -723,6 +814,7 @@ __all__ = [
     "einsum",
     "exp",
     "expand_dims",
+    "finfo",
     "flip",
     "float32",
     "float64",
@@ -730,6 +822,7 @@ __all__ = [
     "full_like",
     "import_dlpack",
     "input_array",
+    "isdtype",
     "log",
     "matmul",
     "matrix_transpose",
@@ -743,6 +836,7 @@ __all__ = [
     "pow",
     "reciprocal",
     "reshape",
+    "result_type",
     "slice",
     "sqrt",
     "square",
