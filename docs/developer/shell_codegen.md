@@ -133,10 +133,13 @@ Tests cover:
 5. real CUDA 12.9 compilation for joint Fock/force, shared/recomputed Coulomb,
    tiled d/f shells, zero-order pairs, and packed tasks.
 
-The committed handwritten kernels remain endpoint oracles and performance
-goldens. In particular, the `psss` force kernel added by `032f497` combines
-all three weighted Cartesian outputs in one primitive traversal. Generated
-low-order code must match that arithmetic quality before replacing it.
+Retained handwritten or independent reference implementations, where
+they still exist, provide numerical and endpoint oracles; retired kernels
+must not be described as active. The historical `psss` force kernel
+combined all three weighted Cartesian outputs in one primitive traversal.
+Any generated replacement must preserve its numerical quality and pass
+the current production-gate contracts. See the
+[CUDA ownership ledger](../maintainer/cuda_ownership.md).
 
 ## Experimental Rys backend
 
@@ -477,7 +480,7 @@ python -m ruff check python/generativeqc_compiler/integral tests/python/test_cod
 Run the explicit CUDA gate:
 
 ```bash
-GENERATIVEQC_NVCC=/group/software/cuda-12.9.1/bin/nvcc \
+GENERATIVEQC_NVCC="$(command -v nvcc)" \
 GENERATIVEQC_CUDA_ARCH=sm_120 \
 python -m pytest tests/python/test_codegen.py -q -s
 ```
