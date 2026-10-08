@@ -1,10 +1,57 @@
 """Prepared J/K selection is a host adapter over the compiler inventory."""
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from tools.check_scf_structure import audit_scf_structure
+
+
+def test_aot_disabled_registry_links_prepared_launchers(tmp_path: Path) -> None:
+    """The real no-AOT registry supplies every prepared streaming selection."""
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a host C++ compiler")
+    root = Path(__file__).resolve().parents[2]
+    (tmp_path / "cuda_runtime_api.h").write_text(
+        "#pragma once\n"
+        "using cudaStream_t = void*;\n"
+        "enum cudaError_t { cudaSuccess = 0, cudaErrorInvalidValue = 1, "
+        "cudaErrorNotSupported = 801 };\n"
+    )
+    driver = tmp_path / "registry.cpp"
+    driver.write_text(
+        '#include "scf/cuda/direct_fock_lowering.hpp"\n'
+        "#include <cassert>\n"
+        "int main() {\n"
+        "  using namespace generativeqc::scf::cuda_execution;\n"
+        "  for (unsigned choice = 0; choice < 4; ++choice) {\n"
+        "    auto launch = direct_fock_streaming_launcher(\n"
+        "        choice == 1, choice == 2, 0, choice == 3);\n"
+        "    assert(launch(0, nullptr, false, 0, nullptr, nullptr, nullptr,\n"
+        "                  nullptr, nullptr, 0, false, 0, nullptr, nullptr,\n"
+        "                  nullptr, nullptr, nullptr, nullptr) == cudaErrorNotSupported);\n"
+        "  }\n"
+        "}\n"
+    )
+    executable = tmp_path / "registry"
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++17",
+            f"-I{tmp_path}",
+            f"-I{root / 'src'}",
+            str(driver),
+            str(root / "src/scf/aot_shell_registry_stub.cpp"),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        timeout=30,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
 
 
 @pytest.mark.parametrize("owner", ["scf/cuda/direct_coulomb.cpp", "scf/cuda_rhf.cpp"])

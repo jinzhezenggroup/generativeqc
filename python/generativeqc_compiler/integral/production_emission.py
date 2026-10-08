@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from functools import partial
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -662,25 +663,26 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
 
     if schedule.kind in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS):
         packed = schedule.kind == ScheduleKind.PACKED_TASKS
-        worker_options = {
-            "prefix": prefix,
-            "class_name": class_name,
-            "internal_parameters": internal_parameters,
-            "shell_class": shell_class,
-            "high_pair_class": high_pair_class,
-            "low_pair_class": low_pair_class,
-            "system_density_bound": system_density_bound,
-            "block_threads": schedule.block_threads,
-            "width": 32 if packed else schedule.tasks_per_block,
-            "packed": packed,
-            "local_lane_state": selection.has_capability(
+        make_worker = partial(
+            exchange_streaming_worker,
+            prefix=prefix,
+            class_name=class_name,
+            internal_parameters=internal_parameters,
+            shell_class=shell_class,
+            high_pair_class=high_pair_class,
+            low_pair_class=low_pair_class,
+            system_density_bound=system_density_bound,
+            block_threads=schedule.block_threads,
+            width=32 if packed else schedule.tasks_per_block,
+            packed=packed,
+            local_lane_state=selection.has_capability(
                 CAPABILITY_LOCAL_PACKED_STREAMING_FOCK
             ),
-            "supports_mixed_fock": supports_mixed_fock,
-            "retained_state": retained_state,
-            "record_precision": record_precision,
-        }
-        worker = exchange_streaming_worker(**worker_options)
+            supports_mixed_fock=supports_mixed_fock,
+            retained_state=retained_state,
+            record_precision=record_precision,
+        )
+        worker = make_worker()
     elif (
         schedule.kind == ScheduleKind.COMPONENT_LANES
         and high_pair_class != low_pair_class
@@ -886,7 +888,7 @@ void {prefix}_shell_class_fock_uhf_streaming_kernel(
         ScheduleKind.PACKED_TASKS,
         ScheduleKind.SUBGROUP_TASKS,
     ):
-        work_worker = exchange_streaming_worker(**worker_options, work_aware=True)
+        work_worker = make_worker(work_aware=True)
         work_worker = work_worker.replace(
             f"void {prefix}_streaming_fock(", f"void {prefix}_work_streaming_fock("
         )
