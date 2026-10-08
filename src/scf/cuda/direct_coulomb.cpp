@@ -615,9 +615,8 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       const auto cls = kernels[i].shell_class;
       if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
         continue;
-      error = direct_fock_streaming_launcher(p.rys_fock_mask,
-                                             unrestricted ? 0U : p.k_block_fock_mask,
-                                             p.rys_task_fock_mask, cls)(
+      error = direct_fock_streaming_launcher(
+          p.rys_fock_mask, unrestricted ? 0U : p.k_block_fock_mask, p.rys_task_fock_mask, cls)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,

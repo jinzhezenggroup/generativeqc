@@ -32,9 +32,11 @@ inline std::uint64_t prepare_direct_fock_rys_mask(bool exchange) {
                                            : "GENERATIVEQC_DIRECT_J_FOCK_LOWERING");
   if (value == nullptr || *value == '\0' || std::strcmp(value, "incumbent") == 0) return 0;
   if (std::strcmp(value, "rys") == 0) return generated::enabled_rys_fock_shell_class_mask();
-  if (exchange && (std::strcmp(value, "block") == 0 || std::strcmp(value, "rys-task") == 0)) return 0;
-  throw std::invalid_argument(exchange ? "Direct K Fock lowering must be incumbent, rys, block or rys-task"
-                                       : "Direct J Fock lowering must be incumbent or rys");
+  if (exchange && (std::strcmp(value, "block") == 0 || std::strcmp(value, "rys-task") == 0))
+    return 0;
+  throw std::invalid_argument(
+      exchange ? "Direct K Fock lowering must be incumbent, rys, block or rys-task"
+               : "Direct J Fock lowering must be incumbent or rys");
 }
 
 /** K-only block contraction is a separate compiled owner; J never reserves it. */
@@ -57,17 +59,20 @@ inline std::uint64_t prepare_direct_fock_rys_task_mask() {
   if (value == nullptr || *value == '\0')
     return generated::preferred_rys_task_fock_shell_class_mask();
   return value != nullptr && std::strcmp(value, "rys-task") == 0
-             ? generated::enabled_rys_task_fock_shell_class_mask() : 0;
+             ? generated::enabled_rys_task_fock_shell_class_mask()
+             : 0;
 }
 
 /** Select before launch; never retry a failed launch into partially written output. */
 inline auto direct_fock_streaming_launcher(std::uint64_t rys_mask, std::uint64_t k_block_mask,
                                            std::uint64_t rys_task_mask, unsigned shell_class) {
   const auto bit = std::uint64_t{1} << shell_class;
-  return (rys_task_mask & bit) ? generated::launch_shell_class_rys_task_streaming_fock
-      : ((k_block_mask & bit) ? generated::launch_shell_class_k_block_streaming_fock
-      : ((rys_mask & bit) ? generated::launch_shell_class_rys_streaming_fock
-                         : generated::launch_shell_class_streaming_fock));
+  return (rys_task_mask & bit)
+             ? generated::launch_shell_class_rys_task_streaming_fock
+             : ((k_block_mask & bit)
+                    ? generated::launch_shell_class_k_block_streaming_fock
+                    : ((rys_mask & bit) ? generated::launch_shell_class_rys_streaming_fock
+                                        : generated::launch_shell_class_streaming_fock));
 }
 
 /** Compatibility for prepared owners without a task-parallel alternative. */
