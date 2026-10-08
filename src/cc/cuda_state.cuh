@@ -16,8 +16,8 @@ using generativeqc_tensor::diis_combine_slice;
 // with orbit weights. Keeping both ijab and jiba does not change the metric.
 inline void diis_gram(generativeqc_tensor::Context& context, const double* errors, int elements,
                       int history, double* gram) {
-  if (elements < 1 || history < 2 || history > 20 || !errors || !gram || !context.handle)
-    throw std::invalid_argument("invalid CC DIIS storage/dimensions/handle");
+  if (elements < 1 || history < 2 || history > 20 || !errors || !gram || !context.has_matrix_provider())
+    throw std::invalid_argument("invalid CC DIIS storage/dimensions/provider");
   context.check_device();
   // Dense histories are row-major [history, elements]: Gram = E * E^T.
   // The shared prepared Tensor provider owns the library submission.
