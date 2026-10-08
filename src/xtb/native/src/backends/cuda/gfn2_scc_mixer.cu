@@ -411,57 +411,7 @@ __global__ void restart_system_kernel(Gfn2SccDeviceBatch batch, Gfn2Wavefunction
   }
 }
 
-__device__ bool cholesky_solve(double* matrix, double* right_hand_side, std::int64_t dimension,
-                               std::int64_t leading_dimension) {
-  for (std::int64_t row = 0; row < dimension; ++row) {
-    for (std::int64_t column = 0; column <= row; ++column) {
-      double value = matrix[row * leading_dimension + column];
-      for (std::int64_t inner = 0; inner < column; ++inner) {
-        value -=
-            matrix[row * leading_dimension + inner] * matrix[column * leading_dimension + inner];
-      }
-      if (!isfinite(value)) {
-        return false;
-      }
-      if (row == column) {
-        if (!(value > 0.0)) {
-          return false;
-        }
-        matrix[row * leading_dimension + column] = sqrt(value);
-      } else {
-        value /= matrix[column * leading_dimension + column];
-        if (!isfinite(value)) {
-          return false;
-        }
-        matrix[row * leading_dimension + column] = value;
-      }
-    }
-  }
-  for (std::int64_t row = 0; row < dimension; ++row) {
-    double value = right_hand_side[row];
-    for (std::int64_t column = 0; column < row; ++column) {
-      value -= matrix[row * leading_dimension + column] * right_hand_side[column];
-    }
-    value /= matrix[row * leading_dimension + row];
-    if (!isfinite(value)) {
-      return false;
-    }
-    right_hand_side[row] = value;
-  }
-  for (std::int64_t reverse = dimension; reverse > 0; --reverse) {
-    const std::int64_t row = reverse - 1;
-    double value = right_hand_side[row];
-    for (std::int64_t column = row + 1; column < dimension; ++column) {
-      value -= matrix[column * leading_dimension + row] * right_hand_side[column];
-    }
-    value /= matrix[row * leading_dimension + row];
-    if (!isfinite(value)) {
-      return false;
-    }
-    right_hand_side[row] = value;
-  }
-  return true;
-}
+#include "generated_gfn2_history_cuda_helpers.inc"
 
 __device__ void record_numeric_failure(Gfn2SccMixerDeviceState state, std::int64_t system) {
   state.system_statuses[system] = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
@@ -647,10 +597,7 @@ __global__ void mix_broyden_kernel(
           record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteWeight);
           serial_valid = false;
         }
-        history_count = static_cast<std::int64_t>(
-            min(static_cast<std::uint64_t>(policy.history_size), old_iteration));
-        new_slot = static_cast<std::int64_t>((old_iteration - 1u) %
-                                             static_cast<std::uint64_t>(policy.history_size));
+#include "generated_gfn2_history_cuda_window.inc"
       }
       if (!serial_valid) {
         valid = 0;
@@ -687,71 +634,7 @@ __global__ void mix_broyden_kernel(
     }
     __syncthreads();
 
-    const std::uint64_t first_iteration =
-        old_iteration - static_cast<std::uint64_t>(history_count) + 1u;
-    for (std::int64_t row = threadIdx.x; row < history_count; row += blockDim.x) {
-      const std::uint64_t represented_row = first_iteration + static_cast<std::uint64_t>(row);
-      const std::int64_t row_slot = static_cast<std::int64_t>(
-          (represented_row - 1u) % static_cast<std::uint64_t>(policy.history_size));
-      const double* const row_df = row_slot == new_slot
-                                       ? workspace.delta_f + vector_begin
-                                       : state.df_history + history_begin + row_slot * dimension;
-      const double row_omega =
-          row_slot == new_slot ? new_omega : state.omega[system * policy.history_size + row_slot];
-      double coefficient_dot = 0.0;
-      if (!isfinite(row_omega)) {
-        record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteWeight);
-        atomicExch(&valid, 0);
-      }
-      for (std::int64_t component = 0; component < dimension; ++component) {
-        coefficient_dot += row_df[component] * workspace.residual[vector_begin + component];
-        if (!isfinite(coefficient_dot)) {
-          record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteCoefficient);
-          atomicExch(&valid, 0);
-          break;
-        }
-      }
-      const double coefficient = row_omega * coefficient_dot;
-      workspace.coefficients[coefficient_begin + row] = coefficient;
-      if (!isfinite(coefficient)) {
-        record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteCoefficient);
-        atomicExch(&valid, 0);
-      }
-      for (std::int64_t column = 0; column < history_count; ++column) {
-        const std::uint64_t represented_column =
-            first_iteration + static_cast<std::uint64_t>(column);
-        const std::int64_t column_slot = static_cast<std::int64_t>(
-            (represented_column - 1u) % static_cast<std::uint64_t>(policy.history_size));
-        const double* const column_df =
-            column_slot == new_slot ? workspace.delta_f + vector_begin
-                                    : state.df_history + history_begin + column_slot * dimension;
-        const double column_omega = column_slot == new_slot
-                                        ? new_omega
-                                        : state.omega[system * policy.history_size + column_slot];
-        double overlap = 0.0;
-        if (!isfinite(column_omega)) {
-          record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteWeight);
-          atomicExch(&valid, 0);
-        }
-        for (std::int64_t component = 0; component < dimension; ++component) {
-          overlap += row_df[component] * column_df[component];
-          if (!isfinite(overlap)) {
-            record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteHistory);
-            atomicExch(&valid, 0);
-            break;
-          }
-        }
-        double value = row_omega * column_omega * overlap;
-        if (row == column) {
-          value += kOmegaZero * kOmegaZero;
-        }
-        workspace.beta[beta_begin + row * policy.history_size + column] = value;
-        if (!isfinite(value)) {
-          record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteHistory);
-          atomicExch(&valid, 0);
-        }
-      }
-    }
+#include "generated_gfn2_history_cuda_gram.inc"
     __syncthreads();
     if (valid == 0) {
       if (threadIdx.x == 0) {
@@ -776,26 +659,7 @@ __global__ void mix_broyden_kernel(
     }
     __syncthreads();
 
-    for (std::int64_t component = threadIdx.x; component < dimension; component += blockDim.x) {
-      const std::int64_t index = vector_begin + component;
-      double value = state.current_inputs[index] + policy.damping * workspace.residual[index];
-      for (std::int64_t history = 0; history < history_count; ++history) {
-        const std::uint64_t represented = first_iteration + static_cast<std::uint64_t>(history);
-        const std::int64_t slot = static_cast<std::int64_t>(
-            (represented - 1u) % static_cast<std::uint64_t>(policy.history_size));
-        const double omega =
-            slot == new_slot ? new_omega : state.omega[system * policy.history_size + slot];
-        const double* const u = slot == new_slot
-                                    ? workspace.new_u + vector_begin
-                                    : state.u_history + history_begin + slot * dimension;
-        value -= omega * workspace.coefficients[coefficient_begin + history] * u[component];
-      }
-      workspace.mixed[index] = value;
-      if (!isfinite(value)) {
-        record_error(device_error, Gfn2SccMixerDeviceError::kNonfiniteMixedMultipole);
-        atomicExch(&valid, 0);
-      }
-    }
+#include "generated_gfn2_history_cuda_correction.inc"
   }
   __syncthreads();
   if (valid == 0) {

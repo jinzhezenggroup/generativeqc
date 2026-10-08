@@ -20,6 +20,46 @@ function(generativeqc_native_test target source)
   endif()
 endfunction()
 
+function(generativeqc_add_ordered_history_cuda_compile_check)
+  if(NOT GENERATIVEQC_ENABLE_CUDA OR
+     NOT GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" OR
+     NOT TARGET generativeqc_gfn2_cuda)
+    return()
+  endif()
+  # Mandatory compile/link coverage for the optional device fixture. This is
+  # never registered with CTest or loaded by the runtime test executable.
+  add_library(generativeqc_ordered_history_cuda_compile_check SHARED
+    tests/native/test_ordered_history_consumers.cu
+    src/xtb/native/src/backends/cuda/gfn2_scc_mixer.cu)
+  target_include_directories(generativeqc_ordered_history_cuda_compile_check PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/xtb/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/xtb/native/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  target_compile_definitions(generativeqc_ordered_history_cuda_compile_check PRIVATE
+    GENERATIVEQC_XTB_HAS_CUDA=1)
+  # Match the native GFN2 archive. Compiler/cache flags remain inherited; in
+  # particular, do not introduce an FMA override for this arithmetic fixture.
+  set_target_properties(generativeqc_ordered_history_cuda_compile_check PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    CUDA_STANDARD 20
+    CUDA_STANDARD_REQUIRED ON
+    CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
+    CUDA_SEPARABLE_COMPILATION ON
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+  if(NOT "${_generativeqc_cuda_compile_pool}" STREQUAL "")
+    set_property(TARGET generativeqc_ordered_history_cuda_compile_check PROPERTY
+                 JOB_POOL_COMPILE "${_generativeqc_cuda_compile_pool}")
+  endif()
+  target_link_libraries(generativeqc_ordered_history_cuda_compile_check PRIVATE CUDA::cudart)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(generativeqc_ordered_history_cuda_compile_check PRIVATE "LINKER:--no-undefined")
+  endif()
+  add_dependencies(generativeqc_ordered_history_cuda_compile_check generativeqc_ordered_history_codegen)
+  add_dependencies(generativeqc_cuda_runtime_tests generativeqc_ordered_history_cuda_compile_check)
+endfunction()
+
 macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
@@ -419,6 +459,7 @@ macro(generativeqc_add_native_tests)
   if(GENERATIVEQC_ENABLE_CUDA)
     generativeqc_native_test(generativeqc_cuda_runtime_tests tests/native/test_cuda_runtime.cu
                        LIBRARIES CUDA::cudart CUDA::cublas)
+    generativeqc_add_ordered_history_cuda_compile_check()
     generativeqc_native_test(generativeqc_df_eigensystem_tests tests/native/test_df_eigensystem.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver)
     generativeqc_native_test(generativeqc_df_capture_recovery_tests tests/native/test_df_capture_recovery.cpp
