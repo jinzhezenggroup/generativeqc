@@ -34,7 +34,9 @@ void replay(int n) {
         "loop-device-release": 2,
         "loop-host-release": 2,
     }
-    assert all(row["details"]["count_kind"] == "static-site-not-runtime-count" for row in rows)
+    assert all(
+        row["details"]["count_kind"] == "static-site-not-runtime-count" for row in rows
+    )
     assert all("replay" == row["function"] for row in rows)
 
 
@@ -51,5 +53,7 @@ void replay(int n) {
         "loop-callee-host-reallocation",
         "loop-callee-host-release",
     }
-    assert all(row["details"]["count_kind"] == "static-path-not-runtime-count" for row in rows)
+    assert all(
+        row["details"]["count_kind"] == "static-path-not-runtime-count" for row in rows
+    )
     assert all(row["details"]["call_path"] for row in rows)

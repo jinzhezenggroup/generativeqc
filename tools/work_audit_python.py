@@ -476,7 +476,6 @@ def _functions(
             )
 
 
-
 def _loop_allocations(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     bindings: dict[str, str],
@@ -495,9 +494,7 @@ def _loop_allocations(
             continue
         for alias in item.names:
             bound = alias.asname or (
-                alias.name.split(".")[0]
-                if isinstance(item, ast.Import)
-                else alias.name
+                alias.name.split(".")[0] if isinstance(item, ast.Import) else alias.name
             )
             local_imports.setdefault(bound, []).append(
                 (item.lineno, item in function.body)
@@ -574,9 +571,13 @@ def _loop_allocations(
                     and isinstance(node.func.value, ast.Name)
                     else None
                 )
-                if member is not None and name is not None and all(
-                    line < node.lineno and at_function_level
-                    for line, at_function_level in local_imports.get(name, ())
+                if (
+                    member is not None
+                    and name is not None
+                    and all(
+                        line < node.lineno and at_function_level
+                        for line, at_function_level in local_imports.get(name, ())
+                    )
                 ):
                     headers = [
                         f"for {ast.unparse(loop.target)} in {ast.unparse(loop.iter)}"
@@ -595,8 +596,7 @@ def _loop_allocations(
                     ):
                         role = "per-tile-candidate"
                     elif any(
-                        key in loop_targets
-                        for key in ("iter", "step", "epoch", "scf")
+                        key in loop_targets for key in ("iter", "step", "epoch", "scf")
                     ):
                         role = "per-iteration-candidate"
                     else:
