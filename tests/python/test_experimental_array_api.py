@@ -452,7 +452,7 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
         lambda x: xp.slice(x, ([0, 2], [0, 2])),
         lambda x: xp.reshape(x, [4]),
         lambda x: xp.broadcast_to(x, [2, 2]),
-        lambda x: xp.permute_dims(x, (-1, -2)),
+        lambda x: xp.permute_dims(x, (-1, -1)),
     ),
 )
 def test_eager_and_compiled_reject_unsupported_static_controls(
