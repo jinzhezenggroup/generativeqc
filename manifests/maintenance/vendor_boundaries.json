@@ -48,14 +48,6 @@
         "cublasSetStream": 2
       }
     },
-    "src/cc/df_source_cuda.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
-      "references": {
-        "cublasDgemm": 1
-      }
-    },
     "src/cc/df_triples_cuda.cu": {
       "classification": "migration",
       "contract": "#1890",
