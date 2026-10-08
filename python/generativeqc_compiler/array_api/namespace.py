@@ -311,6 +311,23 @@ def sqrt(x: object) -> VibeArray:
     return VibeArray(tensor_ir.sqrt(_array(x).node))
 
 
+def square(x: object) -> VibeArray:
+    """Square without imposing the strictly positive domain of generic power."""
+    value = _array(x)
+    return _canonical_generic(VibeArray(tensor_ir.multiply(value.node, value.node)))
+
+
+def reciprocal(x: object) -> VibeArray:
+    """Elementwise reciprocal; generic arrays admit exact scalar broadcasting."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise TypeError(
+            "reciprocal requires a generic array; scalar broadcasting into "
+            "scientifically annotated domains is unsupported"
+        )
+    return divide(1, value)
+
+
 def reshape(
     x: object,
     shape: tuple[int, ...],
@@ -391,6 +408,22 @@ def take(
     return _canonical_generic(result)
 
 
+def _reduction_axes(
+    axis: int | tuple[int, ...] | None, rank: int, operation: str
+) -> tuple[int, ...]:
+    if axis is None:
+        axes = tuple(range(rank))
+    elif type(axis) is int:
+        axes = (_axis(axis, rank, operation),)
+    elif isinstance(axis, tuple):
+        axes = tuple(_axis(item, rank, operation) for item in axis)
+    else:
+        raise TypeError("axis must be an int, tuple of ints, or None")
+    if len(set(axes)) != len(axes):
+        raise ValueError(f"{operation} axes must be unique")
+    return tuple(sorted(axes))
+
+
 def sum(
     x: object,
     *,
@@ -398,22 +431,48 @@ def sum(
     dtype: object = None,
     keepdims: bool = False,
 ) -> VibeArray:
-    """Reduce selected axes; dtype conversion and keepdims are not yet exposed."""
+    """Reduce selected axes; generic arrays may retain singleton reduced axes."""
     value = _array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
-    if type(keepdims) is not bool or keepdims:
-        raise ValueError("frontend sum currently requires keepdims=False")
-    if axis is None:
-        axes = tuple(range(value.ndim))
-    elif type(axis) is int:
-        axes = (_axis(axis, value.ndim, "sum"),)
-    elif isinstance(axis, tuple):
-        axes = tuple(_axis(item, value.ndim, "sum") for item in axis)
-    else:
-        raise TypeError("axis must be an int, tuple of ints, or None")
-    result = VibeArray(tensor_ir.reduce_sum(value.node, axes=tuple(sorted(axes))))
+    if type(keepdims) is not bool:
+        raise TypeError("keepdims must be a bool")
+    axes = _reduction_axes(axis, value.ndim, "sum")
+    if keepdims and not _is_generic_array(value):
+        raise ValueError(
+            "keepdims for scientifically annotated arrays requires explicit "
+            "TensorIR index metadata"
+        )
+    result = VibeArray(tensor_ir.reduce_sum(value.node, axes=axes))
+    if keepdims:
+        shape = tuple(
+            1 if position in axes else extent
+            for position, extent in enumerate(value.shape)
+        )
+        return reshape(result, shape)
     return _canonical_generic(result)
+
+
+def mean(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: bool = False,
+) -> VibeArray:
+    """Arithmetic mean with an exact static reduction count."""
+    value = _array(x)
+    axes = _reduction_axes(axis, value.ndim, "mean")
+    count = 1
+    for position in axes:
+        count *= value.shape[position]
+    if count == 0:
+        raise ValueError("mean of an empty reduction is unsupported")
+    result = sum(value, axis=axes, keepdims=keepdims)
+    if count == 1:
+        return result
+    return _canonical_generic(
+        VibeArray(tensor_ir.add(result.node, coefficients=(Fraction(1, count),)))
+    )
 
 
 def permute_dims(x: object, axes: tuple[int, ...]) -> VibeArray:

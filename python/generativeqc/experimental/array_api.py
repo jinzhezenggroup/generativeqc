@@ -195,6 +195,18 @@ def sqrt(x: object) -> typing.Any:
     return _eager_compute(np.sqrt, array)
 
 
+def square(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.square(x)
+    return _eager_compute(np.square, _eager_array(x))
+
+
+def reciprocal(x: object) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.reciprocal(x)
+    return _eager_compute(np.reciprocal, _eager_array(x))
+
+
 def reshape(
     x: object,
     shape: tuple[int, ...],
@@ -272,17 +284,30 @@ def sum(
     array = _eager_array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
-    if type(keepdims) is not bool or keepdims:
-        raise ValueError("frontend sum currently requires keepdims=False")
-    if axis is None:
-        axes = tuple(range(array.ndim))
-    elif type(axis) is int:
-        axes = (_namespace._axis(axis, array.ndim, "sum"),)
-    elif isinstance(axis, tuple):
-        axes = tuple(_namespace._axis(item, array.ndim, "sum") for item in axis)
-    else:
-        raise TypeError("axis must be an int, tuple of ints, or None")
-    return _eager_compute(np.sum, array, axis=tuple(sorted(axes)))
+    if type(keepdims) is not bool:
+        raise TypeError("keepdims must be a bool")
+    axes = _namespace._reduction_axes(axis, array.ndim, "sum")
+    return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
+
+
+def mean(
+    x: object,
+    *,
+    axis: int | tuple[int, ...] | None = None,
+    keepdims: bool = False,
+) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.mean(x, axis=axis, keepdims=keepdims)
+    array = _eager_array(x)
+    if type(keepdims) is not bool:
+        raise TypeError("keepdims must be a bool")
+    axes = _namespace._reduction_axes(axis, array.ndim, "mean")
+    count = 1
+    for position in axes:
+        count *= array.shape[position]
+    if count == 0:
+        raise ValueError("mean of an empty reduction is unsupported")
+    return _eager_compute(np.mean, array, axis=axes, keepdims=keepdims)
 
 
 def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
@@ -584,13 +609,16 @@ __all__ = [
     "log",
     "matmul",
     "matrix_transpose",
+    "mean",
     "multiply",
     "negative",
     "permute_dims",
     "pow",
+    "reciprocal",
     "reshape",
     "slice",
     "sqrt",
+    "square",
     "subtract",
     "sum",
     "take",

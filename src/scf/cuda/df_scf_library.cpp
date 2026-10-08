@@ -17,6 +17,7 @@
 #include "scf/cuda/df_runtime.hpp"
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
+#include "solver/cuda/generalized_eigen.hpp"
 #include "solver/cuda/symmetric_eigen_provider.hpp"
 #include "solver/cuda/symmetric_eigen_workspace.hpp"
 
@@ -82,6 +83,26 @@ generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left
   return scf_gemm_strided(plan, transpose_left, batch_size, nbf, left, matrix_elements, right,
                           matrix_elements, output, matrix_elements, 1.0, 0.0,
                           "CUDA DF device matrix product", detail);
+}
+
+generativeqc_status scf_generalized_transform(CudaDensityFittingJkPlan& plan, bool recovery,
+                                              std::size_t batch_size, std::size_t nbf,
+                                              double* matrix, const double* orthogonalizer,
+                                              double* temporary, std::string& detail) {
+  namespace shared = ::generativeqc::solver;
+  const shared::GeneralizedEigenDomain domain{
+      nbf, batch_size, batch_size, shared::GeneralizedEigenLayout::column_major, batch_size};
+  if (!domain.valid()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto extent = domain.matrix_extent();
+  const shared::GeneralizedEigenMatrices matrices{
+      matrix, orthogonalizer, temporary, matrix, temporary, extent, extent, extent, extent, extent};
+  const eigen_provider::GeneralizedEigenLowering lowering{domain, plan.blas, matrices};
+  constexpr auto basis = shared::GeneralizedEigenBasis::canonical_x;
+  const auto status = recovery ? shared::recover_generalized_eigen(basis, lowering)
+                               : shared::reduce_generalized_eigen(basis, lowering);
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(static_cast<cublasStatus_t>(status),
+                                                        "CUDA DF device matrix product", detail);
 }
 
 generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nbf,

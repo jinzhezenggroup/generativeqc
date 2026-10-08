@@ -6,6 +6,7 @@
 #include "model/gfn2/occupation_binary64_policy.hpp"
 #include "tensor/weighted_gram.hpp"
 #include "solver/cpu/symmetric_eigen.hpp"
+#include "solver/cpu/generalized_eigen.hpp"
 
 
 #include <algorithm>
@@ -750,10 +751,15 @@ NumericalResult solve_one_spin(const CpuLinearAlgebraBackend& backend,
   const std::size_t dimension = static_cast<std::size_t>(n);
   const std::size_t matrix_count = dimension * dimension;
   copy_symmetric_row_to_column(hamiltonian, dimension, coefficients);
-  cpu_provider::solve_lower_triangular(backend, cpu_provider::TriangularSide::left,
-                                        cpu_provider::Transpose::none, n, factor, coefficients);
-  cpu_provider::solve_lower_triangular(backend, cpu_provider::TriangularSide::right,
-                                        cpu_provider::Transpose::transpose, n, factor, coefficients);
+  const ::generativeqc::solver::GeneralizedEigenDomain domain{
+      dimension, 1, 1, ::generativeqc::solver::GeneralizedEigenLayout::column_major};
+  const ::generativeqc::solver::GeneralizedEigenMatrices matrices{
+      coefficients, factor, nullptr, coefficients, coefficients,
+      matrix_count, matrix_count, 0, matrix_count, matrix_count};
+  const cpu_eigen::GeneralizedEigenLowering lowering{domain, matrices, backend};
+  constexpr auto basis = ::generativeqc::solver::GeneralizedEigenBasis::lower_cholesky;
+  if (::generativeqc::solver::reduce_generalized_eigen(basis, lowering) != 0)
+    return NumericalResult::kBackendFailure;
   for (std::size_t column = 0u; column < dimension; ++column) {
     for (std::size_t row = column + 1u; row < dimension; ++row) {
       const double average =
@@ -781,8 +787,8 @@ NumericalResult solve_one_spin(const CpuLinearAlgebraBackend& backend,
   if (info > 0) {
     return NumericalResult::kDataFailure;
   }
-  cpu_provider::solve_lower_triangular(backend, cpu_provider::TriangularSide::left,
-                                        cpu_provider::Transpose::transpose, n, factor, coefficients);
+  if (::generativeqc::solver::recover_generalized_eigen(basis, lowering) != 0)
+    return NumericalResult::kBackendFailure;
   return finite_array(coefficients, matrix_count) && finite_array(eigenvalues, dimension)
              ? NumericalResult::kSuccess
              : NumericalResult::kDataFailure;

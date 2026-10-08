@@ -496,6 +496,15 @@
         "cublasSgemmStridedBatched": 1
       }
     },
+    "src/tensor/cuda_square_linalg.hpp": {
+      "classification": "provider",
+      "contract": "src/solver/generalized_eigen.hpp",
+      "reason": "Borrowed square FP64 column-major GEMM and lower-triangular solve lowering for shared generalized-eigen phases; stream, handle modes, workspace and numerical admission remain with the owner.",
+      "references": {
+        "cublasDgemmStridedBatched": 1,
+        "cublasDtrsmBatched": 1
+      }
+    },
     "src/tensor/cuda_symmetric_product.cuh": {
       "classification": "provider",
       "contract": "src/tensor/cuda_symmetric_product.hpp",
@@ -521,7 +530,6 @@
       "contract": "#1890",
       "reason": "GFN prepared execution owns handles and generalized eigensolve work; migrate solver/tensor choices without changing occupation or precision admission.",
       "references": {
-        "cublasDtrsmBatched": 1,
         "cublasGetMathMode": 1,
         "cublasGetPointerMode": 1,
         "cublasGetStream": 1,

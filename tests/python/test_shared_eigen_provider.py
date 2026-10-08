@@ -222,10 +222,15 @@ def _consumer_definitions() -> str:
 
 GFN2_TRIDIAGONAL_STUB = r"""
 int tridiagonal_calls = 0;
-Gfn2EigensolverLaunchResult tridiagonal_symmetric_eigensolve(
+Gfn2EigensolverLaunchResult (*tridiagonal_hook)(
     cusolverDnHandle_t, const Gfn2EigensolverBucket&, double*, double*,
-    const Gfn2EigensolverDeviceWorkspace&, int*, cudaStream_t) noexcept {
+    const Gfn2EigensolverDeviceWorkspace&, int*, cudaStream_t) = nullptr;
+Gfn2EigensolverLaunchResult tridiagonal_symmetric_eigensolve(
+    cusolverDnHandle_t solver, const Gfn2EigensolverBucket& bucket, double* matrix, double* values,
+    const Gfn2EigensolverDeviceWorkspace& workspace, int* info, cudaStream_t stream) noexcept {
   ++tridiagonal_calls;
+  if (tridiagonal_hook != nullptr)
+    return tridiagonal_hook(solver, bucket, matrix, values, workspace, info, stream);
   return launch_success();
 }
 """
@@ -255,6 +260,10 @@ def test_provider_sources_invalidate_generated_metadata() -> None:
     generator = (ROOT / "tools/generate_solver_lowering.py").read_text()
     cmake = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
     for dependency in (
+        "src/solver/generalized_eigen.hpp",
+        "src/solver/cuda/generalized_eigen.hpp",
+        "src/solver/cuda/generalized_eigen.cpp",
+        "src/tensor/cuda_square_linalg.hpp",
         "src/solver/cuda/symmetric_eigen_provider.hpp",
         "src/solver/cuda/symmetric_eigen_provider.cpp",
         "src/solver/cuda/cusolver_compat.hpp",
@@ -263,6 +272,7 @@ def test_provider_sources_invalidate_generated_metadata() -> None:
         assert dependency in generator
         assert dependency in cmake
     sources = (ROOT / "cmake/GenerativeQCSources.cmake").read_text()
+    assert sources.count("src/solver/cuda/generalized_eigen.cpp") == 1
     assert sources.count("src/solver/cuda/symmetric_eigen_provider.cpp") == 1
 
 

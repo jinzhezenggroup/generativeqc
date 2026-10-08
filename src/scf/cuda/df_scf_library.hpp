@@ -23,6 +23,13 @@ generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left
                              std::size_t batch_size, std::size_t nbf, const double* left,
                              const double* right, double* output, std::string& detail);
 
+/** Execute the shared canonical-X reduction or recovery on borrowed square
+ * column-major storage. The selected spectral phase remains separately callable. */
+generativeqc_status scf_generalized_transform(CudaDensityFittingJkPlan& plan, bool recovery,
+                                              std::size_t batch_size, std::size_t nbf,
+                                              double* matrix, const double* orthogonalizer,
+                                              double* temporary, std::string& detail);
+
 generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nbf,
                                         std::size_t batch_size, double* eigensystem,
                                         double* eigenvalues, DeviceSolver& solver,

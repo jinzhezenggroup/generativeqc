@@ -310,18 +310,14 @@ generativeqc_status run_cuda_density_fitting_rhf_device_scf(
                                         d_nuclear, d_energy);
     iteration_status = apply_scf_diis(*plan, *state, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
-    iteration_status = scf_gemm(*plan, false, batch_size, plan->nbf, d_fock, d_orthogonalizer,
-                                d_temporary, detail);
-    if (iteration_status == GENERATIVEQC_STATUS_SUCCESS) {
-      iteration_status = scf_gemm(*plan, true, batch_size, plan->nbf, d_orthogonalizer, d_temporary,
-                                  d_fock, detail);
-    }
+    iteration_status = scf_generalized_transform(*plan, false, batch_size, plan->nbf, d_fock,
+                                                 d_orthogonalizer, d_temporary, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     iteration_status = solve_device_batch(*plan, state->solver, plan->nbf, batch_size, d_fock,
                                           d_eigenvalues, d_info, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
-    iteration_status = scf_gemm(*plan, false, batch_size, plan->nbf, d_orthogonalizer, d_fock,
-                                d_temporary, detail);
+    iteration_status = scf_generalized_transform(*plan, true, batch_size, plan->nbf, d_fock,
+                                                 d_orthogonalizer, d_temporary, detail);
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
     launch_build_device_density_kernel(blocks_for(expected), kThreads, 0, plan->stream, batch_size,
                                        plan->nbf, d_occupied, d_temporary, 2.0, d_next_density);
