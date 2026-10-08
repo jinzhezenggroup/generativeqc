@@ -32,7 +32,7 @@ def test_cuda_mo_validation_occurs_once_per_completed_block() -> None:
     batch_helper_end = source.index("}  // namespace", batch_helper_begin)
     batch_helper = source[batch_helper_begin:batch_helper_end]
 
-    assert "cublasDaxpy" in add
+    assert "add_vector_in_place(ctx" in add
     assert "check_scale<<<" not in add
     assert "cudaMemcpyAsync(&invalid" not in add
     assert "cudaStreamSynchronize" not in add
@@ -52,6 +52,17 @@ def test_cuda_mo_validation_occurs_once_per_completed_block() -> None:
     assert download.index("validate(p)") < download.index(
         "cudaMemcpyAsync(out, p.result"
     )
+
+
+def test_cuda_mo_algebra_uses_shared_tensor_provider() -> None:
+    source = NATIVE.read_text(encoding="utf-8")
+    assert "cublasDgemm" not in source
+    assert "cublasDaxpy" not in source
+    assert "cublasGetVersion" not in source
+    assert source.count("transform_axis(ctx,") == 2
+    assert source.count("add_vector_in_place(ctx,") == 2
+    assert "gemm(context, 'T', 'N', rest, columns, dim," in source
+    assert "ctx.provider_version()" in source
 
 
 def test_resident_cuda_mo_block_is_validated_before_publication() -> None:

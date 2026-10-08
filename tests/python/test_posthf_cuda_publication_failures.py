@@ -18,6 +18,7 @@ _SHIM = r"""
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -72,6 +73,17 @@ struct Context {
     if(&metric==&metrics.library_ms && late_library){late_library=false;throw std::runtime_error("elapsed-time failed");}
   }
 };
+void gemm(Context& context, char, char, int m, int n, int k,
+          const double* lhs, const double* rhs, double* out,
+          std::int64_t, std::int64_t, std::int64_t, int, double) {
+  const double one=1, zero=0;
+  blas_check(cublasDgemm(context.handle, CUBLAS_OP_N, CUBLAS_OP_T, n, m, k,
+                         &one, rhs, n, lhs, m, &zero, out, n));
+}
+void add_vector_in_place(Context& context, int n, const double* source, double* target) {
+  const double one=1;
+  blas_check(cublasDaxpy(context.handle, n, &one, source, 1, target, 1));
+}
 void check_scale(double* values,std::size_t n,double,int* error,int){
   ++scans;
   for(std::size_t i=0;i<n;++i)if(!std::isfinite(values[i]))*error=1;
