@@ -24,6 +24,7 @@ from generativeqc_compiler.common.cuda_target import (
     cuda_target_info,
     normalize_cuda_architecture,
 )
+from generativeqc_compiler.common.cuda_resources import KernelResources
 from generativeqc_compiler.common.gpu_profitability import (
     ENDPOINT_NOISE_FRACTION,
     GpuProfitability,
@@ -67,10 +68,30 @@ if typing.TYPE_CHECKING:
     import argparse
 
 
+def _report_float(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise TypeError("benchmark report requires numeric values")
+    return float(value)
+
+
+def _compiled_resources(value: object) -> tuple[KernelResources, ...]:
+    if not isinstance(value, tuple) or not all(
+        isinstance(resource, KernelResources) for resource in value
+    ):
+        raise TypeError("compiler report requires kernel resource records")
+    return value
+
+
+def _compiled_object_path(value: object) -> Path:
+    if not isinstance(value, (str, Path)):
+        raise TypeError("compiled object must have a filesystem path")
+    return Path(value)
+
+
 def _candidate_profitability(
     trial: ScheduleTrial,
     compile_row: dict[str, typing.Any],
-    resources: typing.Any,
+    resources: tuple[KernelResources, ...],
     occupancy: dict[str, object],
     runtime: dict[str, object] | None,
 ) -> GpuProfitability:
@@ -84,9 +105,9 @@ def _candidate_profitability(
             for resource in resources
             if getattr(resource, name, None) is not None
         ]
-        return max(values) if values else None
+        return int(max(values)) if values else None
 
-    endpoint_ms = None if runtime is None else float(runtime["fused_ms"])
+    endpoint_ms = None if runtime is None else _report_float(runtime["fused_ms"])
     return GpuProfitability(
         arithmetic_operation_count=getattr(model, "arithmetic_operation_count", None),
         peak_live_values=getattr(model, "peak_live_values", None),
@@ -431,14 +452,14 @@ def _run_autotune(
                 trial.key: row for trial, row in zip(trials, compile_rows, strict=True)
             }
             objects = [
-                Path(compile_by_key[trial.key]["object"]) for trial in runnable_trials
+                _compiled_object_path(compile_by_key[trial.key]["object"]) for trial in runnable_trials
             ]
             used_oracle_prefixes = {
                 _oracle_symbol_prefix(oracle_by_trial[trial.key])
                 for trial in runnable_trials
             }
             objects.extend(
-                Path(oracle_compile_by_prefix[prefix]["object"])
+                _compiled_object_path(oracle_compile_by_prefix[prefix]["object"])
                 for prefix in sorted(used_oracle_prefixes)
             )
             link_started = time.monotonic()
@@ -492,7 +513,7 @@ def _run_autotune(
             list[tuple[ScheduleTrial, dict[str, object], dict[str, object]]],
         ] = {}
         for trial, compile_row in zip(trials, compile_rows, strict=True):
-            resources = compile_row["resources"]
+            resources = _compiled_resources(compile_row["resources"])
             oracle_compile = oracle_compile_by_prefix[
                 _oracle_symbol_prefix(oracle_by_trial[trial.key])
             ]
@@ -573,8 +594,8 @@ def _run_autotune(
             if runtime is None:
                 reasons.append("schedule did not produce a runtime result")
             else:
-                maximum_value = float(runtime[f"maximum_{trial.consumer.value}"])
-                maximum_error = float(runtime[f"maximum_{trial.consumer.value}_error"])
+                maximum_value = _report_float(runtime[f"maximum_{trial.consumer.value}"])
+                maximum_error = _report_float(runtime[f"maximum_{trial.consumer.value}_error"])
                 tolerance = arguments.absolute_tolerance + (
                     arguments.relative_tolerance * maximum_value
                 )
@@ -583,16 +604,16 @@ def _run_autotune(
                         f"{trial.consumer.value} error {maximum_error:.3e} "
                         f"exceeds {tolerance:.3e}"
                     )
-                oracle_speedup = float(runtime["speedup"])
+                oracle_speedup = _report_float(runtime["speedup"])
                 if (
                     not is_production_baseline
                     and oracle_speedup < arguments.minimum_speedup
                 ):
                     reasons.append(f"speedup is below {arguments.minimum_speedup:.3f}x")
                 if baseline_runtime is not None:
-                    baseline_ms = float(baseline_runtime["fused_ms"])
-                    if float(runtime["fused_ms"]) > 0.0:
-                        speedup_vs_baseline = baseline_ms / float(runtime["fused_ms"])
+                    baseline_ms = _report_float(baseline_runtime["fused_ms"])
+                    if _report_float(runtime["fused_ms"]) > 0.0:
+                        speedup_vs_baseline = baseline_ms / _report_float(runtime["fused_ms"])
                     if (
                         not is_production_baseline
                         and speedup_vs_baseline < arguments.minimum_speedup
@@ -616,7 +637,7 @@ def _run_autotune(
                 baseline_pair = compiled_trials_by_key.get(resource_baseline_key)
                 if baseline_pair is not None:
                     baseline_trial, baseline_compile_row = baseline_pair
-                    baseline_resources = baseline_compile_row["resources"]
+                    baseline_resources = _compiled_resources(baseline_compile_row["resources"])
                     baseline_occupancy = estimate_occupancy(
                         baseline_resources, baseline_trial, target
                     )
@@ -686,7 +707,7 @@ def _run_autotune(
             passing = passing_by_class.get(spec.name, [])
             if not passing:
                 continue
-            fastest_ms = min(float(item[1]["fused_ms"]) for item in passing)
+            fastest_ms = min(_report_float(item[1]["fused_ms"]) for item in passing)
 
             def winner_key(
                 item: tuple[ScheduleTrial, dict[str, object], dict[str, object]],
@@ -694,7 +715,7 @@ def _run_autotune(
                 fastest: float = fastest_ms,
             ) -> typing.Any:
                 trial, runtime, _candidate = item
-                elapsed_ms = float(runtime["fused_ms"])
+                elapsed_ms = _report_float(runtime["fused_ms"])
                 profitability = profitability_by_key[trial.key]
 
                 # Full endpoint time remains primary outside the one-percent
@@ -750,8 +771,9 @@ def _run_autotune(
                         production_max_shared_bytes,
                         target.shared_memory_per_block,
                     )
+                production_resources = _compiled_resources(resource_compile["resources"])
                 production_reasons = _resource_rejections(
-                    resource_compile["resources"],
+                    production_resources,
                     consumer=trial.consumer,
                     maximum_registers=maximum_registers,
                     maximum_stack_bytes=arguments.max_stack_bytes,
@@ -772,10 +794,10 @@ def _run_autotune(
                     "source_bytes": resource_compile.get("source_bytes"),
                     "object_bytes": resource_compile.get("object_bytes"),
                     "resources": [
-                        asdict(item) for item in resource_compile["resources"]
+                        asdict(item) for item in production_resources
                     ],
                     "occupancy": estimate_occupancy(
-                        resource_compile["resources"], trial, target
+                        production_resources, trial, target
                     ),
                     "accepted": not production_reasons,
                     "rejection_reasons": production_reasons,
@@ -789,10 +811,10 @@ def _run_autotune(
                     )
                 if production_reasons:
                     candidate_row["accepted"] = False
-                    candidate_row["rejection_reasons"].extend(
-                        f"production validation: {reason}"
-                        for reason in production_reasons
-                    )
+                    candidate_row["rejection_reasons"] = [
+                        *reasons,
+                        *(f"production validation: {reason}" for reason in production_reasons),
+                    ]
                     continue
                 winners[spec.name] = trial.schedule
                 winner_rows.append(
@@ -811,7 +833,7 @@ def _run_autotune(
                     }
                 )
                 winner_provenance[spec.name] = {
-                    "runtime_seconds": float(runtime["fused_ms"]) / 1000.0,
+                    "runtime_seconds": _report_float(runtime["fused_ms"]) / 1000.0,
                     "compile_seconds": candidate_row.get("compile_seconds"),
                     "source_bytes": candidate_row.get("source_bytes"),
                     "object_bytes": candidate_row.get("object_bytes"),
