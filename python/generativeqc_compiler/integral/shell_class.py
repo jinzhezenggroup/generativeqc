@@ -9,7 +9,7 @@ be evaluated on the first profile-selected production shell class.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from .cuda import CudaEmitter
 from .expr import Expr, Graph
@@ -19,6 +19,16 @@ from .shell_spec import AXES, DPPP_SPEC, PSSS_SPEC, ShellClassSpec, cartesian_co
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
+
+_T = TypeVar("_T")
+
+
+def _triple(values: Sequence[_T]) -> tuple[_T, _T, _T]:
+    """Preserve the fixed Cartesian xyz arity through symbolic generators."""
+    if len(values) != 3:
+        raise ValueError("Cartesian tensor must have three axes")
+    return values[0], values[1], values[2]
+
 
 CENTERS = ("first", "second", "third", "fourth")
 # Compatibility alias for the component-level dppp inspection CLI.  The
@@ -239,14 +249,14 @@ def build_packed_force_geometry_algebra() -> PackedForceGeometryAlgebra:
     inverse_two_p = 0.5 / p
     inverse_two_q = 0.5 / q
     pair_shifts = tuple(
-        tuple(
+        _triple(tuple(
             (product_p if center_index < 2 else product_q)[axis_index]
             - coordinates[center][axis_index]
             for axis_index in range(3)
-        )
+        ))
         for center_index, center in enumerate(CENTERS)
     )
-    difference = tuple(product_p[index] - product_q[index] for index in range(3))
+    difference = _triple(tuple(product_p[index] - product_q[index] for index in range(3)))
     first_separation = tuple(
         coordinates["first"][index] - coordinates["second"][index] for index in range(3)
     )
@@ -254,10 +264,10 @@ def build_packed_force_geometry_algebra() -> PackedForceGeometryAlgebra:
         coordinates["third"][index] - coordinates["fourth"][index] for index in range(3)
     )
     decay_gradients = (
-        tuple(-2 * first_reduced_exponent * item for item in first_separation),
-        tuple(2 * first_reduced_exponent * item for item in first_separation),
-        tuple(-2 * second_reduced_exponent * item for item in second_separation),
-        tuple(2 * second_reduced_exponent * item for item in second_separation),
+        _triple(tuple(-2 * first_reduced_exponent * item for item in first_separation)),
+        _triple(tuple(2 * first_reduced_exponent * item for item in first_separation)),
+        _triple(tuple(-2 * second_reduced_exponent * item for item in second_separation)),
+        _triple(tuple(2 * second_reduced_exponent * item for item in second_separation)),
     )
     argument_squared_distance = graph.sum(item.pow(2) for item in difference)
     boys_argument = rho * argument_squared_distance
@@ -364,7 +374,7 @@ def _pair_expansion(
                 if quantum not in removed:
                     coefficient = coefficient * shifts[quantum]
             coefficient_terms.append(coefficient)
-        terms.append((derivative_orders, graph.sum(coefficient_terms)))
+        terms.append((_triple(derivative_orders), graph.sum(coefficient_terms)))
     return tuple(terms)
 
 
@@ -377,7 +387,7 @@ def _axis_wick_multiplicity(order: int, pairs: int) -> int:
     denominator = 2**pairs
     for value in range(2, pairs + 1):
         denominator *= value
-    return numerator // denominator
+    return int(numerator // denominator)
 
 
 def _coulomb_derivative(
@@ -449,7 +459,7 @@ def _validated_dppp_components(
 
     normalized = tuple(p_components)
     DPPP_SPEC.validate_component((d_component, *normalized))
-    return normalized
+    return _triple(normalized)
 
 
 def _shell_component_value(
@@ -488,9 +498,9 @@ def _shell_component_value(
     terms = []
     for first_orders, first_coefficient in first_expansion:
         for second_orders, second_coefficient in second_expansion:
-            orders = tuple(
+            orders = _triple(tuple(
                 first_orders[axis] + second_orders[axis] for axis in range(3)
-            )
+            ))
             sign = -1.0 if sum(second_orders) % 2 else 1.0
             terms.append(
                 sign * first_coefficient * second_coefficient * coulomb(orders)
@@ -588,16 +598,16 @@ def build_psss_kernel(
             center_gradients.append(
                 graph.differentiate(value, variable, leaf_derivatives)
             )
-        independent_gradients[center_index] = tuple(center_gradients)
+        independent_gradients[center_index] = _triple(center_gradients)
     gradients_by_center = dict(independent_gradients)
     for center in selected_integral.recovered_derivative_centers:
-        gradients_by_center[center] = tuple(
+        gradients_by_center[center] = _triple(tuple(
             -graph.sum(
                 independent_gradients[independent][axis]
                 for independent in selected_integral.independent_derivative_centers
             )
             for axis in range(3)
-        )
+        ))
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(
@@ -614,7 +624,7 @@ def build_psss_kernel(
         variables=variables,
         boys_argument=boys_argument,
         value=value,
-        gradients=gradients,
+        gradients=tuple(_triple(gradient) for gradient in gradients),
         integral=selected_integral,
     )
 
@@ -748,16 +758,16 @@ def build_shell_class_component_kernel(
             center_gradients.append(
                 graph.differentiate(value, variable, leaf_derivatives)
             )
-        independent_gradients[center_index] = tuple(center_gradients)
+        independent_gradients[center_index] = _triple(center_gradients)
     gradients_by_center = dict(independent_gradients)
     for center in selected_integral.recovered_derivative_centers:
-        gradients_by_center[center] = tuple(
+        gradients_by_center[center] = _triple(tuple(
             -graph.sum(
                 independent_gradients[independent][axis]
                 for independent in selected_integral.independent_derivative_centers
             )
             for axis in range(3)
-        )
+        ))
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(
@@ -775,7 +785,7 @@ def build_shell_class_component_kernel(
         variables=variables,
         boys_argument=boys_argument,
         value=value,
-        gradients=gradients,
+        gradients=tuple(_triple(gradient) for gradient in gradients),
         integral=selected_integral,
         geometry_roots=(
             ("inverse_two_p", inverse_two_p),
@@ -941,17 +951,17 @@ def build_shell_class_contraction_kernel(
                 prefactor
                 * (unscaled + value * decay_gradients[CENTERS[center_index]][axis])
             )
-        independent_gradients[center_index] = tuple(center_gradients)
+        independent_gradients[center_index] = _triple(center_gradients)
     recovered_centers = selected_integral.recovered_derivative_centers
     gradients_by_center = dict(independent_gradients)
     for center in recovered_centers:
-        gradients_by_center[center] = tuple(
+        gradients_by_center[center] = _triple(tuple(
             -graph.sum(
                 independent_gradients[independent][axis]
                 for independent in independent_centers
             )
             for axis in range(3)
-        )
+        ))
     requested_centers = set(selected_integral.requested_derivative_centers)
     gradients = tuple(
         gradients_by_center.get(
@@ -968,7 +978,7 @@ def build_shell_class_contraction_kernel(
         component=normalized,
         variables=variables,
         value=value,
-        gradients=gradients,
+        gradients=tuple(_triple(gradient) for gradient in gradients),
         integral=selected_integral,
     )
 
@@ -1018,6 +1028,8 @@ def _clone_expression(
         elif node.operation in ("atan", "asinh", "erf"):
             cloned = target.transcendental_unary(node.operation, arguments[0])
         elif node.operation == "power":
+            if node.payload is None:
+                raise TypeError("power node requires a numeric exponent")
             cloned = target.power(arguments[0], float(node.payload))
         else:
             raise ValueError(f"unsupported cloned operation {node.operation!r}")
@@ -1101,7 +1113,7 @@ def build_weighted_shell_contraction_kernel(
         spec=spec,
         component_weights=component_weights,
         value=value,
-        gradients=gradients,
+        gradients=tuple(_triple(gradient) for gradient in gradients),
         integral=selected_integral,
     )
 
