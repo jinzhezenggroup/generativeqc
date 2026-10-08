@@ -9,6 +9,7 @@ FRONTEND_VERSION = 1
 SUPPORTED_FUNCTIONS = frozenset(
     {
         "add",
+        "astype",
         "zeros",
         "ones",
         "full",
@@ -67,7 +68,10 @@ def capabilities() -> dict[str, object]:
         "scientific_indexing": "rank-preserving-static-slices",
         "scientific_slice_ranges": "static-half-open-unit-step",
         "take_indices": "static-int-tuple",
-        "dtype_promotion": False,
+        "dtype_promotion": "generic-float32-float64-explicit-cast",
+        "scientific_dtype_promotion": False,
+        "dtype_helpers": "real-float32-float64-only",
+        "astype_devices": "device-none-only-cpu-reference",
         "uniform_creation": "exact-scalar-tensorir-broadcast",
         "creation_devices": "device-none-only-cpu-reference",
         "full_integer_default": "requires-unsupported-integer-dtype",

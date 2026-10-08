@@ -120,8 +120,9 @@ def test_broadcast_arrays_eager_compiled_and_mixed_dtype_preserve_types() -> Non
         a, b = xp.broadcast_arrays(x, y)
         return xp.sum(a) + xp.sum(b)
 
-    with pytest.raises(ValueError, match="dtype"):
-        expression(left, right)
+    promoted = expression(left, right)
+    assert promoted.dtype == np.dtype("float64")
+    np.testing.assert_allclose(promoted, np.sum(eager[0]) + np.sum(eager[1]))
 
     right32 = right.astype(np.float32)
     np.testing.assert_array_equal(
