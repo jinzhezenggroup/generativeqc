@@ -294,9 +294,13 @@ def test_prepared_schedule_parser_is_explicit_and_fail_closed(tmp_path: Path) ->
     registry.write_text(
         "#include <cstdint>\n"
         "namespace generativeqc::scf::generated {\n"
-        "inline std::uint64_t enabled_rys_fock_shell_class_mask() { return 0; }\n"
-        "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 0; }\n"
+        "inline std::uint64_t enabled_rys_fock_shell_class_mask() { return 2; }\n"
+        "inline std::uint64_t enabled_rys_task_fock_shell_class_mask() { return 16; }\n"
+        "inline std::uint64_t preferred_task_mask = 8;\n"
+        "inline std::uint64_t preferred_rys_task_fock_shell_class_mask() { return preferred_task_mask; }\n"
+        "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 4; }\n"
         "inline void launch_shell_class_rys_streaming_fock() {}\n"
+        "inline void launch_shell_class_rys_task_streaming_fock() {}\n"
         "inline void launch_shell_class_k_block_streaming_fock() {}\n"
         "inline void launch_shell_class_streaming_fock() {}\n}\n"
     )
@@ -329,6 +333,37 @@ int main() {
     (void)prepare_direct_exchange_task_schedule();
     return 1;
   } catch (const std::invalid_argument&) {}
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr const char* lowering = "GENERATIVEQC_DIRECT_K_FOCK_LOWERING";
+  unsetenv(lowering);
+  const auto default_mask = prepare_direct_fock_rys_task_mask();
+  assert(default_mask == 8);
+  assert(prepare_direct_fock_rys_mask(true) == 0);
+  assert(prepare_direct_fock_rys_mask(false) == 0);
+  assert(prepare_direct_fock_k_block_mask() == 0);
+  setenv(lowering, "", 1);
+  assert(prepare_direct_fock_rys_task_mask() == default_mask);
+  generativeqc::scf::generated::preferred_task_mask = 0;
+  assert(prepare_direct_fock_rys_task_mask() == 0);
+  assert(default_mask == 8);
+  for (const char* mode : {"rys", "block"}) {
+    setenv(lowering, mode, 1);
+    assert(prepare_direct_fock_rys_task_mask() == 0);
+    assert(prepare_direct_fock_rys_mask(true) == (std::strcmp(mode, "rys") == 0 ? 2 : 0));
+    assert(prepare_direct_fock_k_block_mask() == (std::strcmp(mode, "block") == 0 ? 4 : 0));
+  }
+  setenv(lowering, "rys-task", 1);
+  const auto task_mask = prepare_direct_fock_rys_task_mask();
+  assert(task_mask == 16);
+  assert(prepare_direct_fock_rys_mask(true) == 0);
+  assert(prepare_direct_fock_k_block_mask() == 0);
+  assert(direct_fock_streaming_launcher(0, 0, task_mask, 4) ==
+      generativeqc::scf::generated::launch_shell_class_rys_task_streaming_fock);
+  assert(direct_fock_streaming_launcher(0, 0, task_mask, 3) ==
+      generativeqc::scf::generated::launch_shell_class_streaming_fock);
+  setenv(lowering, "incumbent", 1);
+  assert(prepare_direct_fock_rys_task_mask() == 0);
+  assert(task_mask == 16);
 }
 """
     )

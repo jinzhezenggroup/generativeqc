@@ -17,6 +17,11 @@ architecture manifest; generated production CUDA remains a build artifact.
 
 ## Current pipeline
 
+The [task-parallel Direct Rys-K](direct_rys_tasks.md) variants use the same
+mathematical compiler with lane-local quartet ownership. Prepared target
+metadata defaults to five qualified `sm_120` classes; other classes/profiles
+retain the incumbent and explicit experiments remain independently selectable.
+
 `python/generativeqc_compiler/integral/ir.py` is now strictly mathematical, while
 `cuda_target.py` and `cuda_schedule.py` own NVIDIA execution policy:
 

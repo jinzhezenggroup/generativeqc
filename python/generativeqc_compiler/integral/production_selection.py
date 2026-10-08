@@ -18,7 +18,9 @@ from .specialize import specialize_integral_ir
 if TYPE_CHECKING:
     from .shell_spec import ShellClassSpec
 
-_SUPPORTED_RECURRENCES = frozenset(("subset_wick", "rys2", "rys3", "rys4", "rys5"))
+_SUPPORTED_RECURRENCES = frozenset(
+    ("subset_wick", "rys1", "rys2", "rys3", "rys4", "rys5")
+)
 
 
 def _supports_scalar_rys(
@@ -148,6 +150,8 @@ class KernelSelection:
             )
         if selected_integral.consumers != frozenset(self.consumers):
             raise ValueError("production consumers do not match the selection integral")
+        if self.recurrence == "rys1" and selected_integral.derivative is not None:
+            raise ValueError("production one-root Rys is a value-only quartet lowering")
         for field_name in (
             "runtime_seconds",
             "compile_seconds",

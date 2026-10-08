@@ -1,0 +1,258 @@
+{
+  "schema": "generativeqc.rys-task-cold-receipt.v1",
+  "base_revision": "4385f72751b829883407c01106186917c344317b",
+  "library_sha256": "7fe0cec3a72ceed6d35c65da69b909d30ca19a5e67dfc12e3cbb70b0189de030",
+  "device": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "official_profile": "sm_120",
+    "major": 12,
+    "minor": 0,
+    "warp_size": 32,
+    "maximum_threads_per_block": 1024,
+    "maximum_threads_per_sm": 1536,
+    "maximum_blocks_per_sm": 24,
+    "registers_per_sm": 65536,
+    "maximum_registers_per_thread": 255,
+    "sm_count": 170,
+    "shared_memory_per_block": 49152,
+    "shared_memory_per_block_optin": 101376,
+    "shared_memory_per_sm": 102400,
+    "runtime_version": 12090,
+    "driver_version": 13000,
+    "toolkit_version": 12090,
+    "release_build": 1,
+    "fast_compile": 0,
+    "portable": 0
+  },
+  "rys_task_classes": "psps,ppps,dsss,dpss,dsps",
+  "cohorts": {
+    "96-holdout": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 113.3010601401329,
+        "rys-task": 109.24525727331638
+      },
+      "mean_seconds": {
+        "incumbent": 116.66895104050636,
+        "rys-task": 109.23221504613757
+      },
+      "speedup": 1.037125665388562,
+      "sample_seconds": {
+        "incumbent": [
+          112.53794490173459,
+          112.72946569696069,
+          122.4312182739377,
+          122.34506618976593,
+          113.3010601401329
+        ],
+        "rys-task": [
+          109.15111983194947,
+          109.26532407104969,
+          109.2400381937623,
+          109.25933586061001,
+          109.24525727331638
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          17,
+          19,
+          19,
+          17
+        ],
+        "rys-task": [
+          17,
+          17,
+          17,
+          17,
+          17
+        ]
+      },
+      "max_energy_error": 9.094947017729282e-12,
+      "max_force_error": 3.7857106338634594e-11,
+      "time_reduction_percent": 3.579668947316317,
+      "slurm_job_id": "6644",
+      "cuda_visible_devices": "0"
+    },
+    "96-confirmation": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 113.48954321071506,
+        "rys-task": 109.48257065936923
+      },
+      "mean_seconds": {
+        "incumbent": 116.24220770224929,
+        "rys-task": 109.3693062911431
+      },
+      "speedup": 1.0365991822005407,
+      "sample_seconds": {
+        "incumbent": [
+          112.7084146104753,
+          113.48954321071506,
+          122.52866528555751
+        ],
+        "rys-task": [
+          109.48257065936923,
+          108.96873807534575,
+          109.65661013871431
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          17,
+          19
+        ],
+        "rys-task": [
+          17,
+          17,
+          17
+        ]
+      },
+      "max_energy_error": 8.185452315956354e-12,
+      "max_force_error": 3.786032598540601e-11,
+      "time_reduction_percent": 3.530697576168862,
+      "slurm_job_id": "6653",
+      "cuda_visible_devices": "0"
+    },
+    "48-holdout": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 51.19809355959296,
+        "rys-task": 48.740725226700306
+      },
+      "mean_seconds": {
+        "incumbent": 51.19631865620613,
+        "rys-task": 48.699103347957134
+      },
+      "speedup": 1.0504171474975612,
+      "sample_seconds": {
+        "incumbent": [
+          51.36441592872143,
+          51.19809355959296,
+          51.026446480304
+        ],
+        "rys-task": [
+          48.740725226700306,
+          48.47594226524234,
+          48.88064255192876
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          19,
+          19,
+          19
+        ],
+        "rys-task": [
+          19,
+          19,
+          19
+        ]
+      },
+      "max_energy_error": 7.275957614183426e-12,
+      "max_force_error": 1.6549872583482284e-11,
+      "time_reduction_percent": 4.799726243775759,
+      "slurm_job_id": "6646",
+      "cuda_visible_devices": "0"
+    }
+  },
+  "fixed_density_diagnostic_only": {
+    "atoms48": {
+      "1.0": {
+        "wall_median_seconds": {
+          "incumbent": 0.9596782177686691,
+          "rys": 1.6099532451480627,
+          "rys-task": 0.8257793541997671
+        },
+        "admitted_k": 23480495,
+        "max_oracle_error": 1.8843562730422748e-11
+      },
+      "0.001": {
+        "wall_median_seconds": {
+          "incumbent": 0.6840721666812897,
+          "rys": 1.0159786939620972,
+          "rys-task": 0.5847484413534403
+        },
+        "admitted_k": 13392379,
+        "max_oracle_error": 1.409095800111726e-11
+      },
+      "1e-06": {
+        "wall_median_seconds": {
+          "incumbent": 0.3449413515627384,
+          "rys": 0.45260548777878284,
+          "rys-task": 0.2907112520188093
+        },
+        "admitted_k": 4098050,
+        "max_oracle_error": 1.9093819130532096e-11
+      },
+      "1e-14": {
+        "wall_median_seconds": {
+          "incumbent": 0.0025177281349897385,
+          "rys": 0.049319880083203316,
+          "rys-task": 0.0024813245981931686
+        },
+        "admitted_k": 0,
+        "max_oracle_error": 9.815751235954548e-14
+      }
+    },
+    "atoms96": {
+      "1.0": {
+        "wall_median_seconds": {
+          "incumbent": 1.683337738737464,
+          "rys": 4.369086090475321,
+          "rys-task": 1.4568794090300798
+        },
+        "admitted_k": 81907624,
+        "max_oracle_error": 1.8901547366937787e-11
+      },
+      "0.001": {
+        "wall_median_seconds": {
+          "incumbent": 1.0569930467754602,
+          "rys": 2.7232052627950907,
+          "rys-task": 0.9169179610908031
+        },
+        "admitted_k": 39287938,
+        "max_oracle_error": 1.4206176816508598e-11
+      },
+      "1e-06": {
+        "wall_median_seconds": {
+          "incumbent": 0.44543385691940784,
+          "rys": 1.4774130508303642,
+          "rys-task": 0.38480751775205135
+        },
+        "admitted_k": 9476214,
+        "max_oracle_error": 1.9087040239828436e-11
+      },
+      "1e-14": {
+        "wall_median_seconds": {
+          "incumbent": 0.024232028052210808,
+          "rys": 0.8316708356142044,
+          "rys-task": 0.024070724844932556
+        },
+        "admitted_k": 0,
+        "max_oracle_error": 9.815751235220864e-14
+      }
+    }
+  },
+  "numerical_gates": {
+    "energy_ha": 1e-08,
+    "force_ha_per_bohr": 1e-07,
+    "matrix": 1e-08
+  },
+  "standalone_libcint_matrices": 384,
+  "integrated_inputs": 48,
+  "sanitizer_tests_per_tool": 64,
+  "ncu_status": "ERR_NVGPUCTRPERM: counter permission unavailable; no active-lane/barrier-stall attribution claim",
+  "artifacts": {
+    "reference-48.json": "9e83561bf44361aabd283c7b220131121adbe7a9df52759612c38cdf0cdf0212",
+    "validation.tar.gz": "3fa8a04ec66b93ec52a04dfb53cc8afb7c9fda8ec83d32d28e42c2b45175730b",
+    "README.md": "586f31cc2ff18c27e79442473a2cf3bccd46eaf083fa100475ff9caf04206f65",
+    "reference-96.json": "a0e24232d975e7ceae64e7a48b948a5fbac151c79e292fa15c6c0961c153f1c8",
+    "observations.tar.gz": "97fdac784f68091f448a073c1e4f1540d996e83958c504799769e110860620b8"
+  }
+}

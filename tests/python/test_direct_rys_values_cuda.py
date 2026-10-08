@@ -14,6 +14,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_rys_tasks import (
+    direct_rys_task_candidates,
+)
 from generativeqc_compiler.integral.production_rys_values import (
     direct_rys_value_candidates,
 )
@@ -22,7 +25,11 @@ from generativeqc_compiler.integral.production_rys_values import (
 # arithmetic fixtures as a production class allowlist.
 CLASSES = tuple(
     item.spec.name
-    for item in direct_rys_value_candidates(
+    for item in (
+        direct_rys_task_candidates
+        if os.environ.get("GENERATIVEQC_RYS_VALUE_FAMILY") == "task"
+        else direct_rys_value_candidates
+    )(
         resolve_production_profile(
             Path(__file__).resolve().parents[2]
             / "python/generativeqc_compiler/integral/production_shell_classes.json",
@@ -58,6 +65,7 @@ class ShellTask(ctypes.Structure):
 
 @pytest.fixture(
     scope="module",
+    ids=lambda case: "-".join(case),
     params=tuple(
         product(
             CLASSES,
@@ -90,10 +98,12 @@ def quartet_case(request: pytest.FixtureRequest) -> tuple:
 
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("consumer", ("combined", "j", "k", "hf-k"))
+@pytest.mark.parametrize("task_count", (1, 33, 129))
 def test_value_rys_fixed_density_matrices_match_libcint(
     quartet_case: tuple,
     unrestricted: bool,
     consumer: str,
+    task_count: int,
 ) -> None:
     """Execute one fused queue task, including empty CTA and component tails."""
     import cupy as cp
@@ -116,7 +126,7 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         fixture.reversed_mask | {"combined": 0, "j": 4, "k": 8, "hf-k": 12}[consumer]
     )
     arrays = [
-        cp.asarray(np.frombuffer(bytes(task), dtype=np.uint8)),
+        cp.asarray(np.frombuffer(bytes(task) * task_count, dtype=np.uint8)),
         cp.asarray([0], dtype=cp.uint32),
         cp.asarray([0, fixture.pair_split, len(fixture.pairs)], dtype=cp.int64),
         cp.asarray(fixture.pairs),
@@ -126,7 +136,8 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     density = fixture.spin_density if unrestricted else fixture.density[None]
     device_density = cp.asarray(np.concatenate([d.ravel(order="F") for d in density]))
     output = cp.zeros(device_density.size, dtype=cp.float64)
-    count, head = cp.asarray([1], dtype=cp.uint32), cp.zeros(1, dtype=cp.uint32)
+    count = cp.asarray([task_count], dtype=cp.uint32)
+    head = cp.zeros(1, dtype=cp.uint32)
     library = ctypes.CDLL(os.environ["GENERATIVEQC_RYS_VALUE_LIBRARY"])
     launch = getattr(library, f"generativeqc_launch_generated_{name}_fock")
     pointer = ctypes.c_void_p
@@ -170,4 +181,4 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         if consumer == "j"
         else j[None] - (1.0 if unrestricted else 0.5) * k
     )
-    np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=2e-10)
+    np.testing.assert_allclose(actual, task_count * expected, atol=2e-11, rtol=2e-10)

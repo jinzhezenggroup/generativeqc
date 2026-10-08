@@ -507,18 +507,50 @@
     ]
   ],
   "artifacts": {
-    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "da7d8d522bdb004ee786b7494458f39656cfa9d54ed8d1b26904e8b88a0faa5b",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c8b96762479a945189cdc0add5abf0e7e657d5ac8c074297dc074e6a563d9a5d",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "977ed001cda8f1ad24835833fe09b96c07facd2110771fd38688dd9b2bcc510c",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "a16724489de7e99f32d9907dd9575011dbce46110a65dd6d2effc78edd2cadf5",
+    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
+    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
+    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
+    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "11d7f105ec3acc3bea4d1a0fd2353d134d00a89c0747ca9908721051d0b9ffcf",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "a4d5f8026bc2a425830cf4cd2acf78fe96b769aa92903eb41df7558ac7112f8f",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "e585be639807c0404d71bb13eea95539967b40eef493fb7ed9100d55104647fe",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "c9024067a5f1c6051a90794606a725aca182ed43a767b7dd7b03ee2039857243",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
-    "generativeqc_generated_shell_registry.cu": "b85e51c3080ebb4c62f090fcfaca4d8cd2a697d60a29f79b29c5d1914efd7ebc"
+    "generativeqc_generated_shell_registry.cu": "3926954a18600d3941a1dc32ca7010de1dc126bd2c81530ded2ddf24e5e64837"
+  },
+  "retained_source_baseline_revision": "4385f72751b829883407c01106186917c344317b",
+  "retained_sources": {
+    "sm_120": "f8d46946e53486fab54ad5560a3c3011f7bedc9d15762b45977e9281e3c90111",
+    "sm_120_rys_value": "7bbc06523c20043a89826ca4c85d50e0f4fc569c074047fd69282b6a7b5fc7e5",
+    "sm_120_k_block": "ed0c79cd23b1abca00238ab95cc0d3bbbbfc1a1f3bb74e2fd8c12adf2ebb1696",
+    "sm_90": "0246798cc90e49839b56c0b598f24f5c73b9093f8a74cd4e8fafe86b7ae608cf",
+    "sm_90_rys_value": "a36a0cdedd84070ba23a422f7f0aed3657b6e2c9a859430307c0bccfa5a84072",
+    "sm_90_k_block": "b9e2568163513ebd365b6d2439428e77f67158426703e780008c21e1bc513a74"
   },
   "artifact_corrections": [
+    {
+      "task": "rys-task-four-independent-warps-20261008",
+      "integrated_base_revision": "4385f72751b829883407c01106186917c344317b",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu"
+      ],
+      "reason": "Expand only task-parallel Rys candidates to 128 threads with four independently retiring 32-lane warp queues. Scalar per-quartet geometry, roots and recurrence are unchanged; packed ordinary/persistent entry points use the actual task width and lane-private storage. Streaming bra cursors, survivor queues and warp barriers are isolated per warp while sharing the existing global bra head, screening and counters. Regeneration changes only sm_120 shards 0/1/2, which contain the task candidates; the empty task section in shard 3 is unchanged. Registry/header, portable shards, manifest, catalog, and separately pinned incumbent/old-Rys/old-K-block mathematics are unchanged. Numerical, sanitizer, admission-count and complete-endpoint qualification are independent gates; the expanded schedule alone is not a performance claim."
+    },
+    {
+      "task": "rys-task-default-five-20261008",
+      "integrated_base_revision": "4385f72751b829883407c01106186917c344317b",
+      "paths": [
+        "generativeqc_generated_shell_registry.cu"
+      ],
+      "reason": "Promote only the five measured sm_120 Rys task classes in separate target dispatch metadata. Registry source adds the preferred mask and getter intersected with enabled capability/coverage. Full regenerated bundles prove every mathematical shard (including task variants), registry header, manifest and catalog unchanged relative to the qualified opt-in implementation. Separate retained-source hashes continue to pin incumbent, old Rys and old K-block mathematics. Other target/portable preferences remain zero; explicit incumbent rolls back the default. Complete unset-selector endpoint and independent oracle receipts accompany this dispatch-identity change."
+    },
+    {
+      "task": "rys-task-cold96-20261008",
+      "base_revision": "4385f72751b829883407c01106186917c344317b",
+      "reason": "Add independent opt-in _rys_task AOT variants and their prepared registry/filter. All four sm_120 shards gain candidate source; empty portable shards gain the empty variant comment. Registry source gains the optional mask and launcher, but the registry header, manifest, catalog and public generator ABI remain unchanged. Independent regeneration of the frozen base reproduces the prior full-bundle fixture. Separate retained-source hashes prove that every incumbent, old Rys-value and old K-block profile shard remains byte-identical to that base. Updating these bundle hashes does not promote the candidate or change the default mathematics."
+    },
     {
       "issue": 888,
       "source_revision": "2cf3dec31100b0cda0b5267dc4364f75ccad9682",
