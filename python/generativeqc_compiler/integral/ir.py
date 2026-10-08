@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
+from typing import cast
 
 from .blocks import RawBlock, SecondDerivative, WeightedDerivative
 from .range_separation import CoulombKernel, CoulombKernelFamily
@@ -105,7 +106,7 @@ class NuclearCoordinates:
     def resolve(self, operator_centers: tuple[int, ...]) -> tuple[int, ...]:
         """Resolve this parameter selection against an operator inventory."""
 
-        selected = operator_centers if self.centers == "all" else self.centers
+        selected = self.centers if isinstance(self.centers, tuple) else operator_centers
         if not set(selected) <= set(operator_centers):
             raise ValueError("derivative parameters are not centers of the operator")
         return tuple(selected)
@@ -213,7 +214,10 @@ class EcpCenter:
     def __post_init__(self) -> None:
         checked_index(self.center, "ECP center")
         object.__setattr__(self, "terms", tuple(self.terms))
-        if not self.terms or any(not isinstance(t, EcpRadialTerm) for t in self.terms):
+        if not self.terms or any(
+            not isinstance(t, EcpRadialTerm)
+            for t in cast(tuple[object, ...], self.terms)
+        ):
             raise ValueError("ECP center requires explicit scalar Gaussian terms")
 
 
@@ -449,7 +453,7 @@ def four_center_eri_operator(kernel: CoulombKernel | None = None) -> OperatorSpe
         CoulombKernelFamily.FULL_RANGE: OperatorFamily.FOUR_CENTER_ERI,
         CoulombKernelFamily.LONG_RANGE: OperatorFamily.LONG_RANGE_ERI,
         CoulombKernelFamily.SHORT_RANGE: OperatorFamily.SHORT_RANGE_ERI,
-    }[kernel.family]
+    }[CoulombKernelFamily(kernel.family)]
     return OperatorSpec(
         family, (0, 1, 2, 3), (TranslationInvariant(),), omega=kernel.omega
     )
@@ -497,7 +501,7 @@ class IntegralIR:
             not isinstance(
                 c, (ContractionSpec, RawBlock, WeightedDerivative, SecondDerivative)
             )
-            for c in self.contractions
+            for c in cast(tuple[object, ...], self.contractions)
         ):
             raise TypeError(
                 "integral consumers must use a declared contraction contract"
@@ -640,7 +644,7 @@ class IntegralIR:
             selected = int(self.recurrence.removeprefix("rys"))
             if selected != required:
                 raise ValueError(
-                    f"{getattr(self.spec, 'name', self.operator.family.value)} lowering requires rys{required}, "
+                    f"{getattr(self.spec, 'name', OperatorFamily(self.operator.family).value)} lowering requires rys{required}, "
                     f"not {self.recurrence}"
                 )
 
@@ -680,6 +684,8 @@ class IntegralIR:
         if raw:
             component_shape = layout.shape[len(shape) :]
         else:
+            if consumer.weights is None:
+                raise ValueError("weighted second derivative requires weights")
             if consumer.weights.layout.indices != signature.tensor_indices:
                 raise ValueError(
                     "second derivative weights must follow the shell tensor axes"
