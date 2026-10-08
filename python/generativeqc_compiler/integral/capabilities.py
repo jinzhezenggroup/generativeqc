@@ -570,7 +570,7 @@ def build_capability_report(
                 recurrences=recurrence_rows,
                 force_derivative_orders=derivative_rows,
                 production=production_row,
-            ).to_payload()
+            )
         )
     manifest_label = None
     if manifest is not None:
