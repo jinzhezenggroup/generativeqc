@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "src/xtb/native/src"
 CONSUMERS = (
-    "model/gfn2/eigensolver.cpp",
+    ROOT / "src/methods/gfn2_electronic_update.cpp",
+    ROOT / "src/solver/cpu/prepared_spectral.cpp",
     "model/gfn2/scc_driver.cpp",
     "model/gfn2/d4.cpp",
     "backends/cuda/gfn2_scc_setup_eigensolver.cu",
@@ -25,7 +26,7 @@ CONSUMERS = (
 
 
 @pytest.mark.parametrize("path", CONSUMERS)
-def test_runtime_planners_use_shared_checked_sizes(path: str) -> None:
+def test_runtime_planners_use_shared_checked_sizes(path: str | Path) -> None:
     source = (NATIVE / path).read_text()
     assert '#include "runtime/bounded_workspace.hpp"' in source
     assert "using ::generativeqc::runtime::checked_multiply;" in source

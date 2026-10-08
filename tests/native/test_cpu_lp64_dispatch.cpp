@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "model/gfn2/eigensolver.cpp"
+#include "methods/gfn2_electronic_update.cpp"
 #include "scf/solver/cpu_target_eigen.hpp"
 namespace cpu = generativeqc::tensor::cpu;
 namespace eigen = generativeqc::solver::cpu;
@@ -132,6 +132,62 @@ static cpu::CpuLinearAlgebraBackend backend() {
   preflight = false;
   return result;
 }
+static void prepare_ragged_plan(gfn::EigensolverPlanData& plan, void* memory, std::size_t bytes,
+                                gfn::EigensolverOverlapCache& cache) {
+  const std::int64_t offsets[]{0, 2, 7};
+  std::string error;
+  require(eigen::prepare_spectral_plan(
+              offsets, 3, 1e-12,
+              {GENERATIVEQC_XTB_STATUS_SUCCESS, GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED},
+              plan.spectral, error) == eigen::SpectralResult::success,
+          "prepared ragged n2/N5 spectral plan");
+  eigen::SpectralOverlapCache bound;
+  require(eigen::bind_spectral_overlap_cache(plan.spectral, memory, bytes, bound, error) ==
+              eigen::SpectralResult::success,
+          "canonical shared cache binding");
+  cache = {bound.workspace_base, bound.workspace_size_bytes,
+           bound.factors,        bound.generations,
+           bound.statuses,       &plan};
+  cache.geometry_generations[0] = 1;
+  cache.system_statuses[0] = GENERATIVEQC_XTB_STATUS_SUCCESS;
+  plan.spin_channels = {1, 1};
+  plan.alpha_electron_counts = {0., 0.};
+  plan.beta_electron_counts = {0., 0.};
+  for (auto& field : plan.wavefunction_fields) field.system_offsets = {0, 4, 29};
+  plan.wavefunction_fields[1].system_offsets = {0, 2, 7};
+  plan.wavefunction_fields[2].system_offsets = {0, 4, 14};
+}
+static gfn::NumericalResult solve_small_system(const cpu::CpuLinearAlgebraBackend& provider,
+                                               const gfn::EigensolverPlanData& plan,
+                                               const gfn::EigensolverOverlapCache& cache,
+                                               const double* h, double* a, double* values,
+                                               double* work, std::int32_t* iw) {
+  // Exercise the real method's shared-spectrum call and status mapping, retaining
+  // independently borrowed matrix/value/LAPACK buffers for the ABI trace.
+  double occupations[4]{}, densities[4]{}, weighted_densities[4]{};
+  double staged_coefficients[4]{}, staged_values[2]{}, staged_occupations[4]{};
+  double staged_densities[4]{}, staged_weighted_densities[4]{};
+  double potentials[4]{}, entropies[2]{}, bands[2]{}, free_energies[2]{};
+  std::int32_t statuses[2]{};
+  gfn::EigensolverWorkspace scratch;
+  scratch.coefficients = a;
+  scratch.eigenvalues = values;
+  scratch.occupations = occupations;
+  scratch.densities = densities;
+  scratch.energy_weighted_densities = weighted_densities;
+  scratch.lapack_work = work;
+  scratch.lapack_integer_work = iw;
+  gfn::EigensolverWavefunctionView output;
+  output.coefficients = staged_coefficients;
+  output.eigenvalues = staged_values;
+  output.occupations = staged_occupations;
+  output.density = staged_densities;
+  output.energy_weighted_density = staged_weighted_densities;
+  const gfn::EigensolverThermodynamicsView thermodynamics{
+      statuses, 2, potentials, 4, entropies, 2, bands, 2, free_energies, 2};
+  return gfn::solve_system_unchecked(plan, 0, cache, 1, h, 0., provider, scratch, output,
+                                     thermodynamics);
+}
 static void test_dispatch() {
   auto provider = backend();
   alignas(64) double a[4]{}, values[2]{}, factor[4]{1, 0, 0, 1}, work[81]{};
@@ -150,10 +206,11 @@ static void test_dispatch() {
             "DPOCON raw status mapping");
   }
   gfn::EigensolverPlanData plan;
-  require(eigen::prepare_borrowed_symmetric_eigen(5, plan.symmetric_eigen), "prepared N=5");
-  gfn::EigensolverWorkspace scratch;
-  scratch.lapack_work = work;
-  scratch.lapack_integer_work = iw;
+  alignas(64) std::byte cache_memory[512]{};
+  gfn::EigensolverOverlapCache cache;
+  prepare_ragged_plan(plan, cache_memory, sizeof(cache_memory), cache);
+  std::copy_n(factor, 4, cache.cholesky_factors);
+  expected_factor = cache.cholesky_factors;
   const double h[]{2, 1, 1, 2};
   for (int info : {0, -7, 4}) {
     stage = eigen_calls = set_calls = 0;
@@ -162,7 +219,7 @@ static void test_dispatch() {
     gfn::NumericalResult result;
     {
       cpu::ScopedSequentialBlas scope(provider);
-      result = gfn::solve_one_spin(provider, plan, 2, factor, h, a, values, scratch);
+      result = solve_small_system(provider, plan, cache, h, a, values, work, iw);
     }
     forbid_allocation = false;
     require(eigen_calls == 1 && set_calls == 2 && thread_count == 17, "nested scope or retry");
@@ -220,15 +277,15 @@ static void test_real() {
   require(gfn::make_mkl_rt_lp64_backend(provider, error) == 0, error.c_str());
   require(provider.production(), "real oracle did not use admitted production provider");
   gfn::EigensolverPlanData plan;
-  require(eigen::prepare_borrowed_symmetric_eigen(5, plan.symmetric_eigen), "real N=5 plan");
+  alignas(64) std::byte cache_memory[512]{};
+  gfn::EigensolverOverlapCache cache;
+  prepare_ragged_plan(plan, cache_memory, sizeof(cache_memory), cache);
   double h[]{8, 10, 10, 26}, s[]{4, 2, 2, 10}, factor[]{2, 1, 0, 3}, a[4]{}, w[2]{}, work[81]{};
   std::int32_t iw[28]{};
-  gfn::EigensolverWorkspace scratch;
-  scratch.lapack_work = work;
-  scratch.lapack_integer_work = iw;
+  std::copy_n(factor, 4, cache.cholesky_factors);
   {
     cpu::ScopedSequentialBlas scope(provider);
-    require(gfn::solve_one_spin(provider, plan, 2, factor, h, a, w, scratch) ==
+    require(solve_small_system(provider, plan, cache, h, a, w, work, iw) ==
                 gfn::NumericalResult::kSuccess,
             "actual GFN production provider solve failed");
   }

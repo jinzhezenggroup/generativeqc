@@ -1,0 +1,87 @@
+{
+  "commit": "5c02b1ba3c69fbee712697565dcb79da6b768606",
+  "sources": {
+    "tests/native/fixtures/cpu_lp64/mock_provider.cpp": {
+      "fixture": "tests/native/fixtures/cpu_lp64/mock_provider.cpp",
+      "sha256": "a8756887c325e607000ea2b749f94e3c0a20f1c18fc260c86adb043d40a9108c"
+    },
+    "src/tensor/cpu/lp64_provider.cpp": {
+      "fixture": "tensor/cpu/lp64_provider.cpp",
+      "sha256": "dec2cd4665e30818f3e8483e3fc5d1ede66c958719f825f544c498cd54f6cf39"
+    },
+    "src/tensor/cpu/lp64_provider.hpp": {
+      "fixture": "tensor/cpu/lp64_provider.hpp",
+      "sha256": "3aedc741be5832e02d298dfe7b74c1e001ccb0b589dcd594cbcc3a288ebf54fd"
+    },
+    "src/tensor/cpu/lp64_abi.hpp": {
+      "fixture": "tensor/cpu/lp64_abi.hpp",
+      "sha256": "85e477c3d53c1ef6e0d159964a2aa73fb3f4dc02e0e13524ecbb14a14d8b1479"
+    },
+    "src/xtb/native/src/model/gfn2/eigensolver.cpp": {
+      "fixture": "model/gfn2/eigensolver.cpp",
+      "sha256": "e3f92809f61624cd616433e3093b261fc98987beee9f1f16458d05b222741a2d"
+    },
+    "src/solver/cpu/generalized_eigen.hpp": {
+      "fixture": "solver/cpu/generalized_eigen.hpp",
+      "sha256": "6775ea730def264c21d3ebc11fb61413afd7e2f366ba809093515f11b3444bdd"
+    },
+    "src/tensor/cpu_linalg.hpp": {
+      "fixture": "tensor/cpu_linalg.hpp",
+      "sha256": "1148154216f4e58f9eae75f7bd5ef9dc960ccfed857dce6040273f58e0df7b67"
+    },
+    "src/solver/generalized_eigen.hpp": {
+      "fixture": "solver/generalized_eigen.hpp",
+      "sha256": "932fcf044125d34078e114f3e0cc89965783e88bb2a04eed6532b11ddf01f8c8"
+    },
+    "src/solver/cpu/symmetric_eigen.hpp": {
+      "fixture": "solver/cpu/symmetric_eigen.hpp",
+      "sha256": "076af78676165533f764605ff535c740c71ca6795f5b9847277faba1a4a23508"
+    },
+    "src/tensor/weighted_gram.hpp": {
+      "fixture": "tensor/weighted_gram.hpp",
+      "sha256": "f50200cca625a4b7db1a4f12e26461a22703389b4f76c31ed3d6b212ec4fb191"
+    },
+    "src/xtb/native/src/model/gfn2/occupation_binary64_policy.hpp": {
+      "fixture": "model/gfn2/occupation_binary64_policy.hpp",
+      "sha256": "f4dac413402e03b789838b5cf62f937660a0d936bee23babf7801c127bde68a2"
+    },
+    "src/xtb/native/src/model/gfn2/eigensolver.hpp": {
+      "fixture": "model/gfn2/eigensolver.hpp",
+      "sha256": "1a7a70db0b817396c00182bd7d788ed55ffb8de7b171f70839c6535eaeaac429"
+    },
+    "src/xtb/native/src/runtime/types.hpp": {
+      "fixture": "runtime/types.hpp",
+      "sha256": "d056d48f30b2912c499de63e1018b4aef3d3ef0bb1daeedfcf87cb34c45dc8af"
+    },
+    "src/xtb/native/src/model/gfn2/wavefunction.hpp": {
+      "fixture": "model/gfn2/wavefunction.hpp",
+      "sha256": "e78bd15532a2b34076f32fd846b75092c8e72f73fee46ec01e8a6ce82758464d"
+    },
+    "src/xtb/native/src/model/gfn2/basis.hpp": {
+      "fixture": "model/gfn2/basis.hpp",
+      "sha256": "00ff8e0844002a757d526c54558322ff8c9beba1d99f49dd8157452c3d190097"
+    },
+    "src/xtb/native/src/model/common/basis.hpp": {
+      "fixture": "model/common/basis.hpp",
+      "sha256": "7d4c3a36eee934df808b1188b1e7362b11c6bf1c98528773c21ea802cd4063e2"
+    },
+    "src/runtime/bounded_workspace.hpp": {
+      "fixture": "runtime/bounded_workspace.hpp",
+      "sha256": "08031b2686b7916e7e059633247771879ed549e266d9e632780b09f74ed4ff69"
+    },
+    "src/tensor/cpu_linalg.cpp": {
+      "fixture": "tensor/cpu_linalg.cpp",
+      "sha256": "8617cbea7204d809b07ba8d6778afe55172aaff312b04321349ab7f9f410bffc"
+    }
+  },
+  "generated": {
+    "generated_weighted_gram_native.hpp": {
+      "generator": "tools/generate_weighted_gram_native.py",
+      "commit": "5c02b1ba3c69fbee712697565dcb79da6b768606",
+      "sha256": "2df9ee53aee9ccc07cc80a4d0cc12ec975b7480249dfd3deda16e407e76e14a9"
+    }
+  },
+  "omitted_conditional_headers": {
+    "runtime/mkl_pthread_tss_bridge.h": "Not included without GENERATIVEQC_XTB_CONFIGURED_CPU_LINALG_SHIM; the harness uses internal-test provider admission."
+  }
+}

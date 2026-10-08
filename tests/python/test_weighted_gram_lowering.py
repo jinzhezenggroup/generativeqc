@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 import subprocess
 from dataclasses import replace
@@ -237,16 +238,41 @@ def test_generated_paired_loop_against_independent_order_and_math_oracles(
 
 
 def test_cpu_arena_planning_and_bindings_are_unchanged() -> None:
-    source = (ROOT / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
-    begin = source.index(
-        "    const std::size_t maximum = static_cast<std::size_t>(created.maximum_orbitals);"
+    source = (ROOT / "src/methods/gfn2_electronic_update.cpp").read_text()
+    shared = (ROOT / "src/solver/cpu/prepared_spectral.cpp").read_text()
+    assert "created.spectral.maximum_order()" in source
+    assert "cpu_eigen::bind_spectral_overlap_cache(" in source
+    # Preserve the pre-extraction worker/staging packing and borrowed bindings.
+    # Only metadata access spelling and whitespace change with the shared owner;
+    # these two fingerprints still derive from the reviewed pre-extraction body.
+    canonical = source.replace(
+        "created.spectral.symmetric_eigen()", "created.symmetric_eigen"
+    ).replace(
+        "created.spectral.total_matrix_elements()", "created.total_matrix_elements"
     )
-    end = source.index("generativeqc_xtb_status_t factor_overlap_cpu(", begin)
-    # Shared prepared-eigen metadata now supplies the same maximum-order work
-    # counts; retain the reviewed arena planning and binding body as the guard.
+    for begin, end, expected in (
+        (
+            "    std::size_t two_matrices = 0u;",
+            "generativeqc_xtb_status_t bind_eigensolver_overlap_cache(",
+            "869d66fd179c2a577148a0d2c6b3e092065236e25099b7ab85137cc55a8cdd82",
+        ),
+        (
+            "generativeqc_xtb_status_t bind_eigensolver_workspace(",
+            "generativeqc_xtb_status_t factor_overlap_cpu(",
+            "3520078981070419e7f0adf052dc46809af2133a3bb1a99fae58ee3b95c0b665",
+        ),
+    ):
+        body = canonical[canonical.index(begin) : canonical.index(end)]
+        assert hashlib.sha256(re.sub(r"\s+", "", body).encode()).hexdigest() == expected
+    # Cache packing, initialization and binding have moved to the shared owner.
+    # Freeze that complete region too, including its alignment and overlap guards.
+    begin = shared.index(
+        "    std::size_t factor_bytes = 0, generation_bytes = 0, status_bytes = 0;"
+    )
+    end = shared.index("SpectralResult validate_spectral_overlap_cache(", begin)
     assert (
-        hashlib.sha256(source[begin:end].encode()).hexdigest()
-        == "cff9a47ed1f0005f9163f0f469e1fd794cae259ff7ed1f58140fb3fd3c9c050e"
+        hashlib.sha256(re.sub(r"\s+", "", shared[begin:end]).encode()).hexdigest()
+        == "72b199de936d4c9b9acb24ef206bc15bf7c710c071013228fa5b1a572e6d9735"
     )
 
 

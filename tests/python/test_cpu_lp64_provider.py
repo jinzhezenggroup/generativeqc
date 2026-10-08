@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parents[2]
 PROVIDER = ROOT / "src/tensor/cpu/lp64_provider.cpp"
-GFN = ROOT / "src/xtb/native/src/model/gfn2/eigensolver.cpp"
+GFN = ROOT / "src/methods/gfn2_electronic_update.cpp"
+SPECTRAL = ROOT / "src/solver/cpu/prepared_spectral.cpp"
 LoaderBuilds = tuple[dict[str, Path], dict[str, tuple[Path, bool]]]
 
 
@@ -66,7 +67,7 @@ def loader_builds(
         # The real method TU must link and map statuses without owning the loader.
         objects = []
         for index, source in enumerate(
-            (ROOT / "tests/native/test_cpu_lp64_loader.cpp", GFN, PROVIDER)
+            (ROOT / "tests/native/test_cpu_lp64_loader.cpp", GFN, SPECTRAL, PROVIDER)
         ):
             obj = destination / f"{index}.o"
             required_native_cxx.compile_object(
@@ -203,6 +204,7 @@ def test_private_cohort_isolation_and_no_fallback(
 
 def test_no_method_owned_loader_or_raw_unwrapping() -> None:
     source = GFN.read_text()
+    spectral = SPECTRAL.read_text()
     for retired in (
         "CpuLinearAlgebraAccess",
         "load_lapacke_cblas_symbols",
@@ -215,14 +217,36 @@ def test_no_method_owned_loader_or_raw_unwrapping() -> None:
         "class CpuLinearAlgebraBackend",
     ):
         assert retired not in source
+        assert retired not in spectral
     assert "cpu_provider::bind_gemm(backend)" in source
-    assert "cpu_provider::bind_symmetric_eigen(backend)" in source
-    assert "cpu_provider::cholesky_lower(" in source
-    assert "cpu_provider::reciprocal_condition_lower(" in source
-    assert "cpu_provider::solve_lower_triangular(" not in source
-    assert "solver/cpu/generalized_eigen.hpp" in source
-    assert "reduce_generalized_eigen(basis, lowering)" in source
-    assert "recover_generalized_eigen(basis, lowering)" in source
+    assert '#include "solver/cpu/prepared_spectral.hpp"' in source
+    assert "cpu_eigen::prepare_spectral_plan(" in source
+    assert "cpu_eigen::admit_spectral_matrices(" in source
+    assert "cpu_eigen::factor_admitted_spectral_overlaps(" in source
+    assert "cpu_eigen::solve_admitted_spectrum(" in source
+    assert "cpu_eigen::factor_spectral_overlaps(" not in source
+    # Private unchecked probes retain the convenience solve as their default;
+    # production passes the matrix admission prepared outside its BLAS scope.
+    assert "cpu_eigen::solve_prepared_spectrum(" in source
+    for primitive in (
+        "bind_symmetric_eigen(backend)",
+        "cholesky_lower(",
+        "reciprocal_condition_lower(",
+        "reduce_generalized_eigen(basis, lowering)",
+        "recover_generalized_eigen(basis, lowering)",
+    ):
+        assert primitive not in source
+        assert primitive in spectral
+    assert "solve_lower_triangular(" not in source
+    assert '#include "solver/cpu/generalized_eigen.hpp"' in spectral
+    for method in (
+        "generativeqc_xtb_status_t",
+        "compute_occupations",
+        "EigensolverPlan",
+        "Wavefunction",
+        "commit_batch_solve_results",
+    ):
+        assert method not in spectral
     public_header = (PROVIDER.with_suffix(".hpp")).read_text()
     assert "struct CpuLinearAlgebraAccess {" not in public_header
     assert "friend struct CpuLinearAlgebraAccess;" in public_header
@@ -281,6 +305,7 @@ def test_cpu_bindings_are_not_gpu_consumers() -> None:
             for header in (
                 "tensor/cpu/lp64_provider.hpp",
                 "solver/cpu/symmetric_eigen.hpp",
+                "solver/cpu/prepared_spectral.hpp",
                 "tensor/weighted_gram.hpp",
             ):
                 assert f'#include "{header}"' not in source, path
@@ -338,6 +363,7 @@ def dispatch_probe(
     ]
     sources = [
         ROOT / "tests/native/test_cpu_lp64_dispatch.cpp",
+        SPECTRAL,
         PROVIDER,
         ROOT / "src/tensor/cpu_linalg.cpp",
         ROOT / "src/scf/solver/cpu_target_eigen.cpp",
