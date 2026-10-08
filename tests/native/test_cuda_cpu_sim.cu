@@ -22,8 +22,7 @@ void check(cudaError_t status, const char* operation) {
     throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(status));
 }
 
-__global__ void scatter(const double* values, std::size_t count, double* sum,
-                        double* correction) {
+__global__ void scatter(const double* values, std::size_t count, double* sum, double* correction) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += std::size_t(blockDim.x) * gridDim.x)
     generativeqc::runtime::atomicAdd({sum, correction}, values[i]);
@@ -36,8 +35,8 @@ std::array<double, 2> execute(const std::vector<double>& values, unsigned blocks
   try {
     check(cudaMalloc(&input, values.size() * sizeof(double)), "cudaMalloc input");
     check(cudaMalloc(&accumulators, 2 * sizeof(double)), "cudaMalloc accumulators");
-    check(cudaMemcpy(input, values.data(), values.size() * sizeof(double),
-                     cudaMemcpyHostToDevice), "cudaMemcpy input");
+    check(cudaMemcpy(input, values.data(), values.size() * sizeof(double), cudaMemcpyHostToDevice),
+          "cudaMemcpy input");
     check(cudaMemset(accumulators, 0, 2 * sizeof(double)), "cudaMemset accumulators");
     scatter<<<blocks, threads>>>(input, values.size(), accumulators, accumulators + 1);
     check(cudaGetLastError(), "scatter launch");
@@ -93,12 +92,12 @@ int main() {
       }
     }
 
-    const auto nonfinite = execute({std::numeric_limits<double>::infinity(),
-                                    std::numeric_limits<double>::infinity()},
-                                   1, 32);
+    const auto nonfinite = execute(
+        {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()}, 1, 32);
     if (std::isfinite(nonfinite[0] + nonfinite[1]))
       throw std::runtime_error("nonfinite FP64 atomic result was hidden");
-    std::puts("CPU-simulated CUDA: 6 compensated-atomic cancellation cases and nonfinite gate passed");
+    std::puts(
+        "CPU-simulated CUDA: 6 compensated-atomic cancellation cases and nonfinite gate passed");
     return 0;
   } catch (const std::exception& error) {
     std::fprintf(stderr, "CPU-simulated CUDA smoke failed: %s\n", error.what());
