@@ -331,6 +331,7 @@ def test_mean_keeps_tensorir_autodiff_and_scientific_guards() -> None:
     with pytest.raises(TypeError, match="scientifically annotated"):
         xp.reciprocal(annotated)
 
+
 def test_asarray_rejects_implicit_external_device_transfer() -> None:
     class External:
         def __dlpack_device__(self) -> tuple[int, int]:
