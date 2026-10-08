@@ -121,9 +121,7 @@ def ones(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
     return full(shape, 1, dtype=dtype)
 
 
-def full_like(
-    x: object, fill_value: object, *, dtype: str | None = None
-) -> VibeArray:
+def full_like(x: object, fill_value: object, *, dtype: str | None = None) -> VibeArray:
     """Create a generic constant with the same shape/dtype, not a QC relabeling."""
     value = _array(x)
     if not _is_generic_array(value):
@@ -131,9 +129,7 @@ def full_like(
             "full_like for scientifically annotated arrays requires explicit "
             "TensorIR index and representation metadata"
         )
-    return full(
-        value.shape, fill_value, dtype=value.dtype if dtype is None else dtype
-    )
+    return full(value.shape, fill_value, dtype=value.dtype if dtype is None else dtype)
 
 
 def zeros_like(x: object, *, dtype: str | None = None) -> VibeArray:

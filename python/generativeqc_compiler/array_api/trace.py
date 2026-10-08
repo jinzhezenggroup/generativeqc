@@ -13,8 +13,9 @@ from generativeqc_compiler.tensor.types import TensorSpec
 from .array import VibeArray
 from .capabilities import FRONTEND_VERSION
 
-
-_CAPTURE_ACTIVE: ContextVar[bool] = ContextVar("generativeqc_array_capture", default=False)
+_CAPTURE_ACTIVE: ContextVar[bool] = ContextVar(
+    "generativeqc_array_capture", default=False
+)
 
 
 def active_capture() -> bool:

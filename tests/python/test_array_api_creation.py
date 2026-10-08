@@ -6,7 +6,6 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
 from generativeqc_compiler.array_api.trace import active_capture
@@ -48,10 +47,14 @@ def test_uniform_and_like_creation_are_captured_as_tensorir(dtype: object) -> No
     np.testing.assert_array_equal(result, expected)
     lowered = expression.lower(values)
     assert isinstance(lowered, xp.Program)
-    assert any(node.op == "broadcast" and not node.spec.differentiable
-               for node in lowered.nodes)
-    assert all(node.op in {"input", "constant", "broadcast", "add", "multiply", "reshape"}
-               for node in lowered.nodes)
+    assert any(
+        node.op == "broadcast" and not node.spec.differentiable
+        for node in lowered.nodes
+    )
+    assert all(
+        node.op in {"input", "constant", "broadcast", "add", "multiply", "reshape"}
+        for node in lowered.nodes
+    )
 
 
 def test_uniform_constant_is_one_scalar_payload_without_n_squared_expansion() -> None:

@@ -453,15 +453,11 @@ def full_like(
     return _eager_compute(np.full_like, array, float(factor), dtype=np.dtype(name))
 
 
-def zeros_like(
-    x: object, *, dtype: object = None, device: object = None
-) -> typing.Any:
+def zeros_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
     return full_like(x, 0, dtype=dtype, device=device)
 
 
-def ones_like(
-    x: object, *, dtype: object = None, device: object = None
-) -> typing.Any:
+def ones_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
     return full_like(x, 1, dtype=dtype, device=device)
 
 
@@ -656,6 +652,8 @@ __all__ = [
     "exp",
     "float32",
     "float64",
+    "full",
+    "full_like",
     "import_dlpack",
     "input_array",
     "log",
@@ -663,6 +661,8 @@ __all__ = [
     "matrix_transpose",
     "multiply",
     "negative",
+    "ones",
+    "ones_like",
     "permute_dims",
     "pow",
     "reshape",
@@ -671,11 +671,7 @@ __all__ = [
     "subtract",
     "sum",
     "take",
-    "full",
-    "full_like",
-    "ones",
-    "ones_like",
+    "trace",
     "zeros",
     "zeros_like",
-    "trace",
 ]
