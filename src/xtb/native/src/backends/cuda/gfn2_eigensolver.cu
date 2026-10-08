@@ -2364,8 +2364,9 @@ Gfn2EigensolverLaunchResult generalized_transform(
       static_cast<std::size_t>(factor_capacity), static_cast<std::size_t>(matrix_capacity)};
   const eigen_provider::GeneralizedEigenLowering lowering{domain, blas, matrices};
   constexpr auto basis = shared::GeneralizedEigenBasis::lower_cholesky;
-  const cublasStatus_t status = recovery ? shared::recover_generalized_eigen(basis, lowering)
-                                          : shared::reduce_generalized_eigen(basis, lowering);
+  const cublasStatus_t status = static_cast<cublasStatus_t>(
+      recovery ? shared::recover_generalized_eigen(basis, lowering)
+               : shared::reduce_generalized_eigen(basis, lowering));
   return status == CUBLAS_STATUS_SUCCESS ? launch_success() : cublas_failure(status);
 }
 

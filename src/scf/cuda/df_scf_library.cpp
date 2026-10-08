@@ -100,9 +100,9 @@ generativeqc_status scf_generalized_transform(CudaDensityFittingJkPlan& plan, bo
   constexpr auto basis = shared::GeneralizedEigenBasis::canonical_x;
   const auto status = recovery ? shared::recover_generalized_eigen(basis, lowering)
                                : shared::reduce_generalized_eigen(basis, lowering);
-  return status == CUBLAS_STATUS_SUCCESS
-             ? GENERATIVEQC_STATUS_SUCCESS
-             : blas_failure(status, "CUDA DF device matrix product", detail);
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(static_cast<cublasStatus_t>(status),
+                                                        "CUDA DF device matrix product", detail);
 }
 
 generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nbf,

@@ -10,6 +10,11 @@
 
 #include "solver/cuda/generalized_eigen.hpp"
 
+std::uint32_t private_generalized_phase(generativeqc::solver::GeneralizedEigenBasis, bool,
+                                        generativeqc::solver::GeneralizedEigenDomain, void*,
+                                        generativeqc::solver::GeneralizedEigenMatrices,
+                                        shared::GeneralizedEigenPointerMatrices);
+
 namespace orchestration {
 struct Trace {
   std::string name;
@@ -614,6 +619,65 @@ void test_unused_capacity() {
     assert(orchestration::trace.empty());
   }
 }
+void test_private_abi() {
+  using namespace generativeqc::solver;
+  GfnFixture f;
+  // Only the actual solve prefix crosses the vendor ABI, including when the
+  // borrowed capacity exceeds its integer range or matrix-byte bound.
+  for (const auto capacity : {std::size_t(std::numeric_limits<int>::max()) + 1,
+                              std::numeric_limits<std::size_t>::max() / sizeof(double)}) {
+    const GeneralizedEigenDomain domain{2, 1, capacity, GeneralizedEigenLayout::column_major, 1};
+    const shared::GeneralizedEigenPointerMatrices pointers{
+        f.factor_pointers.data(), f.matrix_pointers.data(), capacity, capacity};
+    for (const auto basis :
+         {GeneralizedEigenBasis::canonical_x, GeneralizedEigenBasis::lower_cholesky,
+          GeneralizedEigenBasis::identity}) {
+      GeneralizedEigenMatrices matrices{
+          f.h.data(), f.factors.data(), f.a.data(), f.b.data(), f.coefficients.data(), 4, 4, 4, 4,
+          4};
+      if (basis == GeneralizedEigenBasis::identity)
+        matrices.input = matrices.coefficients = matrices.reduced;
+      const auto lowering = basis == GeneralizedEigenBasis::lower_cholesky
+                                ? shared::GeneralizedEigenLowering{domain, f.blas, pointers}
+                                : shared::GeneralizedEigenLowering{domain, f.blas, matrices};
+      for (const bool recovery : {false, true}) {
+        for (const auto stop :
+             {std::numeric_limits<std::size_t>::max(), std::size_t(0), std::size_t(1)}) {
+          for (const int variant : {0, 1}) {
+            orchestration::reset(stop, variant);
+            const auto expected = recovery ? recover_generalized_eigen(basis, lowering)
+                                           : reduce_generalized_eigen(basis, lowering);
+            const auto wanted = orchestration::trace;
+            orchestration::reset(stop, variant);
+            const auto actual =
+                private_generalized_phase(basis, recovery, domain, f.blas, matrices, pointers);
+            assert(actual == expected);
+            orchestration::same(wanted, orchestration::trace);
+          }
+        }
+        // Invalid bindings must return the private ABI's exact invalid status
+        // without calling the provider or reading any deferred numerical info.
+        for (const int invalid : {0, 1, 2, 3}) {
+          auto bad_domain = domain;
+          auto bad_matrices = matrices;
+          auto bad_pointers = pointers;
+          auto handle = f.blas;
+          if (invalid == 0) handle = nullptr;
+          if (invalid == 1) bad_domain.solves = capacity;
+          if (invalid == 2) bad_domain.layout = GeneralizedEigenLayout::row_major;
+          if (invalid == 3) {
+            bad_matrices.reduced_elements = 3;
+            bad_pointers.matrix_capacity = 0;
+          }
+          orchestration::reset();
+          assert(private_generalized_phase(basis, recovery, bad_domain, handle, bad_matrices,
+                                           bad_pointers) == CUBLAS_STATUS_INVALID_VALUE);
+          assert(orchestration::trace.empty());
+        }
+      }
+    }
+  }
+}
 void test_identity() {
   using namespace generativeqc::solver;
   GfnFixture f;
@@ -718,6 +782,8 @@ int main(int argc, char** argv) {
   const std::string scenario = argv[1];
   if (scenario == "unused-capacity")
     test_unused_capacity();
+  else if (scenario == "private-abi")
+    test_private_abi();
   else if (scenario == "canonical")
     test_canonical();
   else if (scenario == "canonical-ordinary" || scenario == "canonical-rhf" ||

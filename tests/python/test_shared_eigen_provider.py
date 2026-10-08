@@ -260,6 +260,10 @@ def test_provider_sources_invalidate_generated_metadata() -> None:
     generator = (ROOT / "tools/generate_solver_lowering.py").read_text()
     cmake = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
     for dependency in (
+        "src/solver/generalized_eigen.hpp",
+        "src/solver/cuda/generalized_eigen.hpp",
+        "src/solver/cuda/generalized_eigen.cpp",
+        "src/tensor/cuda_square_linalg.hpp",
         "src/solver/cuda/symmetric_eigen_provider.hpp",
         "src/solver/cuda/symmetric_eigen_provider.cpp",
         "src/solver/cuda/cusolver_compat.hpp",
@@ -268,6 +272,7 @@ def test_provider_sources_invalidate_generated_metadata() -> None:
         assert dependency in generator
         assert dependency in cmake
     sources = (ROOT / "cmake/GenerativeQCSources.cmake").read_text()
+    assert sources.count("src/solver/cuda/generalized_eigen.cpp") == 1
     assert sources.count("src/solver/cuda/symmetric_eigen_provider.cpp") == 1
 
 

@@ -111,3 +111,28 @@ above INT_MAX and with a tail that would overflow a capacity-sized matrix byte
 product. Actual solve-count/active-byte overflow still rejects before vendor
 submission. These probes fail against the recovered original domain, closing a
 gap in its original preservation gate without changing the numerical phases.
+
+## CUDA private-ABI boundary correction
+
+The NVIDIA 12.9 build of PR #2110 exposed a header-boundary regression: the
+generalized CUDA phase interface included `tensor/cuda_square_linalg.hpp`, which
+imported official `cublas_v2.h` into GFN's translation unit after its independent
+`runtime/nvidia_host_api.h` declarations. The duplicate enums and incompatible
+status declarations prevented compilation. Existing phase host probes used only
+the official-header fixture, so they missed this collision.
+
+The interface now borrows the BLAS handle as `void*` and returns unmodified
+`uint32_t` statuses, following the existing symmetric-eigen provider boundary.
+Only `solver/cuda/generalized_eigen.cpp` includes the tensor/vendor primitives.
+The shared phase composition, validation, actual-solve bounds, raw failures and
+owner-side deferred numerical info remain unchanged. The new implementation is
+registered in CUDA target sources and the generated solver identity closure;
+the runtime source-identity inventory already recursively covers `src`.
+
+The regression compiles the real private NVIDIA header alongside the phase
+interface in its own translation unit and calls across that seam into the real
+lowering under both NVIDIA and CuMetal host fixtures. It compares complete
+success/first-failure traces for canonical, lower-Cholesky and identity phases,
+large unused capacities, and invalid bindings. The existing full consumer-body
+preservation checks remain in place. Host ABI coverage does not replace the
+normal NVIDIA/CuMetal compile and device qualification lanes.

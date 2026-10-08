@@ -247,10 +247,12 @@ def orchestration_probe(
     compiler = replace(required_native_cxx, base_dir=ROOT)
     return compiler.build_executable(
         [
+            ROOT / "src/solver/cuda/generalized_eigen.cpp",
             ROOT / "src/solver/cuda/symmetric_eigen_provider.cpp",
             ROOT / "src/solver/cuda/symmetric_eigen_workspace.cpp",
             ROOT / "src/solver/cuda/symmetric_eigen_handles.cpp",
             ROOT / "tests/native/test_shared_eigen_private_abi.cpp",
+            ROOT / "tests/native/test_generalized_eigen_private_abi.cpp",
             ROOT / "tests/native/test_generalized_eigen_preservation.cpp",
         ],
         folder / "probe",
@@ -271,6 +273,7 @@ def orchestration_probe(
         "canonical-rhf",
         "canonical-uhf",
         "identity",
+        "private-abi",
         "unused-capacity",
         "invalid",
     ),

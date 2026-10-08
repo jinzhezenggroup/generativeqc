@@ -1,7 +1,6 @@
 #pragma once
 
 #include "solver/generalized_eigen.hpp"
-#include "tensor/cuda_square_linalg.hpp"
 
 namespace generativeqc::solver::cuda {
 
@@ -13,12 +12,16 @@ struct GeneralizedEigenPointerMatrices {
   std::size_t factor_capacity{}, matrix_capacity{};
 };
 
+/** Borrow the owner's BLAS handle without importing a vendor ABI. The shared
+ * implementation alone includes the official headers; GFN's independent
+ * uint32 status declarations must remain in a separate translation unit.
+ * Returns unmodified 32-bit provider statuses, never deferred numerical info. */
 class GeneralizedEigenLowering {
  public:
-  GeneralizedEigenLowering(GeneralizedEigenDomain domain, cublasHandle_t handle,
+  GeneralizedEigenLowering(GeneralizedEigenDomain domain, void* handle,
                            GeneralizedEigenMatrices matrices)
       : domain_(domain), handle_(handle), matrices_(matrices) {}
-  GeneralizedEigenLowering(GeneralizedEigenDomain domain, cublasHandle_t handle,
+  GeneralizedEigenLowering(GeneralizedEigenDomain domain, void* handle,
                            GeneralizedEigenPointerMatrices pointers)
       : domain_(domain), handle_(handle), pointers_(pointers) {}
 
@@ -36,20 +39,12 @@ class GeneralizedEigenLowering {
            (recovery ? matrices_.coefficients == matrices_.reduced
                      : matrices_.input == matrices_.reduced);
   }
-  static cublasStatus_t invalid() noexcept { return CUBLAS_STATUS_INVALID_VALUE; }
-  static bool success(cublasStatus_t status) noexcept { return status == CUBLAS_STATUS_SUCCESS; }
-  static cublasStatus_t identity(bool) noexcept { return CUBLAS_STATUS_SUCCESS; }
-  cublasStatus_t multiply(bool transpose, GeneralizedEigenOperand left,
-                          GeneralizedEigenOperand right, GeneralizedEigenOperand output) const {
-    return tensor::cuda::square_gemm(handle_, transpose, static_cast<int>(domain_.order),
-                                     static_cast<int>(domain_.solves), read(left), read(right),
-                                     write(output));
-  }
-  cublasStatus_t triangular(bool right, bool transpose) const {
-    return tensor::cuda::square_lower_solve(
-        handle_, right, transpose, static_cast<int>(domain_.order),
-        static_cast<int>(domain_.solves), pointers_.factors, pointers_.matrices);
-  }
+  static std::uint32_t invalid() noexcept;
+  static bool success(std::uint32_t status) noexcept;
+  static std::uint32_t identity(bool) noexcept;
+  std::uint32_t multiply(bool transpose, GeneralizedEigenOperand left,
+                         GeneralizedEigenOperand right, GeneralizedEigenOperand output) const;
+  std::uint32_t triangular(bool right, bool transpose) const;
 
  private:
   const double* read(GeneralizedEigenOperand operand) const {
@@ -64,7 +59,7 @@ class GeneralizedEigenLowering {
     return matrices_.reduced;
   }
   GeneralizedEigenDomain domain_;
-  cublasHandle_t handle_{};
+  void* handle_{};
   GeneralizedEigenMatrices matrices_;
   GeneralizedEigenPointerMatrices pointers_;
 };
