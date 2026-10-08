@@ -263,9 +263,7 @@ class SpatialTasks:
         # Validation is per prepared inventory; the omitted-mask workspace is
         # fully reset before examining every potentially screened region.
         omitted_workspace = (
-            np.ones(basis.nao, dtype=bool)
-            if self.policy.screening != "off"
-            else None
+            np.ones(basis.nao, dtype=bool) if self.policy.screening != "off" else None
         )
         for task in self.tasks:
             if (

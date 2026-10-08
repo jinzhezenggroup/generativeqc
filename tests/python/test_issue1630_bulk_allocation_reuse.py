@@ -12,10 +12,8 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from generativeqc import Primitive, Shell
 from generativeqc.response_operator import _BaseResponseOperator
-from generativeqc.response_solver import GMRESOptions, solve_many
 from generativeqc_compiler.common.evidence import finite_difference
 from generativeqc_compiler.dft import ExplicitGrid, NativeAO, partition_weights
 from generativeqc_compiler.dft.nonlocal_reference import (
@@ -138,12 +136,15 @@ def test_spatial_builder_reuses_bounds_and_off_masks_without_aliasing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     atoms = [("H", (-1.5, 0.0, 0.0)), ("H", (1.5, 0.0, 0.0))]
-    shells = tuple(
-        Shell(atom, 0, (Primitive(1.1, 1.0),)) for atom in range(2)
-    )
+    shells = tuple(Shell(atom, 0, (Primitive(1.1, 1.0),)) for atom in range(2))
     points = np.array(
-        [[-1.5, 0.0, 0.0], [-1.4, 0.1, 0.0], [1.4, -0.1, 0.0],
-         [1.5, 0.0, 0.0], [0.0, 2.0, 0.0]],
+        [
+            [-1.5, 0.0, 0.0],
+            [-1.4, 0.1, 0.0],
+            [1.4, -0.1, 0.0],
+            [1.5, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+        ],
     )
     grid = ExplicitGrid(
         points,
@@ -166,8 +167,10 @@ def test_spatial_builder_reuses_bounds_and_off_masks_without_aliasing(
             np.testing.assert_array_equal(
                 task.bounds,
                 np.array(
-                    [grid.points[task.point_ids].min(axis=0),
-                     grid.points[task.point_ids].max(axis=0)]
+                    [
+                        grid.points[task.point_ids].min(axis=0),
+                        grid.points[task.point_ids].max(axis=0),
+                    ]
                 ),
             )
             assert not task.bounds.flags.writeable
@@ -188,17 +191,17 @@ def test_lda_exchange_reference_shares_constant_coefficients(
     with monkeypatch.context() as patch:
         ones = _count_numpy_calls(patch, "ones", "exchange_reference")
         zeros = _count_numpy_calls(patch, "zeros", "exchange_reference")
-        energy, gradient, hessian = exchange_reference(
-            features, spin=True, gga=False
-        )
+        energy, gradient, hessian = exchange_reference(features, spin=True, gga=False)
     assert ones == [2]
     # One output energy + one shared LDA zero derivative buffer.
     assert zeros == [2, 2]
     q = 4 / 3
     cx = 0.75 * (6 / np.pi) ** (1 / 3)
     np.testing.assert_allclose(
-        energy, -cx * (features[0] ** q + features[1] ** q),
-        atol=1e-14, rtol=0,
+        energy,
+        -cx * (features[0] ** q + features[1] ** q),
+        atol=1e-14,
+        rtol=0,
     )
     assert np.isfinite(gradient).all()
     assert np.isfinite(hessian).all()

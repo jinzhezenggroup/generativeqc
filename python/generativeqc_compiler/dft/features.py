@@ -99,9 +99,7 @@ def _contract_density_feature_arrays(
             rho.append(np.sum(value * w, axis=1))
         if need_gradient:
             for axis, derivative in enumerate(derivatives):
-                gradient[spin_index, :, axis] = 2 * np.sum(
-                    derivative * w, axis=1
-                )
+                gradient[spin_index, :, axis] = 2 * np.sum(derivative * w, axis=1)
         if "tau" in requested:
             tau.append(
                 0.5
@@ -270,9 +268,7 @@ def orbital_features(
     c, occ = _spin_orbitals(coefficients, occupations, jets.shape[2])
     rho, tau = [], []
     gradient = (
-        np.empty((2, jets.shape[1], 3), dtype=np.float64)
-        if need_gradient
-        else []
+        np.empty((2, jets.shape[1], 3), dtype=np.float64) if need_gradient else []
     )
     for spin in range(2):
         # Weight before collocation: a zero occupation must remain zero even
@@ -287,9 +283,7 @@ def orbital_features(
             derivatives = jets[1:4] @ factor
         if need_gradient:
             for axis, derivative in enumerate(derivatives):
-                gradient[spin, :, axis] = np.sum(
-                    2 * value * derivative, axis=1
-                )
+                gradient[spin, :, axis] = np.sum(2 * value * derivative, axis=1)
         if "tau" in requested:
             tau.append(0.5 * np.sum(derivatives**2, axis=(0, 2)))
     return _publish(requested, rho, gradient, tau)
