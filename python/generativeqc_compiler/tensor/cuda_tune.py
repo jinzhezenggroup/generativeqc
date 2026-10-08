@@ -53,7 +53,7 @@ if typing.TYPE_CHECKING:
 
 def endpoint_gate(
     baseline: typing.Any, candidate: typing.Any, *, minimum_speedup: typing.Any = 1.02
-) -> dict:
+) -> dict[str, object]:
     """Require a paired median gain whose bootstrap lower bound exceeds one."""
     left, right = np.asarray(baseline), np.asarray(candidate)
     if left.ndim != 1 or left.shape != right.shape or not 5 <= left.size <= 30:
@@ -116,7 +116,7 @@ def _static_compile_shortlist(
 
 def _compile_cost_calibration(
     estimates: typing.Any, metadata: typing.Any, wall_seconds: float
-) -> dict:
+) -> dict[str, object]:
     source_bytes = estimates["generated_source_bytes"]
     compiler_seconds = metadata.get("compile_seconds")
     seconds_per_kib = None
@@ -167,7 +167,7 @@ def _endpoint_profitability(
 ) -> list[dict[str, object]]:
     """Attach complete endpoint timing to the shared GPU profitability record."""
 
-    rows = []
+    rows: list[dict[str, object]] = []
     static = typing.cast("dict[str, object]", compiled_profitability["static"])
     compiled = typing.cast("dict[str, object]", compiled_profitability["compiled"])
     for pairs in timings:
@@ -175,9 +175,11 @@ def _endpoint_profitability(
         baseline_seconds = float(np.median(baseline_samples))
         candidate_seconds = float(np.median(candidate_samples))
         baseline = GpuProfitability(endpoint_seconds=baseline_seconds)
+        combined = {**static, **compiled}
+        # The two payloads are emitted by GpuProfitability.to_payload().
+        # Its constructor revalidates every optional numeric field.
         candidate = GpuProfitability(
-            **static,
-            **compiled,
+            **typing.cast("dict[str, typing.Any]", combined),
             endpoint_seconds=candidate_seconds,
         )
         rows.append(
@@ -201,7 +203,7 @@ class TensorSelection:
 
     plan: TensorPlan
     artifact: CudaArtifact
-    evidence: dict
+    evidence: dict[str, object]
     evidence_path: Path
 
 
@@ -399,7 +401,9 @@ def tune_cuda(
                     profitability_rejections = [
                         reason
                         for fixture in endpoint_profitability
-                        for reason in fixture["rejection_reasons"]
+                        for reason in typing.cast(
+                            "list[str]", fixture["rejection_reasons"]
+                        )
                     ]
                     passed = (
                         all(g["passed"] for g in gates)
@@ -489,6 +493,8 @@ def tune_cuda(
                     qualify(plan, compiled, row)
                     continue
                 row["stage"] = "representative-timing"
+                if screening is None:
+                    raise RuntimeError("active screening requires a screening policy")
                 screen = {
                     "scope": "ranking only; not performance qualification",
                     "fixture_indices": list(screening.fixture_indices),
@@ -521,6 +527,8 @@ def tune_cuda(
                 row.update(status="rejected", reason=str(error))
 
         if screening_active:
+            if screening is None:
+                raise RuntimeError("active screening requires a screening policy")
             # Stable sorting breaks exact ties by original generation order.
             # No screen-speed threshold: noisy/negative screens can still reach
             # qualification. Only the unchanged complete gates can promote.
@@ -701,6 +709,8 @@ def _measure_fixture(
         workload="unchanged-geometry",
         inputs_hash=inputs_hash,
     )
+    if latest[0] is None:
+        raise RuntimeError("endpoint runner did not produce a CUDA result")
     error = max(error, _parity(latest[0].outputs, expected))
     metrics = None
     if profile:
