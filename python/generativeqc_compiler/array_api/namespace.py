@@ -233,11 +233,32 @@ def _broadcast_generic(value: VibeArray, target_shape: tuple[int, ...]) -> VibeA
     return VibeArray(tensor_ir.broadcast(node, target_indices, tuple(kept_axes)))
 
 
+def astype(x: object, dtype: str, *, copy: bool = True) -> VibeArray:
+    """Lower an explicit real-valued cast, preserving scientific index spaces."""
+    value = _array(x)
+    if dtype not in ("float32", "float64"):
+        raise TypeError("astype supports only float32 and float64")
+    if type(copy) is not bool:
+        raise TypeError("astype copy must be a bool")
+    if not copy and value.dtype == dtype:
+        return value
+    return VibeArray(tensor_ir.cast(value.node, dtype))
+
+
+def _promote_generic_arrays(*values: VibeArray) -> tuple[VibeArray, ...]:
+    """Promote supported generic floats by inserting explicit TensorIR casts."""
+    if any(not _is_generic_array(value) for value in values):
+        raise TypeError("promotion requires generic arrays")
+    target = "float64" if any(value.dtype == "float64" for value in values) else "float32"
+    return tuple(astype(value, target, copy=False) for value in values)
+
+
 def _generic_binary(
     left: VibeArray, right: VibeArray
 ) -> tuple[VibeArray, VibeArray] | None:
     if not (_is_generic_array(left) and _is_generic_array(right)):
         return None
+    left, right = _promote_generic_arrays(left, right)
     shape = _broadcast_shape(left.shape, right.shape)
     return _broadcast_generic(left, shape), _broadcast_generic(right, shape)
 
@@ -702,7 +723,8 @@ def matmul(x1: object, x2: object) -> VibeArray:
     """Array-API-style matmul for generic arrays; strict rank-2 for scientific IR."""
     left, right = _binary_arrays(x1, x2, "matmul")
     if _is_generic_array(left) and _is_generic_array(right):
-        return _matmul_generic(left, right)
+        promoted_left, promoted_right = _promote_generic_arrays(left, right)
+        return _matmul_generic(promoted_left, promoted_right)
     if left.ndim != 2 or right.ndim != 2:
         raise ValueError(
             "scientifically annotated matmul currently supports rank-2 arrays only"
@@ -717,6 +739,8 @@ def einsum(
 ) -> VibeArray:
     """GenerativeQC extension for general contractions absent from the core subset."""
     arrays = tuple(_array(value, "einsum operand") for value in operands)
+    if arrays and all(_is_generic_array(value) for value in arrays):
+        arrays = _promote_generic_arrays(*arrays)
     result = VibeArray(
         tensor_ir.einsum(
             equation,
