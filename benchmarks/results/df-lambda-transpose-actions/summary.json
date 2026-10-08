@@ -1,0 +1,455 @@
+{
+  "provenance": {
+    "base_commit": "4385f72751b829883407c01106186917c344317b",
+    "job": "2706",
+    "node": "node2",
+    "CUDA_VISIBLE_DEVICES": "1",
+    "gpu": "uuid, name, driver_version, power.limit [W]\nGPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W\n",
+    "selectors": [
+      "1",
+      "1",
+      "1",
+      "1",
+      "8",
+      "8",
+      "8",
+      "0",
+      "0",
+      "2",
+      "1",
+      "30",
+      "0",
+      "0",
+      "1",
+      "auto",
+      "1",
+      "0",
+      "auto",
+      "0"
+    ],
+    "repetitions_per_variant": 6,
+    "cold_definition": "fresh process and all native scientific owners; no imported reference state; persistent compilation caches retained; one excluded qualification/cache-prime run per variant/case",
+    "timing_boundary": "native_seconds includes complete RHF/source/CCSD/(T)/Lambda/source and orbital/nuclear response; process wall includes process startup and teardown",
+    "binaries": {
+      "baseline": {
+        "libgenerativeqc.so": "e4848da369cc2f201b3cfb581d282b59fe1765ab17f2a68f87df81bfe44662d4",
+        "endpoint": "c0a890a9aa1dac1c7e29db25cd1823baeebd47aff2cd474d98229be86c246316"
+      },
+      "candidate": {
+        "libgenerativeqc.so": "9b56a537226eca805f5b38dbf6db80c93b96f39207e85c9f05f4fe5fc9ba7302",
+        "endpoint": "b9e4d3f71feb7c0c332f77e55b0e93ced3d47447bfb1117c424bec4966513a9b"
+      }
+    },
+    "candidate_compiler_source_sha256": "c3f1aba50fc65e3dfbd65eeaa326b44e6f1a1b43045be5d02bed20d4bfcca671",
+    "build": {
+      "type": "Release",
+      "cuda_architectures": "120",
+      "aot_profile": "portable_cuda",
+      "cuda_toolkit": "12.9.1",
+      "compiler": "GCC 11",
+      "ccache": "4.5.1",
+      "cache_hits_delta": 467,
+      "cache_misses_delta": 6,
+      "cache_statistics_scope": "shared before/after statistics, not exclusive per-build hits",
+      "cpu_threads": 2
+    },
+    "native_qualification": {
+      "job": "2705",
+      "passed": 109,
+      "skipped": 10
+    },
+    "ineligible_cases": [
+      {
+        "case": "ethane58",
+        "reason": "baseline excluded qualification/cache-prime process exceeded the finite 300-second subprocess limit; no candidate or measured large-case sample was attempted",
+        "baseline_seconds": null,
+        "candidate_seconds": null,
+        "input_sha256": "d8d1486907dd86219d05af68dcdfef98370f0b81598b64e83af90a59c7d47fcd"
+      }
+    ]
+  },
+  "conclusion": "Measured CCSD phase benefits on both eligible cases and a small Lambda phase benefit on methane. Complete energy/force timings and water Lambda timings overlap observed variation; no complete endpoint or large-domain speedup is established.",
+  "statistics_scope": "six interleaved pairs per case; paired percentile-bootstrap intervals describe this run and are not a cross-device or asymptotic confidence guarantee",
+  "cases": {
+    "water24": {
+      "nbf": 24,
+      "nocc": 5,
+      "nvir": 19,
+      "naux": 84,
+      "input_sha256": "28b282839661a93488e3805714ea4d66f787029e115854e579ef9fe95ff15c38",
+      "phases": {
+        "process_wall_seconds": {
+          "baseline_median": 13.109577960101888,
+          "candidate_median": 13.084721383522265,
+          "median_reduction_percent": 0.1896062303094137,
+          "paired_wins": 4,
+          "paired_median_reduction_percent": 0.185289592544019,
+          "paired_bootstrap_95_percent": [
+            -0.3861223627610433,
+            0.9475031468690998
+          ]
+        },
+        "native_seconds": {
+          "baseline_median": 12.737516732,
+          "candidate_median": 12.718371609,
+          "median_reduction_percent": 0.15030498803508818,
+          "paired_wins": 4,
+          "paired_median_reduction_percent": 0.17636092009846727,
+          "paired_bootstrap_95_percent": [
+            -0.3390089061012569,
+            0.7628451547878945
+          ]
+        },
+        "reference_seconds": {
+          "baseline_median": 3.9698740105,
+          "candidate_median": 3.966541591,
+          "median_reduction_percent": 0.08394270173778251,
+          "paired_wins": 4,
+          "paired_median_reduction_percent": 0.5150986509846855,
+          "paired_bootstrap_95_percent": [
+            -1.7097808042213392,
+            1.8480948503779626
+          ]
+        },
+        "source_seconds": {
+          "baseline_median": 0.3582817275,
+          "candidate_median": 0.35850554300000004,
+          "median_reduction_percent": -0.062469136107434764,
+          "paired_wins": 3,
+          "paired_median_reduction_percent": 0.07891791744176757,
+          "paired_bootstrap_95_percent": [
+            -1.0264371181234577,
+            0.4698203673332624
+          ]
+        },
+        "ccsd_seconds": {
+          "baseline_median": 0.24929362,
+          "candidate_median": 0.2405489865,
+          "median_reduction_percent": 3.5077646591998524,
+          "paired_wins": 6,
+          "paired_median_reduction_percent": 2.4974850223571208,
+          "paired_bootstrap_95_percent": [
+            1.181228607918644,
+            4.081182505867609
+          ]
+        },
+        "triples_seconds": {
+          "baseline_median": 0.07548160849999999,
+          "candidate_median": 0.07347250050000001,
+          "median_reduction_percent": 2.6617185827458645,
+          "paired_wins": 3,
+          "paired_median_reduction_percent": 0.3383417542290046,
+          "paired_bootstrap_95_percent": [
+            -0.8214228383621847,
+            5.019579379901851
+          ]
+        },
+        "lambda_seconds": {
+          "baseline_median": 0.6607573554999999,
+          "candidate_median": 0.6511481244999999,
+          "median_reduction_percent": 1.4542752978858098,
+          "paired_wins": 5,
+          "paired_median_reduction_percent": 0.5195440844750376,
+          "paired_bootstrap_95_percent": [
+            -0.29594514060061194,
+            2.8144822199292765
+          ]
+        },
+        "source_response_seconds": {
+          "baseline_median": 0.0933785745,
+          "candidate_median": 0.093649977,
+          "median_reduction_percent": -0.2906475082246951,
+          "paired_wins": 2,
+          "paired_median_reduction_percent": -0.050448470482777896,
+          "paired_bootstrap_95_percent": [
+            -0.7051555986134272,
+            0.04494457233217841
+          ]
+        },
+        "orbital_seconds": {
+          "baseline_median": 7.335307902,
+          "candidate_median": 7.3296322365,
+          "median_reduction_percent": 0.0773746047995183,
+          "paired_wins": 5,
+          "paired_median_reduction_percent": 0.025363451395249426,
+          "paired_bootstrap_95_percent": [
+            -0.00964833637562279,
+            0.10274695109460108
+          ]
+        }
+      },
+      "maximum_energy_delta": 0.0,
+      "maximum_force_delta": 2.9753977059954195e-14,
+      "maximum_independent_energy_error": 1.5631940186722204e-13,
+      "maximum_independent_force_direction_error": 2.159833974862968e-09,
+      "semantic_work": {
+        "baseline": {
+          "reference_iterations": [
+            21
+          ],
+          "ccsd_iterations": [
+            17
+          ],
+          "ccsd_evaluations": [
+            32
+          ],
+          "ccsd_contraction_terms": [
+            2320693076
+          ],
+          "lambda_iterations": [
+            18
+          ],
+          "lambda_actions": [
+            36
+          ],
+          "lambda_work": [
+            4017985537
+          ],
+          "lambda_gemm_calls": [
+            15864
+          ],
+          "lambda_kernels": [
+            73859
+          ],
+          "lambda_packing_output_bytes": [
+            1544025224
+          ],
+          "z_iterations": [
+            11
+          ],
+          "z_operator_actions": [
+            12
+          ]
+        },
+        "candidate": {
+          "reference_iterations": [
+            21
+          ],
+          "ccsd_iterations": [
+            17
+          ],
+          "ccsd_evaluations": [
+            32
+          ],
+          "ccsd_contraction_terms": [
+            2320693076
+          ],
+          "lambda_iterations": [
+            18
+          ],
+          "lambda_actions": [
+            36
+          ],
+          "lambda_work": [
+            4017985537
+          ],
+          "lambda_gemm_calls": [
+            15864
+          ],
+          "lambda_kernels": [
+            69804
+          ],
+          "lambda_packing_output_bytes": [
+            1501364656
+          ],
+          "z_iterations": [
+            11
+          ],
+          "z_operator_actions": [
+            12
+          ]
+        }
+      }
+    },
+    "methane34": {
+      "nbf": 34,
+      "nocc": 5,
+      "nvir": 29,
+      "naux": 112,
+      "input_sha256": "c429b6212017cf438bed785897872cdcb74dfc810762521747f6ba6368edb158",
+      "phases": {
+        "process_wall_seconds": {
+          "baseline_median": 30.009977189009078,
+          "candidate_median": 30.01025849801954,
+          "median_reduction_percent": -0.0009373849526372879,
+          "paired_wins": 2,
+          "paired_median_reduction_percent": -0.0008698768917625443,
+          "paired_bootstrap_95_percent": [
+            -0.0853769209812616,
+            0.08569009203492906
+          ]
+        },
+        "native_seconds": {
+          "baseline_median": 29.6766116115,
+          "candidate_median": 29.6782320845,
+          "median_reduction_percent": -0.005460438075655105,
+          "paired_wins": 3,
+          "paired_median_reduction_percent": 0.01481459023960352,
+          "paired_bootstrap_95_percent": [
+            -0.0873100132360749,
+            0.12930136325539632
+          ]
+        },
+        "reference_seconds": {
+          "baseline_median": 2.766454821,
+          "candidate_median": 2.7763834945,
+          "median_reduction_percent": -0.3588951977322008,
+          "paired_wins": 2,
+          "paired_median_reduction_percent": -0.11613043145904944,
+          "paired_bootstrap_95_percent": [
+            -1.3995818202325427,
+            0.8918274772295731
+          ]
+        },
+        "source_seconds": {
+          "baseline_median": 0.4292599735,
+          "candidate_median": 0.4281904265,
+          "median_reduction_percent": 0.24916066393970704,
+          "paired_wins": 3,
+          "paired_median_reduction_percent": -0.00861126304800841,
+          "paired_bootstrap_95_percent": [
+            -0.07212263467888391,
+            1.4884543950168805
+          ]
+        },
+        "ccsd_seconds": {
+          "baseline_median": 0.3720043025,
+          "candidate_median": 0.3685306325,
+          "median_reduction_percent": 0.9337714581943546,
+          "paired_wins": 6,
+          "paired_median_reduction_percent": 0.7277138861955523,
+          "paired_bootstrap_95_percent": [
+            0.533794705931484,
+            1.0568608066332252
+          ]
+        },
+        "triples_seconds": {
+          "baseline_median": 0.070671283,
+          "candidate_median": 0.07049349299999999,
+          "median_reduction_percent": 0.2515731885043171,
+          "paired_wins": 4,
+          "paired_median_reduction_percent": 0.13366444375587094,
+          "paired_bootstrap_95_percent": [
+            -0.839085715167831,
+            3.0664432947102527
+          ]
+        },
+        "lambda_seconds": {
+          "baseline_median": 1.1006624244999998,
+          "candidate_median": 1.093416141,
+          "median_reduction_percent": 0.6583565804285096,
+          "paired_wins": 6,
+          "paired_median_reduction_percent": 0.6271957064649225,
+          "paired_bootstrap_95_percent": [
+            0.5353998968480989,
+            1.204755855301226
+          ]
+        },
+        "source_response_seconds": {
+          "baseline_median": 0.118328506,
+          "candidate_median": 0.1187013765,
+          "median_reduction_percent": -0.31511468588980573,
+          "paired_wins": 0,
+          "paired_median_reduction_percent": -0.1694316345793756,
+          "paired_bootstrap_95_percent": [
+            -0.4424626297987899,
+            -0.10114091725499375
+          ]
+        },
+        "orbital_seconds": {
+          "baseline_median": 24.8157998075,
+          "candidate_median": 24.813746436499997,
+          "median_reduction_percent": 0.008274450212886197,
+          "paired_wins": 2,
+          "paired_median_reduction_percent": -0.032714542550793535,
+          "paired_bootstrap_95_percent": [
+            -0.10873952927447084,
+            0.1090000829096327
+          ]
+        }
+      },
+      "maximum_energy_delta": 0.0,
+      "maximum_force_delta": 2.3203661214665772e-14,
+      "maximum_independent_energy_error": 0.0,
+      "maximum_independent_force_direction_error": 2.5134822183650596e-09,
+      "semantic_work": {
+        "baseline": {
+          "reference_iterations": [
+            13
+          ],
+          "ccsd_iterations": [
+            16
+          ],
+          "ccsd_evaluations": [
+            30
+          ],
+          "ccsd_contraction_terms": [
+            8514858092
+          ],
+          "lambda_iterations": [
+            17
+          ],
+          "lambda_actions": [
+            34
+          ],
+          "lambda_work": [
+            14389708243
+          ],
+          "lambda_gemm_calls": [
+            17964
+          ],
+          "lambda_kernels": [
+            86433
+          ],
+          "lambda_packing_output_bytes": [
+            3940153464
+          ],
+          "z_iterations": [
+            9
+          ],
+          "z_operator_actions": [
+            10
+          ]
+        },
+        "candidate": {
+          "reference_iterations": [
+            13
+          ],
+          "ccsd_iterations": [
+            16
+          ],
+          "ccsd_evaluations": [
+            30
+          ],
+          "ccsd_contraction_terms": [
+            8514858092
+          ],
+          "lambda_iterations": [
+            17
+          ],
+          "lambda_actions": [
+            34
+          ],
+          "lambda_work": [
+            14389708243
+          ],
+          "lambda_gemm_calls": [
+            17964
+          ],
+          "lambda_kernels": [
+            81836
+          ],
+          "lambda_packing_output_bytes": [
+            3837204336
+          ],
+          "z_iterations": [
+            9
+          ],
+          "z_operator_actions": [
+            10
+          ]
+        }
+      }
+    }
+  }
+}
