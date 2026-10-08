@@ -21,8 +21,18 @@ from ..cuda_schedule import (
     AlgebraPlacement,
     ScheduleKind,
 )
+from ..blocks import RawBlock, SecondDerivative, WeightDescriptor, WeightedDerivative
 from ..expr import Expr, PowerLowering
-from ..ir import IntegralIR, KernelConsumer, build_integral_ir
+from ..ir import (
+    ContractionConsumer,
+    ContractionOutput,
+    ContractionSpec,
+    DensityModel,
+    IntegralIR,
+    KernelConsumer,
+    OperatorFamily,
+    build_integral_ir,
+)
 from ..shell_class import (
     ShellClassContractionKernel,
     WeightedShellContractionKernel,
@@ -111,6 +121,60 @@ class StaticAlgebraModel:
         }
 
 
+def _weight_signature(weight: WeightDescriptor | None) -> dict[str, object] | None:
+    if weight is None:
+        return None
+    return {
+        "source": weight.source,
+        "layout": weight.layout.to_payload(),
+        "sign": weight.sign,
+        "prefactor": weight.prefactor,
+    }
+
+
+def _contraction_signature(
+    item: ContractionSpec | RawBlock | WeightedDerivative | SecondDerivative,
+) -> dict[str, object]:
+    """Keep non-HF block descriptors distinct without changing HF identities."""
+    if isinstance(item, ContractionSpec):
+        density_items = (
+            item.density.split("|")
+            if isinstance(item.density, str)
+            else item.density
+        )
+        return {
+            "consumer": ContractionConsumer(item.consumer).value,
+            "density": sorted(DensityModel(model).value for model in density_items),
+            "output": ContractionOutput(item.output).value,
+        }
+    if isinstance(item, RawBlock):
+        return {
+            "consumer": item.consumer,
+            "layout": item.layout.to_payload(),
+            "memory_budget_bytes": item.memory_budget_bytes,
+            "output_sign": item.output_sign,
+        }
+    if isinstance(item, WeightedDerivative):
+        return {
+            "consumer": item.consumer,
+            "weights": _weight_signature(item.weights),
+            "output_layout": item.output_layout.to_payload(),
+            "memory_budget_bytes": item.memory_budget_bytes,
+            "output": ContractionOutput(item.output).value,
+            "output_sign": item.output_sign,
+        }
+    return {
+        "consumer": item.consumer,
+        "weights": _weight_signature(item.weights),
+        "output_layout": item.output_layout.to_payload(),
+        "memory_budget_bytes": item.memory_budget_bytes,
+        "output": item.output,
+        "packing": item.packing,
+        "direction_source": item.direction_source,
+        "output_sign": item.output_sign,
+    }
+
+
 def _integral_signature(integral: IntegralIR) -> str:
     """Return a deterministic short identifier for mathematical IR intent.
 
@@ -141,26 +205,51 @@ def _integral_signature(integral: IntegralIR) -> str:
             "parameters": coordinates(integral.derivative.parameters),
             "invariants": invariants(integral.derivative.invariants),
         }
-    payload = {
-        "spec": {
+    if isinstance(integral.spec, ShellClassSpec):
+        spec_identity: dict[str, object] = {
             "name": integral.spec.name,
             "angular": list(integral.spec.angular),
-        },
+        }
+    else:
+        spec_identity = {
+            "name": integral.spec.legacy_class or "shell_signature",
+            "angular": list(integral.spec.angular),
+            "shells": [
+                {
+                    "slot": shell.slot,
+                    "center": shell.center,
+                    "angular": shell.angular,
+                    "role": str(shell.role.value if hasattr(shell.role, "value") else shell.role),
+                    "convention": str(
+                        shell.convention.value
+                        if hasattr(shell.convention, "value")
+                        else shell.convention
+                    ),
+                }
+                for shell in integral.spec.shells
+            ],
+            "center_bindings": [
+                [binding.center, binding.atom_index]
+                for binding in integral.spec.center_bindings
+            ],
+        }
+    payload = {
+        "spec": spec_identity,
         "operator": {
-            "family": integral.operator.family.value,
+            "family": OperatorFamily(integral.operator.family).value,
             "centers": list(integral.operator.centers),
             "invariants": invariants(integral.operator.invariants),
         },
         "derivative": derivative,
         "contractions": [
-            {
-                "consumer": item.consumer.value,
-                "density": sorted(model.value for model in item.density),
-                "output": item.output.value,
-            }
+            _contraction_signature(item)
             for item in sorted(
                 integral.contractions,
-                key=lambda item: item.consumer.value,
+                key=lambda item: str(
+                    ContractionConsumer(item.consumer).value
+                    if isinstance(item, ContractionSpec)
+                    else item.consumer
+                ),
             )
         ],
         "recurrence": integral.recurrence,
