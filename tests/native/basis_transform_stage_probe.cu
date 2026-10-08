@@ -30,7 +30,9 @@ struct DeviceBuffer {
   explicit DeviceBuffer(std::size_t count) {
     check(cudaMallocManaged(&pointer, count * sizeof(double)));
   }
-  ~DeviceBuffer() { if (pointer) (void)cudaFree(pointer); }
+  ~DeviceBuffer() {
+    if (pointer) (void)cudaFree(pointer);
+  }
   DeviceBuffer(const DeviceBuffer&) = delete;
   DeviceBuffer& operator=(const DeviceBuffer&) = delete;
 };
@@ -63,8 +65,8 @@ void one_case(std::size_t public_nbf, std::size_t direct_nbf, bool generated,
   if (real_basis) {
     const auto angular = pn == 5 ? 2U : 3U;
     const auto cartesian = generativeqc::molecule::cartesian_components(angular);
-    const auto expansions = generativeqc::molecule::ao_expansions(
-        angular, GENERATIVEQC_BASIS_SPHERICAL);
+    const auto expansions =
+        generativeqc::molecule::ao_expansions(angular, GENERATIVEQC_BASIS_SPHERICAL);
     if (expansions.size() != pn || cartesian.size() != dn)
       throw std::runtime_error("real d/f basis dimensions differ from SCF topology");
     for (std::size_t public_ao = 0; public_ao < pn; ++public_ao)
@@ -96,8 +98,7 @@ void one_case(std::size_t public_nbf, std::size_t direct_nbf, bool generated,
   for (std::size_t a = 0; a < dn; ++a)
     for (std::size_t b = 0; b < dn; ++b)
       for (std::size_t p = 0; p < pn; ++p)
-        density_direct[a * dn + b] +=
-            density_right[a * pn + p] * c.pointer[b * pn + p];
+        density_direct[a * dn + b] += density_right[a * pn + p] * c.pointer[b * pn + p];
   for (std::size_t a = 0; a < dn; ++a)
     for (std::size_t p = 0; p < pn; ++p)
       for (std::size_t b = 0; b < dn; ++b)
@@ -117,7 +118,8 @@ void one_case(std::size_t public_nbf, std::size_t direct_nbf, bool generated,
   check(cudaMallocManaged(&error, sizeof(int)));
   check(cudaMemsetAsync(error, 0, sizeof(int), stream));
   tensor::contraction_libraries_unavailable_for_test = generated;
-  constexpr std::size_t budget = (96ULL << 20) + tensor::PreparedBoundedContraction::host_reservation;
+  constexpr std::size_t budget =
+      (96ULL << 20) + tensor::PreparedBoundedContraction::host_reservation;
   {
     tensor::PreparedBoundedContraction density_right_plan(
         lower::basis_density_right_request, lower::basis_density_right_candidates,
@@ -129,14 +131,14 @@ void one_case(std::size_t public_nbf, std::size_t direct_nbf, bool generated,
         lower::density_direct(pn, dn), stream, budget);
     tensor::PreparedBoundedContraction fock_left_plan(
         lower::basis_fock_left_request, lower::basis_fock_left_candidates,
-        lower::basis_fock_left_target, lower::basis_fock_left_compilation,
-        lower::fock_left(pn, dn), stream, budget);
+        lower::basis_fock_left_target, lower::basis_fock_left_compilation, lower::fock_left(pn, dn),
+        stream, budget);
     tensor::PreparedBoundedContraction fock_right_plan(
         lower::basis_fock_right_request, lower::basis_fock_right_candidates,
         lower::basis_fock_right_target, lower::basis_fock_right_compilation,
         lower::fock_right(pn, dn), stream, budget);
-    const std::array plans{&density_right_plan, &density_direct_plan,
-                           &fock_left_plan, &fock_right_plan};
+    const std::array plans{&density_right_plan, &density_direct_plan, &fock_left_plan,
+                           &fock_right_plan};
     for (const auto* plan : plans) {
       const auto provider = plan->candidate().provider;
       if (provider != (generated ? "generated.cuda" : "cublas"))
@@ -144,45 +146,48 @@ void one_case(std::size_t public_nbf, std::size_t direct_nbf, bool generated,
     }
     auto invalid = lower::density_right(pn, dn);
     invalid.operands[0].strides[1]++;
-    try { invalid.validate(); throw std::runtime_error("invalid stride accepted"); }
-    catch (const std::invalid_argument&) {}
     try {
-      density_right_plan.execute(lower::fock_left(pn, dn), stream, c.pointer, d.pointer,
-                                 dr.pointer, error);
+      invalid.validate();
+      throw std::runtime_error("invalid stride accepted");
+    } catch (const std::invalid_argument&) {
+    }
+    try {
+      density_right_plan.execute(lower::fock_left(pn, dn), stream, c.pointer, d.pointer, dr.pointer,
+                                 error);
       throw std::runtime_error("cross-stage identity accepted");
-    } catch (const std::invalid_argument&) {}
+    } catch (const std::invalid_argument&) {
+    }
     try {
-      density_right_plan.execute(lower::density_right(pn, dn), stream, c.pointer,
-                                 d.pointer, c.pointer, error);
+      density_right_plan.execute(lower::density_right(pn, dn), stream, c.pointer, d.pointer,
+                                 c.pointer, error);
       throw std::runtime_error("output/input alias accepted");
-    } catch (const std::invalid_argument&) {}
+    } catch (const std::invalid_argument&) {
+    }
     density_right_plan.execute(lower::density_right(pn, dn), stream, c.pointer, d.pointer,
                                dr.pointer, error);
     density_direct_plan.execute(lower::density_direct(pn, dn), stream, dr.pointer, c.pointer,
                                 dd.pointer, error);
-    fock_left_plan.execute(lower::fock_left(pn, dn), stream, f.pointer, c.pointer,
-                           fl.pointer, error);
-    fock_right_plan.execute(lower::fock_right(pn, dn), stream, c.pointer, fl.pointer,
-                            fr.pointer, error);
+    fock_left_plan.execute(lower::fock_left(pn, dn), stream, f.pointer, c.pointer, fl.pointer,
+                           error);
+    fock_right_plan.execute(lower::fock_right(pn, dn), stream, c.pointer, fl.pointer, fr.pointer,
+                            error);
     check(cudaStreamSynchronize(stream));
     if (*error) throw std::runtime_error("shared contraction reported numerical failure");
     const auto density_right_error = compare(dr.pointer, density_right, "density right");
     const auto density_direct_error = compare(dd.pointer, density_direct, "density direct");
     const auto fock_left_error = compare(fl.pointer, fock_left, "fock left");
     const auto fock_right_error = compare(fr.pointer, fock_right, "fock right");
-    fold_hcore<<<unsigned((pn * pn + 127) / 128), 128, 0, stream>>>(fr.pointer, h.pointer,
-                                                                     pn * pn);
+    fold_hcore<<<unsigned((pn * pn + 127) / 128), 128, 0, stream>>>(fr.pointer, h.pointer, pn * pn);
     check(cudaGetLastError());
     check(cudaStreamSynchronize(stream));
     const auto fock_public_error = compare(fr.pointer, fock_public, "fock public with hcore");
-    std::cout << "public=" << pn << " direct=" << dn << " basis="
-              << (real_basis ? (pn == 5 ? "d" : "f") : "asymmetric") << " provider="
-              << density_right_plan.candidate().provider << " provider_version="
-              << density_right_plan.provider_version()
-              << " max_abs_errors[d_right,d_direct,f_left,f_right,f_public]="
-              << density_right_error << ',' << density_direct_error << ','
-              << fock_left_error << ',' << fock_right_error << ',' << fock_public_error
-              << " logical_summands="
+    std::cout << "public=" << pn << " direct=" << dn
+              << " basis=" << (real_basis ? (pn == 5 ? "d" : "f") : "asymmetric")
+              << " provider=" << density_right_plan.candidate().provider
+              << " provider_version=" << density_right_plan.provider_version()
+              << " max_abs_errors[d_right,d_direct,f_left,f_right,f_public]=" << density_right_error
+              << ',' << density_direct_error << ',' << fock_left_error << ',' << fock_right_error
+              << ',' << fock_public_error << " logical_summands="
               << density_right_plan.summands() + density_direct_plan.summands() +
                      fock_left_plan.summands() + fock_right_plan.summands()
               << '\n';
@@ -194,38 +199,43 @@ void one_case(std::size_t public_nbf, std::size_t direct_nbf, bool generated,
 int main() try {
   int marker = 0;
   const std::array<std::array<std::size_t, 4>, 2> invalid_groups{
-      std::array<std::size_t, 4>{5, 7, 2, 1},
-      std::array<std::size_t, 4>{5, 7, 1, 2}};
+      std::array<std::size_t, 4>{5, 7, 2, 1}, std::array<std::size_t, 4>{5, 7, 1, 2}};
   for (const auto invalid : invalid_groups) {
     try {
-      lower::require_packed_stage(invalid[0], invalid[1], invalid[2], invalid[3],
-                                  nullptr, nullptr);
-    } catch (const std::invalid_argument&) { ++marker; }
+      lower::require_packed_stage(invalid[0], invalid[1], invalid[2], invalid[3], nullptr, nullptr);
+    } catch (const std::invalid_argument&) {
+      ++marker;
+    }
   }
   try {
     lower::require_packed_stage(5, 7, 1, 1, &marker, nullptr);
-  } catch (const std::invalid_argument&) { ++marker; }
+  } catch (const std::invalid_argument&) {
+    ++marker;
+  }
   try {
     lower::require_packed_stage(5, 7, 1, 1, nullptr, &marker);
-  } catch (const std::invalid_argument&) { ++marker; }
+  } catch (const std::invalid_argument&) {
+    ++marker;
+  }
   const std::array<std::array<std::int64_t, 2>, 5> invalid_dimensions{
-      std::array<std::int64_t, 2>{0, 7}, {-1, 7}, {5, 0},
-      {5, -1}, {INT64_MAX, 7}};
+      std::array<std::int64_t, 2>{0, 7}, {-1, 7}, {5, 0}, {5, -1}, {INT64_MAX, 7}};
   for (const auto invalid : invalid_dimensions) {
     try {
       lower::require_packed_stage(invalid[0], invalid[1], 1, 1, nullptr, nullptr);
-    } catch (const std::invalid_argument&) { ++marker; }
+    } catch (const std::invalid_argument&) {
+      ++marker;
+    }
   }
   if (marker != 9) throw std::runtime_error("unsupported stage domain was admitted");
   try {
     lower::require_packed_stage(INT32_MAX, INT32_MAX, 1, 1, nullptr, nullptr);
     throw std::runtime_error("overflow stage dimensions were admitted");
-  } catch (const std::length_error&) {}
+  } catch (const std::length_error&) {
+  }
   const std::array<std::array<std::size_t, 2>, 3> asymmetric_dimensions{
       std::array<std::size_t, 2>{5, 7}, {7, 5}, {12, 17}};
   for (const bool generated : {false, true})
-    for (const auto dims : asymmetric_dimensions)
-      one_case(dims[0], dims[1], generated);
+    for (const auto dims : asymmetric_dimensions) one_case(dims[0], dims[1], generated);
   for (const bool generated : {false, true}) {
     one_case(5, 6, generated, true);
     one_case(7, 10, generated, true);
