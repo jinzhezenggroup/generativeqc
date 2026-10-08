@@ -219,9 +219,8 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     // row-major and reverse the operands; the shared Tensor provider submits
     // the identical FP64 GEMM on the already-owned DF stream/BLAS handle.
     try {
-      generativeqc_tensor::gemm(plan.blas, tb, ta, static_cast<int>(columns),
-                                static_cast<int>(m), static_cast<int>(k), b, a, output, 0, 0, 0,
-                                1, 1.0, 0.0);
+      generativeqc_tensor::gemm(plan.blas, tb, ta, static_cast<int>(columns), static_cast<int>(m),
+                                static_cast<int>(k), b, a, output, 0, 0, 0, 1, 1.0, 0.0);
     } catch (const std::exception&) {
       throw std::runtime_error("native CUDA DF-CC source GEMM failed");
     }

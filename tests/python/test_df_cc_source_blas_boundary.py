@@ -42,13 +42,9 @@ def test_transposed_row_major_provider_preserves_df_source_columns(
     a_memory = np.asfortranarray(a_col).ravel(order="F")
     b_memory = np.asfortranarray(b_col).ravel(order="F")
 
-    old = (a_col.T if left_t else a_col) @ (
-        b_col.T if right_t else b_col
-    )
+    old = (a_col.T if left_t else a_col) @ (b_col.T if right_t else b_col)
     # A column-major matrix is a transposed row-major view of the same bytes.
     a_row = a_memory.reshape(a_col.shape[::-1])
     b_row = b_memory.reshape(b_col.shape[::-1])
-    new = (b_row.T if right_t else b_row) @ (
-        a_row.T if left_t else a_row
-    )
+    new = (b_row.T if right_t else b_row) @ (a_row.T if left_t else a_row)
     np.testing.assert_allclose(new, old.T, rtol=1e-14, atol=1e-14)
