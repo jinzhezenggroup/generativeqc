@@ -107,6 +107,8 @@ def build_df_rys_component_ir(components: typing.Any) -> typing.Any:
         for identifier in source.topological_order((value,)):
             node = source.nodes[identifier]
             if node.operation == "variable":
+                if not isinstance(node.payload, str):
+                    raise TypeError("variable node payload must be a string")
                 cloned[identifier] = replacements[node.payload]
             elif node.operation == "constant":
                 cloned[identifier] = graph.clone_constant(node)
@@ -331,6 +333,8 @@ def build_df_rys_shared_axis_ir(angular: typing.Any) -> typing.Any:
         for identifier in source.topological_order((value,)):
             node = source.nodes[identifier]
             if node.operation == "variable":
+                if not isinstance(node.payload, str):
+                    raise TypeError("variable node payload must be a string")
                 cloned[identifier] = replacements[node.payload]
             elif node.operation == "constant":
                 cloned[identifier] = graph.clone_constant(node)
