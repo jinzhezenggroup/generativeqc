@@ -8,6 +8,7 @@ import typing
 import numpy as np
 from generativeqc import response_solver
 from generativeqc._stationary_cpu import _xc_gradient_argument
+from generativeqc_compiler.xc.grid_response import partition_response
 
 
 class _MatrixOperator:
@@ -120,3 +121,34 @@ def test_block_gmres_reuses_one_projected_rhs_buffer(
     assert rhs_allocations == [max_columns]
     assert result.converged
     np.testing.assert_allclose(matrix @ result.solution, rhs, rtol=0, atol=1e-9)
+
+def test_reused_becke_impulse_matches_fresh_direction_for_all_atoms() -> None:
+    """Exact partition JVP parity across reused tiles and axis directions."""
+    centers = np.array(
+        [[0.0, 0.0, 0.0], [1.2, 0.0, 0.0], [0.1, 1.3, 0.0]],
+        dtype=np.float64,
+    )
+    tiles = (
+        (np.array([[0.3, 0.2, 0.7], [0.9, 0.5, 0.1]]), np.array([0, 1])),
+        (np.array([[0.1, 0.4, 0.8]]), np.array([2])),
+    )
+    reusable = np.zeros((len(centers), 3), dtype=np.float64)
+    for points, owners in tiles:
+        for atom in range(len(centers)):
+            for axis in range(3):
+                fresh = np.zeros_like(reusable)
+                fresh[atom, axis] = 1.0
+                expected = partition_response(
+                    points, centers, point_motion=fresh[owners], center_motion=fresh
+                )
+                reusable[atom, axis] = 1.0
+                actual = partition_response(
+                    points,
+                    centers,
+                    point_motion=reusable[owners],
+                    center_motion=reusable,
+                )
+                np.testing.assert_array_equal(actual.directional, expected.directional)
+                np.testing.assert_array_equal(actual.weights, expected.weights)
+                reusable[atom, axis] = 0.0
+                assert not reusable.any()
