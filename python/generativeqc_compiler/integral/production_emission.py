@@ -358,7 +358,9 @@ def _streaming_fock_internal_signature(
     )
 
 
-def _streaming_fock_source(selection: KernelSelection) -> str:
+def _streaming_fock_source(
+    selection: KernelSelection, *, include_work_buckets: bool = True
+) -> str:
     """Emit fixed-storage shell-pair enumeration for dominant Fock classes."""
 
     if not selection.has_capability(CAPABILITY_STREAMING_FOCK):
@@ -660,24 +662,25 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
 
     if schedule.kind in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS):
         packed = schedule.kind == ScheduleKind.PACKED_TASKS
-        worker = exchange_streaming_worker(
-            prefix=prefix,
-            class_name=class_name,
-            internal_parameters=internal_parameters,
-            shell_class=shell_class,
-            high_pair_class=high_pair_class,
-            low_pair_class=low_pair_class,
-            system_density_bound=system_density_bound,
-            block_threads=schedule.block_threads,
-            width=32 if packed else schedule.tasks_per_block,
-            packed=packed,
-            local_lane_state=selection.has_capability(
+        worker_options = {
+            "prefix": prefix,
+            "class_name": class_name,
+            "internal_parameters": internal_parameters,
+            "shell_class": shell_class,
+            "high_pair_class": high_pair_class,
+            "low_pair_class": low_pair_class,
+            "system_density_bound": system_density_bound,
+            "block_threads": schedule.block_threads,
+            "width": 32 if packed else schedule.tasks_per_block,
+            "packed": packed,
+            "local_lane_state": selection.has_capability(
                 CAPABILITY_LOCAL_PACKED_STREAMING_FOCK
             ),
-            supports_mixed_fock=supports_mixed_fock,
-            retained_state=retained_state,
-            record_precision=record_precision,
-        )
+            "supports_mixed_fock": supports_mixed_fock,
+            "retained_state": retained_state,
+            "record_precision": record_precision,
+        }
+        worker = exchange_streaming_worker(**worker_options)
     elif (
         schedule.kind == ScheduleKind.COMPONENT_LANES
         and high_pair_class != low_pair_class
@@ -879,17 +882,32 @@ void {prefix}_shell_class_fock_uhf_streaming_kernel(
       {internal_arguments});
 }}
 """
+    if include_work_buckets and schedule.kind in (
+        ScheduleKind.PACKED_TASKS,
+        ScheduleKind.SUBGROUP_TASKS,
+    ):
+        work_worker = exchange_streaming_worker(**worker_options, work_aware=True)
+        work_worker = work_worker.replace(
+            f"void {prefix}_streaming_fock(", f"void {prefix}_work_streaming_fock("
+        )
+        work_kernels = kernels.replace(
+            "_streaming_kernel(", "_work_streaming_kernel("
+        ).replace(f"{prefix}_streaming_fock<", f"{prefix}_work_streaming_fock<")
+        return common + worker + kernels + work_worker + work_kernels
     return common + worker + kernels
 
 
 def _streaming_fock_launch_wrapper(
     selection: KernelSelection,
     symbol: str | None = None,
+    *,
+    work_aware: bool = False,
 ) -> str:
     """Emit the stable host wrapper adapting to a specialized internal ABI."""
 
     spec = selection.spec
     class_name = spec.name[0].upper() + spec.name[1:]
+    kernel_infix = "work_" if work_aware else ""
     internal_arguments = _streaming_fock_internal_signature(selection).argument_list(
         wrapper=True
     )
@@ -914,11 +932,11 @@ extern "C" cudaError_t {symbol or f"generativeqc_launch_generated_{spec.name}_st
       static_cast<const Generated{class_name}PrimitivePairData*>(
           primitive_pairs);
   if (unrestricted) {{
-    generated_{spec.name}_shell_class_fock_uhf_streaming_kernel<<<
+    generated_{spec.name}_shell_class_fock_uhf_{kernel_infix}streaming_kernel<<<
         worker_blocks, kGenerated{class_name}FockBlockThreads, 0, stream>>>(
         {internal_arguments});
   }} else {{
-    generated_{spec.name}_shell_class_fock_rhf_streaming_kernel<<<
+    generated_{spec.name}_shell_class_fock_rhf_{kernel_infix}streaming_kernel<<<
         worker_blocks, kGenerated{class_name}FockBlockThreads, 0, stream>>>(
         {internal_arguments});
   }}
@@ -1059,6 +1077,17 @@ def emit_production_shard(
             if selection.has_capability(CAPABILITY_STREAMING_FOCK):
                 body.append(_streaming_fock_source(selection))
                 body.append(_streaming_fock_launch_wrapper(selection))
+                if _streaming_fock_schedule(selection).kind in (
+                    ScheduleKind.PACKED_TASKS,
+                    ScheduleKind.SUBGROUP_TASKS,
+                ):
+                    body.append(
+                        _streaming_fock_launch_wrapper(
+                            selection,
+                            f"generativeqc_launch_generated_{selection.spec.name}_work_streaming_fock",
+                            work_aware=True,
+                        )
+                    )
         if selection.resident_force_recurrence is not None:
             body.append(_emit_ppps_resident_source(selection))
             body.append(_ppps_resident_launch_wrapper())
@@ -1197,7 +1226,11 @@ def emit_profile_shard(
             if selection.has_capability(CAPABILITY_STREAMING_FOCK):
                 body.append(
                     _scope_profile_identifiers(
-                        _streaming_fock_source(selection), selection, identifier
+                        _streaming_fock_source(
+                            selection, include_work_buckets=not variant
+                        ),
+                        selection,
+                        identifier,
                     )
                 )
                 streaming_symbol = f"{force_symbol}_streaming_fock"
@@ -1213,6 +1246,25 @@ def emit_profile_shard(
                     streaming_symbol,
                 )
                 body.append(streaming_wrapper)
+                if not variant and _streaming_fock_schedule(selection).kind in (
+                    ScheduleKind.PACKED_TASKS,
+                    ScheduleKind.SUBGROUP_TASKS,
+                ):
+                    work_symbol = f"{force_symbol}_work_streaming_fock"
+                    body.append(
+                        _scope_profile_identifiers(
+                            _streaming_fock_launch_wrapper(
+                                selection, work_symbol, work_aware=True
+                            ),
+                            selection,
+                            identifier,
+                        ).replace(
+                            _scope_profile_identifiers(
+                                work_symbol, selection, identifier
+                            ),
+                            work_symbol,
+                        )
+                    )
         if selection.resident_force_recurrence is not None:
             resident_source = _scope_profile_identifiers(
                 _strip_emitter_includes(_emit_ppps_resident_source(selection)),

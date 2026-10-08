@@ -10,16 +10,17 @@
 namespace generativeqc::scf::cuda_execution {
 
 /** Freeze raw-K scheduling independently of recurrence selection.
- * Cross-chunk filling is the default; incumbent is an explicit rollback.
+ * Primitive-work buckets are the default; fill is an explicit rollback.
  * No environment reads occur during execution or after output accumulation.
  */
 inline detail::GeneratedExchangeTaskSchedule prepare_direct_exchange_task_schedule() {
   const char* value = std::getenv("GENERATIVEQC_DIRECT_K_TASK_SCHEDULE");
-  if (value == nullptr || *value == '\0' || std::strcmp(value, "fill") == 0)
-    return detail::GeneratedExchangeTaskSchedule::Fill;
+  if (value == nullptr || *value == '\0' || std::strcmp(value, "work") == 0)
+    return detail::GeneratedExchangeTaskSchedule::Work;
+  if (std::strcmp(value, "fill") == 0) return detail::GeneratedExchangeTaskSchedule::Fill;
   if (std::strcmp(value, "incumbent") == 0) return detail::GeneratedExchangeTaskSchedule::Incumbent;
   if (std::strcmp(value, "primitive") == 0) return detail::GeneratedExchangeTaskSchedule::Primitive;
-  throw std::invalid_argument("Direct K task schedule must be incumbent, fill or primitive");
+  throw std::invalid_argument("Direct K task schedule must be incumbent, fill, primitive or work");
 }
 
 /** Optional lowering is frozen by the prepared owner, independently for J/K.
@@ -50,11 +51,13 @@ inline std::uint64_t prepare_direct_fock_k_block_mask() {
 
 /** Select before launch; never retry a failed launch into partially written output. */
 inline auto direct_fock_streaming_launcher(std::uint64_t rys_mask, std::uint64_t k_block_mask,
-                                           unsigned shell_class) {
+                                           unsigned shell_class, bool work_aware = false) {
   const auto bit = std::uint64_t{1} << shell_class;
-  return (k_block_mask & bit) ? generated::launch_shell_class_k_block_streaming_fock
-                              : ((rys_mask & bit) ? generated::launch_shell_class_rys_streaming_fock
-                                                  : generated::launch_shell_class_streaming_fock);
+  return (k_block_mask & bit)
+             ? generated::launch_shell_class_k_block_streaming_fock
+             : ((rys_mask & bit) ? generated::launch_shell_class_rys_streaming_fock
+                                 : (work_aware ? generated::launch_shell_class_work_streaming_fock
+                                               : generated::launch_shell_class_streaming_fock));
 }
 
 /** Compatibility overload for J/HF callers without a K-only alternative. */

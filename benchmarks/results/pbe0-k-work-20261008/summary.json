@@ -1,0 +1,470 @@
+{
+  "schema": "direct-k-work-buckets-qualification.v1",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "major": 12,
+    "minor": 0,
+    "multiprocessors": 170,
+    "memory_bytes": 33668988928,
+    "driver": 13000,
+    "runtime": 12090
+  },
+  "precision": "FP64",
+  "method": "PBE0/RKS",
+  "protocol": {
+    "atoms": 96,
+    "method": "PBE0/RKS",
+    "basis": "def2-SVP",
+    "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+    "representation": "spherical",
+    "grid": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "properties": [
+      "energy",
+      "forces"
+    ],
+    "force_return": "host_array_in_timed_endpoint",
+    "density_fitting": false,
+    "repeats": 5,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "reference_gradient_tolerance": 1e-10,
+    "screening_tolerance": 1e-12,
+    "reference_direct_scf_tolerance": 1e-14,
+    "reference_fock_policy": "full-density-rebuild",
+    "max_iterations": 100,
+    "energy_gate": 1e-08,
+    "force_gate": 1e-07,
+    "cold_definition": "preparation plus first synchronized energy/force endpoint",
+    "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+    "threads": {
+      "OMP_NUM_THREADS": "8",
+      "OPENBLAS_NUM_THREADS": "8",
+      "MKL_NUM_THREADS": "8"
+    }
+  },
+  "cold_definition": "fresh owner/density; persistent compiler and runtime caches reused",
+  "cold_timer": "preparation plus first synchronized energy and host-returning forces; imports, context initialization and Calculator construction excluded",
+  "threads": {
+    "OMP_NUM_THREADS": "8",
+    "OPENBLAS_NUM_THREADS": "8",
+    "MKL_NUM_THREADS": "8"
+  },
+  "cold_comparisons": [
+    {
+      "atoms": 48,
+      "aos": 384,
+      "modes": {
+        "fill": {
+          "median_complete_seconds": 103.37291325442493,
+          "samples": [
+            {
+              "complete_seconds": 109.60660959035158,
+              "prepare_seconds": 1.9584559127688408,
+              "execute_seconds": 107.64815367758274,
+              "force_seconds": 26.705607749521732,
+              "scf_and_publication_seconds": 80.94254592806101,
+              "iterations": 26,
+              "fock_builds": 26,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 4.547473508864641e-12,
+                "force_error": 1.4423795491325109e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            },
+            {
+              "complete_seconds": 97.13921691849828,
+              "prepare_seconds": 1.9102035276591778,
+              "execute_seconds": 95.2290133908391,
+              "force_seconds": 24.003961473703384,
+              "scf_and_publication_seconds": 71.22505191713572,
+              "iterations": 23,
+              "fock_builds": 23,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 3.637978807091713e-12,
+                "force_error": 2.537881016451138e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            }
+          ],
+          "library_sha256": "847696b3104f4d21a23f9e75ae7f74fb46472f82725d88823c14c7f39e7586c4",
+          "source_identity": "aa8e5c1d67d60438d9eed62145b9f142ec7c7d2235aac2b04242bd0ab1866eac"
+        },
+        "work": {
+          "median_complete_seconds": 91.65701419301331,
+          "samples": [
+            {
+              "complete_seconds": 91.56301837041974,
+              "prepare_seconds": 1.8738910481333733,
+              "execute_seconds": 89.68912732228637,
+              "force_seconds": 23.718800250440836,
+              "scf_and_publication_seconds": 65.97032707184553,
+              "iterations": 23,
+              "fock_builds": 23,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 4.092726157978177e-12,
+                "force_error": 2.5109470058737315e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            },
+            {
+              "complete_seconds": 91.75101001560688,
+              "prepare_seconds": 1.9277121536433697,
+              "execute_seconds": 89.82329786196351,
+              "force_seconds": 23.78888677805662,
+              "scf_and_publication_seconds": 66.03441108390689,
+              "iterations": 23,
+              "fock_builds": 23,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 4.320099833421409e-12,
+                "force_error": 2.5335733511155922e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            }
+          ],
+          "library_sha256": "847696b3104f4d21a23f9e75ae7f74fb46472f82725d88823c14c7f39e7586c4",
+          "source_identity": "aa8e5c1d67d60438d9eed62145b9f142ec7c7d2235aac2b04242bd0ab1866eac"
+        }
+      },
+      "observed_median_reduction_fraction": 0.11333625698035665,
+      "timing_claim_eligible": false,
+      "caveat": "Only two fresh-process endpoints per mode; SCF trajectories/Fock counts do not match. Observed timings are not evidence of a stable cold advantage or default promotion."
+    },
+    {
+      "atoms": 96,
+      "aos": 768,
+      "modes": {
+        "fill": {
+          "median_complete_seconds": 203.4864307884127,
+          "samples": [
+            {
+              "complete_seconds": 191.22492656856775,
+              "prepare_seconds": 5.868275590240955,
+              "execute_seconds": 185.3566509783268,
+              "force_seconds": 39.59800422936678,
+              "scf_and_publication_seconds": 145.75864674896002,
+              "iterations": 24,
+              "fock_builds": 24,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 7.912603905424476e-11,
+                "force_error": 2.471112203750181e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            },
+            {
+              "complete_seconds": 215.74793500825763,
+              "prepare_seconds": 5.877452936023474,
+              "execute_seconds": 209.87048207223415,
+              "force_seconds": 39.628534995019436,
+              "scf_and_publication_seconds": 170.24194707721472,
+              "iterations": 28,
+              "fock_builds": 28,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 7.503331289626658e-11,
+                "force_error": 2.2245316699809337e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            }
+          ],
+          "library_sha256": "847696b3104f4d21a23f9e75ae7f74fb46472f82725d88823c14c7f39e7586c4",
+          "source_identity": "aa8e5c1d67d60438d9eed62145b9f142ec7c7d2235aac2b04242bd0ab1866eac"
+        },
+        "work": {
+          "median_complete_seconds": 198.74427225068212,
+          "samples": [
+            {
+              "complete_seconds": 207.27442361786962,
+              "prepare_seconds": 5.856843337416649,
+              "execute_seconds": 201.41758028045297,
+              "force_seconds": 39.61511693894863,
+              "scf_and_publication_seconds": 161.80246334150434,
+              "iterations": 28,
+              "fock_builds": 28,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 7.548806024715304e-11,
+                "force_error": 2.1965540497603797e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            },
+            {
+              "complete_seconds": 190.21412088349462,
+              "prepare_seconds": 5.887285489588976,
+              "execute_seconds": 184.32683539390564,
+              "force_seconds": 39.65491971746087,
+              "scf_and_publication_seconds": 144.67191567644477,
+              "iterations": 25,
+              "fock_builds": 25,
+              "converged": true,
+              "warm_start_used": false,
+              "acceptance": {
+                "energy_error": 7.776179700158536e-11,
+                "force_error": 2.4054203073831104e-11,
+                "gate": true
+              },
+              "slurm_job_id": "6662",
+              "cuda_visible_devices": "0"
+            }
+          ],
+          "library_sha256": "847696b3104f4d21a23f9e75ae7f74fb46472f82725d88823c14c7f39e7586c4",
+          "source_identity": "aa8e5c1d67d60438d9eed62145b9f142ec7c7d2235aac2b04242bd0ab1866eac"
+        }
+      },
+      "observed_median_reduction_fraction": 0.023304544285124962,
+      "timing_claim_eligible": false,
+      "caveat": "Only two fresh-process endpoints per mode; SCF trajectories/Fock counts do not match. Observed timings are not evidence of a stable cold advantage or default promotion."
+    }
+  ],
+  "fixed_initial_density_K": [
+    {
+      "atoms": 48,
+      "aos": 384,
+      "modes": {
+        "fill": {
+          "samples_seconds": [
+            0.9495177902281284,
+            0.9397670105099678,
+            0.9348771385848522,
+            0.9491063915193081,
+            0.9708557538688183,
+            0.9479421265423298
+          ],
+          "median_seconds": 0.9485242590308189
+        },
+        "work": {
+          "samples_seconds": [
+            0.7373994067311287,
+            0.7267172709107399,
+            0.7283627465367317,
+            0.7210613340139389,
+            0.7358050383627415,
+            0.7376545369625092
+          ],
+          "median_seconds": 0.7320838924497366
+        }
+      },
+      "median_reduction_fraction": 0.22818643226082203,
+      "density_kind": "independent PySCF MINAO guess; scaled regimes are synthetic",
+      "density_sha256": "2f81a4d5fb24a6ee6262eee3cd9d4961bcaae02a42f524d765fdabd3459840f3",
+      "admitted_generated_streaming_K_per_class": [
+        3494023,
+        7018770,
+        3522616,
+        1834566,
+        1839548,
+        241455,
+        1514420,
+        1516642,
+        394248,
+        162270,
+        689574,
+        686554,
+        180180,
+        145326,
+        32873,
+        80856,
+        80628,
+        21038,
+        16846,
+        7606,
+        456,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "admitted_generated_streaming_K": 23480495,
+      "count_coverage": "generated streaming classes only; native dddd/fallback work is not counted",
+      "max_oracle_error": 1.8843562723646484e-11,
+      "timing_kind": "prepared SCF device-K seam wall: upload, transformations, K, projection, host export and synchronization; no preparation, SCF or CPU one-electron assembly",
+      "slurm_job_id": "6666"
+    },
+    {
+      "atoms": 96,
+      "aos": 768,
+      "modes": {
+        "fill": {
+          "samples_seconds": [
+            1.6638405360281467,
+            1.6691145524382591,
+            1.6716111935675144,
+            1.6644848361611366,
+            1.6743384897708893,
+            1.6698018163442612
+          ],
+          "median_seconds": 1.6694581843912601
+        },
+        "work": {
+          "samples_seconds": [
+            1.389895062893629,
+            1.3685981184244156,
+            1.3865561187267303,
+            1.3713806755840778,
+            1.4019097946584225,
+            1.372619692236185
+          ],
+          "median_seconds": 1.3795879054814577
+        }
+      },
+      "median_reduction_fraction": 0.17363135035065214,
+      "density_kind": "independent PySCF MINAO guess; scaled regimes are synthetic",
+      "density_sha256": "5ef80f98c98d59a8c31dce6aaf05c609e8109aed430e201cc674576d21c7d950",
+      "admitted_generated_streaming_K_per_class": [
+        12777204,
+        24958824,
+        12170890,
+        6355540,
+        6188172,
+        788130,
+        5295560,
+        5162824,
+        1311704,
+        544620,
+        2300340,
+        2229948,
+        570720,
+        468636,
+        101428,
+        271176,
+        263912,
+        67768,
+        54948,
+        23848,
+        1432,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "admitted_generated_streaming_K": 81907624,
+      "count_coverage": "generated streaming classes only; native dddd/fallback work is not counted",
+      "max_oracle_error": 1.8901547400819105e-11,
+      "timing_kind": "prepared SCF device-K seam wall: upload, transformations, K, projection, host export and synchronization; no preparation, SCF or CPU one-electron assembly",
+      "slurm_job_id": "6666"
+    }
+  ],
+  "gates": {
+    "small_matrix_checks": 16,
+    "small_matrix_max_error": 4.686251386942786e-13,
+    "native_independent_JK_and_derivatives": "PASS",
+    "memcheck_errors": 0,
+    "synccheck_errors": 0
+  },
+  "default": "fill",
+  "work": "experimental opt-in; not promoted",
+  "raw_records": "/data/jzzeng/qc-1892-work-20261008/results on n1",
+  "raw_record_sha256": {
+    "classes-work-cold-96.json": "b3225677bbaf9f4fee6649772385ca261199d8d0ca65a57f899d42b315e0d023",
+    "fill0-cold-48.json": "a6ff5b66eb22ad154dd862cafc87cb3f6f5e81fbc4ac5a785d16a993923ca73f",
+    "fill0-cold-96.json": "03aeced5595b3f37f36add73a73a50ef7209d8e044dbfbb35a7d1d39f096f70d",
+    "fill1-cold-48.json": "f0c24a78941cbecc82308a5c1037520f0a6688efb878f9dc648be04644da6ee3",
+    "fill1-cold-96.json": "d96ccd22d5bc2c4f333c38c44fc8939fc7c15ee98b971f8aaff4008537cb9044",
+    "fixed-k.json": "291a5cbcf4d0883fd7b876882360ab79c24406478e4163f96e604c0120420ff9",
+    "work-matrices.json": "693e2ba534e72341d60d380dbc8547005012e8a0c42e9528f4442b73ef5c1e5f",
+    "work-profile-cold-96.json": "4efc147cb84f4bee977a2a78a854bd34618a5bab449dc62b246c6ee4a1841a56",
+    "work0-cold-48.json": "bf2d2e75f1a0d5cab543076910e08fba6604d74c892289f3941d93a439d79a72",
+    "work0-cold-96.json": "73ef8a0e83912cdfcc32da4a1ec43e8f9abb10890ee26798d1a01b2c63fba29b",
+    "work1-cold-48.json": "032d3581d7a24252505946a9e582e653a1a3a3a8460c0bbfd791239eb9538a91",
+    "work1-cold-96.json": "99c63f725d26ec2434138239f6c60afc111ff693ce8bedf2de5cbf114024ac79"
+  }
+}

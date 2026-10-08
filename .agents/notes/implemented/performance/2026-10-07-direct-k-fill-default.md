@@ -4,6 +4,10 @@ Status: implemented
 Date: 2026-10-07
 References: #1892, #2076
 
+The default-selection decision is superseded by the
+[2026-10-09 work-default decision](2026-10-09-direct-k-work-default.md).
+The original fill qualification and rationale below remain historical evidence.
+
 ## Problem
 
 The qualified fill schedule improves fixed-density K wall and observed complete
