@@ -27,6 +27,7 @@ endfunction()
 function(generativeqc_add_runtime_sources target)
   target_sources(${target} PRIVATE
     src/runtime/context.cpp
+    src/runtime/ragged_topology.cpp
     src/runtime/cuda_provider.cpp
     src/tensor/cpu_linalg.cpp
     src/tensor/cpu/lp64_provider.cpp)

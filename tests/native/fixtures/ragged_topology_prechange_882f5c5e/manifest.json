@@ -1,0 +1,16 @@
+{
+  "commit": "882f5c5e0bc060b5777d5060c9cb89714bb4429b",
+  "source": "git show <commit>:<path>; exact unedited bytes",
+  "sources": {
+    "src/xtb/native/src/backends/common/gfn2_plan_schema.hpp": {
+      "fixture": "backends/common/gfn2_plan_schema.hpp",
+      "sha256": "6261e0b03295e509064da4dfc96d52246b6f570e27cb5d9b3c8b5d7b747d6c5c",
+      "git_blob": "4d42f0d8d5982662fe0550022c8867f09df132c7"
+    },
+    "src/xtb/native/src/backends/common/gfn2_plan_schema.cpp": {
+      "fixture": "backends/common/gfn2_plan_schema.cpp",
+      "sha256": "ed55d903522adcaa88d0eac702aa56df8f06482ae55893dfe44feebe9314e1d5",
+      "git_blob": "a13594f3f0638f85add702c00494aec9a59032db"
+    }
+  }
+}
