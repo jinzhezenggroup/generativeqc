@@ -121,9 +121,7 @@ def ones(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
     return full(shape, 1, dtype=dtype)
 
 
-def full_like(
-    x: object, fill_value: object, *, dtype: str | None = None
-) -> VibeArray:
+def full_like(x: object, fill_value: object, *, dtype: str | None = None) -> VibeArray:
     """Create a generic constant with the same shape/dtype, not a QC relabeling."""
     value = _array(x)
     if not _is_generic_array(value):
@@ -131,9 +129,7 @@ def full_like(
             "full_like for scientifically annotated arrays requires explicit "
             "TensorIR index and representation metadata"
         )
-    return full(
-        value.shape, fill_value, dtype=value.dtype if dtype is None else dtype
-    )
+    return full(value.shape, fill_value, dtype=value.dtype if dtype is None else dtype)
 
 
 def zeros_like(x: object, *, dtype: str | None = None) -> VibeArray:
@@ -404,13 +400,17 @@ def _expand_shape(shape: tuple[int, ...], axis: object) -> tuple[int, ...]:
     if len(inserted) != count:
         raise ValueError("expand_dims axis count is inconsistent")
     original = iter(shape)
-    return tuple(1 if position in inserted else next(original) for position in range(new_rank))
+    return tuple(
+        1 if position in inserted else next(original) for position in range(new_rank)
+    )
 
 
 def expand_dims(x: object, axis: int | tuple[int, ...]) -> VibeArray:
     value = _array(x)
     if not _is_generic_array(value):
-        raise ValueError("expand_dims scientific arrays require explicit TensorIR indices")
+        raise ValueError(
+            "expand_dims scientific arrays require explicit TensorIR indices"
+        )
     return reshape(value, _expand_shape(value.shape, axis))
 
 
@@ -420,7 +420,9 @@ def _squeezed_shape(
     axes = set(_normalized_axes(axis, len(shape), "squeeze"))
     if any(shape[position] != 1 for position in axes):
         raise ValueError("squeeze requires singleton dimensions at specified axes")
-    return tuple(extent for position, extent in enumerate(shape) if position not in axes)
+    return tuple(
+        extent for position, extent in enumerate(shape) if position not in axes
+    )
 
 
 def squeeze(x: object, axis: int | tuple[int, ...]) -> VibeArray:
@@ -455,8 +457,10 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
     value = _array(x)
     if not _is_generic_array(value):
         raise ValueError("flip scientific arrays require explicit TensorIR index maps")
-    axes = tuple(range(value.ndim)) if axis is None else _normalized_axes(
-        axis, value.ndim, "flip"
+    axes = (
+        tuple(range(value.ndim))
+        if axis is None
+        else _normalized_axes(axis, value.ndim, "flip")
     )
     if any(value.shape[position] > 65536 for position in axes):
         raise ValueError("flip exceeds the bounded static gather index budget")

@@ -269,8 +269,10 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.flip(x, axis=axis)
     array = _eager_array(x)
-    axes = tuple(range(array.ndim)) if axis is None else _namespace._normalized_axes(
-        axis, array.ndim, "flip"
+    axes = (
+        tuple(range(array.ndim))
+        if axis is None
+        else _namespace._normalized_axes(axis, array.ndim, "flip")
     )
     return np.flip(array, axis=axes)
 
@@ -496,15 +498,11 @@ def full_like(
     return _eager_compute(np.full_like, array, float(factor), dtype=np.dtype(name))
 
 
-def zeros_like(
-    x: object, *, dtype: object = None, device: object = None
-) -> typing.Any:
+def zeros_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
     return full_like(x, 0, dtype=dtype, device=device)
 
 
-def ones_like(
-    x: object, *, dtype: object = None, device: object = None
-) -> typing.Any:
+def ones_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
     return full_like(x, 1, dtype=dtype, device=device)
 
 
@@ -690,6 +688,8 @@ __all__ = [
     "VibeArray",
     "add",
     "asarray",
+    "broadcast_arrays",
+    "broadcast_shapes",
     "broadcast_to",
     "capabilities",
     "compile",
@@ -697,34 +697,32 @@ __all__ = [
     "dlpack_device",
     "einsum",
     "exp",
+    "expand_dims",
+    "flip",
     "float32",
     "float64",
+    "full",
+    "full_like",
     "import_dlpack",
     "input_array",
     "log",
     "matmul",
     "matrix_transpose",
+    "moveaxis",
     "multiply",
     "negative",
+    "ones",
+    "ones_like",
     "permute_dims",
     "pow",
     "reshape",
     "slice",
     "sqrt",
+    "squeeze",
     "subtract",
     "sum",
     "take",
-    "full",
-    "full_like",
-    "ones",
-    "ones_like",
+    "trace",
     "zeros",
     "zeros_like",
-    "broadcast_arrays",
-    "broadcast_shapes",
-    "expand_dims",
-    "squeeze",
-    "moveaxis",
-    "flip",
-    "trace",
 ]

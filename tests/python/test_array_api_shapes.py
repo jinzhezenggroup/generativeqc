@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
 
@@ -156,7 +155,10 @@ def test_shape_ops_use_existing_tensorir_jvp_and_scientific_guardrails() -> None
     # Axis-only permutations preserve the scientific indices without relabeling.
     matrix = xp.TensorSpec((xp.Index("p", ao), xp.Index("q", ao)), role="input")
     manual = xp.trace(lambda x: {"out": xp.permute_dims(x, (-1, -2))}, {"x": matrix})
-    assert tuple(index.name for index in manual.outputs["out"].spec.indices) == ("q", "p")
+    assert tuple(index.name for index in manual.outputs["out"].spec.indices) == (
+        "q",
+        "p",
+    )
 
 
 @pytest.mark.parametrize(
@@ -188,6 +190,4 @@ def test_capture_flip_rejects_excessive_static_gather_index_budget() -> None:
     values = np.zeros((65537,), dtype=np.float64)
     with pytest.raises(ValueError, match="bounded static gather"):
         expression.lower(values)
-    np.testing.assert_array_equal(
-        xp.flip(values, axis=0), np.flip(values, axis=0)
-    )
+    np.testing.assert_array_equal(xp.flip(values, axis=0), np.flip(values, axis=0))
