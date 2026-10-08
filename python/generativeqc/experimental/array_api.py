@@ -33,6 +33,7 @@ from generativeqc_compiler.array_api import (
     capabilities as _compiler_capabilities,
 )
 from generativeqc_compiler.array_api import namespace as _namespace
+from generativeqc_compiler.array_api.trace import active_capture as _active_capture
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
@@ -388,6 +389,82 @@ def asarray(
     return array
 
 
+def _creation_dtype(dtype: object) -> str:
+    return "float64" if dtype is None else _dtype_name(dtype)
+
+
+def _creation_device(device: object) -> None:
+    if device is not None:
+        raise ValueError(
+            "experimental creation only admits device=None (CPU reference); "
+            "device selection requires a qualified backend"
+        )
+
+
+def full(
+    shape: int | tuple[int, ...],
+    fill_value: object,
+    *,
+    dtype: object = None,
+    device: object = None,
+) -> typing.Any:
+    """Create a finite uniform array, or capture an exact TensorIR constant."""
+    _creation_device(device)
+    target = _namespace._creation_shape(shape)
+    name = _creation_dtype(dtype)
+    if dtype is None and type(fill_value) in (bool, int):
+        raise TypeError(
+            "full with integer/bool fill_value requires an integer/bool dtype "
+            "not supported by this preview; specify a floating dtype explicitly"
+        )
+    factor = _namespace._generic_scalar(fill_value, "full fill value")
+    if _active_capture():
+        return _namespace.full(target, factor, dtype=name)
+    return _eager_compute(np.full, target, float(factor), dtype=np.dtype(name))
+
+
+def zeros(
+    shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
+) -> typing.Any:
+    return full(shape, 0, dtype=_creation_dtype(dtype), device=device)
+
+
+def ones(
+    shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
+) -> typing.Any:
+    return full(shape, 1, dtype=_creation_dtype(dtype), device=device)
+
+
+def full_like(
+    x: object,
+    fill_value: object,
+    *,
+    dtype: object = None,
+    device: object = None,
+) -> typing.Any:
+    """Create a uniform generic array inheriting the input's shape/dtype."""
+    _creation_device(device)
+    factor = _namespace._generic_scalar(fill_value, "full_like fill value")
+    if isinstance(x, VibeArray):
+        name = x.dtype if dtype is None else _dtype_name(dtype)
+        return _namespace.full_like(x, factor, dtype=name)
+    array = _eager_array(x)
+    name = array.dtype.name if dtype is None else _dtype_name(dtype)
+    return _eager_compute(np.full_like, array, float(factor), dtype=np.dtype(name))
+
+
+def zeros_like(
+    x: object, *, dtype: object = None, device: object = None
+) -> typing.Any:
+    return full_like(x, 0, dtype=dtype, device=device)
+
+
+def ones_like(
+    x: object, *, dtype: object = None, device: object = None
+) -> typing.Any:
+    return full_like(x, 1, dtype=dtype, device=device)
+
+
 def _generic_spec(array: np.ndarray, *, differentiable: bool) -> TensorSpec:
     return TensorSpec(
         _namespace._generic_indices(tuple(int(extent) for extent in array.shape)),
@@ -594,5 +671,11 @@ __all__ = [
     "subtract",
     "sum",
     "take",
+    "full",
+    "full_like",
+    "ones",
+    "ones_like",
+    "zeros",
+    "zeros_like",
     "trace",
 ]
