@@ -10,12 +10,12 @@ import inspect
 import typing
 from types import SimpleNamespace
 
+import generativeqc.rks_hessian_integrals as second_hvp
 import numpy as np
 import pytest
 from generativeqc import Primitive, Shell
 from generativeqc.response_operator import _BaseResponseOperator
 from generativeqc.response_solver import GMRESOptions, solve_many
-import generativeqc.rks_hessian_integrals as second_hvp
 from generativeqc_compiler.common.evidence import finite_difference
 from generativeqc_compiler.dft import ExplicitGrid, NativeAO, partition_weights
 from generativeqc_compiler.dft.nonlocal_reference import (
@@ -293,7 +293,7 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
         def __enter__(self) -> Plan:
             return self
 
-        def __exit__(self, *args: typing.Any) -> None:
+        def __exit__(self, *args: object) -> None:
             pass
 
         def contract(self, stream: typing.Any, *, profile: bool) -> typing.Any:
@@ -313,7 +313,9 @@ def test_second_hvp_weight_buffer_is_frozen_per_ao_chunk(
 
     with monkeypatch.context() as patch:
         patch.setattr(second_hvp, "SecondAtomMap", AtomMap)
-        patch.setattr(second_hvp, "second_coordinate_tiles", lambda *a, **k: [(0, 1, 2)])
+        patch.setattr(
+            second_hvp, "second_coordinate_tiles", lambda *a, **k: [(0, 1, 2)]
+        )
         patch.setattr(second_hvp, "_compile_cached", lambda *a, **k: object())
         patch.setattr(second_hvp, "prepare_second_shell_stream", consume)
         patch.setattr(second_hvp, "PreparedSecondDerivative", Plan)
@@ -351,16 +353,21 @@ def test_spatial_validation_reuses_one_omitted_mask(
     atoms = [("H", (-2.0, 0.0, 0.0)), ("H", (2.0, 0.0, 0.0))]
     shells = tuple(Shell(atom, 0, (Primitive(2.0, 1.0),)) for atom in range(2))
     points = np.array(
-        [[-2.0, 0.0, 0.0], [-1.9, 0.0, 0.0],
-         [2.0, 0.0, 0.0], [2.1, 0.0, 0.0], [25.0, 0.0, 0.0]],
+        [
+            [-2.0, 0.0, 0.0],
+            [-1.9, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [2.1, 0.0, 0.0],
+            [25.0, 0.0, 0.0],
+        ],
     )
     grid = ExplicitGrid(
-        points, np.ones(len(points)), (0, 0, 1, 1, 0),
+        points,
+        np.ones(len(points)),
+        (0, 0, 1, 1, 0),
         {"scope": "screened-validation-hoist"},
     )
-    policy = SpatialPolicy(
-        region_points=2, screening="absolute_ao_jet", cutoff=1e-8
-    )
+    policy = SpatialPolicy(region_points=2, screening="absolute_ao_jet", cutoff=1e-8)
     with NativeAO(atoms, basis=shells) as basis:
         tasks = build_spatial_tasks(basis, grid, policy=policy)
         assert len(tasks.tasks) > 1
