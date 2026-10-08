@@ -3,6 +3,7 @@
 Reference is for exact lookup rather than teaching.
 
 - [Python API](api.md) — recursively generated from modules that explicitly declare `__all__`.
+- [Native C/C++ API](native_api.md) — ABI versioning, ownership, error handling and wrapper lifetimes.
 - [Public method table](../public_methods.md) — generated canonical method identities and declared capabilities.
 - [Capability sources](capabilities.md)
 - [Units](units.md)
@@ -17,6 +18,7 @@ Machine-generated `codegen_capabilities.json` and `cuda_ownership/` remain at th
 :maxdepth: 1
 
 api
+native_api
 ../public_methods
 capabilities
 units
