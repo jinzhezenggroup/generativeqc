@@ -11,6 +11,7 @@ import typing
 
 from generativeqc_compiler.common.provenance import canonical_hash
 
+from .blocks import WeightedDerivative
 from .ir_serialization import integral_to_payload
 from .range_separation import CoulombKernelFamily
 from .weighted_eri_cuda import emit_weighted_eri_header
@@ -61,8 +62,8 @@ def emit_weighted_eri_primitive_header(
                 "    if (!std::isfinite(component_weights[i])) return false;",
                 "  Geometry geometry{};",
                 "  if (!generativeqc::integrals::make_eri_geometry(exponents, centers,",
-                f"      {kernel.integral.maximum_coulomb_order}, generativeqc::integrals::CoulombRange::{native_ranges[radial.family]},",
-                f"      {radial.omega.hex()}, geometry)) return false;",
+                f"      {kernel.integral.maximum_coulomb_order}, generativeqc::integrals::CoulombRange::{native_ranges[CoulombKernelFamily(radial.family)]},",
+                f"      {float(radial.omega).hex()}, geometry)) return false;",
                 f"  const auto candidate = {name}(geometry, component_weights);",
                 "  if (!std::isfinite(candidate.value)) return false;",
                 "  for (unsigned center = 0; center < 4; ++center)",
@@ -133,6 +134,8 @@ def emit_weighted_eri_runtime(
     if not kernel.integral.operator.range_separated:
         raise ValueError("the v2 generated runtime requires an explicit range operator")
     consumer = kernel.integral.contractions[0]
+    if not isinstance(consumer, WeightedDerivative):
+        raise TypeError("weighted native program requires a weighted derivative")
     if (consumer.output_sign, consumer.weights.sign, consumer.weights.prefactor) != (
         1,
         1,
@@ -299,7 +302,7 @@ extern "C" @API@int @PREFIX@_metrics_v2(void* handle, generativeqc_tensor::Metri
         "@CASES@": "\n".join(
             f"      case {code}U: return {packed};" for code, packed in codes.items()
         ),
-        "@OMEGA@": radial.omega.hex(),
+        "@OMEGA@": float(radial.omega).hex(),
         "@TAG@": str(tag << 8),
         "@PSSS@": "true" if kernel.spec.angular == (1, 0, 0, 0) else "false",
         "@COUNT@": str(len(kernel.component_indices)),
