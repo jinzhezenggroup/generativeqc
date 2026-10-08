@@ -14,6 +14,44 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize("owner", ["direct_jk.cpp", "direct_jk_plan.hpp"])
+def test_md_j_host_borrows_interface_not_recurrence(tmp_path: Path, owner: str) -> None:
+    """The default provider may borrow MD launch metadata, not device formulas."""
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    (source / "direct_md_j.hpp").write_text('#include "scf/cuda/packed_basis.hpp"\n')
+    (source / "packed_basis.hpp").write_text("\n")
+    (source / "md_hermite_index.cuh").write_text("\n")
+    adapter = source / owner
+    adapter.write_text('#include "scf/cuda/direct_md_j.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    adapter.write_text('#include "scf/cuda/md_hermite_index.cuh"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_direct_provider_host" in errors[0]
+
+
+@pytest.mark.parametrize("kernel", ["direct_md_j.cu", "direct_md_jk.cu"])
+def test_md_j_device_consumers_cannot_acquire_host_provider(
+    tmp_path: Path, kernel: str
+) -> None:
+    """MD contractions share recurrence leaves, never a provider or method driver."""
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    for header in ("direct_md_j.hpp", "md_hermite_index.cuh", "direct_jk_plan.hpp"):
+        (source / header).write_text("\n")
+    adapter = source / kernel
+    adapter.write_text(
+        '#include "scf/cuda/direct_md_j.hpp"\n'
+        '#include "scf/cuda/md_hermite_index.cuh"\n'
+    )
+    assert not audit_scf_structure(tmp_path)["errors"]
+    adapter.write_text('#include "scf/cuda/direct_jk_plan.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_direct_consumers" in errors[0]
+
+
 @pytest.mark.parametrize(
     "header", ["aot_shell_registry.hpp", "generated_shell_task.hpp"]
 )

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/md_hermite_index.cuh",
+  "role": "scientific",
+  "subsystem": "direct_integrals",
+  "reason": "Compact Cartesian/Hermite simplex indexing supports retained recurrence values without materializing an AO four-index tensor.",
+  "regions": []
+}

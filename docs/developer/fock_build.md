@@ -29,6 +29,45 @@ the existing strict-FP64 value mathematics and derivative ownership. The
 [bounded value policy note](../../.agents/notes/implemented/performance/2026-10-02-through-f-value-policy.md)
 records the measured regression and requirements for future default promotion.
 
+## CUDA MD-J default
+
+Eligible CUDA strict-FP64 exact Coulomb values use the density-contracted
+McMurchie–Davidson source by default. Admission requires an s/p/d basis, at least
+eight public AOs and sufficient optional resident capacity. Geometry transforms
+are prepared on the owning stream; replay contracts the total density into
+Hermite coefficients and projects the Coulomb potential back to public AOs.
+Normal generated/canonical K, XC, SCF and finalization owners are unchanged.
+
+The public-AO Schwarz mask remains authoritative. Uniformly accepted shell
+quartets use the Hermite contraction, while partially screened quartets retain
+per-orientation AO eligibility in bounded source pages. Nonsymmetric and UKS
+densities include both input orientations. Additional density screening shares
+`min(screening_tolerance, 1e-12)` across the complete shell-pair census for each
+output element; K never consumes these density envelopes. Screening zero retains
+the unscreened contraction except for exactly zero density work.
+
+Optional descriptors, transforms and scratch are charged within a 128-MiB cap
+after retained normal owners. Unsupported angular momentum, small systems,
+insufficient optional capacity or optional allocation failure retain normal J.
+Mixed J, fixed-mask response and derivative requests bypass MD execution.
+Derivative-capable owners may retain the metadata for their zero-order requests.
+`direct_schedule` reports admission as `md-j-hermite/retained-k`, not a claim
+that every request uses that route.
+
+`GENERATIVEQC_DISABLE_MD_J=1` restores normal J at plan creation for diagnostics;
+no enable flag is needed for the default. `GENERATIVEQC_MD_J_COUNTS=1` reports
+native execution and geometry-candidate censuses when the owner is released.
+Candidate counts are upper bounds on probes, not executed primitive products.
+
+`benchmarks/md_j_normal_cold.py` requires three alternating pairs of fresh
+processes, identical native library/input/device identities, actual native
+96-atom/768-AO grid counts, independent energy and physical-residual gates, and
+MD calls matching complete Fock counts. It explicitly removes the disable flag
+for default samples. Run all GPU qualification through finite Slurm allocation;
+kernel timings and incomplete cohorts do not qualify a cold advantage.
+See the [default decision](../../.agents/notes/implemented/performance/2026-10-08-md-j-default-cold.md)
+for error-budget rationale, measured evidence and rejected residual schedules.
+
 ## Bounded indexed force schedule
 
 Derivative-capable generated exchange owners use the per-system descending

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_md_j.cu",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Default budgeted FP64 SPD Coulomb consumer: public-AO Hermite density contraction and projection use the retained Hermite and Coulomb recurrence owners. Global density error allowances preserve bounded screening; geometry and replay remain device-owned.",
+  "regions": []
+}

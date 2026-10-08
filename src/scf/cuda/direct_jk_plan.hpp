@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "scf/cuda/direct_coulomb.hpp"
+#include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda_direct_jk.hpp"
 
@@ -61,6 +62,8 @@ struct CudaDirectJkPlan {
   std::vector<void*> allocations;
   std::size_t device_bytes{};
   CudaDirectJkDiagnostic diagnostic{};
+  cuda_execution::MdJView md_j{};
+  std::size_t md_j_calls{};
   std::unique_ptr<cuda_execution::GeneratedCoulombPlan> generated_coulomb;
   std::unique_ptr<cuda_execution::GeneratedExchangePlan> generated_exchange;
   /** Internal qualification switch, deliberately disabled for production.

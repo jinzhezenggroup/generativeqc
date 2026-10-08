@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_md_j.hpp",
+  "role": "scientific",
+  "subsystem": "scf_tensor",
+  "reason": "Budgeted MD-J descriptors and shared simplex inventory define the density-Hermite contraction layout; explicit normal-provider fallback remains available.",
+  "regions": []
+}
