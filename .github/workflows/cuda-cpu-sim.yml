@@ -1,0 +1,58 @@
+name: CUDA CPU simulation (experimental)
+
+on:
+  # An isolated compatibility probe, not a required real-GPU acceptance gate.
+  pull_request:
+    paths:
+      - ".github/workflows/cuda-cpu-sim.yml"
+      - "tests/native/test_cuda_cpu_sim.cu"
+      - "src/runtime/compensated_atomic.cuh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fp64-atomic:
+    name: PantheonSim FP64 atomic (CPU only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Pin the experimental simulator; don't let a moving upstream ref silently
+      # change compiler/runtime behavior between qualification runs.
+      - name: Install simulated H100 and CUDA toolchain
+        uses: pantheongpu/pantheonsim@0cd395b000d2bd499d22f364fb48e2b68435ca7e
+        with:
+          gpu: nvidia/h100
+          cuda-toolkit: "12.9"
+
+      - name: Build one real GenerativeQC CUDA primitive
+        shell: bash
+        run: |
+          set -euo pipefail
+          nvcc --version
+          nvcc -std=c++20 -O2 -arch=compute_80 -cudart shared \
+            -I src tests/native/test_cuda_cpu_sim.cu \
+            -o "$RUNNER_TEMP/generativeqc-cuda-cpu-sim"
+          # The simulator can interpose only when cudart is dynamically linked.
+          readelf -d "$RUNNER_TEMP/generativeqc-cuda-cpu-sim" |
+            grep -Eq 'NEEDED.*libcudart\.so'
+
+      - name: Run CPU-interpreted PTX and verify FP64 outputs
+        shell: bash
+        env:
+          VGPU_SASS: "0"
+        run: |
+          set -euo pipefail
+          vgpu info --gpu nvidia/h100
+          vgpu run --gpu nvidia/h100 "$RUNNER_TEMP/generativeqc-cuda-cpu-sim"
+          echo "CPU simulation only: real NVIDIA execution and performance remain untested." \
+            >> "$GITHUB_STEP_SUMMARY"
