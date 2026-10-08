@@ -18,7 +18,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from tools.audit_producer_work import ReceiptError, compare
+try:
+    from tools.audit_producer_work import ReceiptError, compare
+except ModuleNotFoundError:
+    # Invoked as "python tools/ratchet_producer_schedule.py" without installation.
+    from audit_producer_work import ReceiptError, compare
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_SCRIPT = ROOT / "tools/audit_producer_work.py"
