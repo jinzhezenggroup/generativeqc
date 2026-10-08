@@ -75,6 +75,19 @@ class DiagnosticStationaryGradient:
     execution: str = "native-cpu-primitives/compiler-interpreter-diagnostic-v1"
 
 
+def _xc_gradient_argument(
+    features: typing.Mapping[str, typing.Any], point_count: int
+) -> typing.Any:
+    """Reuse gradient jets; create zero fallback only when the key is absent.
+
+    Python evaluates the default expression of dict.get eagerly, previously
+    allocating an unused zero tensor on every GGA/MGGA point tile.
+    Present keys, even a value of None, keep their original semantics.
+    """
+    if "gradient" in features:
+        return features["gradient"]
+    return np.zeros((2, point_count, 3))
+
 def _publish_source(path: typing.Any, source: typing.Any) -> None:
     """Publish complete immutable compiler input before hashing or compilation.
 
@@ -745,7 +758,7 @@ def complete_rks_gradient_diagnostic(
         coefficients = state._source.evaluate_xc_points(
             functional,
             features["rho"],
-            features.get("gradient", np.zeros((2, end - begin, 3))),
+            _xc_gradient_argument(features, end - begin),
             features.get("tau"),
         )
         partials = program.geometry_from_cartesian_coefficients(
