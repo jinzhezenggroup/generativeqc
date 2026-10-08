@@ -763,7 +763,15 @@ def capabilities() -> dict[str, object]:
     report = _compiler_capabilities()
     functions = set(typing.cast("tuple[str, ...]", report["functions"]))
     functions.update(
-        {"asarray", "compile", "matrix_transpose", "can_cast", "finfo", "isdtype", "result_type"}
+        {
+            "asarray",
+            "compile",
+            "matrix_transpose",
+            "can_cast",
+            "finfo",
+            "isdtype",
+            "result_type",
+        }
     )
     report.update(
         {
@@ -787,17 +795,17 @@ def capabilities() -> dict[str, object]:
 
 __all__ = [
     "API_VERSION",
-    "CompiledFunction",
     "DLPACK_INTEROP_VERSION",
+    "FRONTEND_VERSION",
+    "SUPPORTED_FUNCTIONS",
+    "CompiledFunction",
     "DLPackDevice",
     "DLPackImport",
     "DLPackInteropError",
     "ExactScalar",
-    "FRONTEND_VERSION",
     "Index",
     "IndexSpace",
     "Program",
-    "SUPPORTED_FUNCTIONS",
     "TensorSpec",
     "VibeArray",
     "add",
