@@ -871,6 +871,9 @@ struct Gfn2CpuExecutionCache::Impl {
     if (requested == keys) {
       return GENERATIVEQC_XTB_STATUS_SUCCESS;
     }
+    // Copy before committing either half: key allocation failure must retain
+    // the previous matching topology and execution plans for the next request.
+    std::vector<SystemKey> candidate_keys = requested;
     std::vector<std::unique_ptr<SystemExecution>> candidate;
     candidate.reserve(requested.size());
     for (const SystemKey& key : requested) {
@@ -882,8 +885,8 @@ struct Gfn2CpuExecutionCache::Impl {
       }
       candidate.push_back(std::move(system));
     }
-    systems = std::move(candidate);
-    keys = requested;
+    systems.swap(candidate);
+    keys.swap(candidate_keys);
     return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
 
