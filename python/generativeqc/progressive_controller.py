@@ -86,6 +86,7 @@ class HFConvergence:
     physical_residual_rms: float | None = None
 
     def __post_init__(self) -> None:
+        """Validate positive convergence tolerances and the iteration limit."""
         object.__setattr__(
             self, "energy_change", _positive(self.energy_change, "energy tolerance")
         )
@@ -111,6 +112,7 @@ class ArithmeticPolicy:
     require_strict_refinement: bool = False
 
     def __post_init__(self) -> None:
+        """Require final FP64 arithmetic and strict refinement for automatic precision."""
         if self.requested_precision not in ("fp64", "auto"):
             raise ValueError("HF arithmetic must request fp64 or auto")
         if type(self.required_final_bits) is not int or self.required_final_bits != 64:
@@ -124,6 +126,7 @@ class ArithmeticPolicy:
 
     @property
     def is_strict_target(self) -> bool:
+        """Report whether the arithmetic policy establishes a final FP64 target state."""
         return self.required_final_bits == 64 and (
             self.requested_precision == "fp64" or self.require_strict_refinement
         )
@@ -163,6 +166,7 @@ class TargetProblem:
     schema_version: int = _SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        """Validate the RHF/UHF target, physical residual gate, and provider hashes."""
         if not isinstance(self.model, ResolvedModel) or self.model.method not in (
             "rhf",
             "uhf",
@@ -203,9 +207,11 @@ class TargetProblem:
 
     @property
     def identity(self) -> str:
+        """Return the canonical hash of the complete serialized target problem."""
         return canonical_hash(self.to_dict())
 
     def to_dict(self) -> dict:
+        """Serialize model, provider, accuracy, convergence, and policy identities."""
         return {
             "schema_version": self.schema_version,
             "model": self.model.to_dict(),
@@ -278,6 +284,7 @@ class StagePlan:
     allowed_next_stages: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        """Validate stage roles, transfer, providers, convergence, evidence, and successors."""
         _identity(self.stage_id, "stage id")
         object.__setattr__(self, "role", StageRole(self.role))
         object.__setattr__(self, "transfer", TransferOperation(self.transfer))
@@ -331,6 +338,7 @@ class ProgressiveBudget:
     maximum_estimated_cost_units: float | None = None
 
     def __post_init__(self) -> None:
+        """Require positive stage, iteration, storage, and optional work/cost limits."""
         for name in (
             "maximum_stages",
             "maximum_source_iterations",
@@ -366,6 +374,7 @@ class DeterministicHFPlan:
     budget: ProgressiveBudget = ProgressiveBudget()
 
     def __post_init__(self) -> None:
+        """Validate the two-stage source-to-target plan against target identity and budget."""
         if not isinstance(self.problem, TargetProblem) or not isinstance(
             self.budget, ProgressiveBudget
         ):
@@ -455,6 +464,7 @@ class DeterministicHFPlan:
 
     @property
     def identity(self) -> str:
+        """Hash the target, ordered stages, evidence, and budget into a plan identity."""
         return canonical_hash(
             {
                 "problem": self.problem.to_dict(),
@@ -604,6 +614,7 @@ class HFPhysicalResidualAudit:
     seconds: float
 
     def __post_init__(self) -> None:
+        """Validate source hashes, finite energy, and nonnegative residual/timing values."""
         for name in (
             "model_identity",
             "provider_identity",
@@ -655,6 +666,7 @@ class FinalVerification:
 
     @property
     def succeeded(self) -> bool:
+        """Report whether the final verification status is verified."""
         return self.status == "verified"
 
 
@@ -852,6 +864,7 @@ class ProgressiveHFResult:
 
     @property
     def succeeded(self) -> bool:
+        """Report whether the result passed final target verification."""
         return self.verification.succeeded
 
 

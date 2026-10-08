@@ -40,6 +40,7 @@ class InitialGuessSpec:
     grid: GridSpec | None = None
 
     def __post_init__(self) -> None:
+        """Validate guess controls and resolve the admitted coarse grid for LDA."""
         if self.kind not in ("hf", "lda", "minao"):
             raise ValueError("initial guess kind must be 'hf', 'lda', or 'minao'")
         for name, low, high in (
@@ -78,9 +79,11 @@ class InitialGuessSpec:
         object.__setattr__(self, "grid", grid)
 
     def to_payload(self) -> dict:
+        """Return a versioned dictionary of the initial-guess controls."""
         return {"schema_version": 1, **asdict(self)}
 
     def native(self) -> _native.InitialGuessOptionsDescriptor:
+        """Build the native ABI descriptor, using zero grid sizes for HF and MINAO."""
         grid = self.grid
         return _native.InitialGuessOptionsDescriptor(
             ctypes.sizeof(_native.InitialGuessOptionsDescriptor),

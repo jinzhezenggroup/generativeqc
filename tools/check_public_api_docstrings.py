@@ -2,7 +2,10 @@
 
 The inspected Python modules are the same literal-__all__ modules rendered by
 Sphinx. Following local re-exports prevents an undocumented implementation from
-appearing documented merely because its facade imports it.
+appearing documented merely because its facade imports it. The static audit also
+checks explicitly defined public methods, magic methods, constructors, and nested
+public classes on each exported class. It does not require documentation for
+private helpers, unrelated implementation classes, or generated/inherited methods.
 """
 
 from __future__ import annotations
@@ -40,7 +43,7 @@ def _resolve_export(
     module_name: str,
     symbol: str,
     seen: set[tuple[str, str]],
-) -> tuple[Path, bool] | None:
+) -> tuple[Path, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef] | None:
     """Find an exported function/class through first-party import-from chains."""
     key = (module_name, symbol)
     if key in seen:
@@ -56,7 +59,7 @@ def _resolve_export(
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
     }
     if definition := definitions.get(symbol):
-        return path, bool(ast.get_docstring(definition))
+        return path, definition
 
     package = (
         module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
@@ -78,17 +81,40 @@ def _resolve_export(
     return None
 
 
+def _undocumented_members(
+    definition: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+    name: str,
+) -> list[str]:
+    """Inspect only the exported object and its explicitly defined public members."""
+    missing = [] if ast.get_docstring(definition) else [name]
+    if isinstance(definition, ast.ClassDef):
+        for member in definition.body:
+            if not isinstance(
+                member, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                continue
+            public = not member.name.startswith("_")
+            magic = member.name.startswith("__") and member.name.endswith("__")
+            if public or magic:
+                missing.extend(_undocumented_members(member, f"{name}.{member.name}"))
+    return missing
+
+
 def missing_public_docstrings(package: Path | None = None) -> tuple[str, ...]:
-    """Return public exports whose first-party defining object lacks a docstring."""
+    """Return missing docstrings on first-party exports and their public members."""
     package = PACKAGE if package is None else package
     source_root = package.parent
     failures = []
     for module in public_api_modules(package):
         for name in module.exports:
             origin = _resolve_export(source_root, module.name, name, set())
-            if origin is not None and not origin[1]:
-                path = origin[0].relative_to(source_root)
-                failures.append(f"{module.name}.{name} -> {path}: missing docstring")
+            if origin is not None:
+                path, definition = origin
+                relative = path.relative_to(source_root)
+                for member in _undocumented_members(definition, name):
+                    failures.append(
+                        f"{module.name}.{member} -> {relative}: missing docstring"
+                    )
     return tuple(sorted(set(failures)))
 
 

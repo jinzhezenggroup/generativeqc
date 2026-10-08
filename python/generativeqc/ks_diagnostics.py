@@ -23,6 +23,7 @@ class KsEnergyComponents:
 
     @property
     def total(self) -> typing.Any:
+        """Return the nuclear, one-electron, Hartree, and XC energy sum."""
         return self.nuclear + self.one_electron + self.hartree + self.xc
 
 
@@ -93,6 +94,7 @@ class KsTransportDiagnostic:
     occupation_stabilized_proposals: int
 
     def to_payload(self) -> typing.Any:
+        """Return transport diagnostics as a dictionary of dataclass fields."""
         return asdict(self)
 
 

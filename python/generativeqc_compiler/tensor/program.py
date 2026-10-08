@@ -103,6 +103,11 @@ class Program:
         definitions: typing.Any = (),
         provenance: typing.Any = None,
     ) -> None:
+        """Freeze named tensor outputs, definitions, and a snapshot of JSON provenance.
+
+        Require consistent index-space definitions and compatible tensor
+        semantics whenever a space or input name is reused.
+        """
         if not isinstance(outputs, Mapping) or not outputs:
             raise ValueError("program requires named outputs")
         if any(not isinstance(k, str) or not k.isidentifier() for k in outputs):

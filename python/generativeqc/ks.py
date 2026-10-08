@@ -164,6 +164,7 @@ class KsOptions:
     _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        """Validate exclusive functional/composition inputs, grid, schedule, and budget."""
         if self.functional is not None and not isinstance(
             self.functional, FunctionalSpec
         ):
@@ -210,18 +211,22 @@ class KsOptions:
 
     @property
     def has_nondefault_composition(self) -> bool:
+        """Report whether coefficients differ from unit Coulomb/XC without exchange."""
         return self.coefficients != (1.0, 1.0, 0.0)
 
     @property
     def uses_host_xc_schedule(self) -> bool:
+        """Report whether the selected XC schedule runs outside device-fused execution."""
         return self.xc_schedule != "device_fused"
 
     @property
     def has_nonlocal_correlation(self) -> bool:
+        """Report whether the resolved execution plan includes nonlocal correlation."""
         return self.execution_plan.nonlocal_correlation is not None
 
     @property
     def has_range_exchange(self) -> bool:
+        """Report whether the plan includes short-range or long-range exchange."""
         return any(
             term.operator in ("short-range", "long-range")
             for term in self.execution_plan.exchange
@@ -269,6 +274,7 @@ class KsOptions:
 
     @property
     def identity(self) -> typing.Any:
+        """Return the canonical hash of the serialized KS options."""
         return canonical_hash(self.to_payload())
 
 

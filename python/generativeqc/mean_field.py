@@ -274,6 +274,7 @@ class FixedDensityMeanField:
         method_plan: typing.Any = None,
         nonlocal_correlation: typing.Any = None,
     ) -> None:
+        """Bind matching Fock, XC, and optional nonlocal providers to a method plan."""
         from generativeqc_compiler.dft import FixedDensityNonlocalCorrelation
         from generativeqc_compiler.xc.integration import FixedDensityXC
 
@@ -383,6 +384,7 @@ class FixedDensityMeanField:
 
     @property
     def method_plan(self) -> typing.Any:
+        """Return the explicit method plan, or None for the semilocal default."""
         return self._method_plan
 
     def integrate(
