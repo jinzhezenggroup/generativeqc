@@ -1,5 +1,6 @@
 """Executable fixed-density VV10/rVV10 potential/gradient gates for #491 B/C."""
 
+import inspect
 import typing
 from fractions import Fraction
 
@@ -82,6 +83,57 @@ def test_fixed_density_methodir_nonlocal_potential_matches_energy_derivative(
             rtol=0.0,
         )
 
+
+@pytest.mark.parametrize("variant", ("vv10", "rvv10"))
+@pytest.mark.parametrize("density_key", ("density_total", "density_spin"))
+def test_nonlocal_geometry_reuses_three_tile_buffers(
+    variant: str, density_key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Allocation sites are owned once, without changing point/atom pullbacks."""
+    meta, data, grid = load_integration_fixture("h2")
+    assert len(grid.points) > 3
+    spec = original_nonlocal_correlation(variant)
+    executor = FixedDensityNonlocalCorrelation(spec)
+    density = data[density_key]
+    original_empty = np.empty
+    constructed: list[object] = []
+
+    def tracked_empty(
+        shape: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> np.ndarray:
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        if (
+            caller is not None
+            and caller.f_code.co_name == "geometry"
+            and caller.f_code.co_filename.endswith("/dft/nonlocal_integration.py")
+        ):
+            constructed.append(shape)
+        del frame, caller
+        return original_empty(shape, *args, **kwargs)
+
+    with NativeAO(**basis_arguments(meta)) as basis:
+        # A full-span tile exercises the same formulas without intermediate
+        # scratch reuse between ragged tiles and atom/coordinate visits.
+        full = executor.geometry(
+            basis, grid, density, tile_points=len(grid.points)
+        )
+        with monkeypatch.context() as patch:
+            patch.setattr(np, "empty", tracked_empty)
+            tiled = executor.geometry(basis, grid, density, tile_points=3)
+
+    assert constructed.count((3, 3, 3)) == 1
+    assert constructed.count((3, 3)) == 2
+    # The pre-existing point-density/gradient products are still built once.
+    assert constructed.count(len(grid.points)) == 1
+    assert constructed.count((len(grid.points), 3)) == 1
+    assert len(constructed) == 5
+    assert tiled.identity == full.identity
+    for field in ("centers", "points", "weights"):
+        np.testing.assert_allclose(
+            getattr(tiled, field), getattr(full, field), rtol=2e-12, atol=3e-13
+        )
+        assert not getattr(tiled, field).flags.writeable
 
 def test_nonlocal_reference_execution_has_explicit_grid_admission_gate() -> None:
     meta, data, grid = load_integration_fixture("h2")
