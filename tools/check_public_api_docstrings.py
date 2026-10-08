@@ -12,7 +12,11 @@ import ast
 import importlib.util
 import subprocess
 import sys
-from pathlib import Path
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 try:
     from tools.render_python_api_doc import PACKAGE, ROOT, public_api_modules

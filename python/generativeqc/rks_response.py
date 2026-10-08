@@ -81,6 +81,7 @@ class RKSResponseReference:
     diagnostics: tuple[tuple[str, float], ...] = field(init=False)
 
     def __post_init__(self) -> None:
+        """Validate an immutable converged FP64 KS reference for response."""
         if self.algorithm != "KS" or self.precision != "float64":
             raise ValueError("RKS response requires a real FP64 KS reference")
         if self.representation not in ("cartesian", "real_spherical"):
@@ -242,10 +243,12 @@ class RKSResponseReference:
 
     @property
     def nmo(self) -> int:
+        """Return the number of molecular orbitals."""
         return len(self.orbital_energies)
 
     @property
     def nocc(self) -> int:
+        """Return the number of doubly occupied orbitals."""
         return self.electron_count // 2
 
 
@@ -651,6 +654,7 @@ class NativeRKSResponse(CPKSResponseOperator):
 
     @property
     def diagnostics(self) -> dict[str, typing.Any]:
+        """Return current provider, transfer and workspace diagnostics."""
         self.validate_current()
         cuda = self.state._source.backend == "cuda"
         xc = self.xc_kernel._cuda.diagnostics if cuda else None
@@ -707,6 +711,7 @@ class NativeRKSResponse(CPKSResponseOperator):
         *,
         transpose: bool = False,
     ) -> typing.Any:
+        """Apply the validated response-induced Fock contribution."""
         self.validate_current()
         result = super().induced_fock(delta_density, transpose=transpose)
         self.validate_current()
@@ -724,6 +729,7 @@ class NativeRKSResponse(CPKSResponseOperator):
         return result
 
     def close(self) -> None:
+        """Release the response kernel, backend and borrowed source owner."""
         for owner in (
             getattr(self, "xc_kernel", None),
             getattr(self, "backend", None),
@@ -734,12 +740,15 @@ class NativeRKSResponse(CPKSResponseOperator):
             self.state._source.close()
 
     def __enter__(self) -> typing.Self:
+        """Validate the response and enter its scoped ownership lifetime."""
         self.validate_current()
         return self
 
     def __exit__(self, *_: object) -> None:
+        """Release owned response resources when leaving the context."""
         self.close()
 
     def __del__(self) -> None:
+        """Release retained response owners during object finalization."""
         if hasattr(self, "state") or hasattr(self, "backend"):
             self.close()
