@@ -66,7 +66,10 @@
     }
   ],
   "files": {
-    "src/scf/solver/cpu_target_eigen.cpp": "c93672dc0f647efc0cb2288cf5d13de3720dae0b5eff69af15295c63ceb1b861",
+    "src/scf/solver/cpu_target_eigen.cpp": "f485c7f643db090836459c0c12d76d60809c3871f71bd12e89d91fe4c6029da0",
     "src/scf/solver/eigen_frame.cpp": "ba1a5a4e134c923b36d63aeb30f8179bc9aaeac8768f6b309bd78ace0c0cd917"
+  },
+  "revisions": {
+    "src/scf/solver/cpu_target_eigen.cpp": "Shared canonical/identity reduction and recovery; independently requalified prescribed spectra, metric/residual acceptance, absolute scalar cap, and scratch lifetime. All other inherited source fingerprints remain unchanged."
   }
 }

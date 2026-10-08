@@ -1,4 +1,5 @@
 // Host ABI/call trace, not a numerical or real-device qualification.
+#include <cublas_v2.h>
 #include <cusolverDn.h>
 
 #include <algorithm>
@@ -67,10 +68,14 @@ std::vector<std::size_t> query_device, query_host;
 std::vector<int> query_elements;
 std::size_t fail_at = 0;
 cusolverStatus_t failure = CUSOLVER_STATUS_SUCCESS;
+// Optional full-host orchestration trace; ordinary provider tests leave it null.
+cusolverStatus_t (*provider_result_hook)() = nullptr;
+cusolverStatus_t (*provider_stream_hook)(cusolverDnHandle_t, cudaStream_t) = nullptr;
 constexpr int queried_elements = 37;
 constexpr std::size_t queried_device_bytes = 513, queried_host_bytes = 79;
 
 cusolverStatus_t result() {
+  if (provider_result_hook != nullptr) return provider_result_hook();
   return calls.size() - 1 == fail_at ? failure : CUSOLVER_STATUS_SUCCESS;
 }
 void write_sizes(std::size_t* device, std::size_t* host) {
@@ -330,7 +335,6 @@ enum cudaError_t {
   cudaErrorMemoryAllocation = 2,
   cudaErrorUnknown = 999
 };
-enum cublasStatus_t { CUBLAS_STATUS_SUCCESS = 0 };
 using namespace generativeqc::scf::cuda_execution;
 std::vector<std::pair<std::string, std::size_t>> stages;
 cudaError_t kernel_error = cudaSuccess;
@@ -357,7 +361,8 @@ cusolverStatus_t cusolverDnCreate(cusolverDnHandle_t* handle) {
   *handle = static_cast<cusolverDnHandle_t>(handle_tokens.solver);
   return CUSOLVER_STATUS_SUCCESS;
 }
-cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t, cudaStream_t) {
+cusolverStatus_t cusolverDnSetStream(cusolverDnHandle_t solver, cudaStream_t stream) {
+  if (provider_stream_hook != nullptr) return provider_stream_hook(solver, stream);
   return CUSOLVER_STATUS_SUCCESS;
 }
 cusolverStatus_t cusolverDnCreateParams(cusolverDnParams_t* parameters) {
@@ -404,6 +409,7 @@ struct Region {
 }  // namespace runtime
 struct CudaDensityFittingJkPlan {
   cudaStream_t stream{};
+  cublasHandle_t blas{};
   std::size_t naux{7};
   void* integral_source{};
   bool streamed{};
@@ -1239,4 +1245,5 @@ int main(int argc, char** argv) {
   else
     return 2;
   std::cout << "PASS " << operation << '\n';
+  return 0;
 }
