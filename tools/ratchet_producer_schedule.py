@@ -119,8 +119,7 @@ def audit(
         "base_commit": base_sha.lower(),
         "source": SCHEDULE,
         "scope": (
-            "source-bound static schedule only; "
-            "not runtime or native binary evidence"
+            "source-bound static schedule only; not runtime or native binary evidence"
         ),
         "build_sha256": STATIC_NO_BUILD,
         "status": "PASS",
