@@ -34,9 +34,13 @@ def exchange_reference(
         sigma = x[s_index] if spin else x[1] / 4
         u = c * sigma * r ** (-2 * q)
         den = kappa + mu * u
-        f = 1 + kappa - kappa**2 / den if gga else lda_one
-        df = kappa**2 * mu / den**2 if gga else lda_zero
-        ddf = -2 * kappa**2 * mu**2 / den**3 if gga else lda_zero
+        if gga:
+            f = 1 + kappa - kappa**2 / den
+            df = kappa**2 * mu / den**2
+            ddf = -2 * kappa**2 * mu**2 / den**3
+        else:
+            assert lda_one is not None and lda_zero is not None
+            f, df, ddf = lda_one, lda_zero, lda_zero
         e = -cx * r**q * f
         vr = -cx * r ** (q - 1) * (q * f - 2 * q * u * df)
         vs = -cx * c * r ** (-q) * df
