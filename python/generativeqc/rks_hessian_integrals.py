@@ -1123,8 +1123,8 @@ def generated_weighted_second_integral_hvp(
     device_id: int = 0,
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """Contract a selected second-integral source with a nuclear direction.
-    
-        Return its Cartesian Hessian-vector action and resource diagnostics.
+
+    Return its Cartesian Hessian-vector action and resource diagnostics.
     """
     if source_name not in ("one_electron", "coulomb", "overlap_pulay"):
         raise ValueError("unknown stationary second-integral source")
