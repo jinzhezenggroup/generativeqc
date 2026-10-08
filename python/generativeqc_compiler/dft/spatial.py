@@ -260,6 +260,13 @@ class SpatialTasks:
             raise ValueError("stale spatial policy/generation identity")
         ao_shells = _ao_shell_map(basis)
         ids = []
+        # Validation is per prepared inventory; the omitted-mask workspace is
+        # fully reset before examining every potentially screened region.
+        omitted_workspace = (
+            np.ones(basis.nao, dtype=bool)
+            if self.policy.screening != "off"
+            else None
+        )
         for task in self.tasks:
             if (
                 task.generation_id != self.generation_id
@@ -297,9 +304,10 @@ class SpatialTasks:
                 # at preparation; trusting supplied diagnostics would permit
                 # a forged mask to silently drop a large AO column.
                 envelopes = ao_region_envelopes(basis, task.bounds, task.derivatives)
-                omitted = np.ones(basis.nao, dtype=bool)
-                omitted[task.ao_ids] = False
-                certified = np.max(envelopes[:, omitted], axis=1)
+                assert omitted_workspace is not None
+                omitted_workspace.fill(True)
+                omitted_workspace[task.ao_ids] = False
+                certified = np.max(envelopes[:, omitted_workspace], axis=1)
                 if np.any(certified > task.discarded_max):
                     raise ValueError(
                         "spatial mask is not certified by its AO envelopes"
@@ -415,12 +423,19 @@ def build_spatial_tasks(
     generation = _generation(basis, grid, policy)
     ao_shells = _ao_shell_map(basis)
     tasks, pending = [], [np.arange(len(grid.points), dtype=np.int64)]
+    # Descriptor publication copies bounds and discarded maxima into immutable
+    # storage; these mutable construction-only buffers never escape the loop.
+    bounds_workspace = np.empty((2, 3), dtype=np.float64)
+    all_active = np.ones(basis.nao, dtype=bool) if policy.screening == "off" else None
+    empty_discard = np.zeros(len(policy.derivatives))
     while pending:
         ids = pending.pop()
         if not len(ids):
             continue
         points = grid.points[ids]
-        bounds = np.stack((points.min(axis=0), points.max(axis=0)))
+        bounds_workspace[0] = points.min(axis=0)
+        bounds_workspace[1] = points.max(axis=0)
+        bounds = bounds_workspace
         if len(ids) > policy.region_points:
             with np.errstate(over="ignore"):
                 axis = int(np.argmax(bounds[1] - bounds[0]))
@@ -434,15 +449,16 @@ def build_spatial_tasks(
             pending.extend((ordered[middle:], ordered[:middle]))
             continue
         if policy.screening == "off":
-            active = np.ones(basis.nao, dtype=bool)
-            discarded_max = np.zeros(len(policy.derivatives))
+            assert all_active is not None
+            active = all_active
+            discarded_max = empty_discard
         else:
             envelopes = ao_region_envelopes(basis, bounds, policy.derivatives)
             active = np.any(envelopes > policy.cutoff, axis=0)
             discarded_max = (
                 np.max(envelopes[:, ~active], axis=1)
                 if np.any(~active)
-                else np.zeros(len(policy.derivatives))
+                else empty_discard
             )
         ao_ids = _indices(np.flatnonzero(active))
         point_ids = _indices(ids)
