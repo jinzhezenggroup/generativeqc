@@ -972,8 +972,13 @@ class ContractionProgram:
         lookup = {axis: i for i, axis in enumerate(jet_indices(self.contract.ao_order))}
         d = density if self.spec.spin == "polarized" else density.sum(axis=0)[None]
         pullback = np.zeros((len(domain), *jets.shape[1:]))
+        # Every spin consumes these jet contractions synchronously. A single
+        # owned panel avoids restacking separately allocated products on each
+        # spin without changing the FP64 per-jet GEMM definition.
+        work = np.empty((len(domain), *jets.shape[1:]), dtype=np.float64)
         for spin in range(len(d)):
-            work = np.stack([jets[j] @ d[spin] for j in range(len(domain))])
+            for jet_index in range(len(domain)):
+                np.matmul(jets[jet_index], d[spin], out=work[jet_index])
             weighted = {"rho": weights * coefficients["rho"][spin]}
             if order:
                 weighted["gradient"] = weights[:, None] * coefficients["gradient"][spin]
