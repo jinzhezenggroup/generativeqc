@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from typing_extensions import override
 
 from generativeqc_compiler.common.cuda_runtime import _Metrics
 from generativeqc_compiler.common.native_call import checked_native_call
@@ -37,6 +38,7 @@ from generativeqc_compiler.common.provenance import (
 from generativeqc_compiler.tensor.cuda_dtype import compile_options
 from generativeqc_compiler.tensor.cuda_execute import (
     CudaArtifact,
+    CudaExecution,
     PreparedCuda,
     compile_cuda,
 )
@@ -209,7 +211,7 @@ class DeviceTensor:
     alone never confers physical compatibility.
     """
 
-    owner: object
+    owner: PreparedResident
     name: str
     generation: int
 
@@ -431,5 +433,12 @@ class PreparedResident(PreparedCuda):
         """Upload one named input into an already-running resident owner."""
         self.upload({name: host_array})
 
-    def execute(self, feeds: typing.Any, *, profile: typing.Any = False) -> typing.Any:
+    @override
+    def execute(
+        self,
+        feeds: typing.Mapping[str, typing.Any],
+        *,
+        profile: bool = False,
+        diagnostics: bool = False,
+    ) -> CudaExecution:
         raise RuntimeError("use explicit upload/run/download on a resident owner")
