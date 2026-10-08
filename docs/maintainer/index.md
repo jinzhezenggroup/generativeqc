@@ -40,6 +40,7 @@ source_work_audit
 replay_allocation_receipts
 native_structured_materialization
 residency_receipts
+producer_work_receipts
 roadmap
 generated-files
 ```
