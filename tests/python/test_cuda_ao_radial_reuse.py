@@ -418,6 +418,12 @@ def test_native_build_defaults_to_reuse_with_explicit_scalar_opt_out() -> None:
         in registration
     )
     assert "ao_radial_kernel_" not in emit_grid_scientific_kernels()
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    resource_step = workflow.split(
+        "      - name: Compile native grid/XC region resources\n", 1
+    )[1].split("      - name: ", 1)[0]
+    # The validator must compare and qualify the schedule CMake now emits.
+    assert "--ao-radial-reuse" in resource_step
 
 
 @pytest.mark.parametrize("jets,axis_count", [(4, 6), (10, 9)])
