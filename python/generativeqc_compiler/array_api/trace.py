@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typing
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 
 from generativeqc_compiler.tensor.ir import input_tensor
 from generativeqc_compiler.tensor.program import Program
@@ -11,6 +12,15 @@ from generativeqc_compiler.tensor.types import TensorSpec
 
 from .array import VibeArray
 from .capabilities import FRONTEND_VERSION
+
+_CAPTURE_ACTIVE: ContextVar[bool] = ContextVar(
+    "generativeqc_array_capture", default=False
+)
+
+
+def active_capture() -> bool:
+    """Whether this thread/task is currently tracing a symbolic array function."""
+    return _CAPTURE_ACTIVE.get()
 
 
 def input_array(name: str, spec: TensorSpec) -> VibeArray:
@@ -56,7 +66,11 @@ def trace(
         if not isinstance(name, str) or not name.isidentifier():
             raise ValueError("trace input names must be identifiers")
         arrays[name] = input_array(name, spec)
-    result = function(**arrays)
+    token = _CAPTURE_ACTIVE.set(True)
+    try:
+        result = function(**arrays)
+    finally:
+        _CAPTURE_ACTIVE.reset(token)
     metadata = {} if provenance is None else dict(provenance)
     previous = metadata.setdefault("array_frontend_version", FRONTEND_VERSION)
     if previous != FRONTEND_VERSION:
