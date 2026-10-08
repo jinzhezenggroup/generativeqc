@@ -268,9 +268,7 @@ def orbital_features(
     c, occ = _spin_orbitals(coefficients, occupations, jets.shape[2])
     rho, tau = [], []
     gradient_buffer = (
-        np.empty((2, jets.shape[1], 3), dtype=np.float64)
-        if need_gradient
-        else None
+        np.empty((2, jets.shape[1], 3), dtype=np.float64) if need_gradient else None
     )
     for spin in range(2):
         # Weight before collocation: a zero occupation must remain zero even
@@ -286,9 +284,7 @@ def orbital_features(
         if need_gradient:
             assert gradient_buffer is not None
             for axis, derivative in enumerate(derivatives):
-                gradient_buffer[spin, :, axis] = np.sum(
-                    2 * value * derivative, axis=1
-                )
+                gradient_buffer[spin, :, axis] = np.sum(2 * value * derivative, axis=1)
         if "tau" in requested:
             tau.append(0.5 * np.sum(derivatives**2, axis=(0, 2)))
     return _publish(
