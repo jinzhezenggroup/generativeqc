@@ -169,9 +169,6 @@ def test_preview_unsupported_conveniences_fail_closed() -> None:
         xp.add(1, matrix)
 
 
-
-
-
 def test_mean_scientific_contract_preserves_rational_coefficients() -> None:
     ao = IndexSpace("ao", "ao", 3)
     spec = TensorSpec((Index("p", ao),), role="input")
