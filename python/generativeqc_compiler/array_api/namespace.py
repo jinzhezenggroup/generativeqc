@@ -92,6 +92,58 @@ def _generic_indices(shape: tuple[int, ...]) -> tuple[Index, ...]:
     )
 
 
+def _creation_shape(value: object) -> tuple[int, ...]:
+    """Validate scalar/tuple shapes without accepting bool or negative extents."""
+    if type(value) is int:
+        value = (value,)
+    return _shape(value, "creation")
+
+
+def full(
+    shape: int | tuple[int, ...], fill_value: object, *, dtype: str = "float64"
+) -> VibeArray:
+    """Construct a symbolic uniform array without expanding its literal payload."""
+    target = _creation_shape(shape)
+    if dtype not in ("float32", "float64"):
+        raise TypeError("symbolic full supports float32 or float64")
+    factor = _generic_scalar(fill_value, "full fill value")
+    scalar = tensor_ir.constant(factor, TensorSpec(dtype=dtype, role="constant"))
+    if not target:
+        return VibeArray(scalar)
+    return VibeArray(tensor_ir.broadcast(scalar, _generic_indices(target), ()))
+
+
+def zeros(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
+    return full(shape, 0, dtype=dtype)
+
+
+def ones(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
+    return full(shape, 1, dtype=dtype)
+
+
+def full_like(
+    x: object, fill_value: object, *, dtype: str | None = None
+) -> VibeArray:
+    """Create a generic constant with the same shape/dtype, not a QC relabeling."""
+    value = _array(x)
+    if not _is_generic_array(value):
+        raise TypeError(
+            "full_like for scientifically annotated arrays requires explicit "
+            "TensorIR index and representation metadata"
+        )
+    return full(
+        value.shape, fill_value, dtype=value.dtype if dtype is None else dtype
+    )
+
+
+def zeros_like(x: object, *, dtype: str | None = None) -> VibeArray:
+    return full_like(x, 0, dtype=dtype)
+
+
+def ones_like(x: object, *, dtype: str | None = None) -> VibeArray:
+    return full_like(x, 1, dtype=dtype)
+
+
 def _is_generic_array(value: VibeArray) -> bool:
     return all(
         index.space.kind == "matrix"
