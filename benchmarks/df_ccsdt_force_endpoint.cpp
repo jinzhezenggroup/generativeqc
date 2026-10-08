@@ -35,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 23)
+    if (argc < 4 || argc > 25)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
@@ -44,7 +44,8 @@ int main(int argc, char** argv) {
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
           "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO "
           "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO "
-          "[FUSED_SCALAR_RESPONSE_0_OR_1]]]]]]]]]]]]]]]]]]]");
+          "[FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 "
+          "[LAMBDA_TRUE_RESIDUAL_INTERVAL]]]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -95,6 +96,16 @@ int main(int argc, char** argv) {
     const bool parallel_gap_reduction = argc <= 19 || selector(19);
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
     const bool fused_triples_scalar_response = argc > 22 && selector(22);
+    const bool triples_w_fp32 = argc > 23 && selector(23);
+    const auto lambda_true_residual_interval = unsigned_argument(24, 1);
+    if (!lambda_true_residual_interval)
+      throw std::invalid_argument("Lambda true residual interval must be positive");
+    generativeqc::runtime::PrecisionDirective admitted_triples_w;
+    if (triples_w_fp32) {
+      admitted_triples_w = {
+          generativeqc::runtime::PrecisionDtype::Fp32, generativeqc::runtime::PrecisionDtype::Fp32,
+          generativeqc::runtime::PrecisionDtype::Fp32, "issue1764/df-triples-w-fp32-candidate-v1"};
+    }
     double reference_energy_tolerance = 1e-12, reference_density_tolerance = 1e-11;
     if (argc > 21 && std::string(argv[21]) != "auto") {
       const std::string token(argv[21]);
@@ -145,7 +156,8 @@ int main(int argc, char** argv) {
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
-          parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response);
+          parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
+          admitted_triples_w, lambda_true_residual_interval);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -177,6 +189,7 @@ int main(int argc, char** argv) {
       field("correlation_energy", result.correlation_energy);
       field("triples_energy", result.triples_energy);
       field("lambda_residual", result.lambda.independent_residual_norm);
+      work_field("lambda_true_residual_interval", lambda_true_residual_interval);
       field("z_residual", result.orbital.orbital_residual);
       field("stationarity", result.orbital.maximum_stationarity);
       work_field("numeric_capacity_bytes", result.numeric_capacity_bytes);
@@ -295,6 +308,18 @@ int main(int argc, char** argv) {
       work_field("source_weight_values", result.source_weight_values);
       work_field("metric_weight_values", result.metric_weight_values);
       work_field("triples_work", result.triples.contraction_summands);
+      field("triples_w_fp32_requested", triples_w_fp32);
+      field("triples_w_resource_fallback", result.triples.resource_fallback);
+      work_field("triples_w_storage_bits", result.triples.w_contraction_storage_bits);
+      work_field("triples_w_compute_bits", result.triples.w_contraction_compute_bits);
+      work_field("triples_w_accumulation_bits", result.triples.w_contraction_accumulation_bits);
+      work_field("triples_fp64_gemms", result.triples.fp64_gemms);
+      work_field("triples_fp32_gemms", result.triples.fp32_gemms);
+      work_field("triples_precision_cast_elements", result.triples.precision_cast_elements);
+      output << "  \"triples_w_candidate_identity\": "
+             << std::quoted(result.triples.w_candidate_identity) << ",\n";
+      output << "  \"triples_w_precision_schedule_identity\": "
+             << std::quoted(result.triples.w_codegen_precision_schedule_identity) << ",\n";
       field("triples_gap_parallel", result.triples_gap.parallel);
       field("triples_gap_requested", result.triples_gap.requested);
       output << "  \"triples_gap_schedule\": " << std::quoted(result.triples_gap.schedule) << ",\n";

@@ -196,7 +196,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1]]]]]]]]]]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL]]]]]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
@@ -239,6 +239,51 @@ forwards the same explicit
 It applies only when argument twenty is `0`: a fixed-canonical consumer asking
 for epsilon cotangents retains the all-output schedule. Public method defaults
 are unchanged.
+
+Argument twenty-three admits the compiler-owned FP32 forward-W experiment
+(`0` or `1`, default `0`). It preserves all prior positional controls and uses
+the same W moments in the triples energy, pullback seeds and full-Fock response.
+Only W matrix reductions and their staged operands use FP32 storage, computation
+and accumulation; W assembly, integral panels, reverse contractions, Fock
+products, RHF, CCSD, Lambda and orbital/nuclear response stay FP64. The emitted
+precision-schedule identity, actual arithmetic bits, FP32 GEMM count and cast
+element count identify the executed candidate rather than merely its request.
+
+This internal approximate-force candidate is not public mixed-precision method
+admission, and its FP64 reverse is not an exact derivative of discontinuous
+FP32 rounding. Independent physical energy/force gates are required. Complete
+numeric admission charges the additional provider, host bindings and cast/cache
+buffers; if these do not fit, the original FP64 page/panel schedule is retained
+and `triples_w_resource_fallback` is set. Denominator checks and all existing
+CCSD/Lambda/orbital publication gates remain unchanged.
+
+`tests/python/test_df_triples_mixed_endpoint.py` compares cold complete native
+calls against independently fitted PySCF CCSD(T) energies (`1e-8` Eh) and
+independent directional energy finite differences at `1e-4` and `3e-5` Bohr
+(`3e-7` Eh/Bohr). The native triples response tests also cover exact strict-budget
+fallback and failure without publication one byte below its minimum. Set
+`GENERATIVEQC_DF_MIXED_ENDPOINT_TEST=1` and
+`GENERATIVEQC_DF_FORCE_ENDPOINT_BINARY` to the built benchmark inside a finite
+Slurm GPU allocation; retain Slurm's device visibility. These small fixtures
+do not establish near-degenerate or cancellation-heavy production qualification.
+
+Argument twenty-four selects a positive Lambda GMRES true-residual replay
+interval (default `1`); `30` amortizes intermediate checks without altering the
+FP64 operator, preconditioner, equations, workspace or numerical tolerances.
+Predicted convergence, restart, breakdown and exhaustion still trigger a fresh
+physical residual, and the independently generated Lambda equation is audited
+before publishing parameter response. The small Hessenberg residual cannot
+accept a solution. Zero is rejected before molecular work because the existing
+GMRES contract requires a positive interval.
+
+The benchmark reports the requested interval and actual `lambda_actions` and
+`lambda_work`. Any gain from fewer exact operator evaluations is algorithmic
+work reduction, **not** FP32 throughput. Report it separately from the forward-W
+precision experiment; equal geometry and tolerances do not imply equal semantic
+work. Public and internal omitted-argument defaults remain at the historical
+per-iteration schedule pending broader endpoint qualification.
+See the [Lambda replay decision note](../../.agents/notes/implemented/performance/2026-10-09-df-lambda-true-residual-cadence.md)
+for the retained rationale and matched endpoint evidence.
 
 The fused region derives every derivative from the original energy TensorIR
 AD graph, gathers the six inverse virtual permutations in their original

@@ -107,8 +107,11 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     RccsdNativeState* replay_state = nullptr, std::size_t retained_host_bytes = 0,
     std::size_t retained_df_source_bytes = 0, DFGapResponseFingerprints* fingerprints = nullptr,
     DFPhysicalResponseComparison* physical_replay = nullptr,
-    bool fused_triples_scalar_response = false) {
+    bool fused_triples_scalar_response = false, runtime::PrecisionDirective admitted_triples_w = {},
+    std::size_t lambda_true_residual_interval = 1) {
   const auto started = Clock::now();
+  if (!lambda_true_residual_interval)
+    throw std::invalid_argument("Lambda true residual interval must be positive");
   runtime::df_progress::Scope trace(replay_state ? "df_ccsdt_response_replay" : "df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
   if (trace.enabled())
@@ -172,7 +175,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
           o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
           state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
           1e-10, budget, device, difference(base, borrowed), 0, 3, parallel_gap_reduction,
-          request_triples_gap_cotangents, fused_triples_scalar_response);
+          request_triples_gap_cotangents, fused_triples_scalar_response, admitted_triples_w);
       t = std::move(response.pullback);
       result.triples_fock = std::move(response.fock);
       result.triples = t.diagnostic;
@@ -192,7 +195,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
       result.triples = cc::triples::evaluate_df_cuda(
           o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
           state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-          1e-10, difference(budget, base), device);
+          1e-10, difference(budget, base), device, 3, admitted_triples_w);
       result.numeric_capacity_bytes = std::max(result.numeric_capacity_bytes,
                                                checked_add(base, result.triples.workspace_bytes));
     }
@@ -231,6 +234,9 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   lambda_options.max_bytes = difference(budget, lambda_external);
   lambda_options.gmres.max_workspace_bytes = lambda_options.max_bytes;
   lambda_options.gmres.absolute_tolerance = 1e-12;
+  // Acceptance still uses a freshly evaluated FP64 residual and the separate
+  // independent equation. Only redundant intermediate operator replays change.
+  lambda_options.gmres.true_residual_every = lambda_true_residual_interval;
   auto parameters = with_triples ? cc::solve_lambda_parameter_response_cuda_with_energy_source(
                                        p, state.solved, t.t1, t.t2, device, lambda_options)
                                  : cc::solve_lambda_parameter_response_cuda(p, state.solved, device,
@@ -644,16 +650,15 @@ DFPhysicalResponseComparison diagnose_df_ccsdt_physical_responses(
   return comparison;
 }
 
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
-                                  const core::System& auxiliary,
-                                  const generativeqc_method_descriptor& descriptor, bool forces,
-                                  bool with_triples, bool df_auxiliary_reduction,
-                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-                                  const hf::RHFFrameResponseOptions& frame_options,
-                                  bool derived_denominators, bool packed_diis,
-                                  bool parallel_gap_reduction, bool request_triples_gap_cotangents,
-                                  bool fused_triples_scalar_response) {
+DFCCSDTResult run_df_ccsdt_native(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
+    bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
+    std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
+    bool parallel_gap_reduction, bool request_triples_gap_cotangents,
+    bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
+    std::size_t lambda_true_residual_interval) {
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
@@ -662,7 +667,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
         execution, system, auxiliary, descriptor, forces, with_triples, df_auxiliary_reduction,
         df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
-        nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response);
+        nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
+        lambda_true_residual_interval);
   };
   try {
     return attempt();

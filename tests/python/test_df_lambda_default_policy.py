@@ -39,7 +39,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
-        "descriptor.density_tolerance,fused_triples_scalar_response}; }\n"
+        "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
+        "lambda_true_residual_interval}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -74,6 +75,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
 #include <string>
 #include "cc/lambda_response.hpp"
 #include "hf/rhf_frame_response.hpp"
+#include "runtime/execution_precision.hpp"
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace hf { struct RHFFrameResponseOptions; }
@@ -87,6 +89,8 @@ struct DFCCSDTResult {
   bool derived_denominators, packed_diis, parallel_gap, request_gap;
   double reference_energy_tolerance{}, reference_density_tolerance{};
   bool fused_scalar{};
+  runtime::PrecisionDirective triples_w;
+  std::size_t lambda_interval;
 };
 """
         + declaration
@@ -341,7 +345,22 @@ int main() {
                       "1","0","auto",token};
     try { (void)select(23,bad);return 41; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,24}) {
+  for(const char* precision : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0",precision};
+    const auto result = select(24,selected);
+    if(result.triples_w.is_strict_fp64() != (precision[0]=='0') ||
+       !select(23,selected).triples_w.is_strict_fp64()) return 42;
+  }
+  for(const char* interval : {"1", "7", "30"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","1",interval};
+    if(select(25,selected).lambda_interval != std::stoull(interval) ||
+       select(24,selected).lambda_interval != 1) return 43;
+  }
+  for(int argc : {0,1,2,3,26}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

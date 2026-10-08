@@ -60,6 +60,13 @@ struct DFCCSDTResult {
  * fused_triples_scalar_response is an opt-in generated primal/W/V region for
  * gap-free force response. Optional seed storage is admitted before allocation;
  * a tight budget retains the original schedule without changing output demand.
+ * admitted_triples_w is an internal experimental forward-W admission only;
+ * RHF, CCSD, reverse contractions, Lambda and orbital/nuclear response remain
+ * FP64. It never changes the public precision mode or numerical gates.
+ * lambda_true_residual_interval controls only periodic GMRES residual replay.
+ * Predicted convergence, restarts and final acceptance still require a fresh
+ * FP64 residual and an independent physical-equation audit. One retains the
+ * historical per-iteration schedule; the interval must be positive.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -68,7 +75,9 @@ DFCCSDTResult run_df_ccsdt_native(
     std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
-    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false);
+    bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
+    runtime::PrecisionDirective admitted_triples_w = {},
+    std::size_t lambda_true_residual_interval = 1);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.
