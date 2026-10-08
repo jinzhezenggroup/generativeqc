@@ -46,9 +46,7 @@ def test_ao_mo_projection_keeps_column_major_bytes(
     expected_second = tmp_col @ occupied_col
     row_lhs = np.asfortranarray(occupied_col).ravel(order="F").reshape(occupied, n)
     row_rhs = np.asfortranarray(tmp_col).ravel(order="F").reshape(n, na * block)
-    np.testing.assert_allclose(
-        row_lhs @ row_rhs, expected_second.T, atol=1e-14
-    )
+    np.testing.assert_allclose(row_lhs @ row_rhs, expected_second.T, atol=1e-14)
 
 
 @pytest.mark.parametrize("a_count,b_count,na,batch", [(2, 3, 5, 1), (4, 2, 7, 3)])

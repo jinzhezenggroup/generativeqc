@@ -347,8 +347,8 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
   // Tensor adapter owns vendor submission through the borrowed DF plan handle.
   auto submit = [&](const char* operation, char left_t, char right_t, int rows, int columns,
                     int contracted, const double* left, const double* right, double* output,
-                    std::int64_t left_stride, std::int64_t right_stride,
-                    std::int64_t output_stride, int batches) {
+                    std::int64_t left_stride, std::int64_t right_stride, std::int64_t output_stride,
+                    int batches) {
     try {
       generativeqc_tensor::gemm(plan.blas, left_t, right_t, rows, columns, contracted, left, right,
                                 output, left_stride, right_stride, output_stride, batches, 1.0,
@@ -380,8 +380,8 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
     if (rows > static_cast<std::size_t>(std::numeric_limits<int>::max()))
       throw std::invalid_argument("CUDA RI-MP2 transformed B exceeds cuBLAS int32 indexing");
     submit("RI-MP2 occupied AO-to-MO transform", 'N', 'N', static_cast<int>(no),
-           static_cast<int>(rows), static_cast<int>(n), cocc_device.get(), tmp_device.get(),
-           output, 0, 0, 0, 1);
+           static_cast<int>(rows), static_cast<int>(n), cocc_device.get(), tmp_device.get(), output,
+           0, 0, 0, 1);
     ++transform_gemms;
   };
 
@@ -413,14 +413,14 @@ RiMp2CudaEnergy density_fitted_energy_cuda(const hf::PhysicalReference& ref,
           // A is broadcast (zero stride); B advances per occupied j.
           // Row-major B * A^T reverses the original column-major A^T * B.
           submit("RI-MP2 direct fitted-integral batch", 'N', 'T', static_cast<int>(b_count),
-                 static_cast<int>(a_count), static_cast<int>(na),
-                 b_values + j_begin * b_stride, first_b.get() + i * a_stride,
-                 direct_device.get(), static_cast<std::int64_t>(b_stride), 0,
-                 static_cast<std::int64_t>(g_stride), static_cast<int>(j_count));
+                 static_cast<int>(a_count), static_cast<int>(na), b_values + j_begin * b_stride,
+                 first_b.get() + i * a_stride, direct_device.get(),
+                 static_cast<std::int64_t>(b_stride), 0, static_cast<std::int64_t>(g_stride),
+                 static_cast<int>(j_count));
           ++energy_gemms;
           if (!same) {
-            submit("RI-MP2 exchange fitted-integral batch", 'N', 'T',
-                   static_cast<int>(a_count), static_cast<int>(b_count), static_cast<int>(na),
+            submit("RI-MP2 exchange fitted-integral batch", 'N', 'T', static_cast<int>(a_count),
+                   static_cast<int>(b_count), static_cast<int>(na),
                    first_b.get() + j_begin * a_stride, b_values + i * b_stride,
                    exchange_device.get(), static_cast<std::int64_t>(a_stride), 0,
                    static_cast<std::int64_t>(g_stride), static_cast<int>(j_count));
