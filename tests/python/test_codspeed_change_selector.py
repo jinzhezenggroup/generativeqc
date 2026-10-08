@@ -107,10 +107,13 @@ def test_changed_path_selects_bounded_extras(
 ) -> None:
     base = _git(repository, "rev-parse", "HEAD")
     head = _commit_file(repository, path)
-    assert (
-        _select(repository, base, head)
-        == f"GENERATIVEQC_CODSPEED_EXTRA_CASES={extra}\n"
-        f"GENERATIVEQC_CODSPEED_RUN={0 if path.startswith(('docs/', 'tests/', 'manifests/maintenance/')) or path == 'tools/render_python_api_doc.py' else 1}\n"
+    irrelevant = path.startswith((
+        "docs/", "tests/", "manifests/maintenance/"
+    )) or path == "tools/render_python_api_doc.py"
+    expected_run = 0 if irrelevant else 1
+    assert _select(repository, base, head) == (
+        f"GENERATIVEQC_CODSPEED_EXTRA_CASES={extra}\n"
+        f"GENERATIVEQC_CODSPEED_RUN={expected_run}\n"
     )
 
 
@@ -119,7 +122,10 @@ def test_base_only_change_does_not_expand_pr_tier(repository: Path) -> None:
     head = _commit_file(repository, "docs/change.md")
     _git(repository, "checkout", "main")
     base = _commit_file(repository, "src/dft/base-only.cpp")
-    assert _select(repository, base, head) == "GENERATIVEQC_CODSPEED_EXTRA_CASES=\nGENERATIVEQC_CODSPEED_RUN=0\n"
+    assert _select(repository, base, head) == (
+        "GENERATIVEQC_CODSPEED_EXTRA_CASES=\n"
+        "GENERATIVEQC_CODSPEED_RUN=0\n"
+    )
 
 
 def test_sensitive_rename_still_selects_advanced_endpoint(repository: Path) -> None:
@@ -128,5 +134,7 @@ def test_sensitive_rename_still_selects_advanced_endpoint(repository: Path) -> N
     _git(repository, "commit", "-m", "rename")
     head = _git(repository, "rev-parse", "HEAD")
     assert (
-        _select(repository, base, head) == "GENERATIVEQC_CODSPEED_EXTRA_CASES=wb97mv\nGENERATIVEQC_CODSPEED_RUN=1\n"
+        _select(repository, base, head)
+        == "GENERATIVEQC_CODSPEED_EXTRA_CASES=wb97mv\n"
+        "GENERATIVEQC_CODSPEED_RUN=1\n"
     )
