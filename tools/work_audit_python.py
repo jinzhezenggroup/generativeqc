@@ -563,6 +563,20 @@ def _loop_allocations(
                     ),
                     None,
                 )
+                if member in {"concatenate", "stack"} and any(
+                    keyword.arg is None
+                    or (
+                        keyword.arg == "out"
+                        and not (
+                            isinstance(keyword.value, ast.Constant)
+                            and keyword.value.value is None
+                        )
+                    )
+                    for keyword in node.keywords
+                ):
+                    # Known-out variants can reuse caller-owned backing storage;
+                    # **kwargs may also supply out, so avoid asserting allocation.
+                    member = None
                 name = (
                     node.func.id
                     if isinstance(node.func, ast.Name)
