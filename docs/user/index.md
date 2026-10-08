@@ -1,67 +1,65 @@
 # User Guide
 
-Use this guide to install GenerativeQC and run calculations. If the terminology is unfamiliar, start with [Learn quantum chemistry](../learn/index.md).
+Use this guide to install GenerativeQC, choose a supported method, and run a calculation. Start with [Quick start](quickstart.md) if you have not used the package before; for terminology, see [Learn quantum chemistry](../learn/index.md).
 
-## Start
+For precise names, units, capabilities, and public Python signatures, use the [Reference](../reference/index.md) and its [generated public method table](../public_methods.md). Internal algorithms and implementation details belong in the [Developer Guide](../developer/index.md).
 
-- [Installation](installation.md)
-- [Quick start](quickstart.md)
-- [Native CLI without Python](native_cli.md)
-- [Methods and scope](methods.md)
-- [Generated public method table](../public_methods.md)
-
-## Workflows
-
-- [Batched HF](batched_hf.md)
-- [Portable checkpoints](checkpoint.md)
-- [Cross-basis initialization](basis_projection.md)
-- [Progressive HF](progressive_hf.md)
-- [Preliminary SCF initial guesses](initial_guesses.md)
-- [KS options](ks_options.md)
-- [Automatic Libxc semilocal functionals](libxc.md)
-- [Density-fitted DFT](dft_density_fitting.md)
-- [WB97M-V CUDA energy and forces](wb97mv_cuda.md)
-- [r2SCAN-3c](r2scan3c.md)
-
-## Advanced and experimental APIs
-
-- [Experimental symbolic Array API](experimental_array_api.md)
-
-## Basis and Hamiltonian
-
-- [External basis data](external_basis.md)
-- [Higher angular momentum](high_angular_momentum.md)
-- [Scalar Gaussian ECPs](ecp.md)
-
-## Accuracy and performance
-
-- [Accuracy evidence](accuracy.md)
-- [Local autotuning](local_autotuning.md)
-
-Exact lookup information belongs in [Reference](../reference/index.md); internals belong in the [Developer Guide](../developer/index.md).
+## Start here
 
 ```{toctree}
-:hidden:
 :maxdepth: 1
+:caption: Start here
 
 installation
 quickstart
 native_cli
 methods
+```
+
+## Run and reuse calculations
+
+```{toctree}
+:maxdepth: 1
+:caption: Run and reuse calculations
+
 batched_hf
 checkpoint
 basis_projection
 progressive_hf
 initial_guesses
+```
+
+## DFT workflows
+
+```{toctree}
+:maxdepth: 1
+:caption: DFT workflows
+
 ks_options
 libxc
 dft_density_fitting
 wb97mv_cuda
 r2scan3c
-experimental_array_api
+```
+
+## Basis and Hamiltonian
+
+```{toctree}
+:maxdepth: 1
+:caption: Basis and Hamiltonian
+
 external_basis
 high_angular_momentum
 ecp
+```
+
+## Validation and advanced options
+
+```{toctree}
+:maxdepth: 1
+:caption: Validation and advanced options
+
 accuracy
 local_autotuning
+experimental_array_api
 ```
