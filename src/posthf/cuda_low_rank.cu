@@ -240,10 +240,10 @@ int posthf_cholesky_jk_v1(void* handle, size_t rank, const double* density, unsi
           // The shared row-major GEMM adapter reverses the original
           // column-major operands: B*D -> D^T*B^T, then (B*D)*B ->
           // B^T*(B*D)^T. Physical storage and FP64 submission stay identical.
-          gemm(p.context, 'N', 'N', n, n, n, p.density + spin * square, p.physical, p.stage,
-               0, 0, 0, 1, 0.0);
-          gemm(p.context, 'N', 'N', n, n, n, p.physical, p.stage,
-               p.output + (spin + 1) * square, 0, 0, 0, 1, 1.0);
+          gemm(p.context, 'N', 'N', n, n, n, p.density + spin * square, p.physical, p.stage, 0, 0,
+               0, 1, 0.0);
+          gemm(p.context, 'N', 'N', n, n, n, p.physical, p.stage, p.output + (spin + 1) * square, 0,
+               0, 0, 1, 1.0);
         }
       });
       p.context.section(true, p.context.metrics.kernel_ms, [&] {
