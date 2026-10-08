@@ -245,6 +245,7 @@ def test_ci_gate_passes_comparable_unchanged_source(
     assert value["status"] == "PASS"
     assert len(value["cases"]) == len(CASES)
 
+
 def test_changed_producer_work_analyzer_is_explicitly_incomplete(
     checkout: tuple[Path, str],
 ) -> None:
