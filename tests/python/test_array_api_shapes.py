@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
+from generativeqc_compiler.array_api import namespace
 
 
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
@@ -191,3 +192,23 @@ def test_capture_flip_rejects_excessive_static_gather_index_budget() -> None:
     with pytest.raises(ValueError, match="bounded static gather"):
         expression.lower(values)
     np.testing.assert_array_equal(xp.flip(values, axis=0), np.flip(values, axis=0))
+
+
+def test_flip_does_not_enumerate_unselected_axes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Lowering must remain bounded even when an untouched axis is enormous.
+    def bounded_range(*args: int) -> range:
+        result = range(*args)
+        assert len(result) <= 65536, "flip enumerated an unselected axis"
+        return result
+
+    monkeypatch.setattr(namespace, "range", bounded_range, raising=False)
+    spec = xp.TensorSpec(namespace._generic_indices((10**12, 2)), role="input")
+    program = xp.trace(lambda x: xp.flip(x, axis=-1), {"x": spec})
+    assert program.outputs["output"].spec.shape == (10**12, 2)
+    gathers = [node for node in program.nodes if node.op == "gather"]
+    assert len(gathers) == 1
+    assert dict(gathers[0].attrs)["positions"] == (1, 0)
+    unchanged = xp.trace(lambda x: xp.flip(x, axis=()), {"x": spec})
+    assert all(node.op != "gather" for node in unchanged.nodes)

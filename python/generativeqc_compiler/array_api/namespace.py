@@ -464,11 +464,12 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> VibeArray:
     )
     if any(value.shape[position] > 65536 for position in axes):
         raise ValueError("flip exceeds the bounded static gather index budget")
-    key = tuple(
-        builtins.slice(None, None, -1) if position in axes else builtins.slice(None)
-        for position in range(value.ndim)
-    )
-    return _getitem(value, key)
+    node = value.node
+    for position in sorted(axes):
+        node = tensor_ir.gather(
+            node, position, range(value.shape[position] - 1, -1, -1)
+        )
+    return _canonical_generic(VibeArray(node))
 
 
 def reshape(

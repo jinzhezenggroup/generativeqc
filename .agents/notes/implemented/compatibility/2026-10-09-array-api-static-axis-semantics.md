@@ -33,6 +33,14 @@ The experimental public array namespace could trace generic transpose/reshape/br
 
 `tests/python/test_array_api_shapes.py` covers NumPy vs captured execution for signed/multiple axes, float32/64, scalar and empty shapes, broadcast dtype retention, TensorIR JVP, explicit QC index preservation and invalid controls.
 
+Review qualification: `flip` constructs gathers only for reversed axes. Routing
+through generic slice indexing would also enumerate the untouched axes before
+building slice nodes, defeating the compiler work bound for shapes such as
+`(10**12, 2)` reversed only on the last axis. A symbolic regression verifies this
+case without allocating an array, checks that only two gather positions are
+retained, and also covers an empty axis tuple. The focused creation, shape,
+experimental facade, and frontend suites pass together (421 tests).
+
 ## References
 
 - #2111, #633, #2061
