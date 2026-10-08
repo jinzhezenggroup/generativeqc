@@ -122,8 +122,7 @@ def test_base_only_change_does_not_expand_pr_tier(repository: Path) -> None:
     _git(repository, "checkout", "main")
     base = _commit_file(repository, "src/dft/base-only.cpp")
     assert _select(repository, base, head) == (
-        "GENERATIVEQC_CODSPEED_EXTRA_CASES=\n"
-        "GENERATIVEQC_CODSPEED_RUN=0\n"
+        "GENERATIVEQC_CODSPEED_EXTRA_CASES=\nGENERATIVEQC_CODSPEED_RUN=0\n"
     )
 
 
@@ -133,7 +132,6 @@ def test_sensitive_rename_still_selects_advanced_endpoint(repository: Path) -> N
     _git(repository, "commit", "-m", "rename")
     head = _git(repository, "rev-parse", "HEAD")
     assert (
-        _select(repository, base, head)
-        == "GENERATIVEQC_CODSPEED_EXTRA_CASES=wb97mv\n"
+        _select(repository, base, head) == "GENERATIVEQC_CODSPEED_EXTRA_CASES=wb97mv\n"
         "GENERATIVEQC_CODSPEED_RUN=1\n"
     )

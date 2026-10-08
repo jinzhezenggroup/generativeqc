@@ -84,9 +84,7 @@ def test_cpu_identity_ignores_processor_number_and_sorts_features() -> None:
 def test_unknown_cpu_and_bad_sha_rejected() -> None:
     current = _environment()
     current["cpu"] = {"vendor": "", "model": "", "flags": ""}
-    assert not baseline.qualify(
-        {**_receipt(), "environment": current}, SHA, current
-    )[0]
+    assert not baseline.qualify({**_receipt(), "environment": current}, SHA, current)[0]
     with pytest.raises(ValueError):
         baseline._baseline_name("bad-hash")
 
