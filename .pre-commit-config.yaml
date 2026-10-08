@@ -1,7 +1,7 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
-# Preserve exact upstream bytes and the SHA-guarded frozen Johnson migration oracle.
-exclude: ^(upstream/|src/xtb/native/|cmake/3rdparty/implib/|tests/native/fixtures/johnson_prechange_3b97c234/)
+# Preserve exact upstream bytes and SHA-guarded frozen migration oracles.
+exclude: ^(upstream/|src/xtb/native/|cmake/3rdparty/implib/|tests/native/fixtures/johnson_prechange_3b97c234/|tests/native/fixtures/spectral_prechange_5c02b1ba/)
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

@@ -80,8 +80,13 @@ admission remain native runtime responsibilities. Generation needs no installed
 GenerativeQC runtime, GPU, or scientific oracle.
 
 CPU linear-algebra ABI, runtime-provider verification/lifetime and primitive
-bindings live in `tensor/cpu/lp64_provider.*`; GFN retains its method admission,
-generalized transforms and publication. Both GFN and the canonical Gaussian
+bindings live in `tensor/cpu/lp64_provider.*`. The shared
+`solver/cpu/prepared_spectral.*` owner seals ragged spectral dimensions, admits
+borrowed cache/work resources, stages overlap factorization and executes each
+generalized spectrum. GFN's `methods/gfn2_electronic_update.cpp` adapter retains
+electronic admission, spin packing, occupations, densities, thermodynamics and
+publication. Its existing compatibility header also serves CUDA host planning;
+the shared plan initializes no numerical provider. Both GFN and the canonical Gaussian
 CPU path execute `solver/cpu/symmetric_eigen.hpp`, with separate borrowed
 column-major and owned row-major contracts. See
 [CPU linear algebra](cpu_linear_algebra.md) for the exact work-count, fallback,

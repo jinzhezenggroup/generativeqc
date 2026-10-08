@@ -10,7 +10,7 @@ function(generativeqc_add_gfn2_runtime target)
     ${_gfn2_root}/src/model/gfn2/mulliken_kernels_baseline.cpp
     ${_gfn2_root}/src/model/common/sto.cpp
     ${_gfn2_root}/src/model/common/integrals.cpp
-    ${_gfn2_root}/src/model/gfn2/eigensolver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/methods/gfn2_electronic_update.cpp
     ${_gfn2_root}/src/model/gfn2/periodic_embedding.cpp
     ${_gfn2_root}/src/model/gfn2/es2.cpp
     ${_gfn2_root}/src/backends/common/gfn2_plan_schema.cpp

@@ -13,8 +13,13 @@ execution while retaining distinct provider admission and scientific policy.
   calls, opaque eigen/GEMM bindings and sequential thread scopes
 - `src/solver/cpu/symmetric_eigen.hpp` owns immutable ordinary-eigen
   preparation, work binding, scalar Jacobi and borrowed DSYEVD submission
+- `src/solver/cpu/prepared_spectral.*` owns immutable ragged spectral dimensions,
+  exact LP64 resources, borrowed overlap caches and transactional factorization,
+  and single-spectrum generalized execution
+- `src/methods/gfn2_electronic_update.cpp` adapts GFN electronic layouts, occupation
+  policy, density/thermodynamic construction and result publication
 
-The canonical `cpu_symmetric_eigen` facade and GFN2 `solve_one_spin` both
+The canonical `cpu_symmetric_eigen` facade and shared prepared spectral owner both
 execute the prepared service. Gaussian `cpu_target_eigen` reaches it through
 the canonical facade. GFN compatibility factories only translate shared
 initialization status to the existing method status and error boundary.
@@ -90,10 +95,19 @@ MKL partial-initialization retention remains unchanged.
 ## Method-owned policy
 
 Gaussian retains its symmetric-orthogonalizer transform, back transform,
-original-F/S residual checks and metric validation. GFN retains Cholesky
-transforms, explicit symmetrization, overlap conditioning and generation
-cache, occupation/thermodynamic policy, density construction and transactional
-publication.
+original-F/S residual checks and metric validation. The shared spectral owner
+executes Cholesky reduction/recovery, explicit symmetrization and overlap
+conditioning using the caller's threshold. Its cache accepts any nonzero caller
+generation. Backend failure preserves the complete committed cache; numerical
+failure commits that member's generation/status while retaining its old factor
+bytes. Scientific cache invalidation remains the caller's responsibility.
+
+GFN retains occupation/thermodynamic policy, density construction and transactional
+publication, including its two CPU occupation solves for restricted systems.
+Its compatibility header and CUDA topology setup API remain unchanged. Plan
+construction adds one shared immutable metadata allocation, included in resident
+accounting; numerical cache and workspace sizes, offsets, and alignment are
+unchanged. Successful factor/solve transitions use only caller-owned storage.
 
 The shared borrowed service returns raw LAPACK info. GFN preserves negative
 info as a call-level internal error and positive info as per-system
@@ -121,3 +135,9 @@ An intentional change to a protected region requires reviewing its numerical
 or policy effect and updating that explicit fixture. The existing GFN
 molecular, runtime-retention, canonical eigenframe and native CTest gates
 remain separate integration requirements.
+
+`test_prepared_spectral_owner.py` compiles the shared owner without method include
+paths and checks resource admission, independent spectra, failure transactions
+and allocation-free execution. `test_gfn2_spectral_preservation.py` compares the
+real method adapter against a SHA-guarded pre-extraction consumer, including
+exact cache/workspace layouts, occupation-call counts and staged publication.

@@ -123,7 +123,7 @@ def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
     cuda_generator = (root / "tools/generate_gfn2_electronic_cuda.py").read_text()
     assert "density_template_hash()" in cuda_generator
     assert "weighted_density_template_hash()" in cuda_generator
-    cpu = (root / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
+    cpu = (root / "src/methods/gfn2_electronic_update.cpp").read_text()
     cuda = (root / "src/xtb/native/src/backends/cuda/gfn2_density.cu").read_text()
     common = (root / "src/tensor/weighted_gram.hpp").read_text()
     from generativeqc_compiler.method.gfn2_density_lowering import (
@@ -153,7 +153,7 @@ def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
 
 def test_gfn2_cpu_generated_density_failures_mark_staging_status() -> None:
     root = Path(__file__).resolve().parents[2]
-    source = (root / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
+    source = (root / "src/methods/gfn2_electronic_update.cpp").read_text()
     begin = source.index("  double band_energy = 0.0;")
     end = source.index("  const std::size_t spin_matrix_count", begin)
     publication = source[begin:end]
@@ -207,7 +207,7 @@ def test_density_helper_failure_cannot_publish_previous_eigensolution(
     )
     source = tmp_path / "failure_publication.cpp"
     source.write_text(r"""
-#include "model/gfn2/eigensolver.cpp"
+#include "methods/gfn2_electronic_update.cpp"
 #include <iostream>
 using namespace generativeqc::xtb::detail::gfn2;
 static double injected_eigenvalues[2], injected_coefficients[2];
@@ -295,28 +295,42 @@ static CpuLinearAlgebraBackend make_test_backend() {
   if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) std::abort();
   return backend;
 }
+static bool prepare_overlap(EigensolverPlanData& data, LapackInt n, void* memory,
+                            std::size_t bytes, EigensolverOverlapCache& overlap) {
+  const std::int64_t offsets[]{0, n};
+  std::string error;
+  if (cpu_eigen::prepare_spectral_plan(
+          offsets, 2, 1e-12,
+          {GENERATIVEQC_XTB_STATUS_SUCCESS, GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED},
+          data.spectral, error) != cpu_eigen::SpectralResult::success) return false;
+  cpu_eigen::SpectralOverlapCache bound;
+  if (cpu_eigen::bind_spectral_overlap_cache(data.spectral, memory, bytes, bound, error) !=
+      cpu_eigen::SpectralResult::success) return false;
+  overlap = {bound.workspace_base, bound.workspace_size_bytes, bound.factors, bound.generations,
+             bound.statuses, &data};
+  for (LapackInt i = 0; i < n; ++i) overlap.cholesky_factors[i + i * n] = 1.0;
+  overlap.geometry_generations[0] = 1;
+  overlap.system_statuses[0] = GENERATIVEQC_XTB_STATUS_SUCCESS;
+  return true;
+}
 int check(int spins, double coefficient, double eigenvalue, int expected_calls, bool late_beta) {
   // Exercise actual native arithmetic/publication; only LAPACK/BLAS dispatch
   // is injected. No chemistry or external-provider qualification is claimed.
   auto backend = make_test_backend();
   EigensolverPlanData data;
-  if (!cpu_eigen::prepare_borrowed_symmetric_eigen(1, data.symmetric_eigen)) return 20;
+  alignas(64) std::array<std::byte, 512> cache_memory{};
+  EigensolverOverlapCache overlap;
+  if (!prepare_overlap(data, 1, cache_memory.data(), cache_memory.size(), overlap)) return 20;
+  const auto original_cache = cache_memory;
   std::array<LapackInt, 8> integer_work{};
-  data.batch_size = 1;
-  data.orbital_offsets = {0, 1};
-  data.matrix_offsets = {0, 1};
   data.spin_channels = {spins};
   data.alpha_electron_counts = {1.0};
   data.beta_electron_counts = {1.0};
   for (auto& field : data.wavefunction_fields) field.system_offsets = {0, spins};
   data.wavefunction_fields[2].system_offsets = {0, 2};
-  double factor = 1.0;
-  std::uint64_t generation = 1;
-  generativeqc_xtb_status_t overlap_status = GENERATIVEQC_XTB_STATUS_SUCCESS;
-  EigensolverOverlapCache overlap;
-  overlap.cholesky_factors = &factor;
-  overlap.geometry_generations = &generation;
-  overlap.system_statuses = &overlap_status;
+  const double& factor = overlap.cholesky_factors[0];
+  const std::uint64_t& generation = overlap.geometry_generations[0];
+  const generativeqc_xtb_status_t& overlap_status = overlap.system_statuses[0];
   constexpr double guard = 987.125;
   std::array<double, 22> scratch_arena;
   std::array<double, 12> staging_arena;
@@ -376,7 +390,8 @@ int check(int spins, double coefficient, double eigenvalue, int expected_calls, 
   if (failure != NumericalResult::kDataFailure || gemm_calls != expected_calls) return 3;
   if (staging_arena != previous_staging || thermo_arena != previous_thermo) return 7;
   if (scratch_arena.front() != guard || scratch_arena.back() != guard ||
-      factor != 1.0 || generation != 1 || overlap_status != GENERATIVEQC_XTB_STATUS_SUCCESS)
+      factor != 1.0 || generation != 1 || overlap_status != GENERATIVEQC_XTB_STATUS_SUCCESS ||
+      cache_memory != original_cache)
     return 8;
   for (std::size_t i = 13; i < scratch_arena.size(); ++i)
     if (scratch_arena[i] != guard) return 9;
@@ -405,11 +420,11 @@ int check_success(LapackInt n, int spins) {
   const std::size_t matrix_count = static_cast<std::size_t>(n) * n;
   auto backend = make_test_backend();
   EigensolverPlanData data;
-  if (!cpu_eigen::prepare_borrowed_symmetric_eigen(n, data.symmetric_eigen)) return 20;
+  alignas(64) std::array<std::byte, 512> cache_memory{};
+  EigensolverOverlapCache overlap;
+  if (!prepare_overlap(data, n, cache_memory.data(), cache_memory.size(), overlap)) return 20;
+  const auto original_cache = cache_memory;
   std::array<LapackInt, 28> integer_work{};
-  data.batch_size = 1;
-  data.orbital_offsets = {0, n};
-  data.matrix_offsets = {0, static_cast<std::int64_t>(matrix_count)};
   data.spin_channels = {spins};
   data.alpha_electron_counts = {n - 0.25};
   data.beta_electron_counts = {n - 0.75};
@@ -447,15 +462,8 @@ int check_success(LapackInt n, int spins) {
   workspace.batch_free_energies = staged_thermo.data() + 5;
   const auto staging_wavefunction = make_batch_staging_wavefunction(workspace);
   const auto staging_thermodynamics = make_batch_staging_thermodynamics(data, workspace);
-  std::array<double, 25> factor{};
-  for (LapackInt i = 0; i < n; ++i) factor[i + i * n] = 1.0;
-  const auto original_factor = factor;
-  std::uint64_t generation = 1;
-  generativeqc_xtb_status_t overlap_status = GENERATIVEQC_XTB_STATUS_SUCCESS;
-  EigensolverOverlapCache overlap;
-  overlap.cholesky_factors = factor.data();
-  overlap.geometry_generations = &generation;
-  overlap.system_statuses = &overlap_status;
+  const std::uint64_t& generation = overlap.geometry_generations[0];
+  const generativeqc_xtb_status_t& overlap_status = overlap.system_statuses[0];
   std::array<double, 50> hamiltonians{};
   traced_workspace = &workspace;
   expected_spins = spins;
@@ -526,7 +534,8 @@ int check_success(LapackInt n, int spins) {
       published_status != GENERATIVEQC_XTB_STATUS_SUCCESS) return 17;
   if (scratch.front() != guard || staged.front() != guard ||
       staged_thermo.front() != guard || staged_thermo.back() != guard ||
-      factor != original_factor || generation != 1 || overlap_status != GENERATIVEQC_XTB_STATUS_SUCCESS)
+      cache_memory != original_cache || generation != 1 ||
+      overlap_status != GENERATIVEQC_XTB_STATUS_SUCCESS)
     return 14;
   for (std::size_t i = 1 + 7 * matrix_count + 5 * n; i < scratch.size(); ++i)
     if (scratch[i] != guard) return 15;
@@ -591,34 +600,40 @@ int main() {
         env={**os.environ, "CCACHE_BASEDIR": str(root)},
         timeout=60,
     )
-    provider_obj = tmp_path / "lp64_provider.o"
-    subprocess.run(
-        [
-            ccache,
-            compiler,
-            "-std=c++20",
-            "-O1",
-            "-ffunction-sections",
-            "-fdata-sections",
-            "-I",
-            str(root / "src"),
-            "-c",
-            str(root / "src/tensor/cpu/lp64_provider.cpp"),
-            "-o",
-            str(provider_obj),
-        ],
-        check=True,
-        capture_output=True,
-        env={**os.environ, "CCACHE_BASEDIR": str(root)},
-        timeout=60,
-    )
+    shared_objects = []
+    for relative in (
+        "tensor/cpu/lp64_provider.cpp",
+        "solver/cpu/prepared_spectral.cpp",
+    ):
+        shared_obj = tmp_path / (Path(relative).stem + ".o")
+        subprocess.run(
+            [
+                ccache,
+                compiler,
+                "-std=c++20",
+                "-O1",
+                "-ffunction-sections",
+                "-fdata-sections",
+                "-I",
+                str(root / "src"),
+                "-c",
+                str(root / "src" / relative),
+                "-o",
+                str(shared_obj),
+            ],
+            check=True,
+            capture_output=True,
+            env={**os.environ, "CCACHE_BASEDIR": str(root)},
+            timeout=60,
+        )
+        shared_objects.append(shared_obj)
     binary = tmp_path / "failure_publication"
     subprocess.run(
         [
             compiler,
             "-Wl,--gc-sections",
             str(obj),
-            str(provider_obj),
+            *map(str, shared_objects),
             "-ldl",
             "-o",
             str(binary),
