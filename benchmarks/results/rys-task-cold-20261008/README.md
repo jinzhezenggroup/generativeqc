@@ -11,6 +11,10 @@ implementation is in `/data/jzzeng/qc-rys-task-k-20261008`. At qualification,
 no commit, PR, release or tag had been created. The paired controls use the same candidate-enabled binary,
 with incumbent mathematics byte-identical to the frozen base.
 
+Later actual-default qualification is separately labeled in the
+[five-class frozen-base report](../rys-task-default-20261008/README.md) and the
+[three-root current-base report](../rys-task-master-20261008/README.md).
+
 ## Complete endpoint results
 
 All times include calculator/context construction, preparation, the first

@@ -24,6 +24,9 @@
       "src/hf/rhf_frame_response.hpp",
       "src/scf/cuda/direct_jk.cpp",
       "src/scf/cuda/direct_md_j.hpp",
+      "src/scf/cuda/direct_fock_lowering.hpp",
+      "python/generativeqc_compiler/integral/production_rys_tasks.py",
+      "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp"
     ],
@@ -873,6 +876,31 @@
         "issue:#1901",
         "issue:#1972",
         "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
+      ]
+    },
+    {
+      "id": "dft.rys-task-k-default",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:rys-task-k-default",
+        "dft-policy:GENERATIVEQC_DIRECT_K_FOCK_LOWERING",
+        "dft-policy:GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/cuda/direct_fock_lowering.hpp",
+        "python/generativeqc_compiler/integral/production_rys_tasks.py",
+        "python/generativeqc_compiler/integral/production_registry.py"
+      ],
+      "rationale": "Only the qualified sm_120 profile prefers psps, ppps, dsss, dpss, dsps, ddss, dsds, dpps and dspp quartet-parallel Rys-K; other classes and profiles retain incumbent. Three-root classes use one-word 64-bit component masks and bounded local contraction, with generic scatter beyond its private footprint. Construction freezes selection and coverage filters cannot broaden preference. Explicit incumbent fully rolls back. Qualification retains independent FP64 oracle gates, complete cold E+F with real Fock counts and all rejected/default cohorts; isolated K diagnostics do not substitute for endpoint evidence.",
+      "revisit_condition": "Any target/class expansion or queue/parallel-granularity change requires renewed source-identified numerical, sanitizer, work-count and complete-endpoint qualification. Keep frozen historical measurements distinct from current-master qualification and retain valid negative cohorts.",
+      "evidence": [
+        "benchmarks/results/rys-task-default-20261008/README.md",
+        "benchmarks/results/rys-task-master-20261008/README.md",
+        "docs/developer/direct_rys_tasks.md",
+        ".agents/notes/implemented/performance/2026-10-08-rys-task-k-default.md"
       ]
     },
     {

@@ -512,11 +512,11 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
     "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "11d7f105ec3acc3bea4d1a0fd2353d134d00a89c0747ca9908721051d0b9ffcf",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "a4d5f8026bc2a425830cf4cd2acf78fe96b769aa92903eb41df7558ac7112f8f",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "e585be639807c0404d71bb13eea95539967b40eef493fb7ed9100d55104647fe",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "c9024067a5f1c6051a90794606a725aca182ed43a767b7dd7b03ee2039857243",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "ca94f58198497ba8f600a4525eea55fa0247a004c55c5328a37c53b7acbf1eae",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "67a782419f40e62fdf3690dd9f2d8a0051c576f8caef03728018c51f36becae3",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "10e49cb55a475857c98e4fa20376e5b340170ff1b77a8c8b375327bf337a5667",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
-    "generativeqc_generated_shell_registry.cu": "3926954a18600d3941a1dc32ca7010de1dc126bd2c81530ded2ddf24e5e64837"
+    "generativeqc_generated_shell_registry.cu": "5c0bc9ee567fbb75b51d145e2533b81408df2fa757c79c0786c0536e1bb28e3b"
   },
   "retained_source_baseline_revision": "4385f72751b829883407c01106186917c344317b",
   "retained_sources": {
@@ -528,6 +528,17 @@
     "sm_90_k_block": "b9e2568163513ebd365b6d2439428e77f67158426703e780008c21e1bc513a74"
   },
   "artifact_corrections": [
+    {
+      "task": "rys-task-three-root-64-component-mask-20261008",
+      "integrated_base_revision": "99a2a5cac926edc69c28453977d1bc9b70d8bd06",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ],
+      "reason": "Extend bounded quartet-parallel values to three roots and at most 64 Cartesian components. Newly compiled ddss/dsds/dpps/dspp use 64-bit retained-component masks, shared high-accuracy Rys3 interpolation with bounded inner unrolling, and at most 80 doubles of private restricted raw-K contraction; larger contractions retain generic scatter. Add the four classes to sm_120 preference only with independent numerical, sanitizer, identical admission and complete cold endpoint qualification. Regeneration changes task sections in shards 1/2/3 and registry dispatch metadata; shard 0 and every portable artifact remain identical. Six separately pinned incumbent, component-Rys and old-K-block mathematical sources remain byte-identical. New source capability or this identity correction alone is not a performance claim."
+    },
     {
       "task": "rys-task-four-independent-warps-20261008",
       "integrated_base_revision": "4385f72751b829883407c01106186917c344317b",

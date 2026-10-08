@@ -1,6 +1,9 @@
 # Qualified default task-parallel K follow-up
 
 Frozen qualification base: `4385f72751b829883407c01106186917c344317b`.
+The separately qualified three-root extension after main-branch AO/XC promotions
+is retained in the [current-base report](../rys-task-master-20261008/README.md).
+These historical five-class measurements are not changed or pooled with it.
 RTX 5090, n1/Slurm `node1`, `main`, finite `srun --gres=gpu:5090:1` throughout.
 The actual unset default selects five `sm_120` classes: `psps,ppps,dsss,dpss,dsps`.
 Other classes/profiles retain incumbent; `incumbent` explicitly rolls back.

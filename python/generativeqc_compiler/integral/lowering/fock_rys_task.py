@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from ..rys import (
     emit_rys1_roots_cuda,
     emit_rys2_roots_cuda,
+    emit_rys3_roots_cuda,
     emit_rys_value_root_body_cuda,
 )
 from .common import _emitted_component_names, _generic_task_component_setup
@@ -23,8 +24,19 @@ def emit_rys_task_support_cuda(plan: FusedShellPlan) -> str:
     prefix = f"generated_dppp_rys{roots}"
     if roots == 1:
         return emit_rys1_roots_cuda(symbol_prefix=prefix)
+    if roots == 3:
+        # Keep interpolation coefficients short-lived alongside 36/54 values.
+        # This changes compiler scheduling, not the shared quadrature rule.
+        return emit_rys3_roots_cuda(
+            symbol_prefix=prefix,
+            high_accuracy=True,
+            forceinline=True,
+            polynomial_unroll=1,
+        )
     if roots != 2:
-        raise ValueError("task-parallel Rys support requires one or two value roots")
+        raise ValueError(
+            "task-parallel Rys support requires one through three value roots"
+        )
     # A lane owns the whole quartet: inlining keeps the four outputs and live
     # accumulators in registers instead of a device-call/addressed-array frame.
     return emit_rys2_roots_cuda(
@@ -48,11 +60,13 @@ def emit_rys_task_fock_cuda(
     setup = _generic_task_component_setup(spec).replace("shared.task", "task")
     names = _emitted_component_names(spec)
     storage, contraction = (
-        _packed_restricted_k_block(spec, setup, names, maximum_doubles=64)
+        _packed_restricted_k_block(spec, setup, names, maximum_doubles=80)
         if k_block
         else ("", "")
     )
     roots = plan.kernel.integral.required_rys_roots
+    mask_type = "std::uint64_t" if spec.component_count > 32 else "std::uint32_t"
+    mask_unit = "std::uint64_t{1}" if spec.component_count > 32 else "1U"
     body = emit_rys_value_root_body_cuda(spec, plan.kernel.integral)
     # Keep ordinary/persistent entry points byte-identical to the packed ABI.
     # Only their value worker changes; the discarded prefix is not emitted.
@@ -79,7 +93,7 @@ __device__ __forceinline__ void generated_dppp_packed_fock_lane(
     const double* density, double* fock, std::size_t task_index,
     GeneratedDpppPackedFockLaneStorage& storage) {{
   const GeneratedDpppShellTask& task = tasks[task_index];
-  std::uint32_t retained_components = 0U;
+  {mask_type} retained_components = 0U;
 #pragma unroll
   for (unsigned component = 0U; component < kGeneratedDpppComponentCount;
        ++component) {{
@@ -90,7 +104,7 @@ __device__ __forceinline__ void generated_dppp_packed_fock_lane(
             generated_dppp_matrix_index(i, j, matrix_order)] *
         schwarz_bounds[task.density_offset +
             generated_dppp_matrix_index(k, l, matrix_order)] >= screening_tolerance)) {{
-      retained_components |= 1U << component;
+      retained_components |= {mask_unit} << component;
     }}
   }}
   if (retained_components == 0U) return;

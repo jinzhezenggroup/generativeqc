@@ -238,6 +238,45 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_rys_task_default(root: Path) -> dict[str, str]:
+    """Require renewed qualification when the target/class guard is broadened."""
+    preference_relative = Path(
+        "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    )
+    preference = _read(root / preference_relative)
+    preferred = re.search(r"preferred\s*=\s*(\{[^}]+\})", preference)
+    if (
+        preferred is None
+        or ast.literal_eval(preferred.group(1))
+        != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
+        or 'profile.target.architecture != "sm_120" or profile.profile != "sm_120"'
+        not in preference
+    ):
+        raise ValueError("Rys-task default target/class admission drifted")
+    lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
+    lowering = _read(root / lowering_relative)
+    registry_relative = Path(
+        "python/generativeqc_compiler/integral/production_registry.py"
+    )
+    registry = _read(root / registry_relative)
+    if (
+        'std::getenv("GENERATIVEQC_DIRECT_K_FOCK_LOWERING")' not in lowering
+        or "return generated::preferred_rys_task_fock_shell_class_mask();"
+        not in lowering
+        or 'std::strcmp(value, "rys-task") == 0' not in lowering
+        or '"GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES"' not in registry
+        or "kernels->preferred_rys_task_fock_mask\n"
+        "      & enabled_rys_task_fock_shell_class_mask();"
+        not in registry
+    ):
+        raise ValueError("Rys-task default selection/filter guard drifted")
+    return {
+        "dft-policy:rys-task-k-default": preference_relative.as_posix(),
+        "dft-policy:GENERATIVEQC_DIRECT_K_FOCK_LOWERING": lowering_relative.as_posix(),
+        "dft-policy:GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES": registry_relative.as_posix(),
+    }
+
+
 def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
 
@@ -343,6 +382,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_md_j_default(root),
+        _discover_rys_task_default(root),
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
         _discover_response_options(root),

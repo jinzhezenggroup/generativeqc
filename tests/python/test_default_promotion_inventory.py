@@ -83,6 +83,36 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
     assert not validate_inventory(payload, root=tmp_path)
 
 
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            'profile.target.architecture != "sm_120"',
+            'profile.target.architecture != "sm_90"',
+        ),
+        ('profile.profile != "sm_120"', 'profile.profile != "portable_cuda"'),
+        (
+            '"dpps", "dspp"}',
+            '"dpps", "dspp", "ssss"}',
+        ),
+    ],
+)
+def test_rys_task_default_admission_requires_renewed_qualification(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Preference must not expand beyond the independently measured domain."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default target/class admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_inventory_requires_owner_rationale_and_revisit_condition() -> None:
     payload = _payload()
     for field, value in (

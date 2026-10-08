@@ -1,7 +1,8 @@
 # Independent task-parallel Direct Rys-K
 
 The qualified `sm_120` profile defaults to value-only `_rys_task` AOT variants
-for `psps`, `ppps`, `dsss`, `dpss` and `dsps` Direct exchange classes. Other
+for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`, `dpps` and `dspp`
+Direct exchange classes. Other
 classes and profiles retain the incumbent. This selection freezes at provider
 preparation; it does not reselect the old component-lane `rys` experiment,
 select Coulomb J, or select analytic derivatives. Set
@@ -11,9 +12,9 @@ select Coulomb J, or select analytic derivatives. Set
 
 `integral/production_rys_tasks.py` intersects the compiled streaming-Fock
 inventory with `rys_task.py`'s bounded value capability. Eligibility requires
-one or two Rys roots, s/p/d shells, at most a p shell on the fourth center,
-and at most 27 Cartesian components. Capability and measured preference are
-separate: `preferred_rys_task_candidates` records the five qualified classes
+one through three Rys roots, s/p/d shells, at most a p shell on the fourth center,
+and at most 64 Cartesian components. Capability and measured preference are
+separate: `preferred_rys_task_candidates` records the nine qualified classes
 only for the `sm_120` profile. Portable profiles and other architectures retain
 their incumbent until independently qualified.
 
@@ -32,15 +33,21 @@ authoritative; this path does not build a second task queue.
 The value body reuses `RysState`, `build_rys_axis_program` and `_state_expression`.
 The one-root rule uses the existing strict FP64 Boys owner with weight F0 and
 squared node F1/F0. The two-root rule uses the existing high-accuracy tables,
-inlined for lane ownership. AO normalization follows the primitive sum.
+inlined for lane ownership. Three-root tasks reuse the same high-accuracy
+table owner, with bounded polynomial unrolling to limit live coefficient state.
+Classes above 32 components use a 64-bit retained-component mask; smaller
+classes retain their existing 32-bit generated source. AO normalization follows
+the primitive sum.
 No host integral oracle, CPU reference evaluation, or runtime source generation
 is part of the production execution contract.
 
 Restricted raw-K tasks contract into bounded local blocks before atomic
-publication. Their maximum footprint is 64 doubles, without changing the
+publication. Their maximum footprint is 80 doubles, without changing the
 existing Hermite K-block experiment's 32-double default. UHF, combined J/K and
 HF-weighted K use the established generic symmetry scatter. This is not an
-atomic-free design and makes no claim of lower register pressure.
+atomic-free design. Classes exceeding that private contraction bound retain
+generic scatter, not an unbounded local array. Static register counts do not
+substitute for measured occupancy or complete-endpoint performance.
 
 ## Selection and fallback
 
@@ -48,13 +55,17 @@ atomic-free design and makes no claim of lower register pressure.
 classes, using the existing comma-separated exact-class selection convention.
 Unset, empty, or `all` permits the compiled candidate inventory; `none` permits
 none. With the lowering selector unset or empty, this filter can only restrict
-the qualified five-class preference, not expand it. Explicit `rys-task` selects
-the full permitted capability inventory (eight classes on `sm_120`), which is
+the qualified nine-class preference, not expand it. Explicit `rys-task` selects
+the full permitted capability inventory (twelve classes on `sm_120`), which is
 an experiment rather than a generally faster configuration. Both selections
 intersect enabled incumbent Fock coverage and freeze in the prepared K owner.
 Changing the environment after preparation does not change that owner. There
 is no molecule-, method-, size-, or density-dependent promotion table in the
 compiler or runtime.
+
+Current qualification and rejected current-main alternatives are recorded in
+the [three-root execution decision](../../.agents/notes/implemented/performance/2026-10-08-rys-task-three-root-k.md).
+Historical frozen-base five-class receipts retain their original source identity.
 
 An example explicit selection is:
 

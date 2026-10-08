@@ -85,7 +85,7 @@ def preferred_rys_task_candidates(
     """
     if profile.target.architecture != "sm_120" or profile.profile != "sm_120":
         return ()
-    preferred = {"psps", "ppps", "dsss", "dpss", "dsps"}
+    preferred = {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
     return tuple(
         candidate
         for candidate in direct_rys_task_candidates(profile)

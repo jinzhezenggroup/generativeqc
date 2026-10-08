@@ -13,6 +13,7 @@ from .cuda_lowering import supports_component_lane_rys
 from .cuda_schedule import ScheduleIR, ScheduleKind
 from .fused_schedule import build_fused_shell_plan
 from .ir import IntegralIR, KernelConsumer, build_integral_ir
+from .rys_task import task_parallel_rys_eligible
 from .specialize import specialize_integral_ir
 
 if TYPE_CHECKING:
@@ -190,10 +191,19 @@ class KernelSelection:
         if self.recurrence == "rys3":
             component_lanes = _supports_component_lane_rys(self.spec, self.schedule)
             uniform_warps = _supports_uniform_warp_rys(self.spec, self.schedule)
-            if not (scalar_thread_tasks or component_lanes or uniform_warps):
+            packed_tasks = (
+                task_parallel_rys_eligible(selected_integral)
+                and self.schedule.kind == ScheduleKind.PACKED_TASKS
+                and self.schedule.tasks_per_warp == self.schedule.warp_size == 32
+                and not self.schedule.shared_coulomb
+            )
+            if not (
+                scalar_thread_tasks or component_lanes or uniform_warps or packed_tasks
+            ):
                 raise ValueError(
                     "production rys3 requires scalar thread tasks, supported "
-                    "runtime-indexed component lanes, or 32 uniform-warp tasks"
+                    "runtime-indexed component lanes, 32 uniform-warp tasks, "
+                    "or bounded value-only packed quartets"
                 )
         high_root_component_lanes = _supports_component_lane_rys(
             self.spec, self.schedule

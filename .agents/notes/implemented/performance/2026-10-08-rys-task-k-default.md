@@ -91,3 +91,12 @@ Requalify target/class preference when schedules, roots, contraction bounds,
 admission, compiler options or endpoint semantics change. Expand preference
 only with independent correctness and complete-endpoint evidence. Preserve
 the explicit rollback and bounded resource fallback.
+
+## Subsequent current-main qualification
+
+This note retains the frozen-base five-class decision. Its successor
+[three-root quartet-parallel decision](2026-10-08-rys-task-three-root-k.md)
+records the accurate current-main median regression, rejected register-lifetime
+experiment, bounded 36/54-component extension and separately identified
+qualification after the main-branch AO/XC defaults. The historical receipts
+are not replaced or pooled with that newer source.

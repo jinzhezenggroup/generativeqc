@@ -30,6 +30,7 @@ from generativeqc_compiler.integral.production_rys_tasks import (
 from generativeqc_compiler.integral.production_rys_values import (
     direct_rys_value_candidates,
 )
+from generativeqc_compiler.integral.rys import emit_rys3_roots_cuda
 
 if TYPE_CHECKING:
     from generativeqc_compiler.integral.production_selection import KernelSelection
@@ -53,12 +54,17 @@ def test_task_inventory_is_bounded_and_does_not_replace_old_rys() -> None:
         "dpss",
         "dsps",
         "ppps",
+        "ddss",
+        "dsds",
+        "dpps",
+        "dspp",
     }
     assert all(item.schedule.kind == ScheduleKind.PACKED_TASKS for item in CANDIDATES)
     assert all(item.schedule.tasks_per_warp == 32 for item in CANDIDATES)
     assert all(item.schedule.block_threads == 128 for item in CANDIDATES)
     assert all(item.integral.derivative is None for item in CANDIDATES)
-    assert all(item.spec.component_count <= 27 for item in CANDIDATES)
+    assert all(item.spec.component_count <= 64 for item in CANDIDATES)
+    assert all(item.integral.required_rys_roots <= 3 for item in CANDIDATES)
     assert all(
         item.schedule.kind == ScheduleKind.COMPONENT_LANES
         for item in direct_rys_value_candidates(PROFILE)
@@ -120,7 +126,7 @@ def test_registry_keeps_task_masks_behind_incumbent_coverage() -> None:
         "      kernels->fock_names, kernels->fock_name_count)" in source
     )
     assert "& enabled_fock_shell_class_mask()" in source
-    assert "UINT64_C(1247), UINT64_C(1236)" in source
+    assert "UINT64_C(36831), UINT64_C(36820)" in source
     assert (
         "kernels->preferred_rys_task_fock_mask\n      & enabled_rys_task_fock_shell_class_mask()"
         in source
@@ -139,7 +145,7 @@ def test_legacy_single_profile_registry_retains_zero_preference() -> None:
 
 
 @pytest.mark.parametrize("architecture", ("sm_120", "sm_90", "sm_80"))
-def test_only_qualified_profile_prefers_the_five_winners(architecture: str) -> None:
+def test_only_qualified_profile_prefers_the_selected_classes(architecture: str) -> None:
     """Capability is not performance qualification on a different target."""
     profile = resolve_production_profile(MANIFEST, architecture, "portable_cuda")
     assert preferred_rys_task_candidates(profile) == ()
@@ -150,13 +156,17 @@ def test_only_qualified_profile_prefers_the_five_winners(architecture: str) -> N
             "dsss",
             "dpss",
             "dsps",
+            "ddss",
+            "dsds",
+            "dpps",
+            "dspp",
         }
     source = emit_multi_registry_source((profile,))
     assert "UINT64_C(0), UINT64_C(0)" in source
 
 
 def test_larger_local_contraction_does_not_expand_old_block_candidates() -> None:
-    """The 64-double bound is local to the Rys task emitter, not a default."""
+    """The larger local bound does not expand the old 32-double experiment."""
     candidate = next(item for item in CANDIDATES if item.spec.name == "ppps")
     assert PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES == 32
     assert packed_restricted_k_block_doubles(candidate.spec) == 48
@@ -169,3 +179,27 @@ def test_larger_local_contraction_does_not_expand_old_block_candidates() -> None
     source = emit_production_shard((candidate,))
     assert "exchange_block[48]" in source
     assert "raw_exchange_only" in source
+
+
+@pytest.mark.parametrize("name", ("ddss", "dsds", "dpps", "dspp"))
+def test_three_root_tasks_keep_high_component_bits(name: str) -> None:
+    """36/54-component masks must not use undefined 32-bit shifts."""
+    candidate = next(item for item in CANDIDATES if item.spec.name == name)
+    source = emit_production_shard((candidate,))
+    assert candidate.integral.required_rys_roots == 3
+    assert "std::uint64_t retained_components" in source
+    assert "retained_components |= std::uint64_t{1} << component" in source
+    assert f"std::uint64_t{{1}} << {candidate.spec.component_count - 1}U" in source
+    assert "#pragma unroll 1\n    for (int polynomial_degree" in source
+    footprint = packed_restricted_k_block_doubles(candidate.spec)
+    if footprint <= 80:
+        assert f"exchange_block[{footprint}]" in source
+    else:
+        assert "exchange_block[" not in source
+
+
+@pytest.mark.parametrize("hint", (0, -1, True, 1.5))
+def test_polynomial_unrolling_rejects_non_positive_integer_hints(hint: object) -> None:
+    """A scheduling hint cannot produce an invalid CUDA pragma silently."""
+    with pytest.raises(ValueError, match="positive integer"):
+        emit_rys3_roots_cuda(polynomial_unroll=hint)
