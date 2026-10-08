@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import typing
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -22,6 +23,7 @@ from generativeqc_compiler.dft.nonlocal_reference import (
 )
 from generativeqc_compiler.dft.spatial import SpatialPolicy, build_spatial_tasks
 from generativeqc_compiler.method import original_nonlocal_correlation
+from generativeqc_compiler.tensor.autodiff import _vjp_einsum
 from generativeqc_compiler.xc.reference import exchange_reference
 
 
@@ -200,3 +202,30 @@ def test_lda_exchange_reference_shares_constant_coefficients(
     )
     assert np.isfinite(gradient).all()
     assert np.isfinite(hessian).all()
+
+
+def test_tensor_einsum_vjp_uses_one_max_extent_ones_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    left = np.arange(6, dtype=np.float64).reshape(2, 3) + 0.3
+    right = np.arange(12, dtype=np.float64).reshape(3, 4) * 0.1 + 1
+    cotangent = np.arange(8, dtype=np.float64).reshape(2, 4) * 0.2
+    dtype = SimpleNamespace(dtype="float64")
+    node = SimpleNamespace(
+        attrs={
+            "labels": (("i", "k"), ("k", "j")),
+            "output": ("i", "j"),
+            "coefficient": (1, 1),
+        },
+        spec=dtype,
+        inputs=(
+            SimpleNamespace(spec=SimpleNamespace(shape=left.shape)),
+            SimpleNamespace(spec=SimpleNamespace(shape=right.shape)),
+        ),
+    )
+    with monkeypatch.context() as patch:
+        allocations = _count_numpy_calls(patch, "ones", "_vjp_einsum")
+        actual = _vjp_einsum(node, (left, right), cotangent)
+    assert allocations == [12]
+    np.testing.assert_allclose(actual[0], cotangent @ right.T, rtol=0, atol=1e-13)
+    np.testing.assert_allclose(actual[1], left.T @ cotangent, rtol=0, atol=1e-13)
