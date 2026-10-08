@@ -10,7 +10,14 @@ from pathlib import Path
 import pytest
 
 from tools.audit_producer_work import ReceiptError
-from tools.ratchet_producer_schedule import CASES, DEPENDENCIES, SCHEDULE, audit, main
+from tools.ratchet_producer_schedule import (
+    ANALYZER_SOURCE,
+    CASES,
+    DEPENDENCIES,
+    SCHEDULE,
+    audit,
+    main,
+)
 
 SCHEDULE_FIXTURE = """from dataclasses import dataclass
 from .df_occupied_gram_cuda import emit_occupied_gram
@@ -60,10 +67,15 @@ def checkout(tmp_path: Path) -> tuple[Path, str]:
         else:
             source = ""
         destination.write_text(source, encoding="utf-8")
+    auditor = root / ANALYZER_SOURCE
+    auditor.parent.mkdir(parents=True, exist_ok=True)
+    auditor.write_bytes(
+        (Path(__file__).resolve().parents[2] / ANALYZER_SOURCE).read_bytes()
+    )
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "cpu-qa@example.invalid")
     _git(root, "config", "user.name", "CPU Fixture")
-    _git(root, "add", "python")
+    _git(root, "add", "python", "tools")
     _git(root, "commit", "-qm", "fixture source baseline")
     return root, _git(root, "rev-parse", "HEAD")
 
@@ -232,3 +244,15 @@ def test_ci_gate_passes_comparable_unchanged_source(
     value = json.loads(report.read_text(encoding="utf-8"))
     assert value["status"] == "PASS"
     assert len(value["cases"]) == len(CASES)
+
+def test_changed_producer_work_analyzer_is_explicitly_incomplete(
+    checkout: tuple[Path, str],
+) -> None:
+    root, base = checkout
+    auditor = root / ANALYZER_SOURCE
+    auditor.write_bytes(auditor.read_bytes() + b"\n# edited parser\n")
+    result = audit(root, base, audit_script=auditor)
+    assert result["status"] == "INCOMPLETE"
+    assert "analyzer changed" in result["reason"]
+    assert result["cases"] == []
+    assert result["analyzer_sha256"] is not None
