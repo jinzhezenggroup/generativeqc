@@ -218,8 +218,8 @@ def test_tensor_einsum_vjp_uses_one_max_extent_ones_owner(
     dtype = SimpleNamespace(dtype="float64")
     node = SimpleNamespace(
         attrs={
-            "labels": (("i", "k"), ("k", "j")),
-            "output": ("i", "j"),
+            "labels": ((0, 2), (2, 1)),
+            "output": (0, 1),
             "coefficient": (1, 1),
         },
         spec=dtype,
