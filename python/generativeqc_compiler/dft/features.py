@@ -220,7 +220,9 @@ def density_features(
     full diagnostic feature ABI.
     """
     requested, rho, gradient, tau = _density_feature_arrays(jets, density, ingredients)
-    return _publish(requested, rho, gradient, tau)
+    return _publish(
+        requested, rho, gradient_buffer if gradient_buffer is not None else [], tau
+    )
 
 
 def _density_features_from_spin_densities(
@@ -267,8 +269,10 @@ def orbital_features(
     jets, requested, need_gradient = _feature_request(jets, ingredients)
     c, occ = _spin_orbitals(coefficients, occupations, jets.shape[2])
     rho, tau = [], []
-    gradient = (
-        np.empty((2, jets.shape[1], 3), dtype=np.float64) if need_gradient else []
+    gradient_buffer = (
+        np.empty((2, jets.shape[1], 3), dtype=np.float64)
+        if need_gradient
+        else None
     )
     for spin in range(2):
         # Weight before collocation: a zero occupation must remain zero even
@@ -282,8 +286,11 @@ def orbital_features(
         if need_gradient or "tau" in requested:
             derivatives = jets[1:4] @ factor
         if need_gradient:
+            assert gradient_buffer is not None
             for axis, derivative in enumerate(derivatives):
-                gradient[spin, :, axis] = np.sum(2 * value * derivative, axis=1)
+                gradient_buffer[spin, :, axis] = np.sum(
+                    2 * value * derivative, axis=1
+                )
         if "tau" in requested:
             tau.append(0.5 * np.sum(derivatives**2, axis=(0, 2)))
     return _publish(requested, rho, gradient, tau)
