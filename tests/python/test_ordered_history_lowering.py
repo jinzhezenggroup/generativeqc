@@ -36,36 +36,63 @@ def _scalar(name: str) -> Node:
     return input_tensor(name, TensorSpec((), dtype="float64", role="input"))
 
 
-def test_whole_incumbent_translation_units_expand_identically() -> None:
-    # Frozen at dd43e2e/tree 3e4f066e before ownership changed. Expand actual
-    # production includes, not synthetic substitutions or a recomputed baseline.
+def test_frozen_cpu_numerical_body_and_cuda_translation_unit_are_preserved() -> None:
+    # Keep the pre-extraction CPU source and its original frozen hash as an
+    # independent reference. Only names and caller-status encoding may differ
+    # in the relocated numerical body; algebra and operation order cannot.
     from generativeqc_compiler.method.gfn2_history_lowering import (
         emit_gfn2_history_artifacts,
     )
+    from generativeqc_compiler.tensor.broyden_cpu_lowering import (
+        emit_broyden_cpu_artifacts,
+    )
 
-    for backend, filename, frozen in (
+    frozen = ROOT / "tests/native/fixtures/johnson_prechange_3b97c234"
+    old = (frozen / "model/common/scc_mixer.cpp").read_text()
+    for path in sorted(frozen.glob("generated_gfn2_history_cpu_*.inc")):
+        old = old.replace(f'#include "{path.name}"', path.read_text())
+    assert hashlib.sha256(old.encode()).hexdigest() == (
+        "844ad997749c33b55bdc8d568c7dd985bfa262f661b1284c69cec8d86c88983d"
+    )
+    source = (ROOT / "src/solver/cpu/johnson_broyden.cpp").read_text()
+    for name, body in emit_broyden_cpu_artifacts().items():
+        if name.endswith(".inc"):
+            include = f'#include "{name}"'
+            assert source.count(include) == 1
+            source = source.replace(include, body)
+
+    def numerical_body(text: str) -> str:
+        begin = text.index("std::size_t system_index(")
+        end = text.index("\n}  // namespace", begin)
+        return text[begin:end].replace("// clang-format on\n", "")
+
+    old_body = numerical_body(old)
+    for before, after in (
+        ("SccMixer", "Broyden"),
+        ("generativeqc_xtb_status_t", "BroydenResult"),
+        ("GENERATIVEQC_XTB_STATUS_SUCCESS", "BroydenResult::success"),
+        ("GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR", "BroydenResult::numerical_failure"),
         (
-            "cpu",
-            "model/common/scc_mixer.cpp",
-            "844ad997749c33b55bdc8d568c7dd985bfa262f661b1284c69cec8d86c88983d",
+            "state.system_statuses[system] = BroydenResult::success;",
+            "state.system_statuses[system] = state.status_encoding.success;",
         ),
         (
-            "cuda",
-            "backends/cuda/gfn2_scc_mixer.cu",
-            "1e96b2154098685b62b5c7be6659daafacc1e0cc29bfc67f273a1896cffa1b68",
+            "state.system_statuses[system] = BroydenResult::numerical_failure;",
+            "state.system_statuses[system] = state.status_encoding.numerical_failure;",
         ),
     ):
-        source = (NATIVE / filename).read_text()
-        assert "value -= omega *" not in source
-        assert "double overlap = 0.0;" not in source
-        assert "bool cholesky_solve(" not in source
-        expanded = source
-        for name, body in emit_gfn2_history_artifacts(backend).items():
-            if name.endswith(".inc"):
-                include = f'#include "{name}"'
-                assert source.count(include) == 1
-                expanded = expanded.replace(include, body)
-        assert hashlib.sha256(expanded.encode()).hexdigest() == frozen
+        old_body = old_body.replace(before, after)
+    assert numerical_body(source) == old_body
+
+    cuda = (NATIVE / "backends/cuda/gfn2_scc_mixer.cu").read_text()
+    for name, body in emit_gfn2_history_artifacts("cuda").items():
+        if name.endswith(".inc"):
+            include = f'#include "{name}"'
+            assert cuda.count(include) == 1
+            cuda = cuda.replace(include, body)
+    assert hashlib.sha256(cuda.encode()).hexdigest() == (
+        "1e96b2154098685b62b5c7be6659daafacc1e0cc29bfc67f273a1896cffa1b68"
+    )
 
 
 @pytest.mark.parametrize(

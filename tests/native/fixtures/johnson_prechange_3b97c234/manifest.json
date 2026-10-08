@@ -1,0 +1,34 @@
+{
+  "commit": "3b97c234eb18f5e6f354842b458a4e56c1619f95",
+  "sources": {
+    "model/common/scc_mixer.cpp": {
+      "path": "src/xtb/native/src/model/common/scc_mixer.cpp",
+      "sha256": "74ee8ef6ee0b2e9626e79f9f80038d5e5fd1a48d8d403049955bebc461f36acd"
+    },
+    "model/common/scc_mixer.hpp": {
+      "path": "src/xtb/native/src/model/common/scc_mixer.hpp",
+      "sha256": "17ffad6078d6e80c3323f91d5f0a992ae555fd50ad2c77a626a508581de5dd54"
+    },
+    "runtime/types.hpp": {
+      "path": "src/xtb/native/src/runtime/types.hpp",
+      "sha256": "b8c65af042c25e2b5d0c7977963cf8da68458b6a5d59a16f37e27a4112cd584b",
+      "original_sha256": "d056d48f30b2912c499de63e1018b4aef3d3ef0bb1daeedfcf87cb34c45dc8af",
+      "extraction": "Only the int32 status typedef and its enum are retained verbatim; unrelated method descriptors are omitted."
+    },
+    "runtime/bounded_workspace.hpp": {
+      "path": "src/runtime/bounded_workspace.hpp",
+      "sha256": "08031b2686b7916e7e059633247771879ed549e266d9e632780b09f74ed4ff69"
+    },
+    "consumer.cpp": {
+      "path": "tests/native/test_ordered_history_consumers.cpp",
+      "sha256": "c80a515462df6e257479d3c0a1fe1c50aea37e6e1413296061163bb2d045ca09"
+    }
+  },
+  "generated": {
+    "generated_gfn2_history_cpu_correction.inc": "bfcf474ca03d3e743c7cee49244466a1a312c75655d4ccf29db50d78317be5ff",
+    "generated_gfn2_history_cpu_gram.inc": "94c32101290ddca63f29ef49dfdceb97756b488d37db232c60594def8b4a9db8",
+    "generated_gfn2_history_cpu_helpers.inc": "8cf75ee6691a0c2c56307dfcd437ff5b1620cb688dc0e8fdead072fdf064674d",
+    "generated_gfn2_history_cpu_identity.json": "f4b9fce8b31f08b4aa09a3a50edbd1649d7dcb609e5a1c19bc75e77d34a9d5c5",
+    "generated_gfn2_history_cpu_window.inc": "e2a11063fd1a3e748f4d0122d688868d059bd5280e6367535c6496fc93ecf496"
+  }
+}
