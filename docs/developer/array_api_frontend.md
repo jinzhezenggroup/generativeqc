@@ -61,8 +61,11 @@ compatible.
 | unary `-` | Exact coefficient lowering |
 | `pow/exp/log/sqrt` | Existing TensorIR real-valued contracts |
 | `sum` | Explicit reduction, `keepdims=False`, no implicit dtype conversion |
-| `permute_dims`, `.T`, `.mT` | Array-style axis and matrix transpose |
+| `permute_dims`, `.T`, `.mT` | Array-style axis and matrix transpose, including 2025.12 signed axis positions |
 | `reshape` | Shape-only for generic arrays, including one `-1`; scientific arrays require explicit target metadata |
+| `expand_dims/squeeze` | Static singleton axis insertion/removal (including signed and multiple axes); scientific dimensions need explicit typed TensorIR metadata |
+| `moveaxis/flip` | Signed-axis reorder through transpose; generic flip through static gather up to 65,536 indices per reversed axis |
+| `broadcast_shapes/broadcast_arrays` | Static integer-shape calculus / individual explicit generic broadcasts; each input retains its dtype |
 | `broadcast_to` | Shape-only for generic arrays; scientific arrays require explicit indices/axis map |
 | indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
 | `take` | Static integer gather along one axis |

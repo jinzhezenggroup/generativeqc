@@ -78,7 +78,11 @@ dimension, and static indexing with integers, slices (including negative
 strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
 `square` and `reciprocal` lower to existing TensorIR multiply/divide nodes.
 `sum` and `mean` accept static axes, and generic arrays may use
-`keepdims=True` to retain reduced singleton axes. Generic arrays accept finite Python
+`keepdims=True` to retain reduced singleton axes. Shape utilities also include
+`broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,
+`moveaxis` and `flip`. `expand_dims` accepts the 2025.12 multi-axis tuple
+form, and `permute_dims` accepts negative axes; all reuse existing TensorIR
+reshape, transpose, broadcast and gather semantics. Generic arrays accept finite Python
 float literals as ordinary scalar values, so expressions such as `x + 0.5`
 have eager/compiled parity. The compiler records the exact binary value of that
 Python float. Negative-zero float literals are rejected because exact rational
@@ -110,7 +114,10 @@ shape/dtype semantics         AO/occ/vir/aux/spin semantics
 ## Current limits
 
 The eager namespace and reference compiled-call path currently accept CPU/NumPy
-`float32` and `float64` arrays. Static creation is capture-aware but does not
+`float32` and `float64` arrays. Shape functions require static integer
+dimensions and axes. Captured `flip` builds explicit gather index maps and
+rejects reversed axes larger than 65,536 elements to avoid unbounded source
+materialization. Static creation is capture-aware but does not
 supply the standard's full dtype defaults, devices or constructor set. There is no implicit dtype promotion, dynamic Python control
 flow, or implicit external-device transfer. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit

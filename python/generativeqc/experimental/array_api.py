@@ -238,6 +238,57 @@ def broadcast_to(
     return np.broadcast_to(_eager_array(x), _namespace._shape(shape, "broadcast_to"))
 
 
+def broadcast_shapes(*shapes: tuple[int, ...]) -> tuple[int, ...]:
+    return _namespace.broadcast_shapes(*shapes)
+
+
+def broadcast_arrays(*arrays: object) -> tuple[typing.Any, ...]:
+    if not arrays:
+        return ()
+    if any(isinstance(value, VibeArray) for value in arrays):
+        return _namespace.broadcast_arrays(*arrays)
+    values = tuple(_eager_array(value) for value in arrays)
+    return tuple(np.broadcast_arrays(*values))
+
+
+def expand_dims(x: object, axis: int | tuple[int, ...]) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.expand_dims(x, axis)
+    array = _eager_array(x)
+    _namespace._expand_shape(array.shape, axis)
+    return np.expand_dims(array, axis)
+
+
+def squeeze(x: object, axis: int | tuple[int, ...]) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.squeeze(x, axis)
+    array = _eager_array(x)
+    _namespace._squeezed_shape(array.shape, axis)
+    return np.squeeze(array, axis=axis)
+
+
+def moveaxis(
+    x: object, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.moveaxis(x, source, destination)
+    array = _eager_array(x)
+    order = _namespace._moveaxis_order(array.ndim, source, destination)
+    return np.transpose(array, order)
+
+
+def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
+    if isinstance(x, VibeArray):
+        return _namespace.flip(x, axis=axis)
+    array = _eager_array(x)
+    axes = (
+        tuple(range(array.ndim))
+        if axis is None
+        else _namespace._normalized_axes(axis, array.ndim, "flip")
+    )
+    return np.flip(array, axis=axes)
+
+
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.slice(x, ranges)
@@ -315,13 +366,7 @@ def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
     if isinstance(x, VibeArray):
         return _namespace.permute_dims(x, axes)
     array = _eager_array(x)
-    if (
-        not isinstance(axes, tuple)
-        or any(type(axis) is not int for axis in axes)
-        or sorted(axes) != list(range(array.ndim))
-    ):
-        raise ValueError("permutation requires each nonnegative axis exactly once")
-    return np.transpose(array, axes)
+    return np.transpose(array, _namespace._permutation(axes, array.ndim))
 
 
 def matrix_transpose(x: object) -> typing.Any:
@@ -668,6 +713,8 @@ __all__ = [
     "VibeArray",
     "add",
     "asarray",
+    "broadcast_arrays",
+    "broadcast_shapes",
     "broadcast_to",
     "capabilities",
     "compile",
@@ -675,6 +722,8 @@ __all__ = [
     "dlpack_device",
     "einsum",
     "exp",
+    "expand_dims",
+    "flip",
     "float32",
     "float64",
     "full",
@@ -685,6 +734,7 @@ __all__ = [
     "matmul",
     "matrix_transpose",
     "mean",
+    "moveaxis",
     "multiply",
     "negative",
     "ones",
@@ -696,6 +746,7 @@ __all__ = [
     "slice",
     "sqrt",
     "square",
+    "squeeze",
     "subtract",
     "sum",
     "take",
