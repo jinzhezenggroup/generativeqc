@@ -194,7 +194,7 @@ class SecondPrimitive:
     exponents: tuple[float, ...]
     centers: tuple[tuple[float, ...], ...]
     weights: tuple[float, ...] | None = None
-    direction: tuple[float, ...] | None = None
+    direction: tuple[tuple[float, ...], ...] | None = None
     scale: float = 1.0
     output_tile: int = 0
 
