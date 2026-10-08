@@ -9,6 +9,7 @@ Use this guide to keep GenerativeQC scientifically trustworthy, reproducible, pe
 - [Large-domain stationary CUDA qualification](stationary_large_domain_qualification.md)
 - [Scientific evidence retention](evidence_retention.md)
 - [CUDA ownership](cuda_ownership.md)
+- [CPU-interpreted CUDA smoke tests](cuda_cpu_simulation.md)
 - [CUDA vendor boundaries](vendor_boundaries.md)
 - [Resource planning](resource_planning.md)
 - [CPU autotuning](cpu_autotuning.md)
@@ -28,6 +29,7 @@ performance_engineering
 pbe0_xc_tile_qualification
 evidence_retention
 cuda_ownership
+cuda_cpu_simulation
 vendor_boundaries
 resource_planning
 cpu_autotuning
