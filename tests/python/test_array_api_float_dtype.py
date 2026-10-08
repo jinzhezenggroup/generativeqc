@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from generativeqc.experimental import array_api as xp
 from generativeqc.extensions import tensor
 
