@@ -821,7 +821,7 @@ def _run_autotune(
                 if production_reasons:
                     candidate_row["accepted"] = False
                     candidate_row["rejection_reasons"] = [
-                        *reasons,
+                        *typing.cast("list[str]", candidate_row["rejection_reasons"]),
                         *(
                             f"production validation: {reason}"
                             for reason in production_reasons
