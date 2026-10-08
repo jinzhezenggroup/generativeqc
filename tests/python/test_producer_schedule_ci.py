@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from tools.audit_producer_work import ReceiptError
-from tools.ratchet_producer_schedule import CASES, DEPENDENCIES, SCHEDULE, audit
+from tools.ratchet_producer_schedule import CASES, DEPENDENCIES, SCHEDULE, audit, main
 
 SCHEDULE_FIXTURE = """from dataclasses import dataclass
 from .df_occupied_gram_cuda import emit_occupied_gram
@@ -141,3 +142,89 @@ def test_cli_imports_without_editable_install() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "--base-sha" in result.stdout
+
+
+def test_ci_growth_gate_blocks_comparable_production_work(
+    checkout: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, base = checkout
+    source = root / SCHEDULE
+    source.write_text(
+        source.read_text(encoding="utf-8").replace(
+            "maximum_rows = min(n, capacity // (auxiliaries * rank), capacity // n)",
+            "maximum_rows = min(n, 2)",
+        ),
+        encoding="utf-8",
+    )
+    report = tmp_path / "producer-ratchet.json"
+    assert main(
+        [
+            "--root",
+            str(root),
+            "--base-sha",
+            base,
+            "--output",
+            str(report),
+            "--fail-on-work-growth",
+        ]
+    ) == 1
+    result = json.loads(report.read_text(encoding="utf-8"))
+    assert result["status"] == "FAIL"
+    assert any(
+        row["status"] == "FAIL"
+        and row["candidate_executed"] > row["baseline_executed"]
+        for row in result["cases"]
+    )
+    assert all(
+        row.get("classification") != "proven bug" for row in result["cases"]
+    )
+
+
+def test_ci_gate_keeps_unknown_source_dependency_explicit_and_nonblocking(
+    checkout: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, base = checkout
+    (root / DEPENDENCIES[-1]).write_text(
+        "def emit_occupied_gram():\n    return 'changed'\n",
+        encoding="utf-8",
+    )
+    report = tmp_path / "unknown.json"
+    assert main(
+        [
+            "--root",
+            str(root),
+            "--base-sha",
+            base,
+            "--output",
+            str(report),
+            "--fail-on-work-growth",
+        ]
+    ) == 0
+    result = json.loads(report.read_text(encoding="utf-8"))
+    assert result["status"] == "INCOMPLETE"
+    assert "import dependency changed" in result["reason"]
+    assert result["cases"] == []
+    assert main(
+        ["--root", str(root), "--base-sha", base, "--output", str(report)]
+    ) == 1
+
+
+def test_ci_gate_passes_comparable_unchanged_source(
+    checkout: tuple[Path, str], tmp_path: Path
+) -> None:
+    root, base = checkout
+    report = tmp_path / "pass.json"
+    assert main(
+        [
+            "--root",
+            str(root),
+            "--base-sha",
+            base,
+            "--output",
+            str(report),
+            "--fail-on-work-growth",
+        ]
+    ) == 0
+    value = json.loads(report.read_text(encoding="utf-8"))
+    assert value["status"] == "PASS"
+    assert len(value["cases"]) == len(CASES)
