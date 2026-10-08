@@ -248,7 +248,23 @@ reach six for differentiated f functions without exposing a new public basis
 angular momentum. Exact exponential underflow contributes zero. No AO
 magnitude cutoff is applied, and nonfinite outputs fail explicitly.
 
+## Native CUDA AO work reuse
+
+Native CMake builds enable `GENERATIVEQC_CUDA_AO_RADIAL_REUSE=ON` by default.
+The generated four-jet (value/gradient) and ten-jet (through-Hessian) kernels
+share each primitive's radial exponential and identical one-dimensional axis
+derivative expressions. Cartesian/spherical expansion, multiplication and
+accumulation order remain unchanged. Both SCF collocation and native force
+grids use this generated schedule. One-jet and twenty-jet requests retain the
+scalar fallback.
+
+Configure `-DGENERATIVEQC_CUDA_AO_RADIAL_REUSE=OFF` to build the scalar schedule
+explicitly. Generated-source identities distinguish the two variants. The
+Python compiler/JIT API still defaults to the scalar schedule; its explicit
+`ao_radial_reuse=True` selector opts into the same reusable kernel family.
+
 ## Density features
+
 
 An RHF matrix is the **total** density and splits equally into alpha and beta.
 Separate spin input has shape `[2,AO,AO]`. Matrices may be arbitrary non-SCF

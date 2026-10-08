@@ -175,7 +175,9 @@ int main(int argc,char** argv) {
   else launch(ao_kernel,blocks(count,128),128,0,7,basis.data(),I(2),I(4),nao,
               points.data(),npoint,jets,baseline.data()+1,&baseline_error,selected);
   assert(exp_calls==scheduled_exp*(reuse ? jets : 1));
-  assert(axis_calls==scheduled_axis && finite_calls==count && baseline_error==error);
+  const I axes_per_term=reuse ? (jets==4 ? 6 : 9) : 3*jets;
+  assert(axis_calls*axes_per_term==scheduled_axis*3*jets);
+  assert(finite_calls==count && baseline_error==error);
   for(I i=1;i<=count;++i)
     assert(output[i]==baseline[i] || (std::isnan(output[i]) && std::isnan(baseline[i])));
   if(mode==1) {
@@ -400,6 +402,40 @@ def test_radial_reuse_is_explicit_and_source_identity_bound(tmp_path: Path) -> N
     for invalid in (None, 1, "true"):
         with pytest.raises(TypeError, match="selector must be boolean"):
             emit_grid_source(ao_radial_reuse=invalid)
+
+
+def test_native_build_defaults_to_reuse_with_explicit_scalar_opt_out() -> None:
+    """Native build policy changes without changing the compiler/JIT API default."""
+    cmake = (ROOT / "CMakeLists.txt").read_text()
+    assert (
+        "option(GENERATIVEQC_CUDA_AO_RADIAL_REUSE\n"
+        '       "Reuse compiler-owned AO radial and axis work for 4/10 jets" ON)'
+    ) in cmake
+    registration = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
+    assert "if(GENERATIVEQC_CUDA_AO_RADIAL_REUSE)" in registration
+    assert (
+        "list(APPEND _generativeqc_grid_ao_schedule_args --ao-radial-reuse)"
+        in registration
+    )
+    assert "ao_radial_kernel_" not in emit_grid_scientific_kernels()
+
+
+@pytest.mark.parametrize("jets,axis_count", [(4, 6), (10, 9)])
+@pytest.mark.parametrize("fp32", [False, True])
+def test_reuse_emits_each_axis_derivative_once(
+    jets: int, axis_count: int, fp32: bool
+) -> None:
+    """Share only identical DAG results; the existing probe checks exact outputs."""
+    source = emit_grid_scientific_kernels(ao_radial_reuse=True)
+    suffix = "_fp32" if fp32 else ""
+    start = source.index(f"__global__ void ao_radial_kernel_{jets}{suffix}(")
+    end = source.index("\n}\n", start)
+    kernel = source[start:end]
+    assert kernel.count("axis_jet(") == axis_count
+    assert kernel.index("if (radial ==") < kernel.index(
+        "const " + ("float" if fp32 else "double") + " axis_x0"
+    )
+    assert kernel.count(" *\n            axis_") == 3 * jets
 
 
 def test_jit_opt_in_uses_distinct_generated_artifact(
