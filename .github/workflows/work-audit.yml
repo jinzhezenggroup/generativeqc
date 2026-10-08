@@ -20,8 +20,21 @@ jobs:
           mkdir -p .artifacts
           python3 tools/audit_native_work.py --format json > .artifacts/work-audit.json
           python3 tools/audit_native_work.py --summary-only
+      - name: Compare source-bound DF producer work against PR base (advisory)
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Keep checkout shallow; fetch only the immutable base object.
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}" || \
+            echo "::warning::Unable to fetch base commit; producer-work report will be INCOMPLETE"
+          python3 tools/ratchet_producer_schedule.py \
+            --base-sha "${BASE_SHA}" \
+            --output .artifacts/producer-work-ratchet.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: source-work-audit
-          path: .artifacts/work-audit.json
+          path: |
+            .artifacts/work-audit.json
+            .artifacts/producer-work-ratchet.json
           retention-days: 14
