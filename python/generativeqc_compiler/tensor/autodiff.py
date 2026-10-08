@@ -650,7 +650,7 @@ def _vjp_einsum(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndar
     # consumes its shaped prefix synchronously, and a view changes no values.
     # Keeping a single FP64/declared-dtype buffer avoids N backing allocations
     # for high-arity contractions with varied operand shapes.
-    max_ones = max(math.prod(item.spec.shape) for item in node.inputs)
+    max_ones = max((math.prod(item.spec.shape) for item in node.inputs), default=0)
     ones_storage = np.ones(max_ones, dtype=node.spec.dtype)
     for differentiated, operand_labels in enumerate(labels):
         arguments = [bar, output]
