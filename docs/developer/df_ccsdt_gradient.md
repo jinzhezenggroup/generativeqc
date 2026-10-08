@@ -268,8 +268,10 @@ Slurm GPU allocation; retain Slurm's device visibility. These small fixtures
 do not establish near-degenerate or cancellation-heavy production qualification.
 
 Argument twenty-four selects a positive Lambda GMRES true-residual replay
-interval (default `1`); `30` amortizes intermediate checks without altering the
-FP64 operator, preconditioner, equations, workspace or numerical tolerances.
+interval (default `30` for the complete native DF-CCSD(T) force endpoint);
+explicit `1` restores per-iteration checks. The default amortizes intermediate
+checks without altering the FP64 operator, preconditioner, equations, workspace
+or numerical tolerances.
 Predicted convergence, restart, breakdown and exhaustion still trigger a fresh
 physical residual, and the independently generated Lambda equation is audited
 before publishing parameter response. The small Hessenberg residual cannot
@@ -280,8 +282,10 @@ The benchmark reports the requested interval and actual `lambda_actions` and
 `lambda_work`. Any gain from fewer exact operator evaluations is algorithmic
 work reduction, **not** FP32 throughput. Report it separately from the forward-W
 precision experiment; equal geometry and tolerances do not imply equal semantic
-work. Public and internal omitted-argument defaults remain at the historical
-per-iteration schedule pending broader endpoint qualification.
+work. The complete native DF owner and this benchmark now default to interval
+`30`; standalone Lambda and method-neutral GMRES retain interval `1`. The
+precision experiment stays opt-in, and difficult/restarted-case numerical
+qualification is still required before claiming general default-policy safety.
 See the [Lambda replay decision note](../../.agents/notes/implemented/performance/2026-10-09-df-lambda-true-residual-cadence.md)
 for the retained rationale and matched endpoint evidence.
 

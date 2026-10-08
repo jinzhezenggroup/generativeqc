@@ -1,6 +1,6 @@
 # Decision: amortize optional Lambda true-residual replays, not acceptance
 
-Status: implemented internal experiment; omitted-argument default unchanged
+Status: implemented; complete native DF endpoint defaults to cadence 30 after policy update
 Date: 2026-10-09 (local measurement date, Asia/Shanghai)
 
 ## Problem
@@ -25,9 +25,11 @@ Lambda equation remains an additional publication gate. The existing controller
 already implements these rules, including the resident backend.
 
 Both the internal endpoint and CLI reject zero before molecular work: zero is
-not a supported "check only at convergence" sentinel. Omitted arguments retain
-interval 1. The benchmark reports the requested interval and measured work so
-this opt-in remains distinguishable from the historical schedule.
+not a supported "check only at convergence" sentinel. In the original matched measurement, omitted arguments retained interval 1.
+The subsequent 2026-10-09 policy update makes the complete native DF-CCSD(T)
+entry point and its benchmark default to 30; explicit interval 1 remains the
+strict baseline. The benchmark reports the requested interval and measured work
+so historical observations remain distinguishable.
 
 This is **FP64 algorithmic work reduction**, not FP32 Lambda or tensor-core
 throughput. It can be combined with the separate FP32 forward-W experiment, but
@@ -139,12 +141,18 @@ statistics, source/binary identities and sanitizer output. Remote compute root:
 
 ## Consequences and revisit conditions
 
-The endpoint gains a reproducible internal option without a default-policy
-change. Periodic checks can affect stagnation detection timing, even when
-mandatory exact acceptance remains identical. Qualify difficult/restarted
-Lambda cases and repeated complete endpoints before default promotion. Broader
-mixed-precision Lambda requires independent qualification and explicit strict
-refinement/fallback, rather than rebranding this work-reduction option.
+The endpoint first gained a reproducible internal option. On 2026-10-09 the
+complete native DF-CCSD(T) owner and benchmark adopted interval 30 as the
+omitted-argument default, while preserving the explicit interval-1 baseline.
+This is a *policy change* after the single measured pair, not additional
+performance or difficult-case qualification. Standalone Lambda and the shared
+GMRES controller stay on their prior defaults. Periodic checks can affect
+stagnation detection timing even with identical exact acceptance; keep
+qualifying difficult/restarted Lambda cases and repeated complete endpoints.
+The FP32 W precision experiment remains opt-in. Broader mixed-precision Lambda
+requires independent qualification and strict refinement/fallback.
+
+Policy update agent: ChatGPT; model: GPT-6.
 
 ## References
 

@@ -97,7 +97,9 @@ int main(int argc, char** argv) {
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
     const bool fused_triples_scalar_response = argc > 22 && selector(22);
     const bool triples_w_fp32 = argc > 23 && selector(23);
-    const auto lambda_true_residual_interval = unsigned_argument(24, 1);
+    // The complete DF force owner defaults to amortized FP64 Lambda checks.
+    // Explicit interval 1 retains the historical per-iteration control.
+    const auto lambda_true_residual_interval = unsigned_argument(24, 30);
     if (!lambda_true_residual_interval)
       throw std::invalid_argument("Lambda true residual interval must be positive");
     generativeqc::runtime::PrecisionDirective admitted_triples_w;

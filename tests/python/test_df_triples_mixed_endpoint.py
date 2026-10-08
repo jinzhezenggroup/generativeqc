@@ -51,7 +51,7 @@ def run_endpoint(
     *,
     mixed: bool,
     forces: bool = True,
-    lambda_interval: int = 1,
+    lambda_interval: int | None = 1,
 ) -> dict:
     """Use a fresh process with matched controls and no recycled solver state."""
     assert os.environ.get("SLURM_JOB_ID")
@@ -87,8 +87,9 @@ def run_endpoint(
         "auto",
         "0",
         str(int(mixed)),
-        str(lambda_interval),
     ]
+    if lambda_interval is not None:
+        command.append(str(lambda_interval))
     completed = subprocess.run(
         command, capture_output=True, text=True, check=False, timeout=120
     )
@@ -102,6 +103,7 @@ def test_complete_mixed_force_has_independent_energy_and_force_gates(
 ) -> None:
     metadata, _ = load_fixture(name)
     strict = run_endpoint(tmp_path, metadata, mixed=False)
+    default_cadence = run_endpoint(tmp_path, metadata, mixed=False, lambda_interval=None)
     mixed = run_endpoint(tmp_path, metadata, mixed=True)
     cadenced = run_endpoint(tmp_path, metadata, mixed=True, lambda_interval=30)
     energy_only = run_endpoint(tmp_path, metadata, mixed=True, forces=False)
@@ -113,15 +115,28 @@ def test_complete_mixed_force_has_independent_energy_and_force_gates(
     assert mixed["triples_precision_cast_elements"] > 0
     assert mixed["triples_w_precision_schedule_identity"]
     assert not mixed["triples_w_resource_fallback"]
+    assert strict["lambda_true_residual_interval"] == 1
+    assert default_cadence["lambda_true_residual_interval"] == 30
+    assert default_cadence["triples_w_compute_bits"] == 64
+    assert default_cadence["lambda_actions"] <= strict["lambda_actions"]
+    if strict["lambda_iterations"] > 1:
+        assert default_cadence["lambda_actions"] < strict["lambda_actions"]
     assert cadenced["lambda_true_residual_interval"] == 30
     assert cadenced["lambda_actions"] <= mixed["lambda_actions"]
     if mixed["lambda_iterations"] > 1:
         assert cadenced["lambda_actions"] < mixed["lambda_actions"]
     for key in ("lambda_residual", "z_residual", "stationarity"):
+        assert default_cadence[key] < 1e-8
         assert cadenced[key] < 1e-8
     np.testing.assert_allclose(mixed["total_energy"], expected, atol=1e-8, rtol=0)
     np.testing.assert_allclose(
         mixed["total_energy"], strict["total_energy"], atol=1e-8, rtol=0
+    )
+    np.testing.assert_allclose(
+        default_cadence["total_energy"], strict["total_energy"], atol=1e-12, rtol=0
+    )
+    np.testing.assert_allclose(
+        default_cadence["forces"], strict["forces"], atol=3e-7, rtol=0
     )
     np.testing.assert_allclose(mixed["forces"], strict["forces"], atol=3e-7, rtol=0)
     np.testing.assert_allclose(cadenced["forces"], strict["forces"], atol=3e-7, rtol=0)

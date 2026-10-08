@@ -65,8 +65,10 @@ struct DFCCSDTResult {
  * FP64. It never changes the public precision mode or numerical gates.
  * lambda_true_residual_interval controls only periodic GMRES residual replay.
  * Predicted convergence, restarts and final acceptance still require a fresh
- * FP64 residual and an independent physical-equation audit. One retains the
- * historical per-iteration schedule; the interval must be positive.
+ * FP64 residual and an independent physical-equation audit. The complete
+ * DF-CCSD(T) owner defaults to 30; explicitly selecting 1 retains the
+ * historical per-iteration baseline. Standalone Lambda and shared GMRES
+ * defaults remain unchanged; the interval must be positive.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -77,7 +79,7 @@ DFCCSDTResult run_df_ccsdt_native(
     bool packed_diis = false, bool parallel_gap_reduction = true,
     bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
     runtime::PrecisionDirective admitted_triples_w = {},
-    std::size_t lambda_true_residual_interval = 1);
+    std::size_t lambda_true_residual_interval = 30);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.
