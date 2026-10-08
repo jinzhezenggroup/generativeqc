@@ -2,6 +2,7 @@
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,6 +41,18 @@ def test_real_ragged_mixer_planning_and_execution(
     tmp_path: Path, required_native_cxx: "NativeCxx"
 ) -> None:
     """Compile the complete production consumer, not a copied planner surrogate."""
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools/generate_ordered_history_native.py"),
+            "--output-directory",
+            str(tmp_path),
+            "--backend",
+            "cpu",
+        ],
+        check=True,
+        timeout=30,
+    )
     probe = tmp_path / "probe.cpp"
     probe.write_text(r"""
 #include "model/common/scc_mixer.hpp"
@@ -103,6 +116,15 @@ int main() {
     executable = required_native_cxx.build_executable(
         [probe, NATIVE / "model/common/scc_mixer.cpp"],
         tmp_path / "probe",
-        compile_args=["-std=c++17", "-O2", "-I", str(ROOT / "src"), "-I", str(NATIVE)],
+        compile_args=[
+            "-std=c++17",
+            "-O2",
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(NATIVE),
+            "-I",
+            str(tmp_path),
+        ],
     )
     subprocess.run([str(executable)], check=True, timeout=30)

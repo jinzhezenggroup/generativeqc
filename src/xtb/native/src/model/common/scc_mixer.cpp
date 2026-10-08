@@ -487,70 +487,7 @@ generativeqc_xtb_status_t record_numeric_failure(const SccMixerState& state, std
   return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
 }
 
-bool dot_product(const double* first, const double* second, std::size_t count, double& result) {
-  double sum = 0.0;
-  for (std::size_t index = 0u; index < count; ++index) {
-    sum += first[index] * second[index];
-    if (!std::isfinite(sum)) {
-      return false;
-    }
-  }
-  result = sum;
-  return true;
-}
-
-bool cholesky_solve(double* matrix, double* right_hand_side, std::size_t dimension) {
-  /* beta is symmetric positive definite because omega0^2 is added to I. */
-  for (std::size_t row = 0u; row < dimension; ++row) {
-    for (std::size_t column = 0u; column <= row; ++column) {
-      double value = matrix[row * dimension + column];
-      for (std::size_t inner = 0u; inner < column; ++inner) {
-        value -= matrix[row * dimension + inner] * matrix[column * dimension + inner];
-      }
-      if (!std::isfinite(value)) {
-        return false;
-      }
-      if (row == column) {
-        if (!(value > 0.0)) {
-          return false;
-        }
-        matrix[row * dimension + column] = std::sqrt(value);
-      } else {
-        const double diagonal = matrix[column * dimension + column];
-        value /= diagonal;
-        if (!std::isfinite(value)) {
-          return false;
-        }
-        matrix[row * dimension + column] = value;
-      }
-    }
-  }
-
-  for (std::size_t row = 0u; row < dimension; ++row) {
-    double value = right_hand_side[row];
-    for (std::size_t column = 0u; column < row; ++column) {
-      value -= matrix[row * dimension + column] * right_hand_side[column];
-    }
-    value /= matrix[row * dimension + row];
-    if (!std::isfinite(value)) {
-      return false;
-    }
-    right_hand_side[row] = value;
-  }
-  for (std::size_t reverse = dimension; reverse > 0u; --reverse) {
-    const std::size_t row = reverse - 1u;
-    double value = right_hand_side[row];
-    for (std::size_t column = row + 1u; column < dimension; ++column) {
-      value -= matrix[column * dimension + row] * right_hand_side[column];
-    }
-    value /= matrix[row * dimension + row];
-    if (!std::isfinite(value)) {
-      return false;
-    }
-    right_hand_side[row] = value;
-  }
-  return true;
-}
+#include "generated_gfn2_history_cpu_helpers.inc"
 
 generativeqc_xtb_status_t mix_system_unchecked(const SccMixerPlanData& data, std::size_t system,
                                       const SccMixerVectorView& wavefunction,
@@ -641,81 +578,14 @@ generativeqc_xtb_status_t mix_system_unchecked(const SccMixerPlanData& data, std
       return record_numeric_failure(state, system, "SCC mixer Broyden weight is not finite", error);
     }
 
-    const std::size_t history_count = static_cast<std::size_t>(
-        std::min<std::uint64_t>(static_cast<std::uint64_t>(memory), old_iteration));
-    const std::uint64_t first_iteration =
-        old_iteration - static_cast<std::uint64_t>(history_count) + 1u;
-    const std::size_t new_slot =
-        static_cast<std::size_t>((old_iteration - 1u) % static_cast<std::uint64_t>(memory));
-    for (std::size_t history = 0u; history < history_count; ++history) {
-      const std::uint64_t represented_iteration =
-          first_iteration + static_cast<std::uint64_t>(history);
-      workspace.history_slots[history] = static_cast<std::int64_t>(
-          (represented_iteration - 1u) % static_cast<std::uint64_t>(memory));
-    }
+#include "generated_gfn2_history_cpu_window.inc"
 
-    const auto df_vector = [&](std::size_t slot) {
-      return slot == new_slot ? workspace.delta_f
-                              : state.df_history + history_offset + slot * dimension;
-    };
-    const auto u_vector = [&](std::size_t slot) {
-      return slot == new_slot ? workspace.new_u
-                              : state.u_history + history_offset + slot * dimension;
-    };
-    const auto slot_omega = [&](std::size_t slot) {
-      return slot == new_slot ? omega : state.omega[system * memory + slot];
-    };
-
-    for (std::size_t row = 0u; row < history_count; ++row) {
-      const std::size_t row_slot = static_cast<std::size_t>(workspace.history_slots[row]);
-      const double row_omega = slot_omega(row_slot);
-      double coefficient_dot = 0.0;
-      if (!std::isfinite(row_omega) ||
-          !dot_product(df_vector(row_slot), workspace.residual, dimension, coefficient_dot)) {
-        return record_numeric_failure(state, system, "SCC mixer Broyden coefficient is not finite",
-                                      error);
-      }
-      workspace.coefficients[row] = row_omega * coefficient_dot;
-      if (!std::isfinite(workspace.coefficients[row])) {
-        return record_numeric_failure(state, system, "SCC mixer Broyden coefficient overflowed",
-                                      error);
-      }
-      for (std::size_t column = 0u; column < history_count; ++column) {
-        const std::size_t column_slot = static_cast<std::size_t>(workspace.history_slots[column]);
-        const double column_omega = slot_omega(column_slot);
-        double overlap = 0.0;
-        if (!std::isfinite(column_omega) ||
-            !dot_product(df_vector(row_slot), df_vector(column_slot), dimension, overlap)) {
-          return record_numeric_failure(state, system,
-                                        "SCC mixer Broyden history overlap is not finite", error);
-        }
-        double value = row_omega * column_omega * overlap;
-        if (row == column) {
-          value += kOmegaZero * kOmegaZero;
-        }
-        if (!std::isfinite(value)) {
-          return record_numeric_failure(state, system, "SCC mixer Broyden matrix overflowed",
-                                        error);
-        }
-        workspace.beta[row * history_count + column] = value;
-      }
-    }
+#include "generated_gfn2_history_cpu_gram.inc"
     if (!cholesky_solve(workspace.beta, workspace.coefficients, history_count)) {
       return record_numeric_failure(state, system, "SCC mixer Broyden system is not usable", error);
     }
 
-    for (std::size_t component = 0u; component < dimension; ++component) {
-      double value = current[component] + data.damping * workspace.residual[component];
-      for (std::size_t history = 0u; history < history_count; ++history) {
-        const std::size_t slot = static_cast<std::size_t>(workspace.history_slots[history]);
-        value -= slot_omega(slot) * workspace.coefficients[history] * u_vector(slot)[component];
-      }
-      if (!std::isfinite(value)) {
-        return record_numeric_failure(state, system, "SCC mixer Broyden result is not finite",
-                                      error);
-      }
-      workspace.mixed[component] = value;
-    }
+#include "generated_gfn2_history_cpu_correction.inc"
 
     std::copy_n(workspace.delta_f, dimension,
                 state.df_history + history_offset + new_slot * dimension);

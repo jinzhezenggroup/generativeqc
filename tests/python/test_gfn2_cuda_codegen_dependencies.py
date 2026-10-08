@@ -71,6 +71,7 @@ def test_gfn2_cuda_objects_wait_for_method_parameters(tmp_path: Path) -> None:
         timeout=30,
     )
     assert "generativeqc_method_parameters_codegen" in order
+    assert "generativeqc_ordered_history_codegen" in order
     commands = subprocess.check_output(
         ["ninja", "-C", str(build), "-t", "commands", "generativeqc_gfn2_cuda"],
         text=True,
@@ -78,5 +79,6 @@ def test_gfn2_cuda_objects_wait_for_method_parameters(tmp_path: Path) -> None:
     )
     assert "generate_method_parameters.py" in commands
     assert "generated_method_parameters.hpp" in commands
+    assert "generate_ordered_history_native.py" in commands
     assert not list(build.glob("generated/*.hpp"))
     assert not list(build.glob("*.a"))

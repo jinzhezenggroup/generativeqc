@@ -4,6 +4,40 @@ include_guard(GLOBAL)
 # live in GenerativeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(generativeqc_register_host_generated_sources target)
+  set(_generativeqc_history_outputs)
+  foreach(_backend cpu cuda)
+    foreach(_phase helpers window gram correction)
+      list(APPEND _generativeqc_history_outputs
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_history_${_backend}_${_phase}.inc")
+    endforeach()
+    list(APPEND _generativeqc_history_outputs
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_history_${_backend}_identity.json")
+  endforeach()
+  generativeqc_register_generated_sources(
+    NAME generativeqc_ordered_history_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_ordered_history_native.py"
+    OUTPUTS ${_generativeqc_history_outputs}
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_history_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history_emit.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ordered_history_gram.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ir.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/program.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/optimize.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/lowering_contract.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/lowering_provider.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/precision.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/provenance.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/schedule.py"
+    ARGS --output-directory "${CMAKE_CURRENT_BINARY_DIR}/generated"
+    COMMENT "Generating candidate-selected shared ordered-history algebra")
+  if(TARGET generativeqc_gfn2_cuda)
+    add_dependencies(generativeqc_gfn2_cuda generativeqc_ordered_history_codegen)
+  endif()
+
   generativeqc_register_generated_sources(
     NAME generativeqc_solver_lowering_codegen
     TARGET ${target}
