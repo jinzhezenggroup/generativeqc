@@ -220,9 +220,7 @@ def density_features(
     full diagnostic feature ABI.
     """
     requested, rho, gradient, tau = _density_feature_arrays(jets, density, ingredients)
-    return _publish(
-        requested, rho, gradient_buffer if gradient_buffer is not None else [], tau
-    )
+    return _publish(requested, rho, gradient, tau)
 
 
 def _density_features_from_spin_densities(
@@ -293,4 +291,6 @@ def orbital_features(
                 )
         if "tau" in requested:
             tau.append(0.5 * np.sum(derivatives**2, axis=(0, 2)))
-    return _publish(requested, rho, gradient, tau)
+    return _publish(
+        requested, rho, gradient_buffer if gradient_buffer is not None else [], tau
+    )
