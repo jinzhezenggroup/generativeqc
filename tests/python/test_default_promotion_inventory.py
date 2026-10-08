@@ -350,3 +350,34 @@ def test_new_response_default_off_option_must_be_registered(
         "response-option:new_default_off_path" in error and "unregistered" in error
         for error in errors
     )
+
+
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/scf/cuda/direct_md_j.hpp", "128U << 20", "256U << 20"),
+        ("src/scf/cuda/direct_jk.cpp", "host.nbf < 8", "host.nbf < 4"),
+        (
+            "src/scf/cuda/direct_jk.cpp",
+            "md_ready = !runtime::active_device_resource_ledger",
+            "md_ready = true",
+        ),
+        (
+            "src/scf/cuda/direct_jk.cpp",
+            'std::strcmp(disabled, "1") == 0',
+            'std::strcmp(disabled, "0") == 0',
+        ),
+    ],
+)
+def test_md_j_default_domain_and_optional_capacity_are_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "MD-J default" in error for error in validate_inventory(payload, root=tmp_path)
+    )

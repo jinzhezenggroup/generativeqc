@@ -40,6 +40,16 @@ The retained dense angular residual probes are upper bounds, not accepted
 quartet counts: 209,520,685 per MD Fock, 3,352,330,960 per MD endpoint.
 Density-bound refreshes are 32 per MD endpoint.
 
+## Qualification scope after resource repair
+
+The source and binary receipts below identify the measured revision
+`9c911d28004eb0baae07ef63d78ee9c8ffcda63f`. Subsequent host resource repairs retain
+these original hashes; they are not receipts for a rebuilt binary. The repair
+keeps the original optional allowance and numerical kernels for unbudgeted KS,
+retains normal J under public resource ledgers, and uses the existing checked
+optional-allocation rollback. Host policy/allocator tests qualify those changes;
+no additional GPU performance or sanitizer campaign is claimed.
+
 ## Retained evidence
 
 `paired-cold.json` contains all six samples and the acceptance verdict.

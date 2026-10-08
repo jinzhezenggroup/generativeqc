@@ -35,11 +35,13 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
 /** Conservative shape-only capacity for the optional generated shell owner
  * plus the exact bounded generic fallback. A retained derivative order also
  * reserves the full-range shell J/K density/force lease used by stationary
- * consumers. Counts are totals as above.
+ * consumers. Counts are totals as above. Optional MD capacity is requested only
+ * by private unbudgeted KS preparation; public ledger plans retain normal J.
  */
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
-                                             unsigned derivative_order = 0);
+                                             unsigned derivative_order = 0,
+                                             bool reserve_optional_md = false);
 
 /** Bind normalized, homogeneous public AO dimensions and coordinate counts.
  * Each item retains its own shell/geometry metadata. A geometry or basis change

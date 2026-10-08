@@ -33,7 +33,11 @@ records the measured regression and requirements for future default promotion.
 
 Eligible CUDA strict-FP64 exact Coulomb values use the density-contracted
 McMurchie–Davidson source by default. Admission requires an s/p/d basis, at least
-eight public AOs and sufficient optional resident capacity. Geometry transforms
+eight public AOs and sufficient optional resident capacity outside a public
+resource ledger. Public `ResourceBudget` plans retain normal J because their
+incumbent inventory reserves no optional MD storage, including when the budget
+has no explicit cap. This preserves later owners, rebuilds and force storage.
+Geometry transforms
 are prepared on the owning stream; replay contracts the total density into
 Hermite coefficients and projects the Coulomb potential back to public AOs.
 Normal generated/canonical K, XC, SCF and finalization owners are unchanged.

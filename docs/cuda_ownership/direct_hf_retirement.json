@@ -30,7 +30,7 @@
       "id": "native-fock-and-jk",
       "status": "performance-exception",
       "capability": "Retained scientific Direct J/K and materialized/packed Fock consumers for public-AO/reference domains. Order-two and generic quartet production adapters are runtime-only over compiler-owned recurrence, shell canonicalization and Fock scatter.",
-      "current_selector": "Generated shell classes are used where promoted. Remaining scientific files are the independent J/K path plus cached-tensor and packed-Fock consumers; order-two/quartet task adapters no longer own scientific formulas or screening criteria.",
+      "current_selector": "Generated shell classes are used where promoted. Remaining scientific files are the independent J/K path, budgeted density-Hermite Coulomb and partial-residual consumers, plus cached-tensor and packed-Fock consumers; order-two/quartet task adapters no longer own scientific formulas or screening criteria.",
       "generated_alternative": "Compiler-generated recurrence/source contraction and Fock accumulation cover the order-two/quartet adapters. Remaining cached/public-AO Fock/J-K consumers require explicit compiler/TensorIR replacement or measured exception evidence.",
       "schedule_requirements": "Share primitive/Boys work across Fock outputs, preserve symmetry/scatter semantics, and choose materialization/rematerialization from measured register and occupancy evidence rather than Direct-only shape tests.",
       "resource_profile": "Register/shared-memory pressure and repeated primitive work are the primary retirement constraints; endpoint selection must consume generic target/resource evidence.",
@@ -48,6 +48,9 @@
       "files": [
         "src/scf/cuda/direct_cached_tensor_kernels.cu",
         "src/scf/cuda/direct_jk_kernels.cu",
+        "src/scf/cuda/direct_md_j.cu",
+        "src/scf/cuda/direct_md_j.hpp",
+        "src/scf/cuda/direct_md_jk.cu",
         "src/scf/cuda/direct_packed_fock_kernels.cu"
       ]
     },

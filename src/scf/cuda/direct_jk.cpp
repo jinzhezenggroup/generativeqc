@@ -318,7 +318,7 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t batch, std::size_t nao, std:
 
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao, std::size_t atoms,
                                              std::size_t shells, std::size_t primitives,
-                                             unsigned derivative_order) {
+                                             unsigned derivative_order, bool reserve_optional_md) {
   auto bytes = cuda_direct_jk_device_bytes(batch, nao, atoms, shells, primitives, derivative_order);
   const auto add = [&](std::size_t n, std::size_t width) {
     bytes = runtime::size_add(bytes, runtime::size_mul(n, width));
@@ -364,7 +364,9 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
     add(1, sizeof(cuda_execution::GeneratedShellPairStream) + sizeof(unsigned long long));
   }
   const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
-  if (nao >= 8 && (!disabled || std::strcmp(disabled, "1") != 0)) add(1, kMdJResidentCap);
+  if (reserve_optional_md && !runtime::active_device_resource_ledger && nao >= 8 &&
+      (!disabled || std::strcmp(disabled, "1") != 0))
+    add(1, cuda_execution::kMdJResidentCap);
   return bytes;
 }
 
@@ -842,62 +844,50 @@ generativeqc_status create_cuda_direct_jk_plan(
     MdJHost md_host;
     bool md_ready = false;
     try {
-      md_ready = derivative_order <= 1 && budget > plan->device_bytes &&
-                 md_host.prepare(host, budget - plan->device_bytes);
+      // Public plans reserve incumbent owners and later force/rebuild capacity,
+      // not optional MD storage. Spare live bytes are not an admission allowance.
+      md_ready = !runtime::active_device_resource_ledger && derivative_order <= 1 &&
+                 budget > plan->device_bytes && md_host.prepare(host, budget - plan->device_bytes);
     } catch (const std::bad_alloc&) {
     }
     if (md_ready) {
-      const auto allocation_begin = plan->allocations.size();
-      const auto base_bytes = plan->device_bytes;
-      const auto discard_md = [&] {
-        direct_jk_check(cudaStreamSynchronize(plan->stream));
-        while (plan->allocations.size() > allocation_begin) {
-          runtime::resource_cuda_free(plan->allocations.back());
-          plan->allocations.pop_back();
-        }
-        plan->device_bytes = base_bytes;
-        plan->md_j = {};
-      };
-      try {
-        auto upload_vector = [&](const auto& values) {
-          using Value = typename std::decay_t<decltype(values)>::value_type;
-          return static_cast<Value*>(upload(values.data(), values.size() * sizeof(Value)));
-        };
-        auto& md = plan->md_j;
-        md.pairs = upload_vector(md_host.pairs);
-        md.primitives = upload_vector(md_host.primitives);
-        md.ordered_primitives = upload_vector(md_host.ordered);
-        md.shell_offsets = upload_vector(host.system_shell_offsets);
-        md.pair_offsets = upload_vector(host.system_shell_pair_offsets);
-        std::vector<std::int64_t> primitive_offsets;
-        for (const auto pair_offset : host.system_shell_pair_offsets)
-          primitive_offsets.push_back(host.shell_pair_primitive_offsets[pair_offset]);
-        md.primitive_offsets = upload_vector(primitive_offsets);
-        md.minimum_bounds = scratch(md_host.pairs.size() * sizeof(double));
-        md.maximum_bounds = scratch(md_host.pairs.size() * sizeof(double));
-        md.density_bounds = scratch(md_host.pairs.size() * sizeof(double));
-        md.maximum_bound = scratch(sizeof(double));
-        md.active_pairs =
-            reinterpret_cast<std::uint32_t*>(scratch(md_host.pairs.size() * sizeof(std::uint32_t)));
-        md.active_count = reinterpret_cast<std::uint32_t*>(scratch(sizeof(std::uint32_t)));
-        md.source_cursor =
-            reinterpret_cast<unsigned long long*>(scratch(sizeof(unsigned long long)));
-        md.transforms = scratch(md_host.transforms * sizeof(double));
-        md.density = scratch(md_host.hermites * sizeof(double));
-        md.potential = scratch(md_host.hermites * sizeof(double));
-        md.pair_count = md_host.pairs.size();
-        md.primitive_count = md_host.primitives.size();
-        std::copy(md_host.class_offsets.begin(), md_host.class_offsets.end(), md.class_offsets);
-        direct_jk_check(
-            prepare_md_j(plan->stream, plan->batch, md, plan->bounds, plan->screening_tolerance));
-        plan->diagnostic.schedule = "md-j-hermite-public-ao-with-source-ordered-jk";
-      } catch (const DirectJkFailure& failure) {
-        if (failure.status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw;
-        // Optional capacity must not turn an otherwise feasible source into OOM.
-        discard_md();
-      } catch (const std::bad_alloc&) {
-        discard_md();
-      }
+      direct_jk_optional_storage(
+          *plan, true, detail,
+          [&] {
+            auto upload_vector = [&](const auto& values) {
+              using Value = typename std::decay_t<decltype(values)>::value_type;
+              return static_cast<Value*>(upload(values.data(), values.size() * sizeof(Value)));
+            };
+            auto& md = plan->md_j;
+            md.pairs = upload_vector(md_host.pairs);
+            md.primitives = upload_vector(md_host.primitives);
+            md.ordered_primitives = upload_vector(md_host.ordered);
+            md.shell_offsets = upload_vector(host.system_shell_offsets);
+            md.pair_offsets = upload_vector(host.system_shell_pair_offsets);
+            std::vector<std::int64_t> primitive_offsets;
+            for (const auto pair_offset : host.system_shell_pair_offsets)
+              primitive_offsets.push_back(host.shell_pair_primitive_offsets[pair_offset]);
+            md.primitive_offsets = upload_vector(primitive_offsets);
+            md.minimum_bounds = scratch(md_host.pairs.size() * sizeof(double));
+            md.maximum_bounds = scratch(md_host.pairs.size() * sizeof(double));
+            md.density_bounds = scratch(md_host.pairs.size() * sizeof(double));
+            md.maximum_bound = scratch(sizeof(double));
+            md.active_pairs = reinterpret_cast<std::uint32_t*>(
+                scratch(md_host.pairs.size() * sizeof(std::uint32_t)));
+            md.active_count = reinterpret_cast<std::uint32_t*>(scratch(sizeof(std::uint32_t)));
+            md.source_cursor =
+                reinterpret_cast<unsigned long long*>(scratch(sizeof(unsigned long long)));
+            md.transforms = scratch(md_host.transforms * sizeof(double));
+            md.density = scratch(md_host.hermites * sizeof(double));
+            md.potential = scratch(md_host.hermites * sizeof(double));
+            md.pair_count = md_host.pairs.size();
+            md.primitive_count = md_host.primitives.size();
+            std::copy(md_host.class_offsets.begin(), md_host.class_offsets.end(), md.class_offsets);
+            direct_jk_check(prepare_md_j(plan->stream, plan->batch, md, plan->bounds,
+                                         plan->screening_tolerance));
+            plan->diagnostic.schedule = "md-j-hermite-public-ao-with-source-ordered-jk";
+          },
+          [&] { plan->md_j = {}; });
     }
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();

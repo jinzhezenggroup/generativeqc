@@ -662,7 +662,7 @@ std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend b
       primitives = runtime::add_capacity(primitives, shell.primitives.size());
     return scf::cuda_direct_coulomb_device_bytes(1, molecule::ao_count(system), system.atoms.size(),
                                                  system.shells.size(), primitives,
-                                                 direct_derivative_order);
+                                                 direct_derivative_order, true);
   }
 #else
   (void)direct_derivative_order;

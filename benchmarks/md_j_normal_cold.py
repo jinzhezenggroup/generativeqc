@@ -19,6 +19,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 
 def collect(samples: list[dict[str, Any]], oracle_energy: float) -> dict[str, Any]:
     """Require complete, matched numerical endpoints before a cold speedup."""
@@ -183,7 +188,7 @@ def worker(input_path: Path, output_path: Path, mode: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--oracle", type=Path)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--worker", choices=("normal", "md-j"))

@@ -126,3 +126,29 @@ numerical/resource/endpoint gates without changing normal K ownership.
 - [Cold driver](../../../../benchmarks/md_j_normal_cold.py)
 - [Raw-J gates](../../../../tests/python/test_md_j_normal_cuda.py)
 - [Retained cold evidence](../../../../benchmarks/results/md-j-default-cold/README.md)
+
+
+## Resource-admission correction
+
+The initial promoted source `9c911d28004eb0baae07ef63d78ee9c8ffcda63f` added the
+128-MiB optional cap to the public mandatory shape estimate. The public planner
+has one incumbent candidate, so this made previously feasible normal-J budgets
+infeasible before runtime could fall back. A one-water def2-SVP host probe
+reproduced a 128-MiB increase per owner, including a three-owner 384-MiB increase.
+
+Public ledger-bound owners now retain normal J. Their inventory and identity do
+not depend on the diagnostic opt-out, and unused live bytes cannot be spent on MD
+at the expense of later owners, force retention or rebuilds. Private unbudgeted
+KS preparation explicitly requests the original optional cap through an internal
+C++ reservation parameter; removing the cap everywhere would silently shrink
+that provider's budget and risk losing the qualified default. Standalone Fock
+owners still use their explicit budget. No public C ABI changes.
+
+The MD allocation group now uses the incumbent rollback helper. It fences before
+freeing, checks releases, clears allocation last-error state and propagates
+unrelated CUDA/numerical errors. Host fault injection exercises the actual MD
+preparation block at every allocation, with ledger binding/unbinding and opt-out
+changes; public shape/planner tests retain multiowner and force reservations over
+rebuilds. Original GPU receipt hashes remain pinned to the measured source.
+Broader ledger admission requires a real optional candidate with simultaneous
+capacity reservations, not a larger mandatory estimate or live-free-byte test.
