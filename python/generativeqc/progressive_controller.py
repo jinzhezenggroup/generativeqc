@@ -130,11 +130,13 @@ class ArithmeticPolicy:
 
 
 class StageRole(str, Enum):
+    "Role of a stage in the deterministic progressive HF plan."
     INITIALIZATION = "initialization"
     TARGET = "target"
 
 
 class TransferOperation(str, Enum):
+    "Supported density-transfer operation between progressive HF stages."
     METRIC_PROJECTED_DENSITY = "metric_projected_density"
     NONE = "none"
 
@@ -567,6 +569,7 @@ def make_deterministic_hf_plan(
 
 @dataclass(frozen=True)
 class StageExecution:
+    "Execution status, performance, and physical diagnostics for one HF stage."
     stage_id: str
     role: StageRole
     status: str
@@ -834,6 +837,7 @@ def finalize_hf_verification(
 
 @dataclass(frozen=True)
 class ProgressiveHFResult:
+    "Source and target HF results with strict final verification evidence."
     target: BatchItemResult
     source: BatchItemResult
     plan: DeterministicHFPlan

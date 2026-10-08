@@ -56,6 +56,7 @@ if typing.TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class BatchItemResult:
+    "Result for one input-indexed ragged-batch member.\n\nEnergy is in Hartree and optional forces are in Hartree/Bohr. Inspect\n``succeeded`` or ``status`` before consuming a member's numerical outputs."
     index: int
     status: int
     status_message: str

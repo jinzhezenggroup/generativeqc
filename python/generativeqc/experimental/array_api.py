@@ -129,36 +129,54 @@ def _eager_operands(*values: object, scalars: bool = False) -> tuple[np.ndarray,
 
 
 def add(x1: object, x2: object) -> typing.Any:
+    """Add two arrays elementwise, with eager NumPy or symbolic TensorIR dispatch.
+    
+    Host scalar operands must be exact arithmetic values; array dtypes must agree.
+    """
     if _symbolic(x1, x2):
         return _namespace.add(x1, x2)
     return _eager_compute(np.add, *_eager_operands(x1, x2, scalars=True))
 
 
 def subtract(x1: object, x2: object) -> typing.Any:
+    """Subtract the second array from the first elementwise.
+    
+    Use symbolic values to build TensorIR; concrete inputs execute on the host.
+    """
     if _symbolic(x1, x2):
         return _namespace.subtract(x1, x2)
     return _eager_compute(np.subtract, *_eager_operands(x1, x2, scalars=True))
 
 
 def multiply(x1: object, x2: object) -> typing.Any:
+    """Multiply two arrays elementwise without implicit dtype promotion."""
     if _symbolic(x1, x2):
         return _namespace.multiply(x1, x2)
     return _eager_compute(np.multiply, *_eager_operands(x1, x2, scalars=True))
 
 
 def divide(x1: object, x2: object) -> typing.Any:
+    """Divide the first array by the second elementwise.
+    
+    Non-finite eager results raise ValueError instead of being returned silently.
+    """
     if _symbolic(x1, x2):
         return _namespace.divide(x1, x2)
     return _eager_compute(np.divide, *_eager_operands(x1, x2, scalars=True))
 
 
 def negative(x: object) -> typing.Any:
+    """Negate each element of a host or symbolic array."""
     if isinstance(x, VibeArray):
         return _namespace.negative(x)
     return _eager_compute(np.negative, _eager_array(x))
 
 
 def pow(x: object, exponent: object) -> typing.Any:
+    """Raise an array to an exact scalar exponent.
+    
+    Inputs must be strictly positive; unrepresentable exponents are rejected.
+    """
     if isinstance(x, VibeArray):
         return _namespace.pow(x, exponent)
     array = _eager_array(x)
@@ -172,12 +190,14 @@ def pow(x: object, exponent: object) -> typing.Any:
 
 
 def exp(x: object) -> typing.Any:
+    """Apply the exponential function elementwise to host or symbolic input."""
     if isinstance(x, VibeArray):
         return _namespace.exp(x)
     return _eager_compute(np.exp, _eager_array(x))
 
 
 def log(x: object) -> typing.Any:
+    """Take the elementwise natural logarithm of strictly positive values."""
     if isinstance(x, VibeArray):
         return _namespace.log(x)
     array = _eager_array(x)
@@ -187,6 +207,7 @@ def log(x: object) -> typing.Any:
 
 
 def sqrt(x: object) -> typing.Any:
+    """Take the elementwise square root of nonnegative values."""
     if isinstance(x, VibeArray):
         return _namespace.sqrt(x)
     array = _eager_array(x)
@@ -201,6 +222,10 @@ def reshape(
     *,
     indices: tuple[Index, ...] | None = None,
 ) -> typing.Any:
+    """Reshape an array, preserving its element count.
+    
+    Explicit TensorIR indices are only supported for symbolic arrays.
+    """
     if isinstance(x, VibeArray):
         return _namespace.reshape(x, shape, indices=indices)
     if indices is not None:
@@ -216,6 +241,10 @@ def broadcast_to(
     indices: tuple[Index, ...] | None = None,
     axes: tuple[int, ...] | None = None,
 ) -> typing.Any:
+    """Broadcast an array to a requested shape.
+    
+    Explicit indices and axes are reserved for symbolic TensorIR values.
+    """
     if isinstance(x, VibeArray):
         return _namespace.broadcast_to(x, shape, indices=indices, axes=axes)
     if indices is not None or axes is not None:
@@ -226,6 +255,10 @@ def broadcast_to(
 
 
 def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
+    """Select a half-open (start, stop) range along every input axis.
+    
+    Ranges must lie inside the input shape; slicing never changes the axis rank.
+    """
     if isinstance(x, VibeArray):
         return _namespace.slice(x, ranges)
     array = _eager_array(x)
@@ -247,6 +280,7 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
 
 
 def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
+    """Gather a static tuple of in-range positions along the selected axis."""
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
     array = _eager_array(x)
@@ -267,6 +301,10 @@ def sum(
     dtype: object = None,
     keepdims: bool = False,
 ) -> typing.Any:
+    """Reduce over selected axes without retaining reduced dimensions.
+    
+    Dtype conversion and keepdims=True are not supported in this preview.
+    """
     if isinstance(x, VibeArray):
         return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
     array = _eager_array(x)
@@ -286,6 +324,7 @@ def sum(
 
 
 def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
+    """Reorder the axes of a host or symbolic array."""
     if isinstance(x, VibeArray):
         return _namespace.permute_dims(x, axes)
     array = _eager_array(x)
@@ -299,6 +338,7 @@ def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
 
 
 def matrix_transpose(x: object) -> typing.Any:
+    """Swap the last two axes of a host or symbolic matrix-like array."""
     if isinstance(x, VibeArray):
         return _namespace.matrix_transpose(x)
     array = _eager_array(x)
@@ -310,6 +350,7 @@ def matrix_transpose(x: object) -> typing.Any:
 
 
 def matmul(x1: object, x2: object) -> typing.Any:
+    """Multiply matrices using the preview's eager or symbolic dispatch."""
     if _symbolic(x1, x2):
         return _namespace.matmul(x1, x2)
     return _eager_compute(np.matmul, *_eager_operands(x1, x2))
@@ -320,6 +361,10 @@ def einsum(
     *operands: object,
     coefficient: ExactScalar = 1,
 ) -> typing.Any:
+    """Evaluate an Einstein-summation expression with an exact coefficient.
+    
+    Concrete operands follow the NumPy eager reference implementation.
+    """
     if _symbolic(*operands):
         return _namespace.einsum(equation, *operands, coefficient=coefficient)
     arrays = _eager_operands(*operands)
@@ -412,6 +457,7 @@ class CompiledFunction:
         backend: str,
         differentiable: tuple[str, ...],
     ) -> None:
+        """Bind a callable and validate its reference backend and differentiable inputs."""
         if not callable(function):
             raise TypeError("compile requires a callable")
         if backend != "reference":
@@ -487,6 +533,7 @@ class CompiledFunction:
         return program
 
     def __call__(self, *args: object, **kwargs: object) -> typing.Any:
+        """Execute the shape/dtype-specialized TensorIR reference program."""
         program, feeds = self._prepare(*args, **kwargs)
         execution = _execute(program, feeds)
         if tuple(program.outputs) == ("output",):
