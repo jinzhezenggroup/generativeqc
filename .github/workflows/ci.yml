@@ -1382,11 +1382,12 @@ jobs:
 
   cpu-benchmark:
     name: CPU performance (CodSpeed)
-    # PRs always run two representative endpoints and add targeted coverage when
-    # changed paths touch advanced DFT machinery. Scheduled/manual qualification
-    # runs the full endpoint set. Merge-group and post-merge master pushes do not
-    # repeat performance work already covered before integration.
-    if: github.event_name != 'merge_group' && github.event_name != 'push'
+    # Publish PR-tier baselines on post-merge master pushes to avoid old fallback
+    # comparisons. Scheduled/manual runs retain complete endpoint coverage.
+    if: github.event_name != 'merge_group'
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-24.04
     # Leave enough headroom for a fully cold hosted-runner build before
     # CodSpeed starts; performance checks should not become false negatives just
@@ -1398,7 +1399,7 @@ jobs:
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       NUMEXPR_NUM_THREADS: 1
-      GENERATIVEQC_CODSPEED_TIER: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
+      GENERATIVEQC_CODSPEED_TIER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'pr' || 'full' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1425,7 +1426,16 @@ jobs:
             extra_cases="wb97mv"
           fi
           echo "GENERATIVEQC_CODSPEED_EXTRA_CASES=${extra_cases}" >> "$GITHUB_ENV"
+          # Skip only known non-performance files; unknown paths still run.
+          relevant_files="$(grep -Ev '^(docs/|\.agents/|tests/|manifests/maintenance/|README(\..*)?$|CHANGELOG(\..*)?$|.*\.md$|tools/render_python_api_doc\.py$)' <<<"$changed_files" || true)"
+          if [[ -z "$relevant_files" ]]; then
+            echo "GENERATIVEQC_CODSPEED_RUN=0" >> "$GITHUB_ENV"
+            echo "::notice::Skipping CPU performance for non-performance changes."
+          else
+            echo "GENERATIVEQC_CODSPEED_RUN=1" >> "$GITHUB_ENV"
+          fi
       - name: Install uv and Python 3.11
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.10.7"
@@ -1434,6 +1444,7 @@ jobs:
           cache-suffix: "cpu-benchmark-v1"
           prune-cache: true
       - name: Install ccache 4.14
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
           curl --fail --silent --show-error --location \
@@ -1444,6 +1455,7 @@ jobs:
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
       - name: Restore CPU benchmark ccache
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -1452,8 +1464,10 @@ jobs:
             ccache-cpu-benchmark-v2-
             ccache-cpu-benchmark-
       - name: Reset CPU benchmark ccache statistics
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --zero-stats
       - name: Build CPU benchmark library
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
           cmake -S . -B build-benchmark -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
@@ -1462,13 +1476,26 @@ jobs:
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build-benchmark --target generativeqc --parallel
       - name: Show CPU benchmark ccache statistics
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: ccache --show-stats
       - name: Install benchmark dependencies
+        if: env.GENERATIVEQC_CODSPEED_RUN != '0'
         run: |
           uv venv --python 3.11
           uv pip install --python .venv/bin/python \
             numpy pytest pytest-codspeed==5.0.3
+      - name: Qualify PR CodSpeed comparison
+        id: baseline
+        if: github.event_name == 'pull_request' && env.GENERATIVEQC_CODSPEED_RUN != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODSPEED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CODSPEED_REPO: ${{ github.repository }}
+        run: |
+          .venv/bin/python tools/codspeed_baseline.py qualify \
+            --base-sha "$CODSPEED_BASE_SHA" --repo "$CODSPEED_REPO"
       - name: Run CPU CodSpeed endpoint suite
+        if: github.event_name != 'pull_request' || (env.GENERATIVEQC_CODSPEED_RUN != '0' && steps.baseline.outputs.qualified == 'true')
         uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
         env:
           PYTHONPATH: ${{ github.workspace }}/python
@@ -1480,6 +1507,19 @@ jobs:
           # endpoint through GENERATIVEQC_CODSPEED_EXTRA_CASES.
           mode: simulation
           run: .venv/bin/python -m pytest benchmarks/test_cpu_codspeed.py --codspeed -q
+      - name: Record successful master CodSpeed baseline
+        if: github.event_name == 'push'
+        run: |
+          .venv/bin/python tools/codspeed_baseline.py record \
+            --sha "${{ github.sha }}" --output codspeed-baseline/baseline.json
+      - name: Publish exact-master CodSpeed baseline
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: codspeed-cpu-baseline-${{ github.sha }}
+          path: codspeed-baseline/baseline.json
+          if-no-files-found: error
+          retention-days: 30
 
   upload-coverage:
     timeout-minutes: 8
