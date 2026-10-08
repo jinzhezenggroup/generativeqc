@@ -79,9 +79,12 @@ def test_scalar_gmres_allocates_one_arnoldi_matrix_across_restarts(
     ) -> np.ndarray:
         nonlocal arnoldi_allocations
         caller = inspect.currentframe().f_back
-        if caller is not None and caller.f_code.co_name == "_solve_single":
-            if shape == (3, 2):
-                arnoldi_allocations += 1
+        if (
+            caller is not None
+            and caller.f_code.co_name == "_solve_single"
+            and shape == (3, 2)
+        ):
+            arnoldi_allocations += 1
         return original(shape, *args, **kwargs)
 
     with monkeypatch.context() as patch:
@@ -108,9 +111,12 @@ def test_block_gmres_reuses_one_projected_rhs_buffer(
         shape: typing.Any, *args: typing.Any, **kwargs: typing.Any
     ) -> np.ndarray:
         caller = inspect.currentframe().f_back
-        if caller is not None and caller.f_code.co_name == "_block_solve":
-            if isinstance(shape, int):
-                rhs_allocations.append(shape)
+        if (
+            caller is not None
+            and caller.f_code.co_name == "_block_solve"
+            and isinstance(shape, int)
+        ):
+            rhs_allocations.append(shape)
         return original(shape, *args, **kwargs)
 
     with monkeypatch.context() as patch:
