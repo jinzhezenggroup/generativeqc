@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "scf/solver/eigen_frame.hpp"
+#include "solver/cpu/generalized_eigen.hpp"
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::scf::solver {
@@ -38,20 +39,38 @@ reference::EigenResult cpu_target_eigen(const reference::Matrix& matrix,
     throw std::invalid_argument("CPU target eigen inputs require matching finite F/S/X matrices");
   constexpr tensor::CpuLinalgPlan plan{tensor::CpuLinalgProvider::scalar,
                                        tensor::CpuLinalgThreadOwnership::task_parallel, 1};
+  namespace shared = ::generativeqc::solver;
+  const shared::GeneralizedEigenDomain domain{n, 1, 1, shared::GeneralizedEigenLayout::row_major};
+  const auto basis = orthogonalizer ? shared::GeneralizedEigenBasis::canonical_x
+                                    : shared::GeneralizedEigenBasis::identity;
   reference::Matrix transformed(n * n);
-  if (orthogonalizer) {
+  {
     // The transform workspace is released before entering the scalar leaf.
-    reference::Matrix workspace(n * n);
-    tensor::cpu_congruence('T', n, orthogonalizer->data(), matrix.data(), transformed.data(),
-                           workspace.data(), plan);
-  } else {
-    std::copy(matrix.begin(), matrix.end(), transformed.begin());
+    reference::Matrix workspace(orthogonalizer ? n * n : 0);
+    const shared::GeneralizedEigenMatrices matrices{
+        matrix.data(),
+        orthogonalizer ? orthogonalizer->data() : nullptr,
+        workspace.data(),
+        transformed.data(),
+        nullptr,
+        matrix.size(),
+        orthogonalizer ? orthogonalizer->size() : 0,
+        workspace.size(),
+        transformed.size(),
+        0};
+    if (shared::reduce_generalized_eigen(
+            basis, shared::cpu::GeneralizedEigenLowering{domain, matrices, plan}) != 0)
+      throw std::invalid_argument("CPU target eigen reduction binding is invalid");
   }
   auto frame = tensor::cpu_symmetric_eigen(std::move(transformed), n, plan, 1e-14);
   if (orthogonalizer) {
     reference::Matrix coefficients(n * n);
-    tensor::cpu_gemm('N', 'N', n, n, n, orthogonalizer->data(), frame.vectors.data(),
-                     coefficients.data(), 1.0, 0.0, plan);
+    const shared::GeneralizedEigenMatrices matrices{
+        nullptr, orthogonalizer->data(), nullptr, frame.vectors.data(), coefficients.data(),
+        0,       orthogonalizer->size(), 0,       frame.vectors.size(), coefficients.size()};
+    if (shared::recover_generalized_eigen(
+            basis, shared::cpu::GeneralizedEigenLowering{domain, matrices, plan}) != 0)
+      throw std::invalid_argument("CPU target eigen recovery binding is invalid");
     frame.vectors = std::move(coefficients);
   }
   EigenFrameDiagnostic diagnostic;

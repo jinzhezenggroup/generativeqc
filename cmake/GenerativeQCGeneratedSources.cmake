@@ -11,6 +11,10 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/generalized_eigen.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/generalized_eigen.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/generalized_eigen.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_square_linalg.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/cusolver_compat.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/solver/cuda/symmetric_eigen_provider.cpp"

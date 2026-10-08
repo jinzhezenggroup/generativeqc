@@ -219,7 +219,10 @@ def test_no_method_owned_loader_or_raw_unwrapping() -> None:
     assert "cpu_provider::bind_symmetric_eigen(backend)" in source
     assert "cpu_provider::cholesky_lower(" in source
     assert "cpu_provider::reciprocal_condition_lower(" in source
-    assert "cpu_provider::solve_lower_triangular(" in source
+    assert "cpu_provider::solve_lower_triangular(" not in source
+    assert "solver/cpu/generalized_eigen.hpp" in source
+    assert "reduce_generalized_eigen(basis, lowering)" in source
+    assert "recover_generalized_eigen(basis, lowering)" in source
     public_header = (PROVIDER.with_suffix(".hpp")).read_text()
     assert "struct CpuLinearAlgebraAccess {" not in public_header
     assert "friend struct CpuLinearAlgebraAccess;" in public_header

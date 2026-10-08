@@ -1,0 +1,245 @@
+{
+  "base": "6a02e4b184a27301e06fe36762ec0c0c6902fdbf",
+  "baseline_sha256": "6857bfda43585a90a83b0806ee36eac706ba1ac7b1c09fcda1b3f6ef17d55fed",
+  "unchanged_host_helpers": [
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool checked_add(",
+      "sha256": "e3530f893262c2aaf1a0a1bb8b4e516098e8aa921f620d08f8f07815c2b0e6e0",
+      "token_sha256": "eaa459e04bef345aee5af77055421c285abb0079d33cc826f92f15b4cc9092ec"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool ranges_overlap(std::int64_t",
+      "sha256": "a7afc650748d225f0378e01cf4c3996a650b329316dc0f3cd9935acf08918b0a",
+      "token_sha256": "43940532070bfca5307d68a1aa9f5bc4de1e4b543bce7bcf93619e73b065ff13"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "struct AddressRange",
+      "sha256": "575bd87584bce25b97c08c3a21fa9f166e24a39e13b17f87d3d476213e7aa069",
+      "token_sha256": "2a600dc5474bb45254989aab4cf27059ac411fd30e0d215edc9dd82a2193b9b0"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool make_range(",
+      "sha256": "e50568a839999503ebdcfef9cde24cfaeda6a62bbc94ebcec26874e80d53a453",
+      "token_sha256": "b153de1ba13a63672b839d8d3c8bda7e67ef87f9dbf8a47535e22c92c99c4c7d"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool make_byte_range(",
+      "sha256": "bb6e3db6c6e4887b3c81fd2a03cbc74e45b26bc8f33b262c9349d7a8d4bd2c48",
+      "token_sha256": "71a48f5443ccaa544780cd4a28f6f8726c56d88868f40bf518c52ef41e2627f2"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool ranges_overlap(const AddressRange",
+      "sha256": "e456623cfc5769ad7813cfdeaa2c0c73caef1ddbfa878c0ad93057935037e7e2",
+      "token_sha256": "ec2fffbcba11e07b1429c0907be7539a8ee04515e9ae4bd545e8a376713f515d"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "template <std::size_t Count>\nbool pairwise_disjoint(",
+      "sha256": "97d2c1d0d80be4d6c04e9d3b4772d4f5b7239b3dc8764ef298f8d8c98057646a",
+      "token_sha256": "eb688fe49e4f7ff5a40cf822fd9b33f8a3a2337a83ad1222d6099cd71105a95d"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "template <std::size_t FirstCount, std::size_t SecondCount>\nbool disjoint_sets(",
+      "sha256": "7f9e1e652d4d8136f8748ddc966a5939f3f9bed203f4ba9b6ea8feb9907ba020",
+      "token_sha256": "4c8929f84a3fba38540dd8eb6c318adab2b75ca3ccb8221a7b848ae82a018ae0"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult cuda_failure(",
+      "sha256": "0205feb0347e8a9b3adc162fa763b91e0db1454ac9f4212e2b164a92de83100b",
+      "token_sha256": "a38cdb3a9368bcf048e4753e199fc9a711c4c64883ba8ad3eeb86d1df7c1bfcd"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult cublas_failure(",
+      "sha256": "e032e0ddb9f252165b1db89e46ebb1f8f93528c9a0540bdd900752926b0093a7",
+      "token_sha256": "b65178376bb5783e9ff691a479e6fc6af74596c0a78c44a633471da4964d8cad"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_options(",
+      "sha256": "88d6beb5be46533a3cb30e4a54f49e7cf8e7bb08509b40d67e95e1237c41918c",
+      "token_sha256": "e2beeaac0fcf7d660c5db5a4057f66f3dc61ee8829faf69a0b061d2a0c0c6064"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_bucket_plan(",
+      "sha256": "8513f479daf4111b14a36f77e3862198dd947cf6f459d340c311b33e1cc638ae",
+      "token_sha256": "94dbad0d32d052b959948fb8d0b43c361ac713de57a814deff33ba96a9f0ee4e"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_spin_bucket_plan(",
+      "sha256": "31f467ea46ee99eed0fe80cba0f8a2ae9963140dd0e510cf6bad53ba02394764",
+      "token_sha256": "4eada5bf57c9cff1dda74f750055d3ed627b572df3d6e2cf9da776032c62f21a"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_workspace(",
+      "sha256": "2b5f98e56828d6c3e411817ada3bcc39c4ec6939b65fa1629080179856f98569",
+      "token_sha256": "876589d1978d8d064a82a9cef9260233945dcaa16d0d79be55cb2a2530e01023"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_spin_workspace(",
+      "sha256": "efd8bf5c2cced37d766a48a9cae5bb13be290b337c3c5fb04601d21d15b2a49a",
+      "token_sha256": "2e4e7b3da8f4ed74f98bcf4a9b52e7cf3f7328fb134559f0a896a53afcf3ffec"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_cache(",
+      "sha256": "00399c98f9442c3f29b012bff5a082f2751ce91a4e786e1b0446f9cd4fba2019",
+      "token_sha256": "0f237d094f05e94e16bec8115ea97bdc4dec2195c14bdcec87d8436917b5370f"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_solve_ranges(",
+      "sha256": "163cc6a65147a90bad7138530858a41568a05f14d1bf9e48c8fb71b15b6bd3f5",
+      "token_sha256": "c3baf1c7c78d930ae72b359e8de4c44a8bfa4e859265d6548416867f510acb02"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool valid_spin_solve_ranges(",
+      "sha256": "60ab4ec01c04a2729ba17d94f80dac188cf80180d177bd166d40e21556b08ccf",
+      "token_sha256": "7763dc4d7b3e9361e42a3479eb71aaaf03e6aa343489787578a8a877a3c3c03b"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult check_kernel_launch(",
+      "sha256": "d4c8b369d5835f989ba151c73fef6e88e3106c2057fcdbc13a03e63d59f72e7a",
+      "token_sha256": "d5a1411df4705419707437bd71405ea51a1d65ea5f77e57fc2ef4151889a3b2c"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult prepare_launch_sequence(",
+      "sha256": "cad2c855888c01be74b4c7acafadc02a86ea575c7b436c00da8a082ec28504b8",
+      "token_sha256": "4f726633c77286b5116dbeee9077396b1d3f43e5156edf4829806ea2ad0406bf"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult configure_solver(",
+      "sha256": "8daa3919595ef1d975c8b3f5cb5ec7ebcdb3fdb8035eaf139fba6e9d63beed6a",
+      "token_sha256": "beb610592911a3307773db2fbc9ead25d0e6ffd067d5385063a90d1263d7041c"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult configure_blas(",
+      "sha256": "5910c31747119621165e1c50c213627d2ece0b8643351422f2f67ceacabd625e",
+      "token_sha256": "89aea1fc8ea52bb19e084f45b12afea442274756b04b064f58dbd91a3d736488"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "static Gfn2EigensolverLaunchResult validate_spin_solve_buckets(",
+      "sha256": "0d9f827f0499a3ff6ccb99bdd27257dd363e4ec39193252c580f5b2f071f66d9",
+      "token_sha256": "8a851164e72b046bdd5a0a9500e1648695177f259aa172577e770e56cf19c006"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "static Gfn2EigensolverLaunchResult prepare_spin_solve_bucket(",
+      "sha256": "43bc33b565218f8d9c75ed1592251831474a11c26072518360ab4b24d0d34cfe",
+      "token_sha256": "728717c59a4cfd98e6e2cfc5eea4efcc1460ca9af13194edc2c0d6b8e943aa94"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "struct TridiagonalProviderWorkspace",
+      "sha256": "cc6e1ffa56c908215d41dc802a9728d84b0468e493a1934b976140f4a0bd40ee",
+      "token_sha256": "17e864147a6bfbb266a8e63d63b32837ec77e8086a591a6e1af29d3aae326eb8"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool append_workspace_bytes(",
+      "sha256": "b8c6203e39168a64866563f4446c43f112121650233ecf61efdde4c20ec83211",
+      "token_sha256": "4d52b0ff1f5bcc51fd7a37c3eeb0f7d2f9bcd5d4607d3212f68f6b667792088a"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool make_tridiagonal_provider_workspace(",
+      "sha256": "efdc495031da32cb0977a7a05d881c75ba448e70117c1404def0ab3b60ca9b87",
+      "token_sha256": "d2a4f63b15107a57def40bc0b918b6bfe5bc2bf638ec2b5302f1dc9290ec2ed1"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "template <typename T>\nbool is_aligned(",
+      "sha256": "406cf95dda85e5505da7651ade53ee07dec1cf27224d9774eaf7f7fb9b059a0c",
+      "token_sha256": "993571a635a2f0bc9ad5eeff7c053dc94832261378da543397c6cb0dee4de7c3"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "bool checked_multiply(",
+      "sha256": "a028717f16abd3bd14ead6bc6cb9f1bf447e69dacff057931aa91a0d7ee72875",
+      "token_sha256": "ac60387d0a3bf497b547d6aee8fc975e3d35aaa88d9e1d04d3f7e8d948f6e134"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult invalid_argument(",
+      "sha256": "9a9e0b738bc3dcb1108f08caa424edcab833f0cb92c09bc33b3f8f0cf67b1d91",
+      "token_sha256": "39895890a36d1116ed71350470855ab5c4ef78557e0aba85acb00e518b7e660a"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult cusolver_failure(",
+      "sha256": "fdf12141a9c18940ebc2afff9f6aa7cc642e83bb040adbb105e5a8136f9f491f",
+      "token_sha256": "121ab12e3918db0d5aa23358ad948d0deef25b5b2bd6e6dcab2f452c1748948d"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult launch_success(",
+      "sha256": "20c3ef531ec061408f65e3e8d0f468a5632d142b561fa6ffa67bb8c41d3ceb91",
+      "token_sha256": "583eefed667162b7253ee26b1a09f996761090f4974d471c94707fbfcddb6582"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult symmetric_eigensolve(",
+      "sha256": "4da1ead37240fbfd37d6e2ff51ac2206a5ad571bbe69d99ce124fadfd51d7fae",
+      "token_sha256": "a61637d904ec45206da00b98ce8f9e00c68130467b05ac9d5c58d6f193484e30"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult tridiagonal_symmetric_eigensolve(",
+      "sha256": "c7620a228ebf29bba09d09a25ebd9a64d48f5994e005646f90524183c3bb2dbe",
+      "token_sha256": "afcbe94797c3a7d48d8f8bd1b27274d60d48663157cdefa8aa9f9bcef6b32b2e"
+    },
+    {
+      "path": "src/scf/cuda/df_scf_library.cpp",
+      "prefix": "generativeqc_status scf_gemm_strided(",
+      "sha256": "0323a9070c107604ec72a6859e58558adb807d846f4e1e9bbae022da03fcc8f2",
+      "token_sha256": "c5ceeb324dcaaf6ecbe5894a4916228e0568d2e36b61d20b669db4cd5668f6a4"
+    },
+    {
+      "path": "src/scf/cuda/df_scf_library.cpp",
+      "prefix": "generativeqc_status scf_gemm(",
+      "sha256": "dd906fe6e7feb01136785f868f38a5455a5fd11a2158749a57677e7b23bd8b57",
+      "token_sha256": "f15c2cd846fcc147a83b4c0f648997ec4735d990a836d1888f4a419c360c6744"
+    },
+    {
+      "path": "src/scf/cuda/df_runtime.cpp",
+      "prefix": "generativeqc_status blas_failure(",
+      "sha256": "4a391f52eb9c2c5e15c88043e9b94b4ce92436c33dfd86e38d1202ae3ed37d34",
+      "token_sha256": "9ebdcc9d5fbec17daaf6c43434c78bb24e0f20cd9bf8a5ad7d22ce2a8f119f7a"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult enqueue_gfn2_eigensolver_capacity_cuda(",
+      "sha256": "8d474518c199ad6bbb817f127b31e6d0056be019df4f1b5c2db574826bb5f7ae",
+      "token_sha256": "bddd5e004cf884987eebdd53afafb634fc1cdae9f109339cdb3cd880311e895a"
+    },
+    {
+      "path": "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu",
+      "prefix": "Gfn2EigensolverLaunchResult enqueue_gfn2_backtransform_capacity_cuda(",
+      "sha256": "de2f67e91ca956818571fb715e784a08520990e673ef4524685d4d621764b148",
+      "token_sha256": "a60f9295a519f8891f44d8e7a378011c05d944cd444d770594cfd3e1adcd5431"
+    }
+  ],
+  "canonical_consumers": {
+    "df_eigensystem": "9242182d6509dc80cb8322684cde9a5dac80bd68dffe8954d554575e8e216cbd",
+    "df_rhf_scf": "e3a845069e01bebb5611a2b90c5731078c86f7a3ea2000b2c86eef8f3de51545",
+    "df_uhf_scf": "683684d2b1f8558431e002346cd541479f1a12de752ea843f2aec4da8b147f27"
+  }
+}

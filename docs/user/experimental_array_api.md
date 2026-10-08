@@ -75,7 +75,10 @@ arrays cannot be passed to `*_like` without their explicit TensorIR metadata.
 The current preview supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
 dimension, and static indexing with integers, slices (including negative
-strides), `None`/newaxis, and ellipsis. Generic arrays accept finite Python
+strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
+`square` and `reciprocal` lower to existing TensorIR multiply/divide nodes.
+`sum` and `mean` accept static axes, and generic arrays may use
+`keepdims=True` to retain reduced singleton axes. Generic arrays accept finite Python
 float literals as ordinary scalar values, so expressions such as `x + 0.5`
 have eager/compiled parity. The compiler records the exact binary value of that
 Python float. Negative-zero float literals are rejected because exact rational
@@ -117,13 +120,17 @@ array protocols. Exact scalar literals (`int`, `Fraction`, or rational
 strings) and finite Python floats are converted to the array operand dtype;
 array operands of different dtypes are rejected.
 
-Eager functions retain the bounded compiled contract: `sum` requires
-`keepdims=False` and no `dtype` argument; `take` requires a static tuple of
+Eager functions retain the bounded compiled contract: `sum` does not yet
+accept a `dtype` conversion; `mean` rejects reductions over zero elements
+rather than producing a nonfinite value; `take` requires a static tuple of
 nonnegative in-bounds indices; `slice` requires one nonnegative in-bounds
 half-open range per axis. Normal `x[...]` indexing remains a separate path
-supporting negative indices and strides. Real-valued operations require finite
-inputs and results, strictly positive inputs for `log`/`pow`, and nonnegative
-inputs for `sqrt`.
+supporting negative indices and strides. For scientifically annotated arrays,
+reduction `keepdims=True` remains unsupported without explicit TensorIR index
+metadata, rather than silently recreating a discarded AO/occupied/etc. domain.
+Real-valued operations require finite inputs and results, strictly positive
+inputs for `log`/`pow`, and nonnegative inputs for `sqrt`. `square` does
+not inherit the positive-base restriction of `pow`.
 
 General `einsum` remains a GenerativeQC extension for high-rank scientific
 contractions, using explicit-output equations without ellipses or implicit

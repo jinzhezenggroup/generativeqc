@@ -156,6 +156,7 @@ CUDA_MODULES["cuda_df_runtime"] = (
 CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
+    "solver/cuda/generalized_eigen.hpp",
     "solver/cuda/symmetric_eigen_provider.hpp",
     "solver/cuda/symmetric_eigen_workspace.hpp",
     "solver/cuda/symmetric_eigen_handles.hpp",

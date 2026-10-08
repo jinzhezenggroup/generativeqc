@@ -141,6 +141,19 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
     const double* density, const double* beta, std::size_t matrix_elements,
     std::vector<double>& derivatives, std::string& detail);
 
+/** Fixed-density derivative of one independently prepared exact LongRange-K
+ * correction. The coefficient and omega come exclusively from this owner's
+ * immutable strategy. This helper returns a single LR-K' block (3*Natom),
+ * without manufacturing DF J', full-range K' or a complete RSH derivative.
+ *
+ * The caller must establish an ordering dependency if density is produced on
+ * a different CUDA stream; a resident density pointer is not itself a lease.
+ * Value-only Direct owners without retained first derivatives fail closed.
+ */
+generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
+    const PreparedFockPlan& correction, const double* density, const double* beta,
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail);
+
 /** Execute the prepared primary model's full-range J'/K' through the retained
  * shell derivative lease. Output is source-major [J,K]. Absent exchange
  * produces an all-zero K block while preserving the two-source shape.
