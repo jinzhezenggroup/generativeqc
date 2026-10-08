@@ -702,11 +702,9 @@ def emit_cuda(
         ):
             raise ValueError("materialized tensor layout must match its logical shape")
     for i in (*plan.inputs, *(index for _, index in plan.outputs)):
-        if (
-            plan.steps[i].virtual
-            or plan.steps[i].layout is None
-            or not plan.steps[i].layout.is_c_contiguous
-        ):
+        step = plan.steps[i]
+        layout = step.layout
+        if step.virtual or layout is None or not layout.is_c_contiguous:
             raise ValueError("tensor ABI inputs and outputs must use logical C-order")
 
     if not isinstance(symbol_prefix, str) or (
