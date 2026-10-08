@@ -60,6 +60,18 @@ using CudaXcPointBatchLauncher = void (*)(cudaStream_t, const double*, const dou
  * allocation-free incumbent; optional bytes include all retained AO panels. */
 struct CudaXcPointBatchPlan {
   std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};
+  /** Optional mapped contraction scratch; no full-basis AO tensor is restored. */
+  std::size_t work_elements{}, potential_elements{}, descriptor_bytes{};
+  bool compact{};
+  /** Actual eligible groups/tiles; heterogeneous groups retain the incumbent. */
+  std::size_t compact_groups{}, compact_tiles{}, compact_nonempty_tiles{};
+};
+
+/** Immutable offsets into one reusable batch arena. AO labels borrow the
+ * original CSR map and every tile retains its own channel-major strides. */
+struct CudaXcCompactTile {
+  std::size_t begin{}, count{}, active{}, map_offset{}, ao_offset{}, work_offset{},
+      potential_offset{};
 };
 
 /** Compiler-emitted facts for one resolved point program. Runtime schedulers
@@ -207,10 +219,11 @@ class CudaXcPlan {
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
-  /** Qualification-only scheduling ablation. Prepare after maps and before
-   * evaluation/capture; resource rejection and allocation OOM retain one tile.
-   * Response and mixed-arithmetic owners deliberately retain the incumbent. */
-  void prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget);
+  /** Prepare after maps and before evaluation/capture. Rejection/OOM preserves
+   * the incumbent. Compact contraction batching is an explicit qualification
+   * candidate; response, mixed arithmetic and optional providers do not use it. */
+  void prepare_point_batches(std::size_t requested_tiles, std::size_t device_budget,
+                             bool compact = false);
   const CudaXcPointBatchPlan& point_batch_plan() const noexcept { return point_batch_plan_; }
   /** Setup-only provider preparation within an explicit additional allowance.
    * Zero retains the generated incumbent. The allowance is separate from the
@@ -338,6 +351,10 @@ class CudaXcPlan {
 };
 
 namespace cuda_xc_detail {
+/** Compiler-owned small-contraction legality for one original point batch. */
+bool compact_point_batch_admitted(const CudaXcLayout& layout,
+                                  const std::vector<std::size_t>& ao_offsets,
+                                  std::size_t first_tile, std::size_t end_tile);
 std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
                                                                     cudaStream_t stream,
                                                                     std::size_t provider_budget);
@@ -361,7 +378,7 @@ CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool respon
 CudaXcPointBatchPlan prepare_point_batch_plan(const CudaXcLayout& layout,
                                               const std::vector<std::size_t>& ao_offsets,
                                               std::size_t requested_tiles,
-                                              std::size_t device_budget);
+                                              std::size_t device_budget, bool compact);
 CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional);
 /** Emitted capability selector for the same finite point-program registry. */
 CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);

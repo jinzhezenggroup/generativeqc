@@ -350,7 +350,7 @@ __global__ void density_product(const double* density, const double* ao, I n, I 
 }
 
 template<bool Cooperative>
-__global__ void density_features(const double* ao, const double* work, I n, I count, I spins,
+__device__ void density_features_body(const double* ao, const double* work, I n, I count, I spins,
                                  I ao_jets, I work_jets, I feature_terms, I functional,
                                  double* features, int* error) {
   const I stride = count * n;
@@ -383,6 +383,14 @@ __global__ void density_features(const double* ao, const double* work, I n, I co
         features[(spin * feature_terms + k) * count + point] = finite(accum[k], error, 1);
     }
   }
+}
+
+template<bool Cooperative>
+__global__ void density_features(const double* ao, const double* work, I n, I count, I spins,
+                                 I ao_jets, I work_jets, I feature_terms, I functional,
+                                 double* features, int* error) {
+  density_features_body<Cooperative>(ao, work, n, count, spins, ao_jets, work_jets,
+                                     feature_terms, functional, features, error);
 }
 
 // Native binds buffers; this compiler owner selects the bounded reduction.
@@ -867,6 +875,7 @@ def emit_native_xc_contraction_kernels(
     if not isinstance(matrix_schedule, XcMatrixSchedule):
         raise TypeError("native XC contraction emission requires XcMatrixSchedule")
     from .xc_point_batch_cuda import emit_native_xc_point_batch_plan
+    from .xc_tile_batch_cuda import emit_native_xc_tile_batches
 
     batch_dispatch = [
         "CudaXcPointBatchLauncher resolve_point_batch_launcher(std::uint32_t functional) {"
@@ -890,15 +899,19 @@ def emit_native_xc_contraction_kernels(
             "}",
         )
     )
-    return _NATIVE_XC_CONTRACTION_KERNELS.replace(
-        "@POINT_DISPATCH@",
-        emit_native_xc_point_dispatch()
-        + "\n"
-        + "\n".join(batch_dispatch)
-        + "\n"
-        + emit_native_xc_point_batch_plan(),
-    ) + emit_native_xc_matrix_schedule(
-        matrix_schedule, density_source=_NATIVE_XC_CONTRACTION_KERNELS
+    return (
+        _NATIVE_XC_CONTRACTION_KERNELS.replace(
+            "@POINT_DISPATCH@",
+            emit_native_xc_point_dispatch()
+            + "\n"
+            + "\n".join(batch_dispatch)
+            + "\n"
+            + emit_native_xc_point_batch_plan(),
+        )
+        + emit_native_xc_matrix_schedule(
+            matrix_schedule, density_source=_NATIVE_XC_CONTRACTION_KERNELS
+        )
+        + emit_native_xc_tile_batches(matrix_schedule)
     )
 
 

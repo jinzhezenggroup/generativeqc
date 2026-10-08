@@ -7,6 +7,8 @@ priming are retained outside replay timing, and every timed solver call must
 perform one physical iteration and one Fock build without warm fallback.
 With --point-batch-tiles both arms retain 256-point AO maps/contractions and
 only the candidate batches independent point domains within an explicit cap.
+With --compact-xc-batches both arms request the same point batching; only the
+candidate batches mapped contractions. The 12-atom case covers small AO domains.
 """
 
 from __future__ import annotations
@@ -50,7 +52,7 @@ def main() -> None:
     import cupy as cp
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--atoms", type=int, choices=(48, 96), required=True)
+    parser.add_argument("--atoms", type=int, choices=(12, 48, 96), required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--output", type=raw_output_path, required=True)
@@ -58,6 +60,7 @@ def main() -> None:
     parser.add_argument("--feasibility", action="store_true")
     parser.add_argument("--point-batch-tiles", type=int)
     parser.add_argument("--point-batch-bytes", type=int, default=32 * 1024 * 1024)
+    parser.add_argument("--compact-xc-batches", action="store_true")
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID") or not os.environ.get("CUDA_VISIBLE_DEVICES"):
         parser.error("real-GPU execution requires a finite Slurm allocation")
@@ -70,6 +73,10 @@ def main() -> None:
             "point batching needs at least two tiles and a nonnegative byte cap"
         )
     os.environ["GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE"] = "off"
+    if args.compact_xc_batches and args.point_batch_tiles is None:
+        parser.error(
+            "compact XC batching requires an explicit --point-batch-tiles request"
+        )
     case = scaling_cases()[f"water-{args.atoms}"]
     basis, _ = load_comparison_basis(
         args.basis_file, case, role="orbital", compute_forces=True
@@ -86,10 +93,14 @@ def main() -> None:
         values = {
             "GENERATIVEQC_CUDA_XC_BATCH_TILES": str(
                 args.point_batch_tiles
-                if arm == "candidate" and args.point_batch_tiles
+                if args.point_batch_tiles
+                and (arm == "candidate" or args.compact_xc_batches)
                 else 1
             ),
             "GENERATIVEQC_CUDA_XC_BATCH_BYTES": str(args.point_batch_bytes),
+            "GENERATIVEQC_CUDA_XC_COMPACT_BATCH": (
+                "1" if arm == "candidate" and args.compact_xc_batches else "0"
+            ),
         }
         previous = {name: os.environ.get(name) for name in values}
         os.environ.update(values)
@@ -117,6 +128,7 @@ def main() -> None:
             else None
         ),
         "force_tile_points": 256,
+        "compact_xc_batch_request": args.compact_xc_batches,
         "density_scope": "separate independently converged publicly frozen warm snapshots",
         "scope": "complete E+F replays; setup/prime excluded and retained; not cold/moved acceleration",
         "source_file_sha256": source_hashes()
@@ -124,9 +136,19 @@ def main() -> None:
             "benchmarks/pbe0_xc_tile_pairs.py": hashlib.sha256(
                 Path(__file__).read_bytes()
             ).hexdigest(),
-            "python/generativeqc/batch.py": hashlib.sha256(
-                (root / "python/generativeqc/batch.py").read_bytes()
-            ).hexdigest(),
+            **{
+                path: hashlib.sha256((root / path).read_bytes()).hexdigest()
+                for path in (
+                    "python/generativeqc/batch.py",
+                    "python/generativeqc_compiler/dft/xc_point_batch_cuda.py",
+                    "python/generativeqc_compiler/dft/xc_tile_batch_cuda.py",
+                    "python/generativeqc_compiler/dft/xc_compiled_resources.py",
+                    "src/dft/cuda_xc.hpp",
+                    "src/dft/cuda_xc.cpp",
+                    "src/dft/cuda_xc_kernels.cuh",
+                    "src/dft/cuda_ks.cpp",
+                )
+            },
         },
         "reference_sha256": hashlib.sha256(args.reference.read_bytes()).hexdigest(),
         "environment": environment_metadata(accelerator=cuda_accelerator_metadata(cp)),

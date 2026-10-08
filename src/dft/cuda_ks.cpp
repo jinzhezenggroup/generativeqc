@@ -1012,8 +1012,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
           // workspace. Its currently unused bytes are not an optional allowance,
           // even with an unlimited user budget. Keep the incumbent until a plan
           // explicitly accounts for optional panels across those lifetimes.
-          xc->prepare_point_batches(
-              point_batch_tiles, runtime::active_device_resource_ledger ? 0 : point_batch_budget);
+          xc->prepare_point_batches(point_batch_tiles,
+                                    runtime::active_device_resource_ledger ? 0 : point_batch_budget,
+                                    point_batch_size("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", 1) != 0);
           resource.xc_device_bytes =
               sum(resource.xc_device_bytes, xc->point_batch_plan().device_bytes);
         }
