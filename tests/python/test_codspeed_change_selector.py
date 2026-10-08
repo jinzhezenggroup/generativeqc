@@ -107,9 +107,8 @@ def test_changed_path_selects_bounded_extras(
 ) -> None:
     base = _git(repository, "rev-parse", "HEAD")
     head = _commit_file(repository, path)
-    irrelevant = path.startswith((
-        "docs/", "tests/", "manifests/maintenance/"
-    )) or path == "tools/render_python_api_doc.py"
+    irrelevant = path.startswith(("docs/", "tests/", "manifests/maintenance/"))
+    irrelevant = irrelevant or path == "tools/render_python_api_doc.py"
     expected_run = 0 if irrelevant else 1
     assert _select(repository, base, head) == (
         f"GENERATIVEQC_CODSPEED_EXTRA_CASES={extra}\n"
