@@ -103,7 +103,9 @@ def test_complete_mixed_force_has_independent_energy_and_force_gates(
 ) -> None:
     metadata, _ = load_fixture(name)
     strict = run_endpoint(tmp_path, metadata, mixed=False)
-    default_cadence = run_endpoint(tmp_path, metadata, mixed=False, lambda_interval=None)
+    default_cadence = run_endpoint(
+        tmp_path, metadata, mixed=False, lambda_interval=None
+    )
     mixed = run_endpoint(tmp_path, metadata, mixed=True)
     cadenced = run_endpoint(tmp_path, metadata, mixed=True, lambda_interval=30)
     energy_only = run_endpoint(tmp_path, metadata, mixed=True, forces=False)
