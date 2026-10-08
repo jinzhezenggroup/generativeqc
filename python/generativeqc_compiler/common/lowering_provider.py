@@ -84,7 +84,7 @@ class _TypedRecord:
     def __eq__(self, other: object) -> bool:
         if type(self) is not type(other):
             return NotImplemented
-        peer = typing.cast("_TypedRecord", other)
+        peer = other
         return canonical_hash(self.to_payload()) == canonical_hash(peer.to_payload())
 
     def __hash__(self) -> int:
