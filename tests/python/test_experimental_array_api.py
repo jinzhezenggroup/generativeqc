@@ -262,6 +262,7 @@ def test_mean_and_sum_keepdims_eager_compiled_numpy_parity(
 ) -> None:
     values = np.arange(1, 25, dtype=dtype).reshape(2, 3, 4)
     for operation, oracle in ((xp.sum, np.sum), (xp.mean, np.mean)):
+
         def expression(x: object) -> object:
             return operation(x, axis=axis, keepdims=keepdims)
 
