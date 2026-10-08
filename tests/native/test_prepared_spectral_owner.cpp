@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -277,7 +278,7 @@ struct Fixture {
                   lapack_work.data(),  81, lapack_integers.data(), 28};
     for (int system = 0; system < 3; ++system) {
       const int n = dimension(system);
-      for (int i = 0; i < n; ++i) overlap[plan.matrix_offsets()[system] + i * n + i] = 1;
+      for (int i = 0; i < n; ++i) overlap[plan.matrix_offsets()[system] + static_cast<std::int64_t>(i) * n + i] = 1;
     }
     h[0] = 2;
     h[1] = 1;
@@ -1073,7 +1074,7 @@ static void test_token_execution() {
     for (int spectrum = 0; spectrum < counts[system]; ++spectrum) {
       const auto n = f.dimension(system);
       prescribed_problem(
-          n, spectrum, values.data() + offsets[system] - offsets[0] + spectrum * n * n,
+          n, spectrum, values.data() + offsets[system] - offsets[0] + static_cast<std::int64_t>(spectrum) * n * n,
           f.overlap.data() + f.plan.matrix_offsets()[system], prescribed[system][spectrum]);
     }
   const auto original_values = values;
@@ -1098,7 +1099,7 @@ static void test_token_execution() {
   for (int system = 0; system < 3; ++system)
     for (int spectrum = 0; spectrum < counts[system]; ++spectrum) {
       const int n = f.dimension(system);
-      const auto* h = values.data() + offsets[system] - offsets[0] + spectrum * n * n;
+      const auto* h = values.data() + offsets[system] - offsets[0] + static_cast<std::int64_t>(spectrum) * n * n;
       require(spectra.matrix(f.plan, system, spectrum) == h,
               "arbitrary multiplicity pointer calculation");
       reset_events();

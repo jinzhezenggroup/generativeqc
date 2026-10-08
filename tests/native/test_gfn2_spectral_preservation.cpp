@@ -121,11 +121,11 @@ struct Arena {
   unsigned char* data;
   explicit Arena(std::size_t n)
       : size(n),
-        raw(static_cast<unsigned char*>(::operator new(n + 128, std::align_val_t{64}))),
+        raw(static_cast<unsigned char*>(allocation(n + 128, 64))),
         data(raw + 64) {
     std::memset(raw, 0xA7, n + 128);
   }
-  ~Arena() { ::operator delete(raw, std::align_val_t{64}); }
+  ~Arena() { std::free(raw); }
   Arena(const Arena&) = delete;
   void guards() const {
     for (std::size_t i = 0; i < 64; ++i)
@@ -401,12 +401,13 @@ struct Fixture {
         for (int j = 0; j < n; ++j) {
           double s = 0;
           for (int k = 0; k < n; ++k) s += l[i * n + k] * l[j * n + k];
-          overlaps[overlap_offsets[system] + i * n + j] = s;
+          overlaps[overlap_offsets[system] + static_cast<std::int64_t>(i) * n + j] = s;
           for (int spin = 0; spin < spins[system]; ++spin) {
             double h = 0;
             for (int k = 0; k < n; ++k)
               h += lq[i * n + k] * lq[j * n + k] * (-1.0 + 1.5 * k + .2 * system + .3 * spin);
-            hamiltonians[matrix_offsets[system] + spin * n * n + i * n + j] = h;
+            hamiltonians[matrix_offsets[system] + static_cast<std::int64_t>(spin) * n * n +
+                         static_cast<std::int64_t>(i) * n + j] = h;
           }
         }
     }
@@ -921,7 +922,7 @@ void test_oracle() {
       std::array<std::array<long double, 3>, 2> occ{};
       for (int spin = 0; spin < 2; ++spin) {
         const int channel = spins[system] == 1 ? 0 : spin;
-        const double* e = f.wave.eigenvalues + value_offsets[system] + channel * n;
+        const double* e = f.wave.eigenvalues + value_offsets[system] + static_cast<std::int64_t>(channel) * n;
         long double mu = 0, ent = 0;
         occ[spin] =
             occupations(n, e, spin == 0 ? alpha[system] : beta[system], temperature, mu, ent);
@@ -930,7 +931,7 @@ void test_oracle() {
         long double count = 0;
         for (int i = 0; i < n; ++i) {
           near(e[i], -1 + 1.5 * i + .2 * system + .3 * channel, "prescribed generalized spectrum");
-          near(f.wave.occupations[occupation_offsets[system] + spin * n + i], occ[spin][i],
+          near(f.wave.occupations[occupation_offsets[system] + static_cast<std::int64_t>(spin) * n + i], occ[spin][i],
                "independent occupations");
           count += occ[spin][i];
           band += occ[spin][i] * e[i];
@@ -938,12 +939,12 @@ void test_oracle() {
         near(count, spin == 0 ? alpha[system] : beta[system], "independent population");
       }
       for (int channel = 0; channel < spins[system]; ++channel) {
-        const double* c = f.wave.coefficients + matrix_offsets[system] + channel * n * n;
-        const double* h = f.hamiltonians.data() + matrix_offsets[system] + channel * n * n;
-        const double* e = f.wave.eigenvalues + value_offsets[system] + channel * n;
-        const double* d = f.wave.density + matrix_offsets[system] + channel * n * n;
+        const double* c = f.wave.coefficients + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
+        const double* h = f.hamiltonians.data() + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
+        const double* e = f.wave.eigenvalues + value_offsets[system] + static_cast<std::int64_t>(channel) * n;
+        const double* d = f.wave.density + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
         const double* wd =
-            f.wave.energy_weighted_density + matrix_offsets[system] + channel * n * n;
+            f.wave.energy_weighted_density + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
         for (int row = 0; row < n; ++row)
           for (int col = 0; col < n; ++col) {
             long double hc = 0, sc = 0, metric = 0, density = 0, weighted = 0;
