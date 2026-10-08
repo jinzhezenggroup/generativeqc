@@ -626,7 +626,6 @@ def audit_native(source: str, path: str = "<memory>") -> list[dict[str, Any]]:
     return sorted(findings, key=lambda f: (f["line"], f["buffer"]))
 
 
-
 MP2_REPRESENTATION_SOURCE = "src/posthf/mp2_gradient.cpp"
 _MP2_BOUNDARY_ANCHORS = (
     (

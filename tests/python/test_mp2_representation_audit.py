@@ -19,13 +19,15 @@ SOURCE = ROOT / MP2_REPRESENTATION_SOURCE
 
 
 class MP2RepresentationSourceTests(unittest.TestCase):
-    def test_real_canonical_and_factorized_owners_are_visible_without_sparsity(self) -> (
-        None
-    ):
+    def test_real_canonical_and_factorized_owners_are_visible_without_sparsity(
+        self,
+    ) -> None:
         source = SOURCE.read_text(encoding="utf-8")
         observed = audit_mp2_representation_boundary(source)
         self.assertEqual(observed["status"], "SOURCE_VISIBLE")
-        self.assertEqual(observed["source_sha256"], hashlib.sha256(source.encode()).hexdigest())
+        self.assertEqual(
+            observed["source_sha256"], hashlib.sha256(source.encode()).hexdigest()
+        )
         self.assertEqual(len(observed["observed_source_roles"]), 8)
         self.assertEqual(observed["missing_roles"], [])
         self.assertEqual(
@@ -69,7 +71,10 @@ class MP2RepresentationSourceTests(unittest.TestCase):
         evidence = audit_mp2_representation_boundary(changed)
         self.assertEqual(evidence["status"], "INCOMPLETE")
         self.assertTrue(
-            any("dense-canonical-RHS-allocation" in item for item in evidence["missing_roles"])
+            any(
+                "dense-canonical-RHS-allocation" in item
+                for item in evidence["missing_roles"]
+            )
         )
         self.assertFalse(evidence["exact_write_support_proven"])
 
@@ -77,16 +82,21 @@ class MP2RepresentationSourceTests(unittest.TestCase):
         source = SOURCE.read_text(encoding="utf-8")
         needle = "result.two_electron_factors.correlation_iajb = std::move(adjoint.integrals_iajb);"
         self.assertIn(needle, source)
-        changed = source.replace(needle, "result.two_electron_factors.correlation_iajb.clear();")
+        changed = source.replace(
+            needle, "result.two_electron_factors.correlation_iajb.clear();"
+        )
         evidence = audit_mp2_representation_boundary(changed)
         self.assertEqual(evidence["status"], "INCOMPLETE")
         self.assertTrue(
-            any("factorized-Lagrangian-owner" in item for item in evidence["missing_roles"])
+            any(
+                "factorized-Lagrangian-owner" in item
+                for item in evidence["missing_roles"]
+            )
         )
 
-    def test_tree_report_attaches_provenance_boundaries_only_for_selected_source(self) -> (
-        None
-    ):
+    def test_tree_report_attaches_provenance_boundaries_only_for_selected_source(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / MP2_REPRESENTATION_SOURCE
@@ -95,8 +105,13 @@ class MP2RepresentationSourceTests(unittest.TestCase):
             report = audit_tree(root, (MP2_REPRESENTATION_SOURCE,))
             self.assertEqual(report["scanned_files"], 1)
             self.assertEqual(len(report["production_boundaries"]), 1)
-            self.assertEqual(report["production_boundaries"][0]["status"], "SOURCE_VISIBLE")
-            self.assertEqual(report["provenance"]["source_hashes"][MP2_REPRESENTATION_SOURCE], hashlib.sha256(SOURCE.read_bytes()).hexdigest())
+            self.assertEqual(
+                report["production_boundaries"][0]["status"], "SOURCE_VISIBLE"
+            )
+            self.assertEqual(
+                report["provenance"]["source_hashes"][MP2_REPRESENTATION_SOURCE],
+                hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
+            )
             report_other = audit_tree(root, ("src",))
             self.assertEqual(len(report_other["production_boundaries"]), 1)
 

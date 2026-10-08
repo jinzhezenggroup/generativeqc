@@ -157,27 +157,27 @@ def test_ci_growth_gate_blocks_comparable_production_work(
         encoding="utf-8",
     )
     report = tmp_path / "producer-ratchet.json"
-    assert main(
-        [
-            "--root",
-            str(root),
-            "--base-sha",
-            base,
-            "--output",
-            str(report),
-            "--fail-on-work-growth",
-        ]
-    ) == 1
+    assert (
+        main(
+            [
+                "--root",
+                str(root),
+                "--base-sha",
+                base,
+                "--output",
+                str(report),
+                "--fail-on-work-growth",
+            ]
+        )
+        == 1
+    )
     result = json.loads(report.read_text(encoding="utf-8"))
     assert result["status"] == "FAIL"
     assert any(
-        row["status"] == "FAIL"
-        and row["candidate_executed"] > row["baseline_executed"]
+        row["status"] == "FAIL" and row["candidate_executed"] > row["baseline_executed"]
         for row in result["cases"]
     )
-    assert all(
-        row.get("classification") != "proven bug" for row in result["cases"]
-    )
+    assert all(row.get("classification") != "proven bug" for row in result["cases"])
 
 
 def test_ci_gate_keeps_unknown_source_dependency_explicit_and_nonblocking(
@@ -189,24 +189,25 @@ def test_ci_gate_keeps_unknown_source_dependency_explicit_and_nonblocking(
         encoding="utf-8",
     )
     report = tmp_path / "unknown.json"
-    assert main(
-        [
-            "--root",
-            str(root),
-            "--base-sha",
-            base,
-            "--output",
-            str(report),
-            "--fail-on-work-growth",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "--root",
+                str(root),
+                "--base-sha",
+                base,
+                "--output",
+                str(report),
+                "--fail-on-work-growth",
+            ]
+        )
+        == 0
+    )
     result = json.loads(report.read_text(encoding="utf-8"))
     assert result["status"] == "INCOMPLETE"
     assert "import dependency changed" in result["reason"]
     assert result["cases"] == []
-    assert main(
-        ["--root", str(root), "--base-sha", base, "--output", str(report)]
-    ) == 1
+    assert main(["--root", str(root), "--base-sha", base, "--output", str(report)]) == 1
 
 
 def test_ci_gate_passes_comparable_unchanged_source(
@@ -214,17 +215,20 @@ def test_ci_gate_passes_comparable_unchanged_source(
 ) -> None:
     root, base = checkout
     report = tmp_path / "pass.json"
-    assert main(
-        [
-            "--root",
-            str(root),
-            "--base-sha",
-            base,
-            "--output",
-            str(report),
-            "--fail-on-work-growth",
-        ]
-    ) == 0
+    assert (
+        main(
+            [
+                "--root",
+                str(root),
+                "--base-sha",
+                base,
+                "--output",
+                str(report),
+                "--fail-on-work-growth",
+            ]
+        )
+        == 0
+    )
     value = json.loads(report.read_text(encoding="utf-8"))
     assert value["status"] == "PASS"
     assert len(value["cases"]) == len(CASES)
