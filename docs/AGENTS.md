@@ -49,4 +49,3 @@ Historical benchmark snapshots, migration narratives, discarded designs, and one
 - Avoid making a new summary page the authority for facts owned by the
   generated method manifest, public API reference or scientific CUDA ledger.
   Keep the existing Sphinx warnings-as-errors and documentation tests.
-
