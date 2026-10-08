@@ -149,3 +149,121 @@ def test_advisory_tree_exports_python_hot_sites_without_runtime_claim(
     assert report["counts"] == {"python.loop-host-allocation": 1}
     assert report["findings"][0]["details"]["requested_bytes"] is None
     assert report["findings"][0]["fingerprint"]
+
+
+def test_positional_out_and_opaque_arguments_are_not_new_storage() -> None:
+    rows = hot("""
+import numpy as np
+def f(values, workspace, args):
+    for tile in range(3):
+        np.concatenate(values, 0, workspace)
+        np.stack(values, 0, workspace)
+        np.concatenate(*args)
+        np.concatenate(values, 0, None)
+""")
+    assert [row["details"]["numpy_operation"] for row in rows] == ["concatenate"]
+
+
+@pytest.mark.parametrize(
+    "shadow",
+    [
+        "try:\n        pass\n    except Exception as np:\n        pass",
+        "match value:\n        case np:\n            pass",
+        "match value:\n        case [*np]:\n            pass",
+        'match value:\n        case {"a": a, **np}:\n            pass',
+    ],
+)
+def test_exception_and_pattern_bindings_shadow_numpy(shadow: str) -> None:
+    assert not hot(
+        "import numpy as np\ndef f(value):\n    "
+        + shadow
+        + "\n    for i in range(3): np.zeros(3)\n"
+    )
+
+
+def test_nested_helper_import_does_not_hide_outer_numpy_binding() -> None:
+    rows = hot("""
+import numpy as np
+def f():
+    def helper():
+        import numpy as np
+    for tile in range(3):
+        np.zeros(3)
+""")
+    assert len(rows) == 1
+
+
+def test_generator_body_deferred_but_outer_iterable_eager() -> None:
+    rows = hot("""
+import numpy as np
+def f():
+    for tile in range(3):
+        g = (np.zeros(3) for j in np.ones(3) if np.empty(3).size
+             for k in np.full(3, 1))
+""")
+    assert [row["details"]["numpy_operation"] for row in rows] == ["ones"]
+
+
+@pytest.mark.parametrize(
+    "shadow",
+    [
+        "match value:\n        case np: pass",
+        "try: pass\n    except Exception as np: pass",
+    ],
+)
+def test_enclosing_scope_captures_are_not_numpy_imports(shadow: str) -> None:
+    assert not hot(
+        "import numpy as np\ndef f(value):\n    "
+        + shadow
+        + "\n    def g():\n        for tile in range(3): np.zeros(3)\n    return g\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "shadow",
+    [
+        "match value:\n    case np: pass",
+        "try: pass\nexcept Exception as np: pass",
+        "if condition:\n    import other as np",
+        "if condition:\n    from other import obj as np",
+    ],
+)
+def test_module_level_shadowing_is_not_numpy(shadow: str) -> None:
+    assert not hot(
+        "import numpy as np\n"
+        + shadow
+        + "\ndef f():\n    for tile in range(3): np.zeros(3)\n"
+    )
+
+
+def test_conditional_nested_helper_import_keeps_outer_binding() -> None:
+    rows = hot("""
+import numpy as np
+def f(condition):
+    if condition:
+        def helper():
+            import other as np
+    for tile in range(3):
+        np.zeros(3)
+""")
+    assert len(rows) == 1
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        "fn = lambda x=(np := other): x",
+        "def helper(x=(np := other)): pass",
+        "if condition:\n        def helper(x: (np := other)): pass",
+        "def helper() -> (np := other): pass",
+        "if condition:\n        def helper(x=(np := other)): pass",
+        "@(np := other)\n    def helper(): pass",
+        "class Helper((np := other)): pass",
+    ],
+)
+def test_eager_definition_expressions_can_rebind_outer_alias(definition: str) -> None:
+    assert not hot(
+        "import numpy as np\ndef f(other, condition):\n    "
+        + definition
+        + "\n    for tile in range(3): np.zeros(3)\n"
+    )

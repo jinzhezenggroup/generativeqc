@@ -62,6 +62,40 @@ def _plain(node: ast.AST) -> bool:
     )
 
 
+def _binding_nodes(node: ast.AST) -> Iterator[ast.AST]:
+    """Walk binding statements without inheriting nested definition scopes."""
+    yield node
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        # Defaults/decorators execute in the enclosing scope at definition time.
+        eager = [*node.args.defaults, *node.args.kw_defaults]
+        if not isinstance(node, ast.Lambda):
+            eager.extend(node.decorator_list)
+            # Annotations are eager on supported older Python versions unless
+            # postponed; conservatively reject their potential rebindings.
+            eager.append(node.returns)
+            eager.extend(
+                arg.annotation
+                for arg in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    node.args.vararg,
+                    node.args.kwarg,
+                )
+                if arg is not None
+            )
+        for expression in eager:
+            if expression is not None:
+                yield from _binding_nodes(expression)
+        return
+    if isinstance(node, ast.ClassDef):
+        for expression in [*node.bases, *node.keywords, *node.decorator_list]:
+            yield from _binding_nodes(expression)
+        return
+    for child in ast.iter_child_nodes(node):
+        yield from _binding_nodes(child)
+
+
 def _bindings(body: list[ast.stmt], inherited: dict[str, str]) -> dict[str, str]:
     """Resolve imports, rejecting rebinding, including lexical local shadows."""
     result = dict(inherited)
@@ -83,10 +117,33 @@ def _bindings(body: list[ast.stmt], inherited: dict[str, str]) -> dict[str, str]
                     imported[name] = f"numpy.{alias.name}"
                 else:
                     stores.add(name)
-        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            stores.add(stmt.name)
         else:
-            for item in ast.walk(stmt):
+            for item in _binding_nodes(stmt):
+                if isinstance(
+                    item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    stores.add(item.name)
+                # Some lexical bindings store names as strings rather than
+                # ast.Name(Store), including exception and pattern captures.
+                if (
+                    isinstance(item, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar))
+                    and item.name
+                ):
+                    stores.add(item.name)
+                if isinstance(item, ast.MatchMapping) and item.rest:
+                    stores.add(item.rest)
+                if isinstance(item, (ast.Import, ast.ImportFrom)):
+                    for alias in item.names:
+                        if alias.name == "*":
+                            return {}
+                        stores.add(
+                            alias.asname
+                            or (
+                                alias.name.split(".")[0]
+                                if isinstance(item, ast.Import)
+                                else alias.name
+                            )
+                        )
                 if isinstance(item, ast.Name) and isinstance(
                     item.ctx, (ast.Store, ast.Del)
                 ):
@@ -489,16 +546,36 @@ def _loop_allocations(
     do not establish a proven binding. A loop is not necessarily prepared replay.
     """
     local_imports: dict[str, list[tuple[int, bool]]] = {}
-    for item in ast.walk(function):
-        if not isinstance(item, (ast.Import, ast.ImportFrom)):
-            continue
-        for alias in item.names:
-            bound = alias.asname or (
-                alias.name.split(".")[0] if isinstance(item, ast.Import) else alias.name
-            )
-            local_imports.setdefault(bound, []).append(
-                (item.lineno, item in function.body)
-            )
+
+    class BindingVisitor(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            pass
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            pass
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            pass
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            pass
+
+        def visit_Import(self, node: ast.Import | ast.ImportFrom) -> None:
+            for alias in node.names:
+                bound = alias.asname or (
+                    alias.name.split(".")[0]
+                    if isinstance(node, ast.Import)
+                    else alias.name
+                )
+                local_imports.setdefault(bound, []).append(
+                    (node.lineno, node in function.body)
+                )
+
+        visit_ImportFrom = visit_Import
+
+    binding_visitor = BindingVisitor()
+    for statement in function.body:
+        binding_visitor.visit(statement)
 
     findings: list[dict[str, Any]] = []
 
@@ -518,6 +595,11 @@ def _loop_allocations(
 
         def visit_Lambda(self, node: ast.Lambda) -> None:
             pass
+
+        def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+            # Constructing a generator evaluates only its outermost iterable.
+            # Its body, filters and remaining iterables are deferred until use.
+            self.visit(node.generators[0].iter)
 
         def _visit_body(
             self,
@@ -563,16 +645,26 @@ def _loop_allocations(
                     ),
                     None,
                 )
-                if member in {"concatenate", "stack"} and any(
-                    keyword.arg is None
+                if member in {"concatenate", "stack"} and (
+                    any(isinstance(arg, ast.Starred) for arg in node.args)
                     or (
-                        keyword.arg == "out"
+                        len(node.args) >= 3
                         and not (
-                            isinstance(keyword.value, ast.Constant)
-                            and keyword.value.value is None
+                            isinstance(node.args[2], ast.Constant)
+                            and node.args[2].value is None
                         )
                     )
-                    for keyword in node.keywords
+                    or any(
+                        keyword.arg is None
+                        or (
+                            keyword.arg == "out"
+                            and not (
+                                isinstance(keyword.value, ast.Constant)
+                                and keyword.value.value is None
+                            )
+                        )
+                        for keyword in node.keywords
+                    )
                 ):
                     # Known-out variants can reuse caller-owned backing storage;
                     # **kwargs may also supply out, so avoid asserting allocation.
