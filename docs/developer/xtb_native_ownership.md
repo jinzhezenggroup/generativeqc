@@ -51,6 +51,18 @@ all real geometry-dependent values on CUDA, refactor its overlap and commit
 epoch one before SCC and energy/force publication. Fresh SAD initialization,
 transactional failure behavior and the bounded SCC Graph fallback are unchanged.
 
+CUDA host setup and admission use `runtime/ragged_topology.*` for immutable
+atom/shell/AO topology validation and exact borrowed projections. This owner
+checks the fourteen storage ranges, offset/map consistency, optional AO buckets,
+plan identity and ordered element fingerprints without allocating or retaining
+storage. Structural validators never inspect pointed-to values; host inspectors
+require host-readable arrays. Native compatibility adapters preserve the existing
+descriptor types and CUDA kernel interfaces through field-wise views. Explicit
+pair storage keeps its first-endpoint-major order. Spin packing, generation
+validation and physical pair-list cutoffs remain native method contracts.
+The production consumer is CUDA host preparation and admission; the CPU GFN
+execution path does not use this topology owner.
+
 ## Scientific ownership
 
 The compiler emits the following production mathematics. Backend owners retain
