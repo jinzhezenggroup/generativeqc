@@ -441,6 +441,102 @@ void retained_direct_derivative_reuse() {
   matrix(resident_response, response, "resident prepared fused RSH derivative");
 }
 
+void retained_lr_only_derivative() {
+  const auto system = fixture(true);
+  std::size_t primitives = 0;
+  for (const auto& shell : system.shells) primitives += shell.primitives.size();
+  const auto n = generativeqc::molecule::ao_count(system);
+  const auto budget = cuda_direct_coulomb_device_bytes(1, n, system.atoms.size(),
+                                                        system.shells.size(), primitives, 1);
+  for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted})
+    for (const double omega : {0.3, 0.45}) {
+      const auto model = resolve_fock_build(make_rsh_correction_fock_spec(
+          spin, 0.15, 1.0, omega), FockBackend::Cuda, 0.0);
+      const PreparedFockPlan correction(system, nullptr, model, 0, budget, 1);
+      const auto retained = prepared_cuda_direct_derivative_binding(correction);
+      require(retained && retained.maximum_derivative_order == 1,
+              "isolated LR source did not retain first derivatives");
+      require(!model.spec.coulomb.present &&
+                  model.spec.exchange.op == FockOperator::LongRange,
+              "isolated LR test fixture changed scientific identity");
+
+      std::vector<double> density(n * n), beta;
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j <= i; ++j) {
+          const double value = (i == j ? 0.7 : 0.1 / static_cast<double>(i + j + 1));
+          density[i * n + j] = density[j * n + i] = value;
+        }
+      if (spin == FockSpin::Unrestricted) {
+        beta = density;
+        for (auto& value : beta) value *= 0.6;
+      }
+
+      double *device_alpha = nullptr, *device_beta = nullptr;
+      require(cudaSetDevice(retained.device_id) == cudaSuccess &&
+                  cudaMalloc(reinterpret_cast<void**>(&device_alpha),
+                             density.size() * sizeof(double)) == cudaSuccess,
+              "isolated LR test failed to allocate resident density");
+      if (!beta.empty())
+        require(cudaMalloc(reinterpret_cast<void**>(&device_beta),
+                           beta.size() * sizeof(double)) == cudaSuccess,
+                "isolated LR test failed to allocate beta density");
+      require(cudaMemcpyAsync(device_alpha, density.data(), density.size() * sizeof(double),
+                              cudaMemcpyHostToDevice, retained.stream) == cudaSuccess,
+              "isolated LR alpha density staging failed");
+      if (!beta.empty())
+        require(cudaMemcpyAsync(device_beta, beta.data(), beta.size() * sizeof(double),
+                                cudaMemcpyHostToDevice, retained.stream) == cudaSuccess,
+                "isolated LR beta density staging failed");
+
+      std::string detail;
+      std::vector<double> actual;
+      require(execute_prepared_cuda_direct_long_range_derivatives_device(
+                  correction, device_alpha, device_beta, density.size(), actual,
+                  detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      require(actual.size() == 3 * system.atoms.size(),
+              "isolated LR derivative did not publish exactly one coordinate row");
+
+      // Independent Direct first derivative uses the selected LongRange
+      // operator, not the fused RSH decomposition or its host publication.
+      auto spec = model.spec;
+      spec.derivative_order = 1;
+      std::vector<double> reference;
+      require(execute_cuda_direct_energy_derivative(
+                  correction.cuda_direct_source(), spec, density, beta, reference,
+                  detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      matrix(actual, reference, "isolated LR derivative differs from Direct LR oracle");
+      for (const auto value : actual)
+        require(std::isfinite(value), "isolated LR derivative returned nonfinite values");
+
+      actual.assign(2, 999.);
+      require(execute_prepared_cuda_direct_long_range_derivatives_device(
+                  correction, device_alpha, device_beta, density.size() + 1,
+                  actual, detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+              "isolated LR derivative accepted a mismatched resident matrix");
+      if (spin == FockSpin::Unrestricted)
+        require(execute_prepared_cuda_direct_long_range_derivatives_device(
+                    correction, device_alpha, nullptr, density.size(), actual,
+                    detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+                "isolated LR derivative accepted missing beta density");
+      else
+        require(execute_prepared_cuda_direct_long_range_derivatives_device(
+                    correction, device_alpha, device_alpha, density.size(), actual,
+                    detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+                "isolated LR derivative accepted a forged beta density");
+
+      const PreparedFockPlan value_only(system, nullptr, model, 0, budget);
+      require(execute_prepared_cuda_direct_long_range_derivatives_device(
+                  value_only, device_alpha, device_beta, density.size(), actual,
+                  detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && actual.empty(),
+              "value-only LR source silently acquired a derivative lease");
+      require(cudaFree(device_alpha) == cudaSuccess &&
+                  (!device_beta || cudaFree(device_beta) == cudaSuccess),
+              "isolated LR resident density free failed");
+    }
+}
+
 void retained_range_shell_d_parity() {
   for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
     System system;
@@ -558,6 +654,7 @@ int main() {
     ragged_replay();
     prepared_replay();
     retained_direct_derivative_reuse();
+    retained_lr_only_derivative();
     retained_range_shell_d_parity();
     independent_reference_export();
     std::cout << "CUDA common Fock composition: exact/DF/absent pairs, signed gradients, batch "
