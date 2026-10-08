@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_SCRIPT = ROOT / "tools/audit_producer_work.py"
 SCHEDULE = "python/generativeqc_compiler/method/df_exchange_schedule.py"
+ANALYZER_SOURCE = "tools/audit_producer_work.py"
 DEPENDENCIES = (
     "python/generativeqc_compiler/__init__.py",
     "python/generativeqc_compiler/method/__init__.py",
@@ -122,12 +123,24 @@ def audit(
             "source-bound static schedule only; not runtime or native binary evidence"
         ),
         "build_sha256": STATIC_NO_BUILD,
+        "analyzer_sha256": None,
         "status": "PASS",
         "cases": [],
     }
     with tempfile.TemporaryDirectory(prefix="gqc-producer-base-") as temp:
         baseline = Path(temp)
         _baseline_tree(root, base_sha, baseline)
+        # The same parser/receipt implementation must define both censuses.
+        # Do not compare different versions under a nominally identical domain.
+        baseline_analyzer = _git(root, "show", f"{base_sha}:{ANALYZER_SOURCE}")
+        current_analyzer = audit_script.read_bytes()
+        report["analyzer_sha256"] = hashlib.sha256(current_analyzer).hexdigest()
+        if baseline_analyzer != current_analyzer:
+            report.update(
+                status="INCOMPLETE",
+                reason=f"producer-work analyzer changed: {ANALYZER_SOURCE}",
+            )
+            return report
         # A changed imported helper changes the meaning of the schedule but is
         # outside the existing single-source receipt digest: do not certify it.
         for path in DEPENDENCIES:
