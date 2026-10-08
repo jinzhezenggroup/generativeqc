@@ -858,7 +858,9 @@ class Graph:
                 exponent = _numeric_payload(node)
                 source = children[0]
                 if exponent < 0.0:
-                    requirement = "nonzero" if _is_integral_exponent(exponent) else "positive"
+                    requirement = (
+                        "nonzero" if _is_integral_exponent(exponent) else "positive"
+                    )
                     require(identifier, node.arguments[0], requirement)
                 elif not _is_integral_exponent(exponent):
                     require(identifier, node.arguments[0], "nonnegative")
