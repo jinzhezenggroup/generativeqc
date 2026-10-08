@@ -254,8 +254,6 @@ def test_public_preview_exports_array_style_operations() -> None:
         assert callable(getattr(xp, name))
 
 
-
-
 @pytest.mark.parametrize("dtype", (np.float32, np.float64))
 @pytest.mark.parametrize("axis", (None, 0, -1, (0, 2), ()))
 @pytest.mark.parametrize("keepdims", (False, True))
