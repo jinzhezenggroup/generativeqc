@@ -50,7 +50,8 @@ def _git(root: Path, *args: str) -> bytes:
     command = ["git", "-C", str(root), *args]
     result = subprocess.run(command, capture_output=True, check=False)
     if result.returncode:
-        raise ReceiptError(f"git {args[0]} failed: {result.stderr.decode(errors='replace').strip()}")
+        detail = result.stderr.decode(errors="replace").strip()
+        raise ReceiptError(f"git {args[0]} failed: {detail}")
     return result.stdout
 
 
@@ -63,8 +64,10 @@ def _baseline_tree(root: Path, sha: str, target: Path) -> None:
 
 
 def _schedule(
-    source_root: Path, case: tuple[str, int, int, int, int, int, int, bool],
-    *, audit_script: Path = AUDIT_SCRIPT,
+    source_root: Path,
+    case: tuple[str, int, int, int, int, int, int, bool],
+    *,
+    audit_script: Path = AUDIT_SCRIPT,
 ) -> dict[str, Any]:
     label, n, auxiliaries, rank, capacity, dense_rows, dense_outputs, triangular = case
     command = [
@@ -81,7 +84,8 @@ def _schedule(
         "--dense-row-blocks", str(dense_rows),
         "--dense-output-blocks", str(dense_outputs),
         "--scientific-problem", f"ci:{label}:n={n}:a={auxiliaries}:rank={rank}",
-        "--dependency-identity", "static:geometry+basis+occupied-coefficients:shape-only",
+        "--dependency-identity",
+        "static:geometry+basis+occupied-coefficients:shape-only",
         "--build-sha256", STATIC_NO_BUILD,
     ]
     if triangular:
@@ -95,7 +99,9 @@ def _schedule(
         raise ReceiptError(f"{label} schedule did not produce JSON") from exc
 
 
-def audit(root: Path, base_sha: str, *, audit_script: Path = AUDIT_SCRIPT) -> dict[str, Any]:
+def audit(
+    root: Path, base_sha: str, *, audit_script: Path = AUDIT_SCRIPT
+) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-fA-F]{40}", base_sha):
         raise ReceiptError("base SHA must be a full 40-character commit digest")
     root = root.resolve()
@@ -103,7 +109,10 @@ def audit(root: Path, base_sha: str, *, audit_script: Path = AUDIT_SCRIPT) -> di
         "schema": "generativeqc.producer-work-ci.v1",
         "base_commit": base_sha.lower(),
         "source": SCHEDULE,
-        "scope": "source-bound static schedule only; not runtime or native binary evidence",
+        "scope": (
+            "source-bound static schedule only; "
+            "not runtime or native binary evidence"
+        ),
         "build_sha256": STATIC_NO_BUILD,
         "status": "PASS",
         "cases": [],
@@ -115,7 +124,9 @@ def audit(root: Path, base_sha: str, *, audit_script: Path = AUDIT_SCRIPT) -> di
         # outside the existing single-source receipt digest: do not certify it.
         for path in DEPENDENCIES:
             if (baseline / path).read_bytes() != (root / path).read_bytes():
-                report.update(status="INCOMPLETE", reason=f"import dependency changed: {path}")
+                report.update(
+                    status="INCOMPLETE", reason=f"import dependency changed: {path}"
+                )
                 return report
         for case in CASES:
             label = case[0]
@@ -135,7 +146,11 @@ def audit(root: Path, base_sha: str, *, audit_script: Path = AUDIT_SCRIPT) -> di
             report["cases"].append(row)
         outcomes = {row["status"] for row in report["cases"]}
         report["status"] = (
-            "INCOMPLETE" if "INCOMPLETE" in outcomes else "FAIL" if "FAIL" in outcomes else "PASS"
+            "INCOMPLETE"
+            if "INCOMPLETE" in outcomes
+            else "FAIL"
+            if "FAIL" in outcomes
+            else "PASS"
         )
     return report
 
@@ -156,10 +171,15 @@ def main(argv: list[str] | None = None) -> int:
             "cases": [],
         }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     print(json.dumps(report, sort_keys=True))
     if report["status"] != "PASS":
-        print(f"::warning::Static DF producer-work ratchet {report['status']} (see artifact); not a numerical or runtime result")
+        print(
+            f"::warning::Static DF producer-work ratchet {report['status']} "
+            "(see artifact); not a numerical or runtime result"
+        )
     return 0 if report["status"] == "PASS" else 1
 
 
