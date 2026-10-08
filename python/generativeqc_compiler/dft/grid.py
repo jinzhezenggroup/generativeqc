@@ -372,13 +372,18 @@ def partition_weights(
         delta = points - center
         distance[:, a] = np.hypot(np.hypot(delta[:, 0], delta[:, 1]), delta[:, 2])
     logs = np.zeros_like(distance)
+    # Duplicate centers take the exact equal-split branch. Its zero input is
+    # never modified in place, so one lazily allocated vector serves all pairs.
+    coincident_zero: np.ndarray | None = None
     with np.errstate(divide="ignore"):
         for a in range(len(centers)):
             for b in range(a):
                 delta = centers[a] - centers[b]
                 separation = float(np.hypot(np.hypot(delta[0], delta[1]), delta[2]))
                 if separation <= coincident_tolerance:
-                    mu = np.zeros(len(points))
+                    if coincident_zero is None:
+                        coincident_zero = np.zeros(len(points))
+                    mu = coincident_zero
                 else:
                     mu = np.clip((distance[:, a] - distance[:, b]) / separation, -1, 1)
                 for _ in range(iterations):
