@@ -919,8 +919,9 @@ def _emit_ao_radial_kernels() -> str:
     """Emit fixed 4/10-jet producers without runtime-indexed accumulators.
 
     Each output retains the scalar kernel's primitive/Cartesian-term sum and
-    multiplication order. Only the jet-independent radial factor is shared.
-    Axis DAGs remain noinline; 1/20 jets retain the bounded scalar fallback.
+    multiplication order. Share the radial factor and identical axis DAG calls,
+    not products or accumulated contributions. Axis DAGs remain noinline; 1/20
+    jets retain the bounded scalar fallback.
     """
     kernels = []
     for scalar in ("double", "float"):
@@ -961,17 +962,24 @@ def _emit_ao_radial_kernels() -> str:
                     "      for (int term = 0; term < static_cast<int>(record[3]); ++term) {",
                 )
             )
+            # Reuse exact scalar DAG results inside each primitive/Cartesian
+            # term. Computing them after the radial underflow guard preserves
+            # the scalar producer's finite-publication and overflow behavior.
+            axis_orders = range(2 if jets == 4 else 3)
+            for axis_name, offset in zip("xyz", range(4, 7), strict=True):
+                for derivative_order in axis_orders:
+                    lines.append(
+                        f"        const {scalar} axis_{axis_name}{derivative_order} = "
+                        f"axis_jet(static_cast<int>(record[{offset} + 4 * term]), "
+                        f"{derivative_order}, alpha, {axis_name});"
+                    )
             for jet, derivative in enumerate(jet_indices(2)[:jets]):
                 lines.append(
                     f"        value{jet} += radial * {narrow('record[7 + 4 * term]')} *"
                 )
-                for axis, offset, order in zip(
-                    "xyz", range(4, 7), derivative, strict=True
-                ):
-                    ending = ";" if axis == "z" else " *"
-                    lines.append(
-                        f"            axis_jet(static_cast<int>(record[{offset} + 4 * term]), {order}, alpha, {axis}){ending}"
-                    )
+                for axis_name, order in zip("xyz", derivative, strict=True):
+                    ending = ";" if axis_name == "z" else " *"
+                    lines.append(f"            axis_{axis_name}{order}{ending}")
             lines.extend(("      }", "    }"))
             for jet in range(jets):
                 value = (

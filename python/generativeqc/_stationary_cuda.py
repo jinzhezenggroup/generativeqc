@@ -2554,6 +2554,25 @@ def _stationary_ao_map_reserve(
     return 0 if cutoff is None else min(requested_bytes, max_host_bytes - host_bound)
 
 
+def _stationary_device_ao_map_reserve(
+    layout: _StationaryCudaTileLayout, requested_bytes: int, max_device_bytes: int
+) -> int:
+    """Keep optional CSR storage out of the native integral provider's reserve.
+
+    Geometry planning already preserves this allowance for the concurrently
+    live derivative provider. Spending it on a CSR map afterwards can leave a
+    zero provider budget and disable a previously admitted complete force path.
+    A declined or smaller map must instead retain the bounded dense fallback.
+    """
+    dense_device_bound = (
+        layout.grid_plan.peak_bytes
+        + layout.source_resources.allocation_bytes
+        + sum(value.peak_bytes for value in layout.tensor_plans.values())
+    )
+    available = max_device_bytes - dense_device_bound - layout.native_geometry_reserve
+    return min(requested_bytes, max(0, available))
+
+
 def _stationary_resident_ao_cache(
     prepared: PreparedStationaryCudaExecution | None,
     grid: typing.Any,
@@ -2875,14 +2894,9 @@ def _complete_rks_cuda_gradient_diagnostic(
         raise ValueError("unsupported resident AO domain producer")
     if resident_ao_producer == "pre-ao-envelope-native-csr":
         # Charge both device storage/staging and the host offset mirror without
-        # consuming the already admitted dense fallback's resource headroom.
-        dense_device_bound = (
-            grid_plan.peak_bytes
-            + source_bytes
-            + sum(value.peak_bytes for value in tensor_plans.values())
-        )
-        ao_map_reserve = min(
-            ao_map_reserve, max(0, max_device_bytes - dense_device_bound)
+        # consuming the already admitted native integral provider's allowance.
+        ao_map_reserve = _stationary_device_ao_map_reserve(
+            layout, ao_map_reserve, max_device_bytes
         )
     host_bound += ao_map_reserve
     cache = Path(cache)

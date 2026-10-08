@@ -720,6 +720,7 @@ jobs:
         run: >-
           python3 tools/validate_native_xc_resources.py
           --nvcc "$CUDACXX" --architecture sm_120
+          --ao-radial-reuse
           --generated-dir build/cuda-release-sm120/generated
           --cmake-source build/cuda-release-sm120/generated/generated_grid_policy.cu
           --output build/native-xc-resource
