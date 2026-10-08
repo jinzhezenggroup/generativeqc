@@ -122,6 +122,7 @@ def test_block_gmres_reuses_one_projected_rhs_buffer(
     assert result.converged
     np.testing.assert_allclose(matrix @ result.solution, rhs, rtol=0, atol=1e-9)
 
+
 def test_reused_becke_impulse_matches_fresh_direction_for_all_atoms() -> None:
     """Exact partition JVP parity across reused tiles and axis directions."""
     centers = np.array(
