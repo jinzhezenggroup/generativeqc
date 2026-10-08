@@ -249,7 +249,9 @@ def _promote_generic_arrays(*values: VibeArray) -> tuple[VibeArray, ...]:
     """Promote supported generic floats by inserting explicit TensorIR casts."""
     if any(not _is_generic_array(value) for value in values):
         raise TypeError("promotion requires generic arrays")
-    target = "float64" if any(value.dtype == "float64" for value in values) else "float32"
+    target = (
+        "float64" if any(value.dtype == "float64" for value in values) else "float32"
+    )
     return tuple(astype(value, target, copy=False) for value in values)
 
 
