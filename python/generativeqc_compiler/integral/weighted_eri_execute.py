@@ -327,7 +327,7 @@ class WeightedEriExecution:
     """Detached tile rows: value followed by four ordered xyz center derivatives."""
 
     values: np.ndarray
-    diagnostics: dict
+    diagnostics: dict[str, typing.Any]
 
 
 class PreparedWeightedEri:
@@ -609,6 +609,10 @@ class PreparedWeightedEri:
                 raise ValueError(
                     "weighted ERI output tiles exceed the prepared capacity"
                 )
+            records_buffer = self._records
+            chunk_buffer = self._chunk
+            if records_buffer is None or chunk_buffer is None:
+                raise RuntimeError("weighted ERI buffers are closed")
             result = np.zeros((tile_count, 13))
             count = chunks = records = 0
             timing = {
@@ -622,14 +626,14 @@ class PreparedWeightedEri:
                 self._call(
                     "generativeqc_weighted_run_v2",
                     self._handle,
-                    self._records.ctypes.data,
+                    records_buffer.ctypes.data,
                     count,
                     tile_count,
-                    self._chunk.ctypes.data,
+                    chunk_buffer.ctypes.data,
                     int(profile),
                 )
                 with np.errstate(over="raise", invalid="raise"):
-                    np.add(result, self._chunk[:tile_count], out=result)
+                    np.add(result, chunk_buffer[:tile_count], out=result)
                 chunks += 1
                 if profile and self.artifact.backend == "cuda":
                     metrics = _Metrics()
@@ -645,7 +649,7 @@ class PreparedWeightedEri:
                 for blob in stream.records():
                     if len(blob) != PRIMITIVE_RANGE_RECORD.size:
                         raise ValueError("weighted ERI record stride mismatch")
-                    self._records[count] = np.frombuffer(blob, dtype=np.uint8)
+                    records_buffer[count] = np.frombuffer(blob, dtype=np.uint8)
                     count += 1
                     records += 1
                     if count == self.record_capacity:

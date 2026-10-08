@@ -67,7 +67,8 @@ def test_tiled_potential_fuses_point_total_reduction() -> None:
     """The production tiled path must not submit a separate total kernel per tile."""
     source = emit_native_xc_matrix_schedule()
     assert "I work_jets, const double* point_totals, double* potential," in source
-    assert "blockIdx.x == 0 && blockIdx.z == 0" in source
+    assert "point_totals && blockIdx.x == 0 && spin == 0" in source
+    assert "accumulate, error, ao_ids, full_n, blockIdx.z);" in source
     assert "threadIdx.y == 0 && threadIdx.x < 3" in source
     assert (
         "for (I p = 0; p < count; ++p) sum += point_totals[channel*count+p];" in source
@@ -95,7 +96,7 @@ def test_tiled_first_point_tile_initializes_outputs_without_global_clears() -> N
 
     glue = (ROOT / "src/dft/cuda_xc_kernels.cuh").read_text()
     setup = glue[: glue.index("for (std::size_t begin")]
-    dense_setup, sparse_setup = setup.split("if (l.local_ao) {", 1)
+    dense_setup, sparse_setup = setup.split("if (l.local_ao || compact_candidate) {", 1)
     assert "cudaMemsetAsync(potential" not in dense_setup
     assert "cudaMemsetAsync(totals" not in dense_setup
     assert "cudaMemsetAsync(potential" in sparse_setup

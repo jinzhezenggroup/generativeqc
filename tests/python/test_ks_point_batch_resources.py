@@ -180,8 +180,8 @@ struct Xc {
   dft::CudaXcPointBatchPlan batch;
   std::vector<void*>& allocations;
   explicit Xc(std::vector<void*>& owned) : allocations(owned) {}
-  void prepare_point_batches(std::size_t tiles,std::size_t budget) {
-    const auto plan = dft::cuda_xc_detail::prepare_point_batch_plan(layout,{},tiles,budget);
+  void prepare_point_batches(std::size_t tiles,std::size_t budget,bool compact=false) {
+    const auto plan = dft::cuda_xc_detail::prepare_point_batch_plan(layout,{},tiles,budget,compact);
     if (plan.tiles==1) return;
     void* arena=nullptr;
     const auto status=runtime::resource_cuda_malloc(&arena,plan.device_bytes);

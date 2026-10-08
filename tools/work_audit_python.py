@@ -16,6 +16,20 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 RULE_ID = "python.structured-zero-materialization"
+# Ordinary NumPy array-construction APIs; exclude asarray/reshape/transpose,
+# which may return views. Conditional execution and positive extent are unknown.
+_NUMPY_ARRAY_CREATORS = (
+    "empty",
+    "zeros",
+    "ones",
+    "full",
+    "empty_like",
+    "zeros_like",
+    "ones_like",
+    "full_like",
+    "concatenate",
+    "stack",
+)
 
 
 def _text(node: ast.AST) -> str:
@@ -48,6 +62,40 @@ def _plain(node: ast.AST) -> bool:
     )
 
 
+def _binding_nodes(node: ast.AST) -> Iterator[ast.AST]:
+    """Walk binding statements without inheriting nested definition scopes."""
+    yield node
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        # Defaults/decorators execute in the enclosing scope at definition time.
+        eager = [*node.args.defaults, *node.args.kw_defaults]
+        if not isinstance(node, ast.Lambda):
+            eager.extend(node.decorator_list)
+            # Annotations are eager on supported older Python versions unless
+            # postponed; conservatively reject their potential rebindings.
+            eager.append(node.returns)
+            eager.extend(
+                arg.annotation
+                for arg in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                    node.args.vararg,
+                    node.args.kwarg,
+                )
+                if arg is not None
+            )
+        for expression in eager:
+            if expression is not None:
+                yield from _binding_nodes(expression)
+        return
+    if isinstance(node, ast.ClassDef):
+        for expression in [*node.bases, *node.keywords, *node.decorator_list]:
+            yield from _binding_nodes(expression)
+        return
+    for child in ast.iter_child_nodes(node):
+        yield from _binding_nodes(child)
+
+
 def _bindings(body: list[ast.stmt], inherited: dict[str, str]) -> dict[str, str]:
     """Resolve imports, rejecting rebinding, including lexical local shadows."""
     result = dict(inherited)
@@ -69,10 +117,33 @@ def _bindings(body: list[ast.stmt], inherited: dict[str, str]) -> dict[str, str]
                     imported[name] = f"numpy.{alias.name}"
                 else:
                     stores.add(name)
-        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            stores.add(stmt.name)
         else:
-            for item in ast.walk(stmt):
+            for item in _binding_nodes(stmt):
+                if isinstance(
+                    item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    stores.add(item.name)
+                # Some lexical bindings store names as strings rather than
+                # ast.Name(Store), including exception and pattern captures.
+                if (
+                    isinstance(item, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar))
+                    and item.name
+                ):
+                    stores.add(item.name)
+                if isinstance(item, ast.MatchMapping) and item.rest:
+                    stores.add(item.rest)
+                if isinstance(item, (ast.Import, ast.ImportFrom)):
+                    for alias in item.names:
+                        if alias.name == "*":
+                            return {}
+                        stores.add(
+                            alias.asname
+                            or (
+                                alias.name.split(".")[0]
+                                if isinstance(item, ast.Import)
+                                else alias.name
+                            )
+                        )
                 if isinstance(item, ast.Name) and isinstance(
                     item.ctx, (ast.Store, ast.Del)
                 ):
@@ -462,6 +533,211 @@ def _functions(
             )
 
 
+def _loop_allocations(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    bindings: dict[str, str],
+    path: str,
+    scope: str,
+) -> list[dict[str, Any]]:
+    """Inventory NumPy array-creating calls in lexical loops, not runtime events.
+
+    Only ordinary NumPy binding semantics are assumed. Function-local imports
+    must dominate the call as top-level statements; conditional/late imports
+    do not establish a proven binding. A loop is not necessarily prepared replay.
+    """
+    local_imports: dict[str, list[tuple[int, bool]]] = {}
+
+    class BindingVisitor(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            pass
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            pass
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            pass
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            pass
+
+        def visit_Import(self, node: ast.Import | ast.ImportFrom) -> None:
+            for alias in node.names:
+                bound = alias.asname or (
+                    alias.name.split(".")[0]
+                    if isinstance(node, ast.Import)
+                    else alias.name
+                )
+                local_imports.setdefault(bound, []).append(
+                    (node.lineno, node in function.body)
+                )
+
+        visit_ImportFrom = visit_Import
+
+    binding_visitor = BindingVisitor()
+    for statement in function.body:
+        binding_visitor.visit(statement)
+
+    findings: list[dict[str, Any]] = []
+
+    class LoopVisitor(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.loops: list[ast.For | ast.AsyncFor | ast.While] = []
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            # Definition inside a loop does not execute the function body.
+            pass
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            pass
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            pass
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            pass
+
+        def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+            # Constructing a generator evaluates only its outermost iterable.
+            # Its body, filters and remaining iterables are deferred until use.
+            self.visit(node.generators[0].iter)
+
+        def _visit_body(
+            self,
+            node: ast.For | ast.AsyncFor | ast.While,
+            body: list[ast.stmt],
+            orelse: list[ast.stmt],
+        ) -> None:
+            self.loops.append(node)
+            for statement in body:
+                self.visit(statement)
+            self.loops.pop()
+            # The loop's 'else' runs after the loop, not on each iteration.
+            # An enclosing loop still makes it a repeated candidate.
+            for statement in orelse:
+                self.visit(statement)
+
+        def visit_For(self, node: ast.For) -> None:
+            # The iterable is evaluated once on entry, not once per own cycle.
+            self.visit(node.iter)
+            self._visit_body(node, node.body, node.orelse)
+
+        def visit_AsyncFor(self, node: ast.AsyncFor) -> None:
+            self.visit(node.iter)
+            self._visit_body(node, node.body, node.orelse)
+
+        def visit_While(self, node: ast.While) -> None:
+            # The while condition is re-evaluated at each iteration.
+            self.loops.append(node)
+            self.visit(node.test)
+            for statement in node.body:
+                self.visit(statement)
+            self.loops.pop()
+            for statement in node.orelse:
+                self.visit(statement)
+
+        def visit_Call(self, node: ast.Call) -> None:
+            if self.loops:
+                member = next(
+                    (
+                        name
+                        for name in _NUMPY_ARRAY_CREATORS
+                        if _numpy_call(node, name, bindings)
+                    ),
+                    None,
+                )
+                if member in {"concatenate", "stack"} and (
+                    any(isinstance(arg, ast.Starred) for arg in node.args)
+                    or (
+                        len(node.args) >= 3
+                        and not (
+                            isinstance(node.args[2], ast.Constant)
+                            and node.args[2].value is None
+                        )
+                    )
+                    or any(
+                        keyword.arg is None
+                        or (
+                            keyword.arg == "out"
+                            and not (
+                                isinstance(keyword.value, ast.Constant)
+                                and keyword.value.value is None
+                            )
+                        )
+                        for keyword in node.keywords
+                    )
+                ):
+                    # Known-out variants can reuse caller-owned backing storage;
+                    # **kwargs may also supply out, so avoid asserting allocation.
+                    member = None
+                name = (
+                    node.func.id
+                    if isinstance(node.func, ast.Name)
+                    else node.func.value.id
+                    if isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    else None
+                )
+                if (
+                    member is not None
+                    and name is not None
+                    and all(
+                        line < node.lineno and at_function_level
+                        for line, at_function_level in local_imports.get(name, ())
+                    )
+                ):
+                    headers = [
+                        f"for {ast.unparse(loop.target)} in {ast.unparse(loop.iter)}"
+                        if isinstance(loop, (ast.For, ast.AsyncFor))
+                        else f"while {ast.unparse(loop.test)}"
+                        for loop in self.loops
+                    ]
+                    loop_targets = " ".join(
+                        ast.unparse(loop.target).lower()
+                        for loop in self.loops
+                        if isinstance(loop, (ast.For, ast.AsyncFor))
+                    )
+                    if any(
+                        key in loop_targets
+                        for key in ("tile", "panel", "chunk", "block", "batch")
+                    ):
+                        role = "per-tile-candidate"
+                    elif any(
+                        key in loop_targets for key in ("iter", "step", "epoch", "scf")
+                    ):
+                        role = "per-iteration-candidate"
+                    else:
+                        role = "unknown-loop"
+                    findings.append(
+                        {
+                            "rule_id": "python.loop-host-allocation",
+                            "path": str(path),
+                            "line": node.lineno,
+                            "function": scope,
+                            "column": node.col_offset + 1,
+                            "evidence": [
+                                f"line {node.lineno}: {ast.unparse(node)}",
+                                "NumPy array creation is lexically in a loop; execution, positive size, and backing bytes are not measured.",
+                            ],
+                            "confidence": "structural-site",
+                            "disposition": "needs-role-and-runtime-review",
+                            "action": "Check prepared replay reachability, array shape and reusable ownership before changing this site.",
+                            "details": {
+                                "numpy_operation": member,
+                                "loop_context": headers,
+                                "phase_hint": role,
+                                "count_kind": "static-site-not-runtime-count",
+                                "requested_bytes": None,
+                            },
+                        }
+                    )
+            self.generic_visit(node)
+
+    visitor = LoopVisitor()
+    for statement in function.body:
+        visitor.visit(statement)
+    return findings
+
+
 def audit_python(text: str, path: str) -> list[dict[str, Any]]:
     """Return producer-only findings; syntax errors and unsupported cases skip."""
     try:
@@ -476,4 +752,5 @@ def audit_python(text: str, path: str) -> list[dict[str, Any]]:
             finding = _candidate(function, position, bindings, path, scope)
             if finding is not None:
                 findings.append(finding)
+        findings.extend(_loop_allocations(function, bindings, path, scope))
     return findings

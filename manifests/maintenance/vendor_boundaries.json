@@ -48,14 +48,6 @@
         "cublasSetStream": 2
       }
     },
-    "src/cc/cuda_state.cuh": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
-      "references": {
-        "cublasDgemm": 1
-      }
-    },
     "src/cc/df_source_cuda.cu": {
       "classification": "migration",
       "contract": "#1890",
@@ -80,16 +72,6 @@
         "cublasDdot": 1,
         "cublasDgemm": 2,
         "cublasSetPointerMode": 2
-      }
-    },
-    "src/posthf/cuda_transform.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Post-HF contraction/transform owners still couple equations to direct vendor matrix/vector calls; preserve source residency and numerical gates during migration.",
-      "references": {
-        "cublasDaxpy": 2,
-        "cublasDgemm": 2,
-        "cublasGetVersion": 1
       }
     },
     "src/posthf/ri_mp2_cuda.cu": {
@@ -485,15 +467,26 @@
       "reason": "TensorIR CUDA provider templates own dense primitives, admitted reductions and provider provenance; scientific generators consume semantic operations.",
       "references": {
         "cublasCreate": 1,
+        "cublasDaxpy": 1,
         "cublasDestroy": 1,
         "cublasDgemm": 1,
         "cublasDgemmStridedBatched": 1,
+        "cublasGetVersion": 1,
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1,
         "cublasSetWorkspace": 1,
         "cublasSgemm": 1,
         "cublasSgemmStridedBatched": 1
+      }
+    },
+    "src/tensor/cuda_square_linalg.hpp": {
+      "classification": "provider",
+      "contract": "src/solver/generalized_eigen.hpp",
+      "reason": "Borrowed square FP64 column-major GEMM and lower-triangular solve lowering for shared generalized-eigen phases; stream, handle modes, workspace and numerical admission remain with the owner.",
+      "references": {
+        "cublasDgemmStridedBatched": 1,
+        "cublasDtrsmBatched": 1
       }
     },
     "src/tensor/cuda_symmetric_product.cuh": {
@@ -521,7 +514,6 @@
       "contract": "#1890",
       "reason": "GFN prepared execution owns handles and generalized eigensolve work; migrate solver/tensor choices without changing occupation or precision admission.",
       "references": {
-        "cublasDtrsmBatched": 1,
         "cublasGetMathMode": 1,
         "cublasGetPointerMode": 1,
         "cublasGetStream": 1,

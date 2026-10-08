@@ -354,11 +354,16 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # its build-bound graph provenance is replayed from the admitted manifest.
 # Lazy source-product reuse changes only compilation preparation and telemetry;
 # native requirements, work windows, host reserves and reductions remain audited.
+# Optional device AO maps now preserve the native geometry allowance; bind the
+# extracted admission helper independently as well as its endpoint call site.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "c4d9a037cee42a996325d5c8b0e02ef1fe93c3682a56a610f4444d5e6ba06b53"
+    "b3f70cbe30432a9e998622f42e513bfa2e8fbb0d16513abbfc3cddf71479dfe1"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
+)
+STATIONARY_DEVICE_AO_MAP_RESERVE_CONTRACT_SHA256 = (
+    "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
 )
 STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
     "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
@@ -760,6 +765,7 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
         "_stationary_resident_ao_cache",
         "ensure",
         "_request",
+        "_stationary_device_ao_map_reserve",
     )
     owners = {}
     for name in names:
@@ -771,7 +777,9 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
         if len(candidates) != 1:
             raise RuntimeError("stationary CUDA resident AO policy owner is ambiguous")
         owners[name] = candidates[0]
-    wrapper, endpoint, cache, ensure, request = (owners[name] for name in names)
+    wrapper, endpoint, cache, ensure, request, device_reserve = (
+        owners[name] for name in names
+    )
     label = "stationary CUDA resident AO policy"
     for owner in (wrapper, endpoint, ensure, request, cache):
         defaults = {
@@ -822,10 +830,8 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
         (
             (
                 'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
-                "    dense_device_bound = (grid_plan.peak_bytes + source_bytes + "
-                "sum(value.peak_bytes for value in tensor_plans.values()))\n"
-                "    ao_map_reserve = min(ao_map_reserve, "
-                "max(0, max_device_bytes - dense_device_bound))"
+                "    ao_map_reserve = _stationary_device_ao_map_reserve("
+                "layout, ao_map_reserve, max_device_bytes)"
             ),
             "host_bound += ao_map_reserve",
             (
@@ -840,6 +846,22 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
                 "ao_maps.feature_task(ao, ao_maps.domain, begin, end - begin, ingredients))"
             ),
             "task.layout.require_derivative_order(2 if needs_first else 1)",
+        ),
+        label=label,
+    )
+    _require_ast_fragments(
+        device_reserve,
+        (
+            (
+                "dense_device_bound = (layout.grid_plan.peak_bytes + "
+                "layout.source_resources.allocation_bytes + "
+                "sum(value.peak_bytes for value in layout.tensor_plans.values()))"
+            ),
+            (
+                "available = max_device_bytes - dense_device_bound - "
+                "layout.native_geometry_reserve"
+            ),
+            "return min(requested_bytes, max(0, available))",
         ),
         label=label,
     )
@@ -1438,6 +1460,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         raise RuntimeError("stationary CUDA default AO membership changed")
     for name, expected in (
         ("_stationary_ao_map_reserve", STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256),
+        (
+            "_stationary_device_ao_map_reserve",
+            STATIONARY_DEVICE_AO_MAP_RESERVE_CONTRACT_SHA256,
+        ),
         ("_stationary_resident_ao_cache", STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256),
     ):
         helpers = [

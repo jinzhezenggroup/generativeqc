@@ -174,8 +174,10 @@ struct Xc {
   tensor::PanelProductDiagnostic diagnostic{};
   struct BatchPlan { std::size_t device_bytes{}; } batch;
   std::size_t batch_calls{}, batch_tiles{}, batch_budget{};
-  void prepare_point_batches(std::size_t tiles, std::size_t budget) {
+  bool batch_compact{};
+  void prepare_point_batches(std::size_t tiles, std::size_t budget, bool compact) {
     ++batch_calls; batch_tiles = tiles; batch_budget = budget;
+    batch_compact = compact;
     batch.device_bytes = admitted.precision.arithmetic.is_strict_fp64() && budget >= 64 ? 64 : 0;
   }
   const BatchPlan& point_batch_plan() const { return batch; }
@@ -198,6 +200,10 @@ struct Xc {
   }
 };
 int main() {
+  for (unsigned compact = 0; compact < 3; ++compact) {
+    unsetenv("GENERATIVEQC_CUDA_XC_COMPACT_BATCH");
+    if (compact)
+      setenv("GENERATIVEQC_CUDA_XC_COMPACT_BATCH", compact == 1 ? "0" : "1", 1);
   for (bool budgeted : {false, true}) {
     runtime::active_device_resource_ledger = budgeted
         ? std::make_shared<runtime::DeviceResourceLedger>() : nullptr;
@@ -248,6 +254,7 @@ int main() {
     const bool requested = batching != 1 && batching != 4;
     const bool batched = !budgeted && (batching == 0 || batching == 3) && !mixed_density;
     assert(owner.batch_calls == (requested ? 1 : 0));
+    assert(owner.batch_compact == (requested && compact != 1));
     assert(owner.batch_tiles == (batching == 0 || batching == 5 ? 32 : requested ? 4 : 0));
     assert(owner.batch_budget == (budgeted ? 0 : batching == 0 ? 32 * 1024 * 1024 : batching == 3 ? 4096 : 0));
     assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0) + (batched ? 64 : 0));
@@ -266,6 +273,7 @@ int main() {
   }
   }
   runtime::active_device_resource_ledger.reset();
+  }
 }
 """
     )

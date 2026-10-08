@@ -50,6 +50,9 @@ _ALLOCATORS = frozenset(
         "cudaMallocHost",
     ]
 )
+_HOST_REALLOCATORS = frozenset(["realloc"])
+_DEVICE_RELEASES = frozenset(["cudaFree", "cudaFreeAsync"])
+_HOST_RELEASES = frozenset(["free", "cudaFreeHost"])
 _SYNCS = frozenset(
     ["cudaDeviceSynchronize", "cudaStreamSynchronize", "cudaEventSynchronize"]
 )
@@ -459,11 +462,19 @@ def _sites(clean: str, function: Function, calls: list[Call]) -> list[Site]:
         name = call.name.removeprefix("std::")
         kind = None
         if name in _ALLOCATORS:
+            # cudaMallocHost allocates page-locked *host* memory; the broad
+            # cudaMalloc* prefix would misclassify this as a device buffer.
             kind = (
                 "device-allocation"
-                if name.startswith("cudaMalloc")
+                if name in {"cudaMalloc", "cudaMallocManaged", "cudaMallocAsync"}
                 else "host-allocation"
             )
+        elif name in _HOST_REALLOCATORS:
+            kind = "host-reallocation"
+        elif name in _DEVICE_RELEASES:
+            kind = "device-release"
+        elif name in _HOST_RELEASES:
+            kind = "host-release"
         elif name in _SYNCS:
             kind = "synchronization"
         elif name in _TRANSFERS:

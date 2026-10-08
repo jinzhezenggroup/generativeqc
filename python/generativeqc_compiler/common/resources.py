@@ -88,11 +88,11 @@ class ResourceBudget:
         """Effective caps; reserve uses exact integer arithmetic for large sizes."""
         numerator, denominator = float(self.headroom_fraction).as_integer_ratio()
 
-        def remaining(value: typing.Any, reserve: typing.Any = 0) -> typing.Any:
+        def remaining(value: int, reserve: int = 0) -> int:
             headroom = (value * numerator + denominator - 1) // denominator
             return max(0, value - headroom - reserve)
 
-        limits = {}
+        limits: dict[str, int] = {}
         for name, value, reserve in (
             ("host", self.host_bytes, self.host_reserve_bytes),
             ("device", self.device_bytes, self.device_reserve_bytes),
@@ -142,7 +142,10 @@ class ResourceIdentity:
             self, "topology", json.dumps(topology, sort_keys=True, allow_nan=False)
         )
         observables = tuple(sorted(set(self.observables)))
-        if not observables or any(not isinstance(x, str) or not x for x in observables):
+        if not observables or any(
+            not isinstance(x, str) or not x
+            for x in typing.cast("tuple[object, ...]", observables)
+        ):
             raise ValueError("resource identity requires requested observables")
         object.__setattr__(self, "observables", observables)
 
@@ -392,22 +395,27 @@ class ResourcePlan:
         for row in record["requests"]:
             candidates = tuple(
                 ResourceCandidate(
-                    **{
-                        **candidate,
-                        "estimates": tuple(
-                            ResourceEstimate(**e) for e in candidate["estimates"]
-                        ),
-                    }
+                    name=candidate["name"],
+                    mode=candidate["mode"],
+                    estimates=tuple(
+                        ResourceEstimate(**estimate)
+                        for estimate in candidate["estimates"]
+                    ),
+                    relative_cost=candidate["relative_cost"],
+                    decisions=tuple(
+                        tuple(decision) for decision in candidate["decisions"]
+                    ),
                 )
                 for candidate in row["candidates"]
             )
             requests.append(
                 ResourceRequest(
-                    **{
-                        **row,
-                        "identity": ResourceIdentity(**row["identity"]),
-                        "candidates": candidates,
-                    }
+                    name=row["name"],
+                    identity=ResourceIdentity(**row["identity"]),
+                    candidates=candidates,
+                    scope_exclusions=tuple(row["scope_exclusions"]),
+                    unsupported_reason=row["unsupported_reason"],
+                    infeasible_reason=row["infeasible_reason"],
                 )
             )
         plan = cls(
@@ -485,6 +493,8 @@ def plan_resources(
             feasible.append((key, selections))
     if feasible:
         return ResourcePlan(budget, requests, min(feasible)[1], "feasible")
+    if closest is None:
+        raise RuntimeError("resource planner found no candidate combination")
     _, selections, peaks, estimates = closest
     failures = {
         space: {
@@ -652,8 +662,10 @@ class ResourceSession:
         while needed:
             attempted.add(self.plan.selections)
             created = {}
+            failed_owner = needed[0]
             try:
                 for name in needed:
+                    failed_owner = name
                     owner = self.factories[name](self.plan)
                     if not callable(getattr(owner, "close", None)):
                         raise TypeError(
@@ -676,7 +688,7 @@ class ResourceSession:
                 self.fallbacks.append(
                     {
                         "phase": phase,
-                        "failed_owner": name,
+                        "failed_owner": failed_owner,
                         "space": error.space,
                         "reason": str(error),
                         "from_plan": self.plan.identity,

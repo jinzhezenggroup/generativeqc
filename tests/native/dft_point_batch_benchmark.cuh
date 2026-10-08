@@ -1,7 +1,7 @@
-/** Scheduling-only fixed-density XC endpoints, not SCF/force promotion evidence.
+/** Fixed-density XC endpoints, not SCF/force promotion evidence.
  * Keep 256-point maps, FP64 canonical points and generated contractions in both
  * arms. Discovery, optional preparation, publication and work are explicit. */
-void point_batch_benchmark(const char* original, const char* moved) {
+void point_batch_benchmark(const char* original, const char* moved, bool compact = false) {
   using namespace mapped_density_test;
   constexpr std::size_t tile = 256;
   for (unsigned geometry = 0; geometry < 2; ++geometry) {
@@ -22,7 +22,9 @@ void point_batch_benchmark(const char* original, const char* moved) {
       const auto admission = cuda_xc_ao_selection_resources(plan.layout());
       require(plan.select_local_ao(1e-16, admission.host_peak_bytes), "point batch map discovery");
       const auto batch_started = std::chrono::steady_clock::now();
-      plan.prepare_point_batches(route ? 32 : 1, 32ULL << 20);
+      // Isolate compact contractions from the already-default point batching.
+      // The original point-batch experiment still compares against one tile.
+      plan.prepare_point_batches(route || compact ? 32 : 1, 32ULL << 20, route && compact);
       batch_preparation[route] = elapsed(batch_started);
       preparation[route] = elapsed(started);
     }
@@ -55,6 +57,9 @@ void point_batch_benchmark(const char* original, const char* moved) {
             std::max(potential_error, std::abs(potentials[0][entry] - potentials[1][entry]));
         close(potentials[0][entry], potentials[1][entry], "point batch potential parity", 1e-8);
       }
+      if (compact)
+        require(energies[0] == energies[1] && potentials[0] == potentials[1],
+                "compact benchmark changed original tile accumulation");
     }
     for (unsigned route = 0; route < 2; ++route) {
       const auto& fixture = *fixtures[route];
@@ -65,42 +70,50 @@ void point_batch_benchmark(const char* original, const char* moved) {
       const auto submissions = 1 + (grid.point_count() - 1) / (batch.tiles * tile);
       auto ordered = samples[route];
       std::sort(ordered.begin() + 1, ordered.end());
-      std::cout << std::setprecision(12) << "point_batch_endpoint atoms=" << molecule.atoms.size()
-                << " nao=" << basis.nao << " geometry=" << geometry << " route=" << route
-                << " points=" << grid.point_count() << " tile_points=" << tile
-                << " tiles_per_submission=" << batch.tiles
-                << " point_submissions_per_evaluation=" << submissions << " max_point_ctas="
-                << (std::min(batch.tiles * tile, grid.point_count()) + 31) / 32
-                << " point_threads=32 tiles=" << work.tiles << " empty_tiles=" << work.empty_tiles
-                << " selected_point_ao_visits=" << work.point_ao_visits
-                << " selected_point_ao_square=" << work.point_ao_square_sum
-                << " dense_point_ao_square=" << work.dense_point_ao_square_sum
-                << " ao_jet_values_per_evaluation=" << work.point_ao_visits * plan.layout().jets
-                << " density_submissions_per_evaluation=" << work.tiles - work.empty_tiles
-                << " potential_contraction_submissions_per_evaluation="
-                << work.tiles - work.empty_tiles
-                << " empty_total_submissions_per_evaluation=" << work.empty_tiles
-                << " matrix_scatter_elements_per_evaluation=" << work.point_ao_square_sum / tile
-                << " geometry_prepare_s=" << geometry_seconds << " prepare_s=" << preparation[route]
-                << " discovery_s=" << work.discovery_seconds
-                << " batch_prepare_s=" << batch_preparation[route]
-                << " original_arena_bytes=" << fixture.allocation_bytes
-                << " additional_batch_bytes=" << batch.device_bytes
-                << " retained_arena_bytes=" << fixture.allocation_bytes + batch.device_bytes
-                << " host_map_peak_bytes=" << work.host_peak_bytes
-                << " setup_h2d_bytes=" << movement.setup_h2d_bytes
-                << " discovery_d2h_bytes=" << work.discovery_d2h_bytes
-                << " input_h2d_bytes=" << movement.evaluations * d.size() * sizeof(double)
-                << " input_upload_synchronizations=" << movement.evaluations
-                << " discovery_synchronizations=" << work.tiles
-                << " output_d2h_bytes=" << movement.output_d2h_bytes
-                << " synchronizations=" << movement.synchronizations
-                << " evaluations=" << movement.evaluations
-                << " potential_calls=" << movement.potential_calls
-                << " potential_summands=" << movement.potential_summands
-                << " point_gathers=0 descriptor_transfers=0 concurrent_scatters=0"
-                << " cold_s=" << samples[route][0] << " warm_median_s=" << ordered[3]
-                << " max_energy_error=" << energy_error << " max_v_error=" << potential_error;
+      std::cout
+          << std::setprecision(12) << "point_batch_endpoint atoms=" << molecule.atoms.size()
+          << " nao=" << basis.nao << " geometry=" << geometry << " route=" << route
+          << " points=" << grid.point_count() << " tile_points=" << tile
+          << " tiles_per_submission=" << batch.tiles << " compact_contractions=" << batch.compact
+          << " compact_groups=" << batch.compact_groups << " compact_tiles=" << batch.compact_tiles
+          << " point_submissions_per_evaluation=" << submissions
+          << " max_point_ctas=" << (std::min(batch.tiles * tile, grid.point_count()) + 31) / 32
+          << " point_threads=32 tiles=" << work.tiles << " empty_tiles=" << work.empty_tiles
+          << " selected_point_ao_visits=" << work.point_ao_visits
+          << " selected_point_ao_square=" << work.point_ao_square_sum
+          << " dense_point_ao_square=" << work.dense_point_ao_square_sum
+          << " ao_jet_values_per_evaluation=" << work.point_ao_visits * plan.layout().jets
+          << " density_submissions_per_evaluation="
+          << batch.compact_groups + work.tiles - work.empty_tiles - batch.compact_nonempty_tiles
+          << " feature_submissions_per_evaluation="
+          << batch.compact_groups + work.tiles - batch.compact_tiles
+          << " potential_contraction_submissions_per_evaluation="
+          << batch.compact_groups + work.tiles - work.empty_tiles - batch.compact_nonempty_tiles
+          << " ordered_scatter_submissions_per_evaluation=" << batch.compact_groups
+          << " empty_total_submissions_per_evaluation="
+          << work.empty_tiles - (batch.compact_tiles - batch.compact_nonempty_tiles)
+          << " selected_matrix_elements_per_evaluation=" << work.point_ao_square_sum / tile
+          << " geometry_prepare_s=" << geometry_seconds << " prepare_s=" << preparation[route]
+          << " discovery_s=" << work.discovery_seconds
+          << " batch_prepare_s=" << batch_preparation[route]
+          << " original_arena_bytes=" << fixture.allocation_bytes
+          << " additional_batch_bytes=" << batch.device_bytes
+          << " retained_arena_bytes=" << fixture.allocation_bytes + batch.device_bytes
+          << " host_map_peak_bytes=" << work.host_peak_bytes
+          << " setup_h2d_bytes=" << movement.setup_h2d_bytes
+          << " discovery_d2h_bytes=" << work.discovery_d2h_bytes
+          << " input_h2d_bytes=" << movement.evaluations * d.size() * sizeof(double)
+          << " input_upload_synchronizations=" << movement.evaluations
+          << " discovery_synchronizations=" << work.tiles
+          << " output_d2h_bytes=" << movement.output_d2h_bytes
+          << " synchronizations=" << movement.synchronizations
+          << " evaluations=" << movement.evaluations
+          << " potential_calls=" << movement.potential_calls
+          << " potential_summands=" << movement.potential_summands
+          << " descriptor_setup_h2d_bytes=" << batch.descriptor_bytes
+          << " point_gathers=0 descriptor_transfers_per_evaluation=0 concurrent_scatters=0"
+          << " cold_s=" << samples[route][0] << " warm_median_s=" << ordered[3]
+          << " max_energy_error=" << energy_error << " max_v_error=" << potential_error;
       for (std::size_t sample = 0; sample < samples[route].size(); ++sample)
         std::cout << " sample" << sample << "_s=" << samples[route][sample];
       std::cout << std::endl;

@@ -74,6 +74,16 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             registers=72,
             shared_bytes=8704,
         ),
+        *(
+            resource(f"{token}(double*)")
+            for token in (
+                "batch_density_products",
+                "batch_density_features",
+                "batch_potential_panels",
+                "batch_local_potentials",
+                "batch_ordered_scatter",
+            )
+        ),
         # Compiled but inactive variants must not contaminate the selected region.
         resource(
             "generativeqc::dft::cuda_xc_detail::evaluate_points<5, false, false>(double*)",
@@ -148,7 +158,12 @@ def test_automatic_point_resource_envelope_retains_fallback(
     )
     assert evidence.profitability.spill_bytes == (48 if reachable else 0)
     with pytest.raises(ValueError, match="binding identity is stale"):
-        replace(evidence, shape=replace(evidence.shape, point_batching=not enabled))
+        replace(
+            evidence,
+            shape=replace(
+                evidence.shape, point_batching=not enabled, compact_batching=None
+            ),
+        )
     with pytest.raises(TypeError, match="point-batching selector must be boolean"):
         replace(evidence.shape, point_batching=1)
 
@@ -166,6 +181,90 @@ def test_missing_reachable_batch_kernel_fails_closed() -> None:
             target=TARGET,
             source_identity="missing-default-batch",
         )
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        None,
+        "batch_density_products",
+        "batch_density_features",
+        "batch_potential_panels",
+        "batch_local_potentials",
+        "batch_ordered_scatter",
+    ],
+)
+def test_compact_batch_evidence_covers_fallback_and_every_stage(
+    missing: str | None,
+) -> None:
+    """An explicit compact candidate cannot hide an unmeasured stage or fallback."""
+    shape = GridXcCompiledResourceShape(4096, 256, 96, 2, True, True, True)
+    tokens = (
+        "batch_density_products",
+        "batch_density_features",
+        "batch_potential_panels",
+        "batch_local_potentials",
+        "batch_ordered_scatter",
+    )
+    rows = (
+        *(row for row in pbe_resources() if not row.function.startswith("batch_")),
+        *(
+            resource(f"{token}(double*)", registers=104)
+            for token in tokens
+            if token != missing
+        ),
+    )
+    options = {
+        "shape": shape,
+        "functional": "PBE",
+        "target": TARGET,
+        "source_identity": "compact-batch",
+    }
+    if missing is not None:
+        with pytest.raises(ValueError, match="missing"):
+            native_grid_xc_compiled_region_evidence(rows, **options)
+        return
+    evidence = native_grid_xc_compiled_region_evidence(rows, **options)
+    names = {row.function for _, scope in evidence.scopes for row in scope}
+    assert all(f"{token}(double*)" in names for token in tokens)
+    assert any("tiled_density_product<false>" in name for name in names)
+    assert any("tiled_potential" in name for name in names)
+    assert evidence.profitability.compiled_registers_per_thread == 104
+
+
+def test_compact_batch_selector_requires_multiple_point_tiles() -> None:
+    with pytest.raises(ValueError, match="multiple point tiles"):
+        GridXcCompiledResourceShape(256, 256, 96, 2, compact_batching=True)
+    with pytest.raises(ValueError, match="multiple point tiles"):
+        GridXcCompiledResourceShape(
+            512, 256, 96, 2, point_batching=False, compact_batching=True
+        )
+
+
+@pytest.mark.parametrize("points", [256, 512])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_automatic_compact_resource_envelope_retains_every_reachable_stage(
+    points: int, enabled: bool
+) -> None:
+    """The promoted default cannot hide batch pressure or its bounded fallback."""
+    shape = GridXcCompiledResourceShape(
+        points, 256, 96, 2, ao_radial_reuse=True, point_batching=enabled
+    )
+    assert shape.compact_batching is (enabled and points > 256)
+    rows = tuple(
+        row for row in pbe_resources() if not row.function.startswith("batch_")
+    )
+    options = {
+        "shape": shape,
+        "functional": "PBE",
+        "target": TARGET,
+        "source_identity": "compact-default",
+    }
+    if shape.compact_batching:
+        with pytest.raises(ValueError, match="missing.*density-product"):
+            native_grid_xc_compiled_region_evidence(rows, **options)
+    else:
+        native_grid_xc_compiled_region_evidence(rows, **options)
 
 
 @pytest.mark.parametrize(
@@ -209,6 +308,16 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
         resource("tiled_density_product<false>(double*)", registers=250),
         resource("density_features<true>(double*)", registers=250),
         resource("tiled_potential(double*)", registers=250),
+        *(
+            resource(f"{token}(double*)")
+            for token in (
+                "batch_density_products",
+                "batch_density_features",
+                "batch_potential_panels",
+                "batch_local_potentials",
+                "batch_ordered_scatter",
+            )
+        ),
     )
     evidence = native_grid_xc_compiled_region_evidence(
         rows,

@@ -37,10 +37,19 @@ from generativeqc_compiler.common.provenance import (
 from generativeqc_compiler.tensor.cuda_dtype import compile_options
 from generativeqc_compiler.tensor.cuda_execute import (
     CudaArtifact,
+    CudaExecution,
     PreparedCuda,
     compile_cuda,
 )
 from generativeqc_compiler.tensor.cuda_resident_emit import resident_source
+
+if typing.TYPE_CHECKING:
+    from typing_extensions import override as _override
+else:
+    # Keep source-checkout imports independent of optional typing backports.
+    def _override(method: typing.Any) -> typing.Any:
+        return method
+
 
 RESIDENT_SCHEMA = "generativeqc.tensor.resident/1"
 
@@ -209,7 +218,7 @@ class DeviceTensor:
     alone never confers physical compatibility.
     """
 
-    owner: object
+    owner: PreparedResident
     name: str
     generation: int
 
@@ -431,5 +440,12 @@ class PreparedResident(PreparedCuda):
         """Upload one named input into an already-running resident owner."""
         self.upload({name: host_array})
 
-    def execute(self, feeds: typing.Any, *, profile: typing.Any = False) -> typing.Any:
+    @_override
+    def execute(
+        self,
+        feeds: typing.Mapping[str, typing.Any],
+        *,
+        profile: bool = False,
+        diagnostics: bool = False,
+    ) -> CudaExecution:
         raise RuntimeError("use explicit upload/run/download on a resident owner")

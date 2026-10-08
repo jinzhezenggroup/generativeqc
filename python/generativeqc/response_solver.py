@@ -548,9 +548,12 @@ def _solve_single(
     best_residual = beta
     best_basis = ()
     restart = min(n, options.restart, options.max_iterations)
+    # The Arnoldi matrix has a fixed shape for every restart; retaining its
+    # storage avoids a fresh NumPy allocation at each solver cycle.
+    h = np.zeros((restart + 1, restart))
     while total_steps < options.max_iterations:
         basis = [engine.scale(residual, 1.0 / beta)]
-        h = np.zeros((restart + 1, restart))
+        h.fill(0.0)
         base_x = engine.copy(best_x)
         steps_this_cycle = 0
         candidate_x = engine.copy(best_x)
@@ -1233,6 +1236,9 @@ def _block_solve(
     norms = rhs_norms.copy()
     last_start = 0
     breakdown = False
+    # The projected RHS never exceeds max_columns; reinitialize the active
+    # slice for every RHS instead of allocating inside the solve loop.
+    projected_rhs_workspace = np.zeros(max_columns)
 
     def apply(value: typing.Any) -> typing.Any:
         # Match the scalar solver's action-only scope. Residual subtraction
@@ -1277,7 +1283,8 @@ def _block_solve(
         q_new = len(basis)
         projected = hbar[:q_new, :q]
         for column in range(nrhs):
-            rhs_projected = np.zeros(q_new)
+            rhs_projected = projected_rhs_workspace[:q_new]
+            rhs_projected.fill(0.0)
             rhs_projected[:q_initial] = initial_coefficients[:, column]
             coefficients, *_ = np.linalg.lstsq(projected, rhs_projected, rcond=None)
             solution[column] = engine.combination(

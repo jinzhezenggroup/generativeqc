@@ -23,6 +23,15 @@ change Lambda's program equations, Q order, scalar fallback or independent
 expanded audit; the residual and response owners select their tile capacities
 independently.
 
+The shared DF matrix lowerer folds operand permutation views into contraction
+labels and uses GEMM transpose flags for contiguous row/column groups. It keeps
+the order within each flattened group and the leading Q batch axes unchanged;
+interleaved axes still require explicit packing. Remaining packing buffers are
+ordinary TensorIR nodes charged to the native arena. This applies to staged
+Lambda transpose/parameter/factor actions and the DF residual without changing
+the scalar fallback or expanded acceptance audit. It does not infer symmetry
+from equal dimensions or reconstruct omitted `ovvv`/`vvvv` blocks.
+
 `cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
 cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 `fock_response_df_cuda` supplies same-space Fock matrices, including internal

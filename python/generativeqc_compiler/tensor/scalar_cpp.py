@@ -43,6 +43,136 @@ def _identifier(name: str, label: str) -> str:
     return name
 
 
+def _binary_expression(op: str, left: str, right: str) -> str:
+    """Shared native spelling for an existing binary scalar IR operation."""
+    operator = {"multiply": "*", "divide": "/", "add": "+", "subtract": "-"}[op]
+    return f"{left} {operator} {right}"
+
+
+def _sqrt_expression(value: str, namespace: str = "std::") -> str:
+    return f"{namespace}sqrt({value})"
+
+
+def native_scalar_read(value: str, *, accessors: tuple[str, ...] = ()) -> str:
+    """Admit a closed name/member/index read, optionally a declared accessor.
+
+    Index expressions contain only integer literals or names joined by +, - or
+    *. Calls, commas, assignments, nested reads and arbitrary C++ expressions
+    are excluded. A method may explicitly bind a known pure one-index accessor;
+    its argument must be one identifier, never consumer-provided arithmetic.
+    This validates physical spelling, not the implementation of that accessor.
+    """
+    if not isinstance(accessors, tuple) or len(set(accessors)) != len(accessors):
+        raise ValueError("native read accessors must be unique declared names")
+    for accessor in accessors:
+        _identifier(accessor, "native read accessor")
+    identifier = r"[A-Za-z_]\w*"
+    name = rf"{identifier}(?:(?:\.|::){identifier})*"
+    atom = rf"(?:{name}|(?:0|[1-9][0-9]*)(?:u|U|ul|UL|ull|ULL)?)"
+    index = rf"{atom}(?:\s*[+*-]\s*{atom})*"
+    pattern = rf"(?P<name>{name})(?:\((?P<argument>{identifier})\))?(?:\[{index}\])*"
+    match = re.fullmatch(pattern, value) if isinstance(value, str) else None
+    if match is None or (
+        match["argument"] is not None and match["name"] not in accessors
+    ):
+        raise ValueError(
+            "native scalar read requires a declared name/member/index/accessor"
+        )
+    return value
+
+
+def emit_scalar_cpp_statement(
+    program: Program,
+    *,
+    bindings: typing.Mapping[str, str],
+    target: str,
+    form: str = "=",
+    math_namespace: str = "std::",
+    read_accessors: tuple[str, ...] = (),
+) -> str:
+    """Render one closed FP64 graph as a native assignment without temporaries.
+
+    This is the existing scalar algebra's caller-owned-checks and ordered-native-
+    sums execution contract. It deliberately admits only single-output trees of
+    input/constant, binary unit signed sums, multiply, divide and sqrt. It neither
+    adds checks nor promises unfused arithmetic: the enclosing translation unit
+    retains its compiler contraction policy. Compound assignment requires the
+    exact first operand to be the target input. Read bindings must be pure C++
+    names/member/index reads or explicitly declared one-index accessors, never
+    arithmetic supplied by the consumer. Targets cannot be accessor calls.
+
+    It is a spelling/scheduling mode, not a second scalar graph or evaluator.
+    Existing emit_scalar_cpp's default helper output is unchanged.
+    """
+    if not isinstance(program, Program) or len(program.outputs) != 1:
+        raise ValueError("scalar statement requires one TensorIR output")
+    if form not in ("=", "+=", "-=", "/=") or math_namespace not in ("", "std::"):
+        raise ValueError("unsupported native scalar statement spelling")
+    program = prepare_for_backend(program, "scalar", preserve_reduction_order=True)
+    nodes = program.live_nodes
+    if any(n.spec.shape or n.spec.dtype != "float64" for n in nodes):
+        raise ValueError("scalar statement requires scalar float64 values")
+    inputs = {n.attrs["name"] for n in nodes if n.op == "input"}
+    if set(bindings) != inputs:
+        raise ValueError("scalar statement bindings must name every input exactly")
+
+    bound = {
+        name: native_scalar_read(value, accessors=read_accessors)
+        for name, value in bindings.items()
+    }
+    target = native_scalar_read(target)
+
+    def expression(node: Node) -> tuple[str, int]:
+        if node.op == "input":
+            return bound[node.attrs["name"]], 4
+        if node.op == "constant":
+            return _literal(node.attrs["values"][0]), 4
+        if node.op == "sqrt":
+            return _sqrt_expression(expression(node.inputs[0])[0], math_namespace), 4
+        if node.op not in ("add", "multiply", "divide"):
+            raise ValueError("unsupported native scalar statement primitive")
+        op = node.op
+        if op == "add":
+            coefficients = node.attrs["coefficients"]
+            if len(node.inputs) != 2 or coefficients not in (
+                ((1, 1), (1, 1)),
+                ((1, 1), (-1, 1)),
+            ):
+                raise ValueError("native statement requires binary unit signed sum")
+            op = "add" if coefficients[1] == (1, 1) else "subtract"
+        precedence = 1 if op in ("add", "subtract") else 2
+        left, lp = expression(node.inputs[0])
+        right, rp = expression(node.inputs[1])
+        if lp < precedence:
+            left = f"({left})"
+        # Equal-precedence right subtrees must retain the original grouping.
+        if rp <= precedence:
+            right = f"({right})"
+        return _binary_expression(op, left, right), precedence
+
+    root = next(iter(program.outputs.values()))
+    if form != "=":
+        expected = {
+            "+=": ("add", ((1, 1), (1, 1))),
+            "-=": ("add", ((1, 1), (-1, 1))),
+            "/=": ("divide", None),
+        }[form]
+        if (
+            root.op != expected[0]
+            or len(root.inputs) != 2
+            or (expected[1] is not None and root.attrs["coefficients"] != expected[1])
+            or root.inputs[0].op != "input"
+            or bound[root.inputs[0].attrs["name"]] != target
+        ):
+            raise ValueError("compound assignment requires its exact target seed")
+        # Validate the complete tree even when the seed is implicit in spelling.
+        expression(root)
+        code = expression(root.inputs[1])[0]
+    else:
+        code = expression(root)[0]
+    return f"{target} {form} {code};"
+
+
 def _scalar_constant(node: typing.Any) -> Fraction | None:
     if node.op != "constant":
         return None
@@ -275,7 +405,8 @@ def emit_scalar_cpp(
             elif simplify_bounded and _scalar_constant(right) == 1:
                 lines.append(f"  const double {name} = {ref(left)};")
             else:
-                lines.append(f"  const double {name} = {ref(left)} * {ref(right)};")
+                expression = _binary_expression("multiply", ref(left), ref(right))
+                lines.append(f"  const double {name} = {expression};")
         elif node.op == "divide":
             numerator, denominator_node = node.inputs
             denominator = ref(denominator_node)
@@ -286,9 +417,8 @@ def emit_scalar_cpp(
             elif simplify_bounded and _scalar_constant(denominator_node) == 1:
                 lines.append(f"  const double {name} = {ref(numerator)};")
             else:
-                lines.append(
-                    f"  const double {name} = {ref(numerator)} / {denominator};"
-                )
+                expression = _binary_expression("divide", ref(numerator), denominator)
+                lines.append(f"  const double {name} = {expression};")
         elif node.op == "scaled_bilinear":
             if direct_scaled_bilinear:
                 a_node, b_node, c_node, d_node, _e_node, _f_node = node.inputs
@@ -321,7 +451,7 @@ def emit_scalar_cpp(
             if node.op == "sqrt":
                 if check_runtime:
                     lines.append(f"  if ({child} < 0.0) return false;")
-                expression = f"std::sqrt({child})"
+                expression = _sqrt_expression(child)
             elif node.op == "log":
                 if check_runtime:
                     lines.append(f"  if (!({child} > 0.0)) return false;")

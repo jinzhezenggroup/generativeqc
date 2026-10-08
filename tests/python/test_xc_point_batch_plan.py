@@ -19,11 +19,14 @@ def test_emitted_point_batch_resource_admission(
         "#include <limits>\n#include <stdexcept>\n#include <vector>\n"
         "enum class CudaXcAoPrecision { Fp64, Fp32ComputeFp64Storage };\n"
         "struct CudaXcLayout {\n"
-        "  std::size_t npoint{103}, tile_points{16}, nao{64}, jets{4}, spins{2}, feature_terms{5};\n"
+        "  std::size_t npoint{103}, tile_points{16}, nao{64}, jets{4}, spins{2}, feature_terms{5}, work_jets{4};\n"
         "  bool local_ao{}, response{};\n"
         "  CudaXcAoPrecision ao_precision{CudaXcAoPrecision::Fp64};\n};\n"
         "struct CudaXcPointBatchPlan {\n"
-        "  std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};\n};\n"
+        "  std::size_t tiles{1}, ao_elements{}, feature_elements{}, total_elements{}, device_bytes{};\n"
+        "  std::size_t work_elements{}, potential_elements{}, descriptor_bytes{}; bool compact{};\n"
+        "  std::size_t compact_groups{},compact_tiles{},compact_nonempty_tiles{};\n};\n"
+        "struct CudaXcCompactTile { std::size_t begin{},count{},active{},map_offset{},ao_offset{},work_offset{},potential_offset{}; };\n"
         + emit_native_xc_point_batch_plan()
         + r"""
 int main() {

@@ -1,5 +1,6 @@
 #include "scf/cuda_fock_execution.hpp"
 
+#include <cmath>
 #include <limits>
 
 #include "scf/cuda/df_jk_internal.hpp"
@@ -187,6 +188,64 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
         matrix_elements, derivatives, detail);
   }
   return status;
+}
+
+generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
+    const PreparedFockPlan& correction, const double* density, const double* beta,
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail) {
+  derivatives.clear();
+  const auto binding = prepared_cuda_direct_derivative_binding(correction);
+  auto* source = correction.cuda_direct_source();
+  const auto& model = correction.strategy();
+  const auto& spec = model.spec;
+  // The DF main owner is not allowed to act as a Direct LR source. An
+  // independent correction must retain exactly its original radial identity,
+  // screening/omega/coefficients and first-derivative device capability.
+  const bool isolated_lr =
+      model.backend == FockBackend::Cuda && spec.derivative_order == 0 && !spec.coulomb.present &&
+      spec.exchange.present && spec.exchange.approximation == FockApproximation::Exact &&
+      spec.exchange.op == FockOperator::LongRange && spec.exchange.omega > 0.0 &&
+      std::isfinite(spec.exchange.omega) && std::isfinite(spec.exchange.coefficient);
+  if (!binding || !source || !isolated_lr || density == nullptr ||
+      matrix_elements != binding.nbf * binding.nbf ||
+      (spec.spin == FockSpin::Unrestricted ? beta == nullptr : beta != nullptr)) {
+    detail =
+        "prepared LR derivative requires an isolated exact CUDA correction with a first-order "
+        "lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
+  // The canonical Direct RSH consumer publishes [J, SR-K, LR-K]. Selecting
+  // only its LR term with coefficients (0, 0, cLR) avoids a second radial
+  // derivative implementation. The first two rows must be *exactly* zero:
+  // silently accepting work from them could double-count DF primary J/K.
+  std::vector<double> three_sources;
+  auto status = execute_cuda_direct_shell_rsh_energy_derivatives_device(
+      source, spec.spin, 0.0, 0.0, spec.exchange.coefficient, spec.exchange.omega, density, beta,
+      matrix_elements, three_sources, detail);
+  if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+    status = execute_cuda_direct_rsh_energy_derivatives_device(
+        source, spec.spin, 0.0, 0.0, spec.exchange.coefficient, spec.exchange.omega, density, beta,
+        matrix_elements, three_sources, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+  const auto coordinates = binding.coordinates_per_item;
+  if (three_sources.size() != 3 * coordinates) {
+    detail = "prepared LR derivative returned an incompatible source layout";
+    return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+  }
+  for (std::size_t i = 0; i < three_sources.size(); ++i) {
+    if (!std::isfinite(three_sources[i])) {
+      detail = "prepared LR derivative is nonfinite";
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    if (i < 2 * coordinates && three_sources[i] != 0.0) {
+      detail = "prepared LR derivative unexpectedly published full-range or short-range work";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+  }
+  derivatives.assign(three_sources.begin() + 2 * coordinates, three_sources.end());
+  detail.clear();
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(

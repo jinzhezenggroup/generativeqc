@@ -231,7 +231,7 @@ __global__ void gather_density_factor(const double* density, I global_n, I n, I 
 def _emit_panels() -> str:
     lines = [
         r"""
-__global__ void compact_potential_panels(const double* ao, const double* coefficients,
+__device__ void compact_potential_panels_body(const double* ao, const double* coefficients,
     const double* weights, I n, I count, I spins, I terms, I work_jets, double* work, int* error) {
   const I panel = count*n;
   for (I i = I(blockIdx.x)*blockDim.x+threadIdx.x; i < spins*panel;
@@ -255,19 +255,26 @@ __global__ void compact_potential_panels(const double* ao, const double* coeffic
         )
         lines.append("    }")
     lines.append("  }\n}\n")
+    lines.append(r"""
+__global__ void compact_potential_panels(const double* ao, const double* coefficients,
+    const double* weights, I n, I count, I spins, I terms, I work_jets, double* work, int* error) {
+  compact_potential_panels_body(ao, coefficients, weights, n, count, spins, terms, work_jets,
+                                work, error);
+}
+""")
     return "\n".join(lines)
 
 
 _TILED_TEMPLATE = r"""
 // Padding avoids bank conflicts when the AO lane reads a transposed panel.
 // Partial tiles still participate in both barriers and load exact zero padding.
-template <bool Mixed>
-__global__ void tiled_density_product(const double* density, const double* ao, I n, I count,
-                                      I work_jets, double* work, int* error, const size_t* ao_ids, I full_n) {
+template <bool Mixed, bool ActiveRowsOnly = false>
+__device__ void tiled_density_product_body(const double* density, const double* ao, I n, I count,
+    I work_jets, double* work, int* error, const size_t* ao_ids, I full_n, I spin_jet) {
   __shared__ double d[@TILE@][@PAD@], a[@TILE@][@PAD@];
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = I(blockIdx.x)*@TILE@+x, point = I(blockIdx.y)*@TILE@+y;
-  const I spin = blockIdx.z/work_jets, jet = blockIdx.z%work_jets;
+  const I spin = spin_jet/work_jets, jet = spin_jet%work_jets;
   const I panel = count*n;
   const double* source = ao+jet*panel;
   const double* matrix = density+spin*full_n*full_n;
@@ -295,7 +302,10 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
       a[y][x] = point < count && col < n ? source[point*n+col] : 0.0;
     }
     __syncthreads();
-    for (I k = 0; k < @TILE@; ++k) {
+    // Only discarded outputs may skip arithmetic. Every lane still loads the
+    // shared panels and reaches both barriers; valid sums keep their order.
+    if (!ActiveRowsOnly || (mu < n && point < count))
+      for (I k = 0; k < @TILE@; ++k) {
       if constexpr (Mixed)
         value = __dadd_rn(
             value, static_cast<double>(__fmul_rn(__double2float_rn(d[x][k]),
@@ -309,6 +319,13 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
     work[(spin*work_jets+jet)*panel+point*n+mu] = finite(value, error, 1);
 }
 
+template <bool Mixed>
+__global__ void tiled_density_product(const double* density, const double* ao, I n, I count,
+    I work_jets, double* work, int* error, const size_t* ao_ids, I full_n) {
+  tiled_density_product_body<Mixed>(density, ao, n, count, work_jets, work, error, ao_ids,
+                                     full_n, blockIdx.z);
+}
+
 // One triangle is authoritative, including on diagonal and partial blocks.
 // A compact linear block domain enumerates only tile_mu <= tile_nu instead of
 // launching the unused lower half of a square grid. One lane decodes the tile
@@ -318,9 +335,10 @@ __global__ void tiled_density_product(const double* density, const double* ao, I
 // order while avoiding a separate kernel launch for every point tile. The first
 // point tile owns output initialization, so admitted tiled execution needs no
 // matrix-sized or totals memset before every XC evaluation.
-__global__ void tiled_potential(const double* ao, const double* work, I n, I count,
+template <bool ActivePairsOnly = false>
+__device__ void tiled_potential_body(const double* ao, const double* work, I n, I count,
                                 I work_jets, const double* point_totals, double* potential,
-                                double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n) {
+    double* totals, bool accumulate, int* error, const size_t* ao_ids, I full_n, I spin) {
   __shared__ I tile_mu, tile_nu;
   if (threadIdx.x == 0 && threadIdx.y == 0) {
     const I pair = blockIdx.x;
@@ -339,7 +357,7 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
   __shared__ double am[@TILE@][@PAD@], an[@TILE@][@PAD@], wm[@TILE@][@PAD@], wn[@TILE@][@PAD@];
   const I x = threadIdx.x, y = threadIdx.y;
   const I mu = tile_mu*@TILE@+x, nu = tile_nu*@TILE@+y;
-  const I nu_load = tile_nu*@TILE@+x, spin = blockIdx.z, panel = count*n;
+  const I nu_load = tile_nu*@TILE@+x, panel = count*n;
   double value = 0.0;
   for (I jet = 0; jet < work_jets; ++jet) {
     const double* a = ao+jet*panel;
@@ -351,7 +369,8 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
       wm[y][x] = p < count && mu < n ? w[p*n+mu] : 0.0;
       wn[y][x] = p < count && nu_load < n ? w[p*n+nu_load] : 0.0;
       __syncthreads();
-      for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
+      if (!ActivePairsOnly || (mu < n && nu < n && mu <= nu))
+        for (I k = 0; k < @TILE@; ++k) value += am[k][x]*wn[k][y]+wm[k][x]*an[k][y];
       __syncthreads();
     }
   }
@@ -363,7 +382,7 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
     potential[index] = value;
     potential[(spin*full_n+col)*full_n+row] = value;
   }
-  if (point_totals && blockIdx.x == 0 && blockIdx.z == 0 && threadIdx.y == 0 && threadIdx.x < 3) {
+  if (point_totals && blockIdx.x == 0 && spin == 0 && threadIdx.y == 0 && threadIdx.x < 3) {
     const I channel = threadIdx.x;
     double sum = 0.0;
     for (I p = 0; p < count; ++p) sum += point_totals[channel*count+p];
@@ -374,6 +393,13 @@ __global__ void tiled_potential(const double* ao, const double* work, I n, I cou
 // The compiler owns schedule admission; native only supplies borrowed buffers.
 // Tiny shapes and dimensions outside the two-dimensional launch domain retain
 // the bounded grid-stride scalar schedule. Both cover the same scientific work.
+__global__ void tiled_potential(const double* ao, const double* work, I n, I count,
+    I work_jets, const double* point_totals, double* potential, double* totals,
+    bool accumulate, int* error, const size_t* ao_ids, I full_n) {
+  tiled_potential_body(ao, work, n, count, work_jets, point_totals, potential, totals,
+                        accumulate, error, ao_ids, full_n, blockIdx.z);
+}
+
 inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
   if (n < @TILE@ || count < @TILE@ || spins < 1 || work_jets < 1 ||
       work_jets > 65535 || spins > 65535/work_jets) return false;

@@ -19,6 +19,10 @@ def main() -> None:
     # separately retained by the native owner, never guessed during generation.
     sources = (
         "src/scf/cuda/eigensolver.cpp",
+        "src/solver/generalized_eigen.hpp",
+        "src/solver/cuda/generalized_eigen.hpp",
+        "src/solver/cuda/generalized_eigen.cpp",
+        "src/tensor/cuda_square_linalg.hpp",
         "src/solver/cuda/symmetric_eigen_provider.hpp",
         "src/solver/cuda/cusolver_compat.hpp",
         "src/solver/cuda/symmetric_eigen_provider.cpp",

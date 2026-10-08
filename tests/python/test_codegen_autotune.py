@@ -831,8 +831,9 @@ def test_autotune_candidate_artifact_includes_static_model(
     assert not (tmp_path / "manifest.json").exists()
 
 
+@pytest.mark.parametrize("production_failure", [False, True])
 def test_fock_autotune_rejects_candidates_without_baseline_runtime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, production_failure: bool
 ) -> None:
     """Never promote a Fock proposal when its shipped baseline was absent."""
 
@@ -881,7 +882,9 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
         return {
             "key": selected_trial.key,
             "object": tmp_path / f"{selected_trial.schedule_id}.o",
-            "returncode": 0,
+            "returncode": int(
+                production_failure and args[-1] == "_production_resources"
+            ),
             "timed_out": False,
             "duration_seconds": 0.01,
             "diagnostics": "",
@@ -898,11 +901,12 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
             args=[], returncode=0, stdout="", stderr=""
         ),
     )
+    runtime_trial = baseline if production_failure else candidate
     runtime = {
-        "shell_class": candidate.spec.name,
-        "consumer": candidate.consumer.value,
-        "schedule_id": candidate.schedule_id,
-        "trial_key": candidate.key,
+        "shell_class": runtime_trial.spec.name,
+        "consumer": runtime_trial.consumer.value,
+        "schedule_id": runtime_trial.schedule_id,
+        "trial_key": runtime_trial.key,
         "maximum_fock": 0.0,
         "maximum_fock_error": 0.0,
         "speedup": 1.2,
@@ -956,6 +960,19 @@ def test_fock_autotune_rejects_candidates_without_baseline_runtime(
     )
 
     report = _run_autotune(arguments)
+
+    if production_failure:
+        baseline_row = next(
+            row for row in report["candidates"] if row["trial_key"] == baseline.key
+        )
+        # The later candidate lacks runtime evidence; its rejection must not
+        # contaminate this initially accepted baseline's production failure.
+        assert baseline_row["rejection_reasons"] == [
+            "production validation: NVCC compilation failed"
+        ]
+        assert baseline_row["accepted"] is False
+        assert report["winners"] == []
+        return
 
     candidate_row = next(
         row for row in report["candidates"] if row["trial_key"] == candidate.key
