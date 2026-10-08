@@ -11,7 +11,7 @@ import pytest
 from tools.audit_producer_work import ReceiptError
 from tools.ratchet_producer_schedule import CASES, DEPENDENCIES, SCHEDULE, audit
 
-SCHEDULE_FIXTURE = '''from dataclasses import dataclass
+SCHEDULE_FIXTURE = """from dataclasses import dataclass
 from .df_occupied_gram_cuda import emit_occupied_gram
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ def projected_exchange_schedule(n, auxiliaries, rank, capacity, dense_row_blocks
     if generated >= n * dense_row_blocks * dense_output_blocks:
         return ProjectedExchangeSchedule()
     return ProjectedExchangeSchedule(rows, blocks, generated)
-'''
+"""
 
 
 def _git(root: Path, *arguments: str) -> str:
@@ -129,6 +129,7 @@ def test_requires_full_base_sha(checkout: tuple[Path, str]) -> None:
     root, _ = checkout
     with pytest.raises(ReceiptError, match="full 40-character"):
         audit(root, "HEAD")
+
 
 def test_cli_imports_without_editable_install() -> None:
     script = Path(__file__).resolve().parents[2] / "tools/ratchet_producer_schedule.py"
