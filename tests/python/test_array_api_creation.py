@@ -91,7 +91,7 @@ def test_create_like_rejects_scientific_relabeling() -> None:
 
 
 def test_capture_context_is_always_restored_on_trace_error() -> None:
-    spec = xp.TensorSpec((xp.Index("i", xp.IndexSpace("ao", "ao", 2)),))
+    spec = xp.TensorSpec((xp.Index("i", xp.IndexSpace("ao", "ao", 2)),), role="input")
     assert not active_capture()
 
     def fail(x: object) -> object:
@@ -125,11 +125,11 @@ def test_explicit_unknown_device_is_not_silently_accepted(
 def test_uniform_creation_rejects_unsupported_implicit_integer_and_dtype() -> None:
     with pytest.raises(TypeError, match="not supported"):
         xp.full((2,), 3)
-    with pytest.raises(TypeError, match="float32 or float64"):
+    with pytest.raises(TypeError, match="float32/float64"):
         xp.ones((2,), dtype=np.int32)
-    with pytest.raises(TypeError, match="float32 or float64"):
+    with pytest.raises(TypeError, match="float32/float64"):
         xp.full_like(np.ones(2), 2, dtype=np.int32)
-    with pytest.raises(ValueError, match="negative"):
+    with pytest.raises(TypeError, match="nonnegative"):
         xp.zeros((-1,))
     with pytest.raises(TypeError, match="nonnegative"):
         xp.zeros((True,))
