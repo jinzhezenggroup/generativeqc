@@ -20,7 +20,10 @@ from generativeqc_compiler.xc._generated_native_semilocal import (
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_CODES,
 )
-from generativeqc_compiler.xc.automatic_semilocal import AUTOMATIC_FUNCTIONAL_CODE_BASE
+from generativeqc_compiler.xc.automatic_semilocal import (
+    AUTOMATIC_FUNCTIONAL_CODE_BASE,
+    automatic_functional_ingredients,
+)
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN_VERSION
 from generativeqc_compiler.xc.spec import FunctionalSpec
 
@@ -62,10 +65,8 @@ def _scf_xc_points(
         raise TypeError(
             "SCF point evaluator requires a registered curated or automatic functional code"
         )
-    if automatic and required_ingredients not in (
-        ("rho",),
-        ("rho", "sigma"),
-        ("rho", "sigma", "tau"),
+    if automatic and required_ingredients != automatic_functional_ingredients(
+        functional
     ):
         raise ValueError("automatic Libxc point evaluation requires exact ingredients")
     raw_rho, raw_gradient = np.asarray(rho), np.asarray(gradient)

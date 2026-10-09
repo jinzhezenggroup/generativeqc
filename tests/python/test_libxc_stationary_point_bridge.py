@@ -5,10 +5,15 @@ These fixed-feature checks do not certify a converged molecular force endpoint.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
-from generativeqc import _native
+from generativeqc import Calculator, GridSpec, KsOptions, _native, _stationary_cpu
+from generativeqc._dft_gradient import StationaryKsState
 from generativeqc._ks_snapshot import _scf_xc_points
+from generativeqc.ks import scf_domain_for_method
+from generativeqc_compiler.dft import NativeAO
 from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
 from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
@@ -16,6 +21,11 @@ from generativeqc_compiler.method.stationary_gradient import (
 )
 from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
 from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from generativeqc_compiler.method.spec import MethodIR
 
 
 @pytest.mark.parametrize(
@@ -112,7 +122,7 @@ def test_imported_point_bridge_keeps_unsupported_requests_closed() -> None:
             required_ingredients=("rho", "sigma"),
             scales=(0.5, 1.0),
         )
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError, match="not registered"):
         _scf_xc_points(
             library,
             0x3FFFF,
@@ -120,3 +130,76 @@ def test_imported_point_bridge_keeps_unsupported_requests_closed() -> None:
             gradient,
             required_ingredients=("rho", "sigma"),
         )
+
+
+@pytest.mark.parametrize("ingredients", (("rho",), ("rho", "sigma")))
+def test_imported_mgga_cannot_hide_required_tau(ingredients: tuple[str, ...]) -> None:
+    library = _native.load_library(device="cpu")
+    with pytest.raises(ValueError, match="exact ingredients"):
+        _scf_xc_points(
+            library,
+            automatic_functional_code("MGGA_X_LTA"),
+            np.array([[0.42], [0.31]]),
+            np.zeros((2, 1, 3)),
+            required_ingredients=ingredients,
+        )
+
+
+@pytest.mark.parametrize("code", (0x1000300B8, 0x100000001))
+def test_imported_point_code_cannot_wrap_to_registered_program(code: int) -> None:
+    library = _native.load_library(device="cpu")
+    with pytest.raises(ValueError, match="not registered"):
+        _scf_xc_points(
+            library,
+            code,
+            np.array([[0.42], [0.31]]),
+            np.zeros((2, 1, 3)),
+            required_ingredients=("rho", "sigma"),
+        )
+
+
+def test_imported_live_snapshot_reaches_actual_stationary_point_model(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    calculator = Calculator(
+        method="libxc:GGA_X_APBE",
+        basis="sto-3g",
+        device="cpu",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=16, angular_polar=6, angular_azimuth=12)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+    )
+    assert scf_domain_for_method("libxc:GGA_X_APBE") == LIBXC_WORK_DOMAIN
+
+    class PlanObserved(Exception):
+        pass
+
+    def observe_plan(
+        method: MethodIR, mean_field: StationaryMeanField
+    ) -> StationaryGradientPlan:
+        plan = StationaryGradientPlan(method, mean_field)
+        assert plan.mean_field.point_model == LIBXC_WORK_DOMAIN
+        # Stop at the real diagnostic's plan boundary. This tests the live
+        # handoff without claiming a qualified molecular force endpoint.
+        raise PlanObserved
+
+    with (
+        calculator.prepare_batch([atoms]) as batch,
+        NativeAO(atoms, basis="sto-3g") as basis,
+    ):
+        batch.execute(strict=True, properties=("energy",))
+        state = StationaryKsState.from_native(batch, basis)
+        source = state._source
+        assert source.functional_code == automatic_functional_code("GGA_X_APBE")
+        values = source.evaluate_xc_points(
+            source.functional, np.array([[0.42], [0.31]]), np.zeros((2, 1, 3))
+        )
+        assert all(np.isfinite(value).all() for value in values.values())
+        monkeypatch.setattr(_stationary_cpu, "StationaryGradientPlan", observe_plan)
+        with pytest.raises(PlanObserved):
+            _stationary_cpu.complete_rks_gradient_diagnostic(
+                state, basis, cache=tmp_path
+            )
