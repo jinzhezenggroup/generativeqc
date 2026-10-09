@@ -663,6 +663,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     total_shell_quartet_tiles =
         requested_bounded_direct_streaming ? 0 : plan.total_shell_quartet_tiles;
   }
+  // Query the authoritative batched grid limit before any device geometry or
+  // retained plan state is changed. A provider error must leave a warm plan
+  // reusable at its previous geometry. Single-system and bounded-streaming
+  // plans never consume this property.
+  std::size_t maximum_compaction_grid_y = 0;
+  if (requested_quartet_direct && !requested_bounded_direct_streaming && batch_size > 1) {
+    cudaDeviceProp compaction_properties{};
+    const auto compaction_target_error = cudaGetDeviceProperties(&compaction_properties, device_id);
+    if (compaction_target_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(compaction_target_error));
+      return outputs;
+    }
+    maximum_compaction_grid_y = static_cast<std::size_t>(compaction_properties.maxGridSize[1]);
+  }
   // Per-item mixed-capable tile census: the FP32-error budget is evaluated for
   // every system on its own count. Bounded streaming keeps zeros, which the
   // policy refuses rather than guesses, and the largest census is the batch
@@ -1960,20 +1974,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   dim3 direct_shell_quartet_compaction_grid(1U, 1U, 1U);
   if (requested_quartet_direct && !requested_bounded_direct_streaming) {
     direct_shell_quartet_compaction_grid = dim3(blocks_for(total_shell_quartets), 1U, 1U);
-    // Keep the authoritative grid limit for multi-system compaction, including
-    // providers without a complete device-attribute route. Single-system and
-    // bounded-streaming plans never consume this property.
-    std::size_t maximum_compaction_grid_y = 0;
-    if (batch_size > 1) {
-      cudaDeviceProp compaction_properties{};
-      const auto compaction_target_error =
-          cudaGetDeviceProperties(&compaction_properties, device_id);
-      if (compaction_target_error != cudaSuccess) {
-        fill_global_failure(outputs, cuda_status(compaction_target_error));
-        return outputs;
-      }
-      maximum_compaction_grid_y = static_cast<std::size_t>(compaction_properties.maxGridSize[1]);
-    }
     if (batch_size > 1 && batch_size <= maximum_compaction_grid_y) {
       const std::int64_t first_count =
           host.system_shell_quartet_offsets[1] - host.system_shell_quartet_offsets[0];

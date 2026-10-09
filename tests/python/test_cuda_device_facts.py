@@ -7,8 +7,12 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,15 +27,201 @@ def test_hf_driver_uses_qualified_facts_without_unbatched_grid_query() -> None:
         "runtime::cuda_device_facts(device_id, direct_target, direct_device_name)"
         in setup
     )
-    assert "cudaGetDeviceProperties(" not in setup
+    query = setup.index("cudaGetDeviceProperties(")
+    guard = (
+        "if (requested_quartet_direct && !requested_bounded_direct_streaming "
+        "&& batch_size > 1)"
+    )
+    assert setup.index(guard) < query
+    assert setup.index("first_setup ? requested_bounded_direct_streaming") < query
+    assert query < setup.index("++plan.execution_generation")
+    assert query < setup.index("copy_to_device(positions,")
+    assert setup.count("cudaGetDeviceProperties(") == 1
+    assert "compaction_properties.maxGridSize[1]" in setup
+    assert "fill_global_failure(outputs, cuda_status(compaction_target_error))" in setup
     grid = source[compaction:]
     assert (
         "if (requested_quartet_direct && !requested_bounded_direct_streaming)" in grid
     )
-    assert grid.index("if (batch_size > 1)") < grid.index("cudaGetDeviceProperties(")
-    assert "compaction_properties.maxGridSize[1]" in grid
+    assert "cudaGetDeviceProperties(" not in grid
     assert "batch_size <= maximum_compaction_grid_y" in grid
-    assert "fill_global_failure(outputs, cuda_status(compaction_target_error))" in grid
+
+
+def test_compaction_query_failure_preserves_cached_geometry(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Inject a provider error into actual route/query/upload blocks in source order.
+
+    This host trace models a retained Fleet plan; it does not emulate CUDA or
+    establish that a real provider naturally produces this recoverable error.
+    """
+    source = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
+
+    def block_at(start: int) -> str:
+        opening = source.index("{", start)
+        depth = 1
+        end = opening + 1
+        while depth:
+            depth += (source[end] == "{") - (source[end] == "}")
+            end += 1
+        return source[start:end]
+
+    query_start = source.index(
+        "if (requested_quartet_direct && !requested_bounded_direct_streaming "
+        "&& batch_size > 1)"
+    )
+    route_start = source.index(
+        "if (requested_quartet_direct && first_setup && !requested_bounded_direct_streaming)"
+    )
+    route_else = source.index("else if (requested_quartet_direct)", route_start)
+    route_end = route_else + len(block_at(route_else))
+    upload_start = source.rfind(
+        "if (geometry_changed) {",
+        0,
+        source.index("const generativeqc_status position_status ="),
+    )
+    operations = "\n".join(
+        text
+        for _, text in sorted(
+            (
+                (route_start, source[route_start:route_end]),
+                (query_start, block_at(query_start)),
+                (upload_start, block_at(upload_start)),
+            )
+        )
+    )
+    probe = tmp_path / "compaction_geometry.cpp"
+    probe.write_text(
+        r"""
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <vector>
+using generativeqc_status = int;
+constexpr int cudaSuccess = 0, GENERATIVEQC_STATUS_SUCCESS = 0;
+constexpr int GENERATIVEQC_STATUS_INVALID_ARGUMENT = 4;
+constexpr unsigned kMixedFockMinimumAngularOrder = 2;
+struct cudaDeviceProp { int maxGridSize[3]{}; };
+struct RhfBucketItem { int status{}; };
+struct GeneratedShellTask { char value; };
+struct Plan {
+  std::vector<double> cached_positions{1.0};
+  bool initialized = true, bounded_direct_streaming = false;
+  std::size_t total_shell_quartet_tiles = 10;
+};
+struct Host {
+  std::vector<double> positions;
+  int shell_direct_ao_offsets{}, shell_angular{}, system_shell_pair_offsets{};
+  int shell_pair_first{}, shell_pair_second{};
+};
+std::size_t layout_tile_count = 10, arena_bytes = 500;
+namespace detail {
+constexpr std::size_t kDirectFixedTopologyTileLimit = 1000;
+struct DirectQuartetTaskLayout {
+  std::size_t shell_quartet_count{}, exact_tile_count{};
+};
+bool make_direct_quartet_task_layout(int, int, int, int, int, unsigned,
+                                   DirectQuartetTaskLayout& layout) {
+  layout.shell_quartet_count = 8;
+  layout.exact_tile_count = layout_tile_count;
+  return true;
+}
+}
+int injected_error = 0, queries = 0, uploads = 0;
+int cudaGetDeviceProperties(cudaDeviceProp* properties, int device) {
+  assert(device == 7);
+  ++queries;
+  properties->maxGridSize[1] = 23;
+  return injected_error;
+}
+int cuda_status(int error) { return 1000 + error; }
+void fill_global_failure(std::vector<RhfBucketItem>& outputs, int status) {
+  for (auto& output : outputs) output.status = status;
+}
+int copy_to_device(double* out, const double* in, std::size_t bytes, int stream) {
+  assert(stream == 9);
+  ++uploads;
+  std::copy_n(in, bytes / sizeof(double), out);
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+std::vector<RhfBucketItem> execute(Plan& plan, Host host, double& device_position,
+    bool requested_quartet_direct, bool requested_bounded_direct_streaming,
+    std::size_t batch_size) {
+  std::vector<RhfBucketItem> outputs(batch_size);
+  const int device_id = 7;
+  struct { int stream_ = 9; } resources;
+  double* positions = &device_position;
+  const bool first_setup = !plan.initialized;
+  const bool geometry_changed = first_setup || plan.cached_positions != host.positions;
+  const std::size_t total_shell_quartets = 8;
+  struct {
+    struct { std::size_t arena_maximum_bytes; } fixed_topology;
+  } direct_schedule{{arena_bytes}};
+  detail::DirectQuartetTaskLayout direct_task_layout{};
+  std::size_t total_shell_quartet_tiles = 0;
+  std::size_t maximum_compaction_grid_y = 0;
+"""
+        + operations
+        + r"""
+  assert(maximum_compaction_grid_y ==
+      (requested_quartet_direct && !requested_bounded_direct_streaming && batch_size > 1
+       ? 23U : 0U));
+  plan.cached_positions = host.positions;
+  return outputs;
+}
+int main() {
+  Plan plan;
+  double device_position = 1.0;
+  injected_error = 30;
+  auto failed = execute(plan, {{2.0}}, device_position, true, false, 2);
+  for (const auto& item : failed) assert(item.status == 1030);
+  assert(queries == 1 && uploads == 0);
+  assert(plan.cached_positions[0] == 1.0 && device_position == 1.0);
+  injected_error = 0;
+  auto retry = execute(plan, {{1.0}}, device_position, true, false, 2);
+  for (const auto& item : retry) assert(item.status == 0);
+  assert(queries == 2 && uploads == 0 && device_position == 1.0);
+  execute(plan, {{2.0}}, device_position, true, false, 2);
+  assert(queries == 3 && uploads == 1 && device_position == 2.0);
+  for (bool quartet : {false, true})
+    for (bool bounded : {false, true})
+      for (std::size_t batch : {1U, 2U}) {
+        const int before = queries;
+        plan.bounded_direct_streaming = bounded;
+        execute(plan, {{2.0}}, device_position, quartet, bounded, batch);
+        assert(queries - before == int(quartet && !bounded && batch > 1));
+      }
+  // The production admission block can select bounded streaming only after
+  // exact tile counts are known. Querying the initial false value is incorrect.
+  for (std::size_t tiles : {1001U, 501U}) {
+    Plan cold;
+    cold.initialized = false;
+    layout_tile_count = tiles;
+    const int before = queries;
+    injected_error = 30;
+    auto bounded = execute(cold, {{2.0}}, device_position, true, false, 2);
+    for (const auto& item : bounded) assert(item.status == 0);
+    assert(queries == before);
+  }
+  // A captured plan keeps its bounded choice even when current inputs would
+  // initially request the fixed-topology route. The reverse is also honored.
+  layout_tile_count = 10;
+  plan.bounded_direct_streaming = true;
+  const int before = queries;
+  auto inherited = execute(plan, {{2.0}}, device_position, true, false, 2);
+  for (const auto& item : inherited) assert(item.status == 0);
+  assert(queries == before);
+  plan.bounded_direct_streaming = false;
+  injected_error = 0;
+  execute(plan, {{2.0}}, device_position, true, true, 2);
+  assert(queries == before + 1);
+}
+"""
+    )
+    binary = required_native_cxx.build_executable(
+        [probe], tmp_path / "compaction_geometry", compile_args=["-std=c++17", "-O2"]
+    )
+    subprocess.run([str(binary)], check=True, timeout=10)
 
 
 HEADER = r"""

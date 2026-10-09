@@ -258,6 +258,24 @@ and the host/ownership gates pass without changing a scientific ledger shard.
 
 ## Revisit and disposition
 
+### Review correction: query failure before retained geometry mutation
+
+The reviewed candidate queried the batched grid limit after uploading changed
+positions and rebuilding primitive pairs. A retained Fleet plan can survive a
+CUDA error, so an injected recoverable property-query failure during A-to-B reuse
+left device geometry B paired with the previously published geometry key A.
+Retrying A could then skip its required geometry upload. This is a host
+fault-injection finding, not a reproduced real-device provider failure.
+
+Move only that conditional query after final bounded-route admission and before
+plan/device mutation. Single-system and bounded routes still omit the query;
+multi-system grid admission, authoritative provider fallback and typed errors
+are unchanged. Compiled host query/upload traces cover failure and A-to-B-to-A
+retry; the existing independent recurrence/provider suites remain applicable.
+The frozen GPU hashes and timings above describe the pre-review candidate.
+This query-order correction has host validation only, with no new CUDA binary,
+sanitizer run or endpoint timing claimed.
+
 The combined candidate is retained on the evidence above; the earlier
 recurrence-only and unused-eigensolver experiments are not retained defaults.
 
