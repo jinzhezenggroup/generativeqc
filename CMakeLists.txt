@@ -416,6 +416,13 @@ endif()
 if(GENERATIVEQC_BUILD_TESTS)
   generativeqc_add_native_tests()
   if(GENERATIVEQC_BUILD_CLI)
+    add_test(NAME generativeqc_cli_methodir_codegen
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_cli_method_catalog_codegen.py")
+    add_test(NAME generativeqc_cli_comp_method_catalog
+             COMMAND generativeqc_cli methods --compositions --json)
+    set_tests_properties(generativeqc_cli_comp_method_catalog PROPERTIES
+                         PASS_REGULAR_EXPRESSION "pbe0-rks")
     add_test(NAME generativeqc_cli_methods
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
