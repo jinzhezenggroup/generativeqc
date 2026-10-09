@@ -51,18 +51,28 @@ extern "C" int df_triples_fock_probe(std::size_t o, std::size_t v, std::size_t q
   }
 }
 
-extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size_t q,
-                                         const double* const* inputs, double threshold,
-                                         std::size_t budget, std::size_t caller_bytes,
-                                         std::size_t rows, std::size_t panels,
-                                         double* const* output, double* values, std::size_t* counts,
-                                         char* error, std::size_t error_size) noexcept {
+static int combined_probe_impl(std::size_t o, std::size_t v, std::size_t q,
+                               const double* const* inputs, double threshold, std::size_t budget,
+                               std::size_t caller_bytes, std::size_t rows, std::size_t panels,
+                               double* const* output, double* values, std::size_t* counts,
+                               char* error, std::size_t error_size, int precision,
+                               std::size_t counts_size) noexcept {
   try {
+    if ((precision != 0 && precision != 1) || counts_size < 24 || (precision && counts_size < 29))
+      throw std::invalid_argument("invalid combined precision diagnostic contract");
+    const auto admitted_w =
+        precision
+            ? generativeqc::runtime::PrecisionDirective{generativeqc::runtime::PrecisionDtype::Fp32,
+                                                        generativeqc::runtime::PrecisionDtype::Fp32,
+                                                        generativeqc::runtime::PrecisionDtype::Fp32,
+                                                        "issue1764/df-triples-w-fp32-candidate-v1"}
+            : generativeqc::runtime::strict_fp64_precision();
     const auto* selected = std::getenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS");
     const bool fused = selected && std::string(selected) == "1";
     const auto r = generativeqc::cc::triples::pullback_and_fock_df_cuda(
         o, v, q, inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6],
-        inputs[7], inputs[8], threshold, budget, 0, caller_bytes, rows, panels, true, false, fused);
+        inputs[7], inputs[8], threshold, budget, 0, caller_bytes, rows, panels, true, false, fused,
+        admitted_w);
     if (r.pullback.gap.requested || !r.pullback.eps_o.empty() || !r.pullback.eps_v.empty())
       throw std::runtime_error("combined gap-free response published epsilon cotangents");
     std::copy(r.fock.foo.begin(), r.fock.foo.end(), output[0]);
@@ -99,9 +109,37 @@ extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size
                              r.pullback.scalar_fusion.arithmetic_ops};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
+    if (counts_size >= 29) {
+      const auto& diagnostic = r.pullback.diagnostic;
+      const std::size_t arithmetic[]{diagnostic.w_contraction_compute_bits, diagnostic.fp32_gemms,
+                                     diagnostic.precision_cast_elements,
+                                     std::size_t(diagnostic.resource_fallback),
+                                     diagnostic.fp64_gemms};
+      std::copy(std::begin(arithmetic), std::end(arithmetic), counts + 24);
+    }
     return 0;
   } catch (const std::exception& e) {
     if (error && error_size) std::snprintf(error, error_size, "%s", e.what());
     return 1;
   }
+}
+
+extern "C" int df_triples_combined_probe(std::size_t o, std::size_t v, std::size_t q,
+                                         const double* const* inputs, double threshold,
+                                         std::size_t budget, std::size_t caller_bytes,
+                                         std::size_t rows, std::size_t panels,
+                                         double* const* output, double* values, std::size_t* counts,
+                                         char* error, std::size_t error_size) noexcept {
+  return combined_probe_impl(o, v, q, inputs, threshold, budget, caller_bytes, rows, panels, output,
+                             values, counts, error, error_size, 0, 24);
+}
+
+/** Versioned validation ABI with explicit precision and diagnostic capacity. */
+extern "C" int df_triples_combined_precision_probe_v1(
+    std::size_t o, std::size_t v, std::size_t q, const double* const* inputs, double threshold,
+    std::size_t budget, std::size_t caller_bytes, std::size_t rows, std::size_t panels,
+    int precision, double* const* output, double* values, std::size_t* counts,
+    std::size_t counts_size, char* error, std::size_t error_size) noexcept {
+  return combined_probe_impl(o, v, q, inputs, threshold, budget, caller_bytes, rows, panels, output,
+                             values, counts, error, error_size, precision, counts_size);
 }

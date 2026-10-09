@@ -26,6 +26,7 @@ _SHIM = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "runtime/execution_precision.hpp"
 using Clock = std::chrono::steady_clock;
 double elapsed(Clock::time_point x) {
   return std::chrono::duration<double>(Clock::now() - x).count();
@@ -40,6 +41,8 @@ int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
 bool expected_packed = false;
 bool expected_parallel_gap = false, expected_gap_cotangents = true;
+generativeqc::runtime::PrecisionDirective expected_w;
+std::size_t expected_lambda_interval = 1;
 struct ResourceOwner {
   ResourceOwner() { ++live; }
   ~ResourceOwner() {
@@ -58,6 +61,7 @@ struct Cache {
   }
 };
 namespace runtime {
+using generativeqc::runtime::PrecisionDirective;
 struct ExecutionContext {
   bool cuda_requested() { return true; }
 };
@@ -135,6 +139,12 @@ _TAIL = r"""
 (void)lambda_batch_limit;
 assert(parallel_gap_reduction == expected_parallel_gap);
 assert(request_triples_gap_cotangents == expected_gap_cotangents);
+assert(admitted_triples_w.storage_dtype == expected_w.storage_dtype);
+assert(admitted_triples_w.compute_dtype == expected_w.compute_dtype);
+assert(admitted_triples_w.accumulation_dtype == expected_w.accumulation_dtype);
+assert(admitted_triples_w.qualification == expected_w.qualification);
+assert(admitted_triples_w.math_mode == expected_w.math_mode);
+assert(lambda_true_residual_interval == expected_lambda_interval);
 later_phase(state.budget);
 DFCCSDTResult result;
 result.total_seconds = elapsed(started);
@@ -154,11 +164,21 @@ int main() {
   auto call = [&] {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
                                true, 8, 8, opts, true, expected_packed,
-                               expected_parallel_gap, expected_gap_cotangents, false);
+                               expected_parallel_gap, expected_gap_cotangents, false,
+                               expected_w, expected_lambda_interval);
   };
+  for (bool mixed_w : {false, true})
+  for (std::size_t interval : {1, 30})
   for (bool selected_packed : {false, true})
   for (bool parallel_gap : {false, true})
   for (bool gap_cotangents : {false, true}) {
+  using generativeqc::runtime::PrecisionDtype;
+  expected_w = mixed_w
+      ? runtime::PrecisionDirective{PrecisionDtype::Fp32, PrecisionDtype::Fp32,
+                                    PrecisionDtype::Fp32,
+                                    "issue1764/df-triples-w-fp32-candidate-v1"}
+      : runtime::PrecisionDirective{};
+  expected_lambda_interval = interval;
   expected_packed = selected_packed;
   expected_parallel_gap = parallel_gap;
   expected_gap_cotangents = gap_cotangents;
@@ -242,7 +262,7 @@ int main() {
     return run_df_ccsdt_native_attempt(
         execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
         true, expected_packed, expected_parallel_gap, expected_gap_cotangents,
-        nullptr, 0, 0, nullptr, &comparison);
+        nullptr, 0, 0, nullptr, &comparison, false, expected_w, expected_lambda_interval);
   };
   for (std::size_t output_bytes : {20, 21}) {
     reset();
