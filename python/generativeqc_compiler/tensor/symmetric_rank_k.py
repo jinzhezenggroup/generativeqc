@@ -155,6 +155,25 @@ def symmetric_rank_k_request(
         for value in (left, weights, node, *weights.inputs)
     ):
         raise ValueError("rank-k currently requires strict FP64 storage")
+    source_adapter = TensorLoweringAdapter(program)
+    source_request = source_adapter.request(node, backend="cuda")
+    source_arithmetic = source_adapter.directives[node]
+    if source_arithmetic.storage_dtype != "float64" or any(
+        source_adapter.directives[value] != source_arithmetic
+        for value in (left, weights, *weights.inputs)
+    ):
+        raise ValueError(
+            "rank-k weight and contraction require one strict FP64 schedule"
+        )
+    if source_adapter.precision.strict_audit_dtype != "float64" or any(
+        precision.directive.compute_dtype != "float64"
+        or precision.directive.accumulation_dtype != "float64"
+        or precision.casts
+        or precision.refinement
+        or precision.audit
+        for precision in source_request.precisions
+    ):
+        raise ValueError("rank-k cannot silently change arithmetic or audit")
     update = symmetric_rank_k_update_program(program, output)
     update_root = update.outputs["updated"]
     adapter = TensorLoweringAdapter(update)
@@ -263,6 +282,10 @@ def symmetric_rank_k_request(
     semantics = dict(base.semantics)
     semantics.update(
         parent_node_hash=adapter.hashes[node],
+        source_program_hash=program.logical_hash,
+        source_request_identity=source_request.identity,
+        source_scientific_identity=source_request.scientific_identity or "",
+        source_precision_identity=source_request.precisions[0].identity,
         alpha_input_hash=adapter.hashes[alpha],
         beta_input_hash=adapter.hashes[beta],
         old_output_hash=adapter.hashes[old_output],

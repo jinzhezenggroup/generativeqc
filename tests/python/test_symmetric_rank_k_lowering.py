@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
+from generativeqc_compiler.common.precision import PrecisionDirective
 from generativeqc_compiler.tensor.ir import add, einsum, input_tensor
+from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.precision import lower_precision
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scf import density_program, weighted_density_program
 from generativeqc_compiler.tensor.symmetric_rank_k import (
@@ -52,9 +55,20 @@ def test_rank_k_reuses_original_equation_and_has_one_signed_contract(
         ("output", "transactional-symmetric-overwrite-or-accumulate"),
     )
     update = symmetric_rank_k_update_program(program, name)
+    source_request = TensorLoweringAdapter(program).request(
+        program.outputs[name], backend="cuda"
+    )
     assert request.scientific_identity == update.logical_hash
     assert request.scientific_identity != program.logical_hash
     assert dict(request.semantics)["update_program_hash"] == update.logical_hash
+    assert dict(request.semantics)["source_program_hash"] == program.logical_hash
+    assert dict(request.semantics)["source_request_identity"] == source_request.identity
+    assert dict(request.semantics)["source_scientific_identity"] == (
+        source_request.scientific_identity
+    )
+    assert dict(request.semantics)["source_precision_identity"] == (
+        source_request.precisions[0].identity
+    )
     assert dict(request.semantics)["scalar_update_hash"] == (
         symmetric_rank_k_scalar_update_program().logical_hash
     )
@@ -208,3 +222,38 @@ def test_rank_k_rejects_mixed_precision() -> None:
             ),
             "density",
         )
+
+
+def test_rank_k_rejects_changed_or_forged_source_precision_provenance() -> None:
+    program = density_program(1, 3, spin_count=2, orbital_count=5)
+    with pytest.raises(ValueError, match="cannot silently change arithmetic or audit"):
+        symmetric_rank_k_request(
+            lower_precision(program, {}, strict_audit_dtype="float32"), "density"
+        )
+    root_name = program.debug_names[program.outputs["density"]]
+    with pytest.raises(
+        ValueError, match="unscaled ternary einsum|strict FP64|cannot silently change"
+    ):
+        symmetric_rank_k_request(
+            lower_precision(
+                program,
+                {
+                    root_name: PrecisionDirective(
+                        "float32",
+                        "float32",
+                        "float32",
+                        qualification="test/rank-k-rejected",
+                    )
+                },
+            ),
+            "density",
+        )
+
+    lowered = lower_precision(program, {})
+    provenance = lowered.provenance
+    provenance["precision_request_identity"] = "0" * 64
+    altered = Program(lowered.outputs, lowered.definitions, provenance=provenance)
+    with pytest.raises(
+        ValueError, match="precision request scope or identity mismatch"
+    ):
+        symmetric_rank_k_request(altered, "density")
