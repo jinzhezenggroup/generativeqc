@@ -14,6 +14,7 @@ from generativeqc_compiler.tensor import (
     TensorSpec,
     add,
     broadcast,
+    compare,
     divide,
     dot_test,
     einsum,
@@ -34,6 +35,7 @@ from generativeqc_compiler.tensor import (
 )
 from generativeqc_compiler.tensor import ir as tensor_ir
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.ir import COMPARISONS
 
 RNG = np.random.default_rng(1151)
 TARGET = cuda_target_info("sm_80")
@@ -511,6 +513,54 @@ def test_packed_inputs_use_the_weighted_unpack_adjoint(
         rtol=1e-11,
         atol=1e-11,
     )
+
+
+@pytest.mark.parametrize("op", sorted(COMPARISONS))
+@pytest.mark.parametrize("sign", (1, -1))
+def test_packed_generated_ad_rebuilds_unselected_boolean_diagnostics(
+    op: str, sign: int
+) -> None:
+    space = IndexSpace("packed_bool", "occupied", 2)
+    indices = (Index("i", space), Index("j", space))
+    spec = TensorSpec(
+        indices,
+        symmetries=(Symmetry((1, 0), sign),),
+        representation="spin_orbital",
+        role="parameter",
+        differentiable=True,
+    )
+    layout = PackedLayout(spec)
+    x = input_tensor("x", spec)
+    energy = reduce_sum(multiply(x, x), (0, 1))
+    predicate = compare(op, x, x)
+    program = Program({"energy": energy, "predicate": predicate})
+    packed_x = np.linspace(0.25, 0.75, layout.size)
+    packed_tangent = np.linspace(-0.5, 0.5, layout.size)
+
+    forward = linearize(program, ["x"], outputs=["energy"], packed={"x": layout})
+    reverse = transpose_program(program, ["energy"], inputs=["x"], packed={"x": layout})
+    forward_value = execute(
+        forward.program, {"x": packed_x, "d_x": packed_tangent}
+    ).outputs["d_energy"]
+    reverse_value = execute(
+        reverse.program, {"x": packed_x, "bar_energy": np.asarray(1.0)}
+    ).outputs["bar_x"]
+    assert np.isfinite(forward_value)
+    assert reverse_value.shape == packed_x.shape
+    assert np.isfinite(reverse_value).all()
+    for generated in (forward.program, reverse.program):
+        rebuilt = [node for node in generated.nodes if node.op == op]
+        assert len(rebuilt) == 1
+        assert rebuilt[0].spec.dtype == "bool"
+        assert tuple(index.domain for index in rebuilt[0].spec.indices) == tuple(
+            index.domain for index in predicate.spec.indices
+        )
+        assert all(node.spec.dtype != "bool" for node in generated.live_nodes)
+
+    with pytest.raises(ValueError, match="non-differentiable"):
+        linearize(program, ["x"], outputs=["predicate"], packed={"x": layout})
+    with pytest.raises(ValueError, match="non-differentiable"):
+        transpose_program(program, ["predicate"], inputs=["x"], packed={"x": layout})
 
 
 def test_cc_like_scalar_fixture_builds_cpu_derivative_references() -> None:

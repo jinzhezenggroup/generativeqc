@@ -11,11 +11,13 @@ only primal nodes on a requested dependency path produce new nodes.  A
 requested output with no active tangent becomes an explicit zero-like node,
 so provenance never depends on Python control-flow state.
 
-Slice B generates forward and reverse programs for every primitive.
-Gather/slice use exact incidence matrices and repeated einsum labels use exact
-identity projections.  Packed parameters are expanded through an explicit
-unpack DAG, and their reverse programs apply the weighted transpose; callers
-request this with the ``packed=`` mapping. Dense symmetry-constrained inputs
+Slice B generates forward and reverse programs for every differentiable
+primitive. Non-differentiable comparisons are rebuilt when preserving primal
+definitions but reject if selected for AD. Gather/slice use exact incidence
+matrices and repeated einsum labels use exact identity projections. Packed
+parameters are expanded through an explicit unpack DAG, and their reverse
+programs apply the weighted transpose; callers request this with the
+``packed=`` mapping. Dense symmetry-constrained inputs
 keep their dense storage: forward seeds obey the declared symmetry and reverse
 results use a signed-permutation group projector under the dense inner product,
 without constructing coordinate-incidence matrices.
@@ -32,12 +34,14 @@ from itertools import pairwise
 from types import MappingProxyType
 
 from .ir import (
+    COMPARISONS,
     TRANSCENDENTALS,
     Node,
     _execution_power_exponent,
     add,
     broadcast,
     cast,
+    compare,
     constant,
     divide,
     einsum,
@@ -725,6 +729,8 @@ def _rebuild_node(node: Node, inputs: typing.Any) -> Node:
         )
     if node.op == "cast":
         return cast(inputs[0], node.spec.dtype)
+    if node.op in COMPARISONS:
+        return compare(node.op, *inputs)
     if node.op == "multiply":
         return multiply(*inputs)
     if node.op == "divide":
