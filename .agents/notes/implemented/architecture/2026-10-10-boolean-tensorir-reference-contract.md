@@ -20,7 +20,8 @@ operands and produce Boolean intermediates. Generic frontend arrays may first
 broadcast and promote float32/float64 with explicit casts; scientific domains
 must match exactly. Boolean transpose, reshape, slice, gather, and broadcast
 remain typed views. Numeric arithmetic, reductions, einsum, casts, and AD on
-Boolean graphs reject explicitly.
+Boolean graphs reject explicitly. Floating precision schedules omit Boolean
+values and reject directives that target them.
 
 The NumPy TensorIR interpreter is the bounded reference executor. It checks
 input dtype/shape, finite real inputs, output dtype/shape, detached results, and

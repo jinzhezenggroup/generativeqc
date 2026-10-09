@@ -88,12 +88,14 @@ reshape, transpose, broadcast and gather semantics. Six elementwise comparisons
 (`equal`, `not_equal`, `greater`, `greater_equal`, `less`, `less_equal`, plus
 their Python operators) accept finite real operands and return genuine Boolean
 arrays. Generic comparison operands broadcast and promote within float32/float64;
-scientifically annotated operands must have identical domains. Generic arrays
-accept finite Python float literals as ordinary scalar values, so expressions
-such as `x + 0.5` have eager/compiled parity. The compiler records the exact
-binary value of that Python float. Negative-zero float literals are rejected
-because exact rational constants cannot preserve their sign. Explicitly
-scientific arrays retain the stricter exact-scalar spelling rules.
+scientifically annotated operands must have identical domains. Boolean arrays
+support the shape/view operations listed above in both eager and captured paths,
+but remain excluded from floating arithmetic and reductions. Generic arrays accept
+finite Python float literals as ordinary scalar values, so expressions such as
+`x + 0.5` have eager/compiled parity. The compiler records the exact binary value
+of that Python float. Negative-zero float literals are rejected because exact
+rational constants cannot preserve their sign. Explicitly scientific arrays
+retain the stricter exact-scalar spelling rules.
 
 ## Scientific metadata remains explicit
 

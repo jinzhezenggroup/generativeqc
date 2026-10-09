@@ -53,7 +53,7 @@ float32 = np.dtype("float32")
 float64 = np.dtype("float64")
 
 
-def _symbolic(*values: object) -> bool:
+def _symbolic(*values: object) -> builtins.bool:
     return any(isinstance(value, VibeArray) for value in values)
 
 
@@ -84,13 +84,18 @@ def _check_host_values(value: object) -> None:
             pending.extend(children)
 
 
-def _eager_array(value: object) -> np.ndarray:
+def _eager_data_array(value: object) -> np.ndarray:
     # Reuse the public host boundary before NumPy can invoke foreign array hooks.
     array = asarray(value)
     assert isinstance(array, np.ndarray)
+    return _finite_eager(array)
+
+
+def _eager_array(value: object) -> np.ndarray:
+    array = _eager_data_array(value)
     if array.dtype not in (float32, float64):
         raise TypeError("floating arithmetic requires real float32 or float64 arrays")
-    return _finite_eager(array)
+    return array
 
 
 def _finite_eager(value: typing.Any) -> typing.Any:
@@ -115,7 +120,9 @@ def _eager_scalar(value: object, dtype: np.dtype, name: str) -> np.ndarray:
         return _finite_eager(np.asarray(float(factor), dtype=dtype))
 
 
-def _eager_operands(*values: object, scalars: bool = False) -> tuple[np.ndarray, ...]:
+def _eager_operands(
+    *values: object, scalars: builtins.bool = False
+) -> tuple[np.ndarray, ...]:
     arrays = tuple(
         None
         if scalars and type(value) in (int, float, str, Fraction)
@@ -292,7 +299,7 @@ def reshape(
         return _namespace.reshape(x, shape, indices=indices)
     if indices is not None:
         raise ValueError("explicit TensorIR indices require a symbolic array")
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     return np.reshape(array, _namespace._reshape_shape(shape, array.size))
 
 
@@ -313,7 +320,9 @@ def broadcast_to(
         raise ValueError(
             "explicit TensorIR broadcast metadata requires a symbolic array"
         )
-    return np.broadcast_to(_eager_array(x), _namespace._shape(shape, "broadcast_to"))
+    return np.broadcast_to(
+        _eager_data_array(x), _namespace._shape(shape, "broadcast_to")
+    )
 
 
 def broadcast_shapes(*shapes: tuple[int, ...]) -> tuple[int, ...]:
@@ -331,7 +340,7 @@ def broadcast_arrays(*arrays: object) -> tuple[typing.Any, ...]:
         return ()
     if any(isinstance(value, VibeArray) for value in arrays):
         return _namespace.broadcast_arrays(*arrays)
-    values = tuple(_eager_array(value) for value in arrays)
+    values = tuple(_eager_data_array(value) for value in arrays)
     return tuple(np.broadcast_arrays(*values))
 
 
@@ -339,7 +348,7 @@ def expand_dims(x: object, axis: int | tuple[int, ...]) -> typing.Any:
     """Insert singleton dimensions at unique signed axes in eager or generic symbolic arrays."""
     if isinstance(x, VibeArray):
         return _namespace.expand_dims(x, axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     _namespace._expand_shape(array.shape, axis)
     return np.expand_dims(array, axis)
 
@@ -348,7 +357,7 @@ def squeeze(x: object, axis: int | tuple[int, ...]) -> typing.Any:
     """Remove the specified singleton axes from an eager or generic symbolic array."""
     if isinstance(x, VibeArray):
         return _namespace.squeeze(x, axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     _namespace._squeezed_shape(array.shape, axis)
     return np.squeeze(array, axis=axis)
 
@@ -359,7 +368,7 @@ def moveaxis(
     """Move selected axes to matching destinations, preserving the order of the others."""
     if isinstance(x, VibeArray):
         return _namespace.moveaxis(x, source, destination)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     order = _namespace._moveaxis_order(array.ndim, source, destination)
     return np.transpose(array, order)
 
@@ -372,7 +381,7 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
     """
     if isinstance(x, VibeArray):
         return _namespace.flip(x, axis=axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     axes = (
         tuple(range(array.ndim))
         if axis is None
@@ -388,7 +397,7 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """
     if isinstance(x, VibeArray):
         return _namespace.slice(x, ranges)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     if not isinstance(ranges, tuple) or any(
         not isinstance(bounds, tuple)
         or len(bounds) != 2
@@ -410,7 +419,7 @@ def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
     """Gather a static tuple of in-range positions along the selected axis."""
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     normalized_axis = _namespace._axis(axis, array.ndim, "take")
     if not isinstance(indices, tuple) or any(
         type(index) is not int for index in indices
@@ -426,7 +435,7 @@ def sum(
     *,
     axis: int | tuple[int, ...] | None = None,
     dtype: object = None,
-    keepdims: bool = False,
+    keepdims: builtins.bool = False,
 ) -> typing.Any:
     """Reduce over selected axes without retaining reduced dimensions.
 
@@ -447,7 +456,7 @@ def mean(
     x: object,
     *,
     axis: int | tuple[int, ...] | None = None,
-    keepdims: bool = False,
+    keepdims: builtins.bool = False,
 ) -> typing.Any:
     """Average selected axes, optionally retaining singleton reduced dimensions.
 
@@ -471,7 +480,7 @@ def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
     """Reorder the axes of a host or symbolic array."""
     if isinstance(x, VibeArray):
         return _namespace.permute_dims(x, axes)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     return np.transpose(array, _namespace._permutation(axes, array.ndim))
 
 
@@ -479,7 +488,7 @@ def matrix_transpose(x: object) -> typing.Any:
     """Swap the last two axes of a host or symbolic matrix-like array."""
     if isinstance(x, VibeArray):
         return _namespace.matrix_transpose(x)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     if array.ndim < 2:
         raise ValueError(
             "matrix_transpose requires an array with at least two dimensions"
@@ -564,7 +573,7 @@ def astype(
     dtype: object,
     /,
     *,
-    copy: bool = True,
+    copy: builtins.bool = True,
     device: object = None,
 ) -> typing.Any:
     """Explicit float32/float64 conversion with no implicit device transfer."""
@@ -581,7 +590,7 @@ def astype(
     return _eager_compute(np.array, array, dtype=np.dtype(target), copy=True)
 
 
-def can_cast(from_: object, to: object, /) -> bool:
+def can_cast(from_: object, to: object, /) -> builtins.bool:
     """Check Boolean identity or safe promotion in the real-float dtype lattice."""
     source, target = _dtype_of(from_), _dtype_of(to)
     return source == target or (source == float32 and target == float64)
@@ -592,7 +601,7 @@ def finfo(type: object, /) -> np.finfo:
     return np.finfo(np.dtype(_dtype_name(_dtype_of(type))))
 
 
-def isdtype(dtype: object, kind: object) -> bool:
+def isdtype(dtype: object, kind: object) -> builtins.bool:
     """Inspect admitted dtypes using the standard dtype category vocabulary."""
     source = _dtype_of(dtype)
     categories = {
@@ -605,7 +614,7 @@ def isdtype(dtype: object, kind: object) -> bool:
         "numeric",
     }
 
-    def matches(value: object) -> bool:
+    def matches(value: object) -> builtins.bool:
         if isinstance(value, str):
             if value not in categories:
                 raise ValueError(f"unsupported dtype kind {value!r}")
@@ -622,14 +631,16 @@ def isdtype(dtype: object, kind: object) -> bool:
 def result_type(*arrays_and_dtypes: object) -> np.dtype:
     """Infer Boolean identity or a real-float common dtype with weak scalars."""
     dtypes: list[np.dtype] = []
+    weak_numeric = False
     for value in arrays_and_dtypes:
         if type(value) in (int, float):
+            weak_numeric = True
             continue
         dtypes.append(_dtype_of(value))
     if not dtypes:
         raise TypeError("result_type requires at least one array or dtype")
     if np.dtype("bool") in dtypes:
-        if any(dtype != np.dtype("bool") for dtype in dtypes):
+        if weak_numeric or any(dtype != np.dtype("bool") for dtype in dtypes):
             raise TypeError("bool and real dtype promotion is unsupported")
         return np.dtype("bool")
     return float64 if float64 in dtypes else float32
@@ -639,7 +650,7 @@ def asarray(
     value: object,
     *,
     dtype: object = None,
-    copy: bool | None = None,
+    copy: builtins.bool | None = None,
 ) -> typing.Any:
     """Convert a host value or preserve/cast one symbolic array.
 
@@ -798,7 +809,7 @@ def ones_like(x: object, *, dtype: object = None, device: object = None) -> typi
     return full_like(x, True if name == "bool" else 1, dtype=name, device=device)
 
 
-def _generic_spec(array: np.ndarray, *, differentiable: bool) -> TensorSpec:
+def _generic_spec(array: np.ndarray, *, differentiable: builtins.bool) -> TensorSpec:
     return TensorSpec(
         _namespace._generic_indices(tuple(int(extent) for extent in array.shape)),
         dtype=array.dtype.name,

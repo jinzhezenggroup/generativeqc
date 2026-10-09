@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import builtins
 import typing
 
 import numpy as np
 import pytest
 from generativeqc.experimental import array_api as xp
+from generativeqc_compiler.array_api import namespace as compiler_namespace
 from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.precision import PrecisionDirective
 from generativeqc_compiler.tensor import ir
 from generativeqc_compiler.tensor.ad_program import linearize, transpose_program
-from generativeqc_compiler.tensor.autodiff import jvp, vjp
+from generativeqc_compiler.tensor.autodiff import dot_test, jvp, vjp
 from generativeqc_compiler.tensor.cpu import emit_cpu
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 from generativeqc_compiler.tensor.interpreter import execute
 from generativeqc_compiler.tensor.optimize import optimize, prepare_for_backend
+from generativeqc_compiler.tensor.precision import describe_precision, lower_precision
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 
@@ -126,6 +130,11 @@ def test_public_bool_admission_and_bounded_creation() -> None:
     assert xp.result_type(xp.bool, xp.bool) == xp.bool
     with pytest.raises(TypeError, match="promotion"):
         xp.result_type(xp.bool, xp.float64)
+    for scalar in (1, 1.0):
+        with pytest.raises(TypeError, match="promotion"):
+            xp.result_type(xp.bool, scalar)
+        with pytest.raises(TypeError, match="promotion"):
+            xp.result_type(scalar, xp.bool)
     np.testing.assert_array_equal(xp.full((2,), True), [True, True])
     np.testing.assert_array_equal(xp.full((2,), True, dtype=xp.bool), [True, True])
     np.testing.assert_array_equal(xp.zeros((2,), dtype=xp.bool), [False, False])
@@ -142,6 +151,100 @@ def test_public_bool_admission_and_bounded_creation() -> None:
         xp.add(mask, mask)
     with pytest.raises(TypeError, match="array operand"):
         xp.equal(1.0, 2.0)
+
+
+@pytest.mark.parametrize(
+    "operation,oracle",
+    (
+        (lambda x: xp.reshape(x, (6,)), lambda x: np.reshape(x, (6,))),
+        (
+            lambda x: xp.broadcast_to(x, (2, 4, 3)),
+            lambda x: np.broadcast_to(x, (2, 4, 3)),
+        ),
+        (
+            lambda x: xp.broadcast_arrays(x, xp.ones((1, 4, 1)))[0],
+            lambda x: np.broadcast_arrays(x, np.ones((1, 4, 1)))[0],
+        ),
+        (lambda x: xp.expand_dims(x, (0, -1)), lambda x: np.expand_dims(x, (0, -1))),
+        (lambda x: xp.squeeze(x, 1), lambda x: np.squeeze(x, 1)),
+        (lambda x: xp.moveaxis(x, 0, 2), lambda x: np.moveaxis(x, 0, 2)),
+        (lambda x: xp.flip(x, axis=(0, 2)), lambda x: np.flip(x, axis=(0, 2))),
+        (lambda x: xp.slice(x, ((0, 1), (0, 1), (1, 3))), lambda x: x[:1, :1, 1:3]),
+        (lambda x: xp.take(x, (2, 0), axis=2), lambda x: np.take(x, (2, 0), axis=2)),
+        (
+            lambda x: xp.permute_dims(x, (2, 1, 0)),
+            lambda x: np.transpose(x, (2, 1, 0)),
+        ),
+        (xp.matrix_transpose, lambda x: np.swapaxes(x, -1, -2)),
+    ),
+)
+def test_eager_and_captured_boolean_views_match_numpy(
+    operation: typing.Callable[[typing.Any], typing.Any],
+    oracle: typing.Callable[[np.ndarray], np.ndarray],
+) -> None:
+    values = np.arange(6, dtype=np.float64).reshape(2, 1, 3)
+    mask = xp.greater(values, 2)[:, :, ::-1]
+    original = mask.copy()
+    expected = oracle(mask)
+    eager = operation(mask)
+    captured = xp.compile(operation)(mask)
+    assert eager.dtype == captured.dtype == np.dtype("bool")
+    np.testing.assert_array_equal(eager, expected)
+    np.testing.assert_array_equal(captured, expected)
+    np.testing.assert_array_equal(mask, original)
+    assert not np.shares_memory(captured, mask)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    (
+        lambda x: xp.add(x, x),
+        lambda x: xp.subtract(x, x),
+        lambda x: xp.multiply(x, x),
+        lambda x: xp.divide(x, x),
+        xp.negative,
+        xp.exp,
+        xp.log,
+        xp.sqrt,
+        lambda x: xp.pow(x, 2),
+        xp.square,
+        xp.reciprocal,
+        xp.sum,
+        xp.mean,
+        lambda x: xp.matmul(x, x),
+        lambda x: xp.einsum("ij->ji", x),
+    ),
+)
+def test_boolean_views_do_not_admit_floating_arithmetic(
+    operation: typing.Callable[[typing.Any], typing.Any],
+) -> None:
+    mask = np.array([[True, False], [False, True]])
+    with pytest.raises(TypeError, match="floating arithmetic"):
+        operation(mask)
+    with pytest.raises((TypeError, ValueError), match="bool|floating arithmetic"):
+        xp.compile(operation)(mask)
+
+
+def test_compiler_namespace_bool_creation_uses_boolean_literals() -> None:
+    seed = compiler_namespace.full((2,), True, dtype="bool")
+    arrays = {
+        "zeros": compiler_namespace.zeros((2,), dtype="bool"),
+        "ones": compiler_namespace.ones((2,), dtype="bool"),
+        "zeros_like": compiler_namespace.zeros_like(seed),
+        "ones_like": compiler_namespace.ones_like(seed),
+    }
+    assert all(value.dtype == "bool" for value in arrays.values())
+    outputs = execute(Program({name: value.node for name, value in arrays.items()}), {})
+    np.testing.assert_array_equal(outputs.outputs["zeros"], [False, False])
+    np.testing.assert_array_equal(outputs.outputs["ones"], [True, True])
+    np.testing.assert_array_equal(outputs.outputs["zeros_like"], [False, False])
+    np.testing.assert_array_equal(outputs.outputs["ones_like"], [True, True])
+
+
+def test_public_bool_dtype_does_not_rebind_python_annotations() -> None:
+    assert typing.get_type_hints(xp.asarray)["copy"] == builtins.bool | None
+    assert typing.get_type_hints(xp.sum)["keepdims"] is builtins.bool
+    assert typing.get_type_hints(xp.can_cast)["return"] is builtins.bool
 
 
 def test_optimizer_cse_and_backend_gates() -> None:
@@ -163,6 +266,31 @@ def test_optimizer_cse_and_backend_gates() -> None:
         emit_cpu(program)
     with pytest.raises(ValueError, match="does not support bool data or comparisons"):
         plan_cuda(program, cuda_target_info("sm_80"))
+
+    mixed = Program({"real": x, "predicate": ir.compare("equal", x, x)})
+    for backend in ("cpu", "cuda", "portable", "scalar"):
+        prepared = prepare_for_backend(mixed, backend, requested_outputs=("real",))
+        assert tuple(prepared.outputs) == ("real",)
+        assert all(node.spec.dtype != "bool" for node in prepared.live_nodes)
+
+
+def test_bool_nodes_are_outside_floating_precision_schedules() -> None:
+    spec = TensorSpec(dtype="float64", role="input")
+    x = ir.input_tensor("x", spec)
+    predicate = ir.compare("equal", x, x)
+    program = Program({"real": x, "predicate": predicate})
+    predicate_name = program.debug_names[predicate]
+    schedule = describe_precision(program)
+    assert predicate_name not in {value.name for value in schedule.values}
+    assert all(
+        value.storage_dtype in ("float32", "float64") for value in schedule.values
+    )
+    with pytest.raises(ValueError, match="non-floating"):
+        lower_precision(
+            program,
+            {predicate_name: PrecisionDirective("float64", "float64", "float64")},
+        )
+    assert lower_precision(program, {}).logical_hash == program.logical_hash
 
 
 def test_scientific_domain_and_boolean_algebra_fail_closed() -> None:
@@ -203,6 +331,12 @@ def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
     for operation in (
         lambda: jvp(program, {"x": array}, {"x": np.ones_like(array)}),
         lambda: vjp(program, {"x": array}, {"output": np.ones(2, dtype=np.bool_)}),
+        lambda: dot_test(
+            program,
+            {"x": array},
+            {"x": np.ones_like(array)},
+            {"output": np.ones(2, dtype=np.bool_)},
+        ),
         lambda: linearize(program, ("x",)),
         lambda: transpose_program(program, ("output",)),
     ):

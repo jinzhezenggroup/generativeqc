@@ -148,8 +148,10 @@ Issue #528 adds `PrecisionDirective(storage_dtype, compute_dtype,
 accumulation_dtype)` and `lower_precision`. The directive is a scheduling
 request, while the lowered program remains an ordinary typed TensorIR DAG whose
 precision changes are visible as `cast` nodes. `describe_precision` produces a
-stable `PrecisionSchedule` identity containing every live value's resolved
-dtype, sensitivity class, cast traffic, strict-audit dtype and arithmetic mode.
+stable `PrecisionSchedule` identity containing every live floating value's
+resolved dtype, sensitivity class, cast traffic, strict-audit dtype and
+arithmetic mode. Boolean data and `int64` controls are outside floating precision
+schedules, and directives targeting either fail closed.
 
 The default schedule remains strict FP64. `conservative_precision_variants`
 only creates an opt-in FP32 candidate for ordinary elementwise/view subgraphs;

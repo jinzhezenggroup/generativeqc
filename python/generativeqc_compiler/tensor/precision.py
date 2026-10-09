@@ -426,6 +426,8 @@ def lower_precision(
         if not isinstance(directive, PrecisionDirective):
             raise TypeError("precision directive values must be PrecisionDirective")
         node = live[name]
+        if node.spec.dtype not in DTYPES:
+            raise ValueError("precision directives cannot target non-floating values")
         if node.op in ("input", "constant", "cast"):
             raise ValueError("precision directives target computed non-cast values")
         if directive.compute_dtype != directive.accumulation_dtype and (
@@ -476,6 +478,14 @@ def lower_precision(
             continue
         if node.op == "cast":
             mapping[node] = cast(mapping[node.inputs[0]], node.attrs["dtype"])
+            continue
+        if node.spec.dtype not in DTYPES:
+            mapping[node] = Node(
+                node.op,
+                tuple(mapping[child] for child in node.inputs),
+                node.spec,
+                node.attributes,
+            )
             continue
         directive = normalized.get(names[node])
         compute_dtype = (
@@ -639,7 +649,7 @@ def describe_precision(
     values = []
     casts = []
     for node in program.live_nodes:
-        if node.spec.dtype == "int64":
+        if node.spec.dtype not in DTYPES:
             continue
         sensitivity = _sensitivity(node.op)
         binding = execution.get(names[node])

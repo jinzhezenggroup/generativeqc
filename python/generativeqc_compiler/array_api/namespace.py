@@ -119,11 +119,11 @@ def full(
 
 
 def zeros(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
-    return full(shape, 0, dtype=dtype)
+    return full(shape, False if dtype == "bool" else 0, dtype=dtype)
 
 
 def ones(shape: int | tuple[int, ...], *, dtype: str = "float64") -> VibeArray:
-    return full(shape, 1, dtype=dtype)
+    return full(shape, True if dtype == "bool" else 1, dtype=dtype)
 
 
 def full_like(x: object, fill_value: object, *, dtype: str | None = None) -> VibeArray:
@@ -138,11 +138,15 @@ def full_like(x: object, fill_value: object, *, dtype: str | None = None) -> Vib
 
 
 def zeros_like(x: object, *, dtype: str | None = None) -> VibeArray:
-    return full_like(x, 0, dtype=dtype)
+    value = _array(x)
+    target = value.dtype if dtype is None else dtype
+    return full_like(value, False if target == "bool" else 0, dtype=target)
 
 
 def ones_like(x: object, *, dtype: str | None = None) -> VibeArray:
-    return full_like(x, 1, dtype=dtype)
+    value = _array(x)
+    target = value.dtype if dtype is None else dtype
+    return full_like(value, True if target == "bool" else 1, dtype=target)
 
 
 def _is_generic_array(value: VibeArray) -> bool:

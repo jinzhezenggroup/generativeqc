@@ -1029,6 +1029,8 @@ def dot_test(
     """Check ``<w, Jv> == <J^T w, v>`` on one fixed primal evaluation."""
     if not isinstance(program, Program):
         raise TypeError("dot_test requires a Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     if not math.isfinite(rtol) or rtol < 0:
         raise ValueError("rtol must be finite and nonnegative")
     checked_size(max_bytes, "autodiff byte budget")
