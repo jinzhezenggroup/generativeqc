@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 SOURCE_SUFFIXES = frozenset(
     {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".cu", ".cuh"}
@@ -56,7 +59,8 @@ class LoopFinding:
     lhs: str | None = None
 
 
-def _mask_comments_and_literals(text: str) -> str:
+def _mask_comments_and_literals(text: str, *, literal_mask: str = " ") -> str:
+    """Keep offsets intact; callers may mark literals to preserve their identity."""
     chars = list(text)
     out = list(text)
     index = 0
@@ -78,7 +82,7 @@ def _mask_comments_and_literals(text: str) -> str:
                 continue
             if char in {'"', "'"}:
                 quote = char
-                out[index] = " "
+                out[index] = literal_mask
                 index += 1
                 state = "literal"
                 continue
@@ -102,17 +106,17 @@ def _mask_comments_and_literals(text: str) -> str:
                 index += 1
             continue
         if char == "\\":
-            out[index] = " "
+            out[index] = literal_mask
             if index + 1 < len(chars) and chars[index + 1] != "\n":
-                out[index + 1] = " "
+                out[index + 1] = literal_mask
             index += 2
         elif char == quote:
-            out[index] = " "
+            out[index] = literal_mask
             index += 1
             state = "normal"
         else:
             if char != "\n":
-                out[index] = " "
+                out[index] = literal_mask
             index += 1
     return "".join(out)
 

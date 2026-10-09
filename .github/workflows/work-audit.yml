@@ -25,9 +25,22 @@ jobs:
           python3 tools/audit_native_complexity.py --format json \
             > .artifacts/native-complexity.json
           # Already-supported exact rank-2 matrix-chain regressions are a
-          # blocking source regression; other high-order findings stay advisory.
+          # blocking source regression; materialization sites require explicit
+          # source-bound review below, without asserting scientific necessity.
           python3 tools/audit_native_complexity.py --fail-on-matrix-chain --summary-only
+      - name: Require source-bound materialization candidate review
+        if: always()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}" || \
+            echo "::warning::Unable to fetch base commit; materialization review will fail INCOMPLETE"
+          python3 tools/ratchet_native_materialization.py \
+            --base-sha "${BASE_SHA}" \
+            --output .artifacts/native-materialization-review.json \
+            --fail-on-unreviewed
       - name: Ratchet comparable DF producer work (unknown stays advisory)
+        if: always()
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -47,4 +60,5 @@ jobs:
             .artifacts/producer-work-ratchet.json
             .artifacts/native-structured-materialization.json
             .artifacts/native-complexity.json
+            .artifacts/native-materialization-review.json
           retention-days: 14
