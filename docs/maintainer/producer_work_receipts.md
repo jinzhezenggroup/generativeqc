@@ -106,5 +106,35 @@ python3 tools/ratchet_producer_schedule.py --base-sha "$BASE_SHA" \
   bytes, throughput, or reusable-dependency proof. The uploaded artifact records
   both source identities and each shape's baseline/candidate evidence.
 
-This slice does not modify native scheduling, install a new counter system,
-claim GPU execution, or complete issue #1628's runtime/scientific gates.
+## Audit coverage and validation boundaries
+
+The common receipt and production DF adapters cover the producer-work audit
+contract: streamed source-pass multiplication, independent outer-consumer
+multiplicity, source-driven once-only work, source-bound baseline/candidate
+comparison, and a work-audit CI step that fails on comparable production schedule
+growth. Memory budgets and producer work remain separate. The production adapters
+mark reuse as unproven and report count growth as a work-regression review signal.
+A stronger reusable-producer claim requires external proof review; receipt
+validation checks the proof flag and digest format, not proof correctness or
+review status.
+
+The [receipt regressions](../../tests/python/test_producer_work_audit.py) cover
+12 logical rows produced once at a sufficient budget and 16 generated rows in
+four callbacks under three outer blocks at the bounded budget. Cached native
+host probes enumerate the actual generated production visitor, including tails
+and triangular/full domains. The [CI regressions](../../tests/python/test_producer_schedule_ci.py)
+cover growth, unchanged work, changed dependencies and failure precedence.
+Malformed receipt fields, duplicate JSON keys and forged completion claims are
+covered by the receipt regressions. These are semantic-work checks, not profiler timing.
+
+Audit acceptance does not establish completed GPU scientific endpoints,
+installed-binary authentication, universal runtime-domain coverage, or latency
+improvement. Existing native trace counters remain diagnostic submission
+records; their incomplete completion/coverage/source proofs stay explicit.
+Those limits constrain future runtime claims, rather than adding unstated
+scientific or GPU requirements to the audit contract of
+[#1628](https://github.com/jinzhezenggroup/generativeqc/issues/1628).
+
+No native scheduling, scientific equation, memory policy or automatic cache
+insertion is changed by this audit. Materialization representation selection
+and the broader compiler reasoning program retain their own acceptance gates.
