@@ -135,23 +135,39 @@ def _admit(plan: Any) -> tuple[bool, bool, str, str]:
 
 
 def _row(identifier: str, spin: str) -> Row:
-    method = resolve_method(identifier, spin=spin)
-    plan = compile_ks_execution_plan(method)
-    cpu, cuda, domain, reason = _admit(plan)
+    suffix = "rks" if spin == "unpolarized" else "uks"
+    source = identifier
+    cpu = cuda = False
+    domain = identity = ""
     components: tuple[tuple[str, float], ...] = ()
     exchange: tuple[tuple[int, float, float], ...] = ()
-    if cpu or cuda:
-        components = tuple(
-            (name, float(coefficient))
-            for name, coefficient in plan.semilocal.functional.components
-        )
-        exchange = tuple(
-            (1, float(term.coefficient), float(term.omega)) for term in plan.exchange
-        )
+    try:
+        method = resolve_method(identifier, spin=spin)
+        source = method.identifier
+        plan = compile_ks_execution_plan(method)
+        cpu, cuda, domain, reason = _admit(plan)
+        # Evaluate provenance only on valid representations. Generated Libxc
+        # inventories may contain legal metadata combinations without a
+        # serializable native XC point domain. Those remain visible, disabled.
+        identity = method.identity
+        if cpu or cuda:
+            components = tuple(
+                (name, float(coefficient))
+                for name, coefficient in plan.semilocal.functional.components
+            )
+            exchange = tuple(
+                (1, float(term.coefficient), float(term.omega)) for term in plan.exchange
+            )
+    except (TypeError, ValueError, NotImplementedError) as error:
+        reason = f"MethodIR is not natively representable: {error}"
+        cpu = cuda = False
+        domain = identity = ""
+        components = ()
+        exchange = ()
     return Row(
-        name=f"{identifier.lower()}-{'rks' if spin == 'unpolarized' else 'uks'}",
-        source=method.identifier,
-        identity=method.identity,
+        name=f"{identifier.lower()}-{suffix}",
+        source=source,
+        identity=identity,
         spin=1 if spin == "unpolarized" else 2,
         domain=domain,
         components=components,
@@ -160,7 +176,6 @@ def _row(identifier: str, spin: str) -> Row:
         cuda=cuda,
         reason=reason,
     )
-
 
 def rows() -> tuple[Row, ...]:
     identifiers = {name.lower(): name for name in METHOD_CATALOG}
