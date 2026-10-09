@@ -456,7 +456,9 @@ def symmetric_rank_k_request(
             else "alpha,product,beta,old_output"
         ),
         scalar_update_hash=scalar_update.logical_hash,
-        update="alpha-product-plus-beta-output",
+        update="alpha-product"
+        if update == "overwrite"
+        else "alpha-product-plus-beta-output",
     )
     return replace(
         base,

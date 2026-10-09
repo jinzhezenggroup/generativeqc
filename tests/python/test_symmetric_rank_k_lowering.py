@@ -268,6 +268,13 @@ def test_executed_shapes_have_distinct_bound_requests() -> None:
     assert small.identity != large.identity
     assert small.operands[0].shape == (3, 5)
     assert large.operands[0].shape == (17, 9)
+    overwrite = symmetric_rank_k_request(
+        density_program(1, 3, spin_count=2, orbital_count=5),
+        "density",
+        update="overwrite",
+    )
+    assert dict(overwrite.semantics)["update"] == "alpha-product"
+    assert dict(small.semantics)["update"] == "alpha-product-plus-beta-output"
 
 
 def test_rank_k_rejects_mixed_precision() -> None:

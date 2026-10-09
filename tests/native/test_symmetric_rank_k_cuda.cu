@@ -359,6 +359,19 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
         overwrite_diagnostic.selected.compilation_identity !=
             compilation(weighted, order, true, n, k))
       throw std::runtime_error("rank-k prepared diagnostic mislabeled its update mode");
+    if (n == 17) {
+      auto smaller = invocation;
+      smaller.n = 3;
+      smaller.k = 5;
+      bool rejected_smaller = false;
+      try {
+        binding.execute(stream, smaller);
+      } catch (const std::invalid_argument&) {
+        rejected_smaller = true;
+      }
+      if (!rejected_smaller)
+        throw std::runtime_error("rank-k accepted a smaller shape under larger metadata");
+    }
     auto enqueue = [&] {
       check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
                             cudaMemcpyDeviceToDevice, stream));
