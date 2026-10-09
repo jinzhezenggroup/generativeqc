@@ -46,8 +46,9 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 @pytest.mark.parametrize(
     "before,after",
     [
-        ("functions > 400", "functions > 600"),
-        ("options.max_iterations = 32", "options.max_iterations = 50"),
+        ("guess.work_amortization_ratio < 1.0", "guess.work_amortization_ratio < 0.1"),
+        ("preliminary_iterations = 32", "preliminary_iterations = 50"),
+        ("guess.preparation_peak_bytes > guess.value_budget_bytes", "false"),
     ],
 )
 def test_df_rhf_guess_default_domain_is_audited(

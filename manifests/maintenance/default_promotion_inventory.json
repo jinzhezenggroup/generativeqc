@@ -46,11 +46,12 @@
         "src/methods/df_hf_guess_basis.hpp",
         "src/methods/df_ccsdt_force.cu"
       ],
-      "rationale": "The native DF-CCSD(T) owner may preconverge a detached density with a separately bundled H/C JK-fit basis, only for neutral spherical through-f 200–400 AO cold references. The accepted RHF reference, Hamiltonian and complete analytic response remain unscreened FP64 Direct. Preliminary work is finite and included in reference/endpoint timing; unsupported topology, tight budgets and refused guesses retain Direct. Explicit or warm density seeds take precedence.",
+      "rationale": "The native DF-CCSD(T) owner may preconverge a detached density with a separately bundled H/C JK-fit basis for neutral spherical through-f cold references. Admission excludes cache-eligible exact references, requires a conservative dense Cartesian/fitting sweep-volume amortization screen, charges actual preparation metadata/matrices under the finite cap, and requires the shared source-backed dense/packed planner to retain full factors with metadata and DIIS reservations; there is no fixed AO interval. Streamed proposals are skipped because bounded memory does not imply profitable work. The volume screen is a heuristic, not a universal measured crossover or actual integral census. The accepted RHF reference, Hamiltonian and complete analytic response remain unscreened FP64 Direct. Preliminary work is finite and included in reference/endpoint timing; unsupported topology, tight budgets and refused guesses retain Direct. Explicit or warm density seeds take precedence.",
       "revisit_condition": "Expand the topology/resource domain only with independent reference/force gates and paired complete endpoint evidence, including a larger planner case. Never interpret this policy as promotion of a fitted accepted reference or DF-HF gradients.",
       "evidence": [
         "docs/developer/df_hf_preconvergence.md",
         ".agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md",
+        ".agents/notes/implemented/performance/2026-10-09-df-rhf-work-admission.md",
         "tests/python/test_df_hf_guess_policy.py",
         "tests/python/test_df_hf_preconvergence.py"
       ]

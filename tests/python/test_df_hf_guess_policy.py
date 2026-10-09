@@ -1,4 +1,4 @@
-"""Execute the native default policy with only its expensive DF boundary injected."""
+"""Execute the native policy with SCF and resource-planner boundaries injected."""
 
 import shutil
 import subprocess
@@ -24,12 +24,19 @@ def test_native_df_guess_admission_and_refusal(tmp_path: Path) -> None:
 #include "methods/df_hf_guess.hpp"
 #include "molecule/basis.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/density_fitting.hpp"
 using namespace generativeqc;
 int calls{}, behavior{};
+bool resident = true;
 namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& system) noexcept {
   std::size_t functions{};
   for (const auto& shell : system.shells) functions += 2 * shell.angular_momentum + 1;
+  return functions;
+}
+std::size_t cartesian_ao_count(const core::System& system) noexcept {
+  std::size_t functions{};
+  for (const auto& shell : system.shells) functions += cartesian_count(shell.angular_momentum);
   return functions;
 }
 generativeqc_status validate_and_normalize(core::System& system, std::string&) {
@@ -41,6 +48,18 @@ generativeqc_status validate_and_normalize(core::System& system, std::string&) {
 }
 }
 namespace generativeqc::scf {
+std::size_t density_fitting_source_metadata_bytes(std::size_t, std::size_t, std::size_t,
+    std::size_t, std::size_t, std::size_t) {return 0;}
+std::size_t density_fitting_scf_diis_device_bytes(std::size_t, std::size_t, unsigned) noexcept {return 0;}
+DensityFittingTilePlan plan_requested_density_fitting_tiles(DfPairStorageRequest, std::size_t,
+    std::size_t, std::size_t, std::size_t, std::size_t, std::size_t,
+    std::size_t, bool generated, std::size_t rank, bool method_owned_packing) {
+  assert(generated && rank > 0 && !method_owned_packing);
+  DensityFittingTilePlan plan;
+  plan.stores_full_three_center = resident;
+  plan.peak_workspace_bytes = 128ULL << 20;
+  return plan;
+}
 ScfResult run_rhf_density_fitting_cuda(
     const core::System&, const core::System&, const ScfOptions& options, int device,
     const std::vector<double>* density, initial_guess::OverlapOrthogonalizer*) {
@@ -100,9 +119,33 @@ int main() {
   setenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS", "auto", 1);
   for (std::size_t count : {199, 401}) {
     source.shells.resize(count);
-    assert(prepare().outcome == DFHFGuessOutcome::Ineligible);
+    assert(prepare().outcome == DFHFGuessOutcome::Used);
   }
+  assert(calls == 3);
+  resident = false;
+  assert(prepare().outcome == DFHFGuessOutcome::BudgetSkipped && calls == 3);
+  resident = true;
+  source.shells.resize(34);
+  assert(prepare().outcome == DFHFGuessOutcome::CacheSkipped);
+  source.shells[0].angular_momentum = 2;
+  auto small = prepare();
+  assert(small.outcome == DFHFGuessOutcome::WorkSkipped);
+  assert(small.auxiliary_functions == 484 && small.cartesian_functions == 39);
+  assert(small.work_amortization_ratio < 1.0 && calls == 3);
+  source.shells[0].angular_momentum = 0;
+  source.shells.resize(4096);
+  auto large = prepare();
+  assert(large.outcome == DFHFGuessOutcome::BudgetSkipped);
+  assert(large.preparation_peak_bytes > large.value_budget_bytes && calls == 3);
   source.shells.resize(230);
+  source.atoms.resize(80);
+  for (std::size_t index = 8; index < source.atoms.size(); ++index)
+    source.atoms[index].atomic_number = 1;
+  auto auxiliary_heavy = prepare();
+  assert(auxiliary_heavy.outcome == DFHFGuessOutcome::WorkSkipped);
+  assert(auxiliary_heavy.cartesian_functions == 230);
+  assert(auxiliary_heavy.auxiliary_functions > 484 && calls == 3);
+  source.atoms.resize(8);
   source.atoms[0].atomic_number = 8;
   assert(prepare().outcome == DFHFGuessOutcome::Ineligible);
   source.atoms[0].atomic_number = 6;
@@ -114,7 +157,7 @@ int main() {
   source.shells[0].angular_momentum = 0;
   assert(prepare(true, 900ULL << 20).outcome == DFHFGuessOutcome::BudgetSkipped);
   descriptor.correlation_memory_budget_bytes = 128ULL << 20;
-  assert(prepare().outcome == DFHFGuessOutcome::BudgetSkipped && calls == 1);
+  assert(prepare().outcome == DFHFGuessOutcome::BudgetSkipped && calls == 3);
   descriptor.correlation_memory_budget_bytes = 1ULL << 30;
   behavior = 1;
   guess = prepare();
@@ -126,7 +169,7 @@ int main() {
     assert(guess.outcome == DFHFGuessOutcome::Failed && guess.density.empty());
     assert(!guess.work_counters_complete);
   }
-  assert(calls == 4);
+  assert(calls == 6);
 }
 """
     )

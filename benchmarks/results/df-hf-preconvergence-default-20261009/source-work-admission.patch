@@ -1,0 +1,57 @@
+--- a/benchmarks/df_hf_preconvergence.cpp
++++ b/benchmarks/df_hf_preconvergence.cpp
+@@ -125,3 +125,2 @@
+     bool pre_converged{}, pre_fallback{};
+-    bool pre_work_counters_complete{true};
+     generativeqc::methods::detail::DFHFGuess automatic_guess;
+@@ -135,3 +134,2 @@
+       pre_cycles = automatic_guess.iterations;
+-      pre_work_counters_complete = automatic_guess.work_counters_complete;
+       native_jk_functions = automatic_guess.auxiliary_functions;
+@@ -146,3 +144,2 @@
+       pre_options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+-      pre_options.density_fitting_host_retry = false;
+       pre_options.density_fitting_memory_budget_bytes = budget;
+@@ -169,3 +166,2 @@
+         pre_fallback = true;
+-        pre_work_counters_complete = false;
+         std::cerr << "DF preconvergence refused: " << error.what() << '\n';
+@@ -239,3 +235,2 @@
+         pre_cycles = automatic_guess.iterations;
+-        pre_work_counters_complete = automatic_guess.work_counters_complete;
+         native_jk_functions = automatic_guess.auxiliary_functions;
+@@ -311,4 +306,3 @@
+     field("pre_tolerance", pre_tolerance);
+-    field("pre_iterations", pre_work_counters_complete ? std::to_string(pre_cycles) : "null");
+-    field("pre_work_counters_complete", pre_work_counters_complete ? "true" : "false");
++    field("pre_iterations", pre_cycles);
+     field("pre_policy_outcome", static_cast<unsigned>(automatic_guess.outcome));
+--- a/src/methods/df_hf_guess.cpp
++++ b/src/methods/df_hf_guess.cpp
+@@ -121,3 +121,2 @@
+     options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+-    options.density_fitting_host_retry = false;
+     options.reference_memory_budget_bytes = guess.value_budget_bytes;
+--- a/src/scf/rhf.cpp
++++ b/src/scf/rhf.cpp
+@@ -1994,11 +1994,2 @@
+     }
+-    if (!options.density_fitting_host_retry) {
+-      if (device_status != GENERATIVEQC_STATUS_SUCCESS || device_records.size() != 1)
+-        throw std::runtime_error(detail.empty() ? "CUDA DF preliminary SCF refused" : detail);
+-      result.iterations = device_records.front().iterations;
+-      result.energy = device_records.front().energy;
+-      result.energy_change = device_records.front().energy_change;
+-      result.density_rms = device_records.front().density_rms;
+-      return result;
+-    }
+   }
+--- a/src/scf/types.hpp
++++ b/src/scf/types.hpp
+@@ -124,6 +124,2 @@
+   std::size_t density_fitting_memory_budget_bytes{};
+-  /** Single-system CUDA RHF may retry its compact solve with host-orchestrated
+-   * DIIS. Provisional density guesses disable this second SCF attempt so their
+-   * iteration limit bounds all preliminary SCF work. */
+-  bool density_fitting_host_retry{true};
+   /** Correlated energy consumers require values-only, bounded direct RHF. */

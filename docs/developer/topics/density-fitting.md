@@ -19,6 +19,7 @@ Density-fitting scientific sources, storage layouts, occupied-space work, respon
 ../df_final_eigensystem
 ../df_final_state
 ../df_generated_residency
+../df_hf_preconvergence
 ../df_occupied_cuda
 ../df_occupied_exchange
 ../df_response_panel_reuse

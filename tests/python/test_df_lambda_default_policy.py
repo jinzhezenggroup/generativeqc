@@ -68,11 +68,15 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         )[0]
     )
     reference_benchmark = (ROOT / "benchmarks/df_hf_preconvergence.cpp").read_text()
-    reference_call = (
-        "const auto result ="
-        + reference_benchmark.split("const auto result =", 1)[1].split(";", 1)[0]
-        + ";\n"
+    # The reference probe moves its guess out of the result. Extract the actual
+    # native call without requiring a const result or duplicating its selectors.
+    reference_calls = re.findall(
+        r"(?:const\s+)?auto\s+result\s*=\s*"
+        r"generativeqc::methods::detail::run_df_ccsdt_native\([^;]+;",
+        reference_benchmark,
     )
+    assert len(reference_calls) == 1
+    reference_call = reference_calls[0] + "\n"
     source = tmp_path / "defaults.cpp"
     source.write_text(
         r"""

@@ -1,0 +1,18 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "purpose": "Losslessly retain the original validation envelope under the unchanged checkout budget. Scientific acceptance, source provenance and every decoded byte remain unchanged.",
+  "files": [
+    {
+      "encoding": "gzip",
+      "stored_path": "evidence.json.gz",
+      "stored_bytes": 3519,
+      "stored_sha256": "cb654c2ab52678cda389e73f14108be36959763a8db33387de1657efa02f9de4",
+      "decoded_path": "evidence.json",
+      "decoded_bytes": 43494,
+      "decoded_sha256": "a31002afe7d26a9f148332ed2239e3579d9b17ddeb47481216776313ac8082da",
+      "original_git_blob": "b02c46e52a74e3f035ec71f30ce23620322dff89",
+      "original_git_revision": "4183fa70b12f4cc2b0326e8fb3fd61b5b1c1b858",
+      "original_git_path": "benchmarks/results/df-hf-preconvergence-default-20261009/evidence.json"
+    }
+  ]
+}
