@@ -38,10 +38,16 @@ template <class T> class DeviceBuffer {
 };
 
 __global__ void materialize_weights(const double* occupations, const double* energies,
-                                    double* weights, std::size_t count) {
+                                    double* weights, std::size_t count, int* error) {
   for (std::size_t i = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x;
-       i < count; i += std::size_t(blockDim.x) * gridDim.x)
-    weights[i] = occupations[i] * energies[i];
+       i < count; i += std::size_t(blockDim.x) * gridDim.x) {
+    double value{};
+    if (!metadata::rank_k_energy_weight(occupations[i], energies[i], value)) {
+      atomicCAS(error, 0, 1);
+      value = 0.0;
+    }
+    weights[i] = value;
+  }
 }
 
 static std::size_t panel_index(std::size_t batch, std::size_t row, std::size_t orbital,
@@ -123,7 +129,8 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
             (static_cast<double>((row * 7 + orbital * 11 + batch * 3) % 29) - 14.0) / 19.0;
     for (std::size_t orbital = 0; orbital < k; ++orbital) {
       occupations[batch * k + orbital] = orbital % 5 == 0 ? 0.0 : 0.5 + 0.125 * (orbital % 3);
-      energies[batch * k + orbital] = (static_cast<double>((orbital * 7 + batch) % 11) - 6.0) / 3.0;
+      energies[batch * k + orbital] = orbital == 0 ? -0.0 :
+          (static_cast<double>((orbital * 7 + batch) % 11) - 6.0) / 3.0;
       weights[batch * k + orbital] = weighted ?
           occupations[batch * k + orbital] * energies[batch * k + orbital] :
           (orbital % 4 == 0 ? -0.75 : occupations[batch * k + orbital]);
@@ -131,7 +138,8 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
     for (std::size_t row = 0; row < n; ++row)
       for (std::size_t col = 0; col < n; ++col)
         baseline[matrix_index(batch, row, col, n, order)] =
-            0.125 * (1 + batch + std::min(row, col) + std::max(row, col));
+            0.125 * (1 + batch + std::min(row, col) + std::max(row, col)) +
+            (row > col ? 2.0 : 0.0);
   }
   DeviceBuffer<double> d_coefficients(panel_count), d_weights(batches * k),
       d_occupations(batches * k), d_energies(batches * k),
@@ -147,6 +155,15 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
   const double alpha = 1.25, beta = -0.5;
   SymmetricRankKInvocation invocation{n, k, batches, d_coefficients.get(), d_weights.get(),
                                        d_output.get(), d_error.get(), alpha, beta};
+  bool rejected_order = false;
+  try {
+    CudaSymmetricRankK wrong(request(weighted, order), candidates(weighted, order),
+                              target(weighted, order), compilation(weighted, order),
+                              n, k, batches,
+                              order == RankKOrder::RowMajor ? RankKOrder::ColumnMajor : RankKOrder::RowMajor,
+                              stream, 0);
+  } catch (const std::invalid_argument&) { rejected_order = true; }
+  if (!rejected_order) throw std::runtime_error("rank-k accepted wrong physical order");
   {
     CudaSymmetricRankK binding(request(weighted, order), candidates(weighted, order),
                                 target(weighted, order), compilation(weighted, order),
@@ -161,7 +178,8 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
       check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
       if (weighted)
         materialize_weights<<<generativeqc_tensor::blocks(batches * k, 128), 128, 0, stream>>>(
-            d_occupations.get(), d_energies.get(), d_weights.get(), batches * k);
+            d_occupations.get(), d_energies.get(), d_weights.get(), batches * k,
+            d_error.get());
       binding.execute(stream, invocation);
     };
     enqueue();

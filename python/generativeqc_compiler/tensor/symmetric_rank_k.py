@@ -84,6 +84,12 @@ def symmetric_rank_k_request(
         or left.spec.shape[-2] != node.spec.shape[-1]
     ):
         raise ValueError("rank-k input and output scientific domains differ")
+    if any(
+        index.selection is not None
+        for value in (left, weights, node)
+        for index in value.spec.indices
+    ):
+        raise ValueError("rank-k gathered axes require an explicit packing contract")
     if weights.op != "input" and not (
         weights.op == "multiply"
         and len(weights.inputs) == 2
