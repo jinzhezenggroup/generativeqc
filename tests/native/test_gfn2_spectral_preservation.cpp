@@ -381,6 +381,7 @@ struct Fixture {
   void inputs(double scale = 1) {
     for (int system = 0; system < 3; ++system) {
       const int n = static_cast<int>(orbital_offsets[system + 1] - orbital_offsets[system]);
+      const auto stride = static_cast<std::int64_t>(n);
       double l[9]{}, q[9]{};
       for (int i = 0; i < n; ++i) {
         l[i * n + i] = scale * (1.25 + 0.25 * i);
@@ -401,13 +402,13 @@ struct Fixture {
         for (int j = 0; j < n; ++j) {
           double s = 0;
           for (int k = 0; k < n; ++k) s += l[i * n + k] * l[j * n + k];
-          overlaps[overlap_offsets[system] + static_cast<std::int64_t>(i) * n + j] = s;
+          overlaps[overlap_offsets[system] + i * stride + j] = s;
           for (int spin = 0; spin < spins[system]; ++spin) {
             double h = 0;
             for (int k = 0; k < n; ++k)
               h += lq[i * n + k] * lq[j * n + k] * (-1.0 + 1.5 * k + .2 * system + .3 * spin);
-            hamiltonians[matrix_offsets[system] + static_cast<std::int64_t>(spin) * n * n +
-                         static_cast<std::int64_t>(i) * n + j] = h;
+            hamiltonians[matrix_offsets[system] + spin * stride * stride +
+                         i * stride + j] = h;
           }
         }
     }
@@ -917,12 +918,13 @@ void test_oracle() {
     require(scan_calls == 4 && threaded_scan_calls == 0, "solve preflight scan work changed");
     for (int system = 0; system < 3; ++system) {
       const int n = static_cast<int>(orbital_offsets[system + 1] - orbital_offsets[system]);
+      const auto stride = static_cast<std::int64_t>(n);
       const double* s = f.overlaps.data() + overlap_offsets[system];
       long double band = 0, entropy = 0;
       std::array<std::array<long double, 3>, 2> occ{};
       for (int spin = 0; spin < 2; ++spin) {
         const int channel = spins[system] == 1 ? 0 : spin;
-        const double* e = f.wave.eigenvalues + value_offsets[system] + static_cast<std::int64_t>(channel) * n;
+        const double* e = f.wave.eigenvalues + value_offsets[system] + channel * stride;
         long double mu = 0, ent = 0;
         occ[spin] =
             occupations(n, e, spin == 0 ? alpha[system] : beta[system], temperature, mu, ent);
@@ -931,7 +933,7 @@ void test_oracle() {
         long double count = 0;
         for (int i = 0; i < n; ++i) {
           near(e[i], -1 + 1.5 * i + .2 * system + .3 * channel, "prescribed generalized spectrum");
-          near(f.wave.occupations[occupation_offsets[system] + static_cast<std::int64_t>(spin) * n + i], occ[spin][i],
+          near(f.wave.occupations[occupation_offsets[system] + spin * stride + i], occ[spin][i],
                "independent occupations");
           count += occ[spin][i];
           band += occ[spin][i] * e[i];
@@ -939,12 +941,13 @@ void test_oracle() {
         near(count, spin == 0 ? alpha[system] : beta[system], "independent population");
       }
       for (int channel = 0; channel < spins[system]; ++channel) {
-        const double* c = f.wave.coefficients + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
-        const double* h = f.hamiltonians.data() + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
-        const double* e = f.wave.eigenvalues + value_offsets[system] + static_cast<std::int64_t>(channel) * n;
-        const double* d = f.wave.density + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
+        const double* c = f.wave.coefficients + matrix_offsets[system] + channel * stride * stride;
+        const double* h =
+            f.hamiltonians.data() + matrix_offsets[system] + channel * stride * stride;
+        const double* e = f.wave.eigenvalues + value_offsets[system] + channel * stride;
+        const double* d = f.wave.density + matrix_offsets[system] + channel * stride * stride;
         const double* wd =
-            f.wave.energy_weighted_density + matrix_offsets[system] + static_cast<std::int64_t>(channel) * n * n;
+            f.wave.energy_weighted_density + matrix_offsets[system] + channel * stride * stride;
         for (int row = 0; row < n; ++row)
           for (int col = 0; col < n; ++col) {
             long double hc = 0, sc = 0, metric = 0, density = 0, weighted = 0;
