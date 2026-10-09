@@ -28,10 +28,6 @@ cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_siz
                                      const std::uint8_t* active, const std::uint32_t* counts,
                                      const std::uint32_t* heads, double* raw_gram);
 
-/** A prepared owner fixes this experimental reduction policy for its lifetime.
- * Unset or 0 retains the qualified serial reduction. */
-bool incremental_diis_gram_requested();
-
 /** Preserve launch geometry, stream and per-item state routing.
  * cooperative_dots uses one complete 32-lane warp per system, as submitted
  * by compact DF SCF. It computes only unique symmetric Gram entries, mirrors

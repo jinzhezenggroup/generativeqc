@@ -74,6 +74,7 @@ def native_probe(
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
     xc = (ROOT / "src/dft/cuda_xc.cpp").read_text()
     direct = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     api = (ROOT / "src/api/c_api_resources.cpp").read_text()
@@ -122,9 +123,12 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
         "std::size_t cuda_direct_coulomb_device_bytes(",
     ):
         source += _definition(direct, signature) + "\n"
-    source += "}\n" + _LAYOUT.split("#if defined(__CUDACC__)")[0].replace(
-        "#pragma once", ""
+    source += (
+        "}\nnamespace generativeqc::scf::cuda_execution {\n"
+        + _definition(diis, "bool incremental_diis_gram_requested(")
+        + "\n}\n"
     )
+    source += _LAYOUT.split("#if defined(__CUDACC__)")[0].replace("#pragma once", "")
     source += r"""
 namespace generativeqc::dft {
 namespace q = generativeqc::generated::quadrature;
@@ -379,6 +383,11 @@ extern "C" std::size_t md_capacity(void* handle,bool reserve) {
         ),
     )
     probe = ctypes.CDLL(str(library))
+    probe.generativeqc_resource_ks_cuda_v1.argtypes = [ctypes.c_size_t] * 9 + [
+        ctypes.POINTER(ctypes.c_uint64),
+        ctypes.c_size_t,
+    ]
+    probe.generativeqc_resource_ks_cuda_v1.restype = ctypes.c_int
     probe.fleet.argtypes = (
         [ctypes.c_void_p] + [ctypes.c_size_t] * 3 + [ctypes.POINTER(ctypes.c_uint64)]
     )
@@ -446,13 +455,16 @@ def _request(
 
 @pytest.mark.parametrize("count,workspace", [(1, 512 << 20), (1024, 128 << 20)])
 @pytest.mark.parametrize("explicit_limit", [False, True])
+@pytest.mark.parametrize("incremental_gram", ["0", "1"])
 def test_public_budget_preserves_fleet_and_later_workspace(
     native_probe: Any,
     monkeypatch: pytest.MonkeyPatch,
     count: int,
     workspace: int,
     explicit_limit: bool,
+    incremental_gram: str,
 ) -> None:
+    monkeypatch.setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", incremental_gram)
     for name in CONTROLS:
         monkeypatch.delenv(name, raising=False)
     request, library = _request(native_probe, monkeypatch, count)
@@ -472,6 +484,48 @@ def test_public_budget_preserves_fleet_and_later_workspace(
         assert ledger.to_dict()["live_bytes"] == 0
     finally:
         ledger.close()
+
+
+@pytest.mark.parametrize("history", [1, 2, 8, 64])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_incremental_gram_charges_only_optional_physical_cache(
+    native_probe: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    history: int,
+    spins: int,
+) -> None:
+    inventories = []
+    selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"
+    for mode in (None, "0", "1"):
+        if mode is None:
+            monkeypatch.delenv(selection, raising=False)
+        else:
+            monkeypatch.setenv(selection, mode)
+        request, _ = _request(
+            native_probe,
+            monkeypatch,
+            1,
+            diis_history=history,
+            method="pbe-uks" if spins == 2 else "pbe-rks",
+        )
+        inventories.append(
+            json.loads(dict(request.candidates[0].decisions)["item_device_inventory"])[
+                0
+            ]
+        )
+    expected = 8 * history * history if history >= 2 else 0
+    assert inventories[0] == inventories[1]
+    assert inventories[2]["state"] - inventories[0]["state"] == expected
+    for key in ("xc", "coulomb"):
+        assert inventories[2][key] == inventories[0][key]
+    monkeypatch.setenv(selection, "invalid")
+    output = (ctypes.c_uint64 * 3)()
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v1(
+            2, 2, 2, 6, 49152, 8, spins, 0, 256, output, 3
+        )
+        != 0
+    )
 
 
 @pytest.mark.parametrize(

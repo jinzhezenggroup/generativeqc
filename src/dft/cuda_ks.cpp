@@ -27,6 +27,7 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/mean_field_setup.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"

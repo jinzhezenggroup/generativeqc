@@ -91,6 +91,19 @@ LDA RKS/UKS public forces matched independent gradients 2/2, and two DF
 shared-caller regressions passed 2/2. Final HF/KS density matrix A/B errors
 were at most `9.1e-14` across RHF, UHF, RKS and UKS.
 
+PR qualification exposed missing opt-in Gram charges in the HF public shape
+queries and an incomplete KS host-probe binding. All three HF arena queries
+now share the admitted selector with execution. An isolated host-only follow-up
+in the retained Notebook passed 169 Python tests and the native HF resource-layout
+test, covering default/off/on capacity, histories 1/2/8/64, both spin counts,
+invalid selection and fleet budgets. The native regression failed at the Gram
+byte assertion when linked with the original query source. Its seven host C++
+objects used verified `sccache` 0.16.0; no CUDA execution or new numerical claim
+is implied. Logs and exit receipts are under the same experiment directory as
+`pr2159-host-tests-final.log`, `pr2159-host-tests-final.exit` and
+`pr2159-hf-host.exit`. The frozen incumbent P/W header hash remains unchanged;
+the additive DIIS adapter is excluded from that historical payload comparison.
+
 Matched complete endpoint A/B used three calls per mode and the median of
 the last two, including the requested output and public `Calculator` work.
 The ratios below are incremental/default; values near one do not establish
