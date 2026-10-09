@@ -182,6 +182,45 @@ def test_mixed_bool_real_host_containers_fail_before_numpy_promotion() -> None:
         xp.asarray(deep)
 
 
+def test_host_array_like_uses_its_unforced_source_kind() -> None:
+    class BooleanArrayLike:
+        def __array__(
+            self, dtype: object = None, copy: builtins.bool | None = None
+        ) -> np.ndarray:
+            values = np.asarray([True, False])
+            return np.array(
+                values,
+                dtype=dtype,
+                copy=True if copy is None else copy,
+            )
+
+    source = BooleanArrayLike()
+    np.testing.assert_array_equal(xp.asarray(source), [True, False])
+    np.testing.assert_array_equal(xp.asarray(source, dtype=xp.bool), [True, False])
+    with pytest.raises(TypeError, match="cross-kind"):
+        xp.asarray(source, dtype=xp.float64)
+
+    class RealArrayLike:
+        def __array__(
+            self, dtype: object = None, copy: builtins.bool | None = None
+        ) -> np.ndarray:
+            values = np.asarray([0.25, 0.5])
+            return np.array(
+                values,
+                dtype=dtype,
+                copy=True if copy is None else copy,
+            )
+
+    real_source = RealArrayLike()
+    np.testing.assert_array_equal(
+        xp.asarray(real_source, dtype=xp.float64), [0.25, 0.5]
+    )
+    with pytest.raises(TypeError, match="cross-kind"):
+        xp.asarray(real_source, dtype=xp.bool)
+    with pytest.raises(TypeError, match="nested host"):
+        xp.asarray([source], dtype=xp.bool)
+
+
 def test_tensor_facade_exports_comparison_factory() -> None:
     x = ir.input_tensor("x", TensorSpec(dtype="float64", role="input"))
     predicate = tensor_compare("equal", x, x)

@@ -86,11 +86,14 @@ def _check_host_values(value: object) -> frozenset[str]:
                     "use import_dlpack for an explicit handoff"
                 )
             if not isinstance(item, (list, tuple)):
-                kinds.add(
-                    "bool"
-                    if type(item) is builtins.bool or isinstance(item, np.bool_)
-                    else "real"
-                )
+                if type(item) is builtins.bool or isinstance(item, np.bool_):
+                    kinds.add("bool")
+                elif type(item) in (int, float, complex, str, Fraction) or isinstance(
+                    item, np.generic
+                ):
+                    kinds.add("real")
+                else:
+                    kinds.add("unknown" if depth == 0 else "unknown-nested")
                 continue
             children = item
             child_count = len(item)
@@ -691,22 +694,29 @@ def asarray(
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
         return VibeArray(_cast(value.node, name))
     source_kinds = _check_host_values(value)
-    if len(source_kinds) > 1:
+    if "unknown-nested" in source_kinds:
+        raise TypeError("nested host containers require scalar or NumPy array leaves")
+    if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
         raise TypeError("mixed bool/real host values are unsupported")
-    target = None if dtype is None else _data_dtype_name(dtype)
-    source_is_bool = (
-        source_kinds == frozenset(("bool",))
-        if source_kinds
-        else np.asarray(value).dtype.name == "bool"
+    source_array = (
+        np.asarray(value) if source_kinds == frozenset(("unknown",)) else None
     )
+    target = None if dtype is None else _data_dtype_name(dtype)
+    if source_array is not None:
+        source_is_bool = source_array.dtype.name == "bool"
+    elif source_kinds:
+        source_is_bool = source_kinds == frozenset(("bool",))
+    else:
+        source_is_bool = np.asarray(value).dtype.name == "bool"
     if target is not None and (target == "bool") != source_is_bool:
         raise TypeError("cross-kind bool/real input conversion is unsupported")
+    source = value if source_array is None else source_array
     if copy is True:
-        array = np.array(value, dtype=target, copy=True)
+        array = np.array(source, dtype=target, copy=True)
     elif copy is False:
-        array = np.array(value, dtype=target, copy=False)
+        array = np.array(source, dtype=target, copy=False)
     else:
-        array = np.asarray(value, dtype=target)
+        array = np.asarray(source, dtype=target)
     if array.dtype.name not in ("bool", "float32", "float64"):
         raise TypeError(
             "experimental Array API runtime inputs must have bool, float32 or float64 dtype"
