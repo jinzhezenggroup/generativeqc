@@ -96,12 +96,22 @@ historical evidence, not a source-matched supported-toolchain acceptance.
 
 At commit `41f920b512e25dc6da8c08130de9bbda15e71cbe`, qz Job
 `i1877-rankk-h100-1010h` completed all 16 cases on H100 with CUDA 12.9.86.
-The original JSONL, source/artifact hashes, 1,367 file checks and compiler
-cache receipts are retained in `benchmarks/results/rank-k-1877-20261010/`.
-The complete prepared device endpoint measured 12.79–21.50 µs for the
-generated route and 25.56–50.98 µs for cuBLAS over the tested small panels.
-Those receipts qualify executable alternatives, not a full method endpoint or
-a profitable production library default.
+The tracked compact record and all 16 accepted case rows are retained in
+`benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
+hashes, 1,367 file checks, cache receipts and negative trials remain at the
+task-owned qz result path and in Git history at commit
+`9ec7fc52e408c062802db6e68de0f31eca7eff1f`; they are not implied to have been
+independently retrieved merely because their hashes and locations are recorded.
+The complete prepared device endpoint measured 12.79–21.50 µs for the generated
+route and 25.56–50.98 µs for cuBLAS over the tested small panels. Those receipts
+qualify executable alternatives, not a full method endpoint or a profitable
+production library default.
+
+Pre-commit bot commit `9ec7fc52e408c062802db6e68de0f31eca7eff1f`
+subsequently reformatted the native header and device harness, including an
+include-order change. Therefore Job `h` remains source-matched to `41f920b` and
+must not be represented as an exact-byte qualification of that later head. A
+later source-matched device rerun requires its own source and artifact hashes.
 
 ## Revisit when
 
