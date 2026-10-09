@@ -50,6 +50,7 @@ ScfResult run_rhf_density_fitting_cuda(
   assert(options.energy_tolerance == 1e-4 && options.density_tolerance == 1e-4);
   assert(options.precision_mode == GENERATIVEQC_PRECISION_FP64);
   assert(options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_CUDA);
+  assert(!options.density_fitting_host_retry);
   assert(!options.compute_forces && !options.export_physical_reference);
   assert(options.reference_memory_budget_bytes == (512ULL << 20));
   assert(options.density_fitting_memory_budget_bytes == options.reference_memory_budget_bytes);

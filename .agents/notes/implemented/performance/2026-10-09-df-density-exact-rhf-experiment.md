@@ -7,6 +7,12 @@ The initial experiment below is preserved as measured. Its benchmark-only
 default decision is superseded by the separately qualified
 [native guarded default](2026-10-09-df-rhf-preconvergence-default.md).
 
+Review qualification: DF cycle counts below report only the final SCF attempt;
+the measured solver could perform an unrecorded internal DF retry. Complete
+timers include that work, but the retained cycle/fallback fields cannot exclude
+it. See the [historical cycle-count correction](2026-10-09-df-rhf-preconvergence-default.md#review-correction-historical-df-cycle-counts).
+These frozen results are not fresh GPU qualification of the retry-bound repair.
+
 ## Problem
 
 Conventional unscreened FP64 RHF consumes about 129 seconds in the 230-AO

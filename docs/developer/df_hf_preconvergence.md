@@ -15,8 +15,12 @@ by the native basis owner on the current geometry. They are not the caller's
 correlation RI basis, and no Python/PySCF computation or lookup occurs in
 production.
 
-The preliminary solve uses FP64, at most 32 iterations, and `1e-4` energy
-and density tolerances. Its numeric budget is capped at 512 MiB, after
+The preliminary solve uses FP64, one compact CUDA SCF attempt with at most
+32 iterations, and `1e-4` energy and density tolerances. The ordinary DF
+solver's additional host-orchestrated SCF retry is disabled for this guess;
+nonconvergence returns to cold Direct RHF. Physical final-state validation
+after convergence remains required and is separate from the SCF cycle count.
+Its numeric budget is capped at 512 MiB, after
 charging live correlation auxiliary metadata and any retained response cache;
 less than 256 MiB available skips preparation. Its source and SCF owners are
 destroyed before Direct SCF. Only the detached density remains, and its
@@ -110,8 +114,10 @@ The output retains density and orbital energies for gauge-independent
 comparison, actual Direct SCF and post-SCF Fock counts, physical commutator,
 canonical density drift, generalized eigen residual and `C^T S C` error.
 Degenerate orbital coefficients are deliberately not compared elementwise.
-DF cycle count is reported, but a complete DF physical-Fock census is not
-available and is explicitly null. Refused/retried Direct counts are not
+DF SCF cycle count is reported when `pre_work_counters_complete` is true;
+exceptions with unreported work emit null cycles. Both automatic and explicit
+preliminary guesses use a single compact SCF attempt. A complete DF physical-Fock
+census is not available and is explicitly null. Refused/retried Direct counts are not
 reconstructed from the successful attempt's iteration count.
 
 `rhf_seconds` includes all DF preparation/SCF/refusal and Direct solve work.

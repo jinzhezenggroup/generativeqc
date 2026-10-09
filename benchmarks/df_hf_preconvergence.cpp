@@ -124,10 +124,12 @@ int main(int argc, char** argv) {
     std::size_t native_jk_functions{};
     unsigned pre_cycles{};
     bool pre_converged{}, pre_fallback{};
+    bool pre_work_counters_complete{true};
     if (mode == "df-direct") {
       auto pre_options = exact_options;
       pre_options.export_physical_reference = false;
       pre_options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+      pre_options.density_fitting_host_retry = false;
       pre_options.density_fitting_memory_budget_bytes = budget;
       pre_options.energy_tolerance = pre_tolerance;
       pre_options.density_tolerance = pre_tolerance;
@@ -150,6 +152,7 @@ int main(int argc, char** argv) {
         }
       } catch (const std::exception& error) {
         pre_fallback = true;
+        pre_work_counters_complete = false;
         std::cerr << "DF preconvergence refused: " << error.what() << '\n';
       }
       pre_seconds = seconds(pre_start);
@@ -218,6 +221,7 @@ int main(int argc, char** argv) {
         pre_seconds = result.reference_guess.seconds;
         direct_seconds -= pre_seconds;
         pre_cycles = result.reference_guess.iterations;
+        pre_work_counters_complete = result.reference_guess.work_counters_complete;
         native_jk_functions = result.reference_guess.auxiliary_functions;
         pre_converged =
             result.reference_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
@@ -289,7 +293,8 @@ int main(int argc, char** argv) {
                      : mode == "df-direct" ? generativeqc::molecule::ao_count(jk)
                                            : 0);
     field("pre_tolerance", pre_tolerance);
-    field("pre_iterations", pre_cycles);
+    field("pre_iterations", pre_work_counters_complete ? std::to_string(pre_cycles) : "null");
+    field("pre_work_counters_complete", pre_work_counters_complete ? "true" : "false");
     field("df_fock_builds", "null");
     field("pre_converged", pre_converged ? "true" : "false");
     field("pre_fallback", pre_fallback ? "true" : "false");

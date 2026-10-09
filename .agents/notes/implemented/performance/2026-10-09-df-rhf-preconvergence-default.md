@@ -26,8 +26,12 @@ and validated-topology guard, not a molecule-name or benchmark-identity switch.
 Other cases keep the old cold Direct policy. Explicit detached seeds take
 precedence, including future compatible warm-state callers.
 
-The guess uses FP64, 32 iterations and `1e-4` preliminary energy/density
-tolerances. Cap its numeric budget at 512 MiB after charging live correlation
+The guess uses FP64, one compact CUDA SCF attempt with at most 32 iterations,
+and `1e-4` preliminary energy/density tolerances. Additional host-orchestrated
+SCF retries are disabled for the guess. Physical final-state validation after
+convergence remains required and is separate from this SCF iteration cap.
+The retained measurements predate the retry-bound repair described below.
+Cap its numeric budget at 512 MiB after charging live correlation
 auxiliary metadata and optional response-cache storage; skip below 256 MiB
 available. Release the DF source, Fock, eigensolver and DIIS owners before
 Direct; charge the surviving density's capacity in every downstream phase.
@@ -73,6 +77,35 @@ topology, work limit, memory bound, density guard, strict control preservation,
 refusal and explicit opt-out. Native methane tests retain the original
 small-system path and independent conventional-RHF oracle/fallback checks.
 
+### Review correction: historical DF cycle counts
+
+Review of the measured implementation found that setting `max_iterations=32`
+limited each SCF attempt, not the complete preliminary solve. A nonconverged
+compact CUDA attempt could be followed by a fresh host-orchestrated attempt
+with the same limit. An extracted native-owner regression reproduced 64 actual
+SCF iterations while the returned record reported only the final 32. Successful
+host retries likewise replaced the first attempt's count; final guess success
+and the recorded fallback flags did not establish that no internal DF retry ran.
+
+This limitation applies to every frozen cohort below, including the separate
+`cdb2131a` integration pair. Their DF cycle fields describe the final reported
+attempt, not a verified total. The retained records cannot determine whether
+any measured solve used the internal retry. Complete DF preparation, reference
+and endpoint timers include discarded attempts, so the timing comparisons and
+numerical gates remain valid for the recorded binaries. Physical Direct Fock
+counts are separate from the incomplete DF census; DF physical-Fock counts
+remain explicitly null.
+
+The repair disables the extra host SCF attempt only for preliminary guesses,
+preserves ordinary DF solver behavior, and exports null preliminary cycle counts
+when work cannot be accounted for. The 32-cycle limit covers the single compact
+SCF attempt; subsequent physical final-state validation may perform additional
+work and does not make a 32-Fock claim. Host regression checks cover exhausted,
+partial-failure and malformed-record outcomes. These checks do not constitute
+a fresh GPU timing or numerical qualification of the repaired binary. Frozen
+receipts, source patches and hashes are preserved unchanged; historical speedups
+must not be relabeled as measurements of the repair.
+
 ### Five paired complete endpoints
 
 The default owner was frozen on master
@@ -103,11 +136,13 @@ These are matched benchmark controls, not changes to public CC solver defaults.
 Median RHF reduction is **33.635845%**, including median DF preparation
 3.210506688 s. Complete cold E+F reduction is **8.675789%** (45.652596999 s).
 Every individual pair improves the complete endpoint. Direct work is always
-19 SCF cycles / 20 physical Focks versus 13 DF cycles followed by 12 Direct
-cycles / 13 physical Direct Focks, including post-SCF work. DF physical Fock
-counts are unavailable and remain explicitly null, never inferred from cycles.
-There are no seed fallbacks, Direct execution retries, discarded primal
-attempts or discarded resident-JK response attempts.
+19 SCF cycles / 20 physical Focks versus 12 Direct cycles / 13 physical Direct
+Focks, including post-SCF work. The preliminary solve reports 13 final-attempt
+DF SCF cycles, subject to the historical count limitation above. DF physical
+Fock counts are unavailable and remain explicitly null, never inferred from
+cycles. No final guess refusal, seed fallback, Direct execution retry, discarded
+primal attempt or discarded resident-JK response attempt is recorded; these
+fields do not exclude an internal DF SCF retry.
 
 All 25 control/candidate numerical combinations pass. Maximum errors are
 `4.2632564e-14 Eh` in reference energy, `1.7053026e-13 Eh` in total energy,
@@ -135,7 +170,8 @@ or prepared-batch mode; no warm-density/batch throughput claim is made.
 
 Slurm 2774 shifts the first hydrogen by `0.02 bohr` along x. Its complete
 E+F pair is 552.116997698 s Direct versus 487.593827330 s auto, with RHF
-155.094346049 s versus 90.906128643 s including 3.297560717 s / 15 DF cycles.
+155.094346049 s versus 90.906128643 s including 3.297560717 s of preparation
+and 15 reported final-attempt DF SCF cycles.
 Actual Direct Focks fall from 23 to 13; neither path reuses an old geometry
 or density. Total energy difference is `2.2737368e-13 Eh`, full-component
 force difference `4.5079052e-10 Eh/bohr`, and fresh independent RHF
@@ -144,7 +180,8 @@ energy/density/orbital errors are `3.1263880e-13`, `3.8625128e-10`, and
 
 Slurm 2773 changes only the declared numeric budget to 8 GiB. Complete E+F
 is 592.025127689 s Direct versus 549.864125003 s auto, with RHF
-128.874705287 s versus 86.698087783 s including 3.181876310 s / 13 DF cycles.
+128.874705287 s versus 86.698087783 s including 3.181876310 s of preparation
+and 13 reported final-attempt DF SCF cycles.
 Actual Direct Focks remain 20 versus 13. The tighter existing correlation/
 response schedule costs more than the 64-GiB cohort on both paths; those
 times are not pooled. Maximum force difference is `3.2716208e-10 Eh/bohr`.
@@ -164,10 +201,11 @@ Slurm 2772 uses the reproducible 322-AO neutral propane fixture with 686
 correlation-RI functions, the same 64-GiB declared numeric budget and the
 fixed 512-MiB preliminary cap. Complete **energy-only** endpoints are
 1323.555844317 s Direct versus 1092.770877391 s auto. RHF is
-578.678886719 s versus 356.398949598 s including 9.786017762 s / 14 DF
-cycles. Actual Direct Focks fall from 21 to 14; no guess or target fallback
-occurs. This exposes a larger/more expensive source regime rather than
-extrapolating the 230-AO setup cost.
+578.678886719 s versus 356.398949598 s including 9.786017762 s of preparation
+and 14 reported final-attempt DF SCF cycles. Actual Direct Focks fall from 21
+to 14; no final guess refusal or seeded-Direct fallback is recorded. An internal
+DF retry is not excluded by these fields. This exposes a larger/more expensive
+source regime rather than extrapolating the 230-AO setup cost.
 
 Maximum candidate/control energy and density errors are `1.2789769e-13 Eh`
 and `4.3339422e-10`. Fresh independent conventional RHF energy/density/
@@ -189,15 +227,16 @@ not a promise that complete correlated E+F fits in 512 MiB or 8 GiB VRAM.
 Both endpoints pass the unchanged reference/force gates; their instrumented
 times are not pooled with the five uninstrumented pairs.
 
-### Latest-master integration
+### Latest-master integration before the retry-bound repair
 
 After fast-forwarding to master
 `cdb2131a47aaeb003bbc85fc76cf172848b8044b`, a separate cached Release build
 and Slurm 2777 on node2 repeat the complete 230-AO E+F pair. Direct RHF is
 128.362663975 s versus 86.381578004 s including 3.209459416 s of preparation;
 complete E+F is 516.234425654 s versus 472.112529135 s. Direct physical Focks
-remain 20 versus 13, with no fallback. Maximum full-component force difference
-is `3.2721137e-10 Eh/bohr`. Independent conventional RHF, same-Hamiltonian
+remain 20 versus 13, with no recorded final guess refusal or seeded-Direct
+fallback; internal DF retries were not recorded. Maximum full-component force
+difference is `3.2721137e-10 Eh/bohr`. Independent conventional RHF, same-Hamiltonian
 correlation energy, and both directional finite-difference gates pass.
 
 The same finite allocation passes **89 focused tests**, including real native

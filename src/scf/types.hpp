@@ -122,6 +122,10 @@ struct ScfOptions {
   double density_fitting_relative_threshold{1.0e-10};
   /** Byte budget for bounded DF plan/integral work; zero means implementation default. */
   std::size_t density_fitting_memory_budget_bytes{};
+  /** Single-system CUDA RHF may retry its compact solve with host-orchestrated
+   * DIIS. Provisional density guesses disable this second SCF attempt so their
+   * iteration limit bounds all preliminary SCF work. */
+  bool density_fitting_host_retry{true};
   /** Correlated energy consumers require values-only, bounded direct RHF. */
   bool export_physical_reference{false};
   std::size_t reference_memory_budget_bytes{};

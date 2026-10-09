@@ -79,6 +79,7 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
     options.compute_forces = false;
     options.export_physical_reference = false;
     options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+    options.density_fitting_host_retry = false;
     options.reference_memory_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
     options.density_fitting_memory_budget_bytes = options.reference_memory_budget_bytes;
     auto preliminary = scf::run_rhf_density_fitting_cuda(system, auxiliary, options, device_id);
