@@ -13,6 +13,7 @@
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
 #include "dft/xc_point_response.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/ecp_cuda.hpp"
 #include "methods/dft_method.hpp"
@@ -855,17 +856,19 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
                                                    std::size_t point_count, double* values,
                                                    std::size_t value_count) {
   constexpr std::size_t stride = 11;
-  const auto* family = generativeqc::dft::semilocal_family_metadata_from_code(functional);
+  const auto automatic = generativeqc::dft::generated::automatic_libxc_entry(functional);
+  const auto* family = automatic ? nullptr : generativeqc::dft::semilocal_family_metadata_from_code(functional);
   const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
   if (!std::isfinite(exchange_scale) || !std::isfinite(correlation_scale) || exchange_scale < 0 ||
-      correlation_scale < 0 || !family ||
-      (scaled && !generativeqc::dft::cuda_xc_capability_qualified(
-                     family->cuda_fast_paths.component_scaling)) ||
+      correlation_scale < 0 || (!family && !automatic) ||
+      (scaled && (!family || !generativeqc::dft::cuda_xc_capability_qualified(
+                                  family->cuda_fast_paths.component_scaling))) ||
       !rho || !gradient || !tau || !values || point_count == 0 ||
       point_count > std::numeric_limits<std::size_t>::max() / stride ||
       value_count != stride * point_count)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   try {
+    if (automatic) generativeqc::dft::validate_semilocal_point_program(*automatic.program);
     for (std::size_t point = 0; point < point_count; ++point) {
       double local_rho[2]{rho[point], rho[point_count + point]};
       double local_gradient[2][3]{};
@@ -893,6 +896,19 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
         output[9] = xc.kinetic[0];
         output[10] = xc.kinetic[1];
       };
+      if (automatic) {
+        // The native SCF and stationary derivative consumers must evaluate the
+        // same AOT program, including its pinned Libxc work-domain continuation.
+        const auto xc = automatic.program->evaluate(local_rho, local_gradient, local_tau);
+        bool finite = std::isfinite(xc.energy);
+        for (double value : xc.rho) finite = finite && std::isfinite(value);
+        for (double value : xc.kinetic) finite = finite && std::isfinite(value);
+        for (const auto& spin_gradient : xc.gradient)
+          for (double value : spin_gradient) finite = finite && std::isfinite(value);
+        if (!finite) throw std::runtime_error("nonfinite automatic Libxc point result");
+        publish_mgga(xc);
+        continue;
+      }
       switch (family->family) {
         case generativeqc::dft::SemilocalFamily::Lda: {
           const auto xc = generativeqc::dft::point::evaluate(false, local_rho, local_gradient,
