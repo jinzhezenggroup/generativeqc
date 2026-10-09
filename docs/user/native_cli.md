@@ -162,8 +162,7 @@ not a list of all compiler-owned scientific compositions. This slice supports
 PBE0 **RKS energy only**: PBE0 UKS, native DFT analytic forces and broader
 compiler-method name discovery remain future qualification work.
 
-The
-native method adapter validates method/backend/basis combinations and
+The native method adapter validates method/backend/basis combinations and
 rejects unsupported requests rather than silently running direct J/K.
 
 **DFT analytic forces remain unavailable through the native C++ calculation
