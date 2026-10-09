@@ -112,8 +112,11 @@ struct Projection {
 };
 struct ResidentAoMap {
   struct Indices {
-    const std::size_t* get() const { return nullptr; }
+    std::size_t* get() const { return nullptr; }
   } indices;
+  struct Masks {
+    unsigned* get() const { return nullptr; }
+  } masks;
   std::vector<std::size_t> offsets;
   std::string identity;
   const double* points{};
@@ -122,6 +125,10 @@ struct ResidentAoMap {
   int map_derivative_order{};
   bool local_ao = true;
 };
+void ao_region_compact_kernel(const unsigned*, std::size_t, std::size_t,
+                             const std::size_t*, std::size_t*, bool) {
+  throw std::runtime_error("resident compaction is outside this publication probe");
+}
 struct GridPlan {
   Context context;
   std::unique_ptr<ResidentAoMap> resident_map;

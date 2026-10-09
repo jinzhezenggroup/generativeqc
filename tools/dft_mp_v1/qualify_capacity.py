@@ -310,10 +310,10 @@ STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
-# Normalization selection is constructor-only and leaves page/resource budgets
-# unchanged. Bind the full initializer, including legacy-artifact rejection.
+# Both primitive modes share the admitted phase storage. Bind constructor-only
+# mode selection, legacy-artifact fallback, and boolean resource reservation.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "312d4b7120a5af71cc7958aeaf2db1e7262550ed69b1931f8592b4511a436485"
+    "10fe94e2b32797d78df4f61cdab6aa303977a2e54e15eac7484f3d2301c1e3c2"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -354,10 +354,11 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # its build-bound graph provenance is replayed from the admitted manifest.
 # Lazy source-product reuse changes only compilation preparation and telemetry;
 # native requirements, work windows, host reserves and reductions remain audited.
-# Optional device AO maps now preserve the native geometry allowance; bind the
-# extracted admission helper independently as well as its endpoint call site.
+# CSR and exact-bitmask device AO maps preserve native geometry allowances.
+# Exact maps reserve only their finite numeric owner, including both offset
+# mirrors and compact AO scratch; bind the helper and endpoint independently.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "b3f70cbe30432a9e998622f42e513bfa2e8fbb0d16513abbfc3cddf71479dfe1"
+    "11953bdd5a073e7cf4f07c424737918357d3477ff5b3dc2442670f97c3f6a495"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -366,16 +367,16 @@ STATIONARY_DEVICE_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "2ae396067d6e7610a2f0591c3a9eb61bd001d13a60377194b85823074ace5e65"
 )
 STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
-    "32ce7ee6f37e34e518e4769e3ce84bcbee72c00cb1e4fd377bcc03377ba14318"
+    "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "1889ebf22dff9d64f602f714ab5157e69b01bf122ba682f04cea04b2c232dba8"
+    "58be748f2b084ab282c1294e9bb6e07ee55b4f6514b108f195adca9dd7cc0a2e"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
 )
 BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256 = (
-    "9d11620513c8800057827b5af1fee1659552c1d43dd7d014c6fcb53c95f901ad"
+    "099ccef7e0204d3627bb8ad4f5f8b9181bf6eab28203241dd137df812d157387"
 )
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -395,7 +396,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "4f69d058f71826cd8a81ce74d4971a1249074447b5bbf6bcdc8e795c8fd535cb"
+    "0294d09bae3f61bbb78a7159e7229da7387cee4392395a9dc5fa63967598e38a"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -429,7 +430,7 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "ab6fbe1da74f53081a13afe0edb6f7c4bf1d65bb2594deb645d4c4e1f7244740"
+    "e2887ec3f402a587417cd16180d09f3df3e25988ddf52a0416e454b4ba0afe62"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
@@ -448,7 +449,7 @@ NATIVE_BECKE_NORMALIZE_METRICS_CONTRACT_SHA256 = (
     "0b9c9d546fff87884bd0279f6a39231a5821afeb5b1664cbfea1ef54abb3550b"
 )
 NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256 = (
-    "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
+    "6357559cf08d355460465b3f374c0898a30a8a5d4829b55a587921db28269934"
 )
 NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256 = (
     "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
@@ -457,10 +458,13 @@ NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256 = (
     "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
 )
 NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256 = (
-    "b7f8d1b346ae580f2c977cece992aa5cbea0582adcc9e0f2ab76c0fa94831e4b"
+    "bf0f5dc9db02a8b1e13c965eeb928734b775c8dd96af8b8f7215191e980ed94e"
+)
+NATIVE_BECKE_NORMALIZED_ADJOINT_CONTRACT_SHA256 = (
+    "14fc6c3d9944a82c610b79333618f37ff2b592ab2b1a7b4435ecd1331f40e9dd"
 )
 NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256 = (
-    "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
+    "a966bc33dc595f2467d359aa7772a3adf7daf37889fec41a9c29937fcba3f32a"
 )
 NATIVE_STATIONARY_CONFIGURE_BECKE_CONTRACT_SHA256 = (
     "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -471,10 +475,10 @@ NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
-# The JIT side now defers integral source reuse; packaged selection and the
-# prepared request/geometry/resource contracts stay unchanged and fail closed.
+# The JIT side defers integral source reuse. Prepared admission charges both
+# native CSR and exact-bitmask caches; packaged selection remains unchanged.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "1869293908a30ea3d85731aa3f938dad80c28fcfc337ac9909d96dfe43cfa70c"
+    "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
 )
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
     "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"
@@ -509,6 +513,9 @@ GRID_PLAN_DEFINITION = (
     "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
+EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256 = (
+    "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9"
+)
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
     "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811"
 )
@@ -523,7 +530,7 @@ SOURCE_RESOURCES_DEFINITION = (
     "sources=len(source_names), target=target, budget_bytes=max_device_bytes - "
     "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - "
     "native_geometry_reserve, phased_becke=_resolve_phased_becke_policy(na, None), "
-    "becke_primitive=_resolve_becke_primitive_policy())"
+    "becke_primitive=bool(_resolve_becke_primitive_policy()))"
 )
 SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
@@ -829,9 +836,14 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
         endpoint,
         (
             (
-                'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
+                'if resident_ao_producer in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}:\n'
                 "    ao_map_reserve = _stationary_device_ao_map_reserve("
                 "layout, ao_map_reserve, max_device_bytes)"
+            ),
+            (
+                'if resident_ao_producer == "exact-jets-native-bitmask":\n'
+                "    ao_map_reserve = ExactAoMapResources("
+                "n, len(state.grid.points), tile_points).admitted_bytes(ao_map_reserve)"
             ),
             "host_bound += ao_map_reserve",
             (
@@ -869,7 +881,7 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
         ensure,
         (
             (
-                'if resident_ao_producer == "pre-ao-envelope-native-csr":\n'
+                'if resident_ao_producer in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}:\n'
                 "    device_peak_bound += resident_ao_cache_bytes"
             ),
             (
@@ -889,8 +901,9 @@ def _resident_ao_policy_contract(tree: ast.Module) -> None:
             ),
             (
                 "owner = (ResidentDeviceAoMapOwner(grid, domain, cutoff=cutoff, "
-                "budget_bytes=budget_bytes, max_active_fraction=max_active_fraction) "
-                "if producer == 'pre-ao-envelope-native-csr' else "
+                "budget_bytes=budget_bytes, max_active_fraction=max_active_fraction, "
+                "**({'producer': producer} if producer == 'exact-jets-native-bitmask' else {})) "
+                "if producer in {'pre-ao-envelope-native-csr', 'exact-jets-native-bitmask'} else "
                 "ResidentAoMapCache(grid, domain, cutoff=cutoff, "
                 "budget_bytes=budget_bytes, producer=producer))"
             ),
@@ -1082,7 +1095,13 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     resource_digest = _lf_sha256(resource_source.read_bytes())
     if resource_digest != GEOMETRY_RESOURCES_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA geometry-resource contract changed")
+    exact_ao_map_digest = _lf_sha256(
+        (repository / "python/generativeqc_compiler/dft/ao_map_plan.py").read_bytes()
+    )
+    if exact_ao_map_digest != EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA exact AO map resource contract changed")
     page_contract = {
+        "exact_ao_map_resources_sha256": exact_ao_map_digest,
         "public_wrapper_sha256": wrapper_digest,
         "geometry_resources_sha256": resource_digest,
         "ordinary_tile_layout_sha256": STATIONARY_TILE_LAYOUT_CONTRACT_SHA256,
@@ -1176,6 +1195,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_becke_primitive_admission_sha256": (
             "int stationary_configure_becke_primitive_v1(",
             NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256,
+        ),
+        "native_becke_normalized_adjoint_sha256": (
+            "int stationary_configure_becke_normalized_adjoint_v1(",
+            NATIVE_BECKE_NORMALIZED_ADJOINT_CONTRACT_SHA256,
         ),
         "native_becke_primitive_metrics_sha256": (
             "int stationary_becke_primitive_metrics_v1(",
@@ -1894,7 +1917,7 @@ def _method_resources(
             limits["additional_device_bytes"] - grid_plan.peak_bytes - native_reserve,
         ),
         phased_becke=_resolve_phased_becke_policy(atom_count, None),
-        becke_primitive=_resolve_becke_primitive_policy(),
+        becke_primitive=bool(_resolve_becke_primitive_policy()),
     )
     source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes
