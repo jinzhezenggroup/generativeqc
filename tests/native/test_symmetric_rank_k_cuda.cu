@@ -140,8 +140,9 @@ static void verify(const std::vector<double>& result, const std::vector<double>&
             beta == 0.0
                 ? 0.0
                 : baseline[matrix_index(batch, std::min(row, col), std::max(row, col), n, order)];
-        const auto expected =
-            static_cast<double>(alpha * sum + beta * static_cast<long double>(old));
+        // TensorIR add starts at +0; overwrite is a multiply without that seed.
+        const auto expected = static_cast<double>(
+            beta == 0.0 ? alpha * sum : 0.0L + alpha * sum + beta * static_cast<long double>(old));
         const auto actual = result[matrix_index(batch, row, col, n, order)];
         const auto tolerance = 2e-11 * std::max(1.0, std::abs(expected));
         if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance ||
@@ -316,18 +317,23 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
       check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
       verify(result, poisoned, coefficients, weights, n, k, batches, order, alpha, overwrite.beta);
     }
-    check(cudaMemcpy(d_output.get(), poisoned.data(), d_output.bytes(), cudaMemcpyHostToDevice));
-    check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
-    auto signed_zero = invocation;
-    signed_zero.alpha = -0.0;
-    signed_zero.beta = -0.0;
-    binding.execute(stream, signed_zero);
-    check(cudaStreamSynchronize(stream));
-    check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
-    if (error) throw std::runtime_error("rank-k signed-zero overwrite failed");
-    check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
-    verify(result, poisoned, coefficients, weights, n, k, batches, order, signed_zero.alpha,
-           signed_zero.beta);
+    for (double zero_alpha : {0.0, -0.0}) {
+      for (double zero_beta : {0.0, -0.0}) {
+        check(
+            cudaMemcpy(d_output.get(), poisoned.data(), d_output.bytes(), cudaMemcpyHostToDevice));
+        check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
+        auto signed_zero = invocation;
+        signed_zero.alpha = zero_alpha;
+        signed_zero.beta = zero_beta;
+        binding.execute(stream, signed_zero);
+        check(cudaStreamSynchronize(stream));
+        check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+        if (error) throw std::runtime_error("rank-k signed-zero overwrite failed");
+        check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
+        verify(result, poisoned, coefficients, weights, n, k, batches, order, signed_zero.alpha,
+               signed_zero.beta);
+      }
+    }
 
     // A nonfinite signed weight must leave the entire output intact.
     weights[0] = std::numeric_limits<double>::quiet_NaN();

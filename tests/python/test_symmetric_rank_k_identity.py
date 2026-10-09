@@ -137,6 +137,7 @@ def test_generation_only_hashes_inputs_without_executing_compilers(
 
     monkeypatch.setattr(subprocess, "Popen", no_process)
     rendered = generator.render(generator.compiler_identity(*inputs))
+    assert "rank_k_bound_old_output" in rendered
     assert "rank_k_density_row_overwrite_candidates" in rendered
     assert "rank_k_density_row_update_candidates" in rendered
 
@@ -166,6 +167,7 @@ def test_checkout_generation_needs_no_installed_python_packages(
         timeout=30,
     )
     rendered = output.read_text()
+    assert "rank_k_bound_old_output" in rendered
     assert "rank_k_density_row_overwrite_candidates" in rendered
     assert "rank_k_density_row_update_candidates" in rendered
 
@@ -181,10 +183,13 @@ def test_missing_native_inputs_fail_closed(inputs: tuple[Path, Path, Path]) -> N
         generator.compiler_identity(*inputs)
 
 
-def test_missing_device_subtool_fails_closed(inputs: tuple[Path, Path, Path]) -> None:
+@pytest.mark.parametrize("relative", ["nvvm/bin/cicc", "bin/nvcc.profile"])
+def test_missing_device_subtool_fails_closed(
+    inputs: tuple[Path, Path, Path], relative: str
+) -> None:
     _, toolkit, _ = inputs
-    (toolkit / "nvvm/bin/cicc").unlink()
-    with pytest.raises(FileNotFoundError, match="nvvm/bin/cicc"):
+    (toolkit / relative).unlink()
+    with pytest.raises(FileNotFoundError, match=relative):
         generator.compiler_identity(*inputs)
 
 

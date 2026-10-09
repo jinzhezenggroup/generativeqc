@@ -108,10 +108,8 @@ __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder ord
     }
     double value{};
     if (!generated_value(call, batch, row, col, order, value)) atomicCAS(call.error, 0, 1);
-    const auto old =
-        call.beta == 0.0
-            ? 0.0
-            : call.output[batch * call.n * call.n + matrix_index(row, col, call.n, order)];
+    const auto old = rank_k_generated::rank_k_bound_old_output(
+        call.output, batch, call.n, row, col, order == RankKOrder::RowMajor, call.beta);
     double updated{};
     if (!update_value(call, value, old, updated)) atomicCAS(call.error, 0, 1);
   }
@@ -127,7 +125,8 @@ __global__ void validate_library(SymmetricRankKInvocation call, const double* pr
     if (row > col) continue;
     const auto address = batch * call.n * call.n + matrix_index(row, col, call.n, order);
     const auto value = product[address];
-    const auto old = call.beta == 0.0 ? 0.0 : call.output[address];
+    const auto old = rank_k_generated::rank_k_bound_old_output(
+        call.output, batch, call.n, row, col, order == RankKOrder::RowMajor, call.beta);
     double updated{};
     if (!update_value(call, value, old, updated)) atomicCAS(call.error, 0, 1);
   }
@@ -147,8 +146,8 @@ __global__ void publish(SymmetricRankKInvocation call, const double* product, Ra
       value = product[offset + matrix_index(row, col, call.n, order)];
     else if (!generated_value(call, batch, row, col, order, value))
       return;
-    const auto old =
-        call.beta == 0.0 ? 0.0 : call.output[offset + matrix_index(row, col, call.n, order)];
+    const auto old = rank_k_generated::rank_k_bound_old_output(
+        call.output, batch, call.n, row, col, order == RankKOrder::RowMajor, call.beta);
     double updated{};
     if (!update_value(call, value, old, updated)) return;
     call.output[offset + matrix_index(row, col, call.n, order)] = updated;

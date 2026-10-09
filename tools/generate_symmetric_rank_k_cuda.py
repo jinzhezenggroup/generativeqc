@@ -16,6 +16,7 @@ from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 from generativeqc_compiler.tensor.scf import density_program, weighted_density_program
 from generativeqc_compiler.tensor.symmetric_rank_k import (
+    emit_symmetric_rank_k_old_output_binding,
     emit_symmetric_rank_k_portfolio,
     symmetric_rank_k_scalar_overwrite_program,
     symmetric_rank_k_scalar_update_program,
@@ -26,6 +27,7 @@ from tools.generate_build_identity import _inventory, _source_identity
 
 _TOOLCHAIN_FILES = (
     "bin/nvcc",
+    "bin/nvcc.profile",
     "bin/cudafe++",
     "bin/fatbinary",
     "bin/nvlink",
@@ -112,6 +114,7 @@ def render(source: str) -> str:
     bodies = [
         "#pragma once",
         "#include <cmath>",
+        "#include <cstddef>",
         '#include "runtime/lowering_binding.hpp"',
         "namespace generativeqc::tensor::rank_k_generated {",
     ]
@@ -125,6 +128,7 @@ def render(source: str) -> str:
         },
     )
     bodies.extend(stages.values())
+    bodies.append(emit_symmetric_rank_k_old_output_binding())
     overwrite = emit_scalar_cpp(
         symmetric_rank_k_scalar_overwrite_program(),
         function_name="rank_k_alpha_overwrite",

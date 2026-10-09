@@ -1,12 +1,14 @@
 """Project a symmetric weighted rank-k TensorIR contraction to CUDA providers.
 
-The existing ternary einsum is the scientific owner.  This module only records
-one physical batch slice and offers implementations of that same operation.
+The original Gram and composed overwrite/update roots own the science. A
+generated reader binds physical upper-triangle storage to the constrained
+logical old-output input for the nonzero-beta branch.
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
+from math import isfinite
 from typing import Literal
 
 from generativeqc_compiler.common.backend import TargetInfo
@@ -21,6 +23,7 @@ from generativeqc_compiler.common.lowering_provider import (
     ProviderDescriptor,
 )
 from generativeqc_compiler.common.native_lowering import native_lowering_portfolio
+from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.common.schedule import ScheduleTopology
 from generativeqc_compiler.common.specialization import (
     CompilationIdentity,
@@ -30,10 +33,49 @@ from generativeqc_compiler.common.specialization import (
 from .ir import Node, add, broadcast, input_tensor, multiply
 from .lowering import TensorLoweringAdapter
 from .program import Program
-from .types import TensorSpec, checked_shape
+from .types import Symmetry, TensorSpec, checked_shape
 
 MatrixOrder = Literal["row-major", "column-major"]
 UpdateMode = Literal["overwrite", "update"]
+
+
+def emit_symmetric_rank_k_old_output_binding() -> str:
+    """Bind physical upper storage to the symmetric logical old input."""
+    return """__device__ inline double rank_k_bound_old_output(
+    const double* output, std::size_t batch, std::size_t n,
+    std::size_t row, std::size_t col, bool row_major, double beta) {
+  if (beta == 0.0) return 0.0;
+  const auto upper_row = row < col ? row : col;
+  const auto upper_col = row < col ? col : row;
+  const auto address = row_major ? upper_row * n + upper_col : upper_row + upper_col * n;
+  return output[batch * n * n + address];
+}"""
+
+
+def symmetric_rank_k_bind_old_output(
+    program: Program, output: str, beta: float, old_output: object
+) -> object:
+    """Materialize the logical old input from physical upper storage for reference use."""
+    import numpy as np
+
+    if not isfinite(beta):
+        raise ValueError("rank-k beta must be finite")
+    shape = program.outputs[output].spec.shape
+    if len(shape) < 2 or shape[-2] != shape[-1]:
+        raise ValueError("rank-k old output requires square matrices")
+    bound = np.zeros(shape, dtype=np.float64)
+    if beta == 0.0:
+        return bound
+    physical = np.asarray(old_output)
+    if physical.shape != shape or physical.dtype != np.dtype("float64"):
+        raise ValueError("rank-k old output must match the FP64 output shape")
+    rows, columns = np.triu_indices(shape[-1])
+    upper = physical[..., rows, columns]
+    if not np.isfinite(upper).all():
+        raise ValueError("rank-k old output upper triangle must be finite")
+    bound[..., rows, columns] = upper
+    bound[..., columns, rows] = upper
+    return bound
 
 
 def _domains(indices: tuple) -> tuple:
@@ -79,8 +121,23 @@ def symmetric_rank_k_scalar_update_program() -> Program:
     )
 
 
+def _check_rank_k_binding_names(program: Program) -> None:
+    reserved = {
+        "rank_k_alpha",
+        "rank_k_beta",
+        "rank_k_old_output",
+        "rank_k_bound_old_output",
+    }
+    if any(
+        value.op == "input" and value.attrs["name"] in reserved
+        for value in program.live_nodes
+    ):
+        raise ValueError("rank-k source inputs use reserved update binding names")
+
+
 def symmetric_rank_k_overwrite_program(program: Program, output: str) -> Program:
     """Compose the original Gram with its explicit alpha input."""
+    _check_rank_k_binding_names(program)
     product = program.outputs[output]
     alpha = input_tensor("rank_k_alpha", TensorSpec((), dtype="float64", role="input"))
     return Program(
@@ -98,11 +155,17 @@ def symmetric_rank_k_overwrite_program(program: Program, output: str) -> Program
 
 
 def symmetric_rank_k_update_program(program: Program, output: str) -> Program:
-    """Compose the original Gram with explicit scalar and old-output inputs."""
+    """Compose the nonzero-beta branch with a bound symmetric old input."""
+    _check_rank_k_binding_names(program)
     product = program.outputs[output]
     alpha = input_tensor("rank_k_alpha", TensorSpec((), dtype="float64", role="input"))
     beta = input_tensor("rank_k_beta", TensorSpec((), dtype="float64", role="input"))
-    old_output = input_tensor("rank_k_old_output", replace(product.spec, role="input"))
+    permutation = list(range(len(product.spec.indices)))
+    permutation[-2:] = reversed(permutation[-2:])
+    old_output = input_tensor(
+        "rank_k_bound_old_output",
+        replace(product.spec, role="input", symmetries=(Symmetry(tuple(permutation)),)),
+    )
     updated = _rank_k_update(
         broadcast(alpha, product.spec.indices, ()),
         product,
@@ -248,7 +311,7 @@ def symmetric_rank_k_request(
     }
     alpha = named_inputs.get("rank_k_alpha")
     beta = named_inputs.get("rank_k_beta")
-    old_output = named_inputs.get("rank_k_old_output")
+    old_output = named_inputs.get("rank_k_bound_old_output")
     update_products = [value for value in update_root.inputs if value.op == "multiply"]
     alpha_views = [
         value
@@ -369,6 +432,14 @@ def symmetric_rank_k_request(
         alpha_input_hash=adapter.hashes[alpha],
         beta_input_hash="" if beta is None else adapter.hashes[beta],
         old_output_hash="" if old_output is None else adapter.hashes[old_output],
+        old_output_binding_identity=""
+        if old_output is None
+        else canonical_hash(
+            {
+                "logical_input": "rank_k_bound_old_output",
+                "native_reader": emit_symmetric_rank_k_old_output_binding(),
+            }
+        ),
         update_root_hash=adapter.hashes[update_root],
         update_program_hash=composition.logical_hash,
         update_mode=update,

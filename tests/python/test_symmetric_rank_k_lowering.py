@@ -178,6 +178,7 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
     toolkit = tmp_path / "cuda"
     for relative in (
         "bin/nvcc",
+        "bin/nvcc.profile",
         "bin/cudafe++",
         "bin/fatbinary",
         "bin/nvlink",

@@ -71,6 +71,7 @@ if [[ ! -x "$nvcc_exe" ]]; then
 fi
 toolchain_files=(
   "$toolkit_root/bin/nvcc"
+  "$toolkit_root/bin/nvcc.profile"
   "$toolkit_root/bin/cudafe++"
   "$toolkit_root/bin/fatbinary"
   "$toolkit_root/bin/nvlink"
