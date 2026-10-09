@@ -17,9 +17,11 @@ def packed_restricted_k_block_doubles(spec: ShellClassSpec) -> int:
     return 2 * (first * third + second * third + first * fourth + second * fourth)
 
 
-def packed_restricted_k_block_eligible(spec: ShellClassSpec) -> bool:
+def packed_restricted_k_block_eligible(
+    spec: ShellClassSpec,
+    *,
+    maximum_doubles: int = PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES,
+) -> bool:
     """Keep the qualification alternative inside one bounded shared footprint."""
 
-    return (
-        packed_restricted_k_block_doubles(spec) <= PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES
-    )
+    return packed_restricted_k_block_doubles(spec) <= maximum_doubles

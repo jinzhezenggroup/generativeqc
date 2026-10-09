@@ -1,0 +1,19 @@
+{
+  "base_commit": "ec71ef7fea6f705a3623b45c7bfb51105c43337a",
+  "slurm_job": "2795",
+  "visibility": "0",
+  "device": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "input_sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+  "measured_patch_sha256": "4f9d9a35921825c37f62e06383d4e41adb0e28ba9ac1252bdfa91a68f84ddadc",
+  "libraries": {
+    "base": "71d509d25e4f3a67ced5003fb3d47b7e9affe7b2e03df20490bb07bd386ec097",
+    "candidate": "21f9644b323be44fa3e24cc7e65c8f9331b55a6f7e68162fcc34f94581692d8e"
+  },
+  "executables": {
+    "base": "b8683698887d3a7172d460ee8e1cd3ad101dce60c575c44bde92ce999e350957",
+    "candidate": "96f6fc6c95a3fcacf18418e096ff32c69efd173f06c17d80ecfce10c4e712610"
+  },
+  "timing_boundary": "native helper: molecular RHF, DF source, CCSD, independent expanded replay and FP64 (T), including inner phase-owner teardown; fresh-process wall additionally includes startup and all final caller/reference cleanup",
+  "forces_requested": false
+}

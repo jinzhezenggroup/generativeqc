@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .capabilities import CAPABILITY_STREAMING_FOCK, query_integral_capability
-from .cuda_schedule import schedule_candidates
+from .cuda_schedule import ScheduleKind, schedule_candidates
 from .fused_schedule import build_fused_shell_plan
 from .ir import KernelConsumer, build_integral_ir
 from .production_selection import KernelSelection
@@ -43,10 +43,18 @@ def direct_rys_value_candidates(
         )
         if not query_integral_capability(integral).supported:
             continue
-        if not schedule_candidates(integral, profile.target):
+        schedules = tuple(
+            item
+            for item in schedule_candidates(integral, profile.target)
+            if item.kind == ScheduleKind.COMPONENT_LANES
+        )
+        if not schedules:
             continue
         plan = build_fused_shell_plan(
-            incumbent.spec, integral=integral, target=profile.target
+            incumbent.spec,
+            integral=integral,
+            target=profile.target,
+            schedule=schedules[0],
         )
         candidates.append(
             KernelSelection(

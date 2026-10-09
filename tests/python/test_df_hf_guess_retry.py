@@ -21,6 +21,7 @@ _SHIM = r"""
 #include <vector>
 #include "methods/df_hf_guess.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/density_fitting.hpp"
 #include "molecule/basis.hpp"
 using namespace generativeqc;
 using scf::ScfOptions;
@@ -78,9 +79,21 @@ double density_rms(const Matrix&,const Matrix&){return 1.0;}
 
 _TAIL = r"""namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& s) noexcept {return s.shells.size();}
+std::size_t cartesian_ao_count(const core::System& system) noexcept {return system.shells.size();}
 generativeqc_status validate_and_normalize(core::System&,std::string&){return GENERATIVEQC_STATUS_SUCCESS;}
 }
 namespace generativeqc::scf {
+std::size_t density_fitting_source_metadata_bytes(std::size_t, std::size_t, std::size_t,
+    std::size_t, std::size_t, std::size_t) {return 0;}
+std::size_t density_fitting_scf_diis_device_bytes(std::size_t, std::size_t, unsigned) noexcept {return 0;}
+DensityFittingTilePlan plan_requested_density_fitting_tiles(DfPairStorageRequest, std::size_t,
+    std::size_t, std::size_t, std::size_t, std::size_t, std::size_t,
+    std::size_t, bool, std::size_t, bool method_owned_packing) {
+  assert(!method_owned_packing);
+  DensityFittingTilePlan plan;
+  plan.stores_full_three_center = true;
+  return plan;
+}
 ScfResult run_rhf_density_fitting_cuda(const core::System& s,const core::System& a,const ScfOptions& o,int d,const std::vector<double>* density,initial_guess::OverlapOrthogonalizer*) {return ::run_rhf_density_fitting_cuda_impl(s,a,o,d,density,nullptr);}
 void validate_hf_warm_density(const core::System&,generativeqc_method,const std::vector<double>&,const initial_guess::EigenOperation&){}
 }

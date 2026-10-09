@@ -1,0 +1,7 @@
+{
+  "path": "src/dft/energy_change.hpp",
+  "reason": "Shared host/device compensated electronic-energy subtraction for KS convergence at fixed geometry; low-word correction and the first-evaluation baseline remain maintained numerical logic, not retired generated code.",
+  "regions": [],
+  "role": "scientific",
+  "subsystem": "xc"
+}

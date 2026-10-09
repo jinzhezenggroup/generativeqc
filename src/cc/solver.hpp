@@ -25,6 +25,9 @@ struct SolverOptions {
   bool df_auxiliary_reduction{true};
   // Optional compiler-packed FP64 matrix contractions, with scalar fallback.
   bool df_matrix_gemm{true};
+  // Independently admitted lowering of the original expanded physical replay.
+  // Disable for ablation; never reuse the primal's reduced intermediates.
+  bool df_replay_matrix_gemm{true};
   // Shape/budget admission may choose a smaller Q tile, including one slice.
   std::size_t df_auxiliary_batch_limit{8};
   // Native canonical CUDA construction may retain the small spectrum instead
@@ -121,6 +124,7 @@ struct SolverDiagnostic {
   std::size_t df_preparation_calls{};
   std::size_t df_contraction_terms{};
   bool df_matrix_gemm{};
+  bool df_replay_matrix_gemm{};
   std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_bytes{};
   std::size_t df_provider_capacity_bytes{};
   std::size_t df_auxiliary_batch_size{1}, df_auxiliary_tiles{}, df_accumulation_bytes{};

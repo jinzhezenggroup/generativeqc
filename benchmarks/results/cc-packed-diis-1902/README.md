@@ -9,7 +9,10 @@ All compilation, tests and postprocessing run on n2 in finite Slurm allocations,
 with ccache. Inputs are native molecular water7 (o=5,v=2,q=7) and ethane230
 (o=9,v=221,q=488), DIIS8, canonical derived denominators and a64 GiB ordinary
 budget. No supplied orbitals/amplitudes or production reference oracle is used.
-`summary.json` retains binary/input/source hashes, every observation and gates.
+`summary.json.gz` retains binary/input/source hashes, every observation and gates.
+Storage is lossless: decompression restores the original JSON bytes (SHA-256
+`1a1f288a61e60b8bebbe4aef818957c6e95269e8ed0bc2aa6e731061e087f463`).
+Only storage changes; measurements, ordering and scientific identities do not.
 
 ## Complete energy: job2327, two alternating pairs
 

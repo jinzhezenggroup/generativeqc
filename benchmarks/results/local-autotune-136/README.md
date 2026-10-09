@@ -11,7 +11,7 @@ energy and analytic forces.
 Source revision: `02b6897`. CUDA toolkit/NVCC 12.9.86; runtime 12090; driver 13000.
 Slurm jobs 8962 (tuning) and 8963 (reuse/import). The native source fingerprint
 and complete hardware/toolchain identities are in `profile.json` and
-`evidence.json`. The baseline and candidates are Release builds with fast
+`evidence.json.xz`. The baseline and candidates are Release builds with fast
 compilation disabled; the native compiler cache was already populated.
 
 The bounded quick run selected PPPS and PSPS, covering 26.33% of measured active
@@ -35,7 +35,7 @@ The final PPPS native object passed 14 independent libcint fixtures across
 RHF/UHF direct and persistent wrappers (56 executions), with maximum absolute
 Fock error `6.70e-16`. All source, object, cubin, schedule, and driver hashes,
 compiler resources, raw samples, and rejected candidates remain in
-`evidence.json`. The final accepted library exactly reproduced the binary used
+`evidence.json.xz`. The final accepted library exactly reproduced the binary used
 for endpoint acceptance.
 
 `diagnostics.json` proves automatic selection from the tuning cache. `reuse.json`
@@ -94,3 +94,8 @@ and value-only Coulomb lookup strides independently of geometry scratch sizes.
 The exact native-object gate exposed these integration issues before any
 incorrect profile was activated. The two affected golden shard hashes include
 a documented correctness update in the integral-IR artifact fixture.
+
+Decode the complete original record with
+`xz -dc benchmarks/results/local-autotune-136/evidence.json.xz`.
+Decoded bytes and SHA256 are recorded in
+[`../unified-k-work-20261009/storage-recovery.json`](../unified-k-work-20261009/storage-recovery.json).

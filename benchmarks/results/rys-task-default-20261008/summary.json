@@ -1,0 +1,345 @@
+{
+  "schema": "rys-task-default-promotion.v1",
+  "qualified_base_revision": "4385f72751b829883407c01106186917c344317b",
+  "architecture": "sm_120",
+  "block_threads": 128,
+  "warps_per_cta": 4,
+  "preferred_classes": [
+    "psps",
+    "ppps",
+    "dsss",
+    "dpss",
+    "dsps"
+  ],
+  "native_source_identity": "b05f71428835c60b17bf813b19364b987eb1700e34b7974f587a7f816c67eeb3",
+  "library_sha256": "18a7805606ca47f95b8b324a10331bea9c4dd7670cd96bf5b16386207f8b3a4f",
+  "cohorts": {
+    "default-promotion-96": {
+      "gate": false,
+      "failures": [
+        "no complete cold E+F median advantage",
+        "no complete cold E+F mean advantage"
+      ],
+      "median_seconds": {
+        "incumbent": 113.71922518312931,
+        "default": 119.57065896317363
+      },
+      "mean_seconds": {
+        "incumbent": 115.28738112747669,
+        "default": 116.45912177860737
+      },
+      "speedup": 0.951062962847378,
+      "sample_seconds": {
+        "incumbent": [
+          118.53194028139114,
+          113.61097791790962,
+          113.71922518312931
+        ],
+        "default": [
+          110.0147232413292,
+          119.57065896317363,
+          119.79198313131928
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          18,
+          17,
+          17
+        ],
+        "default": [
+          17,
+          19,
+          19
+        ]
+      },
+      "max_energy_error": 9.094947017729282e-12,
+      "max_force_error": 3.7811254127717575e-11,
+      "library_sha256": "4da536bcd7d1cec9266d93a565e9984346230db478f9a18de093aa575ca2b5a4",
+      "slurm_job_id": "6665",
+      "rys_task_classes": "all"
+    },
+    "final-promotion-96": {
+      "gate": false,
+      "failures": [
+        "no complete cold E+F median advantage",
+        "no complete cold E+F mean advantage"
+      ],
+      "median_seconds": {
+        "incumbent": 112.80820118263364,
+        "default": 118.55243396759033
+      },
+      "mean_seconds": {
+        "incumbent": 114.39547844727834,
+        "default": 123.29496517280738
+      },
+      "speedup": 0.9515469012932536,
+      "sample_seconds": {
+        "incumbent": [
+          112.80820118263364,
+          117.64775594323874,
+          112.73047821596265
+        ],
+        "default": [
+          118.55243396759033,
+          132.7802928648889,
+          118.55216868594289
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          18,
+          17
+        ],
+        "default": [
+          19,
+          22,
+          19
+        ]
+      },
+      "max_energy_error": 9.094947017729282e-12,
+      "max_force_error": 3.786099211922078e-11,
+      "library_sha256": "d7cc865934868838080ae33a01b95a222aa243c671647ec0aaf084a6a099b566",
+      "slurm_job_id": "6668",
+      "rys_task_classes": "all"
+    },
+    "wide-promotion-96": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 113.51454117894173,
+        "default": 110.31419360265136
+      },
+      "mean_seconds": {
+        "incumbent": 113.55688962216179,
+        "default": 113.3087636133035
+      },
+      "speedup": 1.0290112040143984,
+      "sample_seconds": {
+        "incumbent": [
+          113.51454117894173,
+          113.46574622765183,
+          113.6903814598918
+        ],
+        "default": [
+          119.42141889408231,
+          110.19067834317684,
+          110.31419360265136
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          17,
+          17
+        ],
+        "default": [
+          19,
+          17,
+          17
+        ]
+      },
+      "max_energy_error": 8.185452315956354e-12,
+      "max_force_error": 3.7806424657560456e-11,
+      "library_sha256": "18a7805606ca47f95b8b324a10331bea9c4dd7670cd96bf5b16386207f8b3a4f",
+      "slurm_job_id": "6672",
+      "rys_task_classes": "all"
+    },
+    "wide-promotion-48": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 51.677313566207886,
+        "default": 49.24278720840812
+      },
+      "mean_seconds": {
+        "incumbent": 51.630872978518404,
+        "default": 49.234293599923454
+      },
+      "speedup": 1.0494392477723942,
+      "sample_seconds": {
+        "incumbent": [
+          51.50160586088896,
+          51.713699508458376,
+          51.677313566207886
+        ],
+        "default": [
+          49.24278720840812,
+          49.14770360663533,
+          49.312389984726906
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          19,
+          19,
+          19
+        ],
+        "default": [
+          19,
+          19,
+          19
+        ]
+      },
+      "max_energy_error": 7.048583938740194e-12,
+      "max_force_error": 1.6568524330295986e-11,
+      "library_sha256": "18a7805606ca47f95b8b324a10331bea9c4dd7670cd96bf5b16386207f8b3a4f",
+      "slurm_job_id": "6672",
+      "rys_task_classes": "all"
+    },
+    "subset-p-96": {
+      "gate": false,
+      "failures": [
+        "no complete cold E+F median advantage",
+        "no complete cold E+F mean advantage"
+      ],
+      "median_seconds": {
+        "incumbent": 113.55050944164395,
+        "default": 121.4152928814292
+      },
+      "mean_seconds": {
+        "incumbent": 120.09374778469403,
+        "default": 121.43899840861559
+      },
+      "speedup": 0.93522411178083,
+      "sample_seconds": {
+        "incumbent": [
+          113.55050944164395,
+          113.42013174667954,
+          133.3106021657586
+        ],
+        "default": [
+          121.4152928814292,
+          121.34339660778642,
+          121.55830573663116
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          17,
+          21
+        ],
+        "default": [
+          19,
+          19,
+          19
+        ]
+      },
+      "max_energy_error": 8.185452315956354e-12,
+      "max_force_error": 3.782330004753476e-11,
+      "library_sha256": "18a7805606ca47f95b8b324a10331bea9c4dd7670cd96bf5b16386207f8b3a4f",
+      "slurm_job_id": "6673",
+      "rys_task_classes": "psps,ppps"
+    },
+    "subset-d-96": {
+      "gate": false,
+      "failures": [
+        "no complete cold E+F median advantage",
+        "no complete cold E+F mean advantage"
+      ],
+      "median_seconds": {
+        "incumbent": 113.66422244161367,
+        "default": 121.45614690333605
+      },
+      "mean_seconds": {
+        "incumbent": 118.43384501213829,
+        "default": 121.45815883204341
+      },
+      "speedup": 0.9358457792348396,
+      "sample_seconds": {
+        "incumbent": [
+          113.66422244161367,
+          113.53860032558441,
+          128.09871226921678
+        ],
+        "default": [
+          121.45614690333605,
+          121.58622446656227,
+          121.33210512623191
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          17,
+          20
+        ],
+        "default": [
+          19,
+          19,
+          19
+        ]
+      },
+      "max_energy_error": 9.549694368615746e-12,
+      "max_force_error": 3.782690827236479e-11,
+      "library_sha256": "18a7805606ca47f95b8b324a10331bea9c4dd7670cd96bf5b16386207f8b3a4f",
+      "slurm_job_id": "6673",
+      "rys_task_classes": "dsss,dpss,dsps"
+    },
+    "wide-confirmation-promotion-96": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 123.1374966353178,
+        "default": 114.82215798646212
+      },
+      "mean_seconds": {
+        "incumbent": 119.37387966290116,
+        "default": 113.90666614621878
+      },
+      "speedup": 1.0724192855688714,
+      "sample_seconds": {
+        "incumbent": [
+          113.2739652171731,
+          113.64353024959564,
+          123.56250122562051,
+          123.1374966353178,
+          123.25190498679876
+        ],
+        "default": [
+          110.1328315064311,
+          110.19181290268898,
+          114.90119077637792,
+          114.82215798646212,
+          119.48533755913377
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          17,
+          17,
+          19,
+          19,
+          19
+        ],
+        "default": [
+          17,
+          17,
+          18,
+          18,
+          19
+        ]
+      },
+      "max_energy_error": 8.640199666842818e-12,
+      "max_force_error": 3.790073810350236e-11,
+      "library_sha256": "18a7805606ca47f95b8b324a10331bea9c4dd7670cd96bf5b16386207f8b3a4f",
+      "slurm_job_id": "6674",
+      "rys_task_classes": "all"
+    }
+  },
+  "cpu_validation": {
+    "passed": 381,
+    "skipped": 18
+  },
+  "cuda_validation": {
+    "libcint_matrices": 576,
+    "sanitizer_cases_per_tool": 64,
+    "sanitizer_findings": 0
+  },
+  "artifacts": {
+    "validation.tar.gz": "f18f7f5453ebe8b37eb5e4c23b5707ce3c8020fe71380059ec57f7cb183a9eb6",
+    "observations.tar.gz": "c45830e0097f5aa54d72a656bc9fb7d0794c57c8f0ae3e3b63c198eda6dda830"
+  }
+}

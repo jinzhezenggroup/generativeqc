@@ -65,6 +65,10 @@ class ScheduleTrial:
                 self.schedule.algebra_fusion.value,
                 self.schedule.algebra_form.value,
             )
+        ) + (
+            "_mixed_pair_products_fp64"
+            if self.schedule.mixed_pair_products_fp64
+            else ""
         )
 
     @property
@@ -185,7 +189,7 @@ def deduplicate_execution_equivalent_trials(
 def schedule_payload(schedule: ScheduleIR) -> dict[str, object]:
     """Serialize all schedule decisions written to a v2 manifest."""
 
-    return {
+    payload = {
         "kind": schedule.kind.value,
         "block_threads": schedule.block_threads,
         "component_tile": schedule.component_tile,
@@ -201,6 +205,9 @@ def schedule_payload(schedule: ScheduleIR) -> dict[str, object]:
         "minimum_blocks_per_sm": schedule.minimum_blocks_per_sm,
         "maximum_registers": schedule.maximum_registers,
     }
+    if schedule.mixed_pair_products_fp64:
+        payload["mixed_pair_products_fp64"] = True
+    return payload
 
 
 @cache

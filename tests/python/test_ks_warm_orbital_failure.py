@@ -40,9 +40,11 @@ def orbital_probe(
         )
     )
     legacy = _method(source, "  bool finish_legacy()")
-    # Anchor whole top-level lines: an earlier retry branch also assigns
-    # previous_energy and must not truncate the publication owner.
-    end = legacy.index("\n    previous_energy = output.energy;")
+    # Anchor the completed publication owner, independently of the energy
+    # representation updated afterward. Earlier retry branches clear the same
+    # flag at deeper indentation and must not truncate the owner.
+    completion = "\n    pending_incremental_delta = false;"
+    end = legacy.index(completion) + len(completion)
     begin = legacy.rfind("\n    try {\n", 0, end)
     assert begin >= 0
     # Compile the actual accepted-proposal copy/exception block and entry
@@ -75,12 +77,15 @@ struct Owner {
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
   bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   bool pending_incremental_delta = true;
-  double warm_energy = std::numeric_limits<double>::infinity();
+  double warm_energy = -41.0, warm_energy_correction = -0x1p-42;
+  struct {
+    double electronic_energy = -2569.0, electronic_energy_correction = 0x1p-43;
+  } physical;
   std::size_t elements = 8;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
   struct {
     bool converged = false;
-    double energy = 0.0;
+    double energy = 9000.0;
     struct {
       std::uint64_t returned_solve_epoch = 0, returned_state_generation = 0;
     } precision_work;
@@ -154,6 +159,7 @@ int main(int argc, char** argv) {
     assert(owner.movement.warm_orbital_frame_invalidations == initially_ready);
     assert(owner.movement.warm_orbital_frames_retained == 0);
     assert(owner.warm_ready && owner.warm[0] == 42.0);
+    assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
     if (scenario == "orbitals") {
       assert(owner.density[0] == 20.0 && owner.warm_orbitals[0] == 10.0);
       assert(fences == 1);
@@ -171,8 +177,11 @@ int main(int argc, char** argv) {
     assert(owner.pending_incremental_delta);
     assert(owner.warm_orbitals_ready == initially_ready);
     assert(copies == 0 && owner.density[0] == 10.0);
+    assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
   } else if (scenario == "converged") {
     assert(owner.warm_ready && owner.warm[0] == 10.0);
+    assert(owner.warm_energy == owner.physical.electronic_energy);
+    assert(owner.warm_energy_correction == owner.physical.electronic_energy_correction);
     assert(owner.warm_orbitals_ready == initially_ready);
     assert(owner.final_state_ready && owner.final_generation == owner.generation);
     assert(owner.output.precision_work.returned_solve_epoch == owner.solve_epoch);
@@ -182,12 +191,15 @@ int main(int argc, char** argv) {
     assert(owner.warm_orbitals_ready && owner.movement.warm_orbital_frames_retained == 1);
     for (std::size_t i = 0; i < owner.elements; ++i)
       assert(owner.density[i] == 20.0 && owner.warm_orbitals[i] == 20.0);
+    assert(owner.warm_energy == -41.0 && owner.warm_energy_correction == -0x1p-42);
   }
   const auto before_clear = owner.movement.warm_orbital_frame_invalidations;
   const auto was_ready = owner.warm_orbitals_ready;
   owner.clear_warm_state();
   owner.clear_warm_state();
   assert(!owner.warm_ready && !owner.warm_orbitals_ready);
+  assert(owner.warm_energy == std::numeric_limits<double>::infinity());
+  assert(owner.warm_energy_correction == 0.0);
   assert(owner.movement.warm_orbital_frame_invalidations == before_clear + was_ready);
 }
 """

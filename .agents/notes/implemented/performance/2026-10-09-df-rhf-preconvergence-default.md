@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-09
 
+The original 200–400 AO admission below is preserved as historical rationale.
+It is superseded by [source/work/resource admission](2026-10-09-df-rhf-work-admission.md);
+the original measured cohorts and scientific-reference invariants remain unchanged.
+
 ## Problem
 
 The [initial master-based experiment](2026-10-09-df-density-exact-rhf-experiment.md)

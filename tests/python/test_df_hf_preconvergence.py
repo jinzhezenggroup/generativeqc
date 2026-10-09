@@ -1,5 +1,7 @@
 """Protect independent, all-repeat gates for the benchmark-only DF density handoff."""
 
+import gzip
+import hashlib
 import json
 import os
 import subprocess
@@ -15,6 +17,30 @@ from benchmarks.df_hf_preconvergence import (
     prepare_jk,
     summarize,
 )
+from tools.generativeqc_validation.record import load_publication_record
+
+
+def test_lossless_default_evidence_retains_original_receipt() -> None:
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/df-hf-preconvergence-default-20261009"
+    )
+    storage = json.loads((directory / "storage.json").read_text())
+    [entry] = storage["files"]
+    packed = (directory / entry["stored_path"]).read_bytes()
+    raw = gzip.decompress(packed)
+    assert len(packed) == entry["stored_bytes"]
+    assert hashlib.sha256(packed).hexdigest() == entry["stored_sha256"]
+    assert len(raw) == entry["decoded_bytes"] == 43494
+    assert (
+        hashlib.sha256(raw).hexdigest()
+        == entry["decoded_sha256"]
+        == ("a31002afe7d26a9f148332ed2239e3579d9b17ddeb47481216776313ac8082da")
+    )
+    # The storage receipt pins the immutable original Git path and revision;
+    # gzip changes no original byte, measurement, gate or source identity.
+    assert load_publication_record(directory) == json.loads(raw)
+    assert load_publication_record(directory, name="evidence.json") == json.loads(raw)
 
 
 def sample(mode: str = "direct", endpoint: str = "forces") -> dict:
@@ -71,16 +97,28 @@ def test_changed_geometry_and_budget_fixture_metadata(tmp_path: Path) -> None:
             assert actual[0].split()[3] == str(8 << 30)
 
 
-def test_larger_fixture_raw_basis_roundtrip(tmp_path: Path) -> None:
-    """The larger input is metadata only, with 322 spherical AOs and 26 electrons."""
+@pytest.mark.parametrize(
+    "case,functions,electrons",
+    [
+        ("propane322", 322, 26),
+        ("butane414", 414, 34),
+        ("methane34", 34, 10),
+        ("ethane58", 58, 18),
+        ("ethane144", 144, 18),
+    ],
+)
+def test_larger_fixture_raw_basis_roundtrip(
+    tmp_path: Path, case: str, functions: int, electrons: int
+) -> None:
+    """Qualification inputs round-trip raw basis metadata without an oracle computation."""
     pytest.importorskip("pyscf")
     from benchmarks.df_hf_preconvergence import read_molecule
 
-    output = tmp_path / "propane322.input"
-    prepare_case("propane322", output)
+    output = tmp_path / f"{case}.input"
+    prepare_case(case, output)
     molecule = read_molecule(output)
-    assert molecule.nao_nr() == 322
-    assert molecule.nelectron == 26
+    assert molecule.nao_nr() == functions
+    assert molecule.nelectron == electrons
 
 
 def records(tmp_path: Path, *rows: dict) -> list[Path]:

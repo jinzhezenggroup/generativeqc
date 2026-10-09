@@ -1,0 +1,207 @@
+{
+  "schema": "rys-task-master-qualification.v1",
+  "qualified_base_revision": "99a2a5cac926edc69c28453977d1bc9b70d8bd06",
+  "qualified_implementation_parent": "c8117cc45",
+  "architecture": "sm_120",
+  "block_threads": 128,
+  "warps_per_cta": 4,
+  "preferred_classes": [
+    "psps",
+    "ppps",
+    "dsss",
+    "dpss",
+    "dsps",
+    "ddss",
+    "dsds",
+    "dpps",
+    "dspp"
+  ],
+  "capability_classes": 12,
+  "maximum_value_components": 64,
+  "maximum_private_contraction_doubles": 80,
+  "library_sha256": "02bc03610e6fbabcd4d47b8584974565a4371a7dbbb78e954a84c089c6794001",
+  "native_source_identity": "31f6418b2944bac013426a98a016ea8ab4e85a3641b135a97141e6d1822cef7c",
+  "cohorts": {
+    "96": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 116.38217017054558,
+        "default": 101.29690455645323
+      },
+      "mean_seconds": {
+        "incumbent": 118.39377624839544,
+        "default": 102.96589879095555
+      },
+      "speedup": 1.1489212891563263,
+      "sample_seconds": {
+        "incumbent": [
+          116.38217017054558,
+          130.93988133594394,
+          116.38887677714229,
+          111.8921727463603,
+          116.36578021198511
+        ],
+        "default": [
+          100.9522712379694,
+          101.3685864917934,
+          101.29690455645323,
+          101.29531779885292,
+          109.91641386970878
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          19,
+          22,
+          19,
+          18,
+          19
+        ],
+        "default": [
+          17,
+          17,
+          17,
+          17,
+          19
+        ]
+      },
+      "max_energy_error": 9.094947017729282e-12,
+      "max_force_error": 3.786043700770847e-11,
+      "slurm_job_id": "6688"
+    },
+    "48": {
+      "gate": true,
+      "failures": [],
+      "median_seconds": {
+        "incumbent": 49.426069654524326,
+        "default": 45.58370094001293
+      },
+      "mean_seconds": {
+        "incumbent": 49.38383503258228,
+        "default": 46.03312493984898
+      },
+      "speedup": 1.084292600979632,
+      "sample_seconds": {
+        "incumbent": [
+          49.426069654524326,
+          49.70367515087128,
+          49.021760292351246
+        ],
+        "default": [
+          45.27951654419303,
+          45.58370094001293,
+          47.23615733534098
+        ]
+      },
+      "fock_builds": {
+        "incumbent": [
+          19,
+          19,
+          19
+        ],
+        "default": [
+          19,
+          19,
+          20
+        ]
+      },
+      "max_energy_error": 7.275957614183426e-12,
+      "max_force_error": 1.656874637490091e-11,
+      "slurm_job_id": "6688"
+    }
+  },
+  "rejected_current_base_five_class_cohort": {
+    "gate": false,
+    "failures": [
+      "no complete cold E+F median advantage"
+    ],
+    "median_seconds": {
+      "incumbent": 106.31378076598048,
+      "default": 107.40308244526386
+    },
+    "mean_seconds": {
+      "incumbent": 106.35433528199792,
+      "default": 106.08336813127
+    },
+    "speedup": 0.9898578173504609,
+    "sample_seconds": {
+      "incumbent": [
+        106.21945180743933,
+        106.52977327257395,
+        106.31378076598048
+      ],
+      "default": [
+        103.41299728676677,
+        107.4340246617794,
+        107.40308244526386
+      ]
+    },
+    "fock_builds": {
+      "incumbent": [
+        17,
+        17,
+        17
+      ],
+      "default": [
+        17,
+        18,
+        18
+      ]
+    },
+    "max_energy_error": 8.185452315956354e-12,
+    "max_force_error": 3.7852221357326243e-11
+  },
+  "mechanism": {
+    "96": {
+      "device_k_median_seconds": {
+        "incumbent": 1.6813126831054688,
+        "rys": 4.294011962890625,
+        "default": 1.339689697265625
+      },
+      "admitted_shell_quartets": 81907624,
+      "equal_admission_vectors_all_scales": true,
+      "max_oracle_error": 1.9087040239775496e-11
+    },
+    "48": {
+      "device_k_median_seconds": {
+        "incumbent": 0.9519700622558593,
+        "rys": 1.5822909545898438,
+        "default": 0.7499904785156251
+      },
+      "admitted_shell_quartets": 23480495,
+      "equal_admission_vectors_all_scales": true,
+      "max_oracle_error": 1.9093819130585035e-11
+    }
+  },
+  "integrated_validation": {
+    "cases": 176,
+    "max_error": 6.370268140189872e-12,
+    "slurm_job_id": "6689"
+  },
+  "cpu_validation": {
+    "passed": 248,
+    "skipped": 18,
+    "compiler_modules": 502,
+    "scf_modules": 223,
+    "dependency_errors": 0,
+    "promotion_entries": 40,
+    "promotion_controls": 84
+  },
+  "cuda_validation": {
+    "libcint_matrices": 864,
+    "sanitizer_cases_per_tool": 96,
+    "findings": 0
+  },
+  "excluded_infrastructure_cohort": {
+    "jobs": [
+      "6678",
+      "6679"
+    ],
+    "reason": "Unexpected concurrent allocations on node1 requesting the same RTX 5090 resource; the entire interrupted cohort is retained but excluded before acceptance. Exclusive-node repetition is independently qualified."
+  },
+  "artifacts": {
+    "observations.tar.gz": "03486d9b297a1ca66380d375aa105b172af864d511e34eb8013711bf755404e7",
+    "validation.tar.gz": "ff73cf54b5e5ba6895f81917376bfca51815e470bd4b5198826aff9f3aa468a9"
+  }
+}
