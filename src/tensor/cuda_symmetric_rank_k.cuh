@@ -16,7 +16,8 @@ enum class RankKOrder { RowMajor, ColumnMajor };
 /** One borrowed physical batch of C diag(w) C^T, repeated for `batches`.
  * Inputs and destination cannot alias.  The caller initializes error to zero
  * on the same stream before every execution, including graph replay.  On a
- * numerical error no output element is published.  Alpha/beta are host scalars.
+ * numerical error no output element is published.  Alpha/beta are host scalars
+ * bound to the compiler-owned scalar update TensorIR program.
  */
 struct SymmetricRankKInvocation {
   std::size_t n{}, k{}, batches{};
@@ -104,8 +105,9 @@ __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder ord
         call.beta == 0.0
             ? 0.0
             : call.output[batch * call.n * call.n + matrix_index(row, col, call.n, order)];
-    const auto updated = call.alpha * value + call.beta * old;
-    if (!isfinite(value) || !isfinite(old) || !isfinite(updated)) atomicCAS(call.error, 0, 1);
+    double updated{};
+    if (!rank_k_generated::rank_k_alpha_beta_update(call.alpha, value, call.beta, old, updated))
+      atomicCAS(call.error, 0, 1);
   }
 }
 
@@ -120,7 +122,8 @@ __global__ void validate_library(SymmetricRankKInvocation call, const double* pr
     const auto address = batch * call.n * call.n + matrix_index(row, col, call.n, order);
     const auto value = product[address];
     const auto old = call.beta == 0.0 ? 0.0 : call.output[address];
-    if (!isfinite(value) || !isfinite(old) || !isfinite(call.alpha * value + call.beta * old))
+    double updated{};
+    if (!rank_k_generated::rank_k_alpha_beta_update(call.alpha, value, call.beta, old, updated))
       atomicCAS(call.error, 0, 1);
   }
 }
@@ -141,7 +144,9 @@ __global__ void publish(SymmetricRankKInvocation call, const double* product, Ra
       return;
     const auto old =
         call.beta == 0.0 ? 0.0 : call.output[offset + matrix_index(row, col, call.n, order)];
-    const auto updated = call.alpha * value + call.beta * old;
+    double updated{};
+    if (!rank_k_generated::rank_k_alpha_beta_update(call.alpha, value, call.beta, old, updated))
+      return;
     call.output[offset + matrix_index(row, col, call.n, order)] = updated;
     call.output[offset + matrix_index(col, row, call.n, order)] = updated;
   }

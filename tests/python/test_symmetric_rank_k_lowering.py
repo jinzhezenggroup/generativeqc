@@ -17,6 +17,7 @@ from generativeqc_compiler.tensor.scf import density_program, weighted_density_p
 from generativeqc_compiler.tensor.symmetric_rank_k import (
     emit_symmetric_rank_k_portfolio,
     symmetric_rank_k_request,
+    symmetric_rank_k_update_program,
 )
 from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 
@@ -48,6 +49,12 @@ def test_rank_k_reuses_original_equation_and_has_one_signed_contract(
     assert request.constraints.capture_required
     assert request.effects == (
         ("output", "transactional-symmetric-overwrite-or-accumulate"),
+    )
+    assert dict(request.semantics)["scalar_update_hash"] == (
+        symmetric_rank_k_update_program().logical_hash
+    )
+    assert dict(request.semantics)["scalar_input_roles"] == (
+        "alpha,product,beta,old_output"
     )
     emitted = emit_symmetric_rank_k_portfolio(
         program, name, sha256(b"source").hexdigest(), name="rank_k", order=order
@@ -170,6 +177,7 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
         return output.read_bytes()
 
     before = generate()
+    assert b"rank_k_alpha_beta_update" in before
     (toolkit / "bin/nvcc").write_text("changed compiler bytes")
     assert generate() != before
 

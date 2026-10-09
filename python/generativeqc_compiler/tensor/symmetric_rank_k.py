@@ -7,7 +7,7 @@ one physical batch slice and offers implementations of that same operation.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from generativeqc_compiler.common.backend import TargetInfo
 from generativeqc_compiler.common.lowering_contract import (
@@ -27,11 +27,10 @@ from generativeqc_compiler.common.specialization import (
     TargetCapabilities,
 )
 
+from .ir import Node, add, input_tensor, multiply
 from .lowering import TensorLoweringAdapter
-from .types import checked_shape
-
-if TYPE_CHECKING:
-    from .program import Program
+from .program import Program
+from .types import TensorSpec, checked_shape
 
 MatrixOrder = Literal["row-major", "column-major"]
 
@@ -39,6 +38,22 @@ MatrixOrder = Literal["row-major", "column-major"]
 def _domains(indices: tuple) -> tuple:
     """Compare scientific index domains without treating notation as identity."""
     return tuple(index.domain for index in indices)
+
+
+def symmetric_rank_k_update_program() -> Program:
+    """Own the runtime ``alpha * product + beta * old_output`` scalar update."""
+
+    def scalar(name: str) -> Node:
+        return input_tensor(name, TensorSpec((), dtype="float64", role="input"))
+
+    alpha = scalar("alpha")
+    product = scalar("product")
+    beta = scalar("beta")
+    old_output = scalar("old_output")
+    return Program(
+        {"updated": add(multiply(alpha, product), multiply(beta, old_output))},
+        provenance={"source": "tensor symmetric rank-k scalar update"},
+    )
 
 
 def symmetric_rank_k_request(
@@ -132,6 +147,29 @@ def symmetric_rank_k_request(
         for precision in base.precisions
     ):
         raise ValueError("rank-k cannot silently change arithmetic or audit")
+    update = symmetric_rank_k_update_program()
+    update_inputs = {
+        value.attrs["name"]: value for value in update.live_nodes if value.op == "input"
+    }
+    update_root = update.outputs["updated"]
+    update_products = [value for value in update_root.inputs if value.op == "multiply"]
+    if (
+        set(update_inputs) != {"alpha", "product", "beta", "old_output"}
+        or any(
+            value.spec.shape or value.spec.dtype != "float64"
+            for value in update.live_nodes
+        )
+        or update_root.op != "add"
+        or update_root.attrs["coefficients"] != ((1, 1), (1, 1))
+        or len(update_products) != 2
+        or {frozenset(value.inputs) for value in update_products}
+        != {
+            frozenset((update_inputs["alpha"], update_inputs["product"])),
+            frozenset((update_inputs["beta"], update_inputs["old_output"])),
+        }
+        or len(update.live_nodes) != 7
+    ):
+        raise ValueError("rank-k scalar update TensorIR changed")
     n, k = left.spec.shape[-2:]
     checked_shape((n, k, n), 8)
     panel_strides = (k, 1) if order == "row-major" else (1, n)
@@ -163,6 +201,8 @@ def symmetric_rank_k_request(
         if weights.op == "multiply"
         else "borrowed",
         publication="upper-triangle-mirrored",
+        scalar_input_roles="alpha,product,beta,old_output",
+        scalar_update_hash=update.logical_hash,
         update="alpha-product-plus-beta-output",
     )
     return replace(
