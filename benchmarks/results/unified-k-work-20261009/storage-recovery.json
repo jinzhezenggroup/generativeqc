@@ -28,6 +28,15 @@
 "decoded_bytes": 289845,
 "decoded_sha256": "55d295cf134361dc4586687a68b23422b60cb0dd4e6a5709b685e405354f95bd",
 "decode_command": "xz -dc benchmarks/results/unified-k-work-20261009/initial-union-receipts.json.xz > benchmarks/results/unified-k-work-20261009/initial-union-receipts.json"
+},
+{
+"path": "benchmarks/results/unified-k-work-20261009/summary.json.xz",
+"bytes": 4780,
+"sha256": "798cc751af6a1f4a6622442d2a403190f79cd366448d6726a3027a49ec538907",
+"decoded_path": "benchmarks/results/unified-k-work-20261009/summary.json",
+"decoded_bytes": 86851,
+"decoded_sha256": "0e840132de5e2f04ec09b2bcfaef46f9591c9892dbb172368f46086f37747a73",
+"decode_command": "xz -dc benchmarks/results/unified-k-work-20261009/summary.json.xz"
 }
 ],
 "historical_archives": [

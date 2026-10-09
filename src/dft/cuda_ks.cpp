@@ -16,6 +16,7 @@
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
+#include "dft/energy_change.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
@@ -282,7 +283,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool final_state_ready{}, final_frame_ready{}, final_stationary_weights_ready{};
   std::uint64_t owner{next_ks_owner()}, solve_epoch{}, generation{}, final_generation{};
   double previous_energy{std::numeric_limits<double>::infinity()};
+  double previous_energy_correction{};
   double warm_energy{std::numeric_limits<double>::infinity()};
+  double warm_energy_correction{};
   bool warm_energy_baseline{};
   unsigned pending_iterations{};
   std::array<std::uint64_t, kCudaKsChunkCapacity> pending_generations{};
@@ -452,6 +455,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void clear_warm_state() noexcept {
     warm_ready = false;
     warm_energy = std::numeric_limits<double>::infinity();
+    warm_energy_correction = 0.0;
     warm_energy_baseline = false;
     invalidate_warm_orbitals();
   }
@@ -1222,6 +1226,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     }
     warm_energy_baseline = use_warm && !device_chunk_mode && std::isfinite(warm_energy);
     previous_energy = warm_energy_baseline ? warm_energy : std::numeric_limits<double>::infinity();
+    previous_energy_correction = warm_energy_baseline ? warm_energy_correction : 0.0;
     is_active = true;
   }
 
@@ -1463,7 +1468,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.converged = device_control.converged != 0;
     if (output.converged && warm_updates) {
       warm_ready = true;
-      warm_energy = output.energy;
+      warm_energy = physical[completed - 1].electronic_energy;
+      warm_energy_correction = physical[completed - 1].electronic_energy_correction;
     }
     if (output.converged) {
       final_state_ready = true;
@@ -1964,7 +1970,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     diagnostic.density_change = physical.density_change;
     output.physical_residual_rms = physical.residual_rms;
     output.energy = diagnostic.components.total();
-    output.energy_change = std::abs(output.energy - previous_energy);
+    output.energy_change = detail::electronic_energy_change(
+        physical.electronic_energy, physical.electronic_energy_correction, previous_energy,
+        previous_energy_correction);
     output.density_rms = physical.density_rms;
     diagnostic.history.push_back({output.iterations, diagnostic.components, output.energy_change,
                                   physical.density_change, physical.residual, diagnostic.electrons,
@@ -1992,6 +2000,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemsetAsync(history_count, 0, sizeof(*history_count), stream));
         check(cudaMemsetAsync(history_head, 0, sizeof(*history_head), stream));
         previous_energy = std::numeric_limits<double>::infinity();
+        previous_energy_correction = 0.0;
         return true;
       }
       is_active = false;
@@ -2077,7 +2086,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(warm, density, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
         warm_ready = true;
-        warm_energy = output.energy;
+        warm_energy = physical.electronic_energy;
+        warm_energy_correction = physical.electronic_energy_correction;
         occupied_fitted_factor_ready = false;
       } else if (is_active) {
         check(cudaMemcpyAsync(density, proposal, elements * sizeof(double),
@@ -2115,7 +2125,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
     pending_incremental_delta = false;
-    previous_energy = output.energy;
+    previous_energy = physical.electronic_energy;
+    previous_energy_correction = physical.electronic_energy_correction;
     try {
       if (output.converged && complete_precision_inventory_domain()) {
         auto& work = output.precision_work;

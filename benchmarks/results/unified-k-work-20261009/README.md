@@ -53,7 +53,7 @@ Actual Fock counts (not same-iteration kernel ratios):
 - 96, Fill / Work / Combined: `[17,19,17,18,17]` / `[19,18,19,17,19]` / `[19,18,17,17,17]`.
 - 48, Fill / Work / Combined: `[19,20,20]` / `[19,19,20]` / `[19,19,19]`.
 
-`summary.json` retains every receipt's timing/work/gates, checksums, effective controls, protocol,
+`summary.json.xz` retains every receipt's timing/work/gates, checksums, effective controls, protocol,
 loaded binary, job/device provenance, cold flags, convergence, positive Fock
 counts and every numerical gate. Its deliberate joint-policy reducer requires
 exact 5/3 populations and gains in both mean and median against both standalone
@@ -158,7 +158,7 @@ finite exclusive-node driver on an allowed RTX 5090 node. Restore neither GPU
 visibility nor a failed/older library as a fallback. Reduce only the final same-
 binary job's 24 Cold receipts; do not pool historical or exploratory revisions.
 After extraction, run `python reproduce/summarize_joint.py observations --compact` to
-reproduce `summary.json`; this CPU-only reducer exits nonzero for a failed gate.
+reproduce the decoded `summary.json.xz`; this CPU-only reducer exits nonzero for a failed gate.
 The original independent Cold references remain pinned in
 `../rys-task-cold-20261008/reference-{48,96}.json`; a moved moving-grid/response
 GPU4PySCF reference is retained separately with its generator and full force vector.
@@ -174,7 +174,7 @@ tag, publishing workflow, merge or universal speedup is requested or implied.
 
 ## Lossless storage and historical recovery
 
-The two curated receipt files are losslessly XZ-compressed. For example,
+The summary and two curated receipt files are losslessly XZ-compressed. For example,
 `xz -dc benchmarks/results/unified-k-work-20261009/final-receipts.json.xz`
 prints every original JSON byte, including all positive and negative numerical
 observations. `storage-recovery.json` records compressed and decoded sizes and

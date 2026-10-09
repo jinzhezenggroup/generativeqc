@@ -37,6 +37,12 @@ one RMS.
 Each `KsIteration` describes a physical E/F/D state and its proposed density
 change. `energy_change` is `None` on the first iteration, because no preceding
 energy exists. Later entries retain the measured absolute energy difference.
+CUDA KS retains both words of its compensated electronic-energy reductions
+when computing that difference. The fixed nuclear energy cancels analytically;
+large component and total energies are not rounded before subtraction. Thus
+`energy_change` can differ at roundoff level from subtracting two separately
+rounded diagnostic totals. Convergence tolerances and all density/residual gates
+remain unchanged.
 `occupation_stabilized` records whether that proposal used the stationary
 UKS virtual-projector shift; its recorded energy and residual remain physical
 and unshifted. CPU RKS performs additional validation/projection after its

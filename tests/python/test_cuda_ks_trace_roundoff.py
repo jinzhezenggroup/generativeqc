@@ -38,7 +38,7 @@ def diagnostic_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("cuda-ks-trace")
     path = directory / "probe.cpp"
     path.write_text(
-        "#include <cmath>\n#include <cstddef>\n#include <cstdint>\n"
+        "#include <cmath>\n#include <cstddef>\n#include <cstdint>\n#include <algorithm>\n"
         "#include <cstdlib>\n#include <iomanip>\n#include <iostream>\n"
         "#include <vector>\n#include <thread>\n#include <barrier>\n"
         "#define __global__\n#define __device__\n#define __shared__ static\n"
@@ -67,7 +67,17 @@ int main(int argc, char** argv) {
       range_exchange[spin * matrix + index] = -4 * term;
     }
   }
-  const double totals[3] = {};
+  double totals[3] = {};
+  if (argc > 3) {
+    std::fill(hcore.begin(), hcore.end(), 0.0);
+    std::fill(coulomb.begin(), coulomb.end(), 0.0);
+    std::fill(exchange.begin(), exchange.end(), 0.0);
+    std::fill(range_exchange.begin(), range_exchange.end(), 0.0);
+    hcore[0] = -4096.0;
+    hcore[1] = 3e-13;
+    coulomb[0] = 8192.0;
+    totals[0] = 0.25;
+  }
   const int status[2] = {};
   Scalars output;
   std::vector<std::thread> lanes;
@@ -79,6 +89,11 @@ int main(int argc, char** argv) {
                       nullptr, nullptr, status, nullptr, &output);
   });
   for (auto& lane : lanes) lane.join();
+  if (argc > 3) {
+    std::cout << std::setprecision(17) << output.electronic_energy << ' '
+              << output.electronic_energy_correction << '\n';
+    return 0;
+  }
   std::cout << std::setprecision(17)
             << output.one_electron - reference << ' '
             << output.hartree - reference << ' '
@@ -121,6 +136,22 @@ def test_diagnostic_energy_traces_do_not_lose_sub_ulp_terms(
     one, hartree, exchange, failure = map(float, completed.stdout.split())
     assert failure == 0
     assert (one, hartree, exchange) == pytest.approx((0, 0, 0), abs=1e-15)
+
+
+def test_electronic_energy_keeps_unrounded_component_words(
+    diagnostic_probe: Path,
+) -> None:
+    """A large individual component must not quantize away the physical delta."""
+    completed = subprocess.run(
+        [str(diagnostic_probe), "9", "1", "expanded"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    high, correction = map(float, completed.stdout.split())
+    assert math.fsum((high, correction, -0.25)) == pytest.approx(
+        3e-13, rel=1e-12, abs=0
+    )
 
 
 @pytest.mark.parametrize("matrix", (3, 255, 258, 513, 771))
@@ -195,7 +226,7 @@ def cuda_diagnostic_probe(tmp_path_factory: pytest.TempPathFactory) -> Any:
     code = (
         "#include <cstddef>\n#include <cstdint>\n#include <cmath>\n"
         + descriptor
-        + "static_assert(sizeof(Scalars) <= 128);\n"
+        + "static_assert(sizeof(Scalars) <= 136);\n"
         + "static_assert(offsetof(Scalars, failure) == 14 * sizeof(double));\n"
         + body.replace(
             "__global__ void diagnostic_kernel",
@@ -229,7 +260,7 @@ def test_cuda_diagnostic_traces_match_exact_sum(
     range_exchange = -4 * cp.tile(terms, spins)
     totals = cp.zeros(3)
     status = cp.zeros(2, dtype=cp.int32)
-    output = cp.zeros(16)
+    output = cp.zeros(18)
     cuda_diagnostic_probe(
         (1,),
         (256,),
@@ -305,7 +336,7 @@ def _cuda_trace_result(
     status = [cp.asarray([value], dtype=cp.int32) for value in errors]
     solver = cp.asarray([int(solver_failure)] * spins, dtype=cp.int32)
     mask = np.uint64(0) if enabled is None else cp.asarray([enabled], dtype=cp.uint8)
-    output = cp.full(16, -99.0)
+    output = cp.full(18, -99.0)
     kernel(
         (1,),
         (256,),
@@ -331,6 +362,31 @@ def _cuda_trace_result(
     )
     copied = cp.asnumpy(output)
     return copied if full_output else copied[:3], int(copied.view(np.int32)[28])
+
+
+def test_cuda_electronic_energy_retains_component_cancellation(
+    cuda_diagnostic_probe: Any,
+) -> None:
+    """Check the actual NVCC reduction retains low words until the energy gate."""
+    import numpy as np
+
+    density = np.ones((1, 9))
+    hcore, coulomb = np.zeros(9), np.zeros(9)
+    hcore[0], hcore[1], coulomb[0] = -4096.0, 3e-13, 8192.0
+    actual, failure = _cuda_trace_result(
+        cuda_diagnostic_probe,
+        density,
+        hcore,
+        coulomb,
+        None,
+        None,
+        xc_energy=0.25,
+        full_output=True,
+    )
+    assert failure == 0
+    assert math.fsum((actual[15], actual[16], -0.25)) == pytest.approx(
+        3e-13, rel=1e-12, abs=0
+    )
 
 
 @pytest.mark.parametrize("spins", (1, 2))
@@ -459,8 +515,8 @@ def test_cuda_parallel_diagnostics_preserve_all_physical_metrics(
     np.testing.assert_allclose(actual[4:9], expected[:5], rtol=3e-13, atol=0)
     np.testing.assert_allclose(actual[9:11], expected[5:], rtol=3e-13, atol=1e-13)
     assert actual[8] == expected[4]
-    # The native result is 120 bytes; the adjacent output word is a canary.
-    assert actual[15] == -99.0
+    # The private result includes both energy words; guard its 136-byte extent.
+    assert actual[17] == -99.0
 
 
 @pytest.mark.parametrize("invalid", ("residual", "proposal", "overlap"))
