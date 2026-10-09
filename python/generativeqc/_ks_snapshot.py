@@ -50,14 +50,26 @@ def _scf_xc_points(
     tau: typing.Any = None,
     *,
     scales: typing.Any = (1.0, 1.0),
+    required_ingredients: tuple[str, ...] | None = None,
 ) -> typing.Any:
     """Evaluate the exact native semilocal SCF point model."""
     if type(functional) is bool:
         functional = int(functional)
-    if type(functional) is not int or functional not in SEMILOCAL_FAMILY_CODES:
+    automatic = (
+        type(functional) is int and functional >= AUTOMATIC_FUNCTIONAL_CODE_BASE
+    )
+    if type(functional) is not int or (
+        not automatic and functional not in SEMILOCAL_FAMILY_CODES
+    ):
         raise TypeError(
-            "SCF point evaluator requires a registered curated functional code"
+            "SCF point evaluator requires a registered curated or automatic functional code"
         )
+    if automatic and required_ingredients not in (
+        ("rho",),
+        ("rho", "sigma"),
+        ("rho", "sigma", "tau"),
+    ):
+        raise ValueError("automatic Libxc point evaluation requires exact ingredients")
     raw_rho, raw_gradient = np.asarray(rho), np.asarray(gradient)
     if (
         np.iscomplexobj(raw_rho)
@@ -71,7 +83,9 @@ def _scf_xc_points(
     rho = np.ascontiguousarray(raw_rho, dtype=np.float64)
     gradient = np.ascontiguousarray(raw_gradient, dtype=np.float64)
     if tau is None:
-        if functional in _META_GGA_CODES:
+        if functional in _META_GGA_CODES or (
+            automatic and required_ingredients == ("rho", "sigma", "tau")
+        ):
             raise ValueError("meta-GGA point evaluation requires tau[2,n]")
         tau = np.zeros_like(rho)
     raw_tau = np.asarray(tau)
@@ -1089,6 +1103,7 @@ class NativeKsSnapshot:
             gradient,
             tau,
             scales=self.coefficients[:2],
+            required_ingredients=functional.ingredients,
         )
         self.check_current()
         return values
