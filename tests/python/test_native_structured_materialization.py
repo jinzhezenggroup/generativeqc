@@ -354,7 +354,7 @@ std::size_t index(std::size_t i, std::size_t j) { return i*n+j; }
         self.assertIn("assign freshness", finding["unknown_reason"])
         self.assertIsNone(finding["recommendation"])
         self.assertTrue(report["provenance"]["source_hashes"])
-        self.assertEqual(len(report["provenance"]["scanner_hashes"]), 3)
+        self.assertEqual(len(report["provenance"]["scanner_hashes"]), 4)
 
     def _symlink(self, link: Path, target: Path) -> None:
         try:

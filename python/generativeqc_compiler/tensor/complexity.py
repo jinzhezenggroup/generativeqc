@@ -12,6 +12,8 @@ import typing
 from dataclasses import dataclass, replace
 from math import prod
 
+from generativeqc_compiler.common import materialization
+
 from .ir import Node, _infer
 from .precision import remap_precision_execution
 from .program import Program
@@ -156,6 +158,7 @@ class ComplexityEntry:
     op: str
     output: bool
     complexity: NodeComplexity
+    logical_elements: int
 
     def to_payload(self) -> dict[str, typing.Any]:
         return {
@@ -179,6 +182,25 @@ class ComplexityReport:
     @property
     def max_work_degree(self) -> int:
         return max((entry.complexity.work.degree for entry in self.entries), default=0)
+
+    def materialization_diagnostics(self) -> tuple[dict[str, typing.Any], ...]:
+        """Report logical storage and retained outputs, without inferring zeros.
+
+        This explicit diagnostic pass is separate from equation serialization,
+        AD and normal preparation. No support is guessed from a tensor shape,
+        contraction factorization, view, or concrete tensor values.
+        """
+        return tuple(
+            materialization.materialization_diagnostic(
+                origin="tensor-ir",
+                subject={"name": entry.name, "op": entry.op},
+                dense_elements=entry.logical_elements,
+                dense_growth_degree=entry.complexity.storage.degree,
+                certificate_scope="declared logical TensorIR shape only; no write-support certificate",
+                retained_output=entry.output,
+            )
+            for entry in self.entries
+        )
 
     def summary_payload(
         self, *, threshold: int = 4, limit: int = 32
@@ -228,6 +250,7 @@ def analyze_complexity(program: Program) -> ComplexityReport:
                 node.op,
                 node in outputs,
                 node_complexity(node),
+                node.spec.size,
             )
             for node in program.live_nodes
         )

@@ -13,7 +13,11 @@ ASTs under `python/`; vendored `src/xtb/native/` is excluded. Repeat `--path` to
 restrict the inputs or scan generated native output. Python-embedded C++ strings
 are not executable Python statements and are not parsed as native code. NumPy
 loop findings are included in the same advisory JSON/CI artifact, alongside
-the existing exact-zero materialization findings.
+the native and Python exact-zero materialization evidence. The common entrypoint
+uses the strict native structured audit for selection and provenance: missing
+paths and outside-root links are errors; canonical aliases and overlapping inputs
+are deduplicated. The full receipt retains individual source/scanner hashes and
+unknown dirty-state values when Git or alias topology cannot establish cleanliness.
 
 ## What the inventory means
 
@@ -45,7 +49,12 @@ the existing exact-zero materialization findings.
 - **Repeated producer loops:** identical closed arithmetic loop blocks with one
   written buffer and at least two read buffers. These are syntactic candidates;
   intervening mutation, alias identity and resource lifetime are not proved.
-- **Structured zero materialization:** a Python AST analysis reports a fresh
+- **Structured zero materialization:** native rank-2/3/4 zero-vector candidates
+  retain exact support, full-domain, union-bound or unknown classifications from
+  the [native structured audit](native_structured_materialization.md). The same
+  receipt includes source-anchored canonical dense and streamed/factorized MP2
+  roles, without a whole-program ABI or runtime routing proof. A Python AST
+  analysis reports a fresh
   NumPy zero tensor and the union/bound of its admitted local writes. Supported
   forms include literal slices, Cartesian `ix_` blocks, `diag_indices` and
   range-indexed diagonals, and `triu_indices`/`tril_indices` triangles. Repeated
@@ -90,8 +99,13 @@ finding is actionable, intentional or unresolved. Require complete endpoint
 measurements before claiming a speedup. Changing scratch lifetime or removing
 synchronization is outside the scanner's authority.
 
-This is a first advisory slice of #1628, #1629, #1630 and #1631. It does not close
-their runtime-counter, prepared-replay assertion, native exact-support,
-TensorIR-integration or promotion-ratchet acceptance criteria. In particular,
-the native MP2 relaxed-weight representation from #1574 is not yet automatically
-proved by this analyzer.
+The normalized `materialization_diagnostics` use the compiler-owned policy also
+consumed by TensorIR's explicit complexity-report diagnostic pass. Exact native
+single-domain certificates permit a representation review; Python union upper
+bounds retain their bound interpretation and do not gain exact cardinality or a
+storage recommendation. The original certificates remain in each finding.
+
+Runtime-counter, prepared-replay assertions and broader automatic materialization
+policy selection remain separate work. In particular, visibility of #1574's MP2
+source roles does not prove aggregate write support, consumer ABI compatibility,
+selected runtime routing, or a performance gain.

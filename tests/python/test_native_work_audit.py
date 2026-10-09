@@ -212,7 +212,7 @@ def test_json_receipt_and_advisory_comparison(
     (tmp_path / "src").mkdir()
     source = tmp_path / "src" / "case.cpp"
     source.write_text("void f(int n) { for(int i=0;i<n;++i) cudaDeviceSynchronize(); }")
-    assert main(["--root", str(tmp_path), "--format", "json"]) == 0
+    assert main(["--root", str(tmp_path), "--path", "src", "--format", "json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["advisory_only"] is True
     assert report["counts"] == {"loop-synchronization": 1}
@@ -220,7 +220,18 @@ def test_json_receipt_and_advisory_comparison(
     baseline.write_text(json.dumps(report))
     source.write_text("void f() { cudaDeviceSynchronize(); }")
     assert (
-        main(["--root", str(tmp_path), "--format", "json", "--compare", str(baseline)])
+        main(
+            [
+                "--root",
+                str(tmp_path),
+                "--path",
+                "src",
+                "--format",
+                "json",
+                "--compare",
+                str(baseline),
+            ]
+        )
         == 0
     )
     comparison = json.loads(capsys.readouterr().out)["comparison"]
@@ -310,7 +321,7 @@ def test_same_line_sites_preserved_with_distinct_receipt_fingerprints(
     (tmp_path / "src" / "case.cpp").write_text(
         "void f(int n){for(int i=0;i<n;++i){cudaDeviceSynchronize(); cudaDeviceSynchronize();}}"
     )
-    main(["--root", str(tmp_path), "--format", "json"])
+    main(["--root", str(tmp_path), "--path", "src", "--format", "json"])
     findings = json.loads(capsys.readouterr().out)["findings"]
     assert len(findings) == len({f["fingerprint"] for f in findings}) == 2
 
