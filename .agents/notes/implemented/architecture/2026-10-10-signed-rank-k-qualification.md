@@ -17,14 +17,14 @@ weights are signed.
 C[...,q,i]` node. It requires the same coefficient node on both legs, matching
 scientific index domains, strict FP64, and dense row- or column-major physical
 views. A preceding multiplication may materialize the weights. The scientific
-request composes that original Gram with explicit FP64 alpha, beta and
-old-output TensorIR inputs; its full update root, not the unit Gram alone, owns
-scientific identity. The same `_rank_k_update` formula is scalarized into the
-native checked helper, so runtime publication has no second formula. The request
-also validates and binds the original Gram program, scientific request and
-precision identities before composition; unsupported audit/lowered provenance
-fails closed rather than being normalized. It records upper-triangle ownership,
-complete mirroring, and one all-batch
+request has two explicit roots: overwrite owns `alpha * Gram` without a beta or
+old-output input, while update owns `alpha * Gram + beta * old_output`. Both
+formulas are scalarized into separate native checked helpers, so runtime
+publication has no second algebra. Each request validates and binds the original
+Gram program, scientific request and precision identities before composition;
+unsupported audit/lowered provenance fails closed rather than being normalized.
+Overwrite marks output write-only; update marks it read-write. Both record
+upper-triangle ownership, complete mirroring, and one all-batch
 transaction: a detected numerical failure publishes no output block.
 
 Two candidates share that request. The generated fallback uses the existing
@@ -65,6 +65,9 @@ destroys and drains captured graphs before destroying the binding.
 - The generated candidate remains executable without cuBLAS or its scratch.
 - The upper input triangle is the only old-output source when `beta != 0`;
   lower input entries may differ and are replaced on successful publication.
+- `beta=+0` and `beta=-0` select the overwrite request/helper and never read old
+  output; all other beta values select the update request/helper. Both providers
+  must agree on the selected request identity.
 - A single error word intentionally means all-batch failure isolation, not
   per-system isolation or ragged production admission.
 
@@ -100,16 +103,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `c6eebd3555754157dc8ad353243460d6c94f4c68`, qz Job
-`i1877-rankk-h100-1010r` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `cf41294a1b6408e20b6ed721cb402e48bd5b7442`, qz Job
+`i1877-rankk-h100-1010v` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,576 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.63–21.12 µs for the generated
-route and 23.60–34.35 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 12.78–21.42 µs for the generated
+route and 25.67–36.42 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -131,9 +134,14 @@ accepted the numeric sccache floor, but still carried only the unit-Gram
 scientific identity. Job `q` bound the complete alpha/beta/old-output update
 root and scalar helper but normalized original precision provenance. Job `r`
 first validated and bound the original source request/scientific/precision
-identities, rejected unsupported audit/lowered provenance, and source-matched
-`c6eebd355`. Its generated header, object, binary and raw hashes are in the
-compact receipt. Later receipt-only commits may reuse `r` only while all
+identities and rejected unsupported audit/lowered provenance. Job `s` qualified
+the later overwrite/update split, including zero-beta no-read behavior, but its
+compiler digest still omitted CUDA child tools. Dry-run Job `u` identified the
+fixed recipe's actual `cudafe++`, `cicc`, `ptxas`, `fatbinary` and `nvlink`
+invocations plus libdevice, link stub and device-runtime inputs. Job `v` hashes
+that complete fixed device-tool closure, source-matches `cf41294a1`, and is the
+accepted run. Its generated header, object, binary and raw hashes are in the
+compact receipt. Later receipt-only commits may reuse `v` only while all
 qualified implementation blobs remain identical and latest-head review verifies
 that boundary.
 
