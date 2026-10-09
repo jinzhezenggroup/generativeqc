@@ -19,20 +19,10 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-import cupy as cp
-from generativeqc import Calculator, GridSpec, KsOptions
-
-from benchmarks._retained_basis import load_retained_comparison_basis
-from benchmarks.compare_df_direct_endpoint import reference_work_counter
-from benchmarks.compare_gpu4pyscf_batch import (
-    gpu_convergence_payload,
-    load_comparison_basis,
-    native_build_metadata,
-    require_tuned_native_build,
-)
-from benchmarks.ks_preliminary_density import read_ao_work
-from benchmarks.readme_hf_scaling import scaling_cases
-from benchmarks.readme_wb97mv import reference_engine
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
 
 
 def main() -> None:
@@ -40,10 +30,26 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("engine", choices=("native", "reference"))
     parser.add_argument("--properties", choices=("energy", "forces"), required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID") or "CUDA_VISIBLE_DEVICES" not in os.environ:
         raise RuntimeError("real GPU measurements require Slurm-assigned visibility")
+
+    import cupy as cp
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    from benchmarks._retained_basis import load_retained_comparison_basis
+    from benchmarks.compare_df_direct_endpoint import reference_work_counter
+    from benchmarks.compare_gpu4pyscf_batch import (
+        gpu_convergence_payload,
+        load_comparison_basis,
+        native_build_metadata,
+        require_tuned_native_build,
+    )
+    from benchmarks.ks_preliminary_density import read_ao_work
+    from benchmarks.readme_hf_scaling import scaling_cases
+    from benchmarks.readme_wb97mv import reference_engine
+
     case = scaling_cases()["water-96"]
     basis_path = Path("benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json")
     auxiliary_path = Path(
