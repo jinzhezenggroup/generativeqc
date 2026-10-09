@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <stdexcept>
 
 #include "cc/df_triples.hpp"
@@ -1025,7 +1027,8 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
     const double* eps_o, const double* eps_v, double threshold, std::size_t max_bytes, int device,
     std::size_t caller_bytes, std::size_t max_page_rows, std::size_t max_panel_buffers,
-    bool parallel_gap_reduction, bool include_gap_response, bool fused_scalar_response) {
+    bool parallel_gap_reduction, bool include_gap_response, bool fused_scalar_response,
+    runtime::PrecisionDirective admitted_w) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
@@ -1042,6 +1045,13 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   // then shrink the page. Complete work/capacity is proven before input access.
   auto page_capacity = max_page_rows ? std::min(o, max_page_rows) : o;
   bool fused_selected = fused_scalar_response && !include_gap_response;
+  // Validate precision before touching input pointers, even if storage later
+  // refuses the candidate. Optional W ownership supplements the reverse BLAS
+  // owner, so charge both providers and all cast/cache buffers simultaneously.
+  std::optional<generated_df::WPlan> w_plan;
+  bool w_resource_fallback = false;
+  const auto requested_w_plan = generated_df::prepare_w_plan(admitted_w);
+  if (!admitted_w.is_strict_fp64()) w_plan = requested_w_plan;
   auto admitted_layout = [&](std::size_t capacity, std::size_t panels) {
     auto candidate =
         joint_response_layout(o, v, q, capacity, panels, prepared_caller, parallel_gap_reduction,
@@ -1052,6 +1062,26 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       fused_selected = false;
       candidate = joint_response_layout(o, v, q, capacity, panels, prepared_caller,
                                         parallel_gap_reduction, include_gap_response);
+    }
+    if (w_plan) {
+      auto& value = candidate.fock.value;
+      auto cursor = value.arena;
+      const auto offset = reserve(cursor, w_plan->storage_bytes(o, v, value.panel_capacity));
+      const auto arena_bytes = align256(cursor);
+      const auto extra = checked_add(
+          arena_bytes - value.arena,
+          checked_add(w_plan->provider_bytes(), generated_df::WExecution::host_bytes(*w_plan)));
+      if (checked_add(candidate.complete, extra) > max_bytes) {
+        // Preserve the strict page/panel admission rather than reducing
+        // residency just to fit an unqualified precision experiment.
+        w_plan.reset();
+        w_resource_fallback = true;
+      } else {
+        value.execution_storage = offset;
+        value.arena = arena_bytes;
+        value.total = checked_add(value.total, extra);
+        candidate.complete = checked_add(candidate.complete, extra);
+      }
     }
     return candidate;
   };
@@ -1074,6 +1104,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
   DFCudaCombinedResponseResult result;
   auto& response = result.pullback;
   auto& d = response.diagnostic;
+  d.resource_fallback = w_resource_fallback;
   auto& fock = result.fock;
   auto& p = plan.fock.value;
   const std::size_t requested_outputs = include_gap_response ? 9 : 7;
@@ -1097,6 +1128,34 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     };
 
     const generated_df::Inputs in = prepared.values;
+    std::unique_ptr<generated_df::WExecution> w_execution;
+    if (w_plan) {
+      w_execution = std::make_unique<generated_df::WExecution>(
+          *w_plan, o, v, q, context, context.arena + p.execution_storage, p.panel_capacity,
+          d.fp64_gemms, d.fp32_gemms, fock.contraction_summands, d.precision_cast_elements);
+      const auto& selected = w_execution->plan();
+      const auto& candidate = generated_df::w_lowering_candidates[selected.selected];
+      d.resource_fallback = d.resource_fallback || selected.selected != w_plan->selected;
+      d.precision = selected.precision.arithmetic;
+      d.w_contraction_storage_bits =
+          d.precision.storage_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;
+      d.w_contraction_compute_bits =
+          d.precision.compute_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;
+      d.w_contraction_accumulation_bits =
+          d.precision.accumulation_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;
+      d.w_scientific_identity = generated_df::w_lowering_request.scientific_identity;
+      d.w_semantic_identity = generated_df::w_lowering_request.semantic_identity;
+      d.w_candidate_identity = candidate.identity;
+      d.w_provider = candidate.provider;
+      d.w_algorithm = candidate.algorithm;
+      d.retained_incumbent = selected.retained_incumbent;
+      d.w_provider_version = w_execution->provider_version();
+      d.cuda_runtime_version = w_execution->runtime_version();
+      d.w_precision_identity = selected.precision.identity;
+      d.w_codegen_precision_schedule_identity = selected.schedule_identity;
+      d.host_binding_bytes = generated_df::WExecution::host_bytes(selected);
+      w_execution->initialize(context, in);
+    }
     generated_df::ResponseOutputs out;
     const std::array<double**, 9> output_fields{&out.bov, &out.bvv, &out.ovoo,  &out.ovov, &out.fov,
                                                 &out.t1,  &out.t2,  &out.eps_o, &out.eps_v};
@@ -1157,7 +1216,10 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
       if (slot == p.panel_capacity) {
         slot = static_cast<std::size_t>(
             std::min_element(ages.begin(), ages.begin() + p.panel_capacity) - ages.begin());
-        generated_df::build_panel(o, v, q, occupied, in, panels + slot * p.v3, forward_gemm);
+        if (w_execution)
+          w_execution->build_panel(context, in, occupied, panels + slot * p.v3, slot);
+        else
+          generated_df::build_panel(o, v, q, occupied, in, panels + slot * p.v3, forward_gemm);
         ++fock.panel_gemms;
         identities[slot] = occupied;
       }
@@ -1264,8 +1326,15 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
           for (std::size_t perm = 0; perm < 6; ++perm) {
             const auto* order = generated_df::permutations[perm];
             if (occupied[order[0]] != occupied[index]) continue;
-            generated_df::build_w(o, v, occupied[order[0]], occupied[order[1]], occupied[order[2]],
-                                  in, panel, moments + perm * p.v3, forward_gemm);
+            if (w_execution) {
+              const auto slot = static_cast<std::size_t>((panel - panels) / p.v3);
+              w_execution->build_w(context, in, occupied[order[0]], occupied[order[1]],
+                                   occupied[order[2]], panel, moments + perm * p.v3, slot);
+            } else {
+              generated_df::build_w(o, v, occupied[order[0]], occupied[order[1]],
+                                    occupied[order[2]], in, panel, moments + perm * p.v3,
+                                    forward_gemm);
+            }
             fock.w_gemms += 2;
           }
         }
@@ -1383,7 +1452,8 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     d.epilogue_points = checked_mul(p.tiles, p.v3);
     d.workspace_bytes = p.total;
     d.arena_bytes = p.arena;
-    d.provider_retained_bytes = context.metrics.provider_retained_bytes;
+    d.provider_retained_bytes = checked_add(context.metrics.provider_retained_bytes,
+                                            w_execution ? w_execution->provider_bytes() : 0);
     d.panel_capacity = p.panel_capacity;
     d.h2d_bytes = prepared.h2d_bytes;
     d.d2h_bytes = checked_add(plan.response_output_bytes, sizeof(double) + sizeof(int));
@@ -1399,7 +1469,7 @@ DFCudaCombinedResponseResult pullback_and_fock_df_cuda(
     fock.borrowed_host_bytes = plan.fock.host_bytes;
     fock.workspace_bytes = p.total;
     fock.arena_bytes = p.arena;
-    fock.provider_retained_bytes = context.metrics.provider_retained_bytes;
+    fock.provider_retained_bytes = d.provider_retained_bytes;
     fock.page_capacity = page_capacity;
     fock.page_count = plan.fock.pages;
     fock.panel_capacity = p.panel_capacity;

@@ -71,11 +71,13 @@ compatible.
 | `take` | Static integer gather along one axis |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
 | `asarray` | CPU/NumPy float32/float64 eager arrays; no silent external-device transfer |
+| `astype` | Explicit float32/float64 conversion through an existing TensorIR `cast` (or NumPy eager); native physical copy/alias guarantees are not independently claimed |
+| `can_cast/result_type/isdtype/finfo` | Limited real-floating subset; no integer/bool/complex families or their dtype rules |
 | `zeros/ones/full` | Static shapes, finite float32/float64 values; symbolic creation uses one exact scalar + TensorIR broadcast; integer/bool default `full` dtypes remain unsupported |
 | `zeros_like/ones_like/full_like` | Generic arrays only, preserve shape/dtype by default; scientifically annotated axes require an explicit typed TensorIR construction |
 | `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
-| dtype promotion | Not yet supported |
+| dtype promotion | Generic float32/float64 operands promote to float64, using explicit TensorIR casts before ordinary binary arithmetic, matmul and einsum; scientific typed arrays remain strict |
 | dynamic Python control flow | Not supported |
 
 Scientifically annotated arrays keep the exact scalar spelling contract:
@@ -89,8 +91,12 @@ their sign.
 The eager namespace admits operands through the same CPU/NumPy float32/float64
 boundary as `asarray`, before calling NumPy or a foreign array hook. This guard
 also checks nested containers and advertised DLPack/CUDA array protocols. Exact scalar
-literals are materialized in the array operand dtype, and mixed array dtypes
-are rejected. Eager reductions and static selection retain the same bounded
+literals are materialized in the array operand dtype. For generic arrays,
+float32/float64 mixed operands promote via an explicit TensorIR cast, while
+scientific annotated TensorIR domains continue rejecting implicit precision
+changes. A pure `astype` may deliberately insert a precision conversion in
+either mode. The existing backend/reference interpreter is still responsible
+for execution and floating accuracy checks. Eager reductions and static selection retain the same bounded
 controls as capture: no reduction dtype/keepdims extension, nonnegative
 in-bounds `take` indices, and one valid half-open `slice` range per axis.
 Real-valued eager execution rejects nonfinite inputs/results and enforces the

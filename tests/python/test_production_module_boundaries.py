@@ -37,6 +37,7 @@ EMISSION_IMPORTS = {
     "cuda_lowering",
     "cuda_schedule",
     "fused_schedule",
+    "functools",
     "ir",
     "production_cost",
     "production_exchange_queue",

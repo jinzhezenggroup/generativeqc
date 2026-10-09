@@ -65,11 +65,10 @@ constexpr BroydenStatusEncoding encoding{7, -3, 41};
 struct Aligned {
   const std::size_t size;
   void* data;
-  explicit Aligned(std::size_t bytes)
-      : size(bytes), data(::operator new(bytes, std::align_val_t{64})) {
+  explicit Aligned(std::size_t bytes) : size(bytes), data(allocate_aligned(bytes, 64)) {
     std::memset(data, 0, size);
   }
-  ~Aligned() { ::operator delete(data, std::align_val_t{64}); }
+  ~Aligned() { std::free(data); }
   Aligned(const Aligned&) = delete;
 };
 using Bytes = std::vector<unsigned char>;

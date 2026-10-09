@@ -66,14 +66,30 @@ See [the public contract](fock_build.md) for ownership and output semantics.
 ### Prepared exact-K task scheduling
 
 The generated raw exact-K owner freezes
-`GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive` at preparation.
-Unset and empty select `fill` by default. Explicit `incumbent` retains
-per-original-chunk execution for rollback and comparisons. `fill` holds
+`GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive|work` at preparation.
+Unset and empty select `work` by default. Explicit `fill` restores the previous
+bounded cross-chunk schedule; `incumbent` retains per-original-chunk execution
+for rollback and comparisons. `fill` holds
 accepted identities and contribution bounds across chunks in a bounded 2W
 arena, consumes full W-task batches, and flushes the final partial batch.
 Experimental `primitive` additionally stably groups the admitted lookahead
 window by cached ket primitive-pair count; the bra and angular class are fixed
 within that queue.
+The default `work` schedule instead retains eight bounded survivor queues per bra:
+cached ket primitive-pair work has bins 1, 2–3, 4–7 and 8+, each split by
+whether both ket shells are contracted. Bra work and angular class are fixed,
+so this groups primitive-product work without reordering the screening domain.
+The 8+ bin is deliberately saturated; it does not cap primitive traversal or
+promise a work-ratio bound for arbitrarily long custom contractions.
+
+Each queue has a 2W arena. New candidate chunks are scanned only while every
+queue has fewer than W pending tasks. Full expensive bins drain first; partial
+bins accumulate across original chunks and flush independently at the row tail.
+Storage is bounded by 16W identities/bounds per CTA, not by the quartet domain.
+Separate class-specialized work kernels keep this storage out of the incumbent,
+fill and primitive kernels. Whole-CTA, native and unsupported classes retain
+their existing workers. This includes high-angular generated classes, not only
+`psss`/`psps`; explicit Rys/block alternatives are not duplicated or changed.
 Unknown values fail at preparation. Change the setting before creating a new
 owner, not while replaying an existing one.
 
@@ -86,13 +102,22 @@ contracts do not change, and no quartet-domain allocation is introduced.
 Explicit `rys` or `block` Fock lowerings retain their own workers; the queue
 control applies only to classes using the incumbent generated lowering.
 
-Cross-chunk filling is the default; primitive grouping remains opt-in. Compare
+Primitive-work buckets are the default; `primitive` remains opt-in. Compare
 fixed-density matrices/work counts and complete cold/warm/moved energy-plus-force
 endpoints, including preparation and actual SCF trajectories. A sparse synthetic-density
 win is not a complete cold-performance claim. Rationale and development evidence
 are retained in the
 [queue decision note](../../.agents/notes/implemented/performance/2026-10-07-direct-k-cross-chunk-queue.md)
-and [default-selection decision](../../.agents/notes/implemented/performance/2026-10-07-direct-k-fill-default.md).
+and [previous fill-default decision](../../.agents/notes/implemented/performance/2026-10-07-direct-k-fill-default.md).
+The [work-bucket decision](../../.agents/notes/implemented/performance/2026-10-08-direct-k-work-buckets.md)
+records resource and qualification limits; the
+[work-default decision](../../.agents/notes/implemented/performance/2026-10-09-direct-k-work-default.md)
+records the accepted default and explicit fill rollback without claiming a stable
+cold speedup from unmatched SCF trajectories. For a complete PBE0 cold Nsight trace,
+`benchmarks/pbe0_k_work_profile.py --trace trace.sqlite --endpoint cold.json --output classes.json`
+validates paired J-then-K class passes, includes native `dddd`, and reports K time
+separately from J and force work. Trace sums are intrusive device diagnostics,
+not clean endpoint timing or primitive-work counts.
 
 The [production evidence](../../benchmarks/results/fock-strategies/README.md)
 compares 40 complete endpoints per backend against the audit baseline. Energies

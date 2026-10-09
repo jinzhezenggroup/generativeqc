@@ -72,6 +72,15 @@ cudaError_t launch_shell_class_streaming_fock(unsigned, cudaStream_t, bool, unsi
   return cudaErrorNotSupported;
 }
 
+cudaError_t launch_shell_class_work_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
+                                                   const void*, const std::int64_t*, const void*,
+                                                   const double*, const void*, double, bool, double,
+                                                   const double*, const double*, double*,
+                                                   std::uint32_t*, unsigned long long*,
+                                                   unsigned long long*) noexcept {
+  return cudaErrorNotSupported;
+}
+
 cudaError_t launch_shell_class_rys_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
                                                   const void*, const std::int64_t*, const void*,
                                                   const double*, const void*, double, bool, double,

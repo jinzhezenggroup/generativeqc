@@ -111,3 +111,10 @@ execution on a production batch, or a second solver-family integration.
 - #465
 - #370
 - `docs/program_ir.md`
+
+## Completion-mode follow-up
+
+The speculative generic per-item-mask surface described above was retired after
+an audit found no production consumer. Scalar payload identities and runtime
+keys are preserved; method-owned ragged failure/publication behavior is unchanged.
+See [the superseding completion-mode decision](../compatibility/2026-10-08-retire-unused-solver-region-mask.md).

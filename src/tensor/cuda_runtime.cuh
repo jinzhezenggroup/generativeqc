@@ -225,6 +225,18 @@ inline void accumulate_fp32_into_fp64(Context& context, const float* source, dou
   cuda_check(cudaGetLastError());
 }
 
+// Produce a scalar directly into a device buffer while keeping the prepared
+// handle's HOST scalar mode for all following GEMMs. Restore before checking
+// the dot status so even a failed submission does not poison the next call.
+inline void dot_to_device(Context& context, int count, const double* left, const double* right,
+                          double* result) {
+  blas_check(cublasSetPointerMode(context.handle, CUBLAS_POINTER_MODE_DEVICE));
+  const auto dot_status = cublasDdot(context.handle, count, left, 1, right, 1, result);
+  const auto restore_status = cublasSetPointerMode(context.handle, CUBLAS_POINTER_MODE_HOST);
+  blas_check(dot_status);
+  blas_check(restore_status);
+}
+
 // Reusable prepared-provider vector accumulation: target += source.
 // Borrow the same handle/stream as GEMM; no new allocation or selector.
 inline void add_vector_in_place(Context& context, int count, const double* source, double* target) {

@@ -103,6 +103,16 @@ cudaError_t launch_shell_class_streaming_fock(
     const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
 
+/** Launch the separately compiled work-bucket schedule; whole-CTA classes retain
+ * their existing specialized worker. No launch is retried after accumulation. */
+cudaError_t launch_shell_class_work_streaming_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
+    const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
+    const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
+    const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
+    unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
+
 /** Launch a prepared strict-FP64 Rys alternative through the same topology ABI.
  * The caller must check the compiler inventory before selecting this function.
  * Runtime launch failures propagate; they do not retry partially written output.

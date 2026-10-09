@@ -280,6 +280,16 @@ def native_combined_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.An
         + [ct.POINTER(dp), dp, ct.POINTER(ct.c_size_t), ct.c_void_p, ct.c_size_t]
     )
     call.restype = ct.c_int
+    mixed_call = dll.df_triples_combined_precision_probe_v1
+    mixed_call.argtypes = (
+        call.argtypes[:9]
+        + [ct.c_int]
+        + call.argtypes[9:12]
+        + [ct.c_size_t]
+        + call.argtypes[12:]
+    )
+    mixed_call.restype = ct.c_int
+    call.mixed_precision_call = mixed_call
     return call
 
 
@@ -292,6 +302,7 @@ def run_combined(
     rows: int = 0,
     panels: int = 3,
     threshold: float = 1e-10,
+    precision: int | None = None,
 ) -> tuple:
     q, o, v = inputs[0].shape
     arrays = [np.ascontiguousarray(x) for x in inputs]
@@ -301,9 +312,11 @@ def run_combined(
         *(np.full_like(x, np.nan) for x in arrays[:7]),
     ]
     values = np.full(3, np.nan)
-    counts = np.full(24, 19, dtype=np.uintp)
+    counts = np.full(24 if precision is None else 29, 19, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     dp = ct.POINTER(ct.c_double)
+    if precision is not None:
+        call = call.mixed_precision_call
     status = call(
         o,
         v,
@@ -314,13 +327,65 @@ def run_combined(
         caller_bytes,
         rows,
         panels,
+        *((precision,) if precision is not None else ()),
         (dp * len(output))(*(x.ctypes.data_as(dp) for x in output)),
         values.ctypes.data_as(dp),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        *((len(counts),) if precision is not None else ()),
         error,
         len(error),
     )
     return status, output, values, counts, error.value.decode()
+
+
+@pytest.mark.parametrize("fused", ["0", "1"])
+def test_mixed_forward_w_has_strict_budget_fallback(
+    native_combined_probe: typing.Any, monkeypatch: pytest.MonkeyPatch, fused: str
+) -> None:
+    """Optional cast/provider storage must not sacrifice the strict admission."""
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", fused)
+    inputs, _ = case(2, 3, 4)
+    status, strict, strict_values, strict_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1, precision=0
+    )
+    assert status == 0, error
+    status, mixed, mixed_values, mixed_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1, precision=1
+    )
+    assert status == 0, error
+    assert mixed_counts[24] == 32 and mixed_counts[25] > 0 and mixed_counts[26] > 0
+    assert mixed_counts[27] == 0
+    assert mixed_counts[4] > strict_counts[4]
+    for actual, expected in zip(mixed, strict, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=2e-6, rtol=2e-6)
+    np.testing.assert_allclose(mixed_values[0], strict_values[0], atol=2e-6, rtol=2e-6)
+
+    budget = int(strict_counts[4])
+    status, fallback, fallback_values, fallback_counts, error = run_combined(
+        native_combined_probe, inputs, budget=budget, rows=1, panels=1, precision=1
+    )
+    assert status == 0, error
+    assert fallback_counts[24] == 64 and fallback_counts[25] == 0
+    assert fallback_counts[27] == 1 and fallback_counts[4] == budget
+    for actual, expected in zip(fallback, strict, strict=True):
+        np.testing.assert_array_equal(actual, expected)
+    assert fallback_values[0] == strict_values[0]
+
+    # Fusion has its own optional-storage fallback. The refusal threshold must
+    # therefore be the unfused strict minimum, not the fused request's capacity.
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", "0")
+    status, _, _, minimum_counts, error = run_combined(
+        native_combined_probe, inputs, rows=1, panels=1, precision=0
+    )
+    assert status == 0, error
+    budget = int(minimum_counts[4])
+    monkeypatch.setenv("GENERATIVEQC_TEST_FUSED_TRIPLES_SCALARS", fused)
+    status, output, values, counts, error = run_combined(
+        native_combined_probe, inputs, budget=budget - 1, rows=1, panels=1, precision=1
+    )
+    assert status != 0 and "budget" in error
+    assert all(np.isnan(value).all() for value in (*output, values))
+    np.testing.assert_array_equal(counts, 19)
 
 
 def test_combined_probe_output_pointer_capacity() -> None:

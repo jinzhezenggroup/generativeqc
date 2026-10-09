@@ -458,9 +458,12 @@ def native_rks_xc_hvp_components(
         )
         return result.total
 
+    # The three left-leg contractions consume this impulse synchronously.
+    # Reuse one bounded nuclear-direction buffer instead of allocating a new
+    # (natom, 3) array for every atom/axis pair; no view escapes this loop.
+    unit = np.zeros((natom, 3))
     for atom in range(natom):
         for axis in range(3):
-            unit = np.zeros((natom, 3))
             unit[atom, axis] = 1.0
 
             components["xc_ao"][atom, axis] = contract(
@@ -510,6 +513,7 @@ def native_rks_xc_hvp_components(
                 left_weights=left_weight_motion,
                 mixed_weights=mixed_weight_motion,
             )
+            unit[atom, axis] = 0.0
 
     operator.validate_current()
     arrays = tuple(

@@ -87,6 +87,8 @@ struct GeneratedExchangePlan {
   std::size_t device_bytes{}, host_preparation_bytes{};
   /** Prepared strict-K choices never inherit the J owner's preference. */
   std::uint64_t rys_fock_mask{}, k_block_fock_mask{};
+  /** Freeze host launch selection; existing kernels retain their shared footprint. */
+  detail::GeneratedExchangeTaskSchedule task_schedule{};
   double *public_spin{}, *direct_spin{}, *direct_exchange{};
   double *density_temporary{}, *fock_temporary{}, *public_exchange{};
   ShellPairDensityBounds* shell_pair_density_bounds{};

@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -23,10 +24,14 @@ constexpr std::array<std::array<std::int64_t, 4>, 3> kFieldOffsets{
 constexpr double kCanary = 123456.75;
 struct Aligned {
   void* p;
-  explicit Aligned(std::size_t n) : p(::operator new(n, std::align_val_t{64})) {
+  explicit Aligned(std::size_t n) : p(nullptr) {
+    // Preserve the 64-byte alignment and match POSIX allocation with free.
+    if (posix_memalign(&p, 64, n ? n : 64) != 0) throw std::bad_alloc{};
     std::memset(p, 0, n);
   }
-  ~Aligned() { ::operator delete(p, std::align_val_t{64}); }
+  ~Aligned() { std::free(p); }
+  Aligned(const Aligned&) = delete;
+  Aligned& operator=(const Aligned&) = delete;
 };
 struct Fixture {
   int memory;

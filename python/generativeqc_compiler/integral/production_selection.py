@@ -50,6 +50,18 @@ def _supports_component_lane_rys(
     return supports_component_lane_rys(spec, schedule)
 
 
+def supports_exchange_work_buckets(selection: KernelSelection) -> bool:
+    """Component-lane quartets already own a whole CTA, not divergent tasks."""
+    schedule = selection.fock_schedule or selection.schedule
+    if selection.fock_schedule is None and selection.recurrence in (
+        "rys3",
+        "rys4",
+        "rys5",
+    ):
+        return schedule.kind == ScheduleKind.PACKED_TASKS
+    return schedule.kind in (ScheduleKind.PACKED_TASKS, ScheduleKind.SUBGROUP_TASKS)
+
+
 def _supports_uniform_warp_rys(
     spec: ShellClassSpec,
     schedule: ScheduleIR,

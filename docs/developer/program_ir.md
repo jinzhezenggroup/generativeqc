@@ -165,8 +165,12 @@ strict finite bound; the compiler does not invent an unbounded while loop.
 Convergence and failure predicates carry stable provider-owned identities rather
 than embedding SCF/CC policy in generic compiler code. Checkpoints state exactly
 which buffers may be observed at entry, per-iteration, success, failure or exit,
-and `host_visible` is explicit. Scalar completion is the default; a ragged
-consumer must provide an explicit per-item active-mask output.
+and `host_visible` is explicit. Generic completion supports only `scalar`.
+`RegionCompletion.active_mask` remains a reserved null field so existing scalar
+schema-v1 payloads and region identities are unchanged. Construction and replay
+reject `per_item_mask`, unknown modes, and non-null masks rather than silently
+reinterpreting them. Ragged batch completion, per-item failure isolation and
+warm-state publication remain with the existing method-owned controllers.
 
 Derivative behavior is also explicit. `derivative_policy` is either
 `unsupported` or `custom`; a custom region must register identified first-order
@@ -208,12 +212,16 @@ submission and delegates optional capture/replay to the existing shared
 is its first execution consumer; KS still owns convergence, DIIS, occupations,
 failure handling, and publication.
 
-CUDA KS currently binds that executor with replay disabled, preserving the
-qualified ordinary-stream chunk behavior from #623. Captured/replayed KS
-execution still requires matched endpoint and ragged-failure qualification
-before promotion. See
-[the structured-region architecture note](../../.agents/notes/implemented/architecture/2026-09-21-structured-solver-regions.md)
-and [the CUDA execution follow-up](../../.agents/notes/implemented/architecture/2026-09-21-cuda-solver-region-executor.md).
+The native binding also supports only scalar completion and rejects unsupported
+numeric mode values before submitting work or changing replay state. It preserves
+the scalar replay key, bounds each submission by requested steps, remaining
+steps and checkpoint capacity, and leaves convergence/failure/publication policy
+with KS. Qualified semilocal KS replay remains opt-in with its existing ordinary
+stream fallback; retiring generic mask admission does not change those gates.
+
+See [the structured-region architecture note](../../.agents/notes/implemented/architecture/2026-09-21-structured-solver-regions.md),
+[the CUDA execution follow-up](../../.agents/notes/implemented/architecture/2026-09-21-cuda-solver-region-executor.md),
+and [the scalar-only completion decision](../../.agents/notes/implemented/compatibility/2026-10-08-retire-unused-solver-region-mask.md).
 
 ## Shared storage analysis
 

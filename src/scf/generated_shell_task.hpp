@@ -19,6 +19,8 @@ enum class GeneratedExchangeTaskSchedule : std::uint32_t {
   Incumbent = 0,
   Fill = 1,
   Primitive = 2,
+  /** Bounded post-screening queues by primitive work and contraction shape. */
+  Work = 3,
 };
 
 /** Stable geometry-cache ABI shared by handwritten and generated kernels. */
