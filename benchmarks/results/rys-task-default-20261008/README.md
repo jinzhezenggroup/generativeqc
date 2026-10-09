@@ -113,3 +113,12 @@ Summarize at least three processes per mode using `--samples`; acceptance
 requires all numerical/cold/identity gates and both mean and median improvement.
 Changes after this frozen qualification need separately labeled validation,
 especially the subsequent main-branch AO/XC default promotions.
+
+## Exact historical archive recovery
+
+The observations and validation archives are retained byte-for-byte in Git at
+`dee3d522b71df9fb55c91478df3c44b7af454488`. Their complete member names, sizes and hashes,
+archive hashes and copyable recovery commands are recorded in
+[`../unified-k-work-20261009/storage-recovery.json`](../unified-k-work-20261009/storage-recovery.json).
+Recover those archives before following the historical extraction commands above.
+This storage compaction changes no observation, gate or qualification claim.

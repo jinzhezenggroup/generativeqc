@@ -133,7 +133,9 @@
     "local-autotune-136": {
       "owner": "local-autotune-136",
       "reason": "Reviewed retained large evidence for User-local autotuning acceptance (#136). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/local-autotune-136/README.md"
+      "review_document": "benchmarks/results/local-autotune-136/README.md",
+      "lossless_record": "benchmarks/results/local-autotune-136/evidence.json.xz",
+      "recovery_manifest": "benchmarks/results/unified-k-work-20261009/storage-recovery.json"
     },
     "local-spaces-182": {
       "owner": "local-spaces-182",
@@ -631,14 +633,6 @@
       "path": "benchmarks/results/issue409-packed-values/storage-dataflow.json",
       "role": "scientific-record",
       "sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
-    },
-    {
-      "bytes": 369045,
-      "classification": "required-compact-accepted-evidence",
-      "family": "local-autotune-136",
-      "path": "benchmarks/results/local-autotune-136/evidence.json",
-      "role": "decision-or-audit-record",
-      "sha256": "e4c284f632a4752830ec490acb02d20d063f6a1b96d0e52cfffa6dc943291fa7"
     },
     {
       "bytes": 276817,

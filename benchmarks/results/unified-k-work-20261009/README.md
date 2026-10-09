@@ -60,9 +60,9 @@ exact 5/3 populations and gains in both mean and median against both standalone
 policies. The existing single-axis benchmark comparator still rejects unmatched
 task schedules. This small population is not statistical significance or a
 universal-workload performance claim.
-`final-receipts.json` supplies the curated, reviewable numerical fixture with
+`final-receipts.json.xz` supplies the curated, reviewable numerical fixture with
 all Cold and holdout times, work counts, energies and full force vectors;
-`initial-union-receipts.json` retains the rejected union's numerical observations.
+`initial-union-receipts.json.xz` retains the rejected union's numerical observations.
 Full run bundles remain ignored local artifacts under the repository's storage
 policy, with exact retained locations, sizes and checksums in `ignored-artifacts.json`.
 
@@ -171,3 +171,18 @@ The curated fixtures and source-identified summary are the reviewed Git evidence
 See the [decision note](../../../.agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md)
 for invariants, discarded approaches and revisit conditions. No release, release
 tag, publishing workflow, merge or universal speedup is requested or implied.
+
+## Lossless storage and historical recovery
+
+The two curated receipt files are losslessly XZ-compressed. For example,
+`xz -dc benchmarks/results/unified-k-work-20261009/final-receipts.json.xz`
+prints every original JSON byte, including all positive and negative numerical
+observations. `storage-recovery.json` records compressed and decoded sizes and
+SHA256 values, copyable decoding commands, and exact Git recovery commands with
+complete member inventories for the six historical archives. The pre-existing
+`local-autotune-136/evidence.json` is also losslessly stored as `.json.xz`; its
+decoded bytes are identical. Global evidence budgets remain unchanged.
+
+For a shallow or fresh clone, first fetch the exact recovery commit:
+`git fetch https://github.com/jinzhezenggroup/generativeqc.git dee3d522b71df9fb55c91478df3c44b7af454488`.
+Then run the manifest's `git show` recovery command from the repository root.

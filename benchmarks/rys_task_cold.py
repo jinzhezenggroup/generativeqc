@@ -19,6 +19,11 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
+if __package__ in {None, ""}:
+    from _support import raw_output_path
+else:
+    from ._support import raw_output_path
+
 
 def summarize(samples: list[dict[str, Any]]) -> dict[str, Any]:
     """Reject incomplete or unmatched samples before interpreting cold time."""
@@ -241,7 +246,7 @@ def main() -> None:
     )
     parser.add_argument("--atoms", type=int, choices=(48, 96), default=96)
     parser.add_argument("--reference", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--samples", type=Path, nargs="+")
     args = parser.parse_args()
     if args.samples:
