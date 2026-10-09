@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "molecule/basis.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
@@ -61,6 +62,7 @@ FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
   result.one_electron_value_override = one_electron_policy.diagnostic_override;
   result.one_electron_value_capability_fallback = one_electron_policy.capability_fallback;
   if (needs(strategy.spec, FockApproximation::DensityFitted)) {
+    result.df_pair_storage_request = requested_df_pair_storage_request();
     result.df_pair_storage = requested_df_pair_storage();
     result.df_value_mapping = cuda_policy::df_value_mapping_requested();
     if (strategy.spec.derivative_order || retain_df_derivatives)
@@ -232,8 +234,14 @@ struct PreparedFockPlan::Impl {
     // The Cartesian temporary dies before persistent J/K source allocation.
     {
       integrals::IntegralData cartesian;
-      checked(build_cuda_one_electron_integrals(device, system, cartesian, detail, derivatives,
-                                                derivatives),
+      // Retained force capability does not require exporting every H'/S'
+      // matrix before an energy-only solve. The stationary CUDA consumer uses
+      // geometry and final D/W; only its bounded host fallback needs these.
+      const bool export_derivatives =
+          derivatives && !(has_df && !has_exact && strategy.spec.derivative_order == 0 &&
+                           retained_fitted_derivative_order != 0);
+      checked(build_cuda_one_electron_integrals(device, system, cartesian, detail,
+                                                export_derivatives, export_derivatives),
               detail);
       auto ints = integrals::transform_integrals(cartesian, system);
       if (has_df)
@@ -271,9 +279,8 @@ struct PreparedFockPlan::Impl {
       diagnostic.device_bytes = diagnostic.direct.device_bytes;
     }
     if (has_df) {
-      const auto resolved = resolve_df_subbudget(df_workload, resolved_df, diagnostic.device_bytes);
-      diagnostic.response_device_bytes = resolved.response_bytes;
-      const auto plan_budget = resolved.value_bytes;
+      auto resolved = resolve_df_subbudget(df_workload, resolved_df, diagnostic.device_bytes);
+      auto plan_budget = resolved.value_bytes;
       if (!resolved.feasible || !plan_budget || (df_derivatives && !resolved.response_bytes))
         throw std::bad_alloc();
       auto& data = *fitted;
@@ -281,31 +288,53 @@ struct PreparedFockPlan::Impl {
       data.raw.naux = molecule::ao_count(*auxiliary);
       data.raw.ncoord = diagnostic.ncoord;
       data.metric_relative_threshold = strategy.metric_relative_threshold;
-      data.resolved_budget = resolved;
       if (df_derivatives) {
         data.df_gradient_orbital = system;
         data.df_gradient_auxiliary = *auxiliary;
         data.df_gradient_mapping = diagnostic.variant.df_derivative_mapping;
-        data.df_gradient_budget = resolved.response_bytes;
       }
-      data.value_storage = diagnostic.variant.df_pair_storage;
       // Only an explicit method reservation may add complete single-B U capacity.
       // This is separate from RHF-owned SCF factors: KS owns its own Cocc. Empty
       // reservations keep arbitrary-density callers on bounded panels. The
       // packed planner may drop optional U under automatic budget pressure.
+      // Reuse RHF's resident-value crossover without reserving RHF-owned SCF
+      // factors: this method already owns and validates its restricted Cocc.
       const auto plan_values = [&](std::size_t n, std::size_t a, std::size_t fixed) {
         // Packed-raw is not an admitted borrowed-response consumer and does
         // not have the same optional-U budget fallback. Keep its old capacity.
+        const auto request = diagnostic.variant.df_pair_storage_request;
         const auto packed_rank =
-            data.value_storage == DfPairStorage::SymmetricLowerSingle ? reserved_rank : 0;
-        return df_packed_pairs(data.value_storage)
-                   ? plan_packed_density_fitting_tiles(1, n, a, packed_rank, plan_budget, fixed, 0,
-                                                       df_retains_packed_raw(data.value_storage))
-                   : plan_density_fitting_tiles(1, n, a, n, plan_budget, fixed, true);
+            request == DfPairStorageRequest::SymmetricLower ? 0 : reserved_rank;
+        auto tiles = plan_requested_density_fitting_tiles(
+            request, 1, n, a, n, packed_rank, plan_budget, fixed, true, 0, reserved_rank != 0);
+        const bool needs_occupied_capacity =
+            tiles.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
+            tiles.value_storage.rank_capacity < reserved_rank;
+        if (request == DfPairStorageRequest::Automatic && reserved_rank &&
+            (!tiles.stores_full_three_center || needs_occupied_capacity)) {
+          const auto resident =
+              resolve_method_owned_df_resident_budget(resolved, n, a, reserved_rank, fixed);
+          if (resident != resolved) {
+            const auto promoted = plan_requested_density_fitting_tiles(
+                request, 1, n, a, n, packed_rank, resident.value_bytes, fixed, true, 0, true);
+            // Complete U also bounds the force endpoint's work: its live
+            // final-state lease avoids rebuilding the fitted projection. Do
+            // not trade response capacity for a layout with no admission gain.
+            if (promoted.stores_full_three_center &&
+                (!tiles.stores_full_three_center ||
+                 promoted.value_storage.rank_capacity > tiles.value_storage.rank_capacity)) {
+              tiles = promoted;
+              resolved = resident;
+              plan_budget = resident.value_bytes;
+            }
+          }
+        }
+        return tiles;
       };
       // Reuse the existing tile planner before and after source metadata is
       // known. Value/response ownership comes from the shared DF resource policy.
-      (void)plan_values(data.raw.nbf, data.raw.naux, df_source_bytes(system, *auxiliary));
+      const auto source_bytes = df_source_bytes(system, *auxiliary);
+      (void)plan_values(data.raw.nbf, data.raw.naux, source_bytes);
       CudaDensityFittingIntegralSource* raw_source{};
       std::vector<double> metrics;
       std::size_t nbf{}, naux{};
@@ -318,6 +347,20 @@ struct PreparedFockPlan::Impl {
       diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
       const auto tiles =
           plan_values(nbf, naux, cuda_density_fitting_integral_source_device_bytes(source.get()));
+      data.resolved_budget = resolved;
+      data.df_gradient_budget = resolved.response_bytes;
+      diagnostic.response_device_bytes = resolved.response_bytes;
+      runtime::df_progress::Scope budget_trace("prepared_df_resource_policy");
+      runtime::df_progress::number("resolved_total_budget_bytes", resolved.total_bytes);
+      runtime::df_progress::number("resolved_value_budget_bytes", resolved.value_bytes);
+      runtime::df_progress::number("resolved_response_budget_bytes", resolved.response_bytes);
+      runtime::df_progress::number("observed_free_device_bytes", resolved.observed_free_bytes);
+      runtime::df_progress::number("value_peak_bytes", tiles.peak_workspace_bytes);
+      runtime::df_progress::number("value_storage",
+                                   static_cast<unsigned>(tiles.value_storage.pairs));
+      budget_trace.finish();
+      data.value_storage = tiles.value_storage.pairs;
+      diagnostic.variant.df_pair_storage = data.value_storage;
       CudaDensityFittingJkPlan* raw_plan{};
       // from_source owns the transferred handle on both success and failure.
       raw_source = source.release();
@@ -369,6 +412,31 @@ const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
 const core::System& PreparedFockPlan::system() const noexcept { return impl_->orbital; }
 const integrals::IntegralData& PreparedFockPlan::one_electron() const noexcept {
   return impl_->one_electron();
+}
+void PreparedFockPlan::ensure_one_electron_derivatives() const {
+  auto& one = impl_->fitted ? impl_->fitted->one_electron : impl_->exact;
+  const auto coordinates = impl_->orbital.atoms.size() * 3;
+  const auto elements = coordinates * one.nbf * one.nbf;
+  if (one.ncoord == coordinates && one.hcore_derivative.size() == elements &&
+      one.overlap_derivative.size() == elements)
+    return;
+  if (impl_->device_id < 0 || !impl_->fitted || !impl_->retained_fitted_derivative_order)
+    throw std::logic_error("prepared Fock has no deferred one-electron derivative capability");
+  runtime::df_progress::Scope export_trace("deferred_one_electron_derivatives");
+  integrals::IntegralData cartesian;
+  std::string detail;
+  checked(build_cuda_one_electron_integrals(impl_->device_id, impl_->orbital, cartesian, detail,
+                                            true, true),
+          detail);
+  auto derivatives = integrals::transform_integrals(cartesian, impl_->orbital);
+  if (derivatives.nbf != one.nbf || derivatives.ncoord != coordinates ||
+      derivatives.hcore_derivative.size() != elements ||
+      derivatives.overlap_derivative.size() != elements)
+    throw std::runtime_error("deferred one-electron derivative shape mismatch");
+  one.hcore_derivative = std::move(derivatives.hcore_derivative);
+  one.overlap_derivative = std::move(derivatives.overlap_derivative);
+  one.nuclear_repulsion_derivative = std::move(derivatives.nuclear_repulsion_derivative);
+  one.ncoord = coordinates;
 }
 initial_guess::EigenOperation PreparedFockPlan::eigen_operation(EigenUse use) const {
   auto* plan = impl_->cuda_df.get();
@@ -508,10 +576,14 @@ bool PreparedFockPlan::matches(
     return false;
   if (impl_->diagnostic.strategy != strategy || !same_system(impl_->orbital, orbital)) return false;
   try {
+    auto variant = execution_variant(strategy, impl_->retained_fitted_derivative_order != 0);
+    // Automatic storage is resolved once against the prepared owner's budget.
+    // Keep that actual layout, while still invalidating auto -> explicit changes.
+    if (variant.df_pair_storage_request == DfPairStorageRequest::Automatic)
+      variant.df_pair_storage = impl_->diagnostic.variant.df_pair_storage;
     if (strategy.backend == FockBackend::Cuda &&
         (device != impl_->device_id || budget != impl_->requested_budget ||
-         execution_variant(strategy, impl_->retained_fitted_derivative_order != 0) !=
-             impl_->diagnostic.variant))
+         variant != impl_->diagnostic.variant))
       return false;
   } catch (...) {
     // A malformed selector invalidates replay; fresh preparation reports the

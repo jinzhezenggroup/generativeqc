@@ -49,17 +49,52 @@ Prepared CUDA batches expose the provider's metric diagnostics. Whole-KS
 `estimate_resources`/resource-plan admission is rejected for DF until its
 combined inventory is qualified; conventional inventories must not describe DF.
 
+For a CUDA restricted fitted hybrid with method-owned integer occupations,
+automatic value storage keeps a fully resident dense owner when it fits. If
+dense storage would stream, the same planner may instead retain one symmetric
+packed fitted tensor within the resolved DF envelope. For live automatic
+budgets only, the singleton restricted owner may rebalance the value/response
+split to admit it without increasing the total cap or consuming device
+headroom. Response retains at least 20% of that envelope and a conservative
+bounded occupied-response workspace; if both owners cannot fit, the original
+split and streamed fallback remain. Explicit positive budgets and failed
+memory probes retain their original split. The same bounded admission may
+retain the method-owned complete occupied projection for the future force
+endpoint, rather than dropping it while unused response capacity remains.
+The completed projection still requires a valid final-state lease. Optional complete
+occupied projections remain separately charged and may be dropped. When the
+packed owner cannot fit, the bounded dense/source fallback remains available.
+Packed-single preparation batches metric transforms across lower AO-pair rows
+within the existing charged scratch buffers; it does not allocate a retained
+raw tensor or change the symmetric whitening convention.
+Explicit `GENERATIVEQC_DF_VALUE_STORAGE` selections stay authoritative;
+unrestricted and arbitrary-density prepared callers do not acquire this policy
+from their dimensions alone. This changes source reuse, not the fitting metric,
+SCF thresholds or numerical precision.
+
+For a matched prepared-owner cold comparison, use
+[`benchmarks/pbe0_df_cold.py`](../../benchmarks/pbe0_df_cold.py) through Slurm.
+It measures preparation through the first synchronized public result with a
+fresh process, owner and density, retaining persistent disk caches. Imports,
+CUDA context initialization, native Calculator construction and post-result
+owner/process teardown are outside that endpoint timer. Energy-only and
+energy-plus-force runs are separate cold calculations.
+
 Qualified force calculations use token-checked derivative snapshots and the
 prepared DF response provider. The CPU diagnostic requires `execution="native"`
 for a fitted state; the Direct-only reference derivative path is rejected rather
 than differentiating a different Hamiltonian.
 
 The CPU bridge contracts retained host H'/S' derivatives for the one-electron
-and Pulay sources. CUDA first borrows the token-checked final stationary D/W
+and Pulay sources. CUDA fitted energy preparation defers those coordinate-major
+matrices when retaining future force capability. CUDA first borrows the
+token-checked final stationary D/W
 already retained by the KS owner and runs the bounded paired one-electron
 consumer without uploading those AO matrices again. If that optional device
-consumer cannot be admitted under the caller's budget, the exact host
-contraction remains the bounded fallback.
+consumer cannot be admitted under the caller's budget, the prepared owner
+materializes H'/S' with the same CUDA exporter on demand, retains them for
+replay, and uses the exact host contraction as its bounded fallback. Explicit
+derivative Fock preparations still export their requested matrices eagerly.
 
 For restricted CUDA DF response, the Coulomb J' component also borrows the exact
 final resident density under the same live KS token. The detached host density

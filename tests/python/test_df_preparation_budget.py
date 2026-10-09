@@ -268,6 +268,44 @@ int main() {
     subprocess.run([str(executable)], check=True)
 
 
+def test_prepared_storage_request_is_distinct_from_resolved_layout(
+    tmp_path: Path, native_cxx: object
+) -> None:
+    """Changing auto to an explicit layout invalidates even equal-sized owners."""
+    root = Path(__file__).resolve().parents[2]
+    source = tmp_path / "prepared_storage_identity.cpp"
+    source.write_text(r"""
+#include "scf/fock_prepared.hpp"
+int main() {
+  using namespace generativeqc::scf;
+  FockExecutionVariant automatic;
+  automatic.df_pair_storage = DfPairStorage::SymmetricLowerSingle;
+  auto explicit_single = automatic;
+  explicit_single.df_pair_storage_request = DfPairStorageRequest::SymmetricLowerSingle;
+  if (automatic == explicit_single) return 1;
+  automatic.df_pair_storage = DfPairStorage::Dense;
+  auto explicit_dense = automatic;
+  explicit_dense.df_pair_storage_request = DfPairStorageRequest::Dense;
+  if (automatic == explicit_dense) return 2;
+  auto changed_provider = automatic;
+  changed_provider.df_value_mapping = 1;
+  if (automatic == changed_provider) return 3;
+  return 0;
+}
+""")
+    executable = tmp_path / "prepared_storage_identity"
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-I" + str(root / "src"),
+            "-I" + str(root / "include"),
+        ),
+    )
+    subprocess.run([str(executable)], check=True)
+
+
 def test_single_packed_96_atom_plan_keeps_values_when_occupied_scratch_does_not_fit(
     tmp_path: Path, native_cxx: object
 ) -> None:
@@ -325,6 +363,57 @@ int main() {
   const auto auto_uhf = plan_requested_density_fitting_tiles(
       DfPairStorageRequest::Automatic,1,768,3712,160,160,13685173124ULL,0,true,0);
   if (auto_uhf.value_storage.pairs != DfPairStorage::Dense) return 9;
+  const auto method_owned = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,160,13685173124ULL,0,true,0,true);
+  if (!method_owned.stores_full_three_center || method_owned.automatic_rhf_rank != 0 ||
+      method_owned.value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+      method_owned.peak_workspace_bytes > 13685173124ULL) return 10;
+  const auto method_dense = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Dense,1,768,3712,768,160,13685173124ULL,0,true,0,true);
+  if (method_dense.value_storage.pairs != DfPairStorage::Dense ||
+      method_dense.stores_full_three_center) return 11;
+  const auto method_bounded = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,160,4ULL<<30,0,true,0,true);
+  if (method_bounded.value_storage.pairs != DfPairStorage::Dense ||
+      method_bounded.stores_full_three_center ||
+      method_bounded.peak_workspace_bytes > (4ULL<<30)) return 12;
+  const auto method_small = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,96,96,96,24,1ULL<<30,0,true,0,true);
+  if (!method_small.stores_full_three_center ||
+      method_small.value_storage.pairs != DfPairStorage::Dense ||
+      method_small.automatic_rhf_rank != 0) return 13;
+  const auto method_batch = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,2,768,3712,768,160,13685173124ULL,0,true,0,true);
+  if (method_batch.value_storage.pairs != DfPairStorage::Dense) return 14;
+  const auto split = resolve_df_budget(
+      {768,3712,96,1,0,true}, {24ULL<<30,32ULL<<30,true}, 0);
+  const auto resident_split = resolve_method_owned_df_resident_budget(
+      split,768,3712,160,100ULL<<20);
+  const auto resident_values = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,160,
+      resident_split.value_bytes,100ULL<<20,true,0,true);
+  if (resident_split.total_bytes != split.total_bytes ||
+      resident_split.value_bytes + resident_split.response_bytes != split.total_bytes ||
+      resident_split.response_bytes < split.total_bytes/5 ||
+      !resident_values.stores_full_three_center ||
+      resident_values.value_storage.pairs != DfPairStorage::SymmetricLowerSingle) return 15;
+  for (const auto unchanged : {
+      resolve_df_budget({768,3712,96,1,0,true}, {}, 0),
+      resolve_df_budget({768,3712,96,1,0,true}, {24ULL<<30,32ULL<<30,true}, 4ULL<<30),
+      resolve_df_budget({768,3712,96,1,0,true}, {8ULL<<30,32ULL<<30,true}, 0)}) {
+    if (resolve_method_owned_df_resident_budget(unchanged,768,3712,160,100ULL<<20)
+        != unchanged) return 16;
+  }
+  if (resolve_method_owned_df_resident_budget(split,768,3712,0,100ULL<<20) != split)
+    return 17;
+  const auto force_ready_split = resolve_method_owned_df_resident_budget(
+      resolve_df_budget({768,3712,96,1,0,true},{30ULL<<30,32ULL<<30,true},0),
+      768,3712,160,100ULL<<20);
+  const auto force_ready_values = plan_requested_density_fitting_tiles(
+      DfPairStorageRequest::Automatic,1,768,3712,768,160,
+      force_ready_split.value_bytes,100ULL<<20,true,0,true);
+  if (force_ready_values.value_storage.rank_capacity != 160 ||
+      force_ready_values.automatic_rhf_rank != 0) return 18;
   return 0;
 }
 """)

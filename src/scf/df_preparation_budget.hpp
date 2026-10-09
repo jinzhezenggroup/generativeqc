@@ -74,7 +74,7 @@ struct DfResourceEnvelope {
  * for the prepared execution owner even though they are not scientific identity.
  * A positive requested_bytes is always a hard upper bound on total_bytes. */
 struct DfResolvedBudget {
-  static constexpr std::uint32_t policy_version = 3;
+  static constexpr std::uint32_t policy_version = 4;
   std::size_t requested_bytes{};
   std::size_t total_bytes{};
   std::size_t value_bytes{};
