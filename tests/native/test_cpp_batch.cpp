@@ -136,15 +136,17 @@ int main() {
     pbe0_descriptor.max_iterations = 200;
     pbe0_descriptor.energy_tolerance = 1.0e-12;
     pbe0_descriptor.density_tolerance = 1.0e-10;
-    generativeqc::KsComposition pbe0(
-        GENERATIVEQC_METHOD_PBE_RKS, "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
-    pbe0.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
-        .add_semilocal("GGA_C_PBE", 1.0)
-        .add_semilocal("GGA_X_PBE", 0.75)
-        .add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
-    // Destroy the builder and all input pointers after preparation to exercise
-    // deep-copy ownership of the resolved KS plan.
-    auto prepared = pbe0.prepare(context, h2, pbe0_descriptor);
+    // The builder is destroyed as soon as native preparation succeeds.
+    // The returned Calculation must own the full KS snapshot independently.
+    auto prepared = [&]() {
+      generativeqc::KsComposition pbe0(
+          GENERATIVEQC_METHOD_PBE_RKS, "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
+      pbe0.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
+          .add_semilocal("GGA_C_PBE", 1.0)
+          .add_semilocal("GGA_X_PBE", 0.75)
+          .add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
+      return pbe0.prepare(context, h2, pbe0_descriptor);
+    }();
     const auto pbe0_energy = prepared.execute();
     require(std::isfinite(pbe0_energy.energy) &&
                 std::abs(pbe0_energy.energy - (-1.1543107969377155)) < 1.0e-6,
