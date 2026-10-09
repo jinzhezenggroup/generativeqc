@@ -94,24 +94,31 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, and separates
 sccache-wrapped object compilation from native linking. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `41f920b512e25dc6da8c08130de9bbda15e71cbe`, qz Job
-`i1877-rankk-h100-1010h` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `f0c02130c179ca72e8d06d459ed0f695897ee2f0`, qz Job
+`i1877-rankk-h100-1010k` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,367 file checks, cache receipts and negative trials remain at the
-task-owned qz result path and in Git history at commit
-`9ec7fc52e408c062802db6e68de0f31eca7eff1f`; they are not implied to have been
+task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
+`9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.79–21.50 µs for the generated
-route and 25.56–50.98 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 12.95–21.54 µs for the generated
+route and 23.89–33.69 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
 Pre-commit bot commit `9ec7fc52e408c062802db6e68de0f31eca7eff1f`
-subsequently reformatted the native header and device harness, including an
-include-order change. Therefore Job `h` remains source-matched to `41f920b` and
-must not be represented as an exact-byte qualification of that later head. A
-later source-matched device rerun requires its own source and artifact hashes.
+reformatted the native header and device harness after Job `h`, including an
+include-order change. Job `i` then failed before compilation because the CPU
+stage wrote the generated-header manifest relative to the task root instead of
+the verifier's repository root. Job `j` fixed only that manifest path and
+source-matched `c513dccb`. The subsequent review fixes bound complete source,
+toolchain and compile-recipe inputs, keep layout out of semantic identity, and
+compare dummy axes by scientific domain. Job `k` source-matched those final
+compiler/native/harness inputs at `f0c02130`; its generated header, object,
+binary and raw result hashes are recorded in the compact receipt. Later
+receipt-only commits may reuse `k` only while all qualified implementation blobs
+remain identical and latest-head review verifies that boundary.
 
 ## Revisit when
 
