@@ -120,6 +120,7 @@ class GridSpec:
     ordering: str = "atom-radial-polar-azimuth"
 
     def __post_init__(self) -> None:
+        """Validate the supported grid prescription and normalize unique element radii."""
         checked_int(self.version, "grid version", high=2)
         checked_int(self.radial_points, "radial points", high=512)
         checked_int(self.angular_polar, "polar points", high=256)
@@ -273,6 +274,7 @@ class GridPolicy:
     accuracy: str = "standard"
 
     def profile(self, method: str, *, derivative_order: int = 0) -> GridProfile:
+        """Select a qualified LDA or GGA/PBE profile, using tight grids for derivatives."""
         if self.accuracy not in ("standard", "tight"):
             raise ValueError("grid accuracy must be 'standard' or 'tight'")
         if derivative_order not in (0, 1):
@@ -300,6 +302,7 @@ class GridPolicy:
 
     @property
     def provenance(self) -> dict[str, typing.Any]:
+        """Return policy version, radii source, topology, and partition provenance."""
         return {
             "policy_version": 2,
             "radii_source": GRID_POLICY_RADII_SOURCE,
@@ -313,6 +316,7 @@ class GridPolicy:
         }
 
     def resolve(self, method: str, *, derivative_order: int = 0) -> GridSpec:
+        """Build a version-2 grid specification from the selected profile and radii."""
         profile = self.profile(method, derivative_order=derivative_order)
         return GridSpec(
             version=2,

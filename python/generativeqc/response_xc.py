@@ -65,6 +65,7 @@ class FixedDensityXCDerivativeKernel:
         tile_points: typing.Any = 256,
         prepared: typing.Any = None,
     ) -> None:
+        """Bind a semilocal XC response kernel to one validated basis, grid and density."""
         checked_int(tile_points, "XC response tile points")
         if spec.exact_exchange or spec.range_omega or spec.long_range_exchange:
             raise UnsupportedXC(

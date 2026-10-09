@@ -74,6 +74,7 @@ class PackedLayout:
 
     @property
     def size(self) -> int:
+        """Return the number of independent, nonzero symmetry orbits."""
         return len(self.representatives)
 
     def _packed(self, values: typing.Any) -> np.ndarray:

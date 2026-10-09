@@ -67,6 +67,7 @@ class CompiledTensorProgram:
     __slots__ = ("_logical_hash", "_native")
 
     def __init__(self, program: Program, native: typing.Any) -> None:
+        """Bind the native owner and immutable mathematical program identity."""
         self._native = native
         self._logical_hash = program.logical_hash
 

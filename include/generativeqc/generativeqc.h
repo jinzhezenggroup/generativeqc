@@ -667,6 +667,12 @@ typedef struct generativeqc_ks_options {
 } generativeqc_ks_options;
 
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
+/** @native-contract generativeqc_ks_options_version
+ * @behavior Return the KS options schema version (currently 1).
+ * @outputs Returns a scalar version, not a capability guarantee or an owned resource.
+ * @execution Pure synchronous query; no context, allocation, or device initialization is
+ * required.
+ */
 GENERATIVEQC_API uint32_t generativeqc_ks_options_version(void);
 
 /** Explicit preliminary SCF; never an automatic/default selection. */
@@ -720,6 +726,12 @@ typedef struct generativeqc_initial_guess_diagnostic {
   uint32_t work_counters_complete;
 } generativeqc_initial_guess_diagnostic;
 
+/** @native-contract generativeqc_initial_guess_options_version
+ * @behavior Return the initial-guess options schema version (currently 1).
+ * @outputs Returns a scalar version, not a capability guarantee or an owned resource.
+ * @execution Pure synchronous query; no context, allocation, or device initialization is
+ * required.
+ */
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_options_version(void);
 /** Additive provider capabilities, independent of the options-struct schema.
  * A provider bit does not waive its backend, spin, basis or resource admission.
@@ -732,9 +744,46 @@ enum {
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_LDA = 1U << 1,
   GENERATIVEQC_INITIAL_GUESS_CAPABILITY_MINAO = 1U << 2
 };
+/** @native-contract generativeqc_initial_guess_capabilities_v1
+ * @behavior Return additive HF, LDA, and MINAO provider capability bits.
+ * @outputs Ignore unknown bits. A positive bit does not waive the provider-specific backend,
+ * spin, basis, derivative, and resource admission checks documented with
+ * generativeqc_initial_guess_options.
+ * @execution Synchronous, context-free discovery; no device initialization or allocation.
+ */
 GENERATIVEQC_API uint32_t generativeqc_initial_guess_capabilities_v1(void);
+/** @native-contract generativeqc_calculation_get_initial_guess_diagnostic
+ * @behavior Read the most recently retained preliminary-guess outcome.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability.
+ * @outputs Copies requested kind, outcome, preliminary/discarded work counters, capacity and
+ * timing; target convergence remains in the ordinary result.
+ * @errors NOT_IMPLEMENTED means no retained preliminary-guess record; invalid owner/index or
+ * ABI mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Capacity is bytes and preparation_seconds is seconds; work counters are counts.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_initial_guess_diagnostic* out);
+/** @native-contract generativeqc_batch_get_initial_guess_diagnostic
+ * @behavior Read the most recently retained preliminary-guess outcome.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability. index is the zero-based original input index, not a bucket index.
+ * @outputs Copies requested kind, outcome, preliminary/discarded work counters, capacity and
+ * timing; target convergence remains in the ordinary result.
+ * @errors NOT_IMPLEMENTED means no retained preliminary-guess record; invalid owner/index or
+ * ABI mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Capacity is bytes and preparation_seconds is seconds; work counters are counts.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_initial_guess_diagnostic* out);
 
@@ -1229,9 +1278,22 @@ typedef struct generativeqc_batch_item_result_descriptor {
 } generativeqc_batch_item_result_descriptor;
 
 /** Return the ABI version implemented by the loaded shared library. */
+/** @native-contract generativeqc_get_abi_version
+ * @behavior Return the ABI implemented by the loaded library.
+ * @outputs Returns a scalar version, not a capability guarantee or an owned resource.
+ * @execution Pure synchronous query; no context, allocation, or device initialization is
+ * required.
+ */
 GENERATIVEQC_API uint32_t generativeqc_get_abi_version(void);
 
 /** Source/codegen identity, independent of checkout paths and selected kernels. */
+/** @native-contract generativeqc_get_source_identity
+ * @behavior Return the compiled source/code-generation identity independent of checkout paths.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_get_source_identity(void);
 
 /** Hardware and runtime identity for safe user-local schedule reuse.
@@ -1254,35 +1316,165 @@ typedef struct generativeqc_cuda_tuning_device_descriptor {
 } generativeqc_cuda_tuning_device_descriptor;
 
 /** Probe an allocated GPU; CPU builds return NOT_IMPLEMENTED without probing. */
+/** @native-contract generativeqc_cuda_tuning_device
+ * @behavior Probe the selected visible CUDA device for safe tuning-profile reuse.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. device_id is
+ * a CUDA-runtime visible ordinal; output is required.
+ * @outputs On success copies hardware/runtime fields and NUL-terminated name/profile arrays.
+ * @errors CPU-only builds return NOT_IMPLEMENTED without a device probe; invalid ordinals, ABI,
+ * or runtime errors return native status. Do not consume output after failure.
+ * @lifetime Borrows the output descriptor for this call and retains no caller storage.
+ * @execution Synchronous CUDA-runtime probe, restoring the previous device when probing
+ * completes. Caller must coordinate concurrent changes to its runtime device selection.
+ * @units Resource quantities are bytes or hardware counts, as named; version fields are CUDA
+ * integer versions.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_cuda_tuning_device(
     int32_t device_id, generativeqc_cuda_tuning_device_descriptor* output);
 
 /** Return a stable, process-lifetime error string for a status code. */
+/** @native-contract generativeqc_status_message
+ * @behavior Describe a native status code, including unrecognized values.
+ * @inputs Any generativeqc_status integer is accepted.
+ * @outputs Returns a NUL-terminated message; unknown codes return "unknown status".
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no allocation or execution.
+ */
 GENERATIVEQC_API const char* generativeqc_status_message(generativeqc_status status);
 
 /** Query whether a method is currently executable. */
+/** @native-contract generativeqc_method_available
+ * @behavior Query the method registry availability bit, without preparing a calculation.
+ * @inputs A generated method ID and a nonnull available pointer.
+ * @outputs Writes 0 or 1 on success. This is registry availability, not a promise for every
+ * context/basis/property.
+ * @errors Unknown IDs or NULL output return INVALID_ARGUMENT without modifying a valid output.
+ * @lifetime Copies one scalar into caller-owned storage; no native owner or buffer is retained.
+ * @execution Synchronous immutable registry lookup; no numerical execution or device
+ * initialization.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_method_available(generativeqc_method method,
                                                                    int32_t* available);
 
 /** Query method family, properties, and batch support without preparing work. */
+/** @native-contract generativeqc_method_get_capabilities
+ * @behavior Copy registry family, property flags, availability and batch support.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. capabilities
+ * is required; method must be a generated method ID.
+ * @outputs Writes registry metadata only; use context-specific preparation to establish
+ * executable support.
+ * @errors Unknown IDs, NULL output, or ABI mismatch leave valid output unchanged.
+ * @lifetime Copies registry fields into caller-owned storage; no native owner is retained.
+ * @execution Synchronous immutable registry lookup; no numerical execution or device
+ * initialization.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_method_get_capabilities(
     generativeqc_method method, generativeqc_method_capabilities_descriptor* capabilities);
 
+/** Create an opaque execution context from a versioned descriptor.
+ * The caller owns the resulting handle and must release dependent owners first.
+ */
+/** @native-contract generativeqc_context_create
+ * @behavior Allocate and initialize the selected native execution context.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. descriptor
+ * and context output pointer are required; backend/device select actual admission.
+ * @outputs Returns a new owning handle through context on success. A nonnull output slot is set
+ * to NULL even when descriptor validation fails.
+ * @lifetime Copies configuration; the descriptor is not retained. Destroy the context only
+ * after all calculations, batches, D3/D4 and nonlocal plans depending on it.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. A failed call creates no
+ * live context.
+ * @execution Synchronous initialization may allocate runtime/device resources. Do not race the
+ * resulting context with its destruction.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_context_create(
     const generativeqc_context_descriptor* descriptor, generativeqc_context** context);
+/** Release the context after its dependent native owners are destroyed. */
+/** @native-contract generativeqc_context_destroy
+ * @behavior Release the context exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Destroy dependent prepared owners first. All borrowed context-detail pointers are
+ * invalidated.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_context_destroy(generativeqc_context* context);
 
-/** Borrow the last native failure detail, valid until the next failing call
- * on this context or its destruction. Empty when no detail has been recorded. */
+/** Borrow native failure detail; copy it before another operation on this
+ * context or its destruction. D4/nonlocal calls may clear detail on success. */
+/** @native-contract generativeqc_context_get_last_detail
+ * @behavior Borrow the context-specific detail from the last recorded failure.
+ * @inputs A live context, or NULL.
+ * @outputs Returns a NUL-terminated string, empty before any recorded detail; NULL context
+ * returns "invalid context". Validation errors need not record new detail.
+ * @lifetime Context owns the string until a call changes its detail storage or destroys it.
+ * Core successful calls preserve it, but D4/nonlocal preparation and execution may clear it
+ * even on success. Copy before another context operation.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ */
 GENERATIVEQC_API const char* generativeqc_context_get_last_detail(
     const generativeqc_context* context);
 
 /** Backward-compatible alias for generativeqc_context_get_last_detail. */
+/** @native-contract generativeqc_context_last_error
+ * @behavior Borrow the context-specific detail from the last recorded failure.
+ * @inputs A live context, or NULL.
+ * @outputs Returns a NUL-terminated string, empty before any recorded detail; NULL context
+ * returns "invalid context". Validation errors need not record new detail.
+ * @lifetime Context owns the string until a call changes its detail storage or destroys it.
+ * Core successful calls preserve it, but D4/nonlocal preparation and execution may clear it
+ * even on success. Copy before another context operation.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ */
 GENERATIVEQC_API const char* generativeqc_context_last_error(const generativeqc_context* context);
 
+/** Create a system from atom, geometry and basis descriptors in atomic units.
+ * Prepared consumers retain their context; this system owns its copied data.
+ */
+/** @native-contract generativeqc_system_create
+ * @behavior Copy atoms and Gaussian basis data into a normalized system.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. atoms has
+ * atom_count positive entries; shells and primitives match their counts/offsets. Atom-only
+ * systems require both basis counts zero and both basis pointers NULL. Historical ABI prefixes
+ * ending before basis_representation are accepted and default to Cartesian.
+ * @outputs Writes a new owning system. The output is cleared after required nonnull argument
+ * checks, before ABI/scientific validation.
+ * @lifetime Copies atom/shell/primitive buffers; caller descriptors may then be released.
+ * Prepared calculation/batch consumers copy system data, so the source system may be destroyed
+ * after preparation.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. Required-null argument
+ * rejection can leave the output slot unchanged; other failures leave it NULL.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Atom xyz are Bohr; Gaussian exponents use inverse Bohr squared and coefficients follow
+ * the shell/basis normalization contract.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_system_create(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     generativeqc_system** system);
+/** Release a system; prepared consumers retain their own copied system data. */
+/** @native-contract generativeqc_system_destroy
+ * @behavior Release the system exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Prepared consumers own their copied system data and need not be destroyed first.
+ * The destroyed system handle and every alias become invalid.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_system_destroy(generativeqc_system* system);
 
 /** Scalar Gaussian residual ECP: c r^(power-2) exp(-exponent r^2).
@@ -1296,12 +1488,46 @@ typedef struct generativeqc_ecp_term {
   double exponent;
   double coefficient;
 } generativeqc_ecp_term;
+/** @native-contract generativeqc_system_create_ecp
+ * @behavior Create a system with scalar Gaussian residual ECP terms.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options.
+ * core_electrons has atom_count entries; terms has term_count entries. Terms use
+ * c*r^(power-2)*exp(-exponent*r^2), channel -1 local or 0..3 projector difference, and valid
+ * atom indices; effective ionic charges must stay positive.
+ * @outputs Returns a new owning system on success, with copied/validated ECP data.
+ * @lifetime Copies atoms, basis, core counts and terms; no caller array is retained. Prepared
+ * consumers copy the system.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. A nonnull output slot is
+ * cleared before validating other arguments; no live handle is returned on failure.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Coordinates and ECP radial expressions use atomic units; matrix derivatives are
+ * positive energy derivatives, not forces.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_system_create_ecp(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     const int32_t* core_electrons, const generativeqc_ecp_term* terms, size_t term_count,
     generativeqc_system** system);
 /** Part-major [local, nonlocal], each containing value then atom/xyz derivatives.
  * Derivatives are positive energy derivatives, not forces. Output is owned by caller. */
+/** @native-contract generativeqc_system_ecp_integrals
+ * @behavior Evaluate local/nonlocal scalar ECP AO matrices and optional nuclear derivatives.
+ * @inputs Live context/system, nonnull output and radial_points/polar_points quadrature
+ * controls and derivatives equal to 0 or 1. output_count equals 2*N_AO*N_AO times (1+3*N_atom
+ * when derivatives is 1, else 1).
+ * @outputs Writes part-major [local, nonlocal], each part value then atom/xyz derivative
+ * matrices, each matrix row-major in public AO order.
+ * @errors Native pointer/domain/count/quadrature failures return status; do not use output
+ * unless SUCCESS.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Matrix values are Hartree and derivatives +dE/dR in Hartree/Bohr, not forces.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_system_ecp_integrals(
     generativeqc_context* context, const generativeqc_system* system, uint32_t radial_points,
     uint32_t polar_points, int32_t derivatives, double* output, size_t output_count);
@@ -1329,6 +1555,24 @@ typedef struct generativeqc_one_electron_gradient_resources {
  * A CUDA context is required; failures do not silently fall back to CPU.
  * Optional resources must carry the current struct_size/abi_version.
  */
+/** @native-contract generativeqc_system_one_electron_gradient_cuda
+ * @behavior Contract fixed row-major public-AO weights with dS/dT/dV on CUDA.
+ * @inputs matrix_count equals NAO*NAO even for null zero channels; gradient has exactly 3*Natom
+ * doubles. schedule is 0..3. maximum_bytes bounds staging. Optional resources follows
+ * descriptor initialization.
+ * @outputs Writes one atom/xyz energy gradient, excluding nuclear repulsion; optional resources
+ * reports actual staging/transfers. Off-diagonals use W_ij+W_ji.
+ * @errors Requires CUDA context and qualified basis/domain. Native
+ * validation/admission/execution errors return status without CPU fallback; consume
+ * gradient/resources only on SUCCESS. Gradient copy-out occurs only on success; optional
+ * resources can be zeroed before backend failure.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units The contracted energy gradient is +dE/dR in atomic units; physical energy weights
+ * produce Hartree/Bohr. Resources count bytes, uploads and synchronizations.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_system_one_electron_gradient_cuda(
     generativeqc_context* context, const generativeqc_system* system, const double* overlap_weights,
     const double* kinetic_weights, const double* attraction_weights, size_t matrix_count,
@@ -1341,6 +1585,20 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_one_electron_gradient_c
  * NOT_IMPLEMENTED for unexecuted items, uninstrumented CUDA paths (including
  * chunk/replay), or incompletely counted warm-to-cold retries. The result is
  * never inferred from iteration count. */
+/** @native-contract generativeqc_batch_get_last_fock_builds
+ * @behavior Read actual physical Fock builds from the last counted item execution.
+ * @inputs A live batch, zero-based original index and nonnull builds output.
+ * @outputs Copies the count only when a complete operator census is available, including final
+ * rebuilds.
+ * @errors INVALID_ARGUMENT for invalid inputs; NOT_IMPLEMENTED for unavailable/incomplete
+ * counting. Missing counting writes zero before NOT_IMPLEMENTED; invalid owner/index/output
+ * rejects without a valid count.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Builds count physical operator construction, not SCF iterations.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds(
     const generativeqc_batch* batch, uint32_t index, uint64_t* builds);
 
@@ -1350,6 +1608,20 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds(
  * systems may independently select Cartesian/spherical AOs and geometries.
  * This explicit CPU evaluator allocates no ERI or nuclear-derivative tensors.
  * The context supplies error details; its accelerator selection is irrelevant.
+ */
+/** @native-contract generativeqc_system_cross_overlap_cpu
+ * @behavior Evaluate the normalized target/source rectangular overlap on CPU.
+ * @inputs Live context and two systems; output_count equals target_NAO*source_NAO, output is
+ * nonnull. Each system may independently select Cartesian/spherical AOs.
+ * @outputs Writes row-major <target AO|source AO> into caller storage, using the two systems'
+ * geometries.
+ * @errors Invalid arguments/counts or evaluation errors return status; output is usable only on
+ * SUCCESS. The context accelerator selection does not require CUDA.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Overlap is dimensionless; system geometry uses Bohr.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_system_cross_overlap_cpu(
     generativeqc_context* context, const generativeqc_system* target,
@@ -1374,15 +1646,67 @@ typedef struct generativeqc_df_gradient_resources {
  * maximum_tile_elements=0 selects an automatic bound. schedule=0 uses threads,
  * 1 uses deterministic serial traversal. Failures preserve caller output.
  */
+/** @native-contract generativeqc_system_df_gradient_cuda
+ * @behavior Contract fixed external three-/two-center DF weights on CUDA.
+ * @inputs bar_a is row-major [mu,nu,P], count_a=NAO*NAO*NAUX; bar_m is [P,Q],
+ * count_m=NAUX*NAUX. Null channels mean zero. gradient_count=3*Natom. Optional resources is
+ * initialized; orbital and auxiliary systems share physical atoms.
+ * @outputs Writes atom/xyz gradient excluding non-DF terms and optional resource evidence.
+ * schedule=0 threads or 1 serial; maximum_tile_elements=0 chooses automatic tiling.
+ * @errors Validation, capacity and backend failures preserve caller gradient; resources may be
+ * zeroed before backend failure. maximum_bytes independently bounds host/device staging; no CPU
+ * fallback.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Gradient is +dE/dR in atomic units; energy-consistent weights yield Hartree/Bohr.
+ * Counts are elements, capacity fields bytes.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_system_df_gradient_cuda(
     generativeqc_context* context, const generativeqc_system* orbital,
     const generativeqc_system* auxiliary, const double* bar_a, size_t count_a, const double* bar_m,
     size_t count_m, unsigned schedule, size_t maximum_bytes, size_t maximum_tile_elements,
     double* gradient, size_t gradient_count, generativeqc_df_gradient_resources* resources);
 
+/** Prepare one selected method for a valid context and system.
+ * The resulting opaque handle retains execution resources until destroyed.
+ */
+/** @native-contract generativeqc_calculation_prepare
+ * @behavior Prepare method execution resources from a copied system.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. context,
+ * system, method descriptor and calculation output are required. Initialize nested
+ * KS/guess/options descriptors when supplied; registry support remains subject to context,
+ * basis, spin, precision and resource admission.
+ * @outputs Writes one owning plan; after required-null checks, the output slot is cleared
+ * before ABI/admission work.
+ * @lifetime The plan retains its context and copies system/method configuration; source system,
+ * descriptor and option buffers need not survive successful preparation. Context must outlive
+ * the calculation.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. A required-null rejection
+ * can leave the output slot unchanged; later failures leave it NULL.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Method energy tolerances use Hartree; geometries use Bohr. Resource limits are bytes,
+ * and convergence residuals retain the method-specific descriptor meanings.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
+/** Release a prepared calculation and its retained execution resources. */
+/** @native-contract generativeqc_calculation_destroy
+ * @behavior Release the calculation exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Keep the associated context alive during destruction. Releases persistent resources
+ * and invalidates the handle and all borrowed owner state.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_calculation_destroy(generativeqc_calculation* calculation);
 
 /**
@@ -1390,6 +1714,31 @@ GENERATIVEQC_API void generativeqc_calculation_destroy(generativeqc_calculation*
  * provides at least 3 * atom_count doubles. A NULL pointer with force_count=0
  * requests energy and diagnostics only. Coordinates and all reported
  * derivatives use atomic units (Bohr, Hartree, Hartree/Bohr).
+ */
+/** @native-contract generativeqc_calculation_execute
+ * @behavior Run the prepared method and copy its result synchronously.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. result is
+ * required. forces=NULL and force_count=0 requests energy only; otherwise forces addresses at
+ * least 3*atom_count doubles in atom-major xyz order.
+ * @outputs On a completed solve writes energy, iterations, energy_change, density_rms,
+ * converged and executed_backend. Copies requested forces only after convergence. The legacy
+ * density_rms field is method-specific for correlated methods.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Each attempt
+ * invalidates the method result token, precision-work and initial-guess state. Aggregate
+ * precision/SCF/KS records reset only after output validation; a rejected output descriptor may
+ * leave earlier records available. Copy diagnostics before the next execution.
+ * @errors Validation errors return before scalar/force writes. When a native Result returns
+ * normally, NOT_CONVERGED publishes its scalar diagnostics without copying forces. A backend
+ * may instead throw NOT_CONVERGED before any Result (for example GFN2); the status alone
+ * therefore does not guarantee scalar publication. Other failures do not supply a valid
+ * scientific result; do not assume all outputs are unchanged. Unsupported force requests return
+ * NOT_IMPLEMENTED.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Energy and energy_change are Hartree; forces are -dE/dR in Hartree/Bohr. Coordinates
+ * are Bohr; SCF density change and physical commutator residuals are distinct quantities.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute(
     generativeqc_calculation* calculation, generativeqc_result_descriptor* result);
@@ -1401,6 +1750,21 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_execute(
  * out untouched. A NULL out is an availability query; otherwise the caller
  * supplies struct_size and abi_version. Currently populated by LDA/PBE KS.
  */
+/** @native-contract generativeqc_calculation_get_scf_diagnostic
+ * @behavior Read separate density-update and physical SCF residuals.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability.
+ * @outputs Copies a completed supported record, including normal NOT_CONVERGED solves.
+ * @errors NOT_IMPLEMENTED means unavailable/unsupported state; invalid owner/index or ABI
+ * mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units density_rms is the density-update measure; physical_residual_rms is the RMS of FDS-SDF
+ * in atomic units.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_scf_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_scf_diagnostic* out);
 
@@ -1411,12 +1775,45 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_scf_diagnostic
  * Validation failures leave all outputs untouched. NOT_IMPLEMENTED means no
  * completed KS record: unsupported method, not executed, or failed evaluation.
  * Caller serializes all execution/query calls on the prepared owner. */
+/** @native-contract generativeqc_calculation_get_ks_diagnostic
+ * @behavior Copy a completed KS summary and optional full physical iteration history.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. out may be
+ * NULL. history=NULL/history_capacity=0 omits history; otherwise allocate at least
+ * history_count rows and initialize each versioned row.
+ * @outputs Summary reports history_count; query once, allocate, then copy without an
+ * intervening execution. Histories retain normal nonconverged iterations.
+ * @errors Validation/availability failure leaves all outputs untouched. NOT_IMPLEMENTED means
+ * no completed KS record; insufficient history capacity is INVALID_ARGUMENT.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units All energy terms are Hartree; spin electron counts and residual measures follow the KS
+ * descriptor comments, including unavailable-stage energy_change markers.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_ks_diagnostic* out,
     generativeqc_ks_iteration* history, uint32_t history_capacity);
 
 /** Query cumulative prepared-owner CUDA KS transport. Available immediately
  * after CUDA KS preparation so callers can separate setup from phase deltas. */
+/** @native-contract generativeqc_calculation_get_ks_transport_diagnostic
+ * @behavior Read cumulative transport for a prepared CUDA KS owner.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability.
+ * @outputs Copies measured byte/synchronization/iteration counters, including setup; available
+ * immediately after supported preparation.
+ * @errors NOT_IMPLEMENTED means the owner has no transport record. Invalid owner/index, ABI and
+ * mapped backend errors do not produce a usable record.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Transfer fields are bytes; remaining fields count synchronizations, iterations or
+ * proposals.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_transport_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_ks_transport_diagnostic* out);
 
@@ -1433,42 +1830,189 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_ks_transport_d
  * The out-parameter must carry the current complete descriptor size and
  * abi_version. A NULL \p out is a cheap availability probe that never writes.
  */
+/** @native-contract generativeqc_calculation_get_precision_provenance
+ * @behavior Read the completed execution precision policy and provenance.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability.
+ * @outputs Copies the resolved record only after a completed normal return, including
+ * NOT_CONVERGED.
+ * @errors PRECISION_UNAVAILABLE means no populated record. Null owner/out-of-range index or
+ * incompatible output returns invalid-argument/ABI status without writing.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Bit widths and work counters are dimensionless counts; named thresholds follow the
+ * method precision policy.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_precision_provenance(
     const generativeqc_calculation* calculation, generativeqc_precision_provenance* out);
 /** Read #990 incremental Direct-J/K work from the same completed calculation. */
+/** @native-contract generativeqc_calculation_get_incremental_direct_jk_diagnostic
+ * @behavior Read incremental Direct-J/K work from the completed solve.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability.
+ * @outputs Copies the aggregate policy/census counters; query availability is gated by
+ * completed precision provenance.
+ * @errors PRECISION_UNAVAILABLE means no completed record; invalid owner/index or ABI mismatch
+ * leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Work fields count builds, updates, shell quartets or tiles; max_abs_delta_density is
+ * an AO-density difference.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_incremental_direct_jk_diagnostic(
     const generativeqc_calculation* calculation,
     generativeqc_incremental_direct_jk_diagnostic* out);
 /** Query ordered precision work without changing the aggregate descriptor.
  * Unsupported detail versions return NOT_IMPLEMENTED. Too-small row buffers
  * return INVALID_ARGUMENT without modifying any output descriptor. */
+/** @native-contract generativeqc_calculation_get_precision_work
+ * @behavior Copy ordered execution-owned precision work and operator records.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options.
+ * detail_version must be GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION; each NULL row array
+ * requires zero capacity. Nonnull events/operators must hold at least the reported counts with
+ * every row initialized.
+ * @outputs Optional out reports required event_count/operator_count. Query counts, allocate and
+ * copy without an intervening execution. Events retain sequence order; completeness flags
+ * distinguish partial instrumentation.
+ * @errors PRECISION_UNAVAILABLE means no record; unsupported detail versions return
+ * NOT_IMPLEMENTED. Any validation/short-buffer failure leaves every output untouched.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Events/operators count observed logical work, not elapsed time; recurrence counts
+ * represent evaluated AO-ERI values.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_precision_work(
     const generativeqc_calculation* calculation, uint32_t detail_version,
     generativeqc_precision_work_detail* out, generativeqc_precision_work_event* events,
     uint32_t event_capacity, generativeqc_precision_operator_record* operators,
     uint32_t operator_capacity);
 /** Most recent successful correlated execution; failure/absence is explicit. */
+/** @native-contract generativeqc_calculation_get_correlation_diagnostic
+ * @behavior Copy the latest available correlated-method state.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. diagnostic
+ * is required; NULL is not an availability probe.
+ * @outputs Copies reference/correlation energies, residuals, resource evidence, and
+ * method-specific fields. A normal nonconverged batch item may retain finite state.
+ * @errors NOT_IMPLEMENTED means no supported retained record; invalid owner/index, NULL or ABI
+ * mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Energies/denominators are Hartree; *_bytes are bytes, *_ms milliseconds,
+ * iteration/work fields counts; residuals are method-defined.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_correlation_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_correlation_diagnostic* diagnostic);
 /** Most recent RCCSD/RCCSD(T) phase/work record; NULL out probes availability. */
+/** @native-contract generativeqc_calculation_get_cc_performance_diagnostic
+ * @behavior Read the latest RCCSD/RCCSD(T) phase and work evidence.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability.
+ * @outputs Copies nested phase timing and operator counts; nested timings must not be added as
+ * disjoint phases.
+ * @errors NOT_IMPLEMENTED means no supported record; invalid owner/index, ABI or mapped
+ * failures do not yield a valid record.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units *_seconds are seconds; other work fields are logical counts.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_cc_performance_diagnostic(
     const generativeqc_calculation* calculation, generativeqc_cc_performance_diagnostic* out);
 
 /**
  * Read one batch item's precision record by its original input index.
  * The descriptor and NULL availability probe follow the single-calculation
- * query. Records are cleared on each execution and populated independently for
- * SUCCESS/NOT_CONVERGED items; rejected or throwing items return
- * GENERATIVEQC_STATUS_PRECISION_UNAVAILABLE without writing to out. An out-of-range
- * index returns GENERATIVEQC_STATUS_INVALID_ARGUMENT.
+ * query. C-handle slots are cleared before replay validation and populated for
+ * native SUCCESS/NOT_CONVERGED items, even if a later force-buffer check fails.
+ * A reference NOT_CONVERGED exception can populate default records without a
+ * completed native Result. An absent slot returns PRECISION_UNAVAILABLE without
+ * writing; an out-of-range index returns INVALID_ARGUMENT.
+ */
+/** @native-contract generativeqc_batch_get_precision_provenance
+ * @behavior Read the input-indexed cached batch precision record.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability. index is the zero-based original input index, not a bucket index.
+ * @outputs Copies the cached precision policy when the slot is populated for native
+ * SUCCESS/NOT_CONVERGED. A completed native solve can retain this record even if later
+ * force-buffer validation changes the item status to INVALID_ARGUMENT. For MP2/UMP2, reference
+ * NOT_CONVERGED can be thrown before a native Result is returned; the batch can then cache
+ * default values. Query SUCCESS establishes record availability/copy, not a completed observed
+ * execution.
+ * @errors PRECISION_UNAVAILABLE means the cached slot is absent. Null owner, out-of-range index
+ * or incompatible output returns invalid-argument/ABI status without writing.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Bit widths and work counters are dimensionless counts; named thresholds follow the
+ * method precision policy.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_precision_provenance(
     const generativeqc_batch* batch, uint32_t index, generativeqc_precision_provenance* out);
 /** Input-indexed #990 incremental Direct-J/K work record. */
+/** @native-contract generativeqc_batch_get_incremental_direct_jk_diagnostic
+ * @behavior Read the input-indexed cached incremental Direct-J/K record.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability. index is the zero-based original input index, not a bucket index.
+ * @outputs Copies cached aggregate policy/census counters; availability follows slot
+ * population, not an independent work-completion check. A completed native solve can retain
+ * this record even if later force-buffer validation changes the item status to
+ * INVALID_ARGUMENT. For MP2/UMP2, reference NOT_CONVERGED can be thrown before a native Result
+ * is returned; the batch can then cache default values. Query SUCCESS establishes record
+ * availability/copy, not a completed observed execution.
+ * @errors PRECISION_UNAVAILABLE means the cached slot is absent; invalid owner/index or ABI
+ * mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Work fields count builds, updates, shell quartets or tiles; max_abs_delta_density is
+ * an AO-density difference.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_incremental_direct_jk_diagnostic(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_incremental_direct_jk_diagnostic* out);
 /** Original-index batch equivalent of generativeqc_calculation_get_precision_work. */
+/** @native-contract generativeqc_batch_get_precision_work
+ * @behavior Copy input-indexed cached precision work and operator records.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options.
+ * detail_version must be GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION; each NULL row array
+ * requires zero capacity. Nonnull events/operators must hold at least the reported counts with
+ * every row initialized. index is the zero-based original input index, not a bucket index.
+ * @outputs Optional out reports event_count/operator_count. Query counts, allocate and copy
+ * without an intervening execution. Work is cached only when the final item status is SUCCESS
+ * or NOT_CONVERGED. For MP2/UMP2, reference NOT_CONVERGED can be thrown before a native Result
+ * is returned; the batch can then cache default values. Query SUCCESS establishes record
+ * availability/copy, not a completed observed execution. In that case the record can be
+ * empty/default; inspect complete/operator_inventory_complete before treating it as a complete
+ * work census.
+ * @errors PRECISION_UNAVAILABLE means no record; unsupported detail versions return
+ * NOT_IMPLEMENTED. Any validation/short-buffer failure leaves every output untouched.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Populated events/operators count observed logical work, not elapsed time; recurrence
+ * counts represent evaluated AO-ERI values. An empty/default record does not prove that zero
+ * work executed.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_precision_work(
     const generativeqc_batch* batch, uint32_t index, uint32_t detail_version,
     generativeqc_precision_work_detail* out, generativeqc_precision_work_event* events,
@@ -1479,13 +2023,53 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_precision_work(
  * Prepare a persistent ragged fleet plan. Systems may have different atom,
  * shell, primitive, and AO counts; no global padding is introduced.
  */
+/** @native-contract generativeqc_batch_prepare
+ * @behavior Prepare a persistent input-ordered ragged fleet and its workspaces.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. systems
+ * contains system_count nonnull system handles; count is positive. descriptor selects the
+ * common method; flags control warm state and optional profiling. Ragged atom/basis sizes
+ * remain independent.
+ * @outputs Writes one owning batch; after required-null/count validation the output slot is
+ * cleared before admission.
+ * @lifetime Copies every system and method configuration, including geometry; source systems
+ * and their pointer array may be destroyed after success. The context must outlive the batch.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. Required-null/empty-fleet
+ * failures may leave the output slot unchanged; no successful plan is returned on failure.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Prepared xyz are Bohr, energies Hartree, force buffers Hartree/Bohr; resource options
+ * are byte counts.
+ */
 GENERATIVEQC_API generativeqc_status
 generativeqc_batch_prepare(generativeqc_context* context, const generativeqc_system* const* systems,
                            uint32_t system_count, const generativeqc_method_descriptor* descriptor,
                            generativeqc_batch_flags flags, generativeqc_batch** batch);
 
+/** Release a prepared ragged batch and its persistent workspaces/warm state. */
+/** @native-contract generativeqc_batch_destroy
+ * @behavior Release the batch exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Keep the associated context alive during destruction. Releases persistent resources
+ * and invalidates the handle and all borrowed owner state.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_batch_destroy(generativeqc_batch* batch);
 
+/** Return the number of original input systems in this prepared batch. */
+/** @native-contract generativeqc_batch_get_system_count
+ * @behavior Return the prepared fleet size.
+ * @inputs A live batch or NULL.
+ * @outputs Returns original input-system count, or zero for NULL.
+ * @lifetime The returned scalar is independent of the batch lifetime.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ */
 GENERATIVEQC_API uint32_t generativeqc_batch_get_system_count(const generativeqc_batch* batch);
 
 /**
@@ -1497,11 +2081,44 @@ GENERATIVEQC_API uint32_t generativeqc_batch_get_system_count(const generativeqc
  * `GENERATIVEQC_DIRECT_SHELL_CLASS_COUNT`. Entries use the canonical triangular class
  * encoding documented by GENERATIVEQC's direct shell scheduler.
  */
+/** @native-contract generativeqc_batch_get_last_shell_class_profile
+ * @behavior Copy the final-density CUDA direct shell-class profile.
+ * @inputs A live profiled batch, nonnull entries and entry_count at least
+ * GENERATIVEQC_DIRECT_SHELL_CLASS_COUNT; this unversioned array does not need descriptor
+ * initialization.
+ * @outputs Copies canonical triangular shell-class entries only when profiling produced a
+ * record.
+ * @errors INVALID_ARGUMENT for invalid pointers/capacity; NOT_IMPLEMENTED without
+ * enabled/available profiling. Failure supplies no usable profile.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Method-owned HF
+ * profile records can remain from the preceding execution after an early rejected replay; query
+ * success is not proof that the latest attempted replay ran.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Entries contain work/count measures as named, not molecular observables.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_shell_class_profile(
     const generativeqc_batch* batch, generativeqc_shell_class_profile_entry* entries,
     uint32_t entry_count);
 
 /** Copy PPPS queue statistics from the most recent profiled CUDA execution. */
+/** @native-contract generativeqc_batch_get_last_ppps_queue_profile
+ * @behavior Copy the latest profiled CUDA PPPS queue statistics.
+ * @inputs A live profiled batch and nonnull profile. This is an unversioned output structure
+ * with no struct_size or abi_version fields.
+ * @outputs Copies one queue statistics record; no implicit execution is performed.
+ * @errors Invalid arguments or unavailable profiling return native failure status; output is
+ * copied only on success.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Method-owned HF
+ * profile records can remain from the preceding execution after an early rejected replay; query
+ * success is not proof that the latest attempted replay ran.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Queue quantities count descriptors, tasks and primitive work; efficiencies and
+ * imbalance ratios are dimensionless.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_ppps_queue_profile(
     const generativeqc_batch* batch, generativeqc_ppps_queue_profile* profile);
 
@@ -1512,6 +2129,26 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_ppps_queue_prof
  * `written_count`. A later warm replay returns the cached setup decision and
  * never performs another capability probe.
  */
+/** @native-contract generativeqc_batch_get_last_eigensolver_diagnostics
+ * @behavior Copy setup-time per-bucket eigensolver evidence.
+ * @inputs A live batch and nonnull written_count. entries=NULL/entry_count=0 queries required
+ * count; otherwise provide capacity for all records. These output rows are filled by the
+ * library.
+ * @outputs Returns native bucket record order. Warm replays reuse recorded setup decisions
+ * without probing again. Query count then copy under the same serialization interval.
+ * @errors Invalid pointer/capacity returns INVALID_ARGUMENT. Missing records write
+ * written_count=0 and return NOT_IMPLEMENTED. Otherwise required count is written before a
+ * short-buffer failure; no record array is copied on that failure.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Method-owned HF
+ * profile records can remain from the preceding execution after an early rejected replay; query
+ * success is not proof that the latest attempted replay ran.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Workspace/available-capacity fields are bytes; dimensions/system counts are integers
+ * and capability/probe fields are metadata. Eigenvalue/residual/orthogonality errors
+ * characterize the setup probe.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_eigensolver_diagnostics(
     const generativeqc_batch* batch, generativeqc_eigensolver_diagnostic* entries,
     uint32_t entry_count, uint32_t* written_count);
@@ -1520,6 +2157,26 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_eigensolver_dia
  * Copy CUDA density-fitting metric conditioning and allocation diagnostics
  * from the most recent batch execution. Pass `entries = NULL` and
  * `entry_count = 0` to query the required count in `written_count`.
+ */
+/** @native-contract generativeqc_batch_get_last_density_fitting_metric_diagnostics
+ * @behavior Copy CUDA DF metric conditioning and allocation evidence.
+ * @inputs A live batch and nonnull written_count. entries=NULL/entry_count=0 queries required
+ * count; otherwise provide capacity for all records. These output rows are filled by the
+ * library.
+ * @outputs Returns native diagnostic record order; inspect bucket_id/system_index. Resource
+ * peaks exclude generated-force staging. Query count then copy under the same serialization
+ * interval.
+ * @errors Invalid pointer/capacity returns INVALID_ARGUMENT. Missing records write
+ * written_count=0 and return NOT_IMPLEMENTED. Otherwise required count is written before a
+ * short-buffer failure; no record array is copied on that failure.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Method-owned HF
+ * profile records can remain from the preceding execution after an early rejected replay; query
+ * success is not proof that the latest attempted replay ran.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Resource fields are bytes; rank, tile, bucket and work fields are counts/indices;
+ * conditioning values are dimensionless where named.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_density_fitting_metric_diagnostics(
     const generativeqc_batch* batch, generativeqc_density_fitting_metric_diagnostic* entries,
@@ -1532,6 +2189,26 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_density_fitting
  * `GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING`. Pass `entries = NULL`
  * and `entry_count = 0` to query the required count. Records are bucket-major
  * and iteration-ordered within each bucket.
+ */
+/** @native-contract generativeqc_batch_get_last_inactive_eigensolver_profile
+ * @behavior Copy per-iteration inactive-eigensolver evidence.
+ * @inputs A live batch and nonnull written_count. entries=NULL/entry_count=0 queries required
+ * count; otherwise provide capacity for all records. These output rows are filled by the
+ * library.
+ * @outputs Returns bucket-major, iteration-ordered records. Requires
+ * GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING. Query count then copy under the
+ * same serialization interval.
+ * @errors Invalid pointer/capacity returns INVALID_ARGUMENT. Missing records write
+ * written_count=0 and return NOT_IMPLEMENTED. Otherwise required count is written before a
+ * short-buffer failure; no record array is copied on that failure.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Method-owned HF
+ * profile records can remain from the preceding execution after an early rejected replay; query
+ * success is not proof that the latest attempted replay ran.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units solver_elapsed_nanoseconds is nanoseconds; dimensions, physical/active/solver system
+ * counts and iteration/bucket fields are integers.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_inactive_eigensolver_profile(
     const generativeqc_batch* batch, generativeqc_inactive_eigensolver_profile_entry* entries,
@@ -1558,6 +2235,24 @@ typedef struct generativeqc_hf_warm_state {
 
 /** Query with both buffers null to obtain counts, then copy into owned buffers.
  * A missing retained seed returns present=0 and zero counts. */
+/** @native-contract generativeqc_batch_get_hf_warm_state
+ * @behavior Export one retained HF scientific seed without transferring ownership.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. state is
+ * required; index is the original input index. Both density and coordinates NULL queries
+ * counts. To copy, provide both buffers with at least the reported counts.
+ * @outputs A missing seed writes present=0 and zero counts. A present seed contains row-major
+ * RHF total density or UHF alpha then beta density, source coordinates and diagnostics.
+ * @errors Invalid owner/index, ABI, or mismatched/missing copy buffers return failure. Shape
+ * rejection of a present seed leaves the output descriptor unchanged; missing-seed success
+ * writes presence/counts as described.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Coordinates are Bohr and energy/energy_change Hartree; density is in the public AO
+ * basis.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_hf_warm_state(
     const generativeqc_batch* batch, uint32_t index, generativeqc_hf_warm_state* state);
 
@@ -1569,47 +2264,181 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_hf_warm_state(
  * warm guess in its current metric and recomputes SCF convergence normally.
  * Requires warm starts enabled; no runtime objects or convergence flags load.
  */
+/** @native-contract generativeqc_batch_restore_hf_warm_states
+ * @behavior Atomically import input-ordered scientific warm seeds.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. states has
+ * exactly the batch size; present=0 preserves that item. Verify source/target method, ordered
+ * nuclei, basis/AO, core, spin and provider identities before entry. Present density/coordinate
+ * buffers match their reported shapes and contain finite source data.
+ * @outputs Copies validated seeds only after all present entries pass; imports no executable
+ * objects or target convergence claims.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @errors Requires enabled warm starts. Native validation rejects shape, finiteness,
+ * Hermiticity and source-metric occupation failures without partial seed replacement.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Coordinates are Bohr; density is RHF total or UHF alpha-then-beta row-major; source
+ * energy fields are Hartree.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_restore_hf_warm_states(
     generativeqc_batch* batch, const generativeqc_hf_warm_state* states, uint32_t count);
 
 /** Discard all retained per-system converged-density warm starts. */
+/** @native-contract generativeqc_batch_clear_warm_starts
+ * @behavior Discard all retained converged-density warm seeds.
+ * @inputs A live batch.
+ * @outputs Subsequent executions start without these retained seeds; immutable prepared systems
+ * remain available.
+ * @lifetime Invalidates retained seed state, not caller-owned exported copies.
+ * @errors NULL batch returns INVALID_ARGUMENT; successful clearing returns SUCCESS.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ */
 GENERATIVEQC_API generativeqc_status
 generativeqc_batch_clear_warm_starts(generativeqc_batch* batch);
 
 /** Input-ordered SCF diagnostics for the latest completed item evaluation.
- * Returns NOT_IMPLEMENTED before execution, after a rejected/failed item, or
- * when the method does not report a physical residual. A null out queries
- * availability. Every replay invalidates all prior records before validation.
+ * Returns NOT_IMPLEMENTED before execution, without a completed native item, or
+ * when the method does not report a physical residual. A later force-buffer
+ * rejection can retain the completed native record. A null out queries
+ * availability. Every replay clears these C-handle SCF records before validation.
  * This additive query preserves the legacy batch result array's exact stride.
+ */
+/** @native-contract generativeqc_batch_get_scf_diagnostic
+ * @behavior Read separate density-update and physical SCF residuals.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability. index is the zero-based original input index, not a bucket index.
+ * @outputs Copies a completed supported record, including normal NOT_CONVERGED solves.
+ * @errors NOT_IMPLEMENTED means unavailable/unsupported state; invalid owner/index or ABI
+ * mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units density_rms is the density-update measure; physical_residual_rms is the RMS of FDS-SDF
+ * in atomic units.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_scf_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_scf_diagnostic* out);
 
 /** Input-ordered correlated-method diagnostic. The current complete descriptor
- * contract matches generativeqc_calculation_get_correlation_diagnostic. A rejected
- * or backend-failed item has no record; a normal NOT_CONVERGED item may retain
- * its last finite correlation state and physical residual diagnostics. */
+ * contract matches generativeqc_calculation_get_correlation_diagnostic. Record
+ * presence follows the native solve, not final output-buffer validation: a solve
+ * that retains no diagnostic has none, while a completed solve followed by force
+ * buffer rejection can still expose its record. A normal NOT_CONVERGED solve may
+ * retain finite correlation state and physical residual diagnostics. */
+/** @native-contract generativeqc_batch_get_correlation_diagnostic
+ * @behavior Copy the latest available correlated-method state.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. diagnostic
+ * is required; NULL is not an availability probe. index is the zero-based original input index,
+ * not a bucket index.
+ * @outputs Copies available native reference/correlation energies, residuals, resource evidence
+ * and method-specific fields. A normal nonconverged solve may retain finite state. A completed
+ * native solve can retain this record even if later force-buffer validation changes the item
+ * status to INVALID_ARGUMENT.
+ * @errors NOT_IMPLEMENTED means no supported retained record; invalid owner/index, NULL or ABI
+ * mismatch leaves output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Energies/denominators are Hartree; *_bytes are bytes, *_ms milliseconds,
+ * iteration/work fields counts; residuals are method-defined.
+ */
 GENERATIVEQC_API generativeqc_status
 generativeqc_batch_get_correlation_diagnostic(const generativeqc_batch* batch, uint32_t index,
                                               generativeqc_correlation_diagnostic* diagnostic);
 /** Input-ordered counterpart of generativeqc_calculation_get_cc_performance_diagnostic. */
+/** @native-contract generativeqc_batch_get_cc_performance_diagnostic
+ * @behavior Read the latest RCCSD/RCCSD(T) phase and work evidence.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability. index is the zero-based original input index, not a bucket index.
+ * @outputs Copies nested phase timing and operator counts; nested timings must not be added as
+ * disjoint phases.
+ * @errors NOT_IMPLEMENTED means no supported record; invalid owner/index, ABI or mapped
+ * failures do not yield a valid record.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units *_seconds are seconds; other work fields are logical counts.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_cc_performance_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_cc_performance_diagnostic* out);
 
-/** Input-ordered counterpart of generativeqc_calculation_get_ks_diagnostic. Invalid
- * or numerically failed items have no record; valid nonconverged items retain
- * their actual history. Every replay invalidates records from its predecessor. */
+/** Input-ordered counterpart of generativeqc_calculation_get_ks_diagnostic.
+ * Solves without a completed KS record have none; normal nonconverged solves
+ * retain actual history. A later force-buffer rejection does not remove that
+ * history. Every replay clears these C-handle KS records before validation. */
+/** @native-contract generativeqc_batch_get_ks_diagnostic
+ * @behavior Copy a completed KS summary and optional full physical iteration history.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. out may be
+ * NULL. history=NULL/history_capacity=0 omits history; otherwise allocate at least
+ * history_count rows and initialize each versioned row. index is the zero-based original input
+ * index, not a bucket index.
+ * @outputs Summary reports history_count; query once, allocate, then copy without an
+ * intervening execution. Histories retain normal nonconverged iterations. A completed native
+ * solve can retain this record even if later force-buffer validation changes the item status to
+ * INVALID_ARGUMENT.
+ * @errors Validation/availability failure leaves all outputs untouched. NOT_IMPLEMENTED means
+ * no completed KS record; insufficient history capacity is INVALID_ARGUMENT.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units All energy terms are Hartree; spin electron counts and residual measures follow the KS
+ * descriptor comments, including unavailable-stage energy_change markers.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_ks_diagnostic* out,
     generativeqc_ks_iteration* history, uint32_t history_capacity);
 
 /** Input-ordered cumulative CUDA KS transport. Geometry rebuilds retain the
  * retired owner's counters and add the replacement owner's setup. */
+/** @native-contract generativeqc_batch_get_ks_transport_diagnostic
+ * @behavior Read cumulative transport for a prepared CUDA KS owner.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. NULL out
+ * probes availability. index is the zero-based original input index, not a bucket index.
+ * @outputs Copies measured byte/synchronization/iteration counters, including setup; available
+ * immediately after supported preparation.
+ * @errors NOT_IMPLEMENTED means the owner has no transport record. Invalid owner/index, ABI and
+ * mapped backend errors do not produce a usable record.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Transfer fields are bytes; remaining fields count synchronizations, iterations or
+ * proposals.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_transport_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_ks_transport_diagnostic* out);
 
-/** Host-only query for the current input-ordered KS result. Failed or stale
+/** Host-only query for the current input-ordered KS result. Unexecuted or stale
  * batch items have no record; this never accesses device state or runs AO work. */
+/** @native-contract generativeqc_batch_get_ks_ao_selection_diagnostic_v1
+ * @behavior Read current input-indexed sampled-AO geometry and solve evidence.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. index is the
+ * zero-based original input index; out is required and NULL is invalid.
+ * @outputs Copies actual selection, traversal, discovery capacity/time and solve-local XC
+ * counters; these are not accuracy certificates. Actual XC submission evidence is required; a
+ * zero-initialized empty record is unavailable.
+ * @errors Invalid index/ABI returns failure without copying; NOT_IMPLEMENTED denotes failed,
+ * stale or unsupported items.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Discovery time is seconds, byte fields are bytes, AO/grid/visit counters are
+ * dimensionless.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
     const generativeqc_batch* batch, uint32_t index,
     generativeqc_ks_ao_selection_diagnostic_v1* out);
@@ -1621,6 +2450,16 @@ GENERATIVEQC_API generativeqc_status generativeqc_batch_get_ks_ao_selection_diag
  * from the same per-system dm0. Passing one restores the default behavior in
  * which each successful execution advances its retained density. Existing
  * snapshots are neither cleared nor created by this call.
+ */
+/** @native-contract generativeqc_batch_set_warm_start_updates
+ * @behavior Control replacement of retained warm-density snapshots.
+ * @inputs A live batch and enabled equal to 0 or 1.
+ * @outputs Zero freezes existing seeds; one resumes advancing seeds after successful execution.
+ * Does not create or clear snapshots.
+ * @lifetime The setting persists on this batch until changed or destroyed.
+ * @errors NULL batch or a value other than 0/1 returns INVALID_ARGUMENT.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
  */
 GENERATIVEQC_API generativeqc_status
 generativeqc_batch_set_warm_start_updates(generativeqc_batch* batch, int32_t enabled);
@@ -1634,18 +2473,83 @@ generativeqc_batch_set_warm_start_updates(generativeqc_batch* batch, int32_t ena
  * If any item requests forces, retain the whole-fleet force schedule and copy
  * only requested outputs. Output selection applies to this replay alone.
  */
+/** @native-contract generativeqc_batch_execute
+ * @behavior Execute a ragged fleet with input-indexed item failure isolation.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. results
+ * contains exactly the prepared system count of initialized descriptors. inputs is NULL/0 or
+ * one initialized descriptor per system; optional xyz has exactly 3*N doubles, NULL/0 selects
+ * prepared geometry. Each requested forces buffer has at least 3*N doubles; NULL/0 omits it.
+ * @outputs SUCCESS reports a structurally accepted replay, not scientific success of all
+ * members. Inspect every status/converged field before using energy/forces. Only successful
+ * requested force outputs are usable. NOT_CONVERGED can originate from an exception before a
+ * native Result assignment (including MP2/UMP2 reference failure), so published scalar
+ * diagnostics may be default values and energy may be NaN.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the batch and its context alive. Before descriptor validation, replay
+ * clears the C-handle precision-work, initial-guess, Fock-count, aggregate
+ * precision/incremental-JK, SCF and KS records. This does not imply every method-owned profile
+ * is cleared: HF FleetPlan profiles can survive an early rejected replay. Execution can update
+ * warm starts; changed-coordinate arrays are not retained.
+ * @errors Whole-call argument/ABI errors and backend errors remain possible; an item can return
+ * NOT_CONVERGED or another failure while the whole call returns SUCCESS. Do not rely on output
+ * contents after a whole-call failure, or failed-item force buffers. A failed force-buffer
+ * validation is item-local and can occur after the native solve, so precision/SCF/KS
+ * diagnostics can still describe that solve.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units xyz are Bohr, energies/energy_change Hartree, forces -dE/dR in Hartree/Bohr, flat
+ * input atom/xyz order.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_execute(
     generativeqc_batch* batch, const generativeqc_batch_input_descriptor* inputs,
     uint32_t input_count, generativeqc_batch_item_result_descriptor* results,
     uint32_t result_count);
 
 /** Canonical compact-table identities compiled into the D3 production owner. */
+/** @native-contract generativeqc_d3_table_sha256
+ * @behavior Return the compiled D3 compact-table SHA-256.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d3_table_sha256(void);
+/** @native-contract generativeqc_d3_radii_sha256
+ * @behavior Return the compiled D3 radii SHA-256.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d3_radii_sha256(void);
 /** Stable executable-owner identities, separate from method/parameter identity. */
+/** @native-contract generativeqc_d3_provider_identity
+ * @behavior Return the compiled D3 executable provider identity.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d3_provider_identity(void);
+/** @native-contract generativeqc_d3_scheduler_identity
+ * @behavior Return the compiled D3 scheduler identity.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d3_scheduler_identity(void);
 /** Prepared capability identity: d3.bj-two-body, d3.bj-atm, or d3.zero-two-body. */
+/** @native-contract generativeqc_d3_batch_variant_identity
+ * @behavior Return the selected prepared D3 damping/ATM capability identity.
+ * @inputs A live D3 batch, or NULL.
+ * @outputs Returns d3.bj-two-body, d3.bj-atm, or d3.zero-two-body for a prepared variant; NULL
+ * returns NULL.
+ * @lifetime Borrowed immutable identity string; do not free or modify it.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ */
 GENERATIVEQC_API const char* generativeqc_d3_batch_variant_identity(
     const generativeqc_d3_batch* batch);
 
@@ -1655,11 +2559,56 @@ GENERATIVEQC_API const char* generativeqc_d3_batch_variant_identity(
  * The owner copies atomic numbers and prepared geometries. maximum_bytes bounds
  * the plan plus worst-case execution staging and, on CUDA, device ownership.
  */
+/** @native-contract generativeqc_d3_batch_prepare
+ * @behavior Prepare standalone D3 correction-only ragged execution.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. systems has
+ * positive system_count initialized descriptors, each with atom_count atomic numbers and
+ * exactly 3*atom_count xyz values. model is required and initialized; its maximum_bytes bounds
+ * provider-owned persistent/peak staging.
+ * @outputs Writes one owning correction batch; the output is cleared after required
+ * pointer/count validation.
+ * @lifetime Copies atomic numbers, prepared geometry and model options. Caller arrays may be
+ * released after success; context must outlive the batch.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. Required-null/empty input
+ * can leave output unchanged. Failed preparation returns no usable plan.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Prepared xyz are Bohr; correction energies Hartree and positive gradients
+ * Hartree/Bohr. Resource limits are bytes.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_d3_batch_prepare(
     generativeqc_context* context, const generativeqc_d3_system_descriptor* systems,
     uint32_t system_count, const generativeqc_d3_bj_descriptor* model,
     generativeqc_d3_batch** batch);
+/** @native-contract generativeqc_d3_batch_destroy
+ * @behavior Release the d3 batch exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Keep the associated context alive during destruction. Releases persistent resources
+ * and invalidates the handle and all borrowed owner state.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_d3_batch_destroy(generativeqc_d3_batch* batch);
+/** @native-contract generativeqc_d3_batch_get_diagnostic
+ * @behavior Read D3 prepared-plan resource and execution diagnostics.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. live batch
+ * and nonnull diagnostic are required; NULL is not a probe.
+ * @outputs Copies current provider plan/capacity/backend evidence; available after successful
+ * preparation without a molecular replay.
+ * @errors NULL pointers or ABI mismatch return failure without copying.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Capacity/transfer fields are bytes and work quantities are counts; these records do
+ * not imply successful scientific results.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_d3_batch_get_diagnostic(
     const generativeqc_d3_batch* batch, generativeqc_d3_runtime_diagnostic* diagnostic);
 
@@ -1670,6 +2619,26 @@ GENERATIVEQC_API generativeqc_status generativeqc_d3_batch_get_diagnostic(
  * per prepared system; coordinates=NULL,count=0 means the original prepared
  * geometry for that member. A successful function return means the replay was
  * structurally valid; inspect each item status for scientific failures.
+ */
+/** @native-contract generativeqc_d3_batch_execute
+ * @behavior Evaluate D3 correction energies and optional positive nuclear gradients.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. results has
+ * exactly the prepared system count initialized descriptors. inputs is NULL/0 or exactly one
+ * descriptor per system. Each xyz override is exactly 3*N doubles; NULL/0 uses prepared
+ * geometry. Each requested gradient has exactly 3*N doubles, otherwise NULL/0.
+ * @outputs Whole-call SUCCESS means replay structure accepted. Inspect each item status.
+ * Failed-item energy is NaN; failed-item gradient buffers remain unchanged. Successful arrays
+ * follow original atom order.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Replay overrides are
+ * not retained as new prepared geometry.
+ * @errors Bad result-buffer shape rejects the whole call. Bad per-item geometry or scientific
+ * failures are isolated in item status. On whole-call failure do not consume result arrays.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units xyz are Bohr; energies Hartree; gradient is +dE/dR in Hartree/Bohr, the negative of
+ * force.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_d3_batch_execute(
     generativeqc_d3_batch* batch, const generativeqc_d3_batch_input_descriptor* inputs,
@@ -1683,16 +2652,74 @@ GENERATIVEQC_API generativeqc_status generativeqc_d3_batch_execute(
  * gradient=NULL,gradient_count=0 requests energy only. The supported element
  * domain is the canonical H-Ar r2SCAN-3c profile.
  */
+/** @native-contract generativeqc_r2scan3c_gcp_provider_identity
+ * @behavior Return the compiled canonical r2SCAN-3c gCP provider identity.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_r2scan3c_gcp_provider_identity(void);
+/** @native-contract generativeqc_r2scan3c_gcp_evaluate
+ * @behavior Evaluate the canonical H-Ar r2SCAN-3c gCP correction on CPU.
+ * @inputs atomic_numbers has atom_count>0 entries; xyz has exactly 3*atom_count doubles in
+ * atom/xyz order; energy is required. gradient is NULL/0 or exactly 3*atom_count writable
+ * doubles.
+ * @outputs Writes correction energy and optional positive nuclear gradient on success. Omitting
+ * gradient omits copy-out, not necessarily gradient work.
+ * @errors Unsupported elements, bad counts/nonfinite input or evaluation errors return native
+ * status. Do not consume outputs after failure. Outputs can be zeroed or partially accumulated
+ * before failure; they are not transactional.
+ * @lifetime Borrows atomic-number, coordinate and output buffers only for this synchronous
+ * call; retains no owner or caller storage.
+ * @execution Synchronous CPU evaluation with no context or device requirement. Distinct calls
+ * may use disjoint buffers; callers must not concurrently mutate shared buffers.
+ * @units xyz are Bohr; energy Hartree; gradient +dE/dR in Hartree/Bohr.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_r2scan3c_gcp_evaluate(
     const int32_t* atomic_numbers, uint32_t atom_count, const double* coordinates,
     uint32_t coordinate_count, double* energy, double* gradient, uint32_t gradient_count);
 
 /** Audited identities compiled into the production D4(BJ)-EEQ provider. */
+/** @native-contract generativeqc_d4_table_sha256
+ * @behavior Return the compiled D4 compact-table SHA-256.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d4_table_sha256(void);
+/** @native-contract generativeqc_d4_charge_parameter_sha256
+ * @behavior Return the compiled D4 charge-parameter SHA-256.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d4_charge_parameter_sha256(void);
+/** @native-contract generativeqc_d4_derivative_identity
+ * @behavior Return the compiled D4 derivative implementation identity.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d4_derivative_identity(void);
+/** @native-contract generativeqc_d4_provider_identity
+ * @behavior Return the compiled D4 executable provider identity.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d4_provider_identity(void);
+/** @native-contract generativeqc_d4_scheduler_identity
+ * @behavior Return the compiled D4 scheduler identity.
+ * @outputs A NUL-terminated identity string; provenance identity does not establish
+ * method/device capability.
+ * @lifetime Borrowed immutable process-lifetime storage; never modify or free it.
+ * @execution Synchronous, context-free read; no numerical execution.
+ */
 GENERATIVEQC_API const char* generativeqc_d4_scheduler_identity(void);
 
 /**
@@ -1700,11 +2727,56 @@ GENERATIVEQC_API const char* generativeqc_d4_scheduler_identity(void);
  * prepared geometries are copied. maximum_bytes bounds all persistent owner
  * state plus worst-case execution staging/workspace.
  */
+/** @native-contract generativeqc_d4_batch_prepare
+ * @behavior Prepare standalone D4 correction-only ragged execution.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. systems has
+ * positive system_count initialized descriptors, each with atom_count atomic numbers and
+ * exactly 3*atom_count xyz values. model is required and initialized; its maximum_bytes bounds
+ * provider-owned persistent/peak staging.
+ * @outputs Writes one owning correction batch; the output is cleared after required
+ * pointer/count validation.
+ * @lifetime Copies atomic numbers, prepared geometry and model options, including molecular
+ * charge. Caller arrays may be released after success; context must outlive the batch.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. Required-null/empty input
+ * can leave output unchanged. Failed preparation returns no usable plan.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Prepared xyz are Bohr; correction energies Hartree and positive gradients
+ * Hartree/Bohr. Resource limits are bytes.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_d4_batch_prepare(
     generativeqc_context* context, const generativeqc_d4_system_descriptor* systems,
     uint32_t system_count, const generativeqc_d4_bj_eeq_descriptor* model,
     generativeqc_d4_batch** batch);
+/** @native-contract generativeqc_d4_batch_destroy
+ * @behavior Release the d4 batch exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Keep the associated context alive during destruction. Releases persistent resources
+ * and invalidates the handle and all borrowed owner state.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_d4_batch_destroy(generativeqc_d4_batch* batch);
+/** @native-contract generativeqc_d4_batch_get_diagnostic
+ * @behavior Read D4 prepared-plan resource and execution diagnostics.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. live batch
+ * and nonnull diagnostic are required; NULL is not a probe.
+ * @outputs Copies current provider plan/capacity/backend evidence; available after successful
+ * preparation without a molecular replay.
+ * @errors NULL pointers or ABI mismatch return failure without copying.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Capacity/transfer fields are bytes and work quantities are counts; these records do
+ * not imply successful scientific results.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_d4_batch_get_diagnostic(
     const generativeqc_d4_batch* batch, generativeqc_d4_runtime_diagnostic* diagnostic);
 
@@ -1714,6 +2786,27 @@ GENERATIVEQC_API generativeqc_status generativeqc_d4_batch_get_diagnostic(
  * may independently select prepared or changed coordinates. Item scientific
  * failures are isolated; successful function return means the replay itself
  * was structurally valid.
+ */
+/** @native-contract generativeqc_d4_batch_execute
+ * @behavior Evaluate D4 correction energies and optional positive nuclear gradients.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. results has
+ * exactly the prepared system count initialized descriptors. inputs is NULL/0 or exactly one
+ * descriptor per system. Each xyz override is exactly 3*N doubles; NULL/0 uses prepared
+ * geometry. Each requested gradient has exactly 3*N doubles, otherwise NULL/0. Optional
+ * atomic-charge outputs have exactly N elements, otherwise NULL/0.
+ * @outputs Whole-call SUCCESS means replay structure accepted. Inspect each item status.
+ * Failed-item energy is NaN; failed-item gradient/charge buffers remain unchanged. Successful
+ * arrays follow original atom order.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Replay overrides are
+ * not retained as new prepared geometry.
+ * @errors Bad result-buffer shape rejects the whole call. Bad per-item geometry or scientific
+ * failures are isolated in item status. On whole-call failure do not consume result arrays.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units xyz are Bohr; energies Hartree; gradient is +dE/dR in Hartree/Bohr, the negative of
+ * force. Charges are elementary-charge units.
  */
 GENERATIVEQC_API generativeqc_status generativeqc_d4_batch_execute(
     generativeqc_d4_batch* batch, const generativeqc_d4_batch_input_descriptor* inputs,
@@ -1727,14 +2820,80 @@ GENERATIVEQC_API generativeqc_status generativeqc_d4_batch_execute(
  * materialize the full pair matrix. maximum_bytes bounds provider-owned peak
  * host/device workspace, including transactional output staging.
  */
+/** @native-contract generativeqc_nonlocal_plan_prepare
+ * @behavior Prepare a bounded fixed-grid VV10/rVV10 pair evaluator.
+ * @inputs Initialize model with sizeof(its complete type) and GENERATIVEQC_ABI_VERSION.
+ * context, model and plan output are required. Backend comes from context; model selects
+ * variant, point_count, tile_points and maximum_bytes. Positive finite b/c/coefficient and
+ * nonzero point/tile counts are required.
+ * @outputs Writes an owning O(N_grid)-storage plan without materializing the full pair matrix.
+ * @lifetime Copies model options; does not retain caller descriptor. Context must outlive the
+ * plan.
+ * @errors INVALID_ARGUMENT denotes invalid pointers/counts or options; ABI_MISMATCH denotes
+ * incompatible versioned descriptors. Unsupported admitted domains return NOT_IMPLEMENTED;
+ * mapped execution/allocation failures use the native status codes. Output is cleared after
+ * required-pointer checks; required-null rejection may preserve the previous slot.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Grid capacity counts points, workspace limits are bytes; model parameters follow the
+ * atomic-unit VV10/rVV10 definition.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_nonlocal_plan_prepare(
     generativeqc_context* context, const generativeqc_nonlocal_descriptor* model,
     generativeqc_nonlocal_plan** plan);
+/** @native-contract generativeqc_nonlocal_plan_destroy
+ * @behavior Release the nonlocal plan exactly once.
+ * @inputs Pass the matching live owning handle, or NULL for a no-op; never pass a
+ * dangling/foreign handle.
+ * @lifetime Keep the associated context alive during destruction. Releases persistent resources
+ * and invalidates the handle and all borrowed owner state.
+ * @errors Returns no status; NULL is harmless. Double destruction or concurrent use violates
+ * the handle contract.
+ * @execution Synchronous release; serialize with every use of this handle and its context.
+ */
 GENERATIVEQC_API void generativeqc_nonlocal_plan_destroy(generativeqc_nonlocal_plan* plan);
+/** @native-contract generativeqc_nonlocal_plan_get_diagnostic
+ * @behavior Read fixed-grid nonlocal plan execution/resource evidence.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. diagnostic
+ * and live plan are required; NULL is not a probe.
+ * @outputs Copies current backend and preparation capacity evidence; pair_evaluations is the
+ * prepared point_count squared census, not a measured last-execution counter.
+ * @errors Null pointers or ABI mismatch leave the output unchanged.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Capacity fields are bytes, work fields are pair/point counts; recorded evidence is not
+ * a molecular-force result.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_nonlocal_plan_get_diagnostic(
     const generativeqc_nonlocal_plan* plan, generativeqc_nonlocal_runtime_diagnostic* diagnostic);
 
 /** Evaluate fixed-grid energy and any requested derivative families. */
+/** @native-contract generativeqc_nonlocal_plan_execute
+ * @behavior Evaluate fixed-grid nonlocal energy and requested derivative families.
+ * @inputs Initialize every supplied versioned descriptor with sizeof(its complete type) and
+ * GENERATIVEQC_ABI_VERSION; zero-initialize other fields before assigning options. input/result
+ * are required. For the prepared point_count=N, coordinates and density_gradient each have 3*N
+ * values in point/xyz order, weights and density each N. All four pointers are required;
+ * density must be strictly positive and inputs finite. Optional vrho and vsigma must both be
+ * provided with count N. Optional point_derivative and weight_derivative must both be provided
+ * with counts 3*N and N. Omitted families use NULL/zero counts.
+ * @outputs Writes energy plus selected functional-density or independent fixed-grid
+ * point/weight derivatives. These are not complete moving-atom/grid nuclear forces.
+ * @lifetime All input/output buffers are borrowed only for this call; successful copies belong
+ * to the caller. Keep the owner and its context alive throughout the call. Input grid/density
+ * arrays are not retained; outputs are transactionally staged in provider-owned workspace.
+ * @errors Invalid domains, shapes, ABI, capacity or evaluation failures return status and
+ * preserve all caller numerical outputs; copy-out occurs only after successful evaluation.
+ * @execution Synchronous; serialize calls involving the same owner/context, including queries
+ * and destruction. No concurrent execute/query or destroy/use is supported.
+ * @units Atomic units: points Bohr, weights Bohr^3, density Bohr^-3, density_gradient Bohr^-4,
+ * derived sigma=|grad rho|^2 Bohr^-8; energy Hartree. vrho/vsigma follow the unweighted
+ * functional-derivative convention before outer quadrature weights. Point/weight outputs
+ * differentiate independent fixed-grid coordinates/weights, not full nuclear motion.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_nonlocal_plan_execute(
     generativeqc_nonlocal_plan* plan, const generativeqc_nonlocal_input_descriptor* input,
     generativeqc_nonlocal_result_descriptor* result);

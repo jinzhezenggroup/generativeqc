@@ -32,6 +32,7 @@ class ProjectionPolicy:
     maximum_ao: int = 4096
 
     def __post_init__(self) -> None:
+        """Validate finite projection thresholds in (0, 1] and a positive AO limit."""
         for name in ("relative_threshold", "validation_tolerance", "maximum_residual"):
             value = getattr(self, name)
             if isinstance(value, bool) or not np.isfinite(value) or not 0 < value <= 1:
