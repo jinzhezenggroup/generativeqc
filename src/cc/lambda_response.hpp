@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -52,12 +53,18 @@ struct LambdaOptions {
   // Compiler-packed FP64 adjoints with bounded auxiliary batches. Optional
   // matrix storage/provider allocation falls back to the scalar staged graph.
   bool df_matrix_gemm{true};
-  std::size_t df_auxiliary_batch_limit{8};
+  std::size_t df_auxiliary_batch_limit{32};
+  // A DF device-only ceiling is also bounded by the currently free GPU memory.
+  // Host numeric/descriptor storage remains charged to max_bytes separately.
+  std::size_t df_max_device_bytes{std::numeric_limits<std::size_t>::max()};
   // Optional immutable primal staging belongs to a single Problem/T owner.
   // Budget/provider/allocation refusal retains the original FP64 matrix path.
   bool df_core_reuse{true};
   // The original expanded audit graph, optionally through bounded FP64 GEMM.
   bool df_audit_matrix_gemm{true};
+  // Re-evaluate the original virtual residual graph, never accepted residuals
+  // or solver cuts. Optional shared-audit arena admission retains scalar replay.
+  bool df_primal_matrix_gemm{true};
 };
 
 struct LambdaDiagnostic {
@@ -84,11 +91,14 @@ struct LambdaDiagnostic {
   std::size_t df_auxiliary_batch_size{1}, df_auxiliary_batches{};
   std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_output_bytes{};
   std::size_t df_provider_allowance_bytes{};
+  // Admission snapshots are limits, not measured allocation or peak VRAM.
+  std::size_t df_available_device_bytes{}, df_device_limit_bytes{};
   bool df_core_reuse{};
   std::size_t df_core_reuse_bytes{}, df_core_reuse_preparations{}, df_core_reuse_actions{};
   const char* core_reuse_plan_hash{};
   bool df_audit_matrix_gemm{};
   std::size_t df_audit_arena_bytes{};
+  bool df_primal_matrix_gemm{};
   const char* audit_schedule_hash{};
   const char* shared_program_hash{};
   const char* independent_program_hash{};

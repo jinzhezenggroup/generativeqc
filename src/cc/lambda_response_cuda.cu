@@ -283,6 +283,8 @@ class CudaLambdaActions {
     target.df_gemm_summands = d.df_gemm_summands;
     target.df_packing_output_bytes = d.df_packing_output_bytes;
     target.df_provider_allowance_bytes = d.df_provider_allowance_bytes;
+    target.df_available_device_bytes = d.df_available_device_bytes;
+    target.df_device_limit_bytes = d.df_device_limit_bytes;
     target.df_core_reuse = d.df_core_reuse;
     target.df_core_reuse_bytes = d.df_core_reuse_bytes;
     target.df_core_reuse_preparations = d.df_core_reuse_preparations;
@@ -290,6 +292,7 @@ class CudaLambdaActions {
     target.core_reuse_plan_hash = d.core_reuse_plan_hash;
     target.df_audit_matrix_gemm = d.df_audit_matrix_gemm;
     target.df_audit_arena_bytes = d.df_audit_arena_bytes;
+    target.df_primal_matrix_gemm = d.df_primal_matrix_gemm;
     target.audit_schedule_hash = d.audit_schedule_hash;
 
     target.shared_program_hash = d.shared_program_hash;

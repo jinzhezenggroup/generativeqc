@@ -63,6 +63,45 @@ shortage may discard an optional arena: first core retention, then matrix audit,
 then ordinary matrix execution. Nonfinite, numerical, launch, binding and driver
 errors still abort without publishing any response.
 
+Fresh primal replay can separately lower the original per-Q virtual residual
+through the same strict-FP64 matrix compiler. Its only inputs are the immutable
+`t1`, `t2`, `bov` and `bvv`; it does not consume retained solver cuts or previously
+accepted residuals. Q-batched results accumulate in the original Q order, and
+the original retained-core replay plus the physical energy/residual acceptance
+check remain mandatory. `LambdaOptions::df_primal_matrix_gemm`, the complete
+owner's trailing `lambda_primal_matrix` selector and benchmark argument
+twenty-seven request this path (`0`/`1`, default `1`).
+
+Replay requires admission of both ordinary matrix execution and matrix audit.
+Its matrix arena shares storage with the later independent audit because their
+lifetimes are disjoint. Preflight charges the maximum of the two arenas, not
+their sum, plus all prepared descriptors. If the enlarged arena does not fit,
+preflight retries the original audit arena and retains scalar fresh replay.
+Dropping the shared arena or matrix provider also clears replay admission.
+`lambda_primal_matrix_requested` and `lambda_primal_matrix` distinguish request
+from actual execution; `lambda_audit_arena_bytes` includes the admitted shared
+arena and is a capacity reservation, not measured peak VRAM.
+
+The standalone Lambda owner and complete force owner request an auxiliary batch
+limit of thirty-two and original-graph matrix replay by default. Admission is
+conditional: all simultaneous host/device numerical storage must fit
+`LambdaOptions::max_bytes`, and device storage plus the matrix-provider allowance
+must fit the free VRAM snapshot from `cudaMemGetInfo`. The optional
+`LambdaOptions::df_max_device_bytes` ceiling can further constrain that device
+admission without changing the complete numerical budget. The batch is first
+clamped to the auxiliary extent and then halved until its matrix reservation
+fits. CCSD's independently selected default batch limit remains eight.
+
+Optional primal cuts, matrix batches, shared replay/audit storage and core
+retention obey both ceilings. Resource refusal retains smaller batches and the
+original scalar replay/audit; the mandatory scalar reservation must still fit
+or the owner fails without publishing a response. An allocation shortage after
+preflight retains the bounded fallback order described above. A free-memory
+snapshot cannot guarantee a later allocation against concurrent GPU consumers;
+it does not suppress non-resource CUDA errors. Endpoint
+`lambda_available_device_bytes` and `lambda_device_limit_bytes` report the
+admission snapshot and ceiling, not observed peak memory.
+
 Benchmark argument twenty-five selects core reuse (`0`/`1`, default `1`).
 Argument twenty-six selects the matrix audit (`0`/`1`, default `1`), matching
 `LambdaOptions::df_audit_matrix_gemm` and the complete owner's trailing
@@ -89,6 +128,24 @@ binaries, discarded attempts and incomplete observations cannot produce an
 accepted summary. `--screen` is explicitly preliminary, not a repeated ablation.
 Neither a complete-endpoint speedup nor the `<120 s` Lambda stretch target follows
 from implementing the schedule alone; both require measured qualification.
+
+`benchmarks/df_lambda_batch_ablation.py` separately compares Lambda Q-batch
+limits with a mandatory batch-eight baseline; `--replay-candidates` adds fresh
+matrix replay as a second dimension. CCSD batching, strict-FP64 W, cadence thirty,
+core retention and matrix audit remain fixed. Each cell uses a fresh cold process;
+matched runs reverse the cell order on alternate repetitions and require unchanged
+Lambda iterations/actions and all original independent scientific gates. Clean
+and instrumented runs remain separate. `--default-candidate` instead compares
+only the explicit batch-eight/scalar-replay baseline and the requested
+batch-thirty-two/matrix-replay default. All experiment commands explicitly select
+replay, including the legacy core/audit ablation, so later defaults cannot change
+their baseline. `--screen` is preliminary; neither mode alone satisfies the
+shared performance-promotion contract. The conditional default policy is an
+explicit resource-guarded adoption, not a retrospective performance promotion
+of the historical opt-in cohort.
+See the [default-policy decision note](../../.agents/notes/implemented/performance/2026-10-09-df-lambda-vram-defaults.md)
+for admission policy and the [batch/replay decision note](../../.agents/notes/implemented/performance/2026-10-09-df-lambda-batch-fresh-replay.md)
+for original arena-lifetime and fallback rationale.
 
 `cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
 cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
@@ -263,10 +320,10 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL]]]]]]]]]]]]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO [FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 [LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 [LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]
 ```
 
-`MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
+`MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to thirty-two,
 `CCSD_Q_BATCH_LIMIT` to eight, and `DIIS_HISTORY` to six. `DIIS_HISTORY` retains argument position eight and
 accepts zero (disabled) or integers two through twenty. A decimal or scientific
 notation token in this position is rejected; it is never guessed to be a

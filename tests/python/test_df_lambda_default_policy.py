@@ -40,7 +40,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
-        "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix}; }\n"
+        "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
+        "reference_experiment}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -66,6 +67,12 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
             "    std::ofstream output", 1
         )[0]
     )
+    reference_benchmark = (ROOT / "benchmarks/df_hf_preconvergence.cpp").read_text()
+    reference_call = (
+        "const auto result ="
+        + reference_benchmark.split("const auto result =", 1)[1].split(";", 1)[0]
+        + ";\n"
+    )
     source = tmp_path / "defaults.cpp"
     source.write_text(
         r"""
@@ -80,7 +87,7 @@ namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace hf { struct RHFFrameResponseOptions; }
 namespace methods::detail {
-struct DFCCSDTReferenceExperiment;
+struct DFCCSDTReferenceExperiment {};
 struct DFCCSDTResult {
   bool primal, forces, lambda;
   hf::RHFFrameResponseOptions frame;
@@ -94,6 +101,8 @@ struct DFCCSDTResult {
   std::size_t lambda_interval;
   bool core_reuse;
   bool audit_matrix;
+  bool replay_matrix;
+  DFCCSDTReferenceExperiment* reference_experiment;
 };
 """
         + declaration
@@ -112,14 +121,29 @@ generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) 
         + r"""
   return result;
 }
+void check_reference_benchmark() {
+  generativeqc::runtime::ExecutionContext execution;
+  generativeqc::core::System orbital, correlation;
+  generativeqc_method_descriptor descriptor{};
+  generativeqc::methods::detail::DFCCSDTReferenceExperiment experiment;
+  const std::string endpoint = "forces";
+"""
+        + reference_call
+        + r"""
+  if(result.reference_experiment != &experiment || result.replay_matrix ||
+     result.batch_limit != 8 || result.ccsd_batch_limit != 8)
+    throw std::runtime_error("reference benchmark selectors or experiment pointer changed");
+}
 bool default_frame(const generativeqc::hf::RHFFrameResponseOptions& frame) {
   return frame.orbital_screening_tolerance == 0.0 && !frame.profile_jk &&
          !frame.bilinear_derivative && frame.symmetric_polarization;
 }
 int main() {
+  check_reference_benchmark();
   generativeqc::cc::LambdaOptions options;
   if(!options.df_matrix_gemm || !options.df_auxiliary_reduction ||
-     options.gmres.true_residual_every != 1) return 1;
+     options.gmres.true_residual_every != 1 ||
+     options.df_auxiliary_batch_limit != 32 || !options.df_primal_matrix_gemm) return 1;
   options.df_matrix_gemm=false;
   if(options.df_matrix_gemm) return 2;
   generativeqc::runtime::ExecutionContext context;
@@ -134,7 +158,9 @@ int main() {
      ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
      !explicit_matrix.parallel_gap || ordinary.request_gap || explicit_matrix.request_gap) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame) ||
-     ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30) return 7;
+     ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30 ||
+     ordinary.batch_limit != 32 || explicit_matrix.batch_limit != 8 ||
+     !ordinary.replay_matrix) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
   explicit_frame.profile_jk = true;
@@ -159,7 +185,7 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
+     defaults.batch_limit != 32 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
      !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap ||
      defaults.lambda_interval != 30) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
@@ -391,7 +417,14 @@ int main() {
     if(select(27,selected).audit_matrix != (audit[0]=='1') ||
        !select(26,selected).audit_matrix) return 46;
   }
-  for(int argc : {0,1,2,3,28}) {
+  for(const char* replay : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1",replay};
+    if(select(28,selected).replay_matrix != (replay[0]=='1') ||
+       !select(27,selected).replay_matrix || !ordinary.replay_matrix) return 47;
+  }
+  for(int argc : {0,1,2,3,29}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

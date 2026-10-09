@@ -91,18 +91,22 @@ struct DFCCSDTResult {
  * refusing its budget/allocation preserves the original FP64 matrix actions.
  * lambda_audit_matrix lowers the original independent expanded equations
  * through bounded FP64 GEMM; resource refusal retains their scalar schedule.
+ * Lambda defaults request batch 32 and original-graph matrix fresh replay.
+ * Complete host/device budgets and currently free VRAM admit actual storage;
+ * smaller batches and the original scalar replay remain bounded fallbacks.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
     const generativeqc_method_descriptor&, bool forces = true, bool with_triples = true,
     bool df_auxiliary_reduction = true, bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
-    std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
+    std::size_t lambda_batch_limit = 32, std::size_t ccsd_batch_limit = 8,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
     bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
     runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
-    bool lambda_audit_matrix = true, DFCCSDTReferenceExperiment* reference_experiment = nullptr);
+    bool lambda_audit_matrix = true, bool lambda_primal_matrix = true,
+    DFCCSDTReferenceExperiment* reference_experiment = nullptr);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

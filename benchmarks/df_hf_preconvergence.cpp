@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
       descriptor.correlation_memory_budget_bytes = budget;
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, correlation, descriptor, endpoint == "forces", true, true, true, true,
-          8, 8, {}, true, true, true, false, false, {}, 30, true, true, &experiment);
+          8, 8, {}, true, true, true, false, false, {}, 30, true, true, false, &experiment);
       direct_seconds = result.primal.reference_seconds;
       if (mode == "auto-direct") {
         pre_seconds = result.reference_guess.seconds;
