@@ -3,9 +3,10 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
-#include "generativeqc/generativeqc.hpp"
+#include "generativeqc/ks.hpp"
 
 namespace {
 
@@ -111,7 +112,53 @@ int main() {
                   ks.density_rms != *ks.physical_residual_rms,
               "C++ UKS conflated density update and physical residual");
     }
-    std::cout << "C++ ragged batch API: PASS\n";
+    // The native name resolver is backed by the same generated ABI manifest
+    // as the CLI. Compiler-only names are not implicitly transformed.
+    require(generativeqc::resolve_method("pbe-rks") == GENERATIVEQC_METHOD_PBE_RKS,
+            "C++ native method name resolution failed");
+    const char* canonical_name = nullptr;
+    require(generativeqc_method_get_name(GENERATIVEQC_METHOD_PBE_RKS, &canonical_name) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
+                std::string(canonical_name) == "pbe-rks",
+            "native name round trip failed");
+    generativeqc_method unchanged = GENERATIVEQC_METHOD_RHF;
+    require(generativeqc_method_from_name("pbe0-rks", &unchanged) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                unchanged == GENERATIVEQC_METHOD_RHF,
+            "compiler-only method was incorrectly admitted as a native ABI ID");
+    require(generativeqc_method_get_name(999999, &canonical_name) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "unknown native method ID was accepted");
+
+    // No Python compiler/runtime is involved: this is the same PBE0 physical
+    // graph as the native semantic-composition C ABI qualification.
+    auto pbe0_descriptor = generativeqc::default_method_descriptor("pbe-rks");
+    pbe0_descriptor.max_iterations = 200;
+    pbe0_descriptor.energy_tolerance = 1.0e-12;
+    pbe0_descriptor.density_tolerance = 1.0e-10;
+    generativeqc::KsComposition pbe0(
+        GENERATIVEQC_METHOD_PBE_RKS, "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
+    pbe0.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
+        .add_semilocal("GGA_C_PBE", 1.0)
+        .add_semilocal("GGA_X_PBE", 0.75)
+        .add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
+    // Destroy the builder and all input pointers after preparation to exercise
+    // deep-copy ownership of the resolved KS plan.
+    auto prepared = pbe0.prepare(context, h2, pbe0_descriptor);
+    const auto pbe0_energy = prepared.execute();
+    require(std::isfinite(pbe0_energy.energy) &&
+                std::abs(pbe0_energy.energy - (-1.1543107969377155)) < 1.0e-6,
+            "Python-free C++ PBE0 energy differs from qualified native reference");
+    require(pbe0_energy.physical_residual_rms.has_value(),
+            "C++ PBE0 SCF lost physical commutator diagnostic");
+    try {
+      (void)prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+      throw std::runtime_error("C++ SDK incorrectly advertised DFT forces");
+    } catch (const generativeqc::Error& error) {
+      require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+              "C++ DFT force request did not fail closed");
+    }
+    std::cout << "C++ ragged batch and explicit KS API: PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << "test failure: " << error.what() << '\n';
