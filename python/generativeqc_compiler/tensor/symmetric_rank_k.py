@@ -7,7 +7,7 @@ one physical batch slice and offers implementations of that same operation.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from generativeqc_compiler.common.backend import TargetInfo
 from generativeqc_compiler.common.lowering_contract import (
@@ -28,8 +28,10 @@ from generativeqc_compiler.common.specialization import (
 )
 
 from .lowering import TensorLoweringAdapter
-from .program import Program
 from .types import checked_shape
+
+if TYPE_CHECKING:
+    from .program import Program
 
 MatrixOrder = Literal["row-major", "column-major"]
 
@@ -101,7 +103,10 @@ def symmetric_rank_k_request(
         )
     ):
         raise ValueError("rank-k weight must be an input or original input product")
-    if any(value.spec.dtype != "float64" for value in (left, weights, node, *weights.inputs)):
+    if any(
+        value.spec.dtype != "float64"
+        for value in (left, weights, node, *weights.inputs)
+    ):
         raise ValueError("rank-k currently requires strict FP64 storage")
     adapter = TensorLoweringAdapter(program)
     base = adapter.request(node, backend="cuda")
@@ -110,7 +115,9 @@ def symmetric_rank_k_request(
         adapter.directives[value] != arithmetic
         for value in (left, weights, *weights.inputs)
     ):
-        raise ValueError("rank-k weight and contraction require one strict FP64 schedule")
+        raise ValueError(
+            "rank-k weight and contraction require one strict FP64 schedule"
+        )
     if any(
         precision.directive.compute_dtype != "float64"
         or precision.directive.accumulation_dtype != "float64"
@@ -125,12 +132,20 @@ def symmetric_rank_k_request(
     panel_strides = (k, 1) if order == "row-major" else (1, n)
     matrix_strides = (n, 1) if order == "row-major" else (1, n)
     physical = (
-        OperandLayout("input:0", (0, 2), (n, k), panel_strides, alias_group="coefficient"),
-        OperandLayout("input:1", (2,), (k,), (1,)),
-        OperandLayout("input:2", (1, 2), (n, k), panel_strides, alias_group="coefficient"),
         OperandLayout(
-            "output", (0, 1), (n, n), matrix_strides,
-            access="read-write", triangle="upper",
+            "input:0", (0, 2), (n, k), panel_strides, alias_group="coefficient"
+        ),
+        OperandLayout("input:1", (2,), (k,), (1,)),
+        OperandLayout(
+            "input:2", (1, 2), (n, k), panel_strides, alias_group="coefficient"
+        ),
+        OperandLayout(
+            "output",
+            (0, 1),
+            (n, n),
+            matrix_strides,
+            access="read-write",
+            triangle="upper",
         ),
     )
     semantics = dict(base.semantics)
@@ -140,7 +155,9 @@ def symmetric_rank_k_request(
         coefficient_storage=order,
         transpose="coefficient-times-weighted-coefficient-transpose",
         signed_weights=True,
-        weights_materialization="preceding-multiply" if weights.op == "multiply" else "borrowed",
+        weights_materialization="preceding-multiply"
+        if weights.op == "multiply"
+        else "borrowed",
         publication="upper-triangle-mirrored",
         update="alpha-product-plus-beta-output",
     )
@@ -154,7 +171,9 @@ def symmetric_rank_k_request(
             for precision in base.precisions
         ),
         effects=(("output", "transactional-symmetric-overwrite-or-accumulate"),),
-        constraints=LoweringConstraints(determinism="reproducible", capture_required=True),
+        constraints=LoweringConstraints(
+            determinism="reproducible", capture_required=True
+        ),
     )
 
 
@@ -174,7 +193,9 @@ def emit_symmetric_rank_k_portfolio(
     request = symmetric_rank_k_request(program, output, order=order)
     if request.scientific_identity is None:
         raise ValueError("rank-k requires an original scientific identity")
-    target = TargetCapabilities(TargetInfo("cuda", "current-aot-module", 32, 1024, None))
+    target = TargetCapabilities(
+        TargetInfo("cuda", "current-aot-module", 32, 1024, None)
+    )
     precision = request.precisions[0]
     candidates = tuple(
         LoweringCandidate(
@@ -197,10 +218,20 @@ def emit_symmetric_rank_k_portfolio(
             target=target,
         )
         for provider, kind, algorithm, version, materialization in (
-            ("generated.cuda", "generated", "symmetric-rank-k-generated", source,
-             "borrowed-panels/two-pass-transactional-publication"),
-            ("cublas", "library", "symmetric-rank-k-signed-gemm",
-             "runtime-bound-pedantic", "signed-column-scale/gram-scratch/mirror"),
+            (
+                "generated.cuda",
+                "generated",
+                "symmetric-rank-k-generated",
+                source,
+                "borrowed-panels/two-pass-transactional-publication",
+            ),
+            (
+                "cublas",
+                "library",
+                "symmetric-rank-k-signed-gemm",
+                "runtime-bound-pedantic",
+                "signed-column-scale/gram-scratch/mirror",
+            ),
         )
     )
     return native_lowering_portfolio(
