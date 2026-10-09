@@ -8,9 +8,9 @@ The test protects control/warm-copy ordering; it does not qualify GPU numerics.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -100,10 +100,9 @@ int main(int argc, char** argv) {
 
 
 @pytest.fixture(scope="module")
-def control_executable(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("g++") or shutil.which("clang++")
-    if compiler is None:
-        pytest.skip("requires a C++20 host compiler")
+def control_executable(
+    tmp_path_factory: pytest.TempPathFactory, required_native_cxx: Any
+) -> Path:
     source = (ROOT / "src/dft/cuda_ks_kernels.cu").read_text()
     start = source.index("__global__ void advance_kernel(")
     end = source.index("\n}  // namespace", start)
@@ -114,12 +113,12 @@ def control_executable(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("ks-control-schedule")
     cpp, executable = directory / "test.cpp", directory / "test"
     cpp.write_text(PREFIX + declarations + source[start:end] + SUFFIX)
-    subprocess.run(
-        [compiler, "-std=c++20", "-O1", "-pthread", str(cpp), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    required_native_cxx.build_executable(
+        [cpp],
+        executable,
+        compile_args=("-std=c++20", "-O1", "-pthread"),
+        link_args=("-pthread",),
+        compile_timeout=60,
     )
     return executable
 

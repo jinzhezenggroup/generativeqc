@@ -10,7 +10,9 @@
 
 namespace generativeqc::runtime {
 
-enum class SolverRegionCompletionMode : std::uint8_t { Scalar = 0, PerItemMask = 1 };
+// Per-item completion belongs to method-owned batch controllers. Keep the scalar
+// value and binding layout stable, but do not advertise an unimplemented mode.
+enum class SolverRegionCompletionMode : std::uint8_t { Scalar = 0 };
 
 struct SolverRegionCudaBinding {
   GraphBinding graph;
@@ -33,6 +35,8 @@ class SolverRegionCudaExecutor {
   template <class F>
   unsigned submit(const SolverRegionCudaBinding& binding, unsigned requested_steps,
                   unsigned remaining_steps, bool profile, F&& submit_step) {
+    if (binding.completion != SolverRegionCompletionMode::Scalar)
+      throw std::invalid_argument("solver-region completion supports only scalar mode");
     if (!binding.max_steps_per_checkpoint)
       throw std::invalid_argument("solver-region checkpoint width must be positive");
     if (!requested_steps || !remaining_steps)

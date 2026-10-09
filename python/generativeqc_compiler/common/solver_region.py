@@ -17,7 +17,6 @@ from .provenance import canonical_hash
 from .resources import ResourceCandidate, ResourceIdentity, ResourceRequest
 
 _BOUNDARIES = frozenset(("entry", "iteration", "success", "failure", "exit"))
-_COMPLETION_MODES = frozenset(("scalar", "per_item_mask"))
 _DERIVATIVE_MODES = frozenset(
     ("implicit_vjp", "implicit_jvp", "stationary_vjp", "stationary_jvp")
 )
@@ -107,19 +106,22 @@ class RegionDerivative:
 
 @dataclass(frozen=True)
 class RegionCompletion:
-    """Scalar completion now; ragged completion requires an explicit active mask."""
+    """Scalar completion with a reserved null mask for stable schema-v1 identity.
+
+    Ragged batches retain their method-owned per-item controllers; this generic
+    region does not admit an unimplemented active-mask execution contract.
+    """
 
     mode: str = "scalar"
     active_mask: str | None = None
 
     def __post_init__(self) -> None:
-        if self.mode not in _COMPLETION_MODES:
-            raise ValueError("unsupported solver-region completion mode")
-        if self.mode == "scalar":
-            if self.active_mask is not None:
-                raise ValueError("scalar completion cannot bind an active mask")
-        else:
-            _text(self.active_mask, "active mask")
+        if self.mode != "scalar":
+            raise ValueError(
+                "unsupported solver-region completion mode: only scalar is supported"
+            )
+        if self.active_mask is not None:
+            raise ValueError("scalar completion cannot bind an active mask")
 
 
 @dataclass(frozen=True)
@@ -213,8 +215,6 @@ class SolverRegion:
         required_outputs = set(following) | set(self.results) | {self.converged.buffer}
         if self.failed is not None:
             required_outputs.add(self.failed.buffer)
-        if self.completion.active_mask is not None:
-            required_outputs.add(self.completion.active_mask)
         if not required_outputs <= body_outputs:
             raise ValueError("region semantics reference a non-output body buffer")
         if body_outputs != required_outputs:
