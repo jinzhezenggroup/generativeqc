@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass, replace
 from fractions import Fraction
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
@@ -79,6 +80,7 @@ class StationaryMeanField:
         if self.point_model not in (
             "interior-v1",
             SCF_POINT_MODEL,
+            LIBXC_WORK_DOMAIN,
             "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
         ):
             raise UnsupportedMethod("unsupported XC point-model contract")
