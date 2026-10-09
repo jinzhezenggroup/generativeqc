@@ -464,15 +464,15 @@ def test_eager_exact_scalar_composes_with_array_functions(dtype: object) -> None
         lambda x, y: xp.einsum("ij,jk->ik", x, y),
     ),
 )
-def test_eager_namespace_rejects_implicit_array_dtype_promotion(
+def test_eager_namespace_promotes_generic_real_array_dtypes(
     operation: object,
 ) -> None:
     left = np.ones((2, 2), dtype=np.float32)
     right = np.ones((2, 2), dtype=np.float64)
-    with pytest.raises(ValueError, match="dtype"):
-        operation(left, right)
-    with pytest.raises(ValueError, match="dtype"):
-        xp.compile(lambda x, y: operation(x, y))(left, right)
+    eager = operation(left, right)
+    captured = xp.compile(lambda x, y: operation(x, y))(left, right)
+    assert eager.dtype == captured.dtype == np.dtype("float64")
+    np.testing.assert_array_equal(captured, eager)
 
 
 @pytest.mark.parametrize("scalar", (float("nan"), float("inf"), -float("inf"), -0.0))

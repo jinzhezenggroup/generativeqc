@@ -1,4 +1,3 @@
-#include <cublas_v2.h>
 #include <cuda_runtime.h>
 
 #include <algorithm>
@@ -26,6 +25,7 @@
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/df_source_capacity.hpp"
+#include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::cc {
 namespace {
@@ -215,14 +215,15 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   runtime::OwnedCudaBuffer<double> bmo(device, layout.source_values, stream);
   auto gemm = [&](char ta, char tb, std::size_t m, std::size_t columns, std::size_t k,
                   const double* a, const double* b, double* output) {
-    const double one = 1, zero = 0;
-    const auto status = cublasDgemm(
-        plan.blas, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-        static_cast<int>(m), static_cast<int>(columns), static_cast<int>(k), &one, a,
-        static_cast<int>(ta == 'N' ? m : k), b, static_cast<int>(tb == 'N' ? k : columns), &zero,
-        output, static_cast<int>(m));
-    if (status != CUBLAS_STATUS_SUCCESS)
+    // The compiler callback uses column-major operands. View the same bytes as
+    // row-major and reverse the operands; the shared Tensor provider submits
+    // the identical FP64 GEMM on the already-owned DF stream/BLAS handle.
+    try {
+      generativeqc_tensor::gemm(plan.blas, tb, ta, static_cast<int>(columns), static_cast<int>(m),
+                                static_cast<int>(k), b, a, output, 0, 0, 0, 1, 1.0, 0.0);
+    } catch (const std::exception&) {
       throw std::runtime_error("native CUDA DF-CC source GEMM failed");
+    }
   };
   stage = Clock::now();
   {

@@ -1,5 +1,6 @@
 """Real native LDA/PBE RKS nuclear response for the DFT Hessian path."""
 
+import inspect
 import typing
 from dataclasses import replace
 from types import SimpleNamespace
@@ -246,10 +247,32 @@ def test_rks_nuclear_response_matches_reconverged_density_and_weighted_density(
 
 
 def test_native_rks_xc_hvp_matches_reconverged_xc_gradient(
-    case: typing.Any,
+    case: typing.Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     method, operator, direction, directional = case
-    actual = native_rks_xc_hvp_components(operator, directional)
+    original_zeros = np.zeros
+    impulse_allocations = 0
+
+    def audited_zeros(*args: typing.Any, **kwargs: typing.Any) -> np.ndarray:
+        nonlocal impulse_allocations
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        if (
+            caller is not None
+            and caller.f_code.co_name == "native_rks_xc_hvp_components"
+            and args
+            and args[0] == (operator.xc_kernel.basis.natom, 3)
+        ):
+            impulse_allocations += 1
+        del frame, caller
+        return original_zeros(*args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(np, "zeros", audited_zeros)
+        actual = native_rks_xc_hvp_components(operator, directional)
+    # Fixed zero-center and three output accumulators + one reusable impulse.
+    # The old implementation constructed 3*natom separate impulse arrays.
+    assert impulse_allocations == 5
     assert actual.diagnostics["additional_response_solves"] == 0
     assert actual.diagnostics["source_names"] == ("xc_ao", "xc_grid", "xc_weight")
     np.testing.assert_allclose(

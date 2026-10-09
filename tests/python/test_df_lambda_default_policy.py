@@ -39,7 +39,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
-        "descriptor.density_tolerance,fused_triples_scalar_response}; }\n"
+        "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
+        "lambda_true_residual_interval}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -74,6 +75,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
 #include <string>
 #include "cc/lambda_response.hpp"
 #include "hf/rhf_frame_response.hpp"
+#include "runtime/execution_precision.hpp"
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace hf { struct RHFFrameResponseOptions; }
@@ -87,6 +89,8 @@ struct DFCCSDTResult {
   bool derived_denominators, packed_diis, parallel_gap, request_gap;
   double reference_energy_tolerance{}, reference_density_tolerance{};
   bool fused_scalar{};
+  runtime::PrecisionDirective triples_w;
+  std::size_t lambda_interval;
 };
 """
         + declaration
@@ -111,7 +115,8 @@ bool default_frame(const generativeqc::hf::RHFFrameResponseOptions& frame) {
 }
 int main() {
   generativeqc::cc::LambdaOptions options;
-  if(!options.df_matrix_gemm || !options.df_auxiliary_reduction) return 1;
+  if(!options.df_matrix_gemm || !options.df_auxiliary_reduction ||
+     options.gmres.true_residual_every != 1) return 1;
   options.df_matrix_gemm=false;
   if(options.df_matrix_gemm) return 2;
   generativeqc::runtime::ExecutionContext context;
@@ -125,7 +130,8 @@ int main() {
      !ordinary.derived_denominators || !explicit_matrix.derived_denominators ||
      ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
      !explicit_matrix.parallel_gap || ordinary.request_gap || explicit_matrix.request_gap) return 3;
-  if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame)) return 7;
+  if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame) ||
+     ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
   explicit_frame.profile_jk = true;
@@ -136,7 +142,12 @@ int main() {
   if(explicit_scalar.primal || explicit_scalar.lambda ||
      explicit_scalar.frame.orbital_screening_tolerance != 1e-7 ||
      !explicit_scalar.frame.profile_jk || !explicit_scalar.frame.bilinear_derivative ||
-     explicit_scalar.frame.symmetric_polarization || explicit_scalar.ccsd_batch_limit != 3) return 8;
+     explicit_scalar.frame.symmetric_polarization || explicit_scalar.ccsd_batch_limit != 3 ||
+     explicit_scalar.lambda_interval != 30) return 8;
+  const auto strict_lambda=run_df_ccsdt_native(
+      context,system,system,descriptor,true,true,true,true,true,8,8,{},
+      true,false,true,false,false,{},1);
+  if(strict_lambda.lambda_interval != 1) return 44;
   const char* missing[]{"endpoint","input","output","1"};
   const char* matrix[]{"endpoint","input","output","1","1","1","1"};
   const char* scalar[]{"endpoint","input","output","1","1","1","0"};
@@ -146,7 +157,8 @@ int main() {
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
      defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
-     !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap) return 9;
+     !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap ||
+     defaults.lambda_interval != 30) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
@@ -341,7 +353,22 @@ int main() {
                       "1","0","auto",token};
     try { (void)select(23,bad);return 41; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,24}) {
+  for(const char* precision : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0",precision};
+    const auto result = select(24,selected);
+    if(result.triples_w.is_strict_fp64() != (precision[0]=='0') ||
+       !select(23,selected).triples_w.is_strict_fp64()) return 42;
+  }
+  for(const char* interval : {"1", "7", "30"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","1",interval};
+    if(select(25,selected).lambda_interval != std::stoull(interval) ||
+       select(24,selected).lambda_interval != 30) return 43;
+  }
+  for(int argc : {0,1,2,3,26}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

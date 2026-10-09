@@ -326,6 +326,7 @@ void restarted_and_exhausted_paths() {
   GmresOptions restarted;
   restarted.relative_tolerance = 1e-11;
   restarted.restart = 1;
+  restarted.true_residual_every = 30;
   restarted.max_iterations = 80;
   const auto converged = generativeqc::response::solve_gmres(
       generativeqc::response::prepare_gmres(3, restarted),

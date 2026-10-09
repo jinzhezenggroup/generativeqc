@@ -346,7 +346,8 @@ def test_capability_report_does_not_claim_full_conformance() -> None:
     assert report["array_api_version"] is None
     assert report["array_namespace_protocol"] is False
     assert report["implicit_broadcast"] == "generic-arrays"
-    assert report["dtype_promotion"] is False
+    assert report["dtype_promotion"] == "generic-float32-float64-explicit-cast"
+    assert report["scientific_dtype_promotion"] is False
     assert report["reshape_requires_explicit_indices"] == "scientific-arrays-only"
     assert (
         report["broadcast_requires_explicit_indices_and_axes"]

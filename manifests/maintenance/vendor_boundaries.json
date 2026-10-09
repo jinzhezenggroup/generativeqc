@@ -48,30 +48,12 @@
         "cublasSetStream": 2
       }
     },
-    "src/cc/df_source_cuda.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
-      "references": {
-        "cublasDgemm": 1
-      }
-    },
     "src/cc/df_triples_cuda.cu": {
       "classification": "migration",
       "contract": "#1890",
       "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
       "references": {
         "cublasDgemm": 1
-      }
-    },
-    "src/posthf/cuda_low_rank.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Post-HF contraction/transform owners still couple equations to direct vendor matrix/vector calls; preserve source residency and numerical gates during migration.",
-      "references": {
-        "cublasDdot": 1,
-        "cublasDgemm": 2,
-        "cublasSetPointerMode": 2
       }
     },
     "src/runtime/nvidia_host_api/generativeqc_nvidia_host_api.h": {
@@ -459,12 +441,13 @@
       "references": {
         "cublasCreate": 1,
         "cublasDaxpy": 1,
+        "cublasDdot": 1,
         "cublasDestroy": 1,
         "cublasDgemm": 1,
         "cublasDgemmStridedBatched": 1,
         "cublasGetVersion": 1,
         "cublasSetMathMode": 1,
-        "cublasSetPointerMode": 1,
+        "cublasSetPointerMode": 3,
         "cublasSetStream": 1,
         "cublasSetWorkspace": 1,
         "cublasSgemm": 1,

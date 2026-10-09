@@ -70,9 +70,53 @@ def test_reference_tolerance_rejects_invalid_or_looser_values(
 
 
 def test_reference_tolerance_rejects_extra_arguments(endpoint_binary: str) -> None:
-    completed = invoke(endpoint_binary, "auto", "1", "extra")
+    completed = invoke(endpoint_binary, "auto", "1", "0", "1", "extra")
     assert completed.returncode != 0
     assert "usage: df-force-endpoint" in completed.stderr
+
+
+@pytest.mark.parametrize("interval", ["1", "7", "30"])
+def test_lambda_replay_interval_accepts_explicit_unsigned_values(
+    endpoint_binary: str, interval: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", "0", "1", interval)
+    assert completed.returncode != 0
+    assert "invalid molecular probe dimensions" in completed.stderr
+
+
+@pytest.mark.parametrize("interval", ["", "-1", "+1", "1x", "1.5", "2e1"])
+def test_lambda_replay_interval_rejects_invalid_values(
+    endpoint_binary: str, interval: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", "0", "1", interval)
+    assert completed.returncode != 0
+    assert "invalid unsigned endpoint argument" in completed.stderr
+
+
+def test_lambda_replay_interval_rejects_zero_before_molecular_work(
+    endpoint_binary: str,
+) -> None:
+    completed = invoke(endpoint_binary, "auto", "0", "1", "0")
+    assert completed.returncode != 0
+    assert "Lambda true residual interval must be positive" in completed.stderr
+
+
+@pytest.mark.parametrize("selector", ["0", "1"])
+def test_triples_precision_selector_is_explicit(
+    endpoint_binary: str, selector: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", "0", selector)
+    assert completed.returncode != 0
+    assert "invalid molecular probe dimensions" in completed.stderr
+
+
+@pytest.mark.parametrize("selector", ["", "2", "true", "1x"])
+def test_triples_precision_selector_rejects_invalid_values(
+    endpoint_binary: str, selector: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", "0", selector)
+    assert completed.returncode != 0
+    assert "invalid endpoint selector" in completed.stderr
 
 
 @pytest.mark.parametrize("selector", ["0", "1"])
