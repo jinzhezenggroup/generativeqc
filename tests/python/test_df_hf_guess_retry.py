@@ -16,6 +16,7 @@ _SHIM = r"""
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include "methods/df_hf_guess.hpp"
@@ -26,7 +27,7 @@ using scf::ScfOptions;
 using scf::ScfResult;
 using Matrix=std::vector<double>;
 struct EigenResult { Matrix vectors; };
-unsigned device_cycles{}, host_cycles{};
+unsigned device_cycles{}, host_cycles{}, preparations{};
 int device_behavior{};
 namespace host_trace {
 struct Region { Region(const char*) {} void finish(){} };
@@ -46,7 +47,7 @@ struct DensityFittingScfData {
  struct {std::size_t nbf=1; Matrix hcore{1}, overlap{1}; double nuclear_repulsion{};} one_electron;
  struct {std::size_t value_bytes{};} resolved_budget;
 };
-DensityFittingScfData prepare_density_fitting_data(const core::System&,const core::System&,double,int,std::size_t,bool,unsigned){return {};}
+DensityFittingScfData prepare_density_fitting_data(const core::System&,const core::System&,double,int,std::size_t,bool,unsigned){++preparations;return {};}
 using CudaDensityFittingPlanPtr=std::shared_ptr<int>;
 CudaDensityFittingPlanPtr make_cuda_density_fitting_plan(const DensityFittingScfData&,const ScfOptions&,int,std::size_t,bool,void*,const core::System*,const core::System*){return std::make_shared<int>(0);}
 int df_setup_eigen(int*){return 0;}
@@ -128,6 +129,15 @@ int main() {
       system, auxiliary, options, 0, nullptr, nullptr);
   assert(device_cycles == 32 && host_cycles == 32);
   assert(!ordinary.converged && ordinary.iterations == 32);
+
+  // The real admission helper must run before any DF preparation or SCF work.
+  device_cycles = host_cycles = preparations = 0;
+  options.preliminary_guess.emplace();
+  try {
+    run_rhf_density_fitting_cuda_impl(system, auxiliary, options, 0, nullptr, nullptr);
+    assert(false);
+  } catch (const std::invalid_argument&) {}
+  assert(preparations == 0 && device_cycles == 0 && host_cycles == 0);
 }
 """
 
@@ -139,8 +149,16 @@ def test_guess_has_one_scf_attempt_and_ordinary_df_keeps_retry(tmp_path: Path) -
     source = (ROOT / "src/scf/rhf.cpp").read_text()
     start = source.index("ScfResult run_rhf_density_fitting_cuda_impl(")
     stop = source.index("\nScfResult run_uhf_density_fitting_cuda_impl(", start)
+    execution = (ROOT / "src/scf/fock_execution.cpp").read_text()
+    guard_start = execution.index("void reject_cuda_df_preliminary_guess(")
+    guard_stop = execution.index(
+        "\nResolvedFockBuild fock_strategy_for_execution(", guard_start
+    )
+    admission = (
+        "namespace generativeqc::scf {\n" + execution[guard_start:guard_stop] + "}\n"
+    )
     probe = tmp_path / "df_guess_retry.cpp"
-    probe.write_text(_SHIM + source[start:stop] + _TAIL)
+    probe.write_text(_SHIM + admission + source[start:stop] + _TAIL)
     binary = tmp_path / "df_guess_retry"
     compile_owner(
         compiler, tmp_path, [probe, ROOT / "src/methods/df_hf_guess.cpp"], binary
