@@ -92,7 +92,9 @@ class NativeDftDfCliTests(unittest.TestCase):
         b3lyp_data = json.loads(b3lyp.stdout)
         self.assertEqual(b3lyp_data["method"], "b3lyp-rks")
         self.assertTrue(math.isfinite(b3lyp_data["energy_hartree"]))
-        self.assertNotEqual(b3lyp_data["method_ir_identity"], data["method_ir_identity"])
+        self.assertNotEqual(
+            b3lyp_data["method_ir_identity"], data["method_ir_identity"]
+        )
 
     def test_generated_methods_reject_unsupported_graphs_and_forces(self) -> None:
         for method, flags, reason in (

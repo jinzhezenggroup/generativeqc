@@ -294,8 +294,10 @@ void print_methods(bool json) {
 
 void print_compositions(bool json) {
   using generativeqc::cli::method_generated::kMethods;
-  if (json) std::cout << "[\n";
-  else std::cout << "METHOD\tSOURCE\tCPU\tCUDA\tSTATUS\n";
+  if (json)
+    std::cout << "[\n";
+  else
+    std::cout << "METHOD\tSOURCE\tCPU\tCUDA\tSTATUS\n";
   for (std::size_t i = 0; i < kMethods.size(); ++i) {
     const auto& entry = kMethods[i];
     if (json) {
@@ -306,10 +308,10 @@ void print_compositions(bool json) {
                 << "\"cuda\":" << (entry.cuda ? "true" : "false") << ","
                 << "\"reason\":\"" << json_escape(entry.reason) << "\"}";
     } else {
-      std::cout << entry.name << '\t' << entry.source << '\t'
-                << (entry.cpu ? "yes" : "no") << '\t'
+      std::cout << entry.name << '\t' << entry.source << '\t' << (entry.cpu ? "yes" : "no") << '\t'
                 << (entry.cuda ? "yes" : "no") << '\t'
-                << (entry.reason.empty() ? "qualified by native preparation" : entry.reason) << '\n';
+                << (entry.reason.empty() ? "qualified by native preparation" : entry.reason)
+                << '\n';
     }
   }
   if (json) std::cout << "\n]\n";
@@ -484,15 +486,13 @@ RunOptions parse_run(int argc, char** argv) {
   if (options.grid_explicit && !options.composition)
     throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
   if (options.composition) {
-    const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA
-                              ? options.composition->cuda
-                              : options.composition->cpu;
+    const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA ? options.composition->cuda
+                                                                       : options.composition->cpu;
     if (!admitted) {
       const std::string why = options.composition->reason.empty()
                                   ? "no qualified native lowerer on the selected backend"
                                   : std::string(options.composition->reason);
-      throw UsageError("MethodIR composition " + options.method_name + " is unavailable: " +
-                       why);
+      throw UsageError("MethodIR composition " + options.method_name + " is unavailable: " + why);
     }
   }
   if (is_dft(options) && options.forces)
@@ -577,8 +577,8 @@ int run(const RunOptions& options) {
     }
     for (std::uint32_t i = 0; i < row->exchange_count; ++i) {
       const auto& term = kExchanges[row->exchange_offset + i];
-      composed.add_exact_exchange(
-          static_cast<generativeqc_ks_exchange_operator>(term.kind), term.coefficient, term.omega);
+      composed.add_exact_exchange(static_cast<generativeqc_ks_exchange_operator>(term.kind),
+                                  term.coefficient, term.omega);
     }
     return composed.prepare(context, system, method);
   }();
