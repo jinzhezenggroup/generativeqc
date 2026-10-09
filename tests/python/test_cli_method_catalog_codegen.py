@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from generate_cli_method_catalog import render, rows  # noqa: E402
+from generate_cli_method_catalog import render, rows
 
 
 class NativeMethodirProjectionTests(unittest.TestCase):
@@ -47,8 +47,10 @@ class NativeMethodirProjectionTests(unittest.TestCase):
 
     def test_render_is_deterministic_and_complete(self) -> None:
         catalog = rows()
-        self.assertEqual(tuple(sorted(item.name for item in catalog)),
-                         tuple(item.name for item in catalog))
+        self.assertEqual(
+            tuple(sorted(item.name for item in catalog)),
+            tuple(item.name for item in catalog),
+        )
         generated = render(catalog)
         self.assertEqual(generated, render(catalog))
         self.assertIn('{"pbe0-rks", "PBE0"', generated)
