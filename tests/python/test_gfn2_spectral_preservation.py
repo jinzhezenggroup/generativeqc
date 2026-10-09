@@ -124,12 +124,16 @@ def spectral_probes(
             objects.append(output)
         binary = folder / mode
         compiler.link(objects, binary, args=["-ldl", "-pthread"])
+        # Only defined code addresses are consumed below; debug/undefined
+        # symbols and address sorting are unnecessary. Symbol inspection is
+        # setup, not a performance gate: allow the same bounded budget as linking
+        # under parallel CI, while retaining all exact body-count assertions.
         symbols = subprocess.run(
-            [nm, "-anC", str(binary)],
+            [nm, "--defined-only", "--demangle", "--no-sort", str(binary)],
             check=True,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=60,
         ).stdout
         addresses = re.findall(
             r"^([0-9a-f]+) [tT] generativeqc::xtb::detail::gfn2::"
