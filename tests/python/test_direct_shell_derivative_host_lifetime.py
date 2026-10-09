@@ -328,12 +328,13 @@ void range_source(double* force,const double* density,double ck,bool accumulate=
       2,0,0,density,1,1,0,0,0.0,ck) : ck;
   for(unsigned i=0;i<3;++i) force[i]=(accumulate ? force[i] : 0.0)-k*(20+i);
 }
-template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
+template<class... Args> cudaError_t launch_bounded_shell_energy_derivative(Args&&... args) {
   ++full_calls;
   const auto values=std::make_tuple(args...);
   if(std::get<18>(values)!=37) throw std::runtime_error("full range lost borrowed domain");
   full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),
                std::get<17>(values),std::get<19>(values));
+  return cudaGetLastError();
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
   ++range_calls;

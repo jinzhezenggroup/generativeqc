@@ -306,6 +306,66 @@ TensorIR symbolic complexity remains the proof-carrying path for legal contracti
 reassociation; native findings are review prompts for code that still sits outside
 that IR.
 
+### Review high-rank materialization candidates
+
+The `Source work inventory (advisory)` job also enforces a bounded candidate-review
+gate. Its name retains the wider advisory audit scope; the materialization review
+step fails if a finding lacks a current source-bound disposition. Run:
+
+```bash
+python3 tools/ratchet_native_materialization.py --base-sha "$BASE_SHA" \
+  --output .artifacts/native-materialization-review.json --fail-on-unreviewed
+```
+
+`BASE_SHA` must be the full immutable PR base commit, available in the local Git
+object database. The tool extracts its `src/` and `include/` bytes without
+executing baseline code, then scans both trees with the same current analyzers.
+Missing source, baseline, malformed evidence or changed imported analyzer code
+produces `INCOMPLETE`, which fails the enforcing command. It never silently
+substitutes an empty baseline. The first adoption needs no older disposition
+manifest; the actual baseline source census remains mandatory.
+
+The receipt retains full baseline/candidate inventories, raw source and analyzer
+hashes, counts, and separate added, removed, changed and unchanged identities.
+Equal totals cannot hide replacements. A removed lexical finding is evidence of a
+scanner delta, not proof of end-to-end retirement or numerical parity. CI uploads
+the receipt with the existing `source-work-audit` artifact even on failure.
+
+Review entries live in `manifests/native_materialization_dispositions.json`.
+Each current site needs an owner, disposition, reason, producer, consumers,
+residency, lifetime, resource owner, open evidence gaps and matching source
+bindings. Produce the current anchors and source identities with:
+
+```bash
+python3 tools/ratchet_native_materialization.py --inventory-only \
+  --output .artifacts/materialization-candidates.json
+```
+
+Inspect the changed producer/consumer code before updating a record. The site
+identity uses path, function signature, target, loop variables and occurrence;
+line numbers are display anchors. Context bindings cover entire declared source
+files. For ordinary non-preprocessed source, comments and line shifts preserve
+identity while code/literal changes require renewed bindings. Files containing
+preprocessing spellings (including `#`, `%:` or `??=`), raw/line-spliced literals,
+or line-sensitive builtins such as `__LINE__` conservatively bind exact source
+bytes. Textual edits to those files, including comments and line shifts, require
+renewed bindings. This avoids claiming preprocessing equivalence from a bounded
+lexer. Remove records for removed sites: stale or unmatched
+identities, duplicated records, and stale producer/consumer bindings fail review.
+A scanner false positive must be fixed in the classifier, not exempted here.
+
+Producer/consumer symbols are reviewer-declared links, not verified call edges or
+ABI certificates. Source bindings do not claim transitive or whole-program
+coverage. Whole-file changes can conservatively require review of unaffected
+sites. All six current MP2 entries remain `retained-pending-evidence`: bounded
+storage, a dense callback span, or a factorized alternative does not prove that
+fusion is unsafe or slower. The dense first stage has a source-known production
+RCCSD(T) caller in `src/cc/rccsdt_force.cpp`; its retention gap concerns safe and
+profitable replacement, not whether that call exists. The gate enforces review bookkeeping only; issue
+#1626 remains open for independent numerical, work/resource and complete-endpoint
+performance evidence. Historical RCCSD(T) retirements are discussed in the
+[decision note](../../.agents/notes/implemented/performance/2026-10-09-materialization-candidate-review.md).
+
 ## Prefer source-driven reuse
 
 Expensive source work should normally be produced once and consumed by multiple
@@ -399,6 +459,39 @@ profile in `native_build`. Acceptance-matrix runs also write a per-point
 retain this identity. A source hash alone cannot distinguish builds with different
 compiled kernel coverage; see the
 [binary provenance decision](../../.agents/notes/implemented/compatibility/2026-09-17-benchmark-binary-provenance.md).
+
+### SCF residual and stopping-rule interpretation
+
+The batch comparator's schema v3 records `convergence_policy` explicitly.
+Equal numeric tolerances or reported SCF iteration counts do not establish
+equivalent stopping rules or equal Fock work. GPU4PySCF also evaluates an
+initial potential before its counted cycles. Compare complete endpoints and
+independently gated energies/forces; retain stock reference DIIS unchanged.
+An explicitly requested `--reference-full-fock` suppresses both incremental
+potential inputs, including on RKS backends that still reuse `vhf_last` when
+`direct_scf=False`. Density fitting's own `direct_scf=False` policy alone does
+not assert that an explicit full-Fock override was requested.
+
+Convergence payloads with `residual_schema_version=2` distinguish GPU4PySCF's
+`density_frobenius` from `density_rms`. RMS divides the backend norm by the
+square root of all density-matrix entries, including spin blocks, using shape
+metadata only. An unavailable shape yields null RMS, never an assumed size.
+`orbital_gradient_norm` remains the backend's unnormalized global norm and is
+not the native AO commutator RMS. Callback values describe the last reported
+cycle, not an additional final physical audit. First-cycle energy change uses
+the backend's preceding energy when available; a cold default guess is not
+labeled as a warm density seed.
+
+Historical payloads lacking the residual version marker retain their original
+meaning: GPU4PySCF `density_rms` stored an unnormalized Frobenius norm. Do not
+silently rewrite archived measurements. Summary readers accept v2 and v3
+artifacts, preserve their residual fields and retain the new policy metadata.
+
+Both cold and warm reference energy-plus-force timers include returning the
+forces from device to host, matching native `execute()`'s public-output
+boundary. JSON/list serialization remains outside timing on both engines.
+
+### General acceptance gates
 
 Numerical acceptance uses the maximum error across every measured repeat pair.
 Matching iteration counts only classifies timing; it cannot exclude inaccurate

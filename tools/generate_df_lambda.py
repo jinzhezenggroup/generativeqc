@@ -19,6 +19,10 @@ from generativeqc_compiler.cc.df_lambda_matrix import matrix_program
 from generativeqc_compiler.cc.df_lambda_reduction import (
     build_df_lambda_reduction_programs,
 )
+from generativeqc_compiler.tensor.iteration_reuse import (
+    IterationReusePlan,
+    analyze_iteration_reuse,
+)
 
 from tools.generate_df_ccsd_core import programs as core_programs
 from tools.generate_df_ccsd_hoisted import contraction_query
@@ -52,14 +56,30 @@ def staged_programs() -> dict[str, Program]:
     }
 
 
+@cache
+def audit_programs() -> dict[str, Program]:
+    """Lower the original expanded audit, never the solver's staged cut graph."""
+    return {
+        "audit_core": retained_response_programs(*REPRESENTATIVE)[
+            "independent_transpose"
+        ],
+        "audit_auxiliary": virtual_programs("cuda")["amplitude_vjp"],
+    }
+
+
 def staged_type(name: str) -> str:
     return "DeviceParameterOutput" if "parameter_" in name else name + "_outputs"
 
 
 BATCHED_STAGES = frozenset(
-    ("staged_primal_auxiliary", "staged_auxiliary", "staged_factors")
+    ("staged_primal_auxiliary", "staged_auxiliary", "staged_factors", "audit_auxiliary")
 )
-ACCUMULATED_STAGES = ("staged_primal_auxiliary", "staged_auxiliary", "staged_prepare")
+ACCUMULATED_STAGES = (
+    "staged_primal_auxiliary",
+    "staged_auxiliary",
+    "staged_prepare",
+    "audit_auxiliary",
+)
 
 
 @cache
@@ -67,8 +87,28 @@ def matrix_programs() -> dict[str, Program]:
     """Q is a runtime batch extent; the symbolic representative is nonunit."""
     return {
         name: matrix_program(p, batch_size=3 if name in BATCHED_STAGES else None)
-        for name, p in staged_programs().items()
+        for name, p in {**staged_programs(), **audit_programs()}.items()
     }
+
+
+@cache
+def core_reuse_plan() -> IterationReusePlan:
+    """Reuse only primal dependencies within one immutable native Lambda owner.
+
+    All cotangent inputs remain dynamic, including energy and reduced-cut seeds.
+    The generic purity/dependency proof and native retained-slot planner are the
+    same ones used by the conventional CCSD iteration owner; no Lambda algebra
+    or shape-based cache identity is introduced here.
+    """
+    program = matrix_programs()["staged_core"]
+    return analyze_iteration_reuse(
+        program,
+        invariant_inputs=tuple(
+            node.attrs["name"]
+            for node in program.live_nodes
+            if node.op == "input" and not node.attrs["name"].startswith("bar_")
+        ),
+    )
 
 
 def accumulation_declaration(name: str) -> str:
@@ -145,7 +185,7 @@ def header() -> str:
         ).encode()
     ).hexdigest()
     lines.append(f'inline constexpr const char* staged_operator_hash="{identity}";')
-    for name, program in staged.items():
+    for name, program in {**staged, **audit_programs()}.items():
         if "parameter_" not in name:
             fields = ",".join("*" + field for field in program.outputs)
             lines.append(f"struct {staged_type(name)} {{ const double {fields}; }};")
@@ -181,13 +221,48 @@ def header() -> str:
         ]
     matrix_identity = hashlib.sha256(
         json.dumps(
-            {name: p.logical_hash for name, p in matrix_programs().items()},
+            {name: matrix_programs()[name].logical_hash for name in staged_programs()},
             sort_keys=True,
         ).encode()
     ).hexdigest()
     lines.append(
         f'inline constexpr const char* staged_matrix_operator_hash="{matrix_identity}";'
     )
+    audit_identity = hashlib.sha256(
+        json.dumps(
+            {name: matrix_programs()[name].logical_hash for name in audit_programs()},
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+    lines.append(
+        f'inline constexpr const char* audit_matrix_operator_hash="{audit_identity}";'
+    )
+    program = matrix_programs()["staged_core"]
+    reuse = core_reuse_plan()
+    lines += [
+        f'inline constexpr const char* staged_core_reuse_hash="{reuse.identity}";',
+        _required_function(
+            program,
+            "staged_core_reuse_arena_elements",
+            retained_nodes=reuse.invariant_nodes,
+        ),
+    ]
+    for phase, nodes in (
+        ("prepare", reuse.invariant_nodes),
+        ("dynamic", reuse.dynamic_nodes),
+    ):
+        prefix = "staged_core_reuse_" + phase
+        lines += [
+            f"inline constexpr std::size_t {prefix}_operations={len(nodes)};",
+            contraction_query(program, prefix + "_contraction_terms", nodes=nodes),
+            f"inline std::size_t {prefix}_packing_elements(std::size_t o,std::size_t v) {{ std::size_t total=0;",
+            *(
+                f"total=checked_add(total,{_size(node.spec)});"
+                for node in nodes
+                if node.op in ("transpose", "broadcast")
+            ),
+            "return total; }",
+        ]
     return "\n".join([*lines, "}", ""])
 
 
@@ -202,9 +277,12 @@ def cuda_header() -> str:
             "namespace generativeqc::cc::generated::dflambda {",
             "using CudaState = dfcore::CudaState;",
             "struct StagedCudaState : dfhoist::CudaState {",
+            "  double* core_reuse_arena{};",
+            "  double* audit_arena{};",
+            "  generativeqc::tensor::PreparedContractions core_reuse_prepare_contractions, core_reuse_dynamic_contractions;",
             *(
                 f"  generativeqc::tensor::PreparedContractions {name}_contractions;"
-                for name in staged_programs()
+                for name in {**staged_programs(), **audit_programs()}
             ),
             "  const double *bar_df_tau{}, *bar_df_Lvv{}, *bar_df_Wvoov{},",
             "      *bar_df_Wvovo{}, *bar_df_Xv{}, *bar_df_D05_vv_ladder{}, *bar_df_singles_residual{};",
@@ -220,9 +298,31 @@ def cuda_header() -> str:
                 + f"bytes+=generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(n) is not None or _packed_batched_matrix_gemm(n) is not None for n in p.live_nodes)},"
                 + ("variants" if name in BATCHED_STAGES else "1")
                 + ");"
-                for name, p in matrix_programs().items()
+                for name in staged_programs()
+                for p in (matrix_programs()[name],)
             ),
             "  return bytes; }",
+            "inline std::size_t audit_contraction_host_bytes(std::size_t variants){ return "
+            + "+".join(
+                f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(node) is not None or _packed_batched_matrix_gemm(node) is not None for node in matrix_programs()[name].live_nodes)},"
+                + ("variants" if name in BATCHED_STAGES else "1")
+                + ")"
+                for name in audit_programs()
+            )
+            + "; }",
+            "void prepare_audit_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands);",
+            "inline std::size_t core_reuse_contraction_host_bytes(){ return "
+            + "+".join(
+                f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(node) is not None for node in nodes)})"
+                for nodes in (
+                    core_reuse_plan().invariant_nodes,
+                    core_reuse_plan().dynamic_nodes,
+                )
+            )
+            + "; }",
+            "void prepare_core_reuse_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t& calls,std::size_t& summands);",
+            "void run_staged_core_reuse_prepare_cuda(StagedCudaState&);",
+            "staged_core_outputs run_staged_core_reuse_dynamic_cuda(StagedCudaState&);",
             "void prepare_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,bool parameters,std::size_t& calls,std::size_t& summands);",
             "// Caller clears the sticky flag at each complete core-plus-Q action boundary.",
             *(
@@ -231,7 +331,7 @@ def cuda_header() -> str:
             ),
             *(
                 f"{staged_type(name)} run_{name}_cuda(StagedCudaState& state);"
-                for name in staged_programs()
+                for name in {**staged_programs(), **audit_programs()}
             ),
             *(accumulation_declaration(name) + ";" for name in ACCUMULATED_STAGES),
             "}",
@@ -262,23 +362,30 @@ def cuda_source() -> str:
             ),
             f"{output_type(name)} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
         ]
-    for name, program in staged_programs().items():
+    for name, program in {**staged_programs(), **audit_programs()}.items():
         inputs = {
-            n.attrs["name"]: "s." + n.attrs["name"]
+            n.attrs["name"]: "s."
+            + {
+                "bar_df_virtual_singles": "bar_singles_residual",
+                "bar_df_virtual_doubles": "bar_doubles_residual",
+            }.get(n.attrs["name"], n.attrs["name"])
             for n in program.live_nodes
             if n.op == "input"
         }
         kind = staged_type(name)
+        if name not in audit_programs():
+            lines.append(
+                _cuda_program(
+                    program,
+                    name + "_scalar",
+                    kind,
+                    input_overrides=inputs,
+                    state_type="StagedCudaState",
+                    output_fields=tuple(program.outputs),
+                    reset_error=False,
+                )
+            )
         lines += [
-            _cuda_program(
-                program,
-                name + "_scalar",
-                kind,
-                input_overrides=inputs,
-                state_type="StagedCudaState",
-                output_fields=tuple(program.outputs),
-                reset_error=False,
-            ),
             _cuda_program(
                 matrix_programs()[name],
                 name + "_matrix",
@@ -289,9 +396,51 @@ def cuda_source() -> str:
                 reset_error=False,
                 prepared_contractions=f"s.{name}_contractions",
                 batch_dim=True,
+                arena_field="audit_arena" if name in audit_programs() else None,
             ),
-            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return state.{name}_contractions ? run_{name}_matrix(state) : run_{name}_scalar(state); }}",
+            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return "
+            + (
+                f"run_{name}_matrix(state)"
+                if name in audit_programs()
+                else f"state.{name}_contractions ? run_{name}_matrix(state) : run_{name}_scalar(state)"
+            )
+            + "; }",
         ]
+    program = matrix_programs()["staged_core"]
+    for phase in ("prepare", "dynamic"):
+        kind = "void" if phase == "prepare" else staged_type("staged_core")
+        prefix = "staged_core_reuse_" + phase
+        lines += [
+            _cuda_program(
+                program,
+                prefix,
+                kind,
+                input_overrides={
+                    node.attrs["name"]: "s." + node.attrs["name"]
+                    for node in program.live_nodes
+                    if node.op == "input"
+                },
+                state_type="StagedCudaState",
+                output_fields=tuple(program.outputs),
+                reset_error=False,
+                prepared_contractions=f"s.core_reuse_{phase}_contractions",
+                arena_field="core_reuse_arena",
+                batch_dim=True,
+                kernel_prefix="staged_core_matrix",
+                emit_kernels=False,
+                reuse_plan=core_reuse_plan(),
+                reuse_phase=phase,
+            ),
+            f"{kind} run_{prefix}_cuda(StagedCudaState& state) {{ "
+            + ("" if phase == "prepare" else "return ")
+            + f"run_{prefix}(state); }}",
+        ]
+    lines += [
+        "void prepare_core_reuse_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){",
+        "  bind_staged_core_reuse_prepare(s,context,1,calls,summands);",
+        "  bind_staged_core_reuse_dynamic(s,context,1,calls,summands);",
+        "}",
+    ]
     lines.append(
         "void prepare_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,bool parameters,std::size_t& calls,std::size_t& summands){"
     )
@@ -308,6 +457,13 @@ def cuda_source() -> str:
         if optional:
             lines.append("  }")
     lines.append("}")
+    lines += [
+        "void prepare_audit_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",
+        "  bind_audit_core_matrix(s,context,1,calls,summands);",
+        "  bind_audit_auxiliary_matrix(s,context,batch,calls,summands);",
+        "  if(tail && tail!=batch) bind_audit_auxiliary_matrix(s,context,tail,calls,summands);",
+        "}",
+    ]
     lines.extend(accumulation_source(name) for name in ACCUMULATED_STAGES)
     return "\n".join([*lines, "}", ""])
 

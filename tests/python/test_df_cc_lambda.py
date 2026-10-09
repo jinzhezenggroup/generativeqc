@@ -198,6 +198,9 @@ def run(
     matrix: bool = True,
     batch_two: bool = False,
     overflow: bool = False,
+    core_reuse: bool = True,
+    audit_matrix: bool = True,
+    overflow_audit: bool = False,
     budget: int = 1 << 30,
 ) -> tuple:
     o, v = arrays["t1"].shape
@@ -224,7 +227,7 @@ def run(
     result = [np.full(shape, np.nan) for shape in shapes]
     outputs = (dp * len(result))(*(x.ctypes.data_as(dp) for x in result))
     values = np.full(6, np.nan)
-    counts = np.zeros(20, dtype=np.uintp)
+    counts = np.zeros(26, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -235,7 +238,10 @@ def run(
         + 4 * int(not reduction)
         + 8 * int(not matrix)
         + 16 * int(batch_two)
-        + 32 * int(overflow),
+        + 32 * int(overflow)
+        + 64 * int(not core_reuse)
+        + 128 * int(not audit_matrix)
+        + 256 * int(overflow_audit),
         budget,
         ptrs,
         *(x.ctypes.data_as(dp) for x in seeds),
@@ -363,10 +369,11 @@ def test_failed_native_response_has_no_publication(probe: typing.Any) -> None:
     assert exact_counts[13] == 1 and exact_counts[14] == 5
     for actual, expected in zip(exact, reference, strict=True):
         np.testing.assert_array_equal(actual, expected)
-    # A one-byte shortage shrinks Q before giving up matrix execution.
+    # Optional invariant retention is dropped before shrinking the Q batch.
     status, tail, _, tail_counts, error = run(probe, arrays, budget=budget - 1)
     assert status == 0, error
-    assert tail_counts[13] == 1 and tail_counts[14] < counts[14]
+    assert tail_counts[13] == 1 and tail_counts[14] == counts[14]
+    assert tail_counts[20] == 0
     for actual, expected in zip(tail, reference, strict=True):
         np.testing.assert_allclose(actual, expected, atol=3e-10, rtol=3e-10)
     scalar_status, scalar, _, scalar_counts, error = run(probe, arrays, matrix=False)

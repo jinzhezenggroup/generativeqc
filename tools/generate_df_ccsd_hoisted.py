@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import typing
 from collections import Counter
 from functools import cache
 from pathlib import Path
@@ -18,7 +19,7 @@ from generativeqc_compiler.cc.df_hoist import (
     build_df_auxiliary_reduction_programs,
 )
 from generativeqc_compiler.cc.df_lambda_matrix import matrix_program
-from generativeqc_compiler.tensor import Program
+from generativeqc_compiler.tensor import Node, Program
 
 from tools.generate_df_ccsd_core import INPUTS as CORE_INPUTS
 from tools.generate_rccsd_native import (
@@ -33,6 +34,9 @@ from tools.generate_rccsd_native import (
     ordered_batch_accumulation,
     with_jacobi_update,
 )
+
+if typing.TYPE_CHECKING:
+    from collections.abc import Iterable
 
 EXTRA_INPUTS = ("bov", "bvv", "df_tau", *(f"df_{name}" for name in AUXILIARY_OUTPUTS))
 INPUTS = (*CORE_INPUTS, *EXTRA_INPUTS)
@@ -92,14 +96,20 @@ def auxiliary_accumulation() -> tuple[str, str]:
     )
 
 
-def contraction_query(program: Program, name: str, *, batch_dim: bool = False) -> str:
+def contraction_query(
+    program: Program,
+    name: str,
+    *,
+    batch_dim: bool = False,
+    nodes: Iterable[Node] | None = None,
+) -> str:
     """Exact scalar summand count; includes output and all reduction labels.
 
     This is semantic contraction work, not a hardware FLOP or wall-time model.
     Callers multiply the per-Q value by every actually evaluated auxiliary slice.
     """
     terms: Counter[tuple[str, ...]] = Counter()
-    for node in program.live_nodes:
+    for node in program.live_nodes if nodes is None else nodes:
         if node.op == "einsum":
             terms[tuple(sorted(_label_dims(node).values()))] += 1
     lines = [

@@ -66,6 +66,21 @@ class CudaFlagFailure:
 FailureEffect = ReturnFalseFailure | ReturnStatusFailure | CudaFlagFailure
 
 
+@dataclass(frozen=True)
+class CudaVisitCounter:
+    """An optional method-owned visit count at an actual CUDA fold iteration."""
+
+    guard: str
+    counter: str
+
+    def __post_init__(self) -> None:
+        _identifier(self.guard, "CUDA visit guard")
+        _identifier(self.counter, "CUDA visit counter")
+
+    def statement(self) -> str:
+        return f"if constexpr ({self.guard}) ++{self.counter};"
+
+
 def _failure_lines(
     schedule: RetainedHistorySchedule, phase: str, failure: FailureEffect | None
 ) -> tuple[str, ...]:
@@ -123,6 +138,7 @@ def emit_dot_loop(
     extent: str,
     failure: FailureEffect,
     indent: int,
+    visit_counter: CudaVisitCounter | None = None,
 ) -> str:
     """One common ordered dot, with retained return versus flag/break effects."""
     require_history_schedule(program, schedule)
@@ -131,6 +147,8 @@ def emit_dot_loop(
     native_scalar_read(extent)
     if type(indent) is not int or indent < 0:
         raise ValueError("dot indentation must be a nonnegative integer")
+    if visit_counter is not None and schedule.name != "capacity-cuda":
+        raise ValueError("visit counter requires the CUDA history schedule")
     pad = " " * indent
     update = _statement(
         program,
@@ -143,6 +161,7 @@ def emit_dot_loop(
     return "\n".join(
         (
             f"{pad}for ({schedule.index_type} {index} = {schedule.zero}; {index} < {extent}; ++{index}) {{",
+            *((f"{pad}  {visit_counter.statement()}",) if visit_counter else ()),
             f"{pad}  {update}",
             f"{pad}  if (!{schedule.math_namespace}isfinite({accumulator})) {{",
             *(f"{pad}    {line}" for line in failure_lines),
@@ -324,6 +343,7 @@ class CorrectionBindings:
     weights: str = ""
     tentative_vectors: str = ""
     vectors: str = ""
+    visit_counter: CudaVisitCounter | None = None
 
 
 def emit_correction(
@@ -400,6 +420,10 @@ def emit_correction(
             f"      for ({integer} history = {zero}; history < history_count; ++history) {{",
         )
     )
+    if bindings.visit_counter is not None:
+        if cpu:
+            raise ValueError("visit counter requires the CUDA history schedule")
+        lines.append(f"        {bindings.visit_counter.statement()}")
     if cpu:
         lines.append(
             f"        const std::size_t slot = static_cast<std::size_t>({bindings.history_slots}[history]);"

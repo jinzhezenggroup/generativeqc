@@ -352,7 +352,11 @@ class ResidentDeviceAoMapOwner:
         cutoff: float,
         budget_bytes: int,
         max_active_fraction: float = 1.0,
+        producer: str = "pre-ao-envelope-native-csr",
     ) -> None:
+        if producer not in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}:
+            raise ValueError("unsupported native resident AO producer")
+        self._producer = producer
         if type(max_active_fraction) not in (int, float) or not (
             0 < max_active_fraction <= 1
         ):
@@ -380,7 +384,11 @@ class ResidentDeviceAoMapOwner:
                 "basis_generation": self._basis_generation,
                 "geometry_generation": self._geometry_generation,
                 "cutoff": self.cutoff,
-                "producer": "pre-ao-envelope",
+                "producer": (
+                    "pre-ao-envelope"
+                    if producer == "pre-ao-envelope-native-csr"
+                    else producer
+                ),
                 "max_active_fraction": self._max_active_fraction,
             }
         )
@@ -399,6 +407,11 @@ class ResidentDeviceAoMapOwner:
                     cutoff=self.cutoff,
                     budget_bytes=budget_bytes,
                     identity=self.identity,
+                    **(
+                        {"exact": True}
+                        if producer == "exact-jets-native-bitmask"
+                        else {}
+                    ),
                 )
             except NotImplementedError:
                 self._capability_missing = True
@@ -440,12 +453,16 @@ class ResidentDeviceAoMapOwner:
         fresh = self._fresh_discovery
         self._discovery_in_endpoint = fresh
         self._work: dict[str, typing.Any] = {
-            "discovery_producer": "pre-ao-envelope-native-csr",
+            "discovery_producer": self._producer,
             "discoveries": int(
-                fresh and bool(self._info.get("discovery_region_bounds", 0))
+                fresh and bool(self._info.get("discovery_d2h_bytes", 0))
             ),
             "discovery_seconds": self._discovery_seconds if fresh else 0.0,
-            "discovery_ao_jet_values": 0,
+            "discovery_ao_jet_values": self._info.get("discovery_ao_jet_values", 0)
+            if fresh
+            else 0,
+            "discovery_ao_panel_write_bytes": 0,
+            "map_compaction_launches": 0,
             "discovery_region_bounds": self._info.get("discovery_region_bounds", 0)
             if fresh
             else 0,
@@ -485,6 +502,11 @@ class ResidentDeviceAoMapOwner:
             map_entries=self._info.get("map_entries", 0),
             map_tiles=self._info.get("map_tiles", 0),
             native_csr_ready=self._ready,
+            native_map_storage=(
+                "bitmask-rebased"
+                if self._producer == "exact-jets-native-bitmask"
+                else "csr"
+            ),
             max_active_fraction=self._max_active_fraction,
             occupancy_declined=self._occupancy_declined,
         )
@@ -545,6 +567,12 @@ class ResidentDeviceAoMapOwner:
             self._work["tile_count"] += 1
             with lease as task:
                 active = task.layout.nactive
+                if (
+                    self._ready
+                    and self._producer == "exact-jets-native-bitmask"
+                    and 0 < active < grid.plan.nao
+                ):
+                    self._work["map_compaction_launches"] += 1
                 self._work["point_ao_visits"] += count * active
                 self._work["point_ao_square_sum"] += count * active**2
                 self._work["dense_point_ao_square_sum"] += count * grid.plan.nao**2

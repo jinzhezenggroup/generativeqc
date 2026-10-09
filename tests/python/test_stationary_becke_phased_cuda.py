@@ -89,6 +89,10 @@ def native() -> SimpleNamespace:
     }
     if hasattr(library, "stationary_configure_becke_primitive_v1"):
         signatures["stationary_configure_becke_primitive_v1"] = [pointer, ct.c_int]
+    if hasattr(library, "stationary_configure_becke_zero_seed_v1"):
+        signatures["stationary_configure_becke_zero_seed_v1"] = [pointer, ct.c_int]
+    if hasattr(library, "stationary_configure_becke_normalize_v1"):
+        signatures["stationary_configure_becke_normalize_v1"] = [pointer, ct.c_int]
     for name, arguments in signatures.items():
         getattr(library, name).argtypes = [*arguments, *tail]
     library.stationary_destroy.argtypes = [pointer]
@@ -124,7 +128,7 @@ def native() -> SimpleNamespace:
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
 @pytest.mark.parametrize("external", [False, True])
-@pytest.mark.parametrize("primitive", [False, True])
+@pytest.mark.parametrize("primitive", [False, True, 2, "2-off", "2-serial"])
 @pytest.mark.parametrize("profiled", [False, True])
 def test_shared_owner_phases_preserve_sources_and_work(
     native: SimpleNamespace,
@@ -132,7 +136,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
     implicit: bool,
     selection: str,
     external: bool,
-    primitive: bool,
+    primitive: bool | int | str,
     profiled: bool,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
@@ -141,10 +145,26 @@ def test_shared_owner_phases_preserve_sources_and_work(
     oracle. Independent Becke Decimal tests and complete E/F gates are separate.
     Include the actual 128-atom primitive cap, not only the two endpoint sizes.
     """
+    zero_seed_off = primitive == "2-off"
+    serial_normalize = primitive == "2-serial"
+    if zero_seed_off and not hasattr(
+        native.library, "stationary_configure_becke_zero_seed_v1"
+    ):
+        pytest.skip("artifact predates zero-seed qualification opt-out")
+    if serial_normalize and not hasattr(
+        native.library, "stationary_configure_becke_normalize_v1"
+    ):
+        pytest.skip("artifact predates normalization qualification control")
+    if zero_seed_off or serial_normalize:
+        primitive = 2
     if primitive and not hasattr(
         native.library, "stationary_configure_becke_primitive_v1"
     ):
         pytest.skip("artifact predates whole-domain primitive admission")
+    if primitive == 2 and not hasattr(
+        native.library, "stationary_configure_becke_normalized_adjoint_v1"
+    ):
+        pytest.skip("artifact predates generated normalized atom adjoints")
     if profiled and not hasattr(native.library, "stationary_becke_phase_profile_v1"):
         pytest.skip("artifact predates separate Becke phase profiling")
     cupy = native.cupy
@@ -223,6 +243,10 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 native.call(
                     "stationary_configure_becke_primitive_v1", handle, int(primitive)
                 )
+            if zero_seed_off:
+                native.call("stationary_configure_becke_zero_seed_v1", handle, 0)
+            if serial_normalize:
+                native.call("stationary_configure_becke_normalize_v1", handle, 0)
             native.call(
                 "stationary_topology",
                 handle,
@@ -236,7 +260,10 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 if geometry == 1:
                     centers[:, 1] += 0.03 * np.sin(np.arange(atoms))
                 native.call(
-                    "stationary_geometry_reset", handle, centers.ctypes.data, 1e-12
+                    "stationary_geometry_reset",
+                    handle,
+                    centers.ctypes.data,
+                    1e-14 if geometry == 1 else 1e-12,
                 )
                 buffers = []
                 with stream:
@@ -247,6 +274,18 @@ def test_shared_owner_phases_preserve_sources_and_work(
                         features[1:4] = np.array([0.02, -0.015, 0.01])[:, None]
                         features[4] = 0.1
                         active = len(selected)
+                        raw = np.full(count, 0.7)
+                        # Mixed zero/nonzero rows and a subsequent all-zero
+                        # replay exercise uninitialized and stale pair panels.
+                        zero_rows = (
+                            np.ones(count, dtype=bool)
+                            if geometry == 2
+                            else np.arange(begin, end) % (3 if geometry == 0 else 5)
+                            == 0
+                        )
+                        raw[zero_rows] = 0
+                        if geometry == 0:
+                            raw[(np.arange(begin, end) % 7 == 1) & ~zero_rows] = 1e-300
                         device = {
                             "points": cupy.asarray(
                                 centers[owners[begin:end]] + offsets[begin:end]
@@ -256,7 +295,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                             "work": cupy.full(max(1, 8 * count * active), 0.03),
                             "ids": cupy.asarray(selected),
                             "weights": cupy.full(count, 0.4),
-                            "raw": cupy.full(count, 0.7),
+                            "raw": cupy.asarray(raw),
                             "error": cupy.zeros(1, dtype=np.int32),
                             "external": cupy.asarray(
                                 np.linspace(-0.3, 0.5, 6 * 300).reshape(6, 300)
@@ -294,7 +333,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                             ]
                         else:
                             host_weights = np.full(count, 0.4)
-                            host_raw = np.full(count, 0.7)
+                            host_raw = raw
                             device["host_weights"] = host_weights
                             device["host_raw"] = host_raw
                             method = (
@@ -347,6 +386,24 @@ def test_shared_owner_phases_preserve_sources_and_work(
             assert phase_metrics[0] == plan.phased_becke_bytes
             assert phase_metrics[1] == (6 if phased else 0)
             assert metrics[0] == plan.allocation_bytes
+            zero_metrics = getattr(
+                native.library, "stationary_becke_zero_seed_metrics_v1", None
+            )
+            if zero_metrics is not None:
+                zero_metrics.argtypes = [
+                    ct.c_void_p,
+                    ct.POINTER(ct.c_uint64),
+                    ct.c_size_t,
+                ]
+                zero_work = (ct.c_uint64 * 2)()
+                assert zero_metrics(handle, zero_work, 2) == 0
+                # The 1e-14 reset deliberately retains the generic arithmetic.
+                assert tuple(zero_work) == (
+                    int(primitive == 2 and phased and not zero_seed_off),
+                    (86 + 257)
+                    if primitive == 2 and phased and not zero_seed_off
+                    else 0,
+                )
             if hasattr(native.library, "stationary_becke_phase_metrics_v1"):
                 phase_work = (ct.c_uint64 * 17)()
                 phase_times = (ct.c_double * 7)()
@@ -364,7 +421,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 )
                 points = 3 * 257 if phased else 0
                 pairs = points * atoms * (atoms - 1) // 2
-                words = 2 if primitive and phased else 4
+                words = 2 if primitive == 1 and phased else 4
                 profiled_batches = 6 if profiled and phased else 0
                 assert tuple(phase_work) == (
                     6 if phased else 0,
@@ -380,7 +437,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     4 * 8 * pairs,
                     words * 8 * pairs,
                     2 * words * 8 * pairs,
-                    2 * 3 * 8 * pairs if primitive and phased else 0,
+                    2 * 3 * 8 * pairs if primitive == 1 and phased else 0,
                     profiled_batches,
                     8 * profiled_batches,
                     profiled_batches,
@@ -431,20 +488,22 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 )
                 assert tuple(primitive_metrics) == (
                     int(primitive),
-                    int(primitive and phased),
+                    int(primitive) if phased else 0,
                     6 if primitive and phased else 0,
                     3 * 257 * atoms * (atoms - 1) // 2 if primitive and phased else 0,
                 )
             valid_points = device["points"].get()
             valid_tail = None
-            for invalid in (False, True, False):
+            for invalid in (False, "nan", "coincident", False):
                 native.call(
                     "stationary_geometry_reset", handle, centers.ctypes.data, 1e-12
                 )
                 with stream:
                     device["points"].set(valid_points, stream=stream)
-                    if invalid:
+                    if invalid == "nan":
                         device["points"][0, 0] = np.nan
+                    elif invalid == "coincident":
+                        device["points"][0] = cupy.asarray(centers[owners[256]])
                     native.call(method, handle, ct.byref(view), *arguments)
                 result = np.full((8, atoms, 3), 31415.0)
                 if invalid:
@@ -462,5 +521,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
                         valid_tail = result
                     else:
                         np.testing.assert_array_equal(result, valid_tail)
+            if hasattr(native.library, "stationary_configure_becke_zero_seed_v1"):
+                with pytest.raises(RuntimeError, match="once before topology"):
+                    native.call("stationary_configure_becke_zero_seed_v1", handle, 1)
         finally:
             native.library.stationary_destroy(handle)

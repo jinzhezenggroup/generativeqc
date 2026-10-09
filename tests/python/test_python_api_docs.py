@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,78 @@ class PythonApiDocumentationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "literal list or tuple"):
                 renderer.public_api_modules(package)
+
+    def test_literal_public_all_cannot_be_mutated_or_aliased(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            for mutation in (
+                '__all__.append("Hidden")',
+                '__all__ += ["Hidden"]',
+                '__all__[0] = "Hidden"',
+                "alias = __all__",
+                '__all__ = alias = ["Root"]\nalias.append("Hidden")',
+                "from ._impl import __all__",
+                "from ._impl import names as __all__",
+                "import names as __all__",
+                "def __all__(): pass",
+                "class __all__: pass",
+                'def helper(value=__all__.append("Hidden")): pass',
+                'async def helper(value=__all__.append("Hidden")): pass',
+                '@decorate(__all__.append("Hidden"))\ndef helper(): pass',
+                'def helper(value: __all__.append("Hidden")): pass',
+                'def helper() -> __all__.append("Hidden"): pass',
+                'class Helper((__all__.append("Hidden"), object)[1]): pass',
+                'class Helper(metaclass=(__all__.append("Hidden"), type)[1]): pass',
+                'class Helper:\n    __all__.append("Hidden")',
+                'helper = lambda value=__all__.append("Hidden"): None',
+                '__all__: __all__.append("Hidden")',
+                "if enabled:\n    from ._impl import names as __all__",
+                'if enabled:\n    __all__ = ["Hidden"]',
+            ):
+                with self.subTest(mutation=mutation):
+                    _write(
+                        package / "__init__.py",
+                        '__all__ = ["Root"]\n' + mutation + "\n",
+                    )
+                    with self.assertRaisesRegex(ValueError, "dynamic use/mutation"):
+                        renderer.public_api_modules(package)
+
+    def test_annotation_only_all_preserves_runtime_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(package / "__init__.py", "__all__ = []\n")
+            _write(
+                package / "fresh.py",
+                'def run(): pass\n__all__ = ["run"]\n__all__: list[str]\n',
+            )
+            modules = renderer.public_api_modules(package)
+            self.assertEqual(
+                next(
+                    module.exports
+                    for module in modules
+                    if module.name == "generativeqc.fresh"
+                ),
+                ("run",),
+            )
+
+    def test_wildcard_import_cannot_replace_an_empty_public_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(package / "__init__.py", "__all__ = []\nfrom ._impl import *\n")
+            _write(
+                package / "_impl.py", '__all__ = ["__all__", "run"]\ndef run(): pass\n'
+            )
+            with self.assertRaisesRegex(ValueError, "dynamic use/mutation"):
+                renderer.public_api_modules(package)
+
+    def test_deferred_helper_body_can_read_public_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '__all__ = ["Root"]\ndef helper():\n    return __all__\n',
+            )
+            self.assertEqual(renderer.public_api_modules(package)[0].exports, ("Root",))
 
     def test_current_reference_covers_declared_public_facades(self) -> None:
         names = {module.name for module in renderer.public_api_modules()}
@@ -124,6 +197,122 @@ class PythonApiDocumentationTests(unittest.TestCase):
             self.assertEqual(source, ["unrelated"])
             self.assertFalse(registered)
 
+    def test_public_docstring_audit_follows_reexports(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom .impl import Documented, Missing\n'
+                '__all__ = ["Documented", "Missing"]\n',
+            )
+            _write(
+                package / "impl.py",
+                'class Documented:\n    """Documented class."""\n'
+                "class Missing:\n    pass\n",
+            )
+            failures = missing_public_docstrings(package)
+            self.assertEqual(len(failures), 1)
+            self.assertIn("generativeqc.Missing", failures[0])
+            self.assertIn("impl.py", failures[0])
+
+    def test_public_docstring_audit_rejects_new_undocumented_module(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(package / "__init__.py", '"""Public facade."""\n__all__ = []\n')
+            _write(
+                package / "fresh.py",
+                '"""Future public module."""\n'
+                "def undocumented():\n    return 1\n"
+                '__all__ = ["undocumented"]\n',
+            )
+            failures = missing_public_docstrings(package)
+            self.assertEqual(len(failures), 1)
+            self.assertIn("generativeqc.fresh.undocumented", failures[0])
+
+    def test_public_docstring_audit_accepts_documented_reexports(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom .impl import Entry\n__all__ = ["Entry"]\n',
+            )
+            _write(
+                package / "impl.py",
+                'class Entry:\n    """A documented entry point."""\n',
+            )
+            self.assertEqual(missing_public_docstrings(package), ())
+
+    def test_public_docstring_audit_checks_reexported_class_members(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom .bridge import PublicEntry\n'
+                '__all__ = ["PublicEntry"]\n',
+            )
+            _write(package / "bridge.py", "from ._impl import Entry as PublicEntry\n")
+            _write(
+                package / "_impl.py",
+                "raise RuntimeError('Static discovery must never import this module')\n"
+                'class Entry:\n    """A documented class."""\n'
+                "    def __init__(self): pass\n"
+                "    def missing_method(self): pass\n"
+                "    async def missing_async(self): pass\n"
+                "    def __enter__(self): return self\n"
+                "    @property\n    def value(self): return 1\n"
+                "    def _private(self): pass\n"
+                "    class Nested:\n        def nested_method(self): pass\n"
+                "class Unrelated:\n    def method(self): pass\n",
+            )
+            failures = missing_public_docstrings(package)
+            self.assertEqual(len(failures), 7)
+            for member in (
+                "__init__",
+                "missing_method",
+                "missing_async",
+                "__enter__",
+                "value",
+                "Nested",
+                "Nested.nested_method",
+            ):
+                self.assertTrue(
+                    any(
+                        f"generativeqc.PublicEntry.{member} -> generativeqc/_impl.py:"
+                        in failure
+                        for failure in failures
+                    ),
+                    failures,
+                )
+
+    def test_public_docstring_audit_limits_member_scope(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom ._impl import Entry\n__all__ = ["Entry"]\n',
+            )
+            _write(
+                package / "_impl.py",
+                "class Unrelated:\n    def inherited(self): pass\n"
+                'class Entry(Unrelated):\n    """An exported class."""\n'
+                '    def __init__(self):\n        """Initialize the entry."""\n'
+                '    def method(self):\n        """Run the entry."""\n'
+                "    def _private(self): pass\n"
+                "    class _Private:\n        def method(self): pass\n",
+            )
+            self.assertEqual(missing_public_docstrings(package), ())
+
     @unittest.skipUnless(
         importlib.util.find_spec("sphinx"), "requires documentation dependencies"
     )
@@ -147,8 +336,25 @@ class PythonApiDocumentationTests(unittest.TestCase):
                 "def setup(app):\n"
                 "    app.connect('source-read', render_python_api_source)\n",
             )
-            _write(docs / "index.md", "# Test\n\n```{toctree}\nreference/api\n```\n")
+            _write(
+                docs / "index.md",
+                "# Test\n\n```{toctree}\nreference/api\n"
+                "reference/python_contracts\nreference/python_execution_contracts\n```\n",
+            )
             _write(docs / "reference/api.md", "# Generated shell\n")
+            # Preserve every real contract target in this isolated autodoc
+            # fixture. The full docs build verifies their complete prose/links.
+            for page in ("python_contracts", "python_execution_contracts"):
+                source = (ROOT / f"docs/reference/{page}.md").read_text()
+                labels = re.findall(r"^\(([^)]+)\)=\s*$", source, re.MULTILINE)
+                _write(
+                    docs / f"reference/{page}.md",
+                    "# Contract targets\n\n"
+                    + "\n\n".join(
+                        f"({label})=\n## {label}\n\nContract reference target."
+                        for label in labels
+                    ),
+                )
             result = subprocess.run(
                 [
                     sys.executable,

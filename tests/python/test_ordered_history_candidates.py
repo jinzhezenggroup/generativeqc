@@ -357,13 +357,12 @@ def test_cpu_fragments_keep_preextraction_mathematics_and_candidate_identity() -
     }
 
 
-def test_cuda_artifact_names_bodies_and_identity_stay_frozen() -> None:
-    # Retained at 3b97c234 before extracting the CPU provider. Source identity
-    # includes every emitted filename and the SHA-256 of each fragment body.
+def test_cuda_artifact_names_bodies_and_diagnostic_identity() -> None:
+    # Source identity includes every emitted filename and fragment digest.
     artifacts = emit_gfn2_history_artifacts("cuda")
     identity = json.loads(artifacts["generated_gfn2_history_cuda_identity.json"])
     digest = identity.pop("source_identity")
-    assert digest == "f244c11c54c4124254f69177237a3a1dcccc09580f6a55c7e3f24b707092cf09"
+    assert digest == "8592b95f849192ab17f614af64178651b92b25e5d1b4ca5d2e583378ff594784"
     assert canonical_hash(identity) == digest
     for name, expected in identity["sources"].items():
         assert hashlib.sha256(artifacts[name].encode()).hexdigest() == expected

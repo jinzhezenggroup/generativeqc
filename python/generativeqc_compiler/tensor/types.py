@@ -62,6 +62,7 @@ class IndexSpace:
     spin: str | None = None
 
     def __post_init__(self) -> None:
+        """Validate the space identifier, kind, size, and optional spin label."""
         if not isinstance(self.name, str) or not self.name.isidentifier():
             raise ValueError("space name must be an identifier")
         if self.kind not in SPACE_KINDS:
@@ -82,6 +83,7 @@ class Index:
     selection: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
+        """Validate the named space range and freeze optional in-range gather indices."""
         if not isinstance(self.name, str) or not self.name.isidentifier():
             raise ValueError("index name must be an identifier")
         if not isinstance(self.space, IndexSpace):
@@ -101,6 +103,7 @@ class Index:
 
     @property
     def extent(self) -> int:
+        """Return the selection length, or the half-open index range length."""
         if self.selection is not None:
             return len(self.selection)
         stop = self.stop
@@ -132,6 +135,7 @@ class Symmetry:
     sign: int = 1
 
     def __post_init__(self) -> None:
+        """Freeze a valid axis permutation and require a sign of plus or minus one."""
         object.__setattr__(self, "permutation", tuple(self.permutation))
         if any(type(i) is not int for i in self.permutation) or sorted(
             self.permutation
@@ -158,6 +162,7 @@ class TensorSpec:
     differentiable: bool = False
 
     def __post_init__(self) -> None:
+        """Validate unique axes, dtype, representation, role, and compatible symmetries."""
         object.__setattr__(self, "indices", tuple(self.indices))
         if any(not isinstance(i, Index) for i in self.indices):
             raise TypeError("tensor axes must be Index objects")
@@ -202,14 +207,17 @@ class TensorSpec:
 
     @property
     def shape(self) -> tuple[int, ...]:
+        """Return the extents of the ordered tensor indices."""
         return tuple(i.extent for i in self.indices)
 
     @property
     def itemsize(self) -> int:
+        """Return the tensor dtype size in bytes."""
         return 8 if self.dtype in ("float64", "int64") else 4
 
     @property
     def size(self) -> int:
+        """Return the product of tensor dimensions, including one for a scalar."""
         return prod(self.shape)
 
     @property

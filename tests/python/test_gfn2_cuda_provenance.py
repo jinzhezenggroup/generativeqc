@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,7 +19,10 @@ def test_gfn2_cuda_source_manifest_is_current_and_gfn2_only() -> None:
     for relpath, record in manifest["files"].items():
         path = RUNTIME / relpath
         assert path.is_file(), relpath
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        content = path.read_bytes()
+        if os.name == "nt":
+            content = content.replace(b"\r\n", b"\n")
+        digest = hashlib.sha256(content).hexdigest()
         assert digest == record["vendored_sha256"], relpath
         if record["adapted"]:
             adapted.append(relpath)

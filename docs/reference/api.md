@@ -7,3 +7,12 @@ The renderer discovers those modules recursively under `python/generativeqc`,
 so adding a new public module does not require editing this file or the
 documentation navigation. Private modules and modules without `__all__` are
 not promoted into the public API by documentation discovery.
+
+Public modules and their re-exported Python declarations are checked without
+importing the native runtime. The documentation CI enforces Ruff
+`D100,D101,D102,D103,D104,D105,D107` on every `__all__` module, including
+new ones, and requires each exported first-party class/function to have a
+source docstring and a source-bound applicable contract record. See the
+[contract coverage policy](python_contracts.md) and
+[calculation/ownership contracts](python_execution_contracts.md). A Python module without `__all__` is not itself a public
+module, but its re-exported public declarations are still checked.

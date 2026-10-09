@@ -204,16 +204,19 @@ class InactiveEigensolverProfileEntry:
 
     @property
     def inactive_solver_count(self) -> int:
+        """Return the batch solver count minus the active solver count."""
         return self.solver_batch_count - self.active_solver_count
 
     @property
     def inactive_fraction(self) -> float:
+        """Return the inactive fraction, or zero for an empty solver batch."""
         if self.solver_batch_count == 0:
             return 0.0
         return self.inactive_solver_count / self.solver_batch_count
 
     @property
     def inactive_touches(self) -> tuple[str, ...]:
+        """Decode recorded copy, transform, and identity-sanitization touch flags."""
         names = []
         if self.inactive_touch_flags & _native.EIGENSOLVER_INACTIVE_TOUCH_COPY:
             names.append("copy")

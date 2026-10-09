@@ -1,0 +1,209 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "fde808f21a8b686a71b405301dede47b522a021590a854295f9ca1741fc2e5ca",
+      "consumers": [
+        {
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "symbol": "transform_remaining_shells: second -> third"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Compare semantic contraction work and peak live storage with fusion across sk/sl.",
+        "Require independent derivative parity and complete endpoint timing before a profitability claim."
+      ],
+      "label": "MP2 second shell transform",
+      "lifetime": "Allocated per (si,sj); reused across sk/sl consumers until sj scope ends",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (MP2 follow-up to #1574)",
+      "producer": {
+        "path": "src/posthf/mp2_derivative_common.cpp",
+        "symbol": "transform_remaining_shells: first -> second"
+      },
+      "reason": "The source reuses second across later shell transforms. Retained pending measured reuse/fusion evidence; bounded storage alone does not make this materialization required.",
+      "residency": "Host std::vector<double>, di*dj*N^2 elements",
+      "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
+      "source_bindings": {
+        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
+        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+      }
+    },
+    {
+      "candidate_id": "0e33bd360ae328981e5467913ff41d4b0e30d719ff210c8b793ce4b264628442",
+      "consumers": [
+        {
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "symbol": "transform_remaining_shells: third -> local"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Measure work/reuse versus applying the final transforms together.",
+        "Require independent derivative parity, peak live bytes, and complete endpoint timing."
+      ],
+      "label": "MP2 third shell transform",
+      "lifetime": "Allocated per (si,sj,sk); reused across sl consumers",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (MP2 follow-up to #1574)",
+      "producer": {
+        "path": "src/posthf/mp2_derivative_common.cpp",
+        "symbol": "transform_remaining_shells: second -> third"
+      },
+      "reason": "The source reuses third across sl. Retained pending source-matched fusion/recomputation and lifetime evidence.",
+      "residency": "Host std::vector<double>, di*dj*dk*N elements",
+      "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
+      "source_bindings": {
+        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
+        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+      }
+    },
+    {
+      "candidate_id": "b7e67d34cd7ff0b42cd9520d21026a7b7be99520031b79849bdd9df2030a9ac5",
+      "consumers": [
+        {
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "symbol": "transform_remaining_shells: eri_shell callback and conventional_derivative adapter"
+        },
+        {
+          "path": "src/posthf/mp2_derivative_cpu.cpp",
+          "symbol": "conventional_derivative_cpu callback"
+        },
+        {
+          "path": "src/integrals/s_integrals.cpp",
+          "symbol": "contract_weighted_eri_shell_derivative"
+        },
+        {
+          "path": "src/posthf/mp2_derivative_cuda.cpp",
+          "symbol": "conventional_derivative_cuda callback"
+        },
+        {
+          "path": "src/posthf/cuda_derivative.cpp",
+          "symbol": "CudaEriDerivativeBatch::append / finish"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Prove ownership/lifetime for each selected CPU/CUDA consumer before removing local.",
+        "Validate canonical-shell orbit factors and derivative scatter parity independently.",
+        "Measure complete endpoint work, live bytes, and timing for the proposed consumer layout."
+      ],
+      "label": "MP2 shell-local derivative weights",
+      "lifetime": "Allocated for one shell quartet; passed by span to the derivative callback",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (MP2 follow-up to #1574)",
+      "producer": {
+        "path": "src/posthf/mp2_derivative_common.cpp",
+        "symbol": "transform_remaining_shells: third -> local"
+      },
+      "reason": "The callback consumes a shell-local dense span in current source. That ABI observation does not prove a view or fused consumer is unsafe or slower.",
+      "residency": "Host std::vector<double>, di*dj*dk*dl elements; selected consumer may stage device records",
+      "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
+      "source_bindings": {
+        "src/integrals/s_integrals.cpp": "39a97d30ff40a7ad90f7f0f3e0a6c26ccd3249b4c2b406ca9894eba3ac01ea97",
+        "src/posthf/cuda_derivative.cpp": "3b7eda15d228119b5da075f628f0c88134547404cf56c0a5e23750098f9a1275",
+        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
+        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
+        "src/posthf/mp2_derivative_cuda.cpp": "3e70a1765a10b77b3e563f4d118c9c94f183212560e45044b55b380baba53aae",
+        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+      }
+    },
+    {
+      "candidate_id": "36f71f24929ac7f849287cf0a3ee45deb0c7149e756e4b9565dc36b20c951c18",
+      "consumers": [
+        {
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "symbol": "transform_remaining_shells"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Preserve the known RCCSD(T) dense producer/dispatch contract and audit other retaining callers before replacing this staging.",
+        "Compare fused producer work and peak storage while preserving exact eightfold ERI projection.",
+        "Require independent parity and full endpoint timing before declaring retention required."
+      ],
+      "label": "MP2 dense first shell transform",
+      "lifetime": "One si shell iteration; reused across sj/sk/sl before destruction",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (MP2 follow-up to #1574)",
+      "producer": {
+        "path": "src/posthf/mp2_derivative_common.cpp",
+        "symbol": "conventional_derivative_accumulate: symmetric_eri_weight -> first"
+      },
+      "reason": "Retained dense-input pullback with a source-known production RCCSD(T) caller: src/cc/rccsdt_force.cpp assigns weights.two_electron = total_eri and dispatches conventional_derivative_cpu/cuda. The helper-aware classifier keeps this stage visible; no pass was removed when its source read moved behind symmetric_eri_weight. Production reachability does not establish fusion legality or profitability.",
+      "residency": "Host std::vector<double>, di*N^3 elements from dense two-electron weights",
+      "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
+      "source_bindings": {
+        "src/cc/rccsdt_force.cpp": "b76df21995b58c617ae25e85cabdc18c2ade75733e996612e8a6221fbbc3de63",
+        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
+        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
+        "src/posthf/mp2_derivative_cuda.cpp": "3e70a1765a10b77b3e563f4d118c9c94f183212560e45044b55b380baba53aae",
+        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+      }
+    },
+    {
+      "candidate_id": "d4c967d06f59f19958c9bbec51f2f088c00d5db9a22099f64c6b68fa67301a5e",
+      "consumers": [
+        {
+          "path": "src/posthf/mp2_derivative_common.cpp",
+          "symbol": "transform_remaining_shells"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Design and measure structured Fock/ijab producer fusion into the next transform.",
+        "Retain an explicit bounded fallback and verify independent derivative parity.",
+        "Compare complete endpoint timing, executed work, and peak live storage."
+      ],
+      "label": "MP2 factorized correlation first stage",
+      "lifetime": "One si shell iteration; reused across remaining shell transforms",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (MP2 follow-up to #1574)",
+      "producer": {
+        "path": "src/posthf/mp2_derivative_common.cpp",
+        "symbol": "conventional_derivative_accumulate: factors.fock / correlation_iajb -> first"
+      },
+      "reason": "Actionable producer-fusion candidate: the factorized producer still fills first before the next shell transform. Production global N^4 removal did not remove this staging.",
+      "residency": "Host std::vector<double>, di*N^3 elements populated by factorized weights",
+      "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
+      "source_bindings": {
+        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
+        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+      }
+    },
+    {
+      "candidate_id": "8fe4e4b2049cf442f87a75acea65c4168efe2c17ed305ab78161c01fd1134d96",
+      "consumers": [
+        {
+          "path": "src/posthf/mp2_gradient.cpp",
+          "symbol": "canonical_orbital_rhs -> rotation_gradient / add_negative_fock_multiplier"
+        }
+      ],
+      "disposition": "retained-pending-evidence",
+      "evidence_gaps": [
+        "Verify selected endpoint, dense/oracle size gate, and all retaining consumers.",
+        "Validate independent parity and consumer ABI for a representation change.",
+        "No complete endpoint profitability comparison has been supplied for retiring this retained path."
+      ],
+      "label": "MP2 dense orbital RHS weights",
+      "lifetime": "Returned to canonical_orbital_rhs and reused by dense rotation-gradient and multiplier consumers",
+      "owner": "https://github.com/jinzhezenggroup/generativeqc/issues/1626 (MP2 follow-up to #1574)",
+      "producer": {
+        "path": "src/posthf/mp2_gradient.cpp",
+        "symbol": "initial_orbital_weights"
+      },
+      "reason": "Dense/oracle source path remains distinct from canonical_orbital_rhs_streamed. Keep visible pending source-matched endpoint/size-policy evidence; do not infer production use or required dense layout from the allocation.",
+      "residency": "Host OrbitalRhs::two_electron vector, N^4 elements",
+      "resource_owner": "OrbitalRhs::two_electron is allocated by initial_orbital_weights, owned by canonical_orbital_rhs and retained for dense rotation-gradient, multiplier and subsequent Lagrangian consumption. Source inspection does not establish a qualified endpoint size gate or resource-admission plan.",
+      "source_bindings": {
+        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
+        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_gradient.cpp": "d7f31508d2ff9ae30689a46084705e1149a479ebf5ed9b33c01f25fa3f8ea8ac",
+        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+      }
+    }
+  ],
+  "issue": "https://github.com/jinzhezenggroup/generativeqc/issues/1626",
+  "schema": "generativeqc.materialization-dispositions.v1",
+  "scope": "Review inventory only. All six retained MP2 findings have open evidence gaps; no required-materialization or profitability proof is asserted."
+}

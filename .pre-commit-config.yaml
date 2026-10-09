@@ -40,6 +40,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: native-api-contracts
+        name: Check public native contracts and reference
+        entry: python3 tools/check_native_api_contracts.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: compiler-structure
         name: Check scientific compiler dependency directions
         entry: python3 tools/check_compiler_structure.py
@@ -97,6 +103,15 @@ repos:
         args: ["--fix"]
         types_or: [python, pyi, jupyter]
         exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$
+      # This hook discovers all published __all__ modules at runtime, follows
+      # first-party reexports and audits explicitly defined exported class members.
+      # Ruff D100-D107 also checks the discovered public facade modules.
+      # A newly published API is checked without a manual file allowlist.
+      - id: ruff
+        name: Check public Python contracts and Ruff D1xx
+        entry: python tools/check_public_api_docstrings.py --ruff ruff
+        pass_filenames: false
+        always_run: true
       - id: ruff-format
         types_or: [python, pyi, jupyter]
         exclude: ^python/generativeqc_compiler/method/_generated_parameters\.py$

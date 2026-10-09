@@ -16,9 +16,10 @@ def test_failed_event_creation_is_transactional(
     """Fault every base/Becke event without a CUDA runtime or physical GPU."""
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/dft/stationary_gradient_cuda.cuh").read_text()
-    entry = source[
-        source.index("int stationary_profile(") : source.index("int stationary_reset(")
-    ]
+    from test_stationary_task_work_budget import _block
+
+    # Compile only this entry, not unrelated capability ABIs added beside it.
+    entry = _block(source, "int stationary_profile(")
     path = tmp_path / "profile.cpp"
     path.write_text(PREFIX + entry + MAIN)
     binary = tmp_path / "profile"

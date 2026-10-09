@@ -39,10 +39,73 @@ class PublicModule:
     exports: tuple[str, ...]
 
 
+def _uses_all(node: ast.AST) -> bool:
+    """Find module-scope uses/bindings, including import aliases and definitions."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        # Decorators, defaults and annotations are definition-time expressions;
+        # the function body is deferred and does not change the import inventory.
+        return node.name == "__all__" or any(
+            _uses_all(expression)
+            for expression in (
+                *node.decorator_list,
+                node.args,
+                node.returns,
+                *getattr(node, "type_params", ()),
+            )
+            if expression is not None
+        )
+    if isinstance(node, ast.ClassDef):
+        # The class body also runs now; nested function bodies remain deferred.
+        return node.name == "__all__" or any(
+            _uses_all(expression)
+            for expression in (
+                *node.decorator_list,
+                *node.bases,
+                *node.keywords,
+                *getattr(node, "type_params", ()),
+                *node.body,
+            )
+        )
+    if isinstance(node, ast.Lambda):
+        return _uses_all(node.args)
+    if isinstance(node, ast.ImportFrom):
+        return any(
+            alias.name == "*" or (alias.asname or alias.name) == "__all__"
+            for alias in node.names
+        )
+    if isinstance(node, ast.Import):
+        return any(
+            (alias.asname or alias.name.split(".")[0]) == "__all__"
+            for alias in node.names
+        )
+    if isinstance(node, ast.Name):
+        return node.id == "__all__"
+    return any(_uses_all(child) for child in ast.iter_child_nodes(node))
+
+
 def _literal_all(source: Path) -> tuple[str, ...] | None:
     tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
     value: ast.expr | None = None
     for node in tree.body:
+        declares_all = (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and any(
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in node.targets
+            )
+            or isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "__all__"
+        )
+        annotation_uses_all = isinstance(node, ast.AnnAssign) and _uses_all(
+            node.annotation
+        )
+        if annotation_uses_all or not declares_all and _uses_all(node):
+            raise ValueError(
+                f"{source}: dynamic use/mutation of __all__ is unsupported; "
+                "public __all__ must be a literal list or tuple of names"
+            )
         if (
             isinstance(node, ast.Assign)
             and any(
@@ -55,6 +118,9 @@ def _literal_all(source: Path) -> tuple[str, ...] | None:
                 and node.target.id == "__all__"
             )
         ):
+            # A bare annotation updates __annotations__, not the runtime value.
+            if isinstance(node, ast.AnnAssign) and node.value is None:
+                continue
             value = node.value
     if value is None:
         return None
@@ -141,13 +207,19 @@ def render_python_api_markdown(package: Path | None = None) -> str:
         "# Python API",
         "",
         "This page is generated at Sphinx build time from the Python source tree.",
-        f"A module is part of this reference when it has a literal {BT}__all__{BT};",
+        f"A module under {BT}python/generativeqc{BT} is part of this reference when it has a literal {BT}__all__{BT};",
         "private modules and implementation files without that declaration are skipped.",
         "Adding a new public module therefore does not require editing the documentation",
         "navigation or this page.",
+        "Compiler/research modules are covered only through declarations re-exported by",
+        f"this supported facade, including {BT}generativeqc.extensions{BT}.",
         "",
         "Signatures, type annotations, docstrings, inheritance, and source links are",
         "taken from the importable objects during the Sphinx build.",
+        "",
+        "Shared [calculation, batch, result and Torch contracts](python_execution_contracts.md)",
+        "and [extension/family contracts and coverage policy](python_contracts.md)",
+        "supply applicable units, shapes, failures, ownership and backend boundaries.",
         "",
         "## Public modules",
         "",

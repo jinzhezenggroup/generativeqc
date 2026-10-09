@@ -96,6 +96,7 @@ class BasisProvenance:
     checksum: str
 
     def __post_init__(self) -> None:
+        """Require source, version, license, and a lowercase SHA-256 source checksum."""
         if not all(
             isinstance(v, str) and v.strip()
             for v in (self.source, self.version, self.license)
@@ -121,6 +122,7 @@ class BasisShell:
     source_group: int = 0
 
     def __post_init__(self) -> None:
+        """Validate shell sizes and normalize exponent/coefficient decimal strings."""
         object.__setattr__(
             self,
             "angular_momentum",
@@ -206,6 +208,7 @@ class ElementBasis:
     ecp_data: str | None = None
 
     def __post_init__(self) -> None:
+        """Validate nuclear/ECP metadata and freeze the nonempty canonical shell sequence."""
         object.__setattr__(
             self,
             "atomic_number",
@@ -252,6 +255,7 @@ class BasisSet:
     ordering: str = ORDERING
 
     def __post_init__(self) -> None:
+        """Validate basis conventions and sort unique element records by atomic number."""
         if not isinstance(self.name, str) or not self.name.strip():
             raise ValueError("basis requires a nonempty name")
         if not isinstance(self.provenance, BasisProvenance):

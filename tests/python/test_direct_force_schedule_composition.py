@@ -65,12 +65,21 @@ def composed_force_probe(
 
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("range_operator", (0, 1, 2))
+@pytest.mark.parametrize("maximum_shell_angular", (0, 1, 2, 3, 255))
 def test_composed_force_owners_and_submission_failures(
-    composed_force_probe: Path, unrestricted: bool, range_operator: int
+    composed_force_probe: Path,
+    unrestricted: bool,
+    range_operator: int,
+    maximum_shell_angular: int,
 ) -> None:
     """Every lease/cache state must own each order once and stop on any error."""
     result = subprocess.run(
-        [str(composed_force_probe), str(int(unrestricted)), str(range_operator)],
+        [
+            str(composed_force_probe),
+            str(int(unrestricted)),
+            str(range_operator),
+            str(maximum_shell_angular),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -106,6 +115,7 @@ def test_independent_force_oracle_retains_both_schedule_dimensions() -> None:
 
 
 PREFIX = r"""
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -251,9 +261,10 @@ cudaError_t run() {
       coulomb, exchange, {23}, expected_resident);
 }
 int main(int argc, char** argv) {
-  assert(argc == 3);
+  assert(argc == 4);
   expected_unrestricted = std::atoi(argv[1]);
   const int selection = std::atoi(argv[2]);
+  const unsigned basis_bound = static_cast<unsigned>(std::atoi(argv[3]));
   const bool long_range = selection == 2;
   expected_range = long_range ? DirectRangeOperator::Long
                              : selection == 1 ? DirectRangeOperator::Full
@@ -279,7 +290,7 @@ int main(int argc, char** argv) {
     for (int pair_state = 0; pair_state < 7; ++pair_state) {
       expected_batch = {true, &views, &views, 0, 0};
       expected_batch.direct_pair_cooperative_derivatives = cooperative_state != 0;
-      expected_batch.direct_maximum_shell_angular = cooperative_state < 2 ? 2
+      expected_batch.direct_maximum_shell_angular = cooperative_state < 2 ? basis_bound
                                                  : cooperative_state == 2 ? 3 : 255;
       switch (pair_state) {
         case 1: expected_batch.direct_pair_materialized_derivatives = false; break;
@@ -291,13 +302,15 @@ int main(int argc, char** argv) {
                     expected_batch.direct_hermite_convolution = 1; break;
       }
       std::vector<Event> expected;
-      for (int order = 0; order <= 12; ++order) {
+      const int last_order = static_cast<int>(
+          std::min(12U, 4U * expected_batch.direct_maximum_shell_angular));
+      for (int order = 0; order <= last_order; ++order) {
         if (!long_range && resident_state == 0 && order == 1) {
           expected.push_back({Resident, order, false});
         } else {
           const bool pair = !long_range && (pair_state == 0 || pair_state == 6) && order == 8;
           expected.push_back({Reset, -1, false});
-          const bool cooperative = !long_range && cooperative_state == 1 &&
+          const bool cooperative = !long_range && cooperative_state == 1 && basis_bound <= 2 &&
               (pair_state == 0 || pair_state == 1 || pair_state == 6) &&
               order == 7;
           expected.push_back({Bounded, order, pair, cooperative});

@@ -193,30 +193,6 @@
   },
   "files": [
     {
-      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
-      "family": "pbe0-cuda-schedule-20261006",
-      "bytes": 756252,
-      "sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact #2036-base endpoint/reference streams, resource analysis, frozen source restoration and negative trials; warm-only promotion, without cold or allocator/deployment claims."
-    },
-    {
-      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-bundle.json.xz",
-      "family": "pbe0-cuda-schedule-20261006",
-      "bytes": 612472,
-      "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
-    },
-    {
-      "path": "benchmarks/results/pbe0-resident-tiles-20261003/campaign.json.xz",
-      "family": "pbe0-resident-tiles-20261003",
-      "bytes": 134300,
-      "sha256": "1d6dd690d29a8174c0eb0769c6f914b222dd7046e777a73e6ae3d4243b84bc48",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
-    },
-    {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
       "family": "cg01",
@@ -465,14 +441,6 @@
       "sha256": "5b9d20f364e6a02d3eb80b6aef4fd2f04b16a95754b9f3463b5155074acc1745"
     },
     {
-      "bytes": 444945,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-device-response",
-      "path": "benchmarks/results/issue206-device-response/summary.json",
-      "role": "decision-or-audit-record",
-      "sha256": "102788881db492a5454326fcde8f4cf6a38cbaee290cd31e36f3384482e48368"
-    },
-    {
       "bytes": 142797,
       "classification": "required-compact-accepted-evidence",
       "family": "issue206-metric-gemv",
@@ -663,6 +631,30 @@
       "path": "benchmarks/results/one-electron-values-rtx5090/sp8-b3-thread.json",
       "role": "scientific-record",
       "sha256": "5caca21fb3c48a5e185821603750cf6041331c0f9e67f35255f61f25dc9f3780"
+    },
+    {
+      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/bundle.json.xz",
+      "family": "pbe0-cuda-schedule-20261006",
+      "bytes": 756252,
+      "sha256": "4d5560a5baebf7e75a55f034989ca8ee0339d9877313086f8a1936198aaf209f",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact #2036-base endpoint/reference streams, resource analysis, frozen source restoration and negative trials; warm-only promotion, without cold or allocator/deployment claims."
+    },
+    {
+      "path": "benchmarks/results/pbe0-cuda-schedule-20261006/integration-bundle.json.xz",
+      "family": "pbe0-cuda-schedule-20261006",
+      "bytes": 612472,
+      "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
+    },
+    {
+      "path": "benchmarks/results/pbe0-resident-tiles-20261003/campaign.json.xz",
+      "family": "pbe0-resident-tiles-20261003",
+      "bytes": 134300,
+      "sha256": "1d6dd690d29a8174c0eb0769c6f914b222dd7046e777a73e6ae3d4243b84bc48",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
     },
     {
       "bytes": 382561,

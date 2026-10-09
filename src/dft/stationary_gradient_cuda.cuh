@@ -24,6 +24,10 @@ struct Owner {
   bool profile = false, geometry_pending = false;
   bool becke_primitive_requested = false, becke_primitive = false,
        becke_primitive_configured = false;
+  unsigned becke_primitive_mode{};
+  double geometry_tolerance{};
+  unsigned long long* becke_zero_seed_points{};
+  bool becke_zero_seed_requested = true, becke_zero_seed_configured = false;
   bool becke_normalize_supported = false, becke_normalize_cooperative = false,
        becke_normalize_configured = false;
   cudaStream_t geometry_stream{};
@@ -75,6 +79,12 @@ PhasedBeckeInput phased_input(Owner& owner, size_t points) {
   input.work = {owner.atoms, points, pair_storage, fields, zeros, maximum};
   input.seeds = maximum + owner.points;
   input.indices = reinterpret_cast<uint2*>(input.seeds + owner.points);
+  // Only the authenticated first-derivative route may elide zero cotangents.
+  // A positive separation floor keeps prepared reciprocal partials finite;
+  // smaller tolerances retain the ordinary error/overflow behavior unchanged.
+  input.zero_seed_elision = owner.becke_primitive && owner.becke_primitive_mode == 2 &&
+                            owner.becke_zero_seed_requested && owner.geometry_tolerance >= 1e-12;
+  input.zero_seed_points = owner.becke_zero_seed_points;
   return input;
 }
 // Caps make all products below representable before any allocation or pointer
@@ -206,6 +216,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     if (geometry_lanes != view.npoint || !center_pairs || owner.becke_threads_per_point <= 1)
       throw std::invalid_argument("phased Becke lane/cache contract changed");
     phased = phased_input(owner, view.npoint);
+    phased.normalized_adjoints = owner.becke_primitive && owner.becke_primitive_mode == 2;
     phased.points = view.points;
     phased.centers = centers;
     phased.owners = owners;
@@ -254,9 +265,15 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     }
     profile_record(owner, owner.becke_events[4], stream);
     if (owner.becke_primitive) {
-      phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
+      if (owner.becke_primitive_mode == 2)
+        phased_becke_pair<true, false, true><<<pair_blocks, 128, 0, stream>>>(phased);
+      else
+        phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
       profile_record(owner, owner.becke_events[5], stream);
-      phased_becke_atom<2, true><<<atom_blocks, 128, 0, stream>>>(phased);
+      if (owner.becke_primitive_mode == 2)
+        phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
+      else
+        phased_becke_atom<2, true><<<atom_blocks, 128, 0, stream>>>(phased);
       ++owner.becke_primitive_batches;
       owner.becke_primitive_reverse_pair_visits += view.npoint * na * (na - 1) / 2;
     } else {
@@ -365,6 +382,12 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->point_atoms = reinterpret_cast<int64_t*>(take(np));
     p->density = take(ns * n * n);
     p->weighted_density = take(ns * n * n);
+    // The charged 256-byte control panel reserves two error words followed by
+    // this aligned counter. It is not part of the mathematical scratch alias.
+    p->becke_zero_seed_points = reinterpret_cast<unsigned long long*>(
+        reinterpret_cast<unsigned char*>(p->context.error) + 8);
+    cuda_check(cudaMemsetAsync(p->becke_zero_seed_points, 0, sizeof(unsigned long long),
+                               p->context.stream));
     *output = p.release();
   });
 }
@@ -492,28 +515,37 @@ int stationary_configure_becke_primitive_v1(void* pointer, int enabled, char* er
   auto* owner = static_cast<Owner*>(pointer);
   return guarded(owner, error, size, [&] {
     if (!owner || owner->topology_ready || owner->becke_primitive_configured ||
-        (enabled != 0 && enabled != 1))
+        (enabled < 0 || enabled > 2))
       throw std::invalid_argument("Becke primitive must be configured once before topology");
     owner->context.check_device();
     owner->becke_primitive_configured = true;
     owner->becke_primitive_requested = enabled;
+    owner->becke_primitive_mode = enabled;
     // A losing schedule is opt-in only. Reuse the already admitted reservation,
     // center lifetime and point lanes; never allocate or evict another owner.
     if (!enabled || !owner->phased_storage || !owner->center_pairs ||
         owner->atoms > stationary_becke_primitive_max_atoms)
       return;
     cudaFuncAttributes reverse{}, gather{};
-    cuda_check(cudaFuncGetAttributes(&reverse, phased_becke_pair<true, true>));
-    cuda_check(cudaFuncGetAttributes(&gather, phased_becke_atom<2, true>));
+    if (enabled == 2) {
+      cuda_check(cudaFuncGetAttributes(&reverse, phased_becke_pair<true, false, true>));
+      cuda_check(cudaFuncGetAttributes(&gather, phased_becke_atom<2>));
+    } else {
+      cuda_check(cudaFuncGetAttributes(&reverse, phased_becke_pair<true, true>));
+      cuda_check(cudaFuncGetAttributes(&gather, phased_becke_atom<2, true>));
+    }
     if (reverse.maxThreadsPerBlock < 128 || gather.maxThreadsPerBlock < 128) return;
     owner->becke_primitive = true;
   });
 }
+int stationary_configure_becke_normalized_adjoint_v1(void* pointer, char* error, size_t size) {
+  return stationary_configure_becke_primitive_v1(pointer, 2, error, size);
+}
 int stationary_becke_primitive_metrics_v1(void* pointer, uint64_t* output, size_t count) {
   auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
   if (!owner || !output || count != 4) return 1;
-  output[0] = owner->becke_primitive_requested;
-  output[1] = owner->becke_primitive;
+  output[0] = owner->becke_primitive_mode;
+  output[1] = owner->becke_primitive ? owner->becke_primitive_mode : 0;
   output[2] = owner->becke_primitive_batches;
   output[3] = owner->becke_primitive_reverse_pair_visits;
   return 0;
@@ -524,7 +556,8 @@ int stationary_becke_phase_metrics_v1(void* pointer, uint64_t* output, size_t co
   const uint64_t points = owner->phased_points;
   const uint64_t atom_entries = points * owner->atoms;
   const uint64_t pairs = points * owner->atoms * (owner->atoms - 1) / 2;
-  const uint64_t reverse_words = owner->becke_primitive ? 2 : 4;
+  const bool coefficients = owner->becke_primitive && owner->becke_primitive_mode == 1;
+  const uint64_t reverse_words = coefficients ? 2 : 4;
   // Dense launched domains and logical distinct panel values, not hardware
   // transactions or completed work from a failed force. Conditional primal/log
   // reads and scalar transcendental evaluations are deliberately not inferred.
@@ -541,7 +574,7 @@ int stationary_becke_phase_metrics_v1(void* pointer, uint64_t* output, size_t co
                           4 * 8 * pairs,
                           reverse_words * 8 * pairs,
                           2 * reverse_words * 8 * pairs,
-                          owner->becke_primitive ? 2 * 3 * 8 * pairs : 0,
+                          coefficients ? 2 * 3 * 8 * pairs : 0,
                           owner->becke_profile_batches,
                           8 * owner->becke_profile_batches,
                           owner->becke_profile_batches};
@@ -553,6 +586,29 @@ int stationary_becke_phase_profile_v1(void* pointer, double* output, size_t coun
   if (!owner || !output || count != 7) return 1;
   std::copy(owner->becke_phase_ms, owner->becke_phase_ms + 7, output);
   return 0;
+}
+int stationary_becke_zero_seed_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  if (!owner || !output || count != 2) return 1;
+  try {
+    owner->context.check_device();
+    drain_geometry(*owner);
+    output[0] = owner->becke_primitive && owner->becke_primitive_mode == 2 &&
+                owner->becke_zero_seed_requested && owner->geometry_tolerance >= 1e-12;
+    output[1] = 0;
+    if (owner->becke_primitive_mode != 2) return 0;
+    cuda_check(cudaMemcpyAsync(output + 1, owner->becke_zero_seed_points, sizeof(uint64_t),
+                               cudaMemcpyDeviceToHost, owner->context.stream));
+    cuda_check(cudaStreamSynchronize(owner->context.stream));
+    owner->downloads += sizeof(uint64_t);
+    ++owner->d2h_calls;
+    ++owner->synchronizations;
+    return 0;
+  } catch (...) {
+    owner->failed = true;
+    return 1;
+  }
 }
 int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
@@ -616,6 +672,19 @@ int stationary_profile(void* pointer, char* error, size_t size) {
     p->profile = true;
   });
 }
+int stationary_configure_becke_zero_seed_v1(void* pointer, int enabled, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || owner->becke_zero_seed_configured ||
+        (enabled != 0 && enabled != 1))
+      throw std::invalid_argument(
+          "Becke zero-seed elision must be configured once before topology");
+    owner->context.check_device();
+    owner->becke_zero_seed_configured = true;
+    owner->becke_zero_seed_requested = enabled;
+  });
+}
 int stationary_reset(void* pointer, const double* centers, const double* density,
                      const double* weighted_density, double tolerance, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
@@ -627,6 +696,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     drain_geometry(*p);
     p->failed = false;
     p->geometry_peak_lanes = 0;
+    p->geometry_tolerance = tolerance;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
@@ -658,6 +728,7 @@ int stationary_geometry_reset(void* pointer, const double* centers, double toler
     drain_geometry(*p);
     p->failed = false;
     p->geometry_peak_lanes = 0;
+    p->geometry_tolerance = tolerance;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));

@@ -32,6 +32,60 @@ Lambda transpose/parameter/factor actions and the DF residual without changing
 the scalar fallback or expanded acceptance audit. It does not infer symmetry
 from equal dimensions or reconstruct omitted `ovvv`/`vvvv` blocks.
 
+The FP64 matrix Lambda core additionally supports owner-local immutable primal
+staging. The shared TensorIR iteration-reuse proof excludes all adjoint-seed
+dependencies, and retained-slot planning prevents dynamic writes from aliasing
+prepared values. Preparation runs once after the immutable primal cuts, restoring
+the non-batched core extent to one after any partial Q tail. Physical transpose
+actions and the final factor VJP reuse those values; the expanded independent
+physical-equation audit does not consume these cuts or retained values.
+
+`LambdaOptions::df_core_reuse` and the complete owner's trailing
+`lambda_core_reuse` selector enable this optional schedule. Charge its entire
+exclusive core arena and additional prepared-contraction descriptors alongside
+the original matrix/scalar arenas and provider allowance. Budget refusal retains
+ordinary matrix execution. CUDA allocation shortage drops this retention before
+discarding the matrix provider; numerical, binding and driver failures propagate
+without publishing a response. No cached state survives into another owner or
+is admitted through equal pointers, dimensions or stale Hamiltonian identity.
+
+The optional FP64 matrix audit lowers the original expanded retained transpose
+and original per-Q virtual amplitude VJP through the shared matrix compiler. It
+does not replace independent equations with the staged solver graph. Its core
+and batched auxiliary programs use their own bounded arena and descriptors,
+sharing the already admitted strict-FP64 provider. The original scalar expanded
+audit remains the explicit budget/provider fallback. Only CUDA allocation
+shortage may discard an optional arena: first core retention, then matrix audit,
+then ordinary matrix execution. Nonfinite, numerical, launch, binding and driver
+errors still abort without publishing any response.
+
+Benchmark argument twenty-five selects core reuse (`0`/`1`, default `1`).
+Argument twenty-six selects the matrix audit (`0`/`1`, default `1`), matching
+`LambdaOptions::df_audit_matrix_gemm` and the complete owner's trailing
+`lambda_audit_matrix` selector. Actual admission, exclusive audit arena bytes,
+the independent equation hash and separate audit schedule hash are reported.
+`lambda_core_reuse_bytes` is the entire exclusive retained/dynamic arena, not an
+observed GPU peak. Preparation/action counts and the compiler reuse-plan hash
+distinguish execution from resource refusal. With
+`GENERATIVEQC_DF_PROGRESS_TRACE`, immediate Lambda initialization/replay/RHS/GMRES/
+independent-audit/parameter-factor-VJP phases are separate. Each Arnoldi and exact
+residual action carries executed work/transfer/synchronization increments beneath
+GMRES; nested times must not be added to parents. Clean timing disables this
+journal and must not be pooled with instrumented observations.
+
+`benchmarks/df_lambda_core_reuse_ablation.py` alternates repeated forward-W,
+cadence and candidate controls on the exact frozen 230-AO input in a finite Slurm
+allocation. Candidate `r0` disables both retention and matrix audit; `r1` requests
+both, with actual selection reported independently. The eight configurations,
+each repeated in reversed order, include the requested FP64/FP32 W by cadence
+1/30 ablation within each candidate. Independent PySCF energy and retained
+two-step physical directional
+force gates run after execution; reference state never enters production. Changed
+binaries, discarded attempts and incomplete observations cannot produce an
+accepted summary. `--screen` is explicitly preliminary, not a repeated ablation.
+Neither a complete-endpoint speedup nor the `<120 s` Lambda stretch target follows
+from implementing the schedule alone; both require measured qualification.
+
 `cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
 cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 `fock_response_df_cuda` supplies same-space Fock matrices, including internal

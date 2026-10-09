@@ -40,6 +40,7 @@ class FockTerm:
     approximation: str = "exact"
 
     def __post_init__(self) -> None:
+        """Validate presence, operator, approximation, and finite range parameters."""
         if type(self.present) is not bool:
             raise TypeError("Fock presence must be bool")
         if self.operator not in _OPERATORS or self.approximation not in _APPROXIMATIONS:
@@ -66,6 +67,7 @@ class FockBuildSpec:
     exchange: FockTerm = field(default_factory=lambda: FockTerm(coefficient=-0.5))
 
     def __post_init__(self) -> None:
+        """Validate the supported spin, derivative order, and Coulomb/exchange terms."""
         if (
             self.spin not in _SPINS
             or type(self.derivative_order) is not int
@@ -98,6 +100,7 @@ class FockBuildSpec:
         )
 
     def to_dict(self) -> typing.Any:
+        """Return the versioned Fock specification as a nested dictionary."""
         return {"version": 1, **asdict(self)}
 
 
@@ -354,6 +357,7 @@ class FockEvaluation(_DiagnosticResult):
 
     @property
     def energy(self) -> typing.Any:
+        """Return the sum of one-electron, two-electron, and nuclear energies."""
         return (
             self.energy_one_electron + self.energy_two_electron + self.nuclear_repulsion
         )
@@ -401,6 +405,7 @@ class FockPlan:
         metric_relative_threshold: typing.Any = 1e-10,
         device_budget_bytes: typing.Any = 0,
     ) -> None:
+        """Prepare a native Fock plan for the basis, terms, device, and resource limits."""
         from generativeqc_compiler.dft import NativeAO
 
         from .calculator import Calculator
@@ -509,14 +514,17 @@ class FockPlan:
 
     @property
     def basis(self) -> typing.Any:
+        """Return the orbital NativeAO basis bound to this plan."""
         return self._basis
 
     @property
     def spec(self) -> typing.Any:
+        """Return the requested Coulomb and exchange build specification."""
         return self._spec
 
     @property
     def identity(self) -> typing.Any:
+        """Return the canonical identity of the resolved scientific Fock contract."""
         return self._identity
 
     @property
@@ -530,6 +538,7 @@ class FockPlan:
 
     @property
     def diagnostics(self) -> typing.Any:
+        """Query the open native plan for resolved schedules, storage, and provenance."""
         with self._lock:
             self._ensure_open()
             out = _descriptor(_Diagnostic)
@@ -775,18 +784,22 @@ class FockPlan:
             )
 
     def close(self) -> None:
+        """Release the native plan once; repeated calls have no effect."""
         with self._lock:
             if self._handle:
                 self._library.generativeqc_fock_plan_destroy(self._handle)
                 self._handle = ct.c_void_p()
 
     def __enter__(self) -> typing.Any:
+        """Require an open plan and return it for context-managed use."""
         self._ensure_open()
         return self
 
     def __exit__(self, *_: object) -> None:
+        """Release the native plan when leaving the context."""
         self.close()
 
     def __del__(self) -> None:
+        """Release native resources if plan initialization created its lock."""
         if hasattr(self, "_lock"):
             self.close()

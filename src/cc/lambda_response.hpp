@@ -53,6 +53,11 @@ struct LambdaOptions {
   // matrix storage/provider allocation falls back to the scalar staged graph.
   bool df_matrix_gemm{true};
   std::size_t df_auxiliary_batch_limit{8};
+  // Optional immutable primal staging belongs to a single Problem/T owner.
+  // Budget/provider/allocation refusal retains the original FP64 matrix path.
+  bool df_core_reuse{true};
+  // The original expanded audit graph, optionally through bounded FP64 GEMM.
+  bool df_audit_matrix_gemm{true};
 };
 
 struct LambdaDiagnostic {
@@ -79,6 +84,12 @@ struct LambdaDiagnostic {
   std::size_t df_auxiliary_batch_size{1}, df_auxiliary_batches{};
   std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_output_bytes{};
   std::size_t df_provider_allowance_bytes{};
+  bool df_core_reuse{};
+  std::size_t df_core_reuse_bytes{}, df_core_reuse_preparations{}, df_core_reuse_actions{};
+  const char* core_reuse_plan_hash{};
+  bool df_audit_matrix_gemm{};
+  std::size_t df_audit_arena_bytes{};
+  const char* audit_schedule_hash{};
   const char* shared_program_hash{};
   const char* independent_program_hash{};
 };

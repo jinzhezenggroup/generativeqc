@@ -56,6 +56,8 @@ if typing.TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class BatchItemResult:
+    "Result for one input-indexed ragged-batch member.\n\nEnergy is in Hartree and optional forces are in Hartree/Bohr. Inspect\n``succeeded`` or ``status`` before consuming a member's numerical outputs."
+
     index: int
     status: int
     status_message: str
@@ -86,17 +88,24 @@ class BatchItemResult:
 
     @property
     def succeeded(self) -> bool:
+        """Report whether the native item status indicates success."""
         return self.status == _native.STATUS_SUCCESS
 
 
 @dataclass(frozen=True)
 class BatchResult:
-    """Input-ordered results for a ragged batch; forces are never padded."""
+    """Input-ordered results for a ragged batch; forces are never padded.
+
+    ``energies`` is a fresh float64 vector in Hartree with NaN for failed
+    items. Check status before using an item's raw scalar diagnostics.
+    ``raise_for_failures`` raises RuntimeError with item indices and details.
+    See :ref:`python-results-values` and :ref:`python-results-ownership`."""
 
     items: tuple[BatchItemResult, ...]
 
     @property
     def energies(self) -> np.ndarray:
+        """Return float64 item energies, substituting NaN for failed items."""
         return np.asarray(
             [item.energy if item.succeeded else np.nan for item in self.items],
             dtype=np.float64,
@@ -104,13 +113,16 @@ class BatchResult:
 
     @property
     def failure_indices(self) -> tuple[int, ...]:
+        """Return the indices of items whose native status indicates failure."""
         return tuple(item.index for item in self.items if not item.succeeded)
 
     @property
     def succeeded(self) -> bool:
+        """Report whether every item in the batch succeeded."""
         return not self.failure_indices
 
     def raise_for_failures(self) -> None:
+        """Raise RuntimeError listing each failed item index and status message."""
         failures = [
             f"{item.index}: {item.status_message}"
             for item in self.items
@@ -127,7 +139,11 @@ class PreparedBatch:
     may update per-system warm-start densities. Use separate plans for
     concurrent callers. Warm-start updates can be frozen after an initial
     execution when reproducible replays from one fixed dm0 are required.
-    """
+
+    Coordinates are in Bohr; energies and forces use Hartree and Hartree/Bohr.
+    Use context-managed lifetime or explicit ``close``. Result arrays outlive
+    the plan. See :ref:`python-batch-values`, :ref:`python-batch-errors`,
+    :ref:`python-batch-ownership` and :ref:`python-batch-backends`."""
 
     @property
     def capabilities(self) -> MethodCapabilities:
@@ -180,18 +196,22 @@ class PreparedBatch:
 
     @property
     def projection_diagnostics(self) -> dict[str, typing.Any] | None:
+        """Return the most recent warm-start projection diagnostics, if any."""
         return self._warm_state.projection_diagnostics
 
     @projection_diagnostics.setter
     def projection_diagnostics(self, value: dict[str, typing.Any] | None) -> None:
+        """Replace the stored warm-start projection diagnostics."""
         self._warm_state.projection_diagnostics = value
 
     @property
     def checkpoint_diagnostics(self) -> dict[str, typing.Any] | None:
+        """Return the most recent warm-start checkpoint diagnostics, if any."""
         return self._warm_state.checkpoint_diagnostics
 
     @checkpoint_diagnostics.setter
     def checkpoint_diagnostics(self, value: dict[str, typing.Any] | None) -> None:
+        """Replace the stored warm-start checkpoint diagnostics."""
         self._warm_state.checkpoint_diagnostics = value
 
     def __init__(
@@ -206,6 +226,12 @@ class PreparedBatch:
         inactive_eigensolver_profiling: bool = False,
         resource_plan: typing.Any = None,
     ) -> None:
+        """Prepare native systems and method resources for repeated batch evaluation.
+
+        Charges and multiplicities default to zero and one per system. Explicit
+        sequences must match the nonempty batch; an optional resource plan must
+        match the requested systems, method, and calculator budget.
+        """
         if not systems:
             raise ValueError("a batch requires at least one system")
         self._last_statuses = None
@@ -518,11 +544,13 @@ class PreparedBatch:
 
     @property
     def system_count(self) -> int:
+        """Return the number of systems in the open native batch."""
         self._ensure_open()
         return int(self._library.generativeqc_batch_get_system_count(self._batch))
 
     @property
     def atomic_numbers(self) -> tuple[tuple[int, ...], ...]:
+        """Return the prepared atomic numbers grouped in batch order."""
         return self._atomic_numbers
 
     @property
@@ -984,7 +1012,14 @@ class PreparedBatch:
         other owners retain their conservative force capacity allowance.
         Generated force failures retain the original exception type and detail
         in the failed item's ``status_message``, including in strict mode.
-        """
+
+        Coordinates use Bohr. This call is synchronous and must not race another
+        operation on this plan. ``strict=False`` preserves input-ordered item
+        statuses; failed-item forces are None and their scalar energy is not a
+        usable result. ``strict=True`` raises after any failed item, without
+        rolling back successful neighbors' warm-state updates. Whole-call and
+        diagnostic-query errors raise in either mode. Result storage outlives
+        the plan. See :ref:`python-batch-errors`."""
         self._ensure_open()
         from .initial_guess import read_initial_guess_diagnostic
 
@@ -1505,6 +1540,7 @@ class PreparedBatch:
         )
 
     def clear_warm_starts(self) -> None:
+        """Clear both native warm starts and the associated Python warm-state records."""
         self._ensure_open()
         _native.check(
             self._library,
@@ -1610,6 +1646,7 @@ class PreparedBatch:
         return read_inactive_eigensolver_profile(self._library, self._batch)
 
     def close(self) -> None:
+        """Release cached execution, correction, batch, context, and ledger resources."""
         if self._snapshot_grid_cache is not None:
             self._snapshot_grid_cache.clear()
             self._snapshot_grid_cache = None
@@ -1631,12 +1668,15 @@ class PreparedBatch:
             self._resource_ledger.close()
 
     def __enter__(self) -> Self:
+        """Require an open batch and return it for context-managed use."""
         self._ensure_open()
         return self
 
     def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> None:
+        """Release the prepared batch resources when leaving the context."""
         self.close()
 
     def __del__(self) -> None:
+        """Attempt to close the batch, suppressing cleanup errors during finalization."""
         with suppress(Exception):
             self.close()

@@ -72,6 +72,7 @@ struct Batch { std::size_t total_shell_pair_block_quartets; };
 __global__ void probe(Batch batch, detail::BoundedDirectBlockDomain block_domain,
                       const unsigned* candidate_counts, unsigned long long* global_cursor,
                       unsigned* visits, unsigned skip_mode) {
+  constexpr bool Force = true;
   __shared__ unsigned long long block_quartet;
 """
         + preparation
@@ -93,7 +94,7 @@ __global__ void probe(Batch batch, detail::BoundedDirectBlockDomain block_domain
         + page
         + r"""
     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
-         candidate_begin += detail::kBoundedDirectQueueCapacity) {
+         candidate_begin += candidate_packet) {
       __syncthreads();
       atomicAdd(visits + observed * threads + threadIdx.x, 1U);
       __syncthreads();
@@ -143,7 +144,7 @@ int main() {
               const std::size_t begin = indexed ? (ordinal % pages) * 64 : 0;
               const auto end = indexed ? std::min<std::size_t>(counts[product], begin + 64) : counts[product];
               if (!skipped && end > begin)
-                expected = (end - begin + detail::kBoundedDirectQueueCapacity - 1) / detail::kBoundedDirectQueueCapacity;
+                expected = (end - begin + threads - 1) / threads;
             }
             for (unsigned lane = 0; lane < threads; ++lane)
               assert(actual[ordinal * threads + lane] == expected);

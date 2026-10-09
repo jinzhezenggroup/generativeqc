@@ -1,0 +1,85 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All 16 frozen complete cold endpoints pass independent energy/two-step directional force, common-strict component, translation and exact Lambda/Z/stationarity gates. Performance medians/spreads are descriptive; no shared five-pair production promotion is claimed.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 16000,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "196d68780f17954b8a65d72a5fffbbf994b1927417e32e8128851baa215461ca"
+    },
+    {
+      "bytes": 9196,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "7fb11d20c66a0ec8c6a0cc5d3493f2c836452c2ce2c2124128bfe16d2aef20eb"
+    },
+    {
+      "bytes": 15858,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "930e213db2bd0361f09c4cba2047266b05610dfcb963c4c1be5e670c2556f5c1"
+    },
+    {
+      "bytes": 67653,
+      "path": "samples.json",
+      "role": "samples",
+      "sha256": "7dafa7b5cdf85973ab0a5508476c54c467f6c5d6be14957dff71fba58d85e34b"
+    },
+    {
+      "bytes": 45950,
+      "path": "profile-summary.json",
+      "role": "summary",
+      "sha256": "500e38d415b97278f122fb5037fc578b7b9926cf1118cf86dea41b98a692f676"
+    },
+    {
+      "bytes": 8580,
+      "path": "oracle-energy.json",
+      "role": "input",
+      "sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b"
+    },
+    {
+      "bytes": 27497,
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "6364af41803acea67e165d92b8f43fb11c571dbf6392a9c6137761d6302e3d7a"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node2",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=8",
+      "--time=04:00:00",
+      "python",
+      "benchmarks/df_lambda_core_reuse_ablation.py",
+      "--endpoint",
+      "build/endpoint",
+      "--library",
+      "build-cuda/libgenerativeqc.so",
+      "--input",
+      "benchmarks/results/rccsd-diis-ring-1900/ethane230.input",
+      "--oracle",
+      "benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json",
+      "--finite-differences",
+      "benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json",
+      "--output",
+      ".artifacts/issue2136/reproduction",
+      "--repetitions",
+      "2"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "957fd60b6fffa267918ab597ceb12fe2b1a8cd81"
+  }
+}

@@ -165,7 +165,7 @@ int main() {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
-                               expected_w, expected_lambda_interval);
+                               expected_w, expected_lambda_interval, true, true);
   };
   for (bool mixed_w : {false, true})
   for (std::size_t interval : {1, 30})

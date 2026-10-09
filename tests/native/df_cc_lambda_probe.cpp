@@ -56,6 +56,8 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.gmres.absolute_tolerance = 1e-12;
     response.df_auxiliary_reduction = !(mode & 4);
     response.df_matrix_gemm = !(mode & 8);
+    response.df_core_reuse = !(mode & 64);
+    response.df_audit_matrix_gemm = !(mode & 128);
     response.df_auxiliary_batch_limit = (mode & 16) ? 2 : 8;
     if (mode & 32) {
       // Large finite seeds overflow intermediate adjoints. The sticky flag
@@ -63,7 +65,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
       generativeqc::cc::detail::DFLambdaActions actions(p, cc, response, 0, false, true);
       std::vector<double> one(n1, std::numeric_limits<double>::max()),
           two(n2, std::numeric_limits<double>::max()), out_one, out_two;
-      actions.transpose(false, one, two, out_one, out_two);
+      actions.transpose(bool(mode & 256), one, two, out_one, out_two);
       throw std::logic_error("overflowing adjoint was accepted");
     }
     const auto result =
@@ -103,7 +105,13 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              d.df_gemm_calls,
                              d.df_gemm_summands,
                              d.df_packing_output_bytes,
-                             d.df_provider_allowance_bytes};
+                             d.df_provider_allowance_bytes,
+                             std::size_t(d.df_core_reuse),
+                             d.df_core_reuse_bytes,
+                             d.df_core_reuse_preparations,
+                             d.df_core_reuse_actions,
+                             std::size_t(d.df_audit_matrix_gemm),
+                             d.df_audit_arena_bytes};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

@@ -64,6 +64,7 @@ def _becke_owner(work: Mapping[str, typing.Any]) -> dict[str, typing.Any]:
         "becke_threads_per_point",
         "becke_shared_bytes",
         "phased_becke_bytes",
+        "becke_zero_seed_elision_enabled",
     )
     counters: dict[str, int] = {}
     logical_bytes: dict[str, int] = {}
