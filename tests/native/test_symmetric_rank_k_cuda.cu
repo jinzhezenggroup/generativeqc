@@ -216,6 +216,13 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
     int error{};
     check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
     if (error) throw std::runtime_error("rank-k valid case marked nonfinite");
+    if (weighted) {
+      std::vector<double> materialized(weights.size());
+      check(cudaMemcpy(materialized.data(), d_weights.get(), d_weights.bytes(),
+                       cudaMemcpyDeviceToHost));
+      if (!std::signbit(materialized[0]))
+        throw std::runtime_error("rank-k lost the negative-zero weight sign");
+    }
     std::vector<double> result(matrix_count);
     check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
     verify(result, baseline, coefficients, weights, n, k, batches, order, alpha, beta);

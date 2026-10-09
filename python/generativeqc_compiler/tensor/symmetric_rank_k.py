@@ -105,6 +105,12 @@ def symmetric_rank_k_request(
         raise ValueError("rank-k currently requires strict FP64 storage")
     adapter = TensorLoweringAdapter(program)
     base = adapter.request(node, backend="cuda")
+    arithmetic = adapter.directives[node]
+    if arithmetic.storage_dtype != "float64" or any(
+        adapter.directives[value] != arithmetic
+        for value in (left, weights, *weights.inputs)
+    ):
+        raise ValueError("rank-k weight and contraction require one strict FP64 schedule")
     if any(
         precision.directive.compute_dtype != "float64"
         or precision.directive.accumulation_dtype != "float64"
