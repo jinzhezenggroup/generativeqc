@@ -13,9 +13,13 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
     from tools.audit_native_complexity import (
@@ -37,6 +41,10 @@ except ModuleNotFoundError:
         _functions,
         _split,
     )
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+
+from generativeqc_compiler.common import materialization
 
 _ID = r"[A-Za-z_]\w*"
 _INTEGER = r"(?:std::size_t|size_t|int|unsigned(?:\s+long)?)"
@@ -532,9 +540,6 @@ def _certificate(
         "strict_reduction_conditions": [f"{dimension} > 1"]
         if single and domains[0]["kind"] == "lower-triangle"
         else [],
-        "recommendation": None
-        if dense or not single
-        else "Review block/diagonal/packed storage and all consumers before changing the dense ABI.",
         "conditions": sorted(range_conditions)
         + [
             "Integral dimensions and extents are nonnegative; scalar conversions preserve mathematical values and index/allocation arithmetic does not overflow.",
@@ -593,7 +598,7 @@ def audit_native(source: str, path: str = "<memory>") -> list[dict[str, Any]]:
                         },
                         "structured_ir": {
                             "status": "not-analyzed",
-                            "reason": "No TensorIR integration in this standalone slice.",
+                            "reason": "Source support feeds the shared diagnostic policy; TensorIR structure is not reconstructed.",
                         },
                     },
                 }
@@ -622,6 +627,35 @@ def audit_native(source: str, path: str = "<memory>") -> list[dict[str, Any]]:
                     )
                 except (Unsupported, RecursionError) as error:
                     finding["unknown_reason"] = str(error)
+                support_kind: materialization.SupportKind = {
+                    "dense-write-domain": "full-domain",
+                    "exact-structured-write-support": "exact-address-domain",
+                    "write-domain-union": "union-upper-bound",
+                }.get(finding["classification"], "unknown")
+                diagnostic = materialization.materialization_diagnostic(
+                    origin="native-source",
+                    subject={
+                        key: finding[key]
+                        for key in ("path", "line", "function", "buffer")
+                    },
+                    dense_elements=finding.get("dense_elements", args[0]),
+                    dense_growth_degree=finding.get("dense_growth_degree"),
+                    support_kind=support_kind,
+                    written_elements=finding.get("written_elements"),
+                    written_growth_degree=finding.get("written_growth_degree"),
+                    domains=finding.get("domains", []),
+                    expansion_ratio=finding.get("expansion_ratio"),
+                    conditions=finding.get("conditions", []),
+                    certificate_scope="producer-return; mathematical integer preconditions; possible write addresses, not numerical nonzeros",
+                    unknown_reason=finding.get("unknown_reason"),
+                    layout="aggregate-member-vector" if "." in name else "dense-vector",
+                )
+                finding["materialization_diagnostic"] = diagnostic
+                finding["recommendation"] = diagnostic["recommendation"]
+                finding["barriers"]["producer"].update(
+                    status=diagnostic["support"]["producer_status"],
+                    reason=finding.get("unknown_reason"),
+                )
                 findings.append(finding)
     return sorted(findings, key=lambda f: (f["line"], f["buffer"]))
 
@@ -708,6 +742,24 @@ def audit_mp2_representation_boundary(
                 ),
             }
         )
+    diagnostic = materialization.materialization_diagnostic(
+        origin="native-source-role-census",
+        subject={
+            "path": path,
+            "function": "initial_orbital_weights",
+            "buffer": "result.two_electron",
+        },
+        dense_elements="fourth_power(n) (observed expression, not a certified extent)",
+        support_kind="unknown",
+        certificate_scope="source-anchored owner/caller roles only; no aggregate write-support or whole-program alias/ABI proof",
+        unknown_reason=(
+            "assign freshness/type or aggregate ABI not resolved"
+            if not missing
+            else "; ".join(missing)
+        ),
+        layout="aggregate-member-vector",
+        observed_source_roles=evidence,
+    )
     return {
         "schema": "generativeqc.mp2-representation-boundary.v1",
         "path": path,
@@ -717,6 +769,7 @@ def audit_mp2_representation_boundary(
         "alternative": "streamed fock_weights + correlation_iajb owner",
         "observed_source_roles": evidence,
         "missing_roles": missing,
+        "materialization_diagnostic": diagnostic,
         "exact_write_support_proven": False,
         "runtime_endpoint_selection_proven": False,
         "consumer_abi_verified": False,
@@ -728,11 +781,21 @@ def audit_mp2_representation_boundary(
 
 
 def audit_tree(
-    root: Path, paths: tuple[str, ...] = ("src", "include")
+    root: Path,
+    paths: tuple[str, ...] = ("src", "include"),
+    *,
+    include_python_sources: bool = False,
+    _source_visitor: Callable[[str, bytes], None] | None = None,
 ) -> dict[str, Any]:
-    """Retain byte identities for every source and every consumed scanner module."""
+    """Retain strict path selection and identities for all consumed sources.
+
+    The common work audit includes Python in this same selection/provenance
+    boundary. Its visitor analyzes the same captured bytes, never a second read.
+    """
+    policy_identity = materialization.source_identity()
     root = root.resolve()
     sources: dict[str, str] = {}
+    suffixes = SOURCE_SUFFIXES | ({".py"} if include_python_sources else set())
     findings = []
     production_boundaries: list[dict[str, Any]] = []
     candidates: set[Path] = set()
@@ -757,13 +820,18 @@ def audit_tree(
         relative = source.relative_to(root).as_posix()
         if (
             not source.is_file()
-            or source.suffix not in SOURCE_SUFFIXES
+            or source.suffix not in suffixes
             or relative.startswith("src/xtb/native/")
         ):
             continue
         data = source.read_bytes()
         sources[relative] = hashlib.sha256(data).hexdigest()
-        findings.extend(audit_native(data.decode("utf-8", errors="replace"), relative))
+        if _source_visitor is not None:
+            _source_visitor(relative, data)
+        if source.suffix in SOURCE_SUFFIXES:
+            findings.extend(
+                audit_native(data.decode("utf-8", errors="replace"), relative)
+            )
         if relative == MP2_REPRESENTATION_SOURCE:
             production_boundaries.append(
                 audit_mp2_representation_boundary(data.decode("utf-8"), relative)
@@ -791,6 +859,15 @@ def audit_tree(
             "audit_native_work.py",
         )
     }
+    if materialization.source_identity() != policy_identity:
+        raise ValueError(
+            "materialization policy changed during scan; restart the audit"
+        )
+    scanners["python/generativeqc_compiler/common/materialization.py"] = policy_identity
+    if include_python_sources:
+        scanners["work_audit_python.py"] = hashlib.sha256(
+            (Path(__file__).parent / "work_audit_python.py").read_bytes()
+        ).hexdigest()
     dirty = git("status", "--porcelain")
     # Endpoint status cannot prove the intermediate symlink topology unchanged.
     # Known changes still take precedence over that uncertainty or a failed query.
@@ -819,6 +896,8 @@ def audit_tree(
         "schema": "generativeqc.native-structured-materialization.v1",
         "advisory_only": True,
         "provenance": {
+            "source_content_basis": "captured-source-bytes",
+            "filesystem_state_basis": "scan-time-observation",
             "commit": git("rev-parse", "HEAD"),
             "tree": git("rev-parse", "HEAD^{tree}"),
             "working_tree_dirty": None if dirty is None else bool(dirty),
