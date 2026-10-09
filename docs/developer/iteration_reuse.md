@@ -27,6 +27,44 @@ requires the relevant existing owner to refresh or replace that binding. Updatin
 density or CC amplitudes alone does not invalidate genuinely independent values,
 but every operation depending on them still executes.
 
+## Shared native storage lowering
+
+`tensor.native_arena.plan_symbolic_arena` owns the runtime-shape storage schedule
+used by the native RCCSD, triples/response, and DF Lambda generators. It consumes
+ordinary TensorIR after the existing production preparation passes. Domain
+adapters bind indices to runtime extent identifiers and supply the already
+selected dependency order; they do not color slots or infer invariance.
+
+The planner reserves exclusive slots for declared retained nodes before coloring
+dynamic scratch by last reader. Only identical symbolic products can share a
+slot. Equal representative sizes do not prove equal capacities at runtime.
+An operation cannot overwrite its own inputs, and all borrowed outputs remain
+live through return. Slot assignments are immutable and deterministic. The
+storage identity describes capacities and assignments only: it does not establish
+scientific identity, numeric validity, or an immutable-input epoch.
+
+This lowering contract is explicitly materialized, dense FP64 storage. It does
+not infer physical views, donate buffers, select providers, change execution
+order, or choose fusion/rematerialization. Alias-aware lowering uses the existing
+`common.storage` analysis; schedule selection and GPU profitability remain with
+the shared ScheduleIR infrastructure. Unknown runtime dimension bindings,
+non-FP64 intermediates, malformed orders, and invalid retained nodes fail closed.
+
+The emitted checked element-capacity expressions feed the existing native byte
+admission. They are not complete endpoint peaks or measured traffic. Native
+owners must charge reference inputs, outputs, solver storage, descriptors,
+preparation overlap, and dynamic workspaces, then allocate only the admitted
+layout. Allocation/preparation failure must not make a retained value ready.
+
+DF Lambda uses the same invariant proof and symbolic arena planner for its
+FP64 staged matrix core. Primal inputs are immutable within one native action
+owner; all adjoint seeds remain dynamic. The owner admits retained storage and
+contraction descriptors against its complete budget. A resource miss retains
+the full core evaluation; an optional allocation miss drops retention before
+retrying the bounded matrix route. Numerical/launch failures propagate without
+publishing partial output. This does not change batching, matrix-provider
+defaults, stationarity gates, or the independently expanded audit.
+
 ## Native RCCSD consumer
 
 The conventional dense CPU RCCSD solver exposes an internal, default-off
@@ -99,6 +137,12 @@ Run the focused shared proof tests with:
 
 ```sh
 PYTHONPATH=python:. python -m pytest tests/python/test_tensor_iteration_reuse.py
+```
+
+The symbolic storage contract and actual CPU owner can be checked with:
+
+```sh
+PYTHONPATH=python:. python -m pytest tests/python/test_tensor_native_arena.py tests/python/test_rccsd_iteration_reuse.py
 ```
 
 Native tests compare prepared and full evaluation over changing amplitudes and

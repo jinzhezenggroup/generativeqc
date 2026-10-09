@@ -37,6 +37,16 @@ execution templates; method and SCF code consume these interfaces. A compiler
 package move does not promote a new scientific capability or retire a native
 fallback. Native scientific ownership and retirement are tracked by #231.
 
+The compiler also owns the [shared iteration-invariant proof and symbolic native
+arena schedule](iteration_reuse.md). RCCSD and DF Lambda generators bind their
+scientific domains to this common TensorIR planner rather than owning storage
+coloring. Native owners retain complete-budget admission, allocation, epoch
+invalidation, solver state, failure handling, and output publication. Shared
+provider-source batching in `common.source_reuse` remains a distinct ordered
+traversal optimization; it is not proof of cross-iteration numeric validity.
+The ownership decision and overlap audit are retained in the
+[symbolic arena Agent Note](../../.agents/notes/implemented/architecture/2026-10-10-compiler-symbolic-native-arena.md).
+
 `dft.ao.NativeAO` is an explicit adapter to the existing normalized native
 basis ABI. Its runtime imports occur only during preparation. Likewise,
 `dft.grid.owned_atoms` uses the public Atom conversion only when accepting
