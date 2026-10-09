@@ -14,9 +14,19 @@ from generativeqc_compiler.tensor.weighted_gram_emit import emit_scalar_stages
 
 def render() -> str:
     root = Path(__file__).resolve().parents[1]
-    source = hashlib.sha256(
-        (root / "src/tensor/cuda_symmetric_rank_k.cuh").read_bytes()
-    ).hexdigest()
+    source_hash = hashlib.sha256()
+    for path in (
+        "python/generativeqc_compiler/tensor/scf.py",
+        "python/generativeqc_compiler/tensor/weighted_gram.py",
+        "python/generativeqc_compiler/tensor/weighted_gram_emit.py",
+        "python/generativeqc_compiler/tensor/scalar_cpp.py",
+        "python/generativeqc_compiler/tensor/symmetric_rank_k.py",
+        "src/tensor/cuda_symmetric_rank_k.cuh",
+        "tools/generate_symmetric_rank_k_cuda.py",
+    ):
+        source_hash.update(path.encode("utf-8") + b"\0")
+        source_hash.update((root / path).read_bytes().replace(b"\r\n", b"\n"))
+    source = source_hash.hexdigest()
     bodies = ["#pragma once", "#include <cmath>", '#include "runtime/lowering_binding.hpp"',
               "namespace generativeqc::tensor::rank_k_generated {"]
     stages = emit_scalar_stages("cuda", {
