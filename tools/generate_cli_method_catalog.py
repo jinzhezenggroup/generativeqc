@@ -13,6 +13,7 @@ import sys
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
+from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
@@ -49,7 +50,7 @@ class Row:
     reason: str
 
 
-def _match_curated(plan: object) -> dict | None:
+def _match_curated(plan: Any) -> Mapping[str, Any] | None:
     actual = dict(plan.semilocal.functional.components)
     omega = plan.semilocal.functional.range_omega
     for record in SEMILOCAL_FAMILIES:
@@ -67,7 +68,7 @@ def _match_curated(plan: object) -> dict | None:
     return None
 
 
-def _match_split(plan: object) -> bool:
+def _match_split(plan: Any) -> bool:
     if plan.semilocal.functional.range_omega or len(plan.exchange) != 1:
         return False
     term = plan.exchange[0]
@@ -81,7 +82,7 @@ def _match_split(plan: object) -> bool:
     )
 
 
-def _admit(plan: object) -> tuple[bool, bool, str, str]:
+def _admit(plan: Any) -> tuple[bool, bool, str, str]:
     if plan.method.basis is not None or plan.post_scf:
         return (
             False,
