@@ -1,6 +1,6 @@
 # Decision candidate: retain CUDA KS energy low words with smaller K pair caches
 
-Status: implemented; complete endpoint promotion gates passed
+Status: implemented; frozen candidate qualified; compatibility repair host-validated
 Date: 2026-10-09
 
 ## Problem
@@ -42,13 +42,36 @@ private payload. Existing arena/transfer accounting uses `sizeof`; padding may
 change its charge. No new launch, matrix sweep or allocation object is added.
 The diagnostic test's canary moves after the enlarged 136-byte private record.
 
-Retain the sm120 `ddds` canonical/materialized/unrolled value schedule and the
+Retain the sm120 `ddds` canonical/materialized/rolled value schedule and the
 smaller `dppp` table. In the dense emitted-subset probe, `ddds` expensive
 order-four calls drop 64 to 16, with four order-two calls and 64 products.
 This is a source work count, not executed FLOPs or a guarantee for pruned work.
 `dppp` retains eight/four calls and 32 products, caching four instead of eight
 entries. Force, non-Fock schedules, queue ownership and portable profiles stay
 unchanged. Reuse the existing coefficient algebra, not another recurrence.
+
+### Subsequent source review: mixed arithmetic compatibility
+
+Exact regeneration of `9db85cf78451134d037513f73b583751e1c84ce7` found that
+canonical orientation moved the mixed `ddds` sign declaration into an
+indentation-sensitive `double` to `float` replacement. Its coefficient/product
+chain therefore narrowed unintentionally, even though the strict-FP64 campaign
+passed. The curated mixed-method summaries do not establish per-class mixed
+`ddds` oracle coverage. The source repair explicitly retains the previous wide
+products using the default-false `mixed_pair_products_fp64` schedule option,
+enabled only in the tuned `sm_120` `ddds` Fock schedule. A global class exception
+was rejected because it would also widen existing custom canonical schedules.
+The flag round-trips through manifest/tuning serialization and derived schedules;
+ordinary host evaluator tests compare exact binary32-input products with an
+independent Decimal oracle. Float accumulator storage remains unchanged.
+
+The earlier unrolling description was also incorrect: the frozen emitter used
+the unchanged force schedule's flag and emitted `#pragma unroll 1` in the Fock
+helper. Metadata now reflects that rolled source without changing its pragmas.
+Frozen measurements and binary identities below are retained unmodified. No
+new real-GPU or performance qualification is claimed for the repaired source.
+Its source identity is
+`6d517c95ad467049382bee31d10630150fd706a6e594988423f7d48564c09b8e`.
 
 ## Acceptance and provenance
 

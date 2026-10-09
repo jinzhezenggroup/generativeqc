@@ -2,7 +2,7 @@
   "baseline_revision": "2414c57dbc7a11c7cd33e3f81fad333be44422e4",
   "generator_abi": 1,
   "manifest_schema": 2,
-  "manifest_sha256": "e9f7e4fb37bfaa1a527b1eef6e3370a7f493ba63d4ce2f51f08526be812359e3",
+  "manifest_sha256": "992f5aa94b9ea021b6dcdc9000aecc85cbfad8064f11e2ec1304909afd9b975a",
   "architectures": [
     "sm_120",
     "sm_90"
@@ -511,16 +511,16 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "2cc06426b1f5b3a211d0248ef6d28ae0c2e84e3d967453bb895498e3ec5d2d99",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "46d4f2fb0ad874d3a89d23b4f4b0907b06f6570ac4aec88e57d640c82c7cbd81",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "e6c3988908022736e6e74dd041f0c4ec194fa8de33547817c847be9525135745",
     "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "43a3ee6b8371383af87c6d05fe8ed0b16bdba41ad07ae35dbfa30a51a57b9f9b",
     "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "53175fc76cbbe2450065ecbd23f06ce6978ef4ad5bd662e0139d5a86084b3572",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "d18c10a4cdfb0d8fb3dc1419ab3de7d974c0e03b95c342d811624407f34d61d3",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "2b6c9209acb49af9e23475c5af8f4e9fb21538b13f01299fff9c8b67e2bc98ad",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
     "generativeqc_generated_shell_registry.cu": "6d38b38ba84be0b4f68907b36b45022d452dc71bdc6e5ac5775bf13b50644aad"
   },
   "retained_source_baseline_revision": "4385f72751b829883407c01106186917c344317b",
   "retained_sources": {
-    "sm_120": "f8d46946e53486fab54ad5560a3c3011f7bedc9d15762b45977e9281e3c90111",
+    "sm_120": "7ee27a403f607d87ad16702761c6bded94a10a60253a0755cb0170d73f00d4fe",
     "sm_120_rys_value": "7bbc06523c20043a89826ca4c85d50e0f4fc569c074047fd69282b6a7b5fc7e5",
     "sm_120_k_block": "ed0c79cd23b1abca00238ab95cc0d3bbbbfc1a1f3bb74e2fd8c12adf2ebb1696",
     "sm_90": "0246798cc90e49839b56c0b598f24f5c73b9093f8a74cd4e8fafe86b7ae608cf",
@@ -794,6 +794,16 @@
         "generativeqc_generated_shell_registry.cu"
       ],
       "reason": "Add separately compiled work companions for the twelve existing task-parallel Rys classes, selecting them through the frozen schedule rather than changing Fill scratch or numerical bodies. Each of four warps owns eight bounded two-batch bins and retires independently; admission, precision, quartet recurrence and scatter are unchanged. Explicit typed registry dispatch changes the registry source identity; the generated header remains unchanged. Independent emission retains all 21 incumbent/work streams, all twelve original task shards when work companions are omitted, component-Rys/block alternatives and the six retained scientific hashes. All portable artifacts are unchanged. Identity correction alone does not establish a performance claim."
+    },
+    {
+      "task": "ddds-pair-product-precision-compatibility-20261009",
+      "source_revision": "9db85cf78451134d037513f73b583751e1c84ce7",
+      "integrated_base_revision": "c77bd483cbe4e109b90b1a1930c65495e84b8142",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
+      ],
+      "reason": "Record the deliberately changed dppp/ddds value-pair orientation and ddds materialization after independently reproducing all ten prior c77 artifacts. Only sm_120 shards 0 and 3 and the retained sm_120 source change relative to c77; registry/header, portable shards, Rys and K-block retained sources remain identical. Review of 9db exposed incidental narrowing of mixed ddds coefficient products through an indentation-based float-sign rewrite. The explicit mixed_pair_products_fp64 opt-in restores its previous double promotion without changing default-false custom profiles. Relative to frozen 9db generated source, only the mixed ddds sign type changes from float to double; all FP64 helpers, force definitions, streaming queues and other artifacts retain exact bytes. The ddds Fock unroll flag now correctly records the already-emitted rolled pragmas. Independent host Decimal product tests and source-identity checks validate compatibility; frozen GPU receipts remain pinned to the original 9db candidate and do not qualify a rebuilt repaired binary."
     }
   ]
 }

@@ -1,9 +1,26 @@
-# K pair arithmetic and compensated energy differences: promotion qualified
+# Frozen K pair arithmetic and compensated energy qualification
 
 Qualified base: `dee3d522b71df9fb55c91478df3c44b7af454488` (PR #2153).
 The frozen candidate retains smaller sm120 `ddds`/`dppp` value-pair caches and
 the existing compensated energy-trace low words through CUDA KS convergence.
 All predeclared complete endpoint, prepared-K, numerical and holdout gates pass.
+
+These measurements belong to the frozen candidate at `9db85cf78451134d037513f73b583751e1c84ce7`.
+A later source review found an incidental narrowing of the mixed `ddds`
+coefficient products: changing pair orientation triggered an indentation-based
+`double` to `float` rewrite. The compatibility repair explicitly preserves the
+previous double-promoted products through `mixed_pair_products_fp64`, enabled
+only for the tuned `sm_120` `ddds` Fock schedule. Other mixed schedules retain
+their existing arithmetic. Host evaluator regressions verify this repair;
+these frozen GPU receipts do not qualify a rebuilt repaired binary.
+The repaired source identity is
+`6d517c95ad467049382bee31d10630150fd706a6e594988423f7d48564c09b8e`;
+the frozen candidate identity remains `d087c507d3e02b69b224a01d3dbb6bac478f152670452fc7a3710e38d152f9aa`.
+
+The measured `ddds` helper contains `#pragma unroll 1`. Its Fock metadata is now
+corrected to rolled loops; the repair does not introduce unrolling. The strict
+FP64 helper remains byte-identical to the frozen candidate, but that alone
+does not establish unchanged timings after recompiling its CUDA translation unit.
 
 ## Cause and bounded changes
 

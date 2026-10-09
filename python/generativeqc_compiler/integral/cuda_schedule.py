@@ -84,8 +84,12 @@ class CudaScheduleIR:
     minimum_blocks_per_sm: int = 0
     maximum_registers: int = 0
     warp_size: int = 32
+    # Only the mixed Fock evaluator uses this; force/FP64 lowering is unchanged.
+    mixed_pair_products_fp64: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.mixed_pair_products_fp64, bool):
+            raise TypeError("mixed pair-product precision choice must be boolean")
         if self.warp_size < 1:
             raise ValueError("CUDA warp size must be positive")
         if self.block_threads < self.warp_size or self.block_threads > 1024:

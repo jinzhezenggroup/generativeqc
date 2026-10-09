@@ -822,7 +822,11 @@ __device__ __forceinline__ void generated_dppp_make_mixed_primitive_geometry(
         source,
     )
     source = source.replace("  double value = 0.0;", "  float value = 0.0F;")
-    source = source.replace("      const double sign =", "      const float sign =")
+    # Preserve explicitly qualified wide coefficient products when a pair-cache
+    # schedule changes the sign declaration's indentation. Otherwise retain the
+    # existing mixed lowering for all other production and custom schedules.
+    if not plan.schedule.mixed_pair_products_fp64:
+        source = source.replace("      const double sign =", "      const float sign =")
     source = source.replace("? 1.0 : -1.0;", "? 1.0F : -1.0F;")
     source = source.replace(
         "__device__ __forceinline__ double generated_dppp_mixed_component_value",

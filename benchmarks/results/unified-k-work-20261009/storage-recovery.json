@@ -36,7 +36,7 @@
 "decoded_path": "benchmarks/results/unified-k-work-20261009/summary.json",
 "decoded_bytes": 86851,
 "decoded_sha256": "0e840132de5e2f04ec09b2bcfaef46f9591c9892dbb172368f46086f37747a73",
-"decode_command": "xz -dc benchmarks/results/unified-k-work-20261009/summary.json.xz"
+"decode_command": "xz -dc benchmarks/results/unified-k-work-20261009/summary.json.xz > benchmarks/results/unified-k-work-20261009/summary.json"
 }
 ],
 "historical_archives": [

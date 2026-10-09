@@ -289,6 +289,7 @@ def _streaming_fock_schedule(selection: KernelSelection) -> ScheduleIR:
             pair_orientation=schedule.pair_orientation,
             pair_storage=schedule.pair_storage,
             unroll_pair_terms=schedule.unroll_pair_terms,
+            mixed_pair_products_fp64=schedule.mixed_pair_products_fp64,
             minimum_blocks_per_sm=(
                 2 if selection.recurrence in ("rys4", "rys5") else 0
             ),

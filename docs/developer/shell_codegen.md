@@ -19,7 +19,7 @@ architecture manifest; generated production CUDA remains a build artifact.
 
 The [task-parallel Direct Rys-K](direct_rys_tasks.md) variants use the same
 mathematical compiler with lane-local quartet ownership. Prepared target
-metadata defaults to five qualified `sm_120` classes; other classes/profiles
+metadata defaults to nine qualified `sm_120` classes; other classes/profiles
 retain the incumbent and explicit experiments remain independently selectable.
 
 `python/generativeqc_compiler/integral/ir.py` is now strictly mathematical, while
@@ -33,6 +33,10 @@ retain the incumbent and explicit experiments remain independently selectable.
   executable CUDA support.
 - `CudaScheduleIR` describes task/component ownership, block size, component tile,
   Coulomb-state placement, pair orientation/storage, and loop unrolling.
+  The Fock-only `mixed_pair_products_fp64` option explicitly retains widened
+  coefficient products inside a mixed evaluator while its accumulator remains
+  FP32. Only the tuned `sm_120` `ddds` Fock schedule enables it; changing pair
+  orientation must not silently narrow this class's existing arithmetic.
 - `CudaKernelIR` combines the two with a `CudaTargetInfo` and validates target
   limits and component coverage before CUDA is
   emitted.

@@ -6,6 +6,7 @@ remaining template preserves byte-identical generated CUDA and ABI layouts."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ..capabilities import CAPABILITY_K_BLOCK_FOCK, CAPABILITY_MIXED_FOCK
@@ -1375,6 +1376,9 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
                 target=plan.kernel.target,
             )
             fock_schedule = fock_plan.schedule
+            if plan.schedule.mixed_pair_products_fp64:
+                fock_schedule = replace(fock_schedule, mixed_pair_products_fp64=True)
+                fock_plan = _specialize_fock_plan(plan, schedule=fock_schedule)
         else:
             fock_plan = _specialize_fock_plan(plan)
 
