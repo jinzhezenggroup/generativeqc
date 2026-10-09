@@ -145,6 +145,7 @@ assert(admitted_triples_w.accumulation_dtype == expected_w.accumulation_dtype);
 assert(admitted_triples_w.qualification == expected_w.qualification);
 assert(admitted_triples_w.math_mode == expected_w.math_mode);
 assert(lambda_true_residual_interval == expected_lambda_interval);
+assert(lambda_primal_matrix == (physical_replay == nullptr));
 later_phase(state.budget);
 DFCCSDTResult result;
 result.total_seconds = elapsed(started);
@@ -165,7 +166,7 @@ int main() {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
-                               expected_w, expected_lambda_interval, true, true);
+                               expected_w, expected_lambda_interval, true, true, true);
   };
   for (bool mixed_w : {false, true})
   for (std::size_t interval : {1, 30})
