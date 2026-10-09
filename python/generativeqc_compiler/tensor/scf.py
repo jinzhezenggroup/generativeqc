@@ -371,6 +371,42 @@ def diis_gram_program(
     )
 
 
+def diis_new_row_program(
+    batch_size: int,
+    history_size: int,
+    nbf: int,
+    *,
+    spin_count: int = 1,
+) -> Program:
+    """Contract a pending residual against one materialized history window.
+
+    The runtime maps live chronological rows to physical ring slots and stores
+    this row and the pending self norm in its raw Gram cache.
+    """
+    batch, spin, ao, _ = _orbital_spaces(batch_size, spin_count, nbf, nbf)
+    history = IndexSpace("history", "history", _positive(history_size, "history_size"))
+    b, h, s, p, q = (
+        Index("b", batch),
+        Index("h", history),
+        Index("s", spin),
+        Index("p", ao),
+        Index("q", ao),
+    )
+    old = input_tensor("residual_history", TensorSpec((b, h, s, p, q), role="input"))
+    pending = input_tensor("pending_residual", TensorSpec((b, s, p, q), role="input"))
+    return Program(
+        {
+            "new_row": einsum("bhspq,bspq->bh", old, pending),
+            "new_norm": einsum("bspq,bspq->b", pending, pending),
+        },
+        provenance={
+            "scf_tensor_version": SCF_TENSOR_VERSION,
+            "operation": "diis_new_row",
+            "history_semantics": "stateless_live_window_pending_residual",
+        },
+    )
+
+
 def diis_extrapolation_program(
     batch_size: int,
     history_size: int,

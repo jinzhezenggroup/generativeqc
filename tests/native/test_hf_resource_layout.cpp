@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
@@ -21,6 +22,37 @@
 #include "scf/cuda_batch.hpp"
 
 namespace {
+
+void check_incremental_diis_capacity() {
+  using generativeqc::scf::small_hf_cuda_resource_layout;
+  using generativeqc::scf::small_hf_cuda_resource_layout_v2;
+  constexpr auto selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM";
+  const std::array<std::uint8_t, 2> angular{0, 0};
+  const std::array<std::size_t, 2> primitives{3, 3};
+  for (const unsigned history : {1U, 2U, 8U, 64U}) {
+    for (const unsigned spins : {1U, 2U}) {
+      std::size_t v1[2]{}, v2[2]{}, plan_bytes = 0;
+      for (const unsigned incremental : {0U, 1U}) {
+        assert(setenv(selection, incremental ? "1" : "0", 1) == 0);
+        assert(small_hf_cuda_resource_layout(2, 2, 2, 2, 6, history, spins, v1[incremental],
+                                             plan_bytes));
+        assert(small_hf_cuda_resource_layout_v2(
+            2, 2, 2, angular.data(), primitives.data(), angular.size(), history, spins,
+            GENERATIVEQC_PRECISION_FP64, 1e-10, 1e-12, v2[incremental], plan_bytes));
+      }
+      const auto gram_bytes = history >= 2 ? sizeof(double) * history * history : 0;
+      assert(v1[1] == v1[0] + gram_bytes);
+      assert(v2[1] == v2[0] + gram_bytes);
+    }
+  }
+  assert(setenv(selection, "invalid", 1) == 0);
+  std::size_t arena_bytes = 0, plan_bytes = 0;
+  assert(!small_hf_cuda_resource_layout(2, 2, 2, 2, 6, 8, 1, arena_bytes, plan_bytes));
+  assert(!small_hf_cuda_resource_layout_v2(2, 2, 2, angular.data(), primitives.data(),
+                                           angular.size(), 8, 1, GENERATIVEQC_PRECISION_FP64, 1e-10,
+                                           1e-12, arena_bytes, plan_bytes));
+  assert(unsetenv(selection) == 0);
+}
 
 void check_h2_cartesian_rhf() {
   using generativeqc::scf::small_hf_cuda_resource_layout_v2;
@@ -171,6 +203,7 @@ void check_df_values_pack_g_metadata_without_scf_work() {
 }  // namespace
 
 int main() {
+  check_incremental_diis_capacity();
   check_h2_cartesian_rhf();
   check_spherical_d_uhf();
   check_small_spherical_force_packs_direct_transform();

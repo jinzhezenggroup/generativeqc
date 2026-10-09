@@ -104,6 +104,22 @@ The complete route retains these explicit host boundaries:
   shared CPU/CUDA Becke adjoint execute on device. No interior diagnostic XC
   model, CPU derivative/contraction or interpreter fallback is selected.
 
+For admitted phased Becke geometry, a bulk producer evaluates the same SCF
+point model or consumes borrowed external seeds once per point, using one
+thread per point. The cooperative AO
+consumer then specializes away both that evaluator and the unused inline Becke
+adjoint. It borrows the already allocated inline scratch for the point value
+and external grid-motion seeds, ordered on the grid producer's stream; no new
+resident allocation or host staging is needed. Admission requires one geometry
+lane per point and enough atom-channel scratch to keep those values disjoint.
+Nonphased geometry and small scratch domains retain the original evaluator,
+while an AO panel that does not fit shared memory retains the ordered scalar AO
+consumer. The panel reducer visits AO labels once, preserving each atom's and
+the moving grid's original AO addition order even for repeated or unordered maps.
+Native preflight and stage launch gates preserve sticky CUDA status without
+adding a stream synchronization or letting a consumer read a failed producer's
+scratch.
+
 Native code owns traversal, primitive normalization, atom scatter and bounded
 reductions. The Becke worker shares one two-pass implementation across backends,
 including the single-zero-factor derivative and saturated-branch policy.

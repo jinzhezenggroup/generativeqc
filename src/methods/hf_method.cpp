@@ -351,13 +351,11 @@ class HfPreparedBatch final : public PreparedBatch {
                   generativeqc_batch_flags flags, std::optional<core::System> auxiliary_template)
       : plan_(std::move(systems), capabilities.method, options,
               (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0,
-              options.resolved_fock_build->backend == scf::FockBackend::Cuda &&
-                  !options.resolved_fock_build->legacy_density_fitting,
+              options.resolved_fock_build->schedule == scf::FockSchedule::CudaFused,
               (flags & GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING) != 0,
               (flags & GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING) != 0,
               execution.device_id(), std::move(auxiliary_template),
-              options.resolved_fock_build->backend == scf::FockBackend::Cuda &&
-                  options.resolved_fock_build->legacy_density_fitting) {}
+              options.resolved_fock_build->schedule == scf::FockSchedule::CudaDfResident) {}
 
   [[nodiscard]] std::size_t size() const noexcept override { return plan_.size(); }
 

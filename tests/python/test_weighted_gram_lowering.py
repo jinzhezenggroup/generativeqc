@@ -39,11 +39,25 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_all_incumbent_source_bytes_are_preserved() -> None:
     from generativeqc_compiler.tensor.scf_cuda import emit_density_cuda
 
+    # The opt-in DIIS adapter is an additive header sibling. Preserve the
+    # frozen incumbent payload hash rather than replacing its reference.
+    scf_header = native_header()
+    prefix, adapter_and_incumbent = scf_header.split("#if defined(__CUDACC__)\n", 1)
+    adapter, incumbent = adapter_and_incumbent.split("#endif\n\n", 1)
+    assert "struct DiisNewRowStep" in adapter
+    prefix, count = re.subn(
+        r'^inline constexpr const char\* diis_new_row_tensor_template_hash = "[0-9a-f]{64}";\n',
+        "",
+        prefix,
+        flags=re.MULTILINE,
+    )
+    assert count == 1
+
     # Frozen before this migration at ca98c41e, tree bb11434a. Do not regenerate
     # these from the changed emitter and call that an equivalence comparison.
     sources = (
         (
-            native_header(),
+            prefix + incumbent,
             "6193cf69d6fda82db1a645b458d6d38bcc8337d8b70cce674ff0786bd889f04e",
         ),
         (

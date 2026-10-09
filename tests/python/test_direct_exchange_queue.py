@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -20,17 +19,15 @@ from generativeqc_compiler.integral.shell_spec import shell_pair_class
 @pytest.mark.parametrize("name", ["psss", "dppp", "dsds"])
 @pytest.mark.parametrize("work_aware", [False, True])
 def test_emitted_queue_executes_each_survivor_once(
-    tmp_path: Path, name: str, work_aware: bool
+    tmp_path: Path, name: str, work_aware: bool, native_cxx: object
 ) -> None:
     """Cover sparse/dense/empty tails, canonical pairs and mixed-precision tags.
 
     Integral arithmetic is stubbed, but the actual emitted worker runs across
     every lane with blocking collectives. GPU matrix/sanitizer gates remain
     separate; this is an independent admission and synchronization census.
+    Mock consumers retain the real two-plane Fock output ABI.
     """
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++20 host compiler")
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
         root / "python/generativeqc_compiler/integral/production_shell_classes.json",
@@ -89,6 +86,7 @@ def test_emitted_queue_executes_each_survivor_once(
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "runtime/compensated_output.hpp"
 #include "scf/generated_shell_task.hpp"
 #define __device__
 #define __forceinline__
@@ -166,7 +164,8 @@ void {prefix}_stream_populate_task(
 template<bool Unrestricted> void {prefix}_{consumer}(
     const Generated{class_name}ShellTask* tasks, const Generated{class_name}PrimitivePairData*,
     const std::int64_t*, const double*, const Generated{class_name}Vec3*, double,
-    const double*, const double*, double*, std::size_t index, {storage}&{subgroup_parameters}) {{
+    const double*, const double*, generativeqc::runtime::CompensatedOutput,
+    std::size_t index, {storage}&{subgroup_parameters}) {{
   if ({only_leader}) {{
     std::lock_guard lock(output_mutex);
     actual.emplace_back(tasks[index].shell_pair[0], tasks[index].shell_pair[1], false);
@@ -180,7 +179,7 @@ template<bool Unrestricted> void {prefix}_{consumer}(
 template<bool Unrestricted> void {prefix}_{mixed_consumer}(
     const Generated{class_name}ShellTask* tasks, const Generated{class_name}PrimitivePairData*,
     const std::int64_t*, const double*, const Generated{class_name}Vec3*, double,
-    const double*, const double*, double*, std::size_t index,
+    const double*, const double*, generativeqc::runtime::CompensatedOutput, std::size_t index,
     Generated{class_name}MixedSubgroupFockStorage&{subgroup_parameters}) {{
   if ({only_leader}) {{
     std::lock_guard lock(output_mutex);
@@ -289,7 +288,7 @@ int main() {{
           lanes.emplace_back([&, lane] {{
             threadIdx.x = lane;
             {worker_name}<false>(&topology, nullptr, primitive_offsets.data(),
-                nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, nullptr,
+                nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, {{nullptr, nullptr}},
                 &head, &fp64{extra_counter});
           }});
         for (auto& lane : lanes) lane.join();
@@ -313,29 +312,26 @@ int main() {{
     driver_path = tmp_path / "queue.cpp"
     driver_path.write_text(driver)
     executable = tmp_path / "queue"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [driver_path],
+        executable,
+        compile_args=[
             "-std=c++20",
             "-O1",
             "-pthread",
             "-I",
             str(root / "src"),
-            str(driver_path),
-            "-o",
-            str(executable),
         ],
-        check=True,
-        timeout=60,
+        link_args=["-pthread"],
+        compile_timeout=60,
     )
     subprocess.run([str(executable)], check=True, timeout=120)
 
 
-def test_prepared_schedule_parser_is_explicit_and_fail_closed(tmp_path: Path) -> None:
+def test_prepared_schedule_parser_is_explicit_and_fail_closed(
+    tmp_path: Path, native_cxx: object
+) -> None:
     """Default work and explicit rollback freeze before later environment edits."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     root = Path(__file__).resolve().parents[2]
     registry = tmp_path / "scf/aot_shell_registry.hpp"
     registry.parent.mkdir()
@@ -388,20 +384,18 @@ int main() {
 """
     )
     executable = tmp_path / "selection"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [driver],
+        executable,
+        compile_args=[
             "-std=c++20",
             "-I",
             str(tmp_path),
             "-I",
             str(root / "src"),
-            str(driver),
-            "-o",
-            str(executable),
         ],
-        check=True,
-        timeout=30,
+        compile_timeout=30,
+        link_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

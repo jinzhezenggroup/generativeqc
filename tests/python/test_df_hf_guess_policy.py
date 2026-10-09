@@ -53,8 +53,8 @@ std::size_t density_fitting_source_metadata_bytes(std::size_t, std::size_t, std:
 std::size_t density_fitting_scf_diis_device_bytes(std::size_t, std::size_t, unsigned) noexcept {return 0;}
 DensityFittingTilePlan plan_requested_density_fitting_tiles(DfPairStorageRequest, std::size_t,
     std::size_t, std::size_t, std::size_t, std::size_t, std::size_t,
-    std::size_t, bool generated, std::size_t rank) {
-  assert(generated && rank > 0);
+    std::size_t, bool generated, std::size_t rank, bool method_owned_packing) {
+  assert(generated && rank > 0 && !method_owned_packing);
   DensityFittingTilePlan plan;
   plan.stores_full_three_center = resident;
   plan.peak_workspace_bytes = 128ULL << 20;

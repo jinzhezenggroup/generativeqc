@@ -155,8 +155,8 @@ conventions, fixed-density derivatives and preflight rejection.
 | Boundary | Existing responsibility | Remaining coupling |
 | --- | --- | --- |
 | `methods/hf_method.cpp:resolve_hf_options` | Translate legacy method/DF options into one resolved request | Both terms inherit one approximation and one backend |
-| `HfPreparedSingle::execute` | Select existing CPU/CUDA RHF/UHF solvers | Method code still branches on `legacy_density_fitting` |
-| `HfPreparedBatch` / `scf::FleetPlan` | Own compatible buckets, geometry and warm state | Separate direct/DF booleans select the whole bucket |
+| `HfPreparedSingle::execute` | Dispatch by resolved Fock schedule | CUDA DF residency is an execution schedule, not a second approximation flag |
+| `HfPreparedBatch` / `scf::FleetPlan` | Own compatible buckets, geometry and warm state | Resident CUDA DF retains its specialized GPU bucket and retry path |
 | `scf/rhf.cpp` | CPU iterations and final energy/force assembly | Direct/DF entry points remain separate; exact entry preflight requires standard complete HF |
 | `scf/cuda_rhf.cu` | Persistent direct-HF queues, generated/fallback kernels and solver state | Fused CUDA consumers require the standard coupled HF coefficients |
 | `scf/cuda/df_plan*`, `df_jk*`, `df_{coulomb,exchange}.cpp`, `df_*_scf.cpp` | Separate prepared metric ownership, bounded J/K, response and device SCF replay | Existing term selection and provider semantics remain in the public DF adapters |

@@ -213,7 +213,7 @@ CUDA_MODULES["cuda_scf_kernels"] = (
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
-) + ("scf/cuda/matrix_index.",)
+) + ("scf/cuda/matrix_index.", "tensor/cuda_history.cuh")
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
     "solver/cuda/symmetric_eigen_handles.hpp",
@@ -275,8 +275,11 @@ CUDA_EXACT_ALLOWED = {
     "cuda_direct_consumers": ("runtime/compensated_atomic.cuh",),
 }
 # The shared sink must not acquire scientific, provider, or host-plan state.
-CUDA_MODULES["cuda_compensated_atomic"] = ("runtime/compensated_atomic.cuh",)
-CUDA_ALLOWED["cuda_compensated_atomic"] = ()
+CUDA_MODULES["cuda_compensated_atomic"] = (
+    "runtime/compensated_atomic.cuh",
+    "runtime/compensated_output.hpp",
+)
+CUDA_ALLOWED["cuda_compensated_atomic"] = ("runtime/compensated_output.hpp",)
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (

@@ -4,6 +4,49 @@ The generated CPU integral path keeps the scientific Gaussian-integral
 recurrence in the existing compiler DAG. CPU specialization begins only after
 that DAG has been built.
 
+## Dense HF preparation
+
+Value-only full-range s/p/d ERI quartets share primitive geometry, Boys values
+and Coulomb auxiliaries across their Cartesian components. Eligibility is
+per quartet: adding an f/g shell does not disable this reuse for the remaining
+s/p/d quartets. Value-only quartets containing f additionally reuse the retained
+Hermite/Coulomb recurrence's preparation across all components of each primitive
+quartet. This is a scheduling change, not a new recurrence: the scalar oracle
+and shared consumer use the same Hermite and Coulomb recurrence functions. The
+value-only consumer contracts their FP64 values without empty derivative Jets;
+the scalar/derivative primitive retains its monolithic contraction. Its
+invocation-local component buffer is bounded by one ffff quartet (10,000 values),
+not molecule size. Quartets containing g+ and all nuclear derivatives retain
+their scalar schedule. The value passes own disjoint eightfold orbits; neither
+drops nor recomputes contributions. Generated s/p/d scratch remains one dddd
+quartet, and higher-l scratch is released before spherical projection.
+
+Integral producers project spherical tensors once per eightfold orbit, including
+physical-atom nuclear derivatives and value-only range-separated ERIs. This
+preserves the operator, normalization and reduction within each representative;
+other orientations can differ in their last floating-point bits from separate
+ordered reductions. `transform_integrals` does not assert this invariant and
+continues to transform arbitrary caller-supplied tensors in their ordered domain.
+The existing all-s/p/d value-only shell-local projection remains unchanged.
+
+`benchmarks/cpu_hf_high_l.py` checks complete fresh-object CPU RHF calls at original
+and changed geometries against independent PySCF energies and optional analytic
+forces. Select baseline and candidate libraries in separate processes with
+`GENERATIVEQC_LIBRARY`, keep thread settings identical, and compare iteration
+counts as well as timing. Its work census is source-derived canonical
+primitive-component and shared-geometry work, not measured hardware work. For
+example:
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PYTHONPATH=python \
+  GENERATIVEQC_LIBRARY="$PWD/build/cpu/libgenerativeqc.so" \
+  python benchmarks/cpu_hf_high_l.py --case water-tzvp \
+  --representation spherical --repeats 3 --output .artifacts/cpu-hf-tzvp.json
+```
+
+Use `--forces` for the complete energy-plus-force endpoint; energy-only samples
+must not be reported as force timings. These changes do not alter CUDA dispatch.
+
 ```text
 IntegralIR / ShellClassComponentKernel
                 |

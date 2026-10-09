@@ -68,7 +68,8 @@ generativeqc_status whiten_factor_panel(CudaDensityFittingJkPlan& plan, std::siz
 /** Materialize a fixed-geometry source once, reusing bounded resident K staging.
  * Every raw (pair,P) is generated once and feeds ALL Q directly into retained
  * B. The explicit single-factor variant transforms each lower-pair panel
- * immediately, freeing raw scratch before the next panel. Force response must
+ * in bounded packed panels spanning lower rows, freeing raw scratch before
+ * the next panel. Force response must
  * regenerate raw values from the immutable physical source in that variant.
  * The caller handles failure after the plan's stream is drained.
  */
@@ -80,13 +81,20 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
                                             {plan.batch_size, plan.nbf, plan.naux, true, false});
   const double one = 1.0, zero = 0.0;
   if (df_packed_pairs(plan.value_storage.pairs)) {
-    // The retained raw owner accepts whole lower rows independently of the
-    // bounded scratch. Only single-owner transformation needs pair panels.
+    // Source ranges use dense AO-pair indices, but single-owner scratch and B
+    // use contiguous lower-pair order. Fill across row boundaries before each
+    // metric transform, without exceeding either already charged scratch lease.
     std::size_t generated_panels = 0;
+    const auto pair_capacity = std::min(plan.projection_capacity, plan.panel_capacity) / plan.naux;
+    if (!plan.packed_raw && !pair_capacity) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    if (!plan.packed_raw)
+      runtime::cuda_trace::trace_counter("resident_single_staging_pair_capacity", pair_capacity);
     for (std::size_t system = 0; system < plan.batch_size; ++system) {
       auto* raw = plan.packed_raw
                       ? plan.packed_raw + system * plan.stored_tensor_elements_per_system
                       : nullptr;
+      std::size_t buffered_pairs = 0;
+      std::size_t materialized_pairs = 0;
       for (std::size_t mu = 0; mu < plan.nbf; ++mu) {
         if (raw) {
           const auto status = generate_cuda_density_fitting_raw_tile(
@@ -96,23 +104,23 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
           ++generated_panels;
           continue;
         }
-        const auto pair_capacity =
-            std::min(plan.projection_capacity, plan.panel_capacity) / plan.naux;
-        if (!pair_capacity) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
-        for (std::size_t nu = 0; nu <= mu; nu += pair_capacity) {
-          const auto count = std::min(pair_capacity, mu + 1 - nu);
-          auto* panel = plan.auxiliary_tile_values;
+        for (std::size_t nu = 0; nu <= mu;) {
+          const auto count = std::min(pair_capacity - buffered_pairs, mu + 1 - nu);
+          auto* panel = plan.auxiliary_tile_values + buffered_pairs * plan.naux;
           const auto status = generate_cuda_density_fitting_raw_tile(
               plan.integral_source, system, mu * plan.nbf + nu, count, 0, plan.naux, -1,
               reinterpret_cast<void*>(plan.stream), panel, detail);
           if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
           ++generated_panels;
+          buffered_pairs += count;
+          nu += count;
+          if (buffered_pairs < pair_capacity && (mu + 1 < plan.nbf || nu < mu + 1)) continue;
           auto* output = plan.three_center +
-                         (system * plan.stored_pair_count + mu * (mu + 1) / 2 + nu) * plan.naux;
+                         (system * plan.stored_pair_count + materialized_pairs) * plan.naux;
           const auto transform =
               plan.metric_full_rank[system]
-                  ? whiten_factor_panel(plan, system, count, panel, output, eigenvectors,
-                                        scaled_eigenvectors, detail)
+                  ? whiten_factor_panel(plan, system, buffered_pairs, plan.auxiliary_tile_values,
+                                        output, eigenvectors, scaled_eigenvectors, detail)
                   : GENERATIVEQC_STATUS_SUCCESS;
           if (transform != GENERATIVEQC_STATUS_SUCCESS) return transform;
           if (!plan.metric_full_rank[system]) {
@@ -120,13 +128,16 @@ generativeqc_status materialize_generated_tensor(CudaDensityFittingJkPlan& plan,
                 runtime::cuda_trace::trace_call("resident_metric_transform", plan.stream, [&] {
                   return cublasDgemm(
                       plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(plan.naux),
-                      static_cast<int>(count), static_cast<int>(plan.naux), &one,
-                      inverse + system * plan.naux * plan.naux, static_cast<int>(plan.naux), panel,
-                      static_cast<int>(plan.naux), &zero, output, static_cast<int>(plan.naux));
+                      static_cast<int>(buffered_pairs), static_cast<int>(plan.naux), &one,
+                      inverse + system * plan.naux * plan.naux, static_cast<int>(plan.naux),
+                      plan.auxiliary_tile_values, static_cast<int>(plan.naux), &zero, output,
+                      static_cast<int>(plan.naux));
                 });
             if (blas_status != CUBLAS_STATUS_SUCCESS)
               return blas_failure(blas_status, "whiten single packed DF values", detail);
           }
+          materialized_pairs += buffered_pairs;
+          buffered_pairs = 0;
         }
       }
       if (!raw) continue;

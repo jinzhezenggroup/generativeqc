@@ -45,10 +45,15 @@ def emit_numerical_driver(
                     if persistent
                     else "std::size_t"
                 )
+                output = (
+                    "generativeqc::runtime::CompensatedOutput"
+                    if selected_consumer == "fock"
+                    else "double*"
+                )
                 declarations.append(f"""extern "C" __global__ void {symbol}(
                     const Generated{class_name}ShellTask*, const Generated{class_name}PrimitivePairData*,
                     const std::int64_t*, const double*, const Generated{class_name}Vec3*, double,
-                    const double*, const double*, double*, {tail});""")
+                    const double*, const double*, {output}, {tail});""")
                 table.append(
                     f'{{"{spin}_{selected_consumer}{suffix}", reinterpret_cast<const void*>({symbol}), '
                     f"{threads}, {str(spin == 'uhf').lower()}, {str(selected_consumer == 'force').lower()}, {str(persistent).lower()}"

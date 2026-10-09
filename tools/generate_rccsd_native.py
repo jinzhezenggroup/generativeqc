@@ -10,8 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 import typing
-from collections import defaultdict
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +52,10 @@ from generativeqc_compiler.tensor.iteration_reuse import (
     analyze_iteration_reuse,
 )
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.native_arena import (
+    SymbolicArenaPlan,
+    plan_symbolic_arena,
+)
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
@@ -416,27 +419,6 @@ def _canonical_d2_consumer(node: typing.Any) -> bool:
     )
 
 
-@dataclass(frozen=True)
-class ArenaPlan:
-    """Shape-symbolic storage shared by admission and CPU/CUDA emission.
-
-    Slots are reused only after their last reader and only for an identical
-    product of runtime extents. This is valid for every o/v/q, including equal
-    concrete extents; no representative-shape size comparison is involved.
-    Program outputs remain live through return because callers borrow pointers.
-    """
-
-    slots: tuple[tuple[str, ...], ...]
-    node_slots: dict[int, int]
-
-    @property
-    def sizes(self) -> tuple[str, ...]:
-        return tuple(
-            "checked_product({" + ",".join(shape) + "})" if shape else "1"
-            for shape in self.slots
-        )
-
-
 def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
     """Declare the conventional solver's immutable reference inputs explicitly.
 
@@ -456,53 +438,14 @@ def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
 
 def _arena_plan(
     program: Program, *, retained_nodes: tuple[typing.Any, ...] = ()
-) -> ArenaPlan:
-    """Color last-use intervals without aliasing a node with its own inputs.
-
-    All emitted operations write their entire output. Reusing a dead slot needs
-    no clearing or extra arithmetic. CUDA launches use one ordered stream, so
-    the same intervals apply to queued kernels and captured graph replays.
-    """
-    nodes = _execution_nodes(program)
-    numbers = {id(node): number for number, node in enumerate(nodes)}
-    last_use = list(range(len(nodes)))
-    for number, node in enumerate(nodes):
-        for source in node.inputs:
-            last_use[numbers[id(source)]] = number
-    for node in program.outputs.values():
-        last_use[numbers[id(node)]] = len(nodes)
-
-    releases: dict[int, list[int]] = defaultdict(list)
-    available: dict[tuple[str, ...], list[int]] = defaultdict(list)
-    slots: list[tuple[str, ...]] = []
-    node_slots = {}
-    # Retained values are prepared before the dynamic traversal. Their slots
-    # must be exclusive even *before* their original position in that traversal;
-    # merely extending each last-use interval would alias early dynamic writes.
-    for node in retained_nodes:
-        number = numbers.get(id(node))
-        if number is None or node.op == "input" or number in node_slots:
-            raise ValueError("invalid retained native arena node")
-        if node.spec.dtype != "float64":
-            raise ValueError("native RCCSD arena requires FP64 intermediates")
-        node_slots[number] = len(slots)
-        slots.append(tuple(sorted(_dim(index) for index in node.spec.indices)))
-    for number, node in enumerate(nodes):
-        for slot in releases[number]:
-            available[slots[slot]].append(slot)
-        if node.op == "input" or number in node_slots:
-            continue
-        if node.spec.dtype != "float64":
-            raise ValueError("native RCCSD arena requires FP64 intermediates")
-        shape = tuple(sorted(_dim(index) for index in node.spec.indices))
-        if available[shape]:
-            slot = available[shape].pop()
-        else:
-            slot = len(slots)
-            slots.append(shape)
-        node_slots[number] = slot
-        releases[last_use[number] + 1].append(slot)
-    return ArenaPlan(tuple(slots), node_slots)
+) -> SymbolicArenaPlan:
+    """Bind RCCSD runtime extents to the shared TensorIR storage schedule."""
+    return plan_symbolic_arena(
+        program,
+        dimension_symbol=_dim,
+        execution_nodes=_execution_nodes(program),
+        retained_nodes=retained_nodes,
+    )
 
 
 def _cpu_node(

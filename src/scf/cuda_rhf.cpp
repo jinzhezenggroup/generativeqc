@@ -733,6 +733,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     return outputs;
   }
   const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);
+  const bool requested_incremental_diis_gram =
+      diis_history >= 2 && incremental_diis_gram_requested();
   if (diis_history > 64) {
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
@@ -751,6 +753,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
        plan.graph_native_eigensolver_override != requested_graph_native_eigensolver_override ||
        plan.reuse_converged_fock != requested_reuse_converged_fock ||
        plan.incremental_direct_jk != requested_incremental_direct_jk ||
+       plan.incremental_diis_gram != requested_incremental_diis_gram ||
        plan.one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        plan.mixed_precision_fock != requested_mixed_precision_fock ||
        plan.mixed_precision_fock_threshold !=
@@ -867,7 +870,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             options.max_iterations, host.spin_count, requested_persistent_eri,
             requested_transformed_direct, shell_class_profiling, inactive_eigensolver_profiling,
             bounded_fock_class_timing, requested_bounded_direct_streaming,
-            requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout)) {
+            requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
+            requested_incremental_diis_gram)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -941,6 +945,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         static_cast<std::uint32_t>(fp32_tile_offset);
     plan.primitive_count = host.primitive_exponents.size();
     plan.diis_history = diis_history;
+    plan.incremental_diis_gram = requested_incremental_diis_gram;
     plan.persistent_eri = requested_persistent_eri;
     plan.quartet_direct = requested_quartet_direct;
     plan.transformed_direct = requested_transformed_direct;
@@ -1506,6 +1511,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto fock_history = arena_pointer<double>(resources.arena_, layout.fock_history);
   auto residual_history = arena_pointer<double>(resources.arena_, layout.residual_history);
   auto diis_linear_system = arena_pointer<double>(resources.arena_, layout.diis_linear_system);
+  auto diis_raw_gram = plan.incremental_diis_gram
+                           ? arena_pointer<double>(resources.arena_, layout.diis_raw_gram)
+                           : nullptr;
   auto diis_coefficients = arena_pointer<double>(resources.arena_, layout.diis_coefficients);
   auto diis_count = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_count);
   auto diis_head = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_head);
@@ -2219,7 +2227,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           allow_mixed_precision && mixed_precision_fock &&
               (host_generated_mixed_fock_shell_class_mask & (std::uint64_t{1} << shell_class)) !=
                   0U,
-          mixed_precision_fock_threshold, schwarz_bounds, quartet_density, quartet_fock,
+          mixed_precision_fock_threshold, schwarz_bounds, quartet_density,
+          {quartet_fock, resources.reference_fock_correction_},
           bounded_direct_generated_task_heads + shell_class,
           bounded_fock_class_timing ? bounded_fock_fp64_work_counts + shell_class : nullptr,
           bounded_fock_class_timing ? bounded_fock_fp32_work_counts + shell_class : nullptr);
@@ -2366,7 +2375,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             bounded_direct_generated_retry_task_offsets + shell_class,
             device_batch.shell_pair_primitive_offsets, device_batch.shell_primitive_pairs,
             device_batch.direct_ao_coefficients, device_batch.positions,
-            options.screening_tolerance, schwarz_bounds, quartet_density, quartet_fock,
+            options.screening_tolerance, schwarz_bounds, quartet_density,
+            {quartet_fock, resources.reference_fock_correction_},
             bounded_direct_generated_task_counts + shell_class,
             bounded_direct_generated_task_heads + shell_class);
         if (error != cudaSuccess) return error;
@@ -2376,8 +2386,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   };
   const auto launch_bounded_generic_fock = [&](bool is_unrestricted, const double* quartet_density,
                                                double* quartet_fock) -> cudaError_t {
-    if (!resources.reference_fock_correction_ &&
-        (host_uncovered_fock_shell_class_mask == 0U || bounded_direct_aot_only_diagnostic)) {
+    if (host_uncovered_fock_shell_class_mask == 0U || bounded_direct_aot_only_diagnostic) {
       return cudaSuccess;
     }
     // Generated/native pages own every class in host_generated_fock_shell_class_mask.
@@ -2397,19 +2406,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         resources.stream_, device_batch, options.screening_tolerance, shell_pair_bounds,
         shell_pair_density_bounds, bounded_direct_shell_pair_order,
         bounded_direct_shell_pair_block_bounds, bounded_direct_system_density_bounds, nullptr,
-        resources.reference_fock_correction_ ? 0U : host_generated_fock_shell_class_mask,
-        bounded_direct_generated_overflow, schwarz_bounds, quartet_density, active, quartet_fock,
-        bounded_direct_cursor);
+        host_generated_fock_shell_class_mask, bounded_direct_generated_overflow, schwarz_bounds,
+        quartet_density, active, quartet_fock, bounded_direct_cursor);
     return cudaPeekAtLastError();
   };
   const auto launch_bounded_generated_fock =
       [&](bool is_unrestricted, const double* quartet_density, double* quartet_fock,
           bool allow_mixed_precision) -> cudaError_t {
-    // Existing generic quartet science accepts the compensated sink. Generated
-    // page ABIs do not yet carry it; never mix corrected and uncorrected sums in
-    // an exported frame. Ordinary energy/force SCF retains its selected pages.
-    if (resources.reference_fock_correction_)
-      return launch_bounded_generic_fock(is_unrestricted, quartet_density, quartet_fock);
+    // Generated pages/streams and uncovered generic classes share the same
+    // optional correction plane. The owner clears and folds it once per Fock
+    // build, including the final physical-reference rebuild.
     if (bounded_direct_fock_only_diagnostic) {
       // The fixed-density measurement uses one uniform streaming schedule.
       // Mark every generated class for that consumer so an all-FP64 page does
@@ -2509,7 +2515,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             bounded_direct_generated_tasks, task_offsets + shell_class,
             device_batch.shell_pair_primitive_offsets, device_batch.shell_primitive_pairs,
             device_batch.direct_ao_coefficients, device_batch.positions,
-            options.screening_tolerance, schwarz_bounds, quartet_density, quartet_fock,
+            options.screening_tolerance, schwarz_bounds, quartet_density,
+            {quartet_fock, resources.reference_fock_correction_},
             bounded_direct_generated_task_counts + shell_class,
             bounded_direct_generated_task_heads + shell_class);
         if (launch_error != cudaSuccess) return launch_error;
@@ -3115,12 +3122,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
 
-    launch_update_diis_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
-                              resources.stream_, static_cast<std::int32_t>(batch_size),
-                              static_cast<std::int32_t>(nbf), unrestricted ? 2 : 1,
-                              static_cast<std::uint32_t>(diis_history), fock, residual, active,
-                              fock_history, residual_history, diis_linear_system, diis_coefficients,
-                              diis_count, diis_head, eigensystem);
+    const bool incremental_gram = plan.incremental_diis_gram;
+    if (incremental_gram) {
+      const auto gram_status = launch_diis_pending_gram(
+          resources.stream_, static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
+          unrestricted ? 2 : 1, static_cast<std::uint32_t>(diis_history), residual,
+          residual_history, active, diis_count, diis_head, diis_raw_gram);
+      if (gram_status != cudaSuccess) return cuda_status(gram_status);
+    }
+    launch_update_diis_kernel(
+        static_cast<unsigned>(batch_size), matrix_reduction_threads, 0, resources.stream_,
+        static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf), unrestricted ? 2 : 1,
+        static_cast<std::uint32_t>(diis_history), fock, residual, active, fock_history,
+        residual_history, diis_linear_system, diis_coefficients, diis_count, diis_head, eigensystem,
+        false, false, nullptr, 0, diis_raw_gram);
     if (unrestricted) {
       iteration_status =
           multiply_spin_matrices(eigensystem, true, false, orthogonalizer, false, temporary);
