@@ -14,7 +14,8 @@ cd "$repo_root"
 
 snapshot_root=$(dirname "$repo_root")
 if [[ ! -f "$snapshot_root/source-commit.txt" ]] ||
-   [[ ! -f "$snapshot_root/source-identity.sha256" ]]; then
+   [[ ! -f "$snapshot_root/source-identity.sha256" ]] ||
+   [[ ! -f "$snapshot_root/generated.sha256" ]]; then
   echo "rank-k CUDA qualification requires CPU-prepared source receipts" >&2
   exit 2
 fi
@@ -44,16 +45,23 @@ if ! sha256sum -c "$snapshot_root/source-identity.sha256" \
   echo "rank-k CUDA source manifest mismatch" >&2
   exit 2
 fi
+if ! sha256sum -c "$snapshot_root/generated.sha256" \
+     > "$output_dir/generated-check.txt" 2>&1; then
+  cat "$output_dir/generated-check.txt" >&2
+  echo "rank-k generated header mismatch" >&2
+  exit 2
+fi
 export SCCACHE_DIR="$output_dir/cache"
 echo "source_commit=$actual_commit" | tee "$output_dir/provenance.txt"
 sha256sum "$snapshot_root/source-identity.sha256" >> "$output_dir/provenance.txt"
+sha256sum "$snapshot_root/generated.sha256" >> "$output_dir/provenance.txt"
 nvcc --version | tee -a "$output_dir/provenance.txt"
 nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader |
   tee -a "$output_dir/provenance.txt"
 "$cache_exe" --show-stats > "$output_dir/sccache-before.txt"
 
-PYTHONPATH="$repo_root/python" python3 tools/generate_symmetric_rank_k_cuda.py \
-  --output "$output_dir/generated/generated_symmetric_rank_k.cuh"
+cp "$snapshot_root/generated/generated_symmetric_rank_k.cuh" \
+  "$output_dir/generated/generated_symmetric_rank_k.cuh"
 "$cache_exe" nvcc -std=c++20 -O2 -arch=sm_90 -DGENERATIVEQC_TEST_HOOKS \
   -I "$repo_root/src" -I "$output_dir/generated" \
   "$repo_root/tests/native/test_symmetric_rank_k_cuda.cu" \
