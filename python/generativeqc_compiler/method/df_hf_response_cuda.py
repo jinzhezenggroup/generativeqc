@@ -15,6 +15,45 @@ from .df_hf_response_contract import (
 from .df_occupied_response_cuda import emit_occupied_response_helpers
 
 _CHARGE_EQUATION = "tij,pij->tp"
+_RETAINED_CHARGE_EQUATION = "tk,kp->tp"
+
+
+def df_rhf_retained_charge_gemm_kind() -> str:
+    """Lower a retained auxiliary-fast factor against a folded pair density.
+
+    Folding D into unit-weight lower pairs is a storage adapter, not a change
+    to the charge equation. The same contraction also applies the symmetric
+    metric root to a charge vector without constructing inverse-applied A.
+    """
+    term_space = IndexSpace("df_retained_term", "batch", 2)
+    pair_space = IndexSpace("df_retained_pair", "pair", 10)
+    auxiliary_space = IndexSpace("df_retained_auxiliary", "auxiliary", 3)
+    term_index = Index("t", term_space)
+    pair_index = Index("k", pair_space)
+    auxiliary_index = Index("p", auxiliary_space)
+    density = input_tensor(
+        "density",
+        TensorSpec((term_index, pair_index), role="input", differentiable=False),
+    )
+    factor = input_tensor(
+        "factor",
+        TensorSpec((pair_index, auxiliary_index), role="input", differentiable=False),
+    )
+    charge = einsum(_RETAINED_CHARGE_EQUATION, density, factor)
+    contract = gemm_contract(charge)
+    if contract is None:
+        raise RuntimeError("retained DF charge lost TensorIR GEMM eligibility")
+    kind = direct_gemm_kind(
+        contract,
+        (
+            DenseLayout(density.spec.shape),
+            DenseLayout(factor.spec.shape),
+            DenseLayout(charge.spec.shape),
+        ),
+    )
+    if kind != "direct-NN":
+        raise RuntimeError(f"retained DF charge changed its qualified layout: {kind!r}")
+    return kind
 
 
 def df_rhf_charge_gemm_kind() -> str:
@@ -79,10 +118,12 @@ inline constexpr double df_rhf_exchange_coefficient =
 def emit_df_hf_response_cuda() -> str:
     """Emit runtime-sized source-weight kernels bound to the stationary plan."""
     charge_kind = df_rhf_charge_gemm_kind()
+    retained_charge_kind = df_rhf_retained_charge_gemm_kind()
     return f"""// Generated from DensityFittingRHFResponsePlan.
 // stationary-contract: {CONTRACT_IDENTITY}
 // charge-contraction: {_CHARGE_EQUATION}
 // tensorir-charge-lowering: {charge_kind}
+// tensorir-retained-charge-lowering: {retained_charge_kind}
 #ifndef GENERATIVEQC_GENERATED_DF_HF_RESPONSE_CUH
 #define GENERATIVEQC_GENERATED_DF_HF_RESPONSE_CUH
 
@@ -113,6 +154,21 @@ inline cublasStatus_t df_rhf_charge_contract(
   return cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, count, terms, matrix,
                      &one, fitted, matrix, densities, matrix, &zero,
                      potentials + begin, auxiliary_stride);
+}}
+
+/** Contract one density with auxiliary-fast retained B, without unpacking B.
+ * The physical column-major product [P,k]*[k,1] is the compiler's direct-NN
+ * lowering of tk,kp->tp. Callers fold packed density pairs on the same stream.
+ * Setting pairs=auxiliary applies the symmetric metric root to the resulting
+ * charge using the identical vector contraction and no inverse matrix.
+ */
+inline cublasStatus_t df_rhf_retained_charge_contract(
+    cublasHandle_t blas, int pairs, int auxiliary, const double* factor,
+    const double* density, double* charge) {{
+  const double one = 1.0, zero = 0.0;
+  return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, auxiliary, 1, pairs,
+                     &one, factor, auxiliary, density, pairs, &zero,
+                     charge, auxiliary);
 }}
 
 /** Recover the full-rank fitted RHF Coulomb potential from the rooted

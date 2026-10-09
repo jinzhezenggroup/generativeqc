@@ -104,6 +104,23 @@ that J-only call. Exchange K' deliberately keeps its existing density/projection
 path in this change, and unrestricted/multi-term response retains the ordinary
 upload path. This is therefore not a zero-upload resident whole-force path.
 
+Full-rank J-only response contracts the resident whitened factor once with the
+folded density, applies its symmetric metric root to that charge, and emits
+bounded three-center and metric cotangents. It does not repeatedly refit AO
+panels or construct exchange-style AO Gram matrices. Rank-deficient metrics,
+mixed J/K terms and diagnostic algebra retain their general response routes.
+`GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects the original bounded-panel
+route for qualification; the default is `auto`. Both preserve the same metric
+gauge, auxiliary-center response and derivative consumer.
+
+The known native DF snapshot provider separately bounds its additional paired
+one-electron/publication storage; DF response scratch stays in its independent
+resource contract. Spare geometry budget admits point-parallel Becke phases.
+Automatic large fitted grids prefer 256-point tiles to leave room for that
+cache; explicit tiles, unknown providers and insufficient budgets retain their
+bounded fallback. Reported one-electron device usage must fit the reserved
+envelope, rather than relying on unaccounted memory.
+
 Resource metadata distinguishes the resident one-electron path from its host
 fallback; `density_fitted_response_resources_included=0` still explicitly
 excludes unmeasured DF-provider scratch and transfers. These partial diagnostics
