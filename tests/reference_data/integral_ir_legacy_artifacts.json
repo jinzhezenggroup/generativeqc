@@ -507,16 +507,16 @@
     ]
   ],
   "artifacts": {
-    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "2445a5bc078eda4bb2e02b729412fa60bb347737020761712d1530d6b38eeb60",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c9fb44889162087b23437e2eae1c0c2426fd1242cf315ae3227fd867e5769955",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "fa631a5255de9abd6010698ae63d43f9a75fcce7c391f76f94832cc275c08d7a",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "1c5bf58c6f007ce5c2ac15192fd465dd5556b78588e30db6e6c4fd3b4147e845",
+    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "d3570d14af7f354fc2d1bb7e1e9efe6b87f1e735b7c633543fdcbf0062e0236c",
+    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "d3570d14af7f354fc2d1bb7e1e9efe6b87f1e735b7c633543fdcbf0062e0236c",
+    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "d3570d14af7f354fc2d1bb7e1e9efe6b87f1e735b7c633543fdcbf0062e0236c",
+    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "d3570d14af7f354fc2d1bb7e1e9efe6b87f1e735b7c633543fdcbf0062e0236c",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "a4ee98d2ceb9fbf8f1e90427d77d5affb77def8fc7ceaee8da4881c676c4cfcf",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c96ea2d112d94bd8a26251a54a0bcde06ab6dc8759f54348113b43d58b5a8974",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "5153b6b8e135a7e18ca0b00406a84c145ba84afdbef2e447f9fd33a4dd773bfb",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "31080c4479d4d8779d616b69cd4038b789d529f4d89e65fc0822e87f43eb541a",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
-    "generativeqc_generated_shell_registry.cu": "11709decd1ad7b7bfe402a5e8415fa6926baa0af36829bca88f1500342b6d898"
+    "generativeqc_generated_shell_registry.cu": "43309bf22f33d6cccedf973a548123c4b7e53bc0804c1ac6a49dc90e2b8b69e6"
   },
   "artifact_corrections": [
     {
@@ -720,6 +720,22 @@
       "integrated_base_revision": "fb9586569769fccac67bc23411d902e08119024d",
       "reason": "Retain the separately compiled work-aware exact-K workers and launch dispatch in the generated-source identity fixture. Independent regeneration of base fb958656 reproduces all ten previous hashes. All four tuned sm_120 shard differences are insertions of the 19 class-specific work workers and launchers; every existing source line is preserved in order. Registry additions provide work dispatch with incumbent fallback for unsupported classes. All four portable sm_90 shards, the registry header, manifest and catalog remain byte-identical. This fixture refresh changes no generator, scheduling, numerical tolerance or GPU qualification claim.",
       "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ]
+    },
+    {
+      "issue": 2161,
+      "source_revision": "0e3bdbc72721c6d6a4d2f56d4822ccbed7060096",
+      "reason": "Generated Fock workers and registry launchers now carry the runtime-owned CompensatedOutput value. The four sm_120 shards add the shared runtime header, polymorphic scatter output and two-plane Fock signatures; the four empty portable sm_90 shards only add the header. The registry source changes its Fock declarations and dispatch function-pointer type. Pre-PR cdb2131a regenerates all ten prior hashes exactly; reversing only these ABI edits and line wrapping in the 807b0bf1 emission recovers every remaining non-whitespace byte. Registry header, manifest, shell catalog, schedules and numerical expressions are unchanged.",
+      "paths": [
+        "sm_90/generativeqc_generated_shell_sm90_shard_0.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_3.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
