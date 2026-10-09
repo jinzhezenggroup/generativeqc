@@ -150,3 +150,30 @@ improvement with complete E/F and independent error gates, or the DF resource
 contract is unified and can replace the explicitly partial consumer bounds.
 Do not repeat AO refits for J, spend unknown providers' allowances, change the
 metric gauge/precision, or promote a Becke experiment from one microbenchmark.
+
+## Current-master integration follow-up
+
+PR #2164 merged on 2026-10-10 at 01:13:59 Asia/Shanghai and its old fork
+branch was deleted while qualification continued. The force-only patch is
+therefore submitted separately as PR #2170, based on master `b315d4056`.
+Its initial source tree is `4b918b3d285afa2d5477e68584f9671be0281e05`;
+only the fourteen force/code/test/documentation files differ from that base.
+Other agents' dirty CPU-integral and direct-J worktrees are not staged.
+
+The clean rebased tree passes 309 host tests and the compiler checker covers
+505 modules with zero dependency errors. A complete ccache-backed Release
+sm_120 rebuild plus a finite Slurm qualification passes the constrained
+cold/warm/panel/host-fallback CUDA test again. One fresh integrated 96-atom
+E/F endpoint takes 98.606486 s, including 18.500749-s prepare and
+24.951002-s force, with 25 iterations / 25 Focks. This is a single integration
+control, not a replacement for the earlier paired timing population.
+
+Its independent energy error is 1.90994e-11 Eh, force error 1.52676e-10
+Eh/bohr and residual 3.82286e-13. It retains one completed B charge pass,
+zero repeated fitted AO projections / metric BLAS dots, a final-U hit,
+256 geometry lanes, 9,216 phase batches and the same additional-consumer
+399,228,960/192,229,472-byte device/host bounds. The integrated library SHA-256
+is `c7265b4d71c673efeb2c62dc159089376be02416764e3cf5145e98272dc81176`.
+Receipts are `force-followup-96.json`, `force-followup-96-df.jsonl`,
+`force-followup-small-tests.log` and `followup-host-tests.log` in the ignored
+qualification artifact tree.
