@@ -151,4 +151,7 @@ def test_shared_stationary_emission_binds_actual_dynamic_graph_and_native_bound(
     assert "stationary_becke_primitive_max_atoms = 4;" in source
     assert "pair_coefficient_reverse_phase(" in source
     assert "atom_gather_coefficient_phase(" in source
+    assert "zero_seed_elision" in source
+    assert "input.zero_seed(point)" in source
+    assert "atomicAdd(input.zero_seed_points" in source
     assert emit_stationary_phased_becke_cuda(4, iterations=iterations) is source

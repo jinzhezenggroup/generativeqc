@@ -171,6 +171,20 @@ def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool | int
     return mode == "coefficients"
 
 
+def _resolve_becke_zero_seed_policy() -> bool | None:
+    """Allow a qualification opt-out without mutating an installed native owner.
+
+    Unspecified controls preserve legacy artifacts. Explicit controls require
+    the configure-once capability; numerical/resource admission stays native.
+    """
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED")
+    if mode is None:
+        return None
+    if mode not in {"off", "on"}:
+        raise ValueError("Becke zero-seed mode must be 'off' or 'on'")
+    return mode == "on"
+
+
 class _StationaryTaskSource(typing.Protocol):
     """Versioned/identity-bearing bounded derivative task producer."""
 
@@ -559,6 +573,7 @@ class _CudaSources:
             raise TypeError("integral_derivatives must be boolean")
         if becke_normalize is not None and type(becke_normalize) is not bool:
             raise TypeError("Becke normalization selection must be boolean or None")
+        zero_seed = _resolve_becke_zero_seed_policy()
         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
         if type(becke_primitive) is not int or becke_primitive != 2:
             becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
@@ -850,6 +865,18 @@ class _CudaSources:
             )
         # Qualification selects a schedule only during construction. Legacy
         # artifacts keep their serial default; never reconfigure a live owner.
+        if zero_seed is not None:
+            configure_zero = getattr(
+                lib, "stationary_configure_becke_zero_seed_v1", None
+            )
+            if configure_zero is None:
+                raise NotImplementedError(
+                    "artifact predates zero-seed Becke configuration"
+                )
+            configure_zero.argtypes = [ct.c_void_p, ct.c_int, *tail]
+            self._call(
+                "stationary_configure_becke_zero_seed_v1", self.handle, int(zero_seed)
+            )
         if becke_normalize is not None:
             assert configure_normalize is not None
             configure_normalize.argtypes = [ct.c_void_p, ct.c_int, *tail]
@@ -1636,6 +1663,18 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
+        zero_metrics = getattr(
+            self.library, "stationary_becke_zero_seed_metrics_v1", None
+        )
+        zero_values = (ct.c_uint64 * 2)()
+        if zero_metrics is not None:
+            zero_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            if zero_metrics(self.handle, zero_values, 2):
+                raise RuntimeError("stationary Becke zero-seed metrics unavailable")
         values = (ct.c_uint64 * 24)()
         if self.library.stationary_metrics(self.handle, values, 24):
             raise RuntimeError("stationary metrics unavailable")
@@ -1671,6 +1710,9 @@ class _CudaSources:
             )
         )
         metrics["primitive_batches"] = metrics["task_batches"]
+        if zero_metrics is not None:
+            metrics["becke_zero_seed_elision_enabled"] = bool(zero_values[0])
+            metrics["becke_zero_seed_points"] = int(zero_values[1])
         phased_metrics = getattr(
             self.library, "stationary_phased_becke_metrics_v1", None
         )
@@ -1722,8 +1764,27 @@ class _CudaSources:
             if becke_counters(self.handle, becke_values, len(becke_values)):
                 raise RuntimeError("stationary Becke phase counters unavailable")
             metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values))
+            if zero_metrics is not None:
+                elided_pairs = (
+                    metrics["becke_zero_seed_points"]
+                    * self.natom
+                    * (self.natom - 1)
+                    // 2
+                )
+                evaluated_pairs = metrics["becke_pair_primal_visits"] - elided_pairs
+                metrics["becke_primal_evaluated_pair_visits"] = evaluated_pairs
+                metrics["becke_reverse_evaluated_pair_visits"] = evaluated_pairs
+                metrics["becke_gather_evaluated_incident_visits"] = 2 * evaluated_pairs
+                metrics["becke_elided_primal_pair_panel_write_bytes"] = (
+                    32 * elided_pairs
+                )
+                metrics["becke_elided_reverse_pair_panel_write_bytes"] = (
+                    32 * elided_pairs
+                )
+                metrics["becke_elided_gather_pair_panel_read_bytes"] = 64 * elided_pairs
             metrics["becke_work_counter_semantics"] = (
-                "launched dense domains; failed forces are not accepted work"
+                "launched dense domains; evaluated domains subtract exact zero-seed "
+                "rows counted on device; failed forces are not accepted work"
             )
             metrics["becke_traffic_model"] = (
                 "logical distinct pair-panel values and extra cached directions; "
@@ -2310,6 +2371,13 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "center_distance_evaluations",
         "center_geometry_preparations",
         "becke_pair_state_evaluations",
+        "becke_zero_seed_points",
+        "becke_primal_evaluated_pair_visits",
+        "becke_reverse_evaluated_pair_visits",
+        "becke_gather_evaluated_incident_visits",
+        "becke_elided_primal_pair_panel_write_bytes",
+        "becke_elided_reverse_pair_panel_write_bytes",
+        "becke_elided_gather_pair_panel_read_bytes",
         "phased_becke_batches",
         "becke_primitive_batches",
         "becke_primitive_reverse_pair_visits",

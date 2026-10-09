@@ -25,6 +25,9 @@ struct Owner {
   bool becke_primitive_requested = false, becke_primitive = false,
        becke_primitive_configured = false;
   unsigned becke_primitive_mode{};
+  double geometry_tolerance{};
+  unsigned long long* becke_zero_seed_points{};
+  bool becke_zero_seed_requested = true, becke_zero_seed_configured = false;
   bool becke_normalize_supported = false, becke_normalize_cooperative = false,
        becke_normalize_configured = false;
   cudaStream_t geometry_stream{};
@@ -76,6 +79,12 @@ PhasedBeckeInput phased_input(Owner& owner, size_t points) {
   input.work = {owner.atoms, points, pair_storage, fields, zeros, maximum};
   input.seeds = maximum + owner.points;
   input.indices = reinterpret_cast<uint2*>(input.seeds + owner.points);
+  // Only the authenticated first-derivative route may elide zero cotangents.
+  // A positive separation floor keeps prepared reciprocal partials finite;
+  // smaller tolerances retain the ordinary error/overflow behavior unchanged.
+  input.zero_seed_elision = owner.becke_primitive && owner.becke_primitive_mode == 2 &&
+                            owner.becke_zero_seed_requested && owner.geometry_tolerance >= 1e-12;
+  input.zero_seed_points = owner.becke_zero_seed_points;
   return input;
 }
 // Caps make all products below representable before any allocation or pointer
@@ -373,6 +382,12 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->point_atoms = reinterpret_cast<int64_t*>(take(np));
     p->density = take(ns * n * n);
     p->weighted_density = take(ns * n * n);
+    // The charged 256-byte control panel reserves two error words followed by
+    // this aligned counter. It is not part of the mathematical scratch alias.
+    p->becke_zero_seed_points = reinterpret_cast<unsigned long long*>(
+        reinterpret_cast<unsigned char*>(p->context.error) + 8);
+    cuda_check(cudaMemsetAsync(p->becke_zero_seed_points, 0, sizeof(unsigned long long),
+                               p->context.stream));
     *output = p.release();
   });
 }
@@ -572,6 +587,29 @@ int stationary_becke_phase_profile_v1(void* pointer, double* output, size_t coun
   std::copy(owner->becke_phase_ms, owner->becke_phase_ms + 7, output);
   return 0;
 }
+int stationary_becke_zero_seed_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  if (!owner || !output || count != 2) return 1;
+  try {
+    owner->context.check_device();
+    drain_geometry(*owner);
+    output[0] = owner->becke_primitive && owner->becke_primitive_mode == 2 &&
+                owner->becke_zero_seed_requested && owner->geometry_tolerance >= 1e-12;
+    output[1] = 0;
+    if (owner->becke_primitive_mode != 2) return 0;
+    cuda_check(cudaMemcpyAsync(output + 1, owner->becke_zero_seed_points, sizeof(uint64_t),
+                               cudaMemcpyDeviceToHost, owner->context.stream));
+    cuda_check(cudaStreamSynchronize(owner->context.stream));
+    owner->downloads += sizeof(uint64_t);
+    ++owner->d2h_calls;
+    ++owner->synchronizations;
+    return 0;
+  } catch (...) {
+    owner->failed = true;
+    return 1;
+  }
+}
 int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
@@ -634,6 +672,19 @@ int stationary_profile(void* pointer, char* error, size_t size) {
     p->profile = true;
   });
 }
+int stationary_configure_becke_zero_seed_v1(void* pointer, int enabled, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || owner->becke_zero_seed_configured ||
+        (enabled != 0 && enabled != 1))
+      throw std::invalid_argument(
+          "Becke zero-seed elision must be configured once before topology");
+    owner->context.check_device();
+    owner->becke_zero_seed_configured = true;
+    owner->becke_zero_seed_requested = enabled;
+  });
+}
 int stationary_reset(void* pointer, const double* centers, const double* density,
                      const double* weighted_density, double tolerance, char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
@@ -645,6 +696,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     drain_geometry(*p);
     p->failed = false;
     p->geometry_peak_lanes = 0;
+    p->geometry_tolerance = tolerance;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
@@ -676,6 +728,7 @@ int stationary_geometry_reset(void* pointer, const double* centers, double toler
     drain_geometry(*p);
     p->failed = false;
     p->geometry_peak_lanes = 0;
+    p->geometry_tolerance = tolerance;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));

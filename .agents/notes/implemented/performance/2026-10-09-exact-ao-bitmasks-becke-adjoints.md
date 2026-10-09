@@ -259,3 +259,10 @@ Promote only after complete, genuinely paired endpoint evidence with matching
 semantic work, independent gates, capacity/compile accounting and appropriate
 RKS/UKS capability coverage. Neither kernel savings nor sparse-policy selection
 alone closes the broader issues.
+
+## Follow-up
+
+The [zero-cotangent elision decision](2026-10-09-becke-zero-cotangent-elision.md)
+records subsequent actual-domain reduction, rejected scheduling probes, and
+fresh qualification on the merged master. It does not relabel these historical
+measurements or change their no-promotion conclusion.

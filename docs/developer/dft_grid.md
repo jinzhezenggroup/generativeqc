@@ -355,6 +355,24 @@ arithmetic and requires independent derivative and complete E/F gates. The
 qualification runner accepts `--becke-primitive normalized-adjoints`; isolated
 kernel timing or producer selection alone does not authorize promotion.
 
+An admitted normalized-adjoint first-derivative owner also skips partition VJP
+work for an exactly zero FP64 cotangent. This is not a weight/product cutoff:
+point/center distance and owner validation still run, skipped gather outputs
+are explicitly zeroed, and AO, external and moving-grid contributions remain
+independent. The shortcut requires the geometry separation tolerance to be at
+least `1e-12`; smaller tolerances and other derivative routes retain ordinary
+execution. It does not apply to Hessians or response.
+
+`GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED=off|on` is a qualification override
+configured once before topology installation. Unspecified controls preserve
+older artifacts; an explicit override requires the new native capability.
+The default primitive selection is still `off`. Work metrics distinguish dense
+launched domains from actually evaluated pairs and report elided logical
+pair-panel bytes, not hardware transactions. The cumulative device count uses
+the existing control allocation; its readback is charged to D2H and
+synchronization metrics. See the
+[decision and qualification evidence](../../.agents/notes/implemented/performance/2026-10-09-becke-zero-cotangent-elision.md).
+
 CUDA selection is explicit and requires an artifact from
 `compile_cuda(CudaCompilerAdapter(...), cache)`, using the shared finite NVCC
 adapter and verified native-runtime cache. The source also compiles in the
