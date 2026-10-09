@@ -1,0 +1,310 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Current-master VRAM-guarded strict-FP64 Lambda default qualification",
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "revision": "cdb2131a47aaeb003bbc85fc76cf172848b8044b",
+  "hashes": {
+    "source": "6b03c746d7b2165eb974899901e9bac893b2fd6644abc294caa60e6e1a68ca69",
+    "equation": "6da577324b1e99937ac9a08307b6c9e15f455bf7ccc3209292fb8105c30cbce0",
+    "ir": "a11d4b420cf7a2a8f4570d7915913a26c9167e4660b9196eecd94cd926571e61",
+    "schedule": "a51ffd158724a5aa61bb9173ccf14aa8e043a510e2f52d8dc969e6bbb6a24d22"
+  },
+  "hash_reasons": {},
+  "device": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "toolchain": {
+    "cuda": "12.9.1",
+    "compiler_cache": "ccache 4.5.1",
+    "cuda_architectures": "120",
+    "build_type": "Release",
+    "aot_profile": "portable_cuda"
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "precision": "strict FP64 throughout; W experiment disabled",
+    "sample_file": "samples.json.gz",
+    "profile_file": "profile-summary.json.gz",
+    "source_reconstruction": "measured-source.patch.gz",
+    "clean_repetitions_per_cell": 2,
+    "instrumented_repetitions_per_cell": 1,
+    "frozen_sha256": {
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/build/endpoint": "0e12fa5ce7ee4c2578b764b5f319b0d3bd9d55dc050e97b681059d82befb296d",
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "b35fde13be7beaa6bba28b3d119a0835d4967cc501e10d1ce948c5c0b463ad97",
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/df_lambda_batch_ablation.py": "9ad5b4f29cedeca95e9bd65064d9847222b45d300f2d1b6c4bfe8dc6b1033b54",
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/df_lambda_core_reuse_ablation.py": "410c5c738ab9ef2f69ff66a034dc541739f64961714fdf06505569ae23919273",
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+      "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29"
+    },
+    "default_policy": "Explicit user-authorized resource-guarded batch32/replay request; not formal performance promotion."
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "gpu": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+    "host": "n2/node2"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": null,
+      "dimensions": {
+        "ao": 230,
+        "o": 9,
+        "v": 221,
+        "q": 488
+      }
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "reconstruction": "measured-source.patch.gz",
+      "provenance": {
+        "revision": "cdb2131a47aaeb003bbc85fc76cf172848b8044b",
+        "dirty": true,
+        "measured_archive_tree": "c5067fa42ca627b20750814eced745e3632e0f22",
+        "measured_archive_sha256": "5f880d6f66c8261e5ce1829dba8f7357ce49d5847b7c877c4accc48fffdd26d9",
+        "reconstruction": "measured-source.patch.gz",
+        "patch_excludes": "Documentation, Agent Notes and historical evidence; production source, compiler generator, endpoint drivers and validation fixtures are included.",
+        "production_and_drivers_match_compiled_archive": true,
+        "post_compile_test_only_finalization": {
+          "path": "tests/python/test_cc_cuda_lambda_lifetime.py",
+          "reason": "The conventional host lifetime mock gains the two forwarded diagnostic fields. Production/compiler/native-GPU/driver bytes are unchanged from the compiled and measured archive.",
+          "diff_sha256": "9b2a828cdc4df9436f4d98b162efe3a0752b4073bf5c331bbadf4bea6d300173"
+        }
+      }
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "frozen_sha256": {
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/build/endpoint": "0e12fa5ce7ee4c2578b764b5f319b0d3bd9d55dc050e97b681059d82befb296d",
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "b35fde13be7beaa6bba28b3d119a0835d4967cc501e10d1ce948c5c0b463ad97",
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/df_lambda_batch_ablation.py": "9ad5b4f29cedeca95e9bd65064d9847222b45d300f2d1b6c4bfe8dc6b1033b54",
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/df_lambda_core_reuse_ablation.py": "410c5c738ab9ef2f69ff66a034dc541739f64961714fdf06505569ae23919273",
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+        "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29"
+      }
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": null,
+      "references": "Pinned PySCF 2.14.0 energy and original two-step physical finite differences; references read after production."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": null,
+      "clean_samples": 4,
+      "separate_instrumented_samples": 2
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    }
+  },
+  "timings": [
+    {
+      "selection": "baseline",
+      "configuration": "b8",
+      "repetition": 0,
+      "workload": "cold-start",
+      "seconds": 518.302791026,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b32_p1",
+      "repetition": 0,
+      "workload": "cold-start",
+      "seconds": 472.73919943,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b32_p1",
+      "repetition": 1,
+      "workload": "cold-start",
+      "seconds": 473.607494633,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "baseline",
+      "configuration": "b8",
+      "repetition": 1,
+      "workload": "cold-start",
+      "seconds": 545.492539772,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    }
+  ],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Owner capacities, free-memory snapshots and admission limits are not measured peak VRAM or hardware traffic."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {
+    "0": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "1": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "2": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "3": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "4": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "5": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    }
+  },
+  "block_errors": {
+    "independent_total_energy": {
+      "passed": true,
+      "atol": 3e-09,
+      "rtol": 0,
+      "max_absolute_error": 2.0321522242738865e-12,
+      "max_scaled_error": 0.0006773840747579621,
+      "rms_error": 2.0321522242738865e-12,
+      "shape": [
+        6
+      ]
+    },
+    "components_vs_common_strict_native_baseline": {
+      "passed": true,
+      "atol": 3e-07,
+      "rtol": 0,
+      "max_absolute_error": 3.2862601528904634e-13,
+      "max_scaled_error": 1.095420050963488e-06,
+      "rms_error": 6.937692082669667e-14,
+      "shape": [
+        6,
+        8,
+        3
+      ]
+    },
+    "additional_original_strict_component_sanity": {
+      "passed": true,
+      "atol": 3e-09,
+      "rtol": 0,
+      "max_absolute_error": 3.2862601528904634e-13,
+      "max_scaled_error": 0.00010954200509634877,
+      "rms_error": 6.937692082669667e-14,
+      "shape": [
+        6,
+        8,
+        3
+      ]
+    },
+    "translation": {
+      "passed": true,
+      "atol": 3e-08,
+      "rtol": 0,
+      "max_absolute_error": 8.170443488442203e-13,
+      "max_scaled_error": 2.723481162814068e-05,
+      "rms_error": 4.761647197268877e-13,
+      "shape": [
+        6,
+        3
+      ]
+    },
+    "independent_force_step_0.0001": {
+      "passed": true,
+      "atol": 3e-07,
+      "rtol": 0,
+      "max_absolute_error": 7.560333518952245e-09,
+      "max_scaled_error": 0.025201111729840818,
+      "rms_error": 7.560109990481037e-09,
+      "shape": [
+        6
+      ]
+    },
+    "independent_force_step_3e-05": {
+      "passed": true,
+      "atol": 3e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.956130569498061e-09,
+      "max_scaled_error": 0.009853768564993537,
+      "rms_error": 2.95588464424621e-09,
+      "shape": [
+        6
+      ]
+    },
+    "lambda_residual": {
+      "passed": true,
+      "atol": 1e-09,
+      "rtol": 0,
+      "max_absolute_error": 6.11632758978413e-13,
+      "max_scaled_error": 0.000611632758978413,
+      "rms_error": 6.11632758978413e-13,
+      "shape": [
+        6
+      ]
+    },
+    "z_residual": {
+      "passed": true,
+      "atol": 1e-09,
+      "rtol": 0,
+      "max_absolute_error": 1.3569479381157108e-13,
+      "max_scaled_error": 0.00013569479381157106,
+      "rms_error": 1.3569479381157108e-13,
+      "shape": [
+        6
+      ]
+    },
+    "stationarity": {
+      "passed": true,
+      "atol": 1e-09,
+      "rtol": 0,
+      "max_absolute_error": 5.356344550257999e-13,
+      "max_scaled_error": 0.0005356344550257999,
+      "rms_error": 5.356344550257999e-13,
+      "shape": [
+        6
+      ]
+    }
+  },
+  "solver_iterations": [
+    21,
+    21,
+    21,
+    21,
+    21,
+    21
+  ],
+  "solver_trace_reason": "Final iterations/actions and independent residuals retained; full iteration histories are not exported. Separate nested action traces are explanatory only.",
+  "attachments": [],
+  "performance": {
+    "status": "not-run",
+    "reason": "Two forward/reverse repetitions are descriptive, not the shared five-pair promotion gate; measured peak memory, full compile cost and complete iterative trajectories are unavailable. Resource-guarded defaults are separately user-authorized."
+  }
+}

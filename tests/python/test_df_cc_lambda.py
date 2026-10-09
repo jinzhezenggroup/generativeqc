@@ -175,6 +175,7 @@ def probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
         ct.c_size_t,
         ct.c_int,
         ct.c_size_t,
+        ct.c_size_t,
         ct.POINTER(dp),
         dp,
         dp,
@@ -197,11 +198,15 @@ def run(
     reduction: bool = True,
     matrix: bool = True,
     batch_two: bool = False,
+    batch_large: bool = False,
+    primal_matrix: bool = False,
+    native_defaults: bool = False,
     overflow: bool = False,
     core_reuse: bool = True,
     audit_matrix: bool = True,
     overflow_audit: bool = False,
     budget: int = 1 << 30,
+    device_budget: int = np.iinfo(np.uintp).max,
 ) -> tuple:
     o, v = arrays["t1"].shape
     q = len(arrays["bov"])
@@ -227,7 +232,7 @@ def run(
     result = [np.full(shape, np.nan) for shape in shapes]
     outputs = (dp * len(result))(*(x.ctypes.data_as(dp) for x in result))
     values = np.full(6, np.nan)
-    counts = np.zeros(26, dtype=np.uintp)
+    counts = np.zeros(29, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -241,8 +246,12 @@ def run(
         + 32 * int(overflow)
         + 64 * int(not core_reuse)
         + 128 * int(not audit_matrix)
-        + 256 * int(overflow_audit),
+        + 256 * int(overflow_audit)
+        + 512 * int(batch_large)
+        + 1024 * int(primal_matrix)
+        + 2048 * int(native_defaults),
         budget,
+        device_budget,
         ptrs,
         *(x.ctypes.data_as(dp) for x in seeds),
         outputs,

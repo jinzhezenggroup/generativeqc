@@ -144,6 +144,34 @@ def summarize(observations: list[dict]) -> dict:
     }
 
 
+def endpoint_controls(lambda_batch_limit: int = 8) -> list[str]:
+    """Keep the established cold protocol while varying only Lambda Q batching."""
+    if lambda_batch_limit < 1:
+        raise ValueError("Lambda batch limit must be positive")
+    return [
+        "1",
+        "1",
+        "1",
+        "1",
+        str(lambda_batch_limit),
+        "8",
+        "8",
+        "0",
+        "0",
+        "2",
+        "1",
+        "30",
+        "0",
+        "0",
+        "1",
+        "auto",
+        "1",
+        "0",
+        "auto",
+        "0",
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", type=Path, required=True)
@@ -200,28 +228,7 @@ def main() -> None:
         if args.screen
         else list(itertools.product((0, 1), (1, 30), (0, 1)))
     )
-    controls = [
-        "1",
-        "1",
-        "1",
-        "1",
-        "8",
-        "8",
-        "8",
-        "0",
-        "0",
-        "2",
-        "1",
-        "30",
-        "0",
-        "0",
-        "1",
-        "auto",
-        "1",
-        "0",
-        "auto",
-        "0",
-    ]
+    controls = endpoint_controls()
     observations = []
     for repetition in range(args.repetitions):
         order = configurations if repetition % 2 == 0 else configurations[::-1]
@@ -243,6 +250,7 @@ def main() -> None:
                 str(cadence),
                 str(reuse),
                 str(reuse),
+                "0",
             ]
             print(f"starting {prefix.name}", flush=True)
             started = time.perf_counter()
