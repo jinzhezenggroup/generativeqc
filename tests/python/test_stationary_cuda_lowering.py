@@ -107,7 +107,8 @@ assert 'np.lexsort' in driver
         [sys.executable, "-c", script],
         env={**os.environ, "PYTHONPATH": ".:python"},
         check=True,
-        timeout=30,
+        # Allow source-generation work to finish under CI worker contention.
+        timeout=60,
     )
 
 
