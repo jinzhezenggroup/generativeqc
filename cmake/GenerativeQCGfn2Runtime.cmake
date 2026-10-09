@@ -91,6 +91,12 @@ function(generativeqc_add_gfn2_runtime target)
       ${_gfn2_root}/src/backends/cuda/gfn2_total_energy.cu
     )
     add_library(generativeqc_gfn2_cuda STATIC ${_gfn2_cuda_sources})
+    option(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS
+      "Compile bounded GFN2 device density work receipts" OFF)
+    if(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+      target_compile_definitions(generativeqc_gfn2_cuda PRIVATE
+        GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS=1)
+    endif()
     set(GENERATIVEQC_GFN2_ELECTRONIC_CUDA_HEADER
         "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_electronic_native.cuh")
     generativeqc_register_generated_sources(
@@ -116,13 +122,17 @@ function(generativeqc_add_gfn2_runtime target)
       NAME generativeqc_gfn2_density_cuda_codegen
       TARGET generativeqc_gfn2_cuda
       GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_gfn2_density_cuda.py"
-      OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_density_contract.inc"
+      OUTPUTS
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_density_contract.inc"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_density_contract_receipt.inc"
       DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_density_lowering.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/weighted_gram_emit.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/native_lowering.py"
       ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_density_contract.inc"
+           --instrumented-output
+           "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_density_contract_receipt.inc"
       COMMENT "Generating shared paired GFN2 weighted-Gram contraction")
     # Both CPU and CUDA consume compiler-owned pair and D4 parameter artifacts.
     add_dependencies(generativeqc_gfn2_cuda

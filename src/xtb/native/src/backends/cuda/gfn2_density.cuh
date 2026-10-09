@@ -28,6 +28,40 @@ enum class Gfn2DensityDeviceError : std::uint32_t {
   kInvalidSpinChannels = 11u,
 };
 
+enum Gfn2DensityReceiptStatus : std::uint32_t {
+  kDensityContractCompleted = 0u,
+  kDensitySequenceClosed = 1u,
+  kDensityInactiveMember = 2u,
+  kDensityPriorSystemError = 3u,
+  kDensityUnusedChannel = 4u,
+  kDensityLocalArithmeticFailure = 5u,
+  kDensityInvalidActiveMask = 6u,
+};
+
+// One record per launched contraction CTA. The counters are visits in the
+// generated checked-pair loop, including partial visits before a finite error.
+// cta_cycles measures one CTA on one SM, not elapsed graph/kernel time.
+struct Gfn2DensityDeviceReceipt {
+  std::uint64_t slot = 0;
+  std::uint64_t cta_cycles = 0;
+  std::uint64_t pairs_visited = 0;
+  std::uint64_t plain_visits = 0;
+  std::uint64_t plain_completed = 0;
+  std::uint64_t weighted_visits = 0;
+  std::uint64_t weighted_completed = 0;
+  std::uint64_t failed_pairs = 0;
+  std::uint64_t published_pairs = 0;
+  std::int64_t system = -1;
+  std::int64_t orbital_count = 0;
+  std::int64_t pair_count = 0;
+  std::uint32_t spin_channels = 0;
+  std::uint32_t channel = 0;
+  std::uint32_t tile = 0;
+  std::uint32_t status = kDensitySequenceClosed;
+};
+static_assert(std::is_trivially_copyable_v<Gfn2DensityDeviceReceipt>);
+static_assert(std::is_standard_layout_v<Gfn2DensityDeviceReceipt>);
+
 /*
  * Restricted ragged AO topology. orbital_offsets partitions eigenvalue and
  * coefficient dimensions; matrix_offsets partitions complete dense row-major
@@ -125,6 +159,13 @@ struct Gfn2DensityDeviceWorkspace {
   std::int64_t channel_density_trace_elements = 0;
   double* channel_weighted_density_trace_scratch = nullptr;
   std::int64_t channel_weighted_density_trace_elements = 0;
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  // Separate opt-in artifact ABI. Reset count once before a complete endpoint;
+  // every CTA advances it, so count > capacity is an explicit overflow.
+  Gfn2DensityDeviceReceipt* diagnostic_receipts = nullptr;
+  std::uint64_t* diagnostic_receipt_count = nullptr;
+  std::int64_t diagnostic_receipt_capacity = 0;
+#endif
 };
 
 static_assert(std::is_trivially_copyable_v<Gfn2DensityDeviceBatch>);
