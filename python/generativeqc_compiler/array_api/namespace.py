@@ -104,9 +104,14 @@ def full(
 ) -> VibeArray:
     """Construct a symbolic uniform array without expanding its literal payload."""
     target = _creation_shape(shape)
-    if dtype not in ("float32", "float64"):
-        raise TypeError("symbolic full supports float32 or float64")
-    factor = _generic_scalar(fill_value, "full fill value")
+    if dtype not in ("float32", "float64", "bool"):
+        raise TypeError("symbolic full supports bool, float32 or float64")
+    if dtype == "bool":
+        if type(fill_value) is not bool:
+            raise TypeError("symbolic bool full requires a bool fill value")
+        factor = fill_value
+    else:
+        factor = _generic_scalar(fill_value, "full fill value")
     scalar = tensor_ir.constant(factor, TensorSpec(dtype=dtype, role="constant"))
     if not target:
         return VibeArray(scalar)
@@ -249,6 +254,8 @@ def _promote_generic_arrays(*values: VibeArray) -> tuple[VibeArray, ...]:
     """Promote supported generic floats by inserting explicit TensorIR casts."""
     if any(not _is_generic_array(value) for value in values):
         raise TypeError("promotion requires generic arrays")
+    if any(value.dtype not in ("float32", "float64") for value in values):
+        raise TypeError("floating arithmetic requires real float32 or float64 arrays")
     target = (
         "float64" if any(value.dtype == "float64" for value in values) else "float32"
     )
@@ -263,6 +270,44 @@ def _generic_binary(
     left, right = _promote_generic_arrays(left, right)
     shape = _broadcast_shape(left.shape, right.shape)
     return _broadcast_generic(left, shape), _broadcast_generic(right, shape)
+
+
+def _comparison(op: str, x1: object, x2: object) -> VibeArray:
+    if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
+        left, right = x1, x2
+        if _is_generic_array(left) and _is_generic_array(right):
+            left, right = _generic_binary(left, right)
+    elif isinstance(x1, VibeArray):
+        left, right = _generic_array_and_scalar(x1, x2, name=op)
+    elif isinstance(x2, VibeArray):
+        right, left = _generic_array_and_scalar(x2, x1, name=op)
+    else:
+        raise TypeError(f"{op} requires at least one symbolic VibeArray")
+    return _canonical_generic(VibeArray(tensor_ir.compare(op, left.node, right.node)))
+
+
+def equal(x1: object, x2: object) -> VibeArray:
+    return _comparison("equal", x1, x2)
+
+
+def not_equal(x1: object, x2: object) -> VibeArray:
+    return _comparison("not_equal", x1, x2)
+
+
+def greater(x1: object, x2: object) -> VibeArray:
+    return _comparison("greater", x1, x2)
+
+
+def greater_equal(x1: object, x2: object) -> VibeArray:
+    return _comparison("greater_equal", x1, x2)
+
+
+def less(x1: object, x2: object) -> VibeArray:
+    return _comparison("less", x1, x2)
+
+
+def less_equal(x1: object, x2: object) -> VibeArray:
+    return _comparison("less_equal", x1, x2)
 
 
 def _generic_scalar(value: object, name: str) -> Fraction:

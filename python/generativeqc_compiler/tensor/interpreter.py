@@ -84,8 +84,9 @@ def _evaluate(
             raise ValueError(f"missing tensor input: {name}")
         value = np.asarray(feeds[name])
         if value.dtype != np.dtype(node.spec.dtype) or value.shape != node.spec.shape:
+            label = "real dtype" if node.spec.dtype in ("float32", "float64") else "dtype"
             raise ValueError(
-                f"input {name} must have real dtype {node.spec.dtype} and shape {node.spec.shape}"
+                f"input {name} must have {label} {node.spec.dtype} and shape {node.spec.shape}"
             )
         tolerance = 1e-11 if node.spec.dtype == "float64" else 1e-6
         for symmetry in node.spec.symmetries:
@@ -100,12 +101,16 @@ def _evaluate(
                 raise ValueError(f"input {name} violates its declared symmetry")
         return value
     if op == "constant":
+        if node.spec.dtype == "bool":
+            return np.array(a["values"], dtype=np.bool_).reshape(node.spec.shape)
         return np.array(
             [_coefficient(v, node.spec.dtype) for v in a["values"]],
             dtype=node.spec.dtype,
         ).reshape(node.spec.shape)
     if op == "cast":
         return operands[0].astype(node.spec.dtype, copy=True)
+    if op in ("equal", "not_equal", "greater", "greater_equal", "less", "less_equal"):
+        return getattr(np, op)(operands[0], operands[1])
     if op == "add":
         result = np.zeros(node.spec.shape, dtype=node.spec.dtype)
         for operand, coefficient in zip(operands, a["coefficients"]):

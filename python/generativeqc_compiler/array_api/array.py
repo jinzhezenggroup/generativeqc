@@ -61,13 +61,36 @@ class VibeArray:
         """Reject use of symbolic array values in Python control flow."""
         raise TypeError("symbolic VibeArray values cannot drive Python control flow")
 
-    def __eq__(self, other: object) -> bool:
-        """Reject symbolic equality comparisons."""
-        raise TypeError("symbolic VibeArray comparisons are not supported")
+    def __eq__(self, other: object) -> VibeArray:
+        """Build a symbolic Boolean equality value."""
+        from . import namespace
 
-    def __ne__(self, other: object) -> bool:
-        """Reject symbolic inequality comparisons."""
-        raise TypeError("symbolic VibeArray comparisons are not supported")
+        return namespace.equal(self, other)
+
+    def __ne__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.not_equal(self, other)
+
+    def __gt__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.greater(self, other)
+
+    def __ge__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.greater_equal(self, other)
+
+    def __lt__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.less(self, other)
+
+    def __le__(self, other: object) -> VibeArray:
+        from . import namespace
+
+        return namespace.less_equal(self, other)
 
     def __add__(self, other: object) -> VibeArray:
         """Build symbolic addition with this array as the left operand."""

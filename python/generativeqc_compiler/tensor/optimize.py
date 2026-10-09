@@ -644,6 +644,13 @@ def prepare_for_backend(
         raise TypeError("production preparation requires a TensorIR Program")
     if backend not in PRODUCTION_BACKENDS:
         raise ValueError(f"unsupported TensorIR production backend: {backend}")
+    if any(
+        node.spec.dtype == "bool" or node.op in {"equal", "not_equal", "greater", "greater_equal", "less", "less_equal"}
+        for node in program.live_nodes
+    ):
+        raise ValueError(
+            f"{backend} TensorIR lowering does not support bool data or comparisons"
+        )
     if type(preserve_reduction_order) is not bool:
         raise TypeError("preserve_reduction_order must be a Boolean")
     # Production emitters/planners prepare their input again. Carry an explicit

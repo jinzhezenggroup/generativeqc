@@ -957,6 +957,8 @@ def linearize(
     """
     if not isinstance(program, Program):
         raise TypeError("linearize requires a Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
     primal_hash = program.logical_hash
@@ -1048,6 +1050,8 @@ def transpose_program(
     """
     if not isinstance(program, Program):
         raise TypeError("transpose_program requires a Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
     primal_hash = program.logical_hash

@@ -88,6 +88,8 @@ def _eager_array(value: object) -> np.ndarray:
     # Reuse the public host boundary before NumPy can invoke foreign array hooks.
     array = asarray(value)
     assert isinstance(array, np.ndarray)
+    if array.dtype not in (float32, float64):
+        raise TypeError("floating arithmetic requires real float32 or float64 arrays")
     return _finite_eager(array)
 
 
@@ -170,6 +172,39 @@ def divide(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.divide(x1, x2)
     return _eager_compute(np.divide, *_eager_operands(x1, x2, scalars=True))
+
+
+def _compare(op: str, x1: object, x2: object) -> typing.Any:
+    """Keep the finite-only reference boundary before forming bool results."""
+    if _symbolic(x1, x2):
+        return getattr(_namespace, op)(x1, x2)
+    if all(type(value) in (int, float, str, Fraction) for value in (x1, x2)):
+        raise TypeError(f"{op} requires at least one array operand")
+    return _eager_compute(getattr(np, op), *_eager_operands(x1, x2, scalars=True))
+
+
+def equal(x1: object, x2: object) -> typing.Any:
+    return _compare("equal", x1, x2)
+
+
+def not_equal(x1: object, x2: object) -> typing.Any:
+    return _compare("not_equal", x1, x2)
+
+
+def greater(x1: object, x2: object) -> typing.Any:
+    return _compare("greater", x1, x2)
+
+
+def greater_equal(x1: object, x2: object) -> typing.Any:
+    return _compare("greater_equal", x1, x2)
+
+
+def less(x1: object, x2: object) -> typing.Any:
+    return _compare("less", x1, x2)
+
+
+def less_equal(x1: object, x2: object) -> typing.Any:
+    return _compare("less_equal", x1, x2)
 
 
 def negative(x: object) -> typing.Any:
@@ -396,7 +431,7 @@ def sum(
     array = _eager_array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
-    if type(keepdims) is not bool:
+    if type(keepdims) is not builtins.bool:
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "sum")
     return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
@@ -415,7 +450,7 @@ def mean(
     if isinstance(x, VibeArray):
         return _namespace.mean(x, axis=axis, keepdims=keepdims)
     array = _eager_array(x)
-    if type(keepdims) is not bool:
+    if type(keepdims) is not builtins.bool:
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "mean")
     count = 1
@@ -494,15 +529,26 @@ def _dtype_name(dtype: object) -> str:
     return name
 
 
+def _data_dtype_name(dtype: object) -> str:
+    """Admit Boolean data without widening the existing real arithmetic helpers."""
+    try:
+        name = np.dtype(dtype).name
+    except TypeError as exc:
+        raise TypeError("dtype must describe bool, float32 or float64") from exc
+    if name not in ("bool", "float32", "float64"):
+        raise TypeError("experimental Array API supports bool and real float32/float64 data")
+    return name
+
+
 def _dtype_of(value: object) -> np.dtype:
-    """Read an admitted real dtype without converting external array objects."""
+    """Read an admitted data dtype without converting external array objects."""
     if isinstance(value, VibeArray):
-        return np.dtype(_dtype_name(value.dtype))
+        return np.dtype(_data_dtype_name(value.dtype))
     if isinstance(value, np.ndarray):
         _check_host_values(value)
-        return np.dtype(_dtype_name(value.dtype))
+        return np.dtype(_data_dtype_name(value.dtype))
     _check_host_values(value)
-    return np.dtype(_dtype_name(value))
+    return np.dtype(_data_dtype_name(value))
 
 
 def astype(
@@ -514,7 +560,7 @@ def astype(
     device: object = None,
 ) -> typing.Any:
     """Explicit float32/float64 conversion with no implicit device transfer."""
-    if type(copy) is not bool:
+    if type(copy) is not builtins.bool:
         raise TypeError("astype copy must be a bool")
     if device is not None:
         raise ValueError("astype currently supports device=None only")
@@ -535,7 +581,7 @@ def can_cast(from_: object, to: object, /) -> bool:
 
 def finfo(type: object, /) -> np.finfo:
     """Describe IEEE machine limits for the admitted real floating-point dtypes."""
-    return np.finfo(_dtype_of(type))
+    return np.finfo(np.dtype(_dtype_name(_dtype_of(type))))
 
 
 def isdtype(dtype: object, kind: object) -> bool:
@@ -555,6 +601,8 @@ def isdtype(dtype: object, kind: object) -> bool:
         if isinstance(value, str):
             if value not in categories:
                 raise ValueError(f"unsupported dtype kind {value!r}")
+            if source == np.dtype("bool"):
+                return value == "bool"
             return value in ("real floating", "numeric")
         return source == _dtype_of(value)
 
@@ -572,6 +620,10 @@ def result_type(*arrays_and_dtypes: object) -> np.dtype:
         dtypes.append(_dtype_of(value))
     if not dtypes:
         raise TypeError("result_type requires at least one array or dtype")
+    if np.dtype("bool") in dtypes:
+        if any(dtype != np.dtype("bool") for dtype in dtypes):
+            raise TypeError("bool and real dtype promotion is unsupported")
+        return np.dtype("bool")
     return float64 if float64 in dtypes else float32
 
 
@@ -592,27 +644,31 @@ def asarray(
     if isinstance(value, VibeArray):
         if dtype is None:
             return value
-        name = _dtype_name(dtype)
+        name = _data_dtype_name(dtype)
         if name == value.dtype:
             return value
+        if name == "bool" or value.dtype == "bool":
+            raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
         return VibeArray(_cast(value.node, name))
     _check_host_values(value)
-    target = None if dtype is None else _dtype_name(dtype)
+    target = None if dtype is None else _data_dtype_name(dtype)
+    if target is not None and (target == "bool") != (np.asarray(value).dtype.name == "bool"):
+        raise TypeError("cross-kind bool/real input conversion is unsupported")
     if copy is True:
         array = np.array(value, dtype=target, copy=True)
     elif copy is False:
         array = np.array(value, dtype=target, copy=False)
     else:
         array = np.asarray(value, dtype=target)
-    if array.dtype.name not in ("float32", "float64"):
+    if array.dtype.name not in ("bool", "float32", "float64"):
         raise TypeError(
-            "experimental Array API runtime inputs must have float32 or float64 dtype"
+            "experimental Array API runtime inputs must have bool, float32 or float64 dtype"
         )
     return array
 
 
 def _creation_dtype(dtype: object) -> str:
-    return "float64" if dtype is None else _dtype_name(dtype)
+    return "float64" if dtype is None else _data_dtype_name(dtype)
 
 
 def _creation_device(device: object) -> None:
@@ -633,30 +689,37 @@ def full(
     """Create a finite uniform array, or capture an exact TensorIR constant."""
     _creation_device(device)
     target = _namespace._creation_shape(shape)
-    name = _creation_dtype(dtype)
-    if dtype is None and type(fill_value) in (bool, int):
+    name = "bool" if dtype is None and type(fill_value) is builtins.bool else _creation_dtype(dtype)
+    if dtype is None and type(fill_value) is int:
         raise TypeError(
-            "full with integer/bool fill_value requires an integer/bool dtype "
+            "full with an integer fill_value requires an integer dtype "
             "not supported by this preview; specify a floating dtype explicitly"
         )
-    factor = _namespace._generic_scalar(fill_value, "full fill value")
+    if name == "bool":
+        if type(fill_value) is not builtins.bool:
+            raise TypeError("bool full requires a bool fill value")
+        factor = fill_value
+    else:
+        factor = _namespace._generic_scalar(fill_value, "full fill value")
     if _active_capture():
         return _namespace.full(target, factor, dtype=name)
-    return _eager_compute(np.full, target, float(factor), dtype=np.dtype(name))
+    return _eager_compute(np.full, target, factor if name == "bool" else float(factor), dtype=np.dtype(name))
 
 
 def zeros(
     shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
 ) -> typing.Any:
-    """Create floating zeros on the CPU reference path or capture a symbolic constant."""
-    return full(shape, 0, dtype=_creation_dtype(dtype), device=device)
+    """Create real or Boolean zeros on the CPU reference path."""
+    name = _creation_dtype(dtype)
+    return full(shape, False if name == "bool" else 0, dtype=name, device=device)
 
 
 def ones(
     shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
 ) -> typing.Any:
-    """Create floating ones on the CPU reference path or capture a symbolic constant."""
-    return full(shape, 1, dtype=_creation_dtype(dtype), device=device)
+    """Create real or Boolean ones on the CPU reference path."""
+    name = _creation_dtype(dtype)
+    return full(shape, True if name == "bool" else 1, dtype=name, device=device)
 
 
 def full_like(
@@ -668,23 +731,47 @@ def full_like(
 ) -> typing.Any:
     """Create a uniform generic array inheriting the input's shape/dtype."""
     _creation_device(device)
-    factor = _namespace._generic_scalar(fill_value, "full_like fill value")
     if isinstance(x, VibeArray):
-        name = x.dtype if dtype is None else _dtype_name(dtype)
+        name = x.dtype if dtype is None else _data_dtype_name(dtype)
+        if name == "bool":
+            if type(fill_value) is not builtins.bool:
+                raise TypeError("bool full_like requires a bool fill value")
+            factor = fill_value
+        else:
+            factor = _namespace._generic_scalar(fill_value, "full_like fill value")
         return _namespace.full_like(x, factor, dtype=name)
-    array = _eager_array(x)
-    name = array.dtype.name if dtype is None else _dtype_name(dtype)
-    return _eager_compute(np.full_like, array, float(factor), dtype=np.dtype(name))
+    array = _finite_eager(asarray(x))
+    assert isinstance(array, np.ndarray)
+    name = array.dtype.name if dtype is None else _data_dtype_name(dtype)
+    if name == "bool":
+        if type(fill_value) is not builtins.bool:
+            raise TypeError("bool full_like requires a bool fill value")
+        factor = fill_value
+    else:
+        factor = _namespace._generic_scalar(fill_value, "full_like fill value")
+    return _eager_compute(np.full_like, array, factor if name == "bool" else float(factor), dtype=np.dtype(name))
+
+
+def _like_dtype(x: object, dtype: object) -> str:
+    if dtype is not None:
+        return _data_dtype_name(dtype)
+    if isinstance(x, VibeArray):
+        return x.dtype
+    return _data_dtype_name(asarray(x).dtype)
 
 
 def zeros_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
-    """Create floating zeros with the input shape and dtype unless dtype is specified."""
-    return full_like(x, 0, dtype=dtype, device=device)
+    """Create zeros with the input shape and dtype unless dtype is specified."""
+    _creation_device(device)
+    name = _like_dtype(x, dtype)
+    return full_like(x, False if name == "bool" else 0, dtype=name, device=device)
 
 
 def ones_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
-    """Create floating ones with the input shape and dtype unless dtype is specified."""
-    return full_like(x, 1, dtype=dtype, device=device)
+    """Create ones with the input shape and dtype unless dtype is specified."""
+    _creation_device(device)
+    name = _like_dtype(x, dtype)
+    return full_like(x, True if name == "bool" else 1, dtype=name, device=device)
 
 
 def _generic_spec(array: np.ndarray, *, differentiable: bool) -> TensorSpec:
@@ -858,10 +945,14 @@ def capabilities() -> dict[str, object]:
             "compiled_call": "shape-dtype-specialized-tensorir-reference",
             "compiled_differentiability": "explicit-parameter-names",
             "namespace_dispatch": "numpy-eager-or-symbolic-tensorir",
-            "runtime_array": "numpy-host-float32-float64",
+            "runtime_array": "numpy-host-bool-float32-float64",
         }
     )
     return report
+
+
+# Keep the standard dtype object while using builtins.bool for Python type checks.
+bool = np.dtype("bool")
 
 
 __all__ = [
@@ -882,6 +973,7 @@ __all__ = [
     "add",
     "asarray",
     "astype",
+    "bool",
     "broadcast_arrays",
     "broadcast_shapes",
     "broadcast_to",
@@ -891,6 +983,7 @@ __all__ = [
     "divide",
     "dlpack_device",
     "einsum",
+    "equal",
     "exp",
     "expand_dims",
     "finfo",
@@ -899,9 +992,13 @@ __all__ = [
     "float64",
     "full",
     "full_like",
+    "greater",
+    "greater_equal",
     "import_dlpack",
     "input_array",
     "isdtype",
+    "less",
+    "less_equal",
     "log",
     "matmul",
     "matrix_transpose",
@@ -909,6 +1006,7 @@ __all__ = [
     "moveaxis",
     "multiply",
     "negative",
+    "not_equal",
     "ones",
     "ones_like",
     "permute_dims",
