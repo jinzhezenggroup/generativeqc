@@ -17,6 +17,7 @@ from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 from generativeqc_compiler.tensor.scf import density_program, weighted_density_program
 from generativeqc_compiler.tensor.symmetric_rank_k import (
     emit_symmetric_rank_k_portfolio,
+    symmetric_rank_k_scalar_overwrite_program,
     symmetric_rank_k_scalar_update_program,
 )
 from generativeqc_compiler.tensor.weighted_gram_emit import emit_scalar_stages
@@ -117,6 +118,17 @@ def render(source: str) -> str:
         },
     )
     bodies.extend(stages.values())
+    overwrite = emit_scalar_cpp(
+        symmetric_rank_k_scalar_overwrite_program(),
+        function_name="rank_k_alpha_overwrite",
+        input_order=("alpha", "product"),
+        output_order=("updated",),
+    ).replace(
+        "inline bool rank_k_alpha_overwrite(",
+        "__device__ inline bool rank_k_alpha_overwrite(",
+        1,
+    )
+    bodies.append(overwrite)
     update = emit_scalar_cpp(
         symmetric_rank_k_scalar_update_program(),
         function_name="rank_k_alpha_beta_update",
@@ -134,11 +146,17 @@ def render(source: str) -> str:
     ):
         program = builder(1, 3, spin_count=2, orbital_count=5)
         for suffix, order in (("row", "row-major"), ("column", "column-major")):
-            bodies.append(
-                emit_symmetric_rank_k_portfolio(
-                    program, name, source, name=f"rank_k_{name}_{suffix}", order=order
+            for update in ("overwrite", "update"):
+                bodies.append(
+                    emit_symmetric_rank_k_portfolio(
+                        program,
+                        name,
+                        source,
+                        name=f"rank_k_{name}_{suffix}_{update}",
+                        order=order,
+                        update=update,
+                    )
                 )
-            )
     bodies.append("}  // namespace generativeqc::tensor::rank_k_generated")
     return "\n".join(bodies) + "\n"
 

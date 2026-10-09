@@ -84,6 +84,13 @@ __device__ inline std::size_t matrix_index(std::size_t row, std::size_t col, std
   return order == RankKOrder::RowMajor ? row * n + col : row + col * n;
 }
 
+__device__ inline bool update_value(const SymmetricRankKInvocation call, double product,
+                                    double old_output, double& updated) {
+  return call.beta == 0.0 ? rank_k_generated::rank_k_alpha_overwrite(call.alpha, product, updated)
+                          : rank_k_generated::rank_k_alpha_beta_update(
+                                call.alpha, product, call.beta, old_output, updated);
+}
+
 __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder order) {
   const auto count = call.batches * call.n * call.n;
   for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; linear < count;
@@ -106,8 +113,7 @@ __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder ord
             ? 0.0
             : call.output[batch * call.n * call.n + matrix_index(row, col, call.n, order)];
     double updated{};
-    if (!rank_k_generated::rank_k_alpha_beta_update(call.alpha, value, call.beta, old, updated))
-      atomicCAS(call.error, 0, 1);
+    if (!update_value(call, value, old, updated)) atomicCAS(call.error, 0, 1);
   }
 }
 
@@ -123,8 +129,7 @@ __global__ void validate_library(SymmetricRankKInvocation call, const double* pr
     const auto value = product[address];
     const auto old = call.beta == 0.0 ? 0.0 : call.output[address];
     double updated{};
-    if (!rank_k_generated::rank_k_alpha_beta_update(call.alpha, value, call.beta, old, updated))
-      atomicCAS(call.error, 0, 1);
+    if (!update_value(call, value, old, updated)) atomicCAS(call.error, 0, 1);
   }
 }
 
@@ -145,8 +150,7 @@ __global__ void publish(SymmetricRankKInvocation call, const double* product, Ra
     const auto old =
         call.beta == 0.0 ? 0.0 : call.output[offset + matrix_index(row, col, call.n, order)];
     double updated{};
-    if (!rank_k_generated::rank_k_alpha_beta_update(call.alpha, value, call.beta, old, updated))
-      return;
+    if (!update_value(call, value, old, updated)) return;
     call.output[offset + matrix_index(row, col, call.n, order)] = updated;
     call.output[offset + matrix_index(col, row, call.n, order)] = updated;
   }
@@ -162,36 +166,56 @@ class CudaSymmetricRankK final {
   static constexpr std::size_t host_reservation = 16U << 10;
 
   template <std::size_t N>
-  CudaSymmetricRankK(const runtime::NativeLoweringRequest& request,
-                     const std::array<runtime::NativeLoweringCandidate, N>& candidates,
-                     std::string_view target, std::string_view compilation, std::size_t n,
-                     std::size_t k, std::size_t batches, RankKOrder order, cudaStream_t stream,
-                     std::size_t provider_budget, bool library_qualified = false)
+  CudaSymmetricRankK(const runtime::NativeLoweringRequest& overwrite_request,
+                     const std::array<runtime::NativeLoweringCandidate, N>& overwrite_candidates,
+                     std::string_view overwrite_target, std::string_view overwrite_compilation,
+                     const runtime::NativeLoweringRequest& update_request,
+                     const std::array<runtime::NativeLoweringCandidate, N>& update_candidates,
+                     std::string_view update_target, std::string_view update_compilation,
+                     std::size_t n, std::size_t k, std::size_t batches, RankKOrder order,
+                     cudaStream_t stream, std::size_t provider_budget,
+                     bool library_qualified = false)
       : n_(n), k_(k), batches_(batches), order_(order) {
     static_assert(N == 2);
-    static_assert(sizeof(CudaSymmetricRankK) + 2 * sizeof(candidates) + 8192 <= host_reservation);
+    static_assert(sizeof(CudaSymmetricRankK) + 2 * sizeof(overwrite_candidates) + 8192 <=
+                  host_reservation);
 #if !defined(GENERATIVEQC_TEST_HOOKS)
     if (library_qualified) throw std::invalid_argument("rank-k library qualification is test-only");
 #endif
     const bool row_request =
-        request.identity == rank_k_generated::rank_k_density_row_request.identity ||
-        request.identity == rank_k_generated::rank_k_weighted_density_row_request.identity;
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_density_row_overwrite_request.identity &&
+         update_request.identity == rank_k_generated::rank_k_density_row_update_request.identity) ||
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_weighted_density_row_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_weighted_density_row_update_request.identity);
     const bool column_request =
-        request.identity == rank_k_generated::rank_k_density_column_request.identity ||
-        request.identity == rank_k_generated::rank_k_weighted_density_column_request.identity;
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_density_column_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_density_column_update_request.identity) ||
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_weighted_density_column_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_weighted_density_column_update_request.identity);
     if ((order != RankKOrder::RowMajor && order != RankKOrder::ColumnMajor) ||
         row_request == column_request || row_request != (order == RankKOrder::RowMajor))
       throw std::invalid_argument("rank-k physical order does not match the compiled request");
-    if (request.dtype != runtime::PrecisionDtype::Fp64 ||
-        request.accumulation_dtype != runtime::PrecisionDtype::Fp64 || request.inputs != 4 ||
-        request.precisions.size() != 1 ||
-        !runtime::strict_requested_precision(request, request.precisions[0]) ||
-        request.precisions[0].publication_dtype != runtime::PrecisionDtype::Fp64 ||
-        !request.precisions[0].casts.empty() || !request.precisions[0].refinement.empty() ||
-        !request.precisions[0].audit.empty() || candidates[0].provider != "generated.cuda" ||
-        candidates[1].provider != "cublas" ||
-        candidates[0].algorithm != "symmetric-rank-k-generated" ||
-        candidates[1].algorithm != "symmetric-rank-k-signed-gemm")
+    const auto valid = [](const auto& request, const auto& candidates, std::size_t inputs) {
+      return request.dtype == runtime::PrecisionDtype::Fp64 &&
+             request.accumulation_dtype == runtime::PrecisionDtype::Fp64 &&
+             request.inputs == inputs && request.precisions.size() == 1 &&
+             runtime::strict_requested_precision(request, request.precisions[0]) &&
+             request.precisions[0].publication_dtype == runtime::PrecisionDtype::Fp64 &&
+             request.precisions[0].casts.empty() && request.precisions[0].refinement.empty() &&
+             request.precisions[0].audit.empty() && candidates[0].provider == "generated.cuda" &&
+             candidates[1].provider == "cublas" &&
+             candidates[0].algorithm == "symmetric-rank-k-generated" &&
+             candidates[1].algorithm == "symmetric-rank-k-signed-gemm";
+    };
+    if (!valid(overwrite_request, overwrite_candidates, 3) ||
+        !valid(update_request, update_candidates, 4))
       throw std::invalid_argument("rank-k requires its canonical strict-FP64 portfolio");
     if (!n || !k || !batches) throw std::invalid_argument("empty rank-k domain");
     const auto panel = contraction_product(contraction_product(n, k), batches);
@@ -200,7 +224,8 @@ class CudaSymmetricRankK final {
     matrix_bytes_ = contraction_product(matrix, sizeof(double));
     temporary_bytes_ = runtime::lowering_add(panel_bytes_, matrix_bytes_);
     const auto start = std::chrono::steady_clock::now();
-    auto offers = candidates;
+    auto offers = update_candidates;
+    auto overwrite_offers = overwrite_candidates;
     for (auto& offer : offers) offer.host_bytes = host_reservation;
     offers[1].temporary_bytes = temporary_bytes_;
     offers[1].provider_bytes = CudaContractionContext::kProviderAllowance;
@@ -228,10 +253,22 @@ class CudaSymmetricRankK final {
         generativeqc_tensor::cuda_check(status);
       }
     }
+    for (std::size_t candidate = 0; candidate < N; ++candidate) {
+      overwrite_offers[candidate].host_bytes = offers[candidate].host_bytes;
+      overwrite_offers[candidate].temporary_bytes = offers[candidate].temporary_bytes;
+      overwrite_offers[candidate].provider_bytes = offers[candidate].provider_bytes;
+      overwrite_offers[candidate].rejection = offers[candidate].rejection;
+    }
     try {
       if (!offers[1].rejection.empty()) context_.prepare_generated(stream);
-      const auto selected = runtime::select_native_lowering(request, offers, target, compilation, 1,
-                                                            offers[1].rejection.empty() ? 1 : 0);
+      const auto incumbent = offers[1].rejection.empty() ? 1 : 0;
+      const auto selected = runtime::select_native_lowering(update_request, offers, update_target,
+                                                            update_compilation, 1, incumbent);
+      const auto overwrite_selected =
+          runtime::select_native_lowering(overwrite_request, overwrite_offers, overwrite_target,
+                                          overwrite_compilation, 1, incumbent);
+      if (selected.selected != overwrite_selected.selected)
+        throw std::logic_error("rank-k update domains selected different providers");
       library_ = selected.selected == 1;
       if (!library_ && scratch_)
         throw std::logic_error("rank-k selected generated with library scratch");

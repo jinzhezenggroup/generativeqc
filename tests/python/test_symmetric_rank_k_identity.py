@@ -126,9 +126,9 @@ def test_generation_only_hashes_inputs_without_executing_compilers(
         pytest.fail("source generation must not probe a compiler or GPU")
 
     monkeypatch.setattr(subprocess, "Popen", no_process)
-    assert "rank_k_density_row_candidates" in generator.render(
-        generator.compiler_identity(*inputs)
-    )
+    rendered = generator.render(generator.compiler_identity(*inputs))
+    assert "rank_k_density_row_overwrite_candidates" in rendered
+    assert "rank_k_density_row_update_candidates" in rendered
 
 
 def test_checkout_generation_needs_no_installed_python_packages(
@@ -155,7 +155,9 @@ def test_checkout_generation_needs_no_installed_python_packages(
         check=True,
         timeout=30,
     )
-    assert "rank_k_density_row_candidates" in output.read_text()
+    rendered = output.read_text()
+    assert "rank_k_density_row_overwrite_candidates" in rendered
+    assert "rank_k_density_row_update_candidates" in rendered
 
 
 def test_missing_native_inputs_fail_closed(inputs: tuple[Path, Path, Path]) -> None:

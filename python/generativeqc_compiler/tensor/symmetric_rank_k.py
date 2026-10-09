@@ -33,6 +33,7 @@ from .program import Program
 from .types import TensorSpec, checked_shape
 
 MatrixOrder = Literal["row-major", "column-major"]
+UpdateMode = Literal["overwrite", "update"]
 
 
 def _domains(indices: tuple) -> tuple:
@@ -40,9 +41,26 @@ def _domains(indices: tuple) -> tuple:
     return tuple(index.domain for index in indices)
 
 
+def _rank_k_overwrite(alpha: Node, product: Node) -> Node:
+    """The beta-zero TensorIR branch, which has no old-output input."""
+    return multiply(alpha, product)
+
+
 def _rank_k_update(alpha: Node, product: Node, beta: Node, old_output: Node) -> Node:
-    """One TensorIR formula shared by the dense root and scalarized helper."""
-    return add(multiply(alpha, product), multiply(beta, old_output))
+    """The nonzero-beta formula shared by the dense root and scalar helper."""
+    return add(_rank_k_overwrite(alpha, product), multiply(beta, old_output))
+
+
+def symmetric_rank_k_scalar_overwrite_program() -> Program:
+    """Scalarize the checked beta-zero overwrite branch."""
+
+    def scalar(name: str) -> Node:
+        return input_tensor(name, TensorSpec((), dtype="float64", role="input"))
+
+    return Program(
+        {"updated": _rank_k_overwrite(scalar("alpha"), scalar("product"))},
+        provenance={"source": "tensor symmetric rank-k scalar overwrite"},
+    )
 
 
 def symmetric_rank_k_scalar_update_program() -> Program:
@@ -58,6 +76,24 @@ def symmetric_rank_k_scalar_update_program() -> Program:
     return Program(
         {"updated": _rank_k_update(alpha, product, beta, old_output)},
         provenance={"source": "tensor symmetric rank-k scalar update"},
+    )
+
+
+def symmetric_rank_k_overwrite_program(program: Program, output: str) -> Program:
+    """Compose the original Gram with its explicit alpha input."""
+    product = program.outputs[output]
+    alpha = input_tensor("rank_k_alpha", TensorSpec((), dtype="float64", role="input"))
+    return Program(
+        {
+            "updated": _rank_k_overwrite(
+                broadcast(alpha, product.spec.indices, ()), product
+            )
+        },
+        provenance={
+            "source": "tensor symmetric rank-k dense overwrite composition",
+            "rank_k_product_program": program.logical_hash,
+            "rank_k_product_output": output,
+        },
     )
 
 
@@ -88,6 +124,7 @@ def symmetric_rank_k_request(
     output: str,
     *,
     order: MatrixOrder = "row-major",
+    update: UpdateMode = "update",
 ) -> LoweringRequest:
     """Recognize ``C[...,p,i] * w[...,i] * C[...,q,i]`` with signed weights.
 
@@ -97,6 +134,8 @@ def symmetric_rank_k_request(
     """
     if order not in ("row-major", "column-major"):
         raise ValueError("rank-k matrix order must be row-major or column-major")
+    if update not in ("overwrite", "update"):
+        raise ValueError("rank-k update must be overwrite or update")
     node = program.outputs[output]
     if node.op != "einsum" or node.attrs.get("coefficient") != (1, 1):
         raise ValueError("rank-k requires an unscaled ternary einsum")
@@ -165,27 +204,35 @@ def symmetric_rank_k_request(
         raise ValueError(
             "rank-k weight and contraction require one strict FP64 schedule"
         )
-    if source_adapter.precision.strict_audit_dtype != "float64" or any(
-        precision.directive.compute_dtype != "float64"
-        or precision.directive.accumulation_dtype != "float64"
-        or precision.casts
-        or precision.refinement
-        or precision.audit
-        for precision in source_request.precisions
+    if (
+        len(source_request.precisions) != 1
+        or source_adapter.precision.strict_audit_dtype != "float64"
+        or any(
+            precision.directive.compute_dtype != "float64"
+            or precision.directive.accumulation_dtype != "float64"
+            or precision.casts
+            or precision.refinement
+            or precision.audit
+            for precision in source_request.precisions
+        )
     ):
         raise ValueError("rank-k cannot silently change arithmetic or audit")
-    update = symmetric_rank_k_update_program(program, output)
-    update_root = update.outputs["updated"]
-    adapter = TensorLoweringAdapter(update)
+    composition = (
+        symmetric_rank_k_overwrite_program(program, output)
+        if update == "overwrite"
+        else symmetric_rank_k_update_program(program, output)
+    )
+    update_root = composition.outputs["updated"]
+    adapter = TensorLoweringAdapter(composition)
     base = adapter.request(update_root, backend="cuda")
     arithmetic = adapter.directives[update_root]
     if arithmetic.storage_dtype != "float64" or any(
-        adapter.directives[value] != arithmetic for value in update.live_nodes
+        adapter.directives[value] != arithmetic for value in composition.live_nodes
     ):
         raise ValueError(
             "rank-k weight and contraction require one strict FP64 schedule"
         )
-    if any(
+    if len(base.precisions) != 1 or any(
         precision.directive.compute_dtype != "float64"
         or precision.directive.accumulation_dtype != "float64"
         or precision.casts
@@ -195,7 +242,9 @@ def symmetric_rank_k_request(
     ):
         raise ValueError("rank-k cannot silently change arithmetic or audit")
     named_inputs = {
-        value.attrs["name"]: value for value in update.live_nodes if value.op == "input"
+        value.attrs["name"]: value
+        for value in composition.live_nodes
+        if value.op == "input"
     }
     alpha = named_inputs.get("rank_k_alpha")
     beta = named_inputs.get("rank_k_beta")
@@ -203,37 +252,52 @@ def symmetric_rank_k_request(
     update_products = [value for value in update_root.inputs if value.op == "multiply"]
     alpha_views = [
         value
-        for value in update.live_nodes
+        for value in composition.live_nodes
         if value.op == "broadcast" and value.inputs == (alpha,)
     ]
     beta_views = [
         value
-        for value in update.live_nodes
+        for value in composition.live_nodes
         if value.op == "broadcast" and value.inputs == (beta,)
     ]
-    if (
+    common_invalid = (
         alpha is None
-        or beta is None
-        or old_output is None
-        or any(value.spec.dtype != "float64" for value in update.live_nodes)
-        or update_root.op != "add"
-        or update_root.attrs["coefficients"] != ((1, 1), (1, 1))
-        or len(update_products) != 2
+        or any(value.spec.dtype != "float64" for value in composition.live_nodes)
         or len(alpha_views) != 1
-        or len(beta_views) != 1
-        or {frozenset(value.inputs) for value in update_products}
-        != {
-            frozenset((alpha_views[0], node)),
-            frozenset((beta_views[0], old_output)),
-        }
         or alpha.spec.shape
-        or beta.spec.shape
-        or _domains(old_output.spec.indices) != _domains(node.spec.indices)
-        or any(view.attrs["axes"] for view in (*alpha_views, *beta_views))
-        or base.scientific_identity != update.logical_hash
-    ):
+        or alpha_views[0].attrs["axes"]
+        or base.scientific_identity != composition.logical_hash
+    )
+    if update == "overwrite":
+        invalid_composition = (
+            common_invalid
+            or beta is not None
+            or old_output is not None
+            or update_root.op != "multiply"
+            or frozenset(update_root.inputs) != frozenset((alpha_views[0], node))
+        )
+        scalar_update = symmetric_rank_k_scalar_overwrite_program()
+    else:
+        invalid_composition = (
+            common_invalid
+            or beta is None
+            or old_output is None
+            or update_root.op != "add"
+            or update_root.attrs["coefficients"] != ((1, 1), (1, 1))
+            or len(update_products) != 2
+            or len(beta_views) != 1
+            or {frozenset(value.inputs) for value in update_products}
+            != {
+                frozenset((alpha_views[0], node)),
+                frozenset((beta_views[0], old_output)),
+            }
+            or beta.spec.shape
+            or _domains(old_output.spec.indices) != _domains(node.spec.indices)
+            or beta_views[0].attrs["axes"]
+        )
+        scalar_update = symmetric_rank_k_scalar_update_program()
+    if invalid_composition:
         raise ValueError("rank-k dense update TensorIR changed")
-    scalar_update = symmetric_rank_k_scalar_update_program()
     scalar_inputs = {
         value.attrs["name"]: value
         for value in scalar_update.live_nodes
@@ -241,21 +305,36 @@ def symmetric_rank_k_request(
     }
     scalar_root = scalar_update.outputs["updated"]
     scalar_products = [value for value in scalar_root.inputs if value.op == "multiply"]
+    expected_scalar_inputs = (
+        {"alpha", "product"}
+        if update == "overwrite"
+        else {"alpha", "product", "beta", "old_output"}
+    )
+    actual_scalar_products = (
+        {frozenset(scalar_root.inputs)}
+        if update == "overwrite"
+        else {frozenset(value.inputs) for value in scalar_products}
+    )
+    expected_scalar_products = (
+        {frozenset((scalar_inputs["alpha"], scalar_inputs["product"]))}
+        if update == "overwrite"
+        else {
+            frozenset((scalar_inputs["alpha"], scalar_inputs["product"])),
+            frozenset((scalar_inputs["beta"], scalar_inputs["old_output"])),
+        }
+    )
     if (
-        set(scalar_inputs) != {"alpha", "product", "beta", "old_output"}
+        set(scalar_inputs) != expected_scalar_inputs
         or any(
             value.spec.shape or value.spec.dtype != "float64"
             for value in scalar_update.live_nodes
         )
-        or scalar_root.op != "add"
-        or scalar_root.attrs["coefficients"] != ((1, 1), (1, 1))
-        or len(scalar_products) != 2
-        or {frozenset(value.inputs) for value in scalar_products}
-        != {
-            frozenset((scalar_inputs["alpha"], scalar_inputs["product"])),
-            frozenset((scalar_inputs["beta"], scalar_inputs["old_output"])),
-        }
-        or len(scalar_update.live_nodes) != 7
+        or (update == "overwrite" and scalar_root.op != "multiply")
+        or (update == "update" and scalar_root.op != "add")
+        or (
+            update == "update" and scalar_root.attrs["coefficients"] != ((1, 1), (1, 1))
+        )
+        or actual_scalar_products != expected_scalar_products
     ):
         raise ValueError("rank-k scalar update TensorIR changed")
     n, k = left.spec.shape[-2:]
@@ -275,7 +354,7 @@ def symmetric_rank_k_request(
             (0, 1),
             (n, n),
             matrix_strides,
-            access="read-write",
+            access="write" if update == "overwrite" else "read-write",
             triangle="upper",
         ),
     )
@@ -287,10 +366,11 @@ def symmetric_rank_k_request(
         source_scientific_identity=source_request.scientific_identity or "",
         source_precision_identity=source_request.precisions[0].identity,
         alpha_input_hash=adapter.hashes[alpha],
-        beta_input_hash=adapter.hashes[beta],
-        old_output_hash=adapter.hashes[old_output],
+        beta_input_hash="" if beta is None else adapter.hashes[beta],
+        old_output_hash="" if old_output is None else adapter.hashes[old_output],
         update_root_hash=adapter.hashes[update_root],
-        update_program_hash=update.logical_hash,
+        update_program_hash=composition.logical_hash,
+        update_mode=update,
         symmetric_rank_k=True,
         transpose="coefficient-times-weighted-coefficient-transpose",
         signed_weights=True,
@@ -298,7 +378,11 @@ def symmetric_rank_k_request(
         if weights.op == "multiply"
         else "borrowed",
         publication="upper-triangle-mirrored",
-        scalar_input_roles="alpha,product,beta,old_output",
+        scalar_input_roles=(
+            "alpha,product"
+            if update == "overwrite"
+            else "alpha,product,beta,old_output"
+        ),
         scalar_update_hash=scalar_update.logical_hash,
         update="alpha-product-plus-beta-output",
     )
@@ -306,12 +390,22 @@ def symmetric_rank_k_request(
         base,
         semantics=tuple(semantics.items()),
         operands=physical,
-        input_dtypes=("float64",) * 4,
+        input_dtypes=("float64",) * (3 if update == "overwrite" else 4),
         precisions=tuple(
-            replace(precision, input_dtypes=("float64",) * 4)
+            replace(
+                precision,
+                input_dtypes=("float64",) * (3 if update == "overwrite" else 4),
+            )
             for precision in base.precisions
         ),
-        effects=(("output", "transactional-symmetric-overwrite-or-accumulate"),),
+        effects=(
+            (
+                "output",
+                "transactional-symmetric-overwrite"
+                if update == "overwrite"
+                else "transactional-symmetric-overwrite-or-accumulate",
+            ),
+        ),
         constraints=LoweringConstraints(
             determinism="reproducible", capture_required=True
         ),
@@ -325,13 +419,14 @@ def emit_symmetric_rank_k_portfolio(
     *,
     name: str,
     order: MatrixOrder = "row-major",
+    update: UpdateMode = "update",
 ) -> str:
     """Emit generated and signed-GEMM candidates for one rank-k request.
 
     Native preparation resolves exact resource bytes and endpoint eligibility.
     Unknown timing cannot promote the optional library provider by itself.
     """
-    request = symmetric_rank_k_request(program, output, order=order)
+    request = symmetric_rank_k_request(program, output, order=order, update=update)
     if request.scientific_identity is None:
         raise ValueError("rank-k requires an original scientific identity")
     target = TargetCapabilities(

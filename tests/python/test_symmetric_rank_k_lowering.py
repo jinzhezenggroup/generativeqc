@@ -19,7 +19,9 @@ from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scf import density_program, weighted_density_program
 from generativeqc_compiler.tensor.symmetric_rank_k import (
     emit_symmetric_rank_k_portfolio,
+    symmetric_rank_k_overwrite_program,
     symmetric_rank_k_request,
+    symmetric_rank_k_scalar_overwrite_program,
     symmetric_rank_k_scalar_update_program,
     symmetric_rank_k_update_program,
 )
@@ -84,6 +86,16 @@ def test_rank_k_reuses_original_equation_and_has_one_signed_contract(
     )
     assert "symmetric-rank-k-generated" in emitted
     assert "symmetric-rank-k-signed-gemm" in emitted
+    overwrite = symmetric_rank_k_request(program, name, order=order, update="overwrite")
+    overwrite_program = symmetric_rank_k_overwrite_program(program, name)
+    assert overwrite.operation == "multiply"
+    assert overwrite.scientific_identity == overwrite_program.logical_hash
+    assert overwrite.input_dtypes == ("float64",) * 3
+    assert overwrite.operands[-1].access == "write"
+    assert dict(overwrite.semantics)["scalar_update_hash"] == (
+        symmetric_rank_k_scalar_overwrite_program().logical_hash
+    )
+    assert overwrite.scientific_identity != request.scientific_identity
 
 
 def test_rank_k_rejects_changed_coefficient_or_weight_topology() -> None:
@@ -109,6 +121,8 @@ def test_rank_k_rejects_changed_coefficient_or_weight_topology() -> None:
             ),
             "density",
         )
+    with pytest.raises(ValueError, match="update must be overwrite or update"):
+        symmetric_rank_k_request(program, "density", update="unknown")
 
 
 def test_rank_k_layout_changes_physical_identity_but_not_science() -> None:

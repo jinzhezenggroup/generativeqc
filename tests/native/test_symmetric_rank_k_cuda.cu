@@ -65,37 +65,61 @@ static std::size_t matrix_index(std::size_t batch, std::size_t row, std::size_t 
 }
 
 static const std::array<generativeqc::runtime::NativeLoweringCandidate, 2>& candidates(
-    bool weighted, RankKOrder order) {
+    bool weighted, RankKOrder order, bool overwrite) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_candidates
-                                         : metadata::rank_k_weighted_density_column_candidates;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_candidates
-                                       : metadata::rank_k_density_column_candidates;
+    return order == RankKOrder::RowMajor
+               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_candidates
+                            : metadata::rank_k_weighted_density_row_update_candidates)
+               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_candidates
+                            : metadata::rank_k_weighted_density_column_update_candidates);
+  return order == RankKOrder::RowMajor
+             ? (overwrite ? metadata::rank_k_density_row_overwrite_candidates
+                          : metadata::rank_k_density_row_update_candidates)
+             : (overwrite ? metadata::rank_k_density_column_overwrite_candidates
+                          : metadata::rank_k_density_column_update_candidates);
 }
 
-static const generativeqc::runtime::NativeLoweringRequest& request(bool weighted,
-                                                                   RankKOrder order) {
+static const generativeqc::runtime::NativeLoweringRequest& request(bool weighted, RankKOrder order,
+                                                                   bool overwrite) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_request
-                                         : metadata::rank_k_weighted_density_column_request;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_request
-                                       : metadata::rank_k_density_column_request;
+    return order == RankKOrder::RowMajor
+               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_request
+                            : metadata::rank_k_weighted_density_row_update_request)
+               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_request
+                            : metadata::rank_k_weighted_density_column_update_request);
+  return order == RankKOrder::RowMajor
+             ? (overwrite ? metadata::rank_k_density_row_overwrite_request
+                          : metadata::rank_k_density_row_update_request)
+             : (overwrite ? metadata::rank_k_density_column_overwrite_request
+                          : metadata::rank_k_density_column_update_request);
 }
 
-static std::string_view target(bool weighted, RankKOrder order) {
+static std::string_view target(bool weighted, RankKOrder order, bool overwrite) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_target
-                                         : metadata::rank_k_weighted_density_column_target;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_target
-                                       : metadata::rank_k_density_column_target;
+    return order == RankKOrder::RowMajor
+               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_target
+                            : metadata::rank_k_weighted_density_row_update_target)
+               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_target
+                            : metadata::rank_k_weighted_density_column_update_target);
+  return order == RankKOrder::RowMajor
+             ? (overwrite ? metadata::rank_k_density_row_overwrite_target
+                          : metadata::rank_k_density_row_update_target)
+             : (overwrite ? metadata::rank_k_density_column_overwrite_target
+                          : metadata::rank_k_density_column_update_target);
 }
 
-static std::string_view compilation(bool weighted, RankKOrder order) {
+static std::string_view compilation(bool weighted, RankKOrder order, bool overwrite) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_compilation
-                                         : metadata::rank_k_weighted_density_column_compilation;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_compilation
-                                       : metadata::rank_k_density_column_compilation;
+    return order == RankKOrder::RowMajor
+               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_compilation
+                            : metadata::rank_k_weighted_density_row_update_compilation)
+               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_compilation
+                            : metadata::rank_k_weighted_density_column_update_compilation);
+  return order == RankKOrder::RowMajor
+             ? (overwrite ? metadata::rank_k_density_row_overwrite_compilation
+                          : metadata::rank_k_density_row_update_compilation)
+             : (overwrite ? metadata::rank_k_density_column_overwrite_compilation
+                          : metadata::rank_k_density_column_update_compilation);
 }
 
 static void verify(const std::vector<double>& result, const std::vector<double>& baseline,
@@ -113,12 +137,15 @@ static void verify(const std::vector<double>& result, const std::vector<double>&
               static_cast<long double>(weights[batch * k + orbital]) *
               static_cast<long double>(coefficients[panel_index(batch, col, orbital, n, k, order)]);
         const auto old =
-            baseline[matrix_index(batch, std::min(row, col), std::max(row, col), n, order)];
+            beta == 0.0
+                ? 0.0
+                : baseline[matrix_index(batch, std::min(row, col), std::max(row, col), n, order)];
         const auto expected =
             static_cast<double>(alpha * sum + beta * static_cast<long double>(old));
         const auto actual = result[matrix_index(batch, row, col, n, order)];
         const auto tolerance = 2e-11 * std::max(1.0, std::abs(expected));
-        if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
+        if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance ||
+            (actual == 0.0 && expected == 0.0 && std::signbit(actual) != std::signbit(expected)))
           throw std::runtime_error("rank-k high-precision oracle mismatch");
       }
 }
@@ -166,9 +193,12 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
   if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
     bool rejected_overflow = false;
     try {
-      CudaSymmetricRankK overflow(request(weighted, order), candidates(weighted, order),
-                                  target(weighted, order), compilation(weighted, order),
-                                  std::numeric_limits<std::size_t>::max(), 2, 2, order, stream, 0);
+      CudaSymmetricRankK overflow(
+          request(weighted, order, true), candidates(weighted, order, true),
+          target(weighted, order, true), compilation(weighted, order, true),
+          request(weighted, order, false), candidates(weighted, order, false),
+          target(weighted, order, false), compilation(weighted, order, false),
+          std::numeric_limits<std::size_t>::max(), 2, 2, order, stream, 0);
     } catch (const std::length_error&) {
       rejected_overflow = true;
     }
@@ -177,17 +207,33 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
   bool rejected_order = false;
   try {
     CudaSymmetricRankK wrong(
-        request(weighted, order), candidates(weighted, order), target(weighted, order),
-        compilation(weighted, order), n, k, batches,
+        request(weighted, order, true), candidates(weighted, order, true),
+        target(weighted, order, true), compilation(weighted, order, true),
+        request(weighted, order, false), candidates(weighted, order, false),
+        target(weighted, order, false), compilation(weighted, order, false), n, k, batches,
         order == RankKOrder::RowMajor ? RankKOrder::ColumnMajor : RankKOrder::RowMajor, stream, 0);
   } catch (const std::invalid_argument&) {
     rejected_order = true;
   }
   if (!rejected_order) throw std::runtime_error("rank-k accepted wrong physical order");
   if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
-    CudaSymmetricRankK bounded(request(weighted, order), candidates(weighted, order),
-                               target(weighted, order), compilation(weighted, order), n, k, batches,
-                               order, stream, 0, true);
+    bool rejected_pair = false;
+    try {
+      CudaSymmetricRankK mismatched(request(false, order, true), candidates(false, order, true),
+                                    target(false, order, true), compilation(false, order, true),
+                                    request(true, order, false), candidates(true, order, false),
+                                    target(true, order, false), compilation(true, order, false), n,
+                                    k, batches, order, stream, 0);
+    } catch (const std::invalid_argument&) {
+      rejected_pair = true;
+    }
+    if (!rejected_pair) throw std::runtime_error("rank-k paired different scientific roots");
+
+    CudaSymmetricRankK bounded(request(weighted, order, true), candidates(weighted, order, true),
+                               target(weighted, order, true), compilation(weighted, order, true),
+                               request(weighted, order, false), candidates(weighted, order, false),
+                               target(weighted, order, false), compilation(weighted, order, false),
+                               n, k, batches, order, stream, 0, true);
     if (bounded.diagnostic().selected.provider != "generated.cuda" ||
         bounded.diagnostic().library_rejection.find("allowance") == std::string_view::npos)
       throw std::runtime_error("rank-k resource miss did not retain generated fallback");
@@ -204,9 +250,12 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
     verify(result, baseline, coefficients, weights, n, k, batches, order, alpha, beta);
   }
   {
-    CudaSymmetricRankK binding(request(weighted, order), candidates(weighted, order),
-                               target(weighted, order), compilation(weighted, order), n, k, batches,
-                               order, stream, want_library ? 256ULL << 20 : 0, want_library);
+    CudaSymmetricRankK binding(request(weighted, order, true), candidates(weighted, order, true),
+                               target(weighted, order, true), compilation(weighted, order, true),
+                               request(weighted, order, false), candidates(weighted, order, false),
+                               target(weighted, order, false), compilation(weighted, order, false),
+                               n, k, batches, order, stream, want_library ? 256ULL << 20 : 0,
+                               want_library);
     const auto& diagnostic = binding.diagnostic();
     if ((diagnostic.selected.provider == "cublas") != want_library)
       throw std::runtime_error("rank-k selected wrong executable provider");
@@ -253,6 +302,33 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
     check(cudaGraphExecDestroy(graph_exec));
     check(cudaGraphDestroy(graph));
 
+    // beta == +/-0 selects the overwrite TensorIR root and must not read old output.
+    std::vector<double> poisoned(matrix_count, std::numeric_limits<double>::quiet_NaN());
+    for (double zero_beta : {0.0, -0.0}) {
+      check(cudaMemcpy(d_output.get(), poisoned.data(), d_output.bytes(), cudaMemcpyHostToDevice));
+      check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
+      auto overwrite = invocation;
+      overwrite.beta = zero_beta;
+      binding.execute(stream, overwrite);
+      check(cudaStreamSynchronize(stream));
+      check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+      if (error) throw std::runtime_error("rank-k beta-zero overwrite read its old output");
+      check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
+      verify(result, poisoned, coefficients, weights, n, k, batches, order, alpha, overwrite.beta);
+    }
+    check(cudaMemcpy(d_output.get(), poisoned.data(), d_output.bytes(), cudaMemcpyHostToDevice));
+    check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
+    auto signed_zero = invocation;
+    signed_zero.alpha = -0.0;
+    signed_zero.beta = -0.0;
+    binding.execute(stream, signed_zero);
+    check(cudaStreamSynchronize(stream));
+    check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+    if (error) throw std::runtime_error("rank-k signed-zero overwrite failed");
+    check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
+    verify(result, poisoned, coefficients, weights, n, k, batches, order, signed_zero.alpha,
+           signed_zero.beta);
+
     // A nonfinite signed weight must leave the entire output intact.
     weights[0] = std::numeric_limits<double>::quiet_NaN();
     check(cudaMemcpy(d_weights.get(), weights.data(), d_weights.bytes(), cudaMemcpyHostToDevice));
@@ -284,6 +360,20 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
     coefficients[0] = original_coefficient;
     check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(),
                      cudaMemcpyHostToDevice));
+
+    std::vector<double> overflow_seed(matrix_count, 2.0);
+    check(
+        cudaMemcpy(d_output.get(), overflow_seed.data(), d_output.bytes(), cudaMemcpyHostToDevice));
+    check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
+    auto overflow_update = invocation;
+    overflow_update.alpha = std::numeric_limits<double>::max();
+    overflow_update.beta = std::numeric_limits<double>::max();
+    binding.execute(stream, overflow_update);
+    check(cudaStreamSynchronize(stream));
+    check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+    if (!error) throw std::runtime_error("rank-k accepted a nonfinite scalar update");
+    check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
+    if (result != overflow_seed) throw std::runtime_error("rank-k scalar failure changed output");
 
     auto invalid_scalar = invocation;
     invalid_scalar.alpha = std::numeric_limits<double>::quiet_NaN();
@@ -338,8 +428,8 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
               << ",\"provider_retained\":" << diagnostic.retained_provider_bytes
               << ",\"provider_version\":" << diagnostic.provider_version
               << ",\"runtime_version\":" << diagnostic.runtime_version
-              << ",\"scientific_identity\":\"" << request(weighted, order).scientific_identity
-              << "\"}" << std::endl;
+              << ",\"scientific_identity\":\""
+              << request(weighted, order, false).scientific_identity << "\"}" << std::endl;
   }
   check(cudaStreamDestroy(stream));
 }
