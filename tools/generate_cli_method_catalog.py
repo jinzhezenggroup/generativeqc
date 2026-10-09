@@ -156,7 +156,8 @@ def _row(identifier: str, spin: str) -> Row:
                 for name, coefficient in plan.semilocal.functional.components
             )
             exchange = tuple(
-                (1, float(term.coefficient), float(term.omega)) for term in plan.exchange
+                (1, float(term.coefficient), float(term.omega))
+                for term in plan.exchange
             )
     except (TypeError, ValueError, NotImplementedError) as error:
         reason = f"MethodIR is not natively representable: {error}"
@@ -176,6 +177,7 @@ def _row(identifier: str, spin: str) -> Row:
         cuda=cuda,
         reason=reason,
     )
+
 
 def rows() -> tuple[Row, ...]:
     identifiers = {name.lower(): name for name in METHOD_CATALOG}
