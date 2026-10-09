@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def test_bulk_geometry_launches_preserve_sticky_status_and_fail_closed(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
-    """A failed launch must not be hidden by a later successful consumer."""
+    """Preserve launch failures and count each successfully submitted producer."""
     header = (
         Path(__file__).resolve().parents[2] / "src/dft/stationary_gradient_cuda.cuh"
     ).read_text()
@@ -33,7 +33,7 @@ def test_bulk_geometry_launches_preserve_sticky_status_and_fail_closed(
     source = tmp_path / "launch.cpp"
     source.write_text(
         PREFIX
-        + "void execute() { const bool precomputed_point=true;\n"
+        + "void execute(bool precomputed_point=true) {\n"
         + branch
         + "}\n"
         + DRIVER
@@ -48,6 +48,7 @@ PREFIX = r"""
 #include <cassert>
 int sticky_error, producer_error, consumer_error;
 int producers, consumers, peeks;
+struct { int launches; } owner;
 int cudaPeekAtLastError() { ++peeks; return sticky_error; }
 void cuda_check(int error) { if(error) throw error; }
 void producer_launch() { ++producers; sticky_error=producer_error; }
@@ -61,6 +62,7 @@ int main() {
     producer_error=failure==2?72:0;
     consumer_error=failure==3?73:0;
     producers=consumers=peeks=0;
+    owner.launches=19;
     int caught=0;
     try { execute(); } catch(int error) { caught=error; }
     assert(caught==(failure?70+failure:0));
@@ -68,6 +70,16 @@ int main() {
     assert(producers==(failure==1?0:1));
     assert(consumers==((failure==1 || failure==2)?0:1));
     assert(peeks==(failure==1?1:failure==2?2:3));
+    assert(owner.launches==19+((failure==0 || failure==3)?1:0));
   }
+  sticky_error=producer_error=consumer_error=0;
+  owner.launches=0;
+  for(int batch=1;batch<=3;++batch) {
+    execute();
+    assert(owner.launches==batch);
+  }
+  producers=consumers=peeks=0;
+  execute(false);
+  assert(owner.launches==3 && !producers && !consumers && !peeks);
 }
 """

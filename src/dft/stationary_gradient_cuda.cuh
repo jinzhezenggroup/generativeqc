@@ -248,6 +248,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
         view, owners, owner_offset, points_per_atom, na, weights, raw, external, external_stride,
         external_offset, scratch, phased.seeds, error);
     cuda_check(cudaPeekAtLastError());
+    ++owner.launches;
     geometry_cooperative_kernel<true>
         <<<geometry_lanes, owner.becke_threads_per_point,
            owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(

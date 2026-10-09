@@ -404,7 +404,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "e2887ec3f402a587417cd16180d09f3df3e25988ddf52a0416e454b4ba0afe62"
+            "e02f5be7f21d9505421efdde2e0b24a9b0a24b2c5b10d7b81c1c2cab0d682bc8"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -2470,6 +2470,51 @@ def test_geometry_resource_budget_changes_fail_closed(
             "void launch_geometry(",
             "owner.becke_threads_per_point > 1",
             "false",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "geometry_lanes != view.npoint",
+            "false",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "owner.phased_storage &&",
+            "true &&",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "na >= (sizeof(StationaryPointValue) + 3 * sizeof(double) - 1) / (3 * sizeof(double))",
+            "na >= 1",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "external_offset, scratch, phased.seeds, error);",
+            "external_offset, partial, phased.seeds, error);",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            (
+                "external_offset, scratch, phased.seeds, error);\n"
+                "    cuda_check(cudaPeekAtLastError());"
+            ),
+            "external_offset, scratch, phased.seeds, error);",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "geometry_cooperative_kernel<true>",
+            "geometry_cooperative_kernel<false>",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "++owner.launches;",
+            "/* producer launch omitted */",
             "native_launch_geometry_sha256",
         ),
         (
