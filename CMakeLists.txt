@@ -380,6 +380,22 @@ if(GENERATIVEQC_BUILD_CLI)
       --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
       --output "${GENERATIVEQC_CLI_BASIS_HEADER}"
     COMMENT "Generating Python-free CLI basis catalog")
+  set(GENERATIVEQC_CLI_METHOD_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_method_catalog.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_cli_method_codegen
+    TARGET generativeqc_cli
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
+    OUTPUTS "${GENERATIVEQC_CLI_METHOD_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/ks_execution.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_libxc_methods.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
+    ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
+    COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
   target_link_libraries(generativeqc_cli PRIVATE generativeqc)
   target_include_directories(generativeqc_cli PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
