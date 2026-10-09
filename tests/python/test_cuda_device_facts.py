@@ -12,6 +12,28 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+def test_hf_driver_uses_qualified_facts_without_unbatched_grid_query() -> None:
+    """Only multi-system compaction retains the full grid-limit provider query."""
+    source = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
+    beginning = source.index("std::vector<RhfBucketItem> execute_hf_cuda_bucket(")
+    compaction = source.index("dim3 direct_shell_quartet_compaction_grid", beginning)
+    setup = source[beginning:compaction]
+    assert (
+        "runtime::cuda_device_facts(device_id, direct_target, direct_device_name)"
+        in setup
+    )
+    assert "cudaGetDeviceProperties(" not in setup
+    grid = source[compaction:]
+    assert (
+        "if (requested_quartet_direct && !requested_bounded_direct_streaming)" in grid
+    )
+    assert grid.index("if (batch_size > 1)") < grid.index("cudaGetDeviceProperties(")
+    assert "compaction_properties.maxGridSize[1]" in grid
+    assert "batch_size <= maximum_compaction_grid_y" in grid
+    assert "fill_global_failure(outputs, cuda_status(compaction_target_error))" in grid
+
+
 HEADER = r"""
 #pragma once
 #include <cstddef>
