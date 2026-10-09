@@ -64,6 +64,9 @@ endpoint, rather than dropping it while unused response capacity remains.
 The completed projection still requires a valid final-state lease. Optional complete
 occupied projections remain separately charged and may be dropped. When the
 packed owner cannot fit, the bounded dense/source fallback remains available.
+Packed-single preparation batches metric transforms across lower AO-pair rows
+within the existing charged scratch buffers; it does not allocate a retained
+raw tensor or change the symmetric whitening convention.
 Explicit `GENERATIVEQC_DF_VALUE_STORAGE` selections stay authoritative;
 unrestricted and arbitrary-density prepared callers do not acquire this policy
 from their dimensions alone. This changes source reuse, not the fitting metric,

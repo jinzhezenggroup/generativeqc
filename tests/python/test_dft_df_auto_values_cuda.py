@@ -124,6 +124,14 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
                 assert (
                     materialization[0]["counters"]["value_packed_pairs"] == 96 * 97 // 2
                 )
+                counters = materialization[0]["counters"]
+                staging_pairs = counters["resident_single_staging_pair_capacity"]
+                expected_panels = (96 * 97 // 2 + staging_pairs - 1) // staging_pairs
+                assert counters["resident_whitening_factor_panels"] == expected_panels
+                assert (
+                    counters["resident_whitening_factor_gemms"] == 2 * expected_panels
+                )
+                assert expected_panels < 96
             else:
                 assert regeneration > 0
             replay = batch.execute(strict=True, properties=("energy", "forces")).items[
