@@ -71,6 +71,7 @@ class ResolvedModel:
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        """Validate model identity, spin populations, and conventional/fitted metadata."""
         if (
             type(self.schema_version) is not int
             or self.schema_version != SCHEMA_VERSION
@@ -160,6 +161,7 @@ class ObservableTarget:
     relative: float = 0.0
 
     def __post_init__(self) -> None:
+        """Validate supported energy/force norms and require a positive tolerance."""
         if (self.observable, self.norm, self.unit) not in (
             ("energy", "absolute", "Eh"),
             ("forces", "max_abs", "Eh/bohr"),
@@ -195,6 +197,7 @@ class TargetAccuracy:
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        """Validate scope and schema, then sort unique observable/norm requirements."""
         values = tuple(self.observables)
         if not values or any(not isinstance(v, ObservableTarget) for v in values):
             raise ValueError("observables must contain typed accuracy requirements")
@@ -271,6 +274,7 @@ class ErrorEvidence:
     schema_version: int = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        """Validate evidence identities, assumptions, and provenance without claiming bounds."""
         if (
             type(self.schema_version) is not int
             or self.schema_version != SCHEMA_VERSION
@@ -337,6 +341,7 @@ class AccuracyAssessment:
     converged: bool = True
 
     def __post_init__(self) -> None:
+        """Require unique typed evidence tied to the unchanged target model identity."""
         if not isinstance(self.model, ResolvedModel) or not isinstance(
             self.target, TargetAccuracy
         ):

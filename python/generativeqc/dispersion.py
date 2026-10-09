@@ -48,6 +48,7 @@ class D3CorrectionResult:
 
     @property
     def ok(self) -> bool:
+        """Report whether the native correction status indicates success."""
         return self.status == _native.STATUS_SUCCESS
 
 
@@ -148,6 +149,12 @@ class D3CorrectionBatch:
         device_id: int = 0,
         maximum_bytes: int = 256 * 1024 * 1024,
     ) -> None:
+        """Prepare a nonempty native D3 batch with verified compiled data identities.
+
+        Select CPU or CUDA execution and a positive uint64 memory limit. The
+        method must contain the matching correction specification; incompatible
+        compiled parameter identities are rejected before execution.
+        """
         if device not in {"cpu", "cuda"}:
             raise ValueError("device must be 'cpu' or 'cuda'")
         if type(maximum_bytes) is not int or not 0 < maximum_bytes < 2**64:
@@ -281,6 +288,7 @@ class D3CorrectionBatch:
             raise
 
     def close(self) -> None:
+        """Destroy the prepared native batch and context; repeated calls are harmless."""
         if self._batch.value:
             self._library.generativeqc_d3_batch_destroy(self._batch)
             self._batch.value = None
@@ -289,9 +297,11 @@ class D3CorrectionBatch:
             self._context.value = None
 
     def __enter__(self) -> Self:
+        """Return this correction batch for context-managed use."""
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Release the correction batch and context when leaving the context."""
         self.close()
 
     def _require_open(self) -> None:
@@ -299,6 +309,7 @@ class D3CorrectionBatch:
             raise RuntimeError("D3 correction batch is closed")
 
     def diagnostic(self) -> D3RuntimeDiagnostic:
+        """Return memory, backend, and provenance diagnostics for the open D3 batch."""
         self._require_open()
         native = _native.D3RuntimeDiagnostic(
             ctypes.sizeof(_native.D3RuntimeDiagnostic),
@@ -337,6 +348,12 @@ class D3CorrectionBatch:
         *,
         gradients: bool = True,
     ) -> tuple[D3CorrectionResult, ...]:
+        """Evaluate prepared D3 systems, optionally replacing geometries.
+
+        Each geometry must have the prepared (atom_count, 3) shape; None retains
+        that system's stored coordinates. Return item results in batch order,
+        with gradients only when requested and the corresponding item succeeds.
+        """
         self._require_open()
         if geometries is not None and len(geometries) != len(self._counts):
             raise ValueError(
@@ -480,6 +497,7 @@ class D4CorrectionResult:
 
     @property
     def ok(self) -> bool:
+        """Report whether the native correction status indicates success."""
         return self.status == _native.STATUS_SUCCESS
 
 
@@ -550,6 +568,12 @@ class D4CorrectionBatch:
         device_id: int = 0,
         maximum_bytes: int = 256 * 1024 * 1024,
     ) -> None:
+        """Prepare a nonempty native D4 batch with verified compiled data identities.
+
+        Select CPU or CUDA execution and a positive uint64 memory limit. The
+        method must contain the matching correction specification; incompatible
+        compiled parameter identities are rejected before execution.
+        """
         if device not in {"cpu", "cuda"}:
             raise ValueError("device must be 'cpu' or 'cuda'")
         if type(maximum_bytes) is not int or not 0 < maximum_bytes < 2**64:
@@ -686,6 +710,7 @@ class D4CorrectionBatch:
             raise
 
     def close(self) -> None:
+        """Destroy the prepared native batch and context; repeated calls are harmless."""
         if self._batch.value:
             self._library.generativeqc_d4_batch_destroy(self._batch)
             self._batch.value = None
@@ -694,9 +719,11 @@ class D4CorrectionBatch:
             self._context.value = None
 
     def __enter__(self) -> Self:
+        """Return this correction batch for context-managed use."""
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Release the correction batch and context when leaving the context."""
         self.close()
 
     def _require_open(self) -> None:
@@ -704,6 +731,7 @@ class D4CorrectionBatch:
             raise RuntimeError("D4 correction batch is closed")
 
     def diagnostic(self) -> D4RuntimeDiagnostic:
+        """Return memory, backend, and provenance diagnostics for the open D4 batch."""
         self._require_open()
         native = _native.D4RuntimeDiagnostic(
             ctypes.sizeof(_native.D4RuntimeDiagnostic), _native.ABI_VERSION
@@ -758,6 +786,12 @@ class D4CorrectionBatch:
         gradients: bool = True,
         charges: bool = True,
     ) -> tuple[D4CorrectionResult, ...]:
+        """Evaluate prepared D4 systems with optional gradients and atomic charges.
+
+        Replacement coordinates must be real, finite, and have the prepared
+        (atom_count, 3) shape; None retains that system's stored coordinates.
+        Return results in batch order, omitting requested arrays on failed items.
+        """
         self._require_open()
         if geometries is not None and len(geometries) != len(self._counts):
             raise ValueError(
@@ -883,6 +917,7 @@ class GCPCorrectionResult:
 
     @property
     def ok(self) -> bool:
+        """Report whether the native correction status indicates success."""
         return self.status == _native.STATUS_SUCCESS
 
 
@@ -900,6 +935,7 @@ class R2SCAN3CCorrectionResult:
 
     @property
     def ok(self) -> bool:
+        """Report whether the native correction status indicates success."""
         return self.status == _native.STATUS_SUCCESS
 
 
@@ -1010,6 +1046,7 @@ class R2SCAN3CCorrectionBatch:
         device_id: int = 0,
         maximum_bytes: int = 256 * 1024 * 1024,
     ) -> None:
+        """Prepare canonical r2SCAN-3c D4 and CPU gCP corrections for nonempty systems."""
         graph = _method_ir(method)
         expected = resolve_method("R2SCAN-3c", spin=graph.spin)
         if graph.manifest_identity != expected.manifest_identity:
@@ -1051,15 +1088,19 @@ class R2SCAN3CCorrectionBatch:
         )
 
     def close(self) -> None:
+        """Release the owned native D4 correction batch."""
         self._d4.close()
 
     def __enter__(self) -> Self:
+        """Return this composite correction batch for context-managed use."""
         return self
 
     def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Release the owned correction resources when leaving the context."""
         self.close()
 
     def diagnostic(self) -> R2SCAN3CRuntimeDiagnostic:
+        """Return D4 runtime diagnostics and the CPU gCP provider identities."""
         return R2SCAN3CRuntimeDiagnostic(
             method_ir_identity=self.method_ir_identity,
             d4=self._d4.diagnostic(),
@@ -1074,6 +1115,12 @@ class R2SCAN3CCorrectionBatch:
         *,
         gradients: bool = True,
     ) -> tuple[R2SCAN3CCorrectionResult, ...]:
+        """Evaluate and sum D4 and gCP corrections in prepared system order.
+
+        None geometries retain prepared coordinates. Requested gradients are
+        summed only when both components succeed; a component failure returns
+        a failed item with NaN energy and no gradient.
+        """
         if geometries is not None and len(geometries) != len(self._prepared):
             raise ValueError(
                 "changed geometry list must match the prepared system count"

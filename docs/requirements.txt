@@ -2,3 +2,4 @@ sphinx>=8,<9
 myst-parser>=4,<5
 sphinx-book-theme
 numpy>=1.24
+ruff==0.16.10

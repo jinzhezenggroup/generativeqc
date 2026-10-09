@@ -30,6 +30,7 @@ class DenseLayout:
     alignment: int = 1
 
     def __post_init__(self) -> None:
+        """Normalize shape/order and validate sizes, strides, and power-of-two alignment."""
         object.__setattr__(self, "shape", tuple(self.shape))
         order = (
             tuple(range(len(self.shape))) if self.order is None else tuple(self.order)
@@ -50,6 +51,7 @@ class DenseLayout:
 
     @property
     def element_strides(self) -> tuple[int, ...]:
+        """Return logical-axis element strides for the specified physical axis order."""
         result, stride = [0] * len(self.shape), 1
         order = self.order
         assert order is not None
@@ -60,6 +62,7 @@ class DenseLayout:
 
     @property
     def is_c_contiguous(self) -> bool:
+        """Check C ordering while ignoring singleton axes and accepting empty layouts."""
         order = self.order
         assert order is not None
         return not prod(self.shape) or tuple(
@@ -122,13 +125,16 @@ class DenseLayout:
 
     @property
     def storage_elements(self) -> int:
+        """Return the checked product of the dense layout dimensions."""
         return byte_product(*self.shape)
 
     def storage_bytes(self, itemsize: int) -> int:
+        """Return the checked storage size for a nonnegative item size in bytes."""
         checked_bytes(itemsize, "layout item size")
         return byte_product(self.storage_elements, itemsize)
 
     def to_payload(self) -> dict[str, object]:
+        """Serialize layout shape, order, strides, alignment, and contiguity with schema."""
         return {
             "schema": "generativeqc.tensor.dense-layout.v1",
             "shape": self.shape,
@@ -140,6 +146,7 @@ class DenseLayout:
 
     @property
     def identity(self) -> str:
+        """Return the canonical hash of the versioned dense-layout payload."""
         return canonical_hash(self.to_payload())
 
 

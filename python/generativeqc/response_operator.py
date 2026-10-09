@@ -253,6 +253,7 @@ class RHFResponseOperator(_BaseResponseOperator):
     exchange_fraction = 0.5
 
     def __init__(self, problem: typing.Any, backend: typing.Any) -> None:
+        """Bind an RHF response problem to its matching integral backend."""
         super().__init__(problem, backend)
         if problem.method != "rhf":
             raise ResponseUnsupported("RHFResponseOperator requires an RHF problem")
@@ -293,6 +294,7 @@ class CPKSResponseOperator(_BaseResponseOperator):
     def __init__(
         self, problem: typing.Any, backend: typing.Any, xc_kernel: typing.Any
     ) -> None:
+        """Bind a CPKS problem to its backend and reference-compatible XC kernel."""
         super().__init__(problem, backend)
         if problem.method != "cpks":
             raise ResponseUnsupported("CPKSResponseOperator requires a CPKS problem")
@@ -358,6 +360,7 @@ class DenseMatrixResponseOperator:
     def __init__(
         self, problem: typing.Any, matrix: typing.Any, *, backend_identity: typing.Any
     ) -> None:
+        """Validate and retain a dense response matrix for control comparisons."""
         if not isinstance(problem, ResponseProblem):
             raise TypeError("expected ResponseProblem")
         value = np.asarray(matrix, dtype=np.float64)
@@ -378,6 +381,7 @@ class DenseMatrixResponseOperator:
 
     @property
     def identity(self) -> typing.Any:
+        """Return the identity of this dense response operator and its source."""
         return canonical_hash(
             {
                 "problem": self.problem.identity,
@@ -387,6 +391,7 @@ class DenseMatrixResponseOperator:
         )
 
     def apply(self, vector: typing.Any) -> typing.Any:
+        """Apply the dense response Jacobian to a rotation vector."""
         started = time.perf_counter()
         value = self.matrix @ np.asarray(vector, dtype=np.float64)
         self.statistics["actions"] += 1
@@ -394,6 +399,7 @@ class DenseMatrixResponseOperator:
         return value
 
     def apply_transpose(self, vector: typing.Any) -> typing.Any:
+        """Apply the transposed dense response Jacobian to a rotation vector."""
         started = time.perf_counter()
         value = self.matrix.T @ np.asarray(vector, dtype=np.float64)
         self.statistics["transpose_actions"] += 1
@@ -401,6 +407,7 @@ class DenseMatrixResponseOperator:
         return value
 
     def dot_identity(self, left: typing.Any, right: typing.Any) -> typing.Any:
+        """Measure the normalized forward/transpose duality residual."""
         lhs = float(np.dot(left, self.apply(right)))
         rhs = float(np.dot(self.apply_transpose(left), right))
         return abs(lhs - rhs) / max(1.0, abs(lhs), abs(rhs))

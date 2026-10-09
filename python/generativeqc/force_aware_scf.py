@@ -40,6 +40,7 @@ class ScfEffortLevel:
     strict: bool = False
 
     def __post_init__(self) -> None:
+        """Validate level identity, rank, positive SCF tolerances, and iteration limit."""
         _identity(self.name, "SCF effort level name")
         if type(self.rank) is not int or self.rank < 0:
             raise ValueError("SCF effort level rank must be a nonnegative integer")
@@ -60,6 +61,7 @@ class ScfEffortLevel:
 
     @property
     def identity(self) -> str:
+        """Return the canonical hash of the SCF effort level controls."""
         return canonical_hash(asdict(self))
 
 
@@ -76,6 +78,7 @@ class ScfForceCalibrationSample:
     strict_error: ObservableDelta
 
     def __post_init__(self) -> None:
+        """Validate calibration identities, diagnostic kind/value, and strict errors."""
         for name in ("family", "sample_id", "method", "basis_id"):
             _identity(getattr(self, name), name)
         if self.diagnostic_kind not in _DIAGNOSTIC_KINDS:
@@ -101,6 +104,7 @@ class ScfForceErrorEstimate:
     assumptions: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        """Validate nonnegative errors, calibration identities, and explicit assumptions."""
         for name in ("energy_abs", "force_max_abs", "force_rms", "diagnostic_value"):
             object.__setattr__(self, name, _number(getattr(self, name), name))
         for name in ("calibration_id", "method", "basis_id"):
@@ -115,6 +119,7 @@ class ScfForceErrorEstimate:
         object.__setattr__(self, "assumptions", assumptions)
 
     def ratios(self, budget: TargetErrorBudget) -> tuple[float, ...]:
+        """Return estimated energy and force errors relative to the configured budget."""
         values = (
             self.energy_abs / budget.energy_abs,
             self.force_max_abs / budget.force_max_abs,
@@ -124,6 +129,7 @@ class ScfForceErrorEstimate:
         return values
 
     def accepted(self, budget: TargetErrorBudget) -> bool:
+        """Report whether every estimated error-to-budget ratio is at most one."""
         return max(self.ratios(budget)) <= 1.0
 
 
@@ -150,6 +156,7 @@ class ScfForceErrorEstimator:
     method_basis_domains: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
+        """Validate joint method/basis coverage, calibration families, and scale controls."""
         if type(self.schema_version) is not int or self.schema_version != 2:
             raise ValueError("unsupported SCF force-estimator schema")
         if self.diagnostic_kind not in _DIAGNOSTIC_KINDS:
@@ -192,6 +199,12 @@ class ScfForceErrorEstimator:
         safety_factor: typing.Any = 1.25,
         diagnostic_floor: typing.Any = 1e-14,
     ) -> ScfForceErrorEstimator:
+        """Fit empirical energy/force scales to one SCF diagnostic kind.
+
+        Require unique samples spanning at least two molecular families. Scale
+        the largest observed error-to-floored-diagnostic ratio by the safety
+        factor and preserve the sampled joint method/basis domains.
+        """
         samples = tuple(samples)
         if not samples or any(
             not isinstance(item, ScfForceCalibrationSample) for item in samples
@@ -239,6 +252,7 @@ class ScfForceErrorEstimator:
 
     @property
     def identity(self) -> str:
+        """Return the canonical hash of calibration domains, scales, and provenance."""
         return canonical_hash(asdict(self))
 
     def predict(
@@ -249,6 +263,12 @@ class ScfForceErrorEstimator:
         *,
         allow_unseen_basis: bool = False,
     ) -> ScfForceErrorEstimate:
+        """Estimate energy/force errors from a floored calibrated SCF diagnostic.
+
+        Reject uncalibrated methods. Unknown method/basis pairs require explicit
+        allow_unseen_basis and are labeled validation-only in the assumptions.
+        The returned empirical estimate is not a rigorous bound.
+        """
         if method not in self.methods:
             raise ValueError("method is outside SCF force-estimator calibration domain")
         if type(allow_unseen_basis) is not bool:
@@ -381,6 +401,8 @@ class ScfForceErrorEstimator:
 
 @dataclass(frozen=True)
 class ScfEffortTransition:
+    "One recorded change between force-aware SCF effort levels."
+
     from_level: str
     to_level: str
     step_index: int
@@ -388,6 +410,7 @@ class ScfEffortTransition:
     reason: str
 
     def __post_init__(self) -> None:
+        """Validate transition identities and a nonnegative geometry-step index."""
         for name in ("from_level", "to_level", "geometry_id", "reason"):
             _identity(getattr(self, name), name)
         if type(self.step_index) is not int or self.step_index < 0:
@@ -396,6 +419,8 @@ class ScfEffortTransition:
 
 @dataclass(frozen=True)
 class ScfEffortState:
+    "Selected SCF effort index, safe-streak counter, and transition history."
+
     level_index: int
     safe_streak: int = 0
     transitions: tuple[ScfEffortTransition, ...] = ()
@@ -403,6 +428,8 @@ class ScfEffortState:
 
 @dataclass(frozen=True)
 class ScfEffortDecision:
+    "Suggested SCF effort and associated error bounds for the next step."
+
     action: str
     level: ScfEffortLevel
     state: ScfEffortState
@@ -414,6 +441,8 @@ class ScfEffortDecision:
 
 @dataclass(frozen=True)
 class OptimizationFinalVerification:
+    "Final optimization check against the requested model and tolerances."
+
     status: str
     reasons: tuple[str, ...]
     target_model_id: str
@@ -444,6 +473,7 @@ class ForceAwareScfPolicy:
     strict_reproducible: bool = False
 
     def __post_init__(self) -> None:
+        """Validate tightening effort levels, density-RMS calibration, and force controls."""
         levels = tuple(self.levels)
         if not levels or any(not isinstance(item, ScfEffortLevel) for item in levels):
             raise ValueError("force-aware SCF policy requires typed effort levels")
@@ -489,13 +519,16 @@ class ForceAwareScfPolicy:
 
     @property
     def strict_index(self) -> int:
+        """Return the index of the final, strict SCF effort level."""
         return len(self.levels) - 1
 
     @property
     def strict_level(self) -> ScfEffortLevel:
+        """Return the final SCF level used for strict cleanup and verification."""
         return self.levels[-1]
 
     def initial_state(self) -> ScfEffortState:
+        """Create an effort state starting at the strict level."""
         return ScfEffortState(self.strict_index)
 
     def _transition(
@@ -529,6 +562,12 @@ class ForceAwareScfPolicy:
         step_index: int,
         current_force_max: typing.Any | None,
     ) -> ScfEffortDecision:
+        """Choose the next SCF level from calibrated energy and force allowances.
+
+        Use strict effort near stationarity, without a trusted force signal,
+        outside calibration, or in strict reproducible mode. Relaxation requires
+        a sustained safe streak; the returned decision carries the next state.
+        """
         _identity(method, "method")
         _identity(basis_id, "basis identity")
         _identity(geometry_id, "geometry identity")
@@ -694,6 +733,11 @@ class ForceAwareScfPolicy:
         density_rms: typing.Any,
         force_max_abs: typing.Any,
     ) -> OptimizationFinalVerification:
+        """Check target identity, strict effort, SCF convergence, and force termination.
+
+        Return an observed verification status and unmet reasons. A model
+        identity mismatch is unverified; other failed gates are observed_unmet.
+        """
         if type(converged) is not bool:
             raise TypeError("final converged must be boolean")
         for value, name in (

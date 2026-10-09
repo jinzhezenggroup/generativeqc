@@ -124,6 +124,122 @@ class PythonApiDocumentationTests(unittest.TestCase):
             self.assertEqual(source, ["unrelated"])
             self.assertFalse(registered)
 
+    def test_public_docstring_audit_follows_reexports(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom .impl import Documented, Missing\n'
+                '__all__ = ["Documented", "Missing"]\n',
+            )
+            _write(
+                package / "impl.py",
+                'class Documented:\n    """Documented class."""\n'
+                "class Missing:\n    pass\n",
+            )
+            failures = missing_public_docstrings(package)
+            self.assertEqual(len(failures), 1)
+            self.assertIn("generativeqc.Missing", failures[0])
+            self.assertIn("impl.py", failures[0])
+
+    def test_public_docstring_audit_rejects_new_undocumented_module(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(package / "__init__.py", '"""Public facade."""\n__all__ = []\n')
+            _write(
+                package / "fresh.py",
+                '"""Future public module."""\n'
+                "def undocumented():\n    return 1\n"
+                '__all__ = ["undocumented"]\n',
+            )
+            failures = missing_public_docstrings(package)
+            self.assertEqual(len(failures), 1)
+            self.assertIn("generativeqc.fresh.undocumented", failures[0])
+
+    def test_public_docstring_audit_accepts_documented_reexports(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom .impl import Entry\n__all__ = ["Entry"]\n',
+            )
+            _write(
+                package / "impl.py",
+                'class Entry:\n    """A documented entry point."""\n',
+            )
+            self.assertEqual(missing_public_docstrings(package), ())
+
+    def test_public_docstring_audit_checks_reexported_class_members(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom .bridge import PublicEntry\n'
+                '__all__ = ["PublicEntry"]\n',
+            )
+            _write(package / "bridge.py", "from ._impl import Entry as PublicEntry\n")
+            _write(
+                package / "_impl.py",
+                "raise RuntimeError('Static discovery must never import this module')\n"
+                'class Entry:\n    """A documented class."""\n'
+                "    def __init__(self): pass\n"
+                "    def missing_method(self): pass\n"
+                "    async def missing_async(self): pass\n"
+                "    def __enter__(self): return self\n"
+                "    @property\n    def value(self): return 1\n"
+                "    def _private(self): pass\n"
+                "    class Nested:\n        def nested_method(self): pass\n"
+                "class Unrelated:\n    def method(self): pass\n",
+            )
+            failures = missing_public_docstrings(package)
+            self.assertEqual(len(failures), 7)
+            for member in (
+                "__init__",
+                "missing_method",
+                "missing_async",
+                "__enter__",
+                "value",
+                "Nested",
+                "Nested.nested_method",
+            ):
+                self.assertTrue(
+                    any(
+                        f"generativeqc.PublicEntry.{member} -> generativeqc/_impl.py:"
+                        in failure
+                        for failure in failures
+                    ),
+                    failures,
+                )
+
+    def test_public_docstring_audit_limits_member_scope(self) -> None:
+        from tools.check_public_api_docstrings import missing_public_docstrings
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "generativeqc"
+            _write(
+                package / "__init__.py",
+                '"""Public facade."""\nfrom ._impl import Entry\n__all__ = ["Entry"]\n',
+            )
+            _write(
+                package / "_impl.py",
+                "class Unrelated:\n    def inherited(self): pass\n"
+                'class Entry(Unrelated):\n    """An exported class."""\n'
+                '    def __init__(self):\n        """Initialize the entry."""\n'
+                '    def method(self):\n        """Run the entry."""\n'
+                "    def _private(self): pass\n"
+                "    class _Private:\n        def method(self): pass\n",
+            )
+            self.assertEqual(missing_public_docstrings(package), ())
+
     @unittest.skipUnless(
         importlib.util.find_spec("sphinx"), "requires documentation dependencies"
     )

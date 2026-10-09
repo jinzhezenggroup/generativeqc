@@ -78,6 +78,7 @@ class Node:
     attributes: tuple[tuple[str, object], ...] = ()
 
     def __post_init__(self) -> None:
+        """Freeze inputs/attributes and validate the tensor specification and operation."""
         object.__setattr__(self, "inputs", tuple(self.inputs))
         if any(not isinstance(n, Node) for n in self.inputs):
             raise TypeError("node operands must be tensor nodes")

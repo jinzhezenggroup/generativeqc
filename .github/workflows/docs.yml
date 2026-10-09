@@ -37,6 +37,8 @@ jobs:
         run: |
           .venv/bin/python -m unittest discover -s tests/python -p test_sphinx_repository_links.py
           .venv/bin/python -m unittest discover -s tests/python -p test_python_api_docs.py
+      - name: Enforce public API docstrings with Ruff D1xx
+        run: .venv/bin/python tools/check_public_api_docstrings.py --ruff .venv/bin/ruff
       - name: Build documentation with warnings as errors
         env:
           PYTHONPATH: python

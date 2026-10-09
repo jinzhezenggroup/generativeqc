@@ -1268,8 +1268,12 @@ GENERATIVEQC_API generativeqc_status generativeqc_method_available(generativeqc_
 GENERATIVEQC_API generativeqc_status generativeqc_method_get_capabilities(
     generativeqc_method method, generativeqc_method_capabilities_descriptor* capabilities);
 
+/** Create an opaque execution context from a versioned descriptor.
+ * The caller owns the resulting handle and must release dependent owners first.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_context_create(
     const generativeqc_context_descriptor* descriptor, generativeqc_context** context);
+/** Release the context after its dependent native owners are destroyed. */
 GENERATIVEQC_API void generativeqc_context_destroy(generativeqc_context* context);
 
 /** Borrow the last native failure detail, valid until the next failing call
@@ -1280,9 +1284,13 @@ GENERATIVEQC_API const char* generativeqc_context_get_last_detail(
 /** Backward-compatible alias for generativeqc_context_get_last_detail. */
 GENERATIVEQC_API const char* generativeqc_context_last_error(const generativeqc_context* context);
 
+/** Create a system from atom, geometry and basis descriptors in atomic units.
+ * Preserve the context while this system and its prepared consumers are live.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_system_create(
     generativeqc_context* context, const generativeqc_system_descriptor* descriptor,
     generativeqc_system** system);
+/** Release an all-electron system after consumers using it are destroyed. */
 GENERATIVEQC_API void generativeqc_system_destroy(generativeqc_system* system);
 
 /** Scalar Gaussian residual ECP: c r^(power-2) exp(-exponent r^2).
@@ -1380,9 +1388,13 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_df_gradient_cuda(
     size_t count_m, unsigned schedule, size_t maximum_bytes, size_t maximum_tile_elements,
     double* gradient, size_t gradient_count, generativeqc_df_gradient_resources* resources);
 
+/** Prepare one selected method for a valid context and system.
+ * The resulting opaque handle retains execution resources until destroyed.
+ */
 GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
     const generativeqc_method_descriptor* descriptor, generativeqc_calculation** calculation);
+/** Release a prepared calculation and its retained execution resources. */
 GENERATIVEQC_API void generativeqc_calculation_destroy(generativeqc_calculation* calculation);
 
 /**
@@ -1484,8 +1496,10 @@ generativeqc_batch_prepare(generativeqc_context* context, const generativeqc_sys
                            uint32_t system_count, const generativeqc_method_descriptor* descriptor,
                            generativeqc_batch_flags flags, generativeqc_batch** batch);
 
+/** Release a prepared ragged batch and its persistent workspaces/warm state. */
 GENERATIVEQC_API void generativeqc_batch_destroy(generativeqc_batch* batch);
 
+/** Return the number of original input systems in this prepared batch. */
 GENERATIVEQC_API uint32_t generativeqc_batch_get_system_count(const generativeqc_batch* batch);
 
 /**
