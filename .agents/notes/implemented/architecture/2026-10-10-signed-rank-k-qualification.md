@@ -16,10 +16,13 @@ weights are signed.
 `symmetric_rank_k_request` recognizes the existing `C[...,p,i] w[...,i]
 C[...,q,i]` node. It requires the same coefficient node on both legs, matching
 scientific index domains, strict FP64, and dense row- or column-major physical
-views. A preceding multiplication may materialize the weights, but does not
-change the contraction's scientific identity. The request records upper-triangle
-ownership, an explicit alpha/beta update, complete mirroring, and one
-all-batch transaction: a detected numerical failure publishes no output block.
+views. A preceding multiplication may materialize the weights. The scientific
+request composes that original Gram with explicit FP64 alpha, beta and
+old-output TensorIR inputs; its full update root, not the unit Gram alone, owns
+scientific identity. The same `_rank_k_update` formula is scalarized into the
+native checked helper, so runtime publication has no second formula. The request
+records upper-triangle ownership, complete mirroring, and one all-batch
+transaction: a detected numerical failure publishes no output block.
 
 Two candidates share that request. The generated fallback uses the existing
 `tensor.scf` weighted-Gram scalar emitter for signed scaling and ordered
@@ -94,16 +97,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `64422e16e0089a4ee19a54e32791599d9857acb5`, qz Job
-`i1877-rankk-h100-1010o` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `66208b3e00aa190ad0fc3ac0373b006a9a3bdd52`, qz Job
+`i1877-rankk-h100-1010q` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,576 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.99–20.79 µs for the generated
-route and 23.65–34.10 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 12.97–21.53 µs for the generated
+route and 24.23–34.63 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -120,11 +123,13 @@ host compiler, CUDA headers and ambient override inputs were not fully bound.
 Job `l` proved the task-owned Python and expected host bytes; Job `m` rejected
 the platform's ambient `LIBRARY_PATH` before source checking. Job `n` ran with
 the fixed empty override environment before the cache-version parser repair.
-Job `o` regenerated identical metadata from the actual GPU-side inputs,
-accepted the numeric sccache floor and source-matched `64422e16e`. Its generated
-header, object, binary and raw hashes are in the compact receipt. Later
-receipt-only commits may reuse `o` only while all qualified implementation blobs
-remain identical and latest-head review verifies that boundary.
+Job `o` regenerated identical metadata from the actual GPU-side inputs and
+accepted the numeric sccache floor, but still carried only the unit-Gram
+scientific identity. Job `q` bound the complete alpha/beta/old-output update
+root and scalar helper, then source-matched `66208b3e0`. Its generated header,
+object, binary and raw hashes are in the compact receipt. Later receipt-only
+commits may reuse `q` only while all qualified implementation blobs remain
+identical and latest-head review verifies that boundary.
 
 ## Revisit when
 
