@@ -182,19 +182,22 @@ def test_owner_links_without_cuda(topology_probes: dict[str, Path]) -> None:
     readelf = shutil.which("readelf")
     assert nm and readelf, "host-only qualification requires nm and readelf"
     for mode, binary in topology_probes.items():
+        # Binary inspection is fixture setup, not a performance assertion.
+        # Match the finite link budget under parallel CI, retaining the full
+        # symbol table (including undefined CUDA imports) and dynamic tags.
         symbols = subprocess.run(
             [nm, "-C", str(binary)],
             check=True,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=60,
         ).stdout
         dynamic = subprocess.run(
             [readelf, "-d", str(binary)],
             check=True,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=60,
         ).stdout
         assert not re.search(
             r"\b(?:cuda[A-Z]|cu[A-Z]|hip[A-Z]|cublas|cusolver|nccl)", symbols
