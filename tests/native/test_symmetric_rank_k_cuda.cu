@@ -162,7 +162,7 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
                                    target(weighted, order), compilation(weighted, order),
                                    std::numeric_limits<std::size_t>::max(), 2, 2,
                                    order, stream, 0);
-    } catch (const std::overflow_error&) { rejected_overflow = true; }
+    } catch (const std::length_error&) { rejected_overflow = true; }
     if (!rejected_overflow) throw std::runtime_error("rank-k accepted dimension overflow");
   }
   bool rejected_order = false;
