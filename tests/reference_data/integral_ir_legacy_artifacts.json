@@ -511,12 +511,12 @@
     "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
     "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
     "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "da7d8d522bdb004ee786b7494458f39656cfa9d54ed8d1b26904e8b88a0faa5b",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c8b96762479a945189cdc0add5abf0e7e657d5ac8c074297dc074e6a563d9a5d",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "977ed001cda8f1ad24835833fe09b96c07facd2110771fd38688dd9b2bcc510c",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "a16724489de7e99f32d9907dd9575011dbce46110a65dd6d2effc78edd2cadf5",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "2445a5bc078eda4bb2e02b729412fa60bb347737020761712d1530d6b38eeb60",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c9fb44889162087b23437e2eae1c0c2426fd1242cf315ae3227fd867e5769955",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "fa631a5255de9abd6010698ae63d43f9a75fcce7c391f76f94832cc275c08d7a",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "1c5bf58c6f007ce5c2ac15192fd465dd5556b78588e30db6e6c4fd3b4147e845",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
-    "generativeqc_generated_shell_registry.cu": "b85e51c3080ebb4c62f090fcfaca4d8cd2a697d60a29f79b29c5d1914efd7ebc"
+    "generativeqc_generated_shell_registry.cu": "11709decd1ad7b7bfe402a5e8415fa6926baa0af36829bca88f1500342b6d898"
   },
   "artifact_corrections": [
     {
@@ -712,6 +712,19 @@
       "paths": [
         "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
         "sm_120/generativeqc_generated_shell_sm120_shard_2.cu"
+      ]
+    },
+    {
+      "issue": 2135,
+      "source_revision": "6e97c0d2379dc68b411aaa010c9088a2535e0578",
+      "integrated_base_revision": "fb9586569769fccac67bc23411d902e08119024d",
+      "reason": "Retain the separately compiled work-aware exact-K workers and launch dispatch in the generated-source identity fixture. Independent regeneration of base fb958656 reproduces all ten previous hashes. All four tuned sm_120 shard differences are insertions of the 19 class-specific work workers and launchers; every existing source line is preserved in order. Registry additions provide work dispatch with incumbent fallback for unsupported classes. All four portable sm_90 shards, the registry header, manifest and catalog remain byte-identical. This fixture refresh changes no generator, scheduling, numerical tolerance or GPU qualification claim.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
       ]
     }
   ]

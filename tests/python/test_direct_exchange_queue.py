@@ -11,11 +11,17 @@ from generativeqc_compiler.integral.capabilities import CAPABILITY_MIXED_FOCK
 from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
 from generativeqc_compiler.integral.production_emission import _streaming_fock_source
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_selection import (
+    supports_exchange_work_buckets,
+)
 from generativeqc_compiler.integral.shell_spec import shell_pair_class
 
 
 @pytest.mark.parametrize("name", ["psss", "dppp", "dsds"])
-def test_emitted_queue_executes_each_survivor_once(tmp_path: Path, name: str) -> None:
+@pytest.mark.parametrize("work_aware", [False, True])
+def test_emitted_queue_executes_each_survivor_once(
+    tmp_path: Path, name: str, work_aware: bool
+) -> None:
     """Cover sparse/dense/empty tails, canonical pairs and mixed-precision tags.
 
     Integral arithmetic is stubbed, but the actual emitted worker runs across
@@ -37,10 +43,14 @@ def test_emitted_queue_executes_each_survivor_once(tmp_path: Path, name: str) ->
     class_name = name[0].upper() + name[1:]
     prefix = f"generated_{name}"
     source = _streaming_fock_source(selection)
-    start = source.index(
-        f"__device__ __forceinline__ void {prefix}_sort_exchange_queue("
+    worker_name = f"{prefix}_{'work_' if work_aware else ''}streaming_fock"
+    declaration = (
+        f"__device__ __forceinline__ unsigned {prefix}_exchange_work_bucket("
+        if work_aware
+        else f"__device__ __forceinline__ void {prefix}_sort_exchange_queue("
     )
-    marker = source.index(f"__device__ __forceinline__ void {prefix}_streaming_fock(")
+    start = source.index(declaration)
+    marker = source.index(f"__device__ __forceinline__ void {worker_name}(")
     worker = source[start : source.index("\n}\n", marker) + 3]
     first_class = shell_pair_class(*selection.spec.angular[:2])
     second_class = shell_pair_class(*selection.spec.angular[2:])
@@ -85,7 +95,19 @@ def test_emitted_queue_executes_each_survivor_once(tmp_path: Path, name: str) ->
 #define __shared__ static
 constexpr unsigned block_threads = {schedule.block_threads};
 constexpr unsigned execution_width = {width};
-std::barrier rendezvous(block_threads);
+int observed_buckets[block_threads];
+std::vector<unsigned> bucket_labels;
+bool homogeneous_error = false;
+std::barrier rendezvous(block_threads, []() noexcept {{
+  int first_bucket = -1;
+  for (auto& observed : observed_buckets) {{
+    if ({str(work_aware).lower()} && observed >= 0) {{
+      if (first_bucket >= 0 && first_bucket != observed) homogeneous_error = true;
+      first_bucket = observed;
+    }}
+    observed = -1;
+  }}
+}});
 thread_local struct Lane {{ unsigned x; }} threadIdx;
 #define __syncthreads() rendezvous.arrive_and_wait()
 void __syncwarp(unsigned) {{ rendezvous.arrive_and_wait(); }}
@@ -148,6 +170,7 @@ template<bool Unrestricted> void {prefix}_{consumer}(
   if ({only_leader}) {{
     std::lock_guard lock(output_mutex);
     actual.emplace_back(tasks[index].shell_pair[0], tasks[index].shell_pair[1], false);
+    observed_buckets[threadIdx.x] = bucket_labels[tasks[index].shell_pair[1]];
     if ({first_slot}) ++batches;
   }}
 }}
@@ -162,6 +185,7 @@ template<bool Unrestricted> void {prefix}_{mixed_consumer}(
   if ({only_leader}) {{
     std::lock_guard lock(output_mutex);
     actual.emplace_back(tasks[index].shell_pair[0], tasks[index].shell_pair[1], true);
+    observed_buckets[threadIdx.x] = bucket_labels[tasks[index].shell_pair[1]];
     if ({first_slot}) ++batches;
   }}
 }}
@@ -170,9 +194,8 @@ template<bool Unrestricted> void {prefix}_{mixed_consumer}(
         worker
         + f"""
 int main() {{
-  for (auto consumer : {{Consumer::HartreeFock, Consumer::Coulomb,
-                        Consumer::Exchange, Consumer::HartreeFockExchange}}) {{
-  for (unsigned mode = 0; mode < 3; ++mode) {{
+  for (auto consumer : {{{"Consumer::Exchange, Consumer::HartreeFockExchange" if work_aware else "Consumer::HartreeFock, Consumer::Coulomb, Consumer::Exchange, Consumer::HartreeFockExchange"}}}) {{
+  for (unsigned mode = {3 if work_aware else 0}; mode < {4 if work_aware else 3}; ++mode) {{
     for (pattern = 0; pattern < 4; ++pattern) {{
       for (unsigned count : {{0U, 1U, execution_width - 1U, execution_width,
                              execution_width + 1U, 3U * execution_width + 5U}}) {{
@@ -204,8 +227,25 @@ int main() {{
           offsets[{low_class} * 3 + 2] = order.size();
         }}
         std::vector<std::int64_t> primitive_offsets(systems.size() + 1, 0);
-        for (unsigned index = 0; index < systems.size(); ++index)
-          primitive_offsets[index + 1] = primitive_offsets[index] + (index * 7) % 19 + 1;
+        std::vector<std::int32_t> first_shells(systems.size()), second_shells(systems.size());
+        std::vector<std::int64_t> shell_offsets(2 * systems.size() + 1, 0);
+        std::vector<unsigned> buckets(systems.size());
+        constexpr unsigned lengths[] = {{1, 2, 3, 4, 6, 16, 128}};
+        for (unsigned index = 0; index < systems.size(); ++index) {{
+          const unsigned first_length = lengths[index % 7];
+          const unsigned second_length = lengths[(index / 7) % 7];
+          first_shells[index] = 2 * index;
+          second_shells[index] = 2 * index + 1;
+          shell_offsets[2 * index + 1] = shell_offsets[2 * index] + first_length;
+          shell_offsets[2 * index + 2] = shell_offsets[2 * index + 1] + second_length;
+          const unsigned products = first_length * second_length;
+          primitive_offsets[index + 1] = primitive_offsets[index] + products;
+          unsigned magnitude = 0;
+          for (unsigned ceiling = 2; ceiling <= products && magnitude < 3; ceiling *= 2)
+            ++magnitude;
+          buckets[index] = 2 * magnitude + (first_length > 1 && second_length > 1);
+        }}
+        bucket_labels = buckets;
         std::uint8_t active[]{{1, 0}};
         Topology topology{{}};
         topology.batch_size = 2;
@@ -213,12 +253,16 @@ int main() {{
         topology.pair_order = order.data(); topology.pair_class_offsets = offsets;
         topology.active = active; topology.fock_consumer = consumer;
         topology.exchange_task_schedule = static_cast<Queue>(mode);
+        topology.shell_pair_first = first_shells.data();
+        topology.shell_pair_second = second_shells.data();
+        topology.shell_primitive_offsets = shell_offsets.data();
         std::vector<Pair> expected;
         unsigned expected_batches = 0;
         unsigned long long expected_fp64 = 0, expected_fp32 = 0;
         for (unsigned ordinal = offsets[{high_class} * 3];
              ordinal < offsets[{high_class} * 3 + 2]; ++ordinal) {{
           unsigned bra = order[ordinal], system = systems[bra], survivors = 0;
+          unsigned bucket_counts[32]{{}};
           unsigned begin = offsets[{low_class} * 3 + system];
           unsigned end = {prefix}_stream_coarse_ket_end(
               topology, bra, begin, offsets[{low_class} * 3 + system + 1], 1, 1);
@@ -228,10 +272,14 @@ int main() {{
             if (!accepted(topology, bra, ket)) continue;
             bool fp32 = {str(mixed).lower()} && double(ket % 17 + 1) / 20 < .4;
             expected.emplace_back(bra, ket, fp32); ++survivors;
+            ++bucket_counts[buckets[ket]];
             if (fp32) ++expected_fp32;
             else ++expected_fp64;
           }}
-          expected_batches += (survivors + execution_width - 1) / execution_width;
+          if ({str(work_aware).lower()}) {{
+            for (auto bucket_count : bucket_counts)
+              expected_batches += (bucket_count + execution_width - 1) / execution_width;
+          }} else expected_batches += (survivors + execution_width - 1) / execution_width;
         }}
         actual.clear(); batches = 0;
         unsigned head = 0;
@@ -240,13 +288,13 @@ int main() {{
         for (unsigned lane = 0; lane < block_threads; ++lane)
           lanes.emplace_back([&, lane] {{
             threadIdx.x = lane;
-            {prefix}_streaming_fock<false>(&topology, nullptr, primitive_offsets.data(),
+            {worker_name}<false>(&topology, nullptr, primitive_offsets.data(),
                 nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, nullptr,
                 &head, &fp64{extra_counter});
           }});
         for (auto& lane : lanes) lane.join();
         std::sort(expected.begin(), expected.end()); std::sort(actual.begin(), actual.end());
-        if (actual != expected || fp64 != expected_fp64 || fp32 != expected_fp32 ||
+        if (homogeneous_error || actual != expected || fp64 != expected_fp64 || fp32 != expected_fp32 ||
             (mode != 0 && (consumer == Consumer::Exchange ||
                           consumer == Consumer::HartreeFockExchange) &&
              batches != expected_batches)) {{
@@ -284,7 +332,7 @@ int main() {{
 
 
 def test_prepared_schedule_parser_is_explicit_and_fail_closed(tmp_path: Path) -> None:
-    """Default fill and explicit rollback freeze before later environment edits."""
+    """Default work and explicit rollback freeze before later environment edits."""
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
@@ -298,7 +346,8 @@ def test_prepared_schedule_parser_is_explicit_and_fail_closed(tmp_path: Path) ->
         "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 0; }\n"
         "inline void launch_shell_class_rys_streaming_fock() {}\n"
         "inline void launch_shell_class_k_block_streaming_fock() {}\n"
-        "inline void launch_shell_class_streaming_fock() {}\n}\n"
+        "inline void launch_shell_class_streaming_fock() {}\n"
+        "inline void launch_shell_class_work_streaming_fock() {}\n}\n"
     )
     driver = tmp_path / "selection.cpp"
     driver.write_text(
@@ -313,17 +362,23 @@ int main() {
   assert(fallback_topology.exchange_task_schedule == Schedule::Incumbent);
   unsetenv(variable);
   const auto frozen = prepare_direct_exchange_task_schedule();
-  assert(frozen == Schedule::Fill);
-  for (const char* value : {"", "fill"}) {
+  assert(frozen == Schedule::Work);
+  for (const char* value : {"", "work"}) {
     setenv(variable, value, 1);
-    assert(prepare_direct_exchange_task_schedule() == Schedule::Fill);
+    assert(prepare_direct_exchange_task_schedule() == Schedule::Work);
   }
+  setenv(variable, "fill", 1);
+  assert(prepare_direct_exchange_task_schedule() == Schedule::Fill);
+  assert(frozen == Schedule::Work);
   setenv(variable, "incumbent", 1);
   assert(prepare_direct_exchange_task_schedule() == Schedule::Incumbent);
-  assert(frozen == Schedule::Fill);
+  assert(frozen == Schedule::Work);
   setenv(variable, "primitive", 1);
-  assert(frozen == Schedule::Fill);
+  assert(frozen == Schedule::Work);
   assert(prepare_direct_exchange_task_schedule() == Schedule::Primitive);
+  setenv(variable, "work", 1);
+  assert(frozen == Schedule::Work);
+  assert(prepare_direct_exchange_task_schedule() == Schedule::Work);
   setenv(variable, "typo", 1);
   try {
     (void)prepare_direct_exchange_task_schedule();
@@ -349,3 +404,21 @@ int main() {
         timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_work_specialization_is_separate_from_alternative_lowerings() -> None:
+    """Whole-CTA classes and optional lowering variants keep their own workers."""
+    root = Path(__file__).resolve().parents[2]
+    profile = resolve_production_profile(
+        root / "python/generativeqc_compiler/integral/production_shell_classes.json",
+        "sm_120",
+    )
+    for name in ("ddds", "dpps", "ppps", "psss", "ddpp"):
+        selection = next(item for item in profile.selections if item.spec.name == name)
+        source = _streaming_fock_source(selection)
+        incumbent = _streaming_fock_source(selection, include_work_buckets=False)
+        assert "_work_streaming_kernel" not in incumbent
+        assert ("_work_streaming_kernel" in source) == supports_exchange_work_buckets(
+            selection
+        )
+        assert source.startswith(incumbent)

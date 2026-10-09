@@ -27,6 +27,7 @@ from .production_selection import (
     KernelSelection,
     _as_selection,
     _selection_integral,
+    supports_exchange_work_buckets,
 )
 
 if TYPE_CHECKING:
@@ -494,6 +495,11 @@ cudaError_t launch_shell_class_k_block_streaming_fock(
   return cudaErrorNotSupported;
 }}
 
+cudaError_t launch_shell_class_work_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  return launch_shell_class_streaming_fock(shell_class, {_streaming_fock_launch_argument_list()});
+}}
+
 cudaError_t launch_ppps_resident(
     {_resident_launch_parameter_declaration()}) noexcept {{
   {resident_launch}
@@ -659,6 +665,7 @@ def emit_multi_registry_source(
         fock_cases = []
         mixed_fock_cases = []
         streaming_fock_cases = []
+        work_streaming_fock_cases = []
         resident_symbol = None
         force_names = []
         fock_names = []
@@ -797,6 +804,20 @@ def emit_multi_registry_source(
                         f"      return {streaming_fock_symbol}("
                         f"{streaming_fock_arguments});"
                     )
+                    if supports_exchange_work_buckets(selection):
+                        work_symbol = f"{force_symbol}_work_streaming_fock"
+                        declarations.append(
+                            f'extern "C" cudaError_t {work_symbol}('
+                            "cudaStream_t, bool, unsigned, const void*, "
+                            "const std::int64_t*, const void*, const double*, "
+                            "const void*, double, bool, double, const double*, "
+                            "const double*, double*, std::uint32_t*, "
+                            "unsigned long long*, unsigned long long*);"
+                        )
+                        work_streaming_fock_cases.append(
+                            f"    case {shell_class}U:\n"
+                            f"      return {work_symbol}({streaming_fock_arguments});"
+                        )
                 fock_names.append(
                     f'    {{"{selection.spec.name}", {shell_class}U, '
                     f"{sum(selection.spec.angular)}U, {plan.block_threads}U, "
@@ -850,6 +871,14 @@ cudaError_t launch_{identifier}_rys_streaming_fock(
   }}
 }}
 
+cudaError_t launch_{identifier}_work_streaming_fock(
+    {streaming_fock_parameters}) noexcept {{
+  switch (shell_class) {{
+{chr(10).join(work_streaming_fock_cases)}
+    default: return launch_{identifier}_streaming_fock(shell_class, {streaming_fock_arguments});
+  }}
+}}
+
 cudaError_t launch_{identifier}_k_block_streaming_fock(
     {streaming_fock_parameters}) noexcept {{
   switch (shell_class) {{
@@ -893,6 +922,7 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       launch_{identifier}_force, launch_{identifier}_fock,
       launch_{identifier}_mixed_fock,
       launch_{identifier}_streaming_fock,
+      launch_{identifier}_work_streaming_fock,
       launch_{identifier}_rys_streaming_fock,
       launch_{identifier}_k_block_streaming_fock,
       launch_{identifier}_resident}},"""
@@ -932,6 +962,7 @@ struct KernelSet {{
   LaunchFunction launch_fock;
   LaunchFunction launch_mixed_fock;
   StreamingFockLaunchFunction launch_streaming_fock;
+  StreamingFockLaunchFunction launch_work_streaming_fock;
   StreamingFockLaunchFunction launch_rys_streaming_fock;
   StreamingFockLaunchFunction launch_k_block_streaming_fock;
   ResidentLaunchFunction launch_resident;
@@ -1117,6 +1148,14 @@ cudaError_t launch_shell_class_rys_streaming_fock(
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? cudaErrorNotSupported
                             : kernels->launch_rys_streaming_fock(
+      shell_class, {streaming_fock_arguments});
+}}
+
+cudaError_t launch_shell_class_work_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? cudaErrorNotSupported
+                            : kernels->launch_work_streaming_fock(
       shell_class, {streaming_fock_arguments});
 }}
 

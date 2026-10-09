@@ -65,6 +65,7 @@ def exchange_streaming_worker(
     supports_mixed_fock: bool,
     retained_state: str,
     record_precision: Callable[[str], str],
+    work_aware: bool = False,
 ) -> str:
     """Emit one recurrence consumer for incumbent and optional K schedules.
 
@@ -173,6 +174,151 @@ def exchange_streaming_worker(
 """
     execute_condition = "keep" if packed else "stream_keep[subgroup] != 0U"
     execution_state = retained_state if packed else "stream_keep[subgroup]"
+    if work_aware:
+        return f"""
+/** Bucket only admitted quartets; angular class and bra contraction are fixed.
+ * Each nonsaturated work bin spans less than a factor of two in ket pair work.
+ * The two contraction flags distinguish uncontracted, one-sided and two-sided
+ * primitive traversal. Saturated counts retain exact work, not a capped loop.
+ */
+__device__ __forceinline__ unsigned {prefix}_exchange_work_bucket(
+    const generativeqc::scf::detail::GeneratedShellPairStream& topology,
+    std::uint32_t pair, const std::int64_t* primitive_pair_offsets) {{
+  std::uint64_t work = static_cast<std::uint64_t>(
+      primitive_pair_offsets[pair + 1U] - primitive_pair_offsets[pair]);
+  unsigned magnitude = 0U;
+  while (work > 1U && magnitude < 3U) {{ work >>= 1U; ++magnitude; }}
+  const auto first = topology.shell_pair_first[pair];
+  const auto second = topology.shell_pair_second[pair];
+  const bool first_contracted = topology.shell_primitive_offsets[first + 1] -
+      topology.shell_primitive_offsets[first] > 1;
+  const bool second_contracted = topology.shell_primitive_offsets[second + 1] -
+      topology.shell_primitive_offsets[second] > 1;
+  return 2U * magnitude + (first_contracted && second_contracted);
+}}
+
+template <bool Unrestricted>
+__device__ __forceinline__ void {prefix}_streaming_fock(
+{internal_parameters}) {{
+  {warp_mask_declaration}
+{task_storage}
+  __shared__ std::uint32_t work_pairs[8][{2 * width}];
+  __shared__ double work_bounds[8][{2 * width}];
+  __shared__ std::uint32_t work_counts[8];
+  __shared__ std::uint32_t selected_bucket;
+  __shared__ std::uint32_t bra_ordinal;
+  const auto& topology = *topology_pointer;
+  if (topology.generated_overflow != nullptr &&
+      topology.generated_overflow[{shell_class}U] == 0U) return;
+  const std::size_t stride = static_cast<std::size_t>(topology.batch_size) + 1U;
+  const std::uint32_t bra_begin = topology.pair_class_offsets[{high_pair_class}U * stride];
+  const std::uint32_t bra_end = topology.pair_class_offsets[
+      {high_pair_class}U * stride + topology.batch_size];
+  while (true) {{
+    if (threadIdx.x == 0U) bra_ordinal = atomicAdd(bra_head, 1U);
+    __syncthreads();
+    const std::uint32_t claimed_bra = bra_ordinal;
+    __syncthreads();
+    if (claimed_bra >= bra_end - bra_begin) return;
+    const std::uint32_t bra_pair = topology.pair_order[bra_begin + claimed_bra];
+    const std::int32_t system = topology.shell_pair_systems[bra_pair];
+    const std::uint32_t ket_begin = topology.pair_class_offsets[
+        {low_pair_class}U * stride + system];
+    const std::uint32_t ket_end = topology.pair_class_offsets[
+        {low_pair_class}U * stride + system + 1U];
+    const double system_density_bound = {system_density_bound};
+    const std::uint32_t coarse_ket_end = {prefix}_stream_coarse_ket_end(
+        topology, bra_pair, ket_begin, ket_end, system_density_bound, screening_tolerance);
+    for (unsigned bucket = threadIdx.x; bucket < 8U; bucket += {block_threads}U)
+      work_counts[bucket] = 0U;
+    {barrier}
+    std::uint32_t ket_base = ket_begin;
+    bool scan = true;
+    while (true) {{
+      // Scan only when every bucket has fewer than W pending tasks. One chunk
+      // admits at most W survivors, so no individual 2W arena can overflow.
+      if (scan && ket_base < coarse_ket_end) {{
+        if ({leader}) {{
+          const std::uint32_t ordinal = ket_base + {execution_slot};
+          bool keep = ordinal < coarse_ket_end;
+          const std::uint32_t ket_pair = keep ? topology.pair_order[ordinal] : 0U;
+          if (keep && {str(high_pair_class == low_pair_class).lower()})
+            keep = bra_pair >= ket_pair;
+          double contribution_bound = 0.0;
+          if (keep) keep = {prefix}_stream_survives<Unrestricted>(
+              topology, bra_pair, ket_pair, screening_tolerance, &contribution_bound);
+          if (keep) {{
+            const unsigned bucket = {prefix}_exchange_work_bucket(
+                topology, ket_pair, primitive_pair_offsets);
+            const unsigned rank = atomicAdd(&work_counts[bucket], 1U);
+            work_pairs[bucket][rank] = ket_pair;
+            work_bounds[bucket][rank] = contribution_bound;
+          }}
+        }}
+        ket_base += {width}U;
+      }}
+      {barrier}
+      if (threadIdx.x == 0U) {{
+        selected_bucket = 8U;
+        // Expensive full batches go first; partial bins accumulate across
+        // chunks and are flushed independently only at the original tail.
+        for (unsigned bucket = 8U; bucket > 0U; --bucket) {{
+          const auto count = work_counts[bucket - 1U];
+          if (count >= {width}U || (ket_base >= coarse_ket_end && count != 0U)) {{
+            selected_bucket = bucket - 1U;
+            break;
+          }}
+        }}
+      }}
+      {barrier}
+      const unsigned bucket = selected_bucket;
+      if (bucket == 8U) {{
+        if (ket_base >= coarse_ket_end) break;
+        scan = true;
+        continue;
+      }}
+      const unsigned available = work_counts[bucket];
+      const unsigned consumed = available < {width}U ? available : {width}U;
+      {barrier}
+      bool keep = false;
+      std::uint32_t ket_pair = 0U;
+      double contribution_bound = 0.0;
+      if ({leader}) {{
+        keep = {execution_slot} < consumed;
+        if (keep) {{
+          ket_pair = work_pairs[bucket][{execution_slot}];
+          contribution_bound = work_bounds[bucket][{execution_slot}];
+        }}
+{prepare_task}
+      }}
+      {barrier}
+      if ({execute_condition}) {{
+        const std::uint32_t precision_state = {execution_state};
+        {mixed_execution}{{
+          {prefix}_{consumer}<Unrestricted>(
+              {arguments}, {fp64_storage}{subgroup_arguments});
+        }}
+      }}
+      {barrier}
+      const unsigned remaining = available - consumed;
+      std::uint32_t retained_pair = 0U;
+      double retained_bound = 0.0;
+      if ({leader} && {execution_slot} < remaining) {{
+        retained_pair = work_pairs[bucket][consumed + {execution_slot}];
+        retained_bound = work_bounds[bucket][consumed + {execution_slot}];
+      }}
+      {barrier}
+      if ({leader} && {execution_slot} < remaining) {{
+        work_pairs[bucket][{execution_slot}] = retained_pair;
+        work_bounds[bucket][{execution_slot}] = retained_bound;
+      }}
+      if (threadIdx.x == 0U) work_counts[bucket] = remaining;
+      {barrier}
+      scan = false;
+    }}
+  }}
+}}
+"""
     return f"""
 {exchange_queue_sort_source(prefix)}
 template <bool Unrestricted>
