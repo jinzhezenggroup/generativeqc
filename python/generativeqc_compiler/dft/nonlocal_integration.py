@@ -486,6 +486,15 @@ class FixedDensityNonlocalCorrelation:
         lookup = {axis: i for i, axis in enumerate(jet_indices(2))}
         first = [lookup[tuple(int(i == k) for i in range(3))] for k in range(3)]
 
+        # The same three AO-response workspaces are overwritten completely on
+        # each point tile/atom/Cartesian direction. Keep them owned by this
+        # geometry call rather than allocating a new backing array for every
+        # tile (and 3*natom times per tile for the gradient pullback).
+        scratch_points = min(tile_points, ngrid)
+        hessian_scratch = np.empty((scratch_points, 3, 3), dtype=np.float64)
+        feature_points_scratch = np.empty((scratch_points, 3), dtype=np.float64)
+        dgradient_scratch = np.empty((scratch_points, 3), dtype=np.float64)
+
         for begin in range(0, ngrid, tile_points):
             end = min(begin + tile_points, ngrid)
             jets = basis.evaluate(points[begin:end], 2)
@@ -495,7 +504,7 @@ class FixedDensityNonlocalCorrelation:
             derivative_work = [value @ total_density for value in derivatives]
             local_gradient = gradient[begin:end]
             gradient_coeff = 2.0 * vsigma[begin:end, None] * local_gradient
-            hessian = np.empty((end - begin, 3, 3), dtype=np.float64)
+            hessian = hessian_scratch[: end - begin]
             for j in range(3):
                 for k in range(3):
                     axis = [0, 0, 0]
@@ -506,7 +515,7 @@ class FixedDensityNonlocalCorrelation:
                         np.sum(second * weighted, axis=1)
                         + np.sum(derivatives[j] * derivative_work[k], axis=1)
                     )
-            feature_points = np.empty((end - begin, 3), dtype=np.float64)
+            feature_points = feature_points_scratch[: end - begin]
             for k in range(3):
                 feature_points[:, k] = weights[begin:end] * (
                     vrho[begin:end] * local_gradient[:, k]
@@ -520,7 +529,7 @@ class FixedDensityNonlocalCorrelation:
                     drho = -2.0 * np.sum(
                         derivatives[k][:, owned] * weighted[:, owned], axis=1
                     )
-                    dgradient = np.empty((end - begin, 3), dtype=np.float64)
+                    dgradient = dgradient_scratch[: end - begin]
                     for j in range(3):
                         axis = [0, 0, 0]
                         axis[j] += 1
