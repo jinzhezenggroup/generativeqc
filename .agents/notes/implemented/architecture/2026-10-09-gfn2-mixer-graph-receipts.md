@@ -95,6 +95,42 @@ The 768-AO tblite discrepancy remains a failing scientific gate and was not
 rerun in this diagnostic qualification. This change does not select or promote
 a provider schedule and does not close #1882 or #560.
 
+## Review correction: rejected candidate diagnostics
+
+A failed first call or topology replacement can finish SCC submission without
+publishing its transactional `Prepared`. Readback must therefore not depend
+solely on the last committed topology. After the existing failure settlement,
+an opt-in failed candidate copies at most its configured receipt capacity to a
+host snapshot before destroying all candidate device storage. The snapshot is
+released on the next public call. This retains no additional device arena;
+host retention and the failure-only device-to-host copy are each bounded by the
+configured receipt payload (strictly below 64 MiB). A copy/allocation/completion
+failure makes the diagnostic snapshot explicitly unavailable and never changes
+the original transaction status or error.
+
+The submitted-graph flag follows the launch result's actual graph count. A
+healthy bounded fallback reports mode zero and no submitted graph. Native
+bootstrap coverage now enables diagnostics for first-call failure, failed
+replacement, recovery and pre-reset rejection. A host-compiled regression
+harness exercises the actual readback/rollback code with CUDA/provider stubs;
+all 12 cases passed, and the original `9872e6f4` source reproduced the missing
+first-call/replacement/overflow receipts and false fallback graph flag. The
+combined focused CPU suite passed 285 tests with 26 unavailable CUDA/tool
+skips. Those host checks alone do not requalify CUDA execution.
+
+The final repair was rebuilt on the same H100/CUDA 12.9 setup with verified
+`ccache 4.5.1`. Source-matched `libgenerativeqc.so.0.1.0` SHA-256 is
+`c594ab91ca744a63ea449c020d3be0987703c727e078b19dc1885a64d0651f83`;
+the bootstrap executable SHA-256 is
+`cc91751c97c0f5bf1969fea722bf3a3876635cc1c20e9ded575df9e799307e6a`.
+The 12 host-stub transaction cases plus provenance checks passed (18 total).
+The independent tblite small, 48-AO and 192-AO complete energy/host-force
+bootstrap passed for host/device ingress, including first-call and replacement
+failure, recovery, and graph replay. Its final logs are
+`review-host-snapshot-{small,48ao,192ao,host-regression}.log` in the evidence
+directory above. The new observations confirm the diagnostic repair, not a
+provider speedup or acceptance of the still-failing 768-AO gate.
+
 ## Revisit when
 
 An accepted provider schedule replaces the retained generated folds, or

@@ -274,6 +274,58 @@ void verify_mixer_receipts(const Molecule& molecule, bool device_input) {
       seconds(replay_start, replay_stop));
 }
 
+void verify_failed_mixer_receipts(const Molecule& water, bool device_input) {
+  Gfn2CudaExecutionCache cache(0, nullptr);
+  require(cache.enable_mixer_diagnostics(), "could not enable failure receipts");
+  auto bad = water;
+  bad.positions[0] = std::numeric_limits<double>::quiet_NaN();
+  const auto first = run(cache, bad, device_input);
+  failed(first);
+  Gfn2CudaMixerDiagnosticSnapshot first_snapshot;
+  std::string error;
+  require(
+      cache.read_mixer_diagnostics(first_snapshot, error) && first_snapshot.call_id == 1 &&
+          first_snapshot.plan_token != 0 &&
+          first_snapshot.endpoint_completed == (first.status == GENERATIVEQC_XTB_STATUS_SUCCESS),
+      "failed first call lost its call-owned mixer diagnostics");
+  require(first_snapshot.graph_submitted == (first_snapshot.graph_family != 0),
+          "failed first call misreported graph submission");
+
+  oracle(run(cache, water, device_input), water);
+  Gfn2CudaMixerDiagnosticSnapshot recovered;
+  require(cache.read_mixer_diagnostics(recovered, error) && recovered.call_id == 2 &&
+              recovered.endpoint_completed && !recovered.receipts.empty(),
+          "recovery retained stale failed-call diagnostics");
+  require(!cache.enable_mixer_diagnostics(), "late enablement changed prepared graph bindings");
+
+  // A different iteration limit requires a new Prepared even for the same
+  // molecule. A failed candidate must not publish that topology or lose its
+  // independent receipt identity while the prior Prepared remains reusable.
+  const auto replacement = run(cache, bad, device_input, true, 301);
+  failed(replacement);
+  Gfn2CudaMixerDiagnosticSnapshot replaced;
+  require(
+      cache.read_mixer_diagnostics(replaced, error) && replaced.call_id == 3 &&
+          replaced.plan_token != recovered.plan_token &&
+          replaced.endpoint_completed == (replacement.status == GENERATIVEQC_XTB_STATUS_SUCCESS),
+      "failed replacement read the prior topology's mixer diagnostics");
+  oracle(run(cache, water, device_input), water);
+  Gfn2CudaMixerDiagnosticSnapshot replay;
+  require(cache.read_mixer_diagnostics(replay, error) && replay.call_id == 4 &&
+              replay.endpoint_completed &&
+              replay.attempted_receipts == recovered.attempted_receipts,
+          "valid reuse after a failed replacement lost or accumulated receipts");
+  if (replacement.status != GENERATIVEQC_XTB_STATUS_SUCCESS)
+    require(replay.plan_token == recovered.plan_token, "failed replacement published its topology");
+
+  // Invalid iteration limits are rejected before any receipt reset. The last
+  // readable host snapshot must become unavailable rather than masquerading
+  // as diagnostics for this new call.
+  failed(run(cache, water, device_input, true, 0));
+  require(!cache.read_mixer_diagnostics(replay, error),
+          "pre-reset rejection exposed an earlier call's mixer diagnostics");
+}
+
 int main(int argc, char** argv) {
   try {
     require(argc == 2, "expected independent fixture path");
@@ -319,6 +371,7 @@ int main(int argc, char** argv) {
                                             [](const Molecule& m) { return m.name == "h2o"; });
       require(found_water != molecules.end(), "missing water failure/recovery fixture");
       const auto& water = *found_water;
+      verify_failed_mixer_receipts(water, device_input);
       for (int fault = 0; fault < 4; ++fault) {
         auto bad = water;
         if (fault == 0) bad.positions[0] = std::numeric_limits<double>::quiet_NaN();

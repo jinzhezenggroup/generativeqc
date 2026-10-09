@@ -5810,7 +5810,7 @@ struct Gfn2CudaExecutionCache::Impl {
     }
     if (mixer_diagnostics_enabled && !capture_bounded_scc) {
       mixer_graph_family_for_call = static_cast<std::uint32_t>(loop.execution_mode);
-      mixer_graph_submitted_for_call = true;
+      mixer_graph_submitted_for_call = loop.submitted_graphs != 0u;
     }
 
     cuda_status = evaluate_gfn2_terminal_classical_energy_cuda(
@@ -6428,6 +6428,47 @@ struct Gfn2CudaExecutionCache::Impl {
    * bridge. The device token was already consumed by FRESH/WARM admission, so
    * keeping the host bit false makes every later strict WARM reject safely. */
 
+  bool copy_mixer_diagnostics_locked(const Prepared& current,
+                                     Gfn2CudaMixerDiagnosticSnapshot& snapshot,
+                                     std::string& error) const {
+    const cudaError_t completion = cudaStreamSynchronize(stream);
+    if (completion != cudaSuccess) {
+      error = cuda_error_message("CUDA mixer diagnostic endpoint completion", completion);
+      return false;
+    }
+    const auto& sink = current.scc_binding.workspace.mixer_workspace;
+    std::uint64_t attempted = 0u;
+    cudaError_t status =
+        cudaMemcpy(&attempted, sink.receipt_count, sizeof(attempted), cudaMemcpyDeviceToHost);
+    if (status != cudaSuccess) {
+      error = cuda_error_message("CUDA mixer diagnostic count read", status);
+      return false;
+    }
+    Gfn2CudaMixerDiagnosticSnapshot candidate{};
+    candidate.call_id = mixer_call_id;
+    candidate.plan_token = current.host.plan_token;
+    candidate.attempted_receipts = attempted;
+    candidate.device_id = device_id;
+    candidate.graph_family = mixer_graph_family_for_call;
+    candidate.graph_submitted = mixer_graph_submitted_for_call;
+    candidate.endpoint_completed = mixer_endpoint_completed_for_call;
+    const auto retained =
+        std::min(attempted, static_cast<std::uint64_t>(current.mixer_receipt_capacity));
+    candidate.receipts.resize(static_cast<std::size_t>(retained));
+    if (retained != 0u) {
+      status = cudaMemcpy(candidate.receipts.data(), sink.receipts,
+                          static_cast<std::size_t>(retained) * sizeof(Gfn2SccMixerDeviceReceipt),
+                          cudaMemcpyDeviceToHost);
+      if (status != cudaSuccess) {
+        error = cuda_error_message("CUDA mixer diagnostic receipt read", status);
+        return false;
+      }
+    }
+    snapshot = std::move(candidate);
+    error.clear();
+    return true;
+  }
+
   std::int32_t device_id = -1;
   cudaStream_t stream = nullptr;
   Gfn2CudaTopologyStaging topology_staging;
@@ -6442,6 +6483,11 @@ struct Gfn2CudaExecutionCache::Impl {
   std::uint32_t mixer_graph_family_for_call = 0u;
   std::uint64_t mixer_call_id = 0u;
   std::uint64_t mixer_receipt_plan_token_for_call = 0u;
+  // Failed topology candidates roll back all device state. Preserve only their
+  // bounded host receipts, after settlement, until the next public call.
+  Gfn2CudaMixerDiagnosticSnapshot failed_mixer_snapshot;
+  bool failed_mixer_snapshot_attempted = false;
+  bool failed_mixer_snapshot_valid = false;
   std::unique_ptr<Prepared> prepared;
   mutable std::mutex mutex;
 };
@@ -6466,6 +6512,15 @@ bool Gfn2CudaExecutionCache::read_mixer_diagnostics(
     return false;
   }
   std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->failed_mixer_snapshot_attempted) {
+    if (!impl_->failed_mixer_snapshot_valid) {
+      error = "CUDA mixer failed-call diagnostic snapshot was unavailable";
+      return false;
+    }
+    snapshot = impl_->failed_mixer_snapshot;
+    error.clear();
+    return true;
+  }
   const auto* const prepared = impl_->prepared.get();
   if (!impl_->mixer_diagnostics_enabled || !impl_->mixer_receipts_reset_for_call ||
       prepared == nullptr || prepared->mixer_receipt_capacity <= 0 ||
@@ -6475,39 +6530,8 @@ bool Gfn2CudaExecutionCache::read_mixer_diagnostics(
   }
   ScopedCudaDevice device(impl_->device_id, error);
   if (!device.ok()) return false;
-  const cudaError_t completion = cudaStreamSynchronize(impl_->stream);
-  if (completion != cudaSuccess) {
-    error = cuda_error_message("CUDA mixer diagnostic endpoint completion", completion);
-    return false;
-  }
-  const auto& sink = prepared->scc_binding.workspace.mixer_workspace;
-  std::uint64_t attempted = 0u;
-  cudaError_t status = cudaMemcpy(&attempted, sink.receipt_count, sizeof(attempted),
-                                  cudaMemcpyDeviceToHost);
-  if (status != cudaSuccess) {
-    error = cuda_error_message("CUDA mixer diagnostic count read", status);
-    return false;
-  }
   Gfn2CudaMixerDiagnosticSnapshot candidate{};
-  candidate.call_id = impl_->mixer_call_id;
-  candidate.plan_token = prepared->host.plan_token;
-  candidate.attempted_receipts = attempted;
-  candidate.device_id = impl_->device_id;
-  candidate.graph_family = impl_->mixer_graph_family_for_call;
-  candidate.graph_submitted = impl_->mixer_graph_submitted_for_call;
-  candidate.endpoint_completed = impl_->mixer_endpoint_completed_for_call;
-  const auto retained = std::min(attempted,
-                                 static_cast<std::uint64_t>(prepared->mixer_receipt_capacity));
-  candidate.receipts.resize(static_cast<std::size_t>(retained));
-  if (retained != 0u) {
-    status = cudaMemcpy(candidate.receipts.data(), sink.receipts,
-                        static_cast<std::size_t>(retained) *
-                            sizeof(Gfn2SccMixerDeviceReceipt), cudaMemcpyDeviceToHost);
-    if (status != cudaSuccess) {
-      error = cuda_error_message("CUDA mixer diagnostic receipt read", status);
-      return false;
-    }
-  }
+  if (!impl_->copy_mixer_diagnostics_locked(*prepared, candidate, error)) return false;
   std::string restore_error;
   if (device.restore(restore_error) != GENERATIVEQC_XTB_STATUS_SUCCESS) {
     error = std::move(restore_error);
@@ -6536,6 +6560,9 @@ generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCac
     implementation.mixer_endpoint_completed_for_call = false;
     implementation.mixer_graph_family_for_call = 0u;
     implementation.mixer_receipt_plan_token_for_call = 0u;
+    implementation.failed_mixer_snapshot = {};
+    implementation.failed_mixer_snapshot_attempted = false;
+    implementation.failed_mixer_snapshot_valid = false;
   }
   const auto contract_status = validate_molecular_request(batch, options, error);
   if (contract_status != GENERATIVEQC_XTB_STATUS_SUCCESS) return contract_status;
@@ -6630,6 +6657,20 @@ generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCac
       const generativeqc_xtb_status_t settled =
           implementation.settle_public_submissions_locked(*working, failure, error);
       abort_topology_candidate();
+      if (candidate != nullptr && implementation.mixer_diagnostics_enabled &&
+          implementation.mixer_receipts_reset_for_call &&
+          implementation.mixer_receipt_plan_token_for_call == working->host.plan_token) {
+        implementation.failed_mixer_snapshot_attempted = true;
+        // This optional readback must never replace the scientific failure,
+        // including when host allocation or CUDA completion/copy fails.
+        try {
+          std::string diagnostic_error;
+          implementation.failed_mixer_snapshot_valid = implementation.copy_mixer_diagnostics_locked(
+              *working, implementation.failed_mixer_snapshot, diagnostic_error);
+        } catch (...) {
+          implementation.failed_mixer_snapshot_valid = false;
+        }
+      }
       return settled;
     };
 
