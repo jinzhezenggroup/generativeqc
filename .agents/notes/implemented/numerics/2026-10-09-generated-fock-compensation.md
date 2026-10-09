@@ -183,6 +183,30 @@ qualification. The paired timings and independent error bounds above remain
 observations on the frozen 4385f727 source cohort, not measurements on the
 rebased master with its other independent performance changes.
 
+## Standalone validation integration
+
+The standalone f-shell release gate, schedule tuner and benchmark CLI also
+consume generated Fock code. They must resolve the runtime sink headers through
+the source include directory (or the same bundled wheel assets). The f-shell
+object cache and CI restore key include both runtime headers; the numerical gate
+rejects an object if those dependencies change after compilation. Generated CUDA
+bytes alone no longer identify the complete compilation input. Compiler logs are
+retained with the f-shell CI artifact so failed compiles remain diagnosable.
+
+The numerical fixture driver declares Fock outputs as `CompensatedOutput` and
+passes the address of an actual `{sum, nullptr}` value to `cudaLaunchKernel`.
+Force outputs retain their pointer ABI. Passing `&result.pointer` for Fock would
+make CUDA copy the adjacent buffer element count as the correction pointer.
+
+The host regression compiles all eight driver declarations against signatures
+extracted from actual emitted kernels and intercepts direct/persistent launch
+arguments. Restoring either the old declarations or old argument packing fails
+this regression. Standalone checkout and simulated-wheel commands additionally
+pass real host preprocessing, and both runtime-header changes invalidate the
+cached object in the cache regression. These are host integration checks, not
+new GPU numerical or performance qualification; release CUDA validation remains
+the unchanged CUDA 12.9 CI gate.
+
 ## Consequences and revisit conditions
 
 The correction no longer changes class scheduling. Atomic residual recovery

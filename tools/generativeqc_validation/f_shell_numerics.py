@@ -431,7 +431,7 @@ def numerical_matrix(
         validate_evidence,
     )
 
-    from .f_shell import ROOT, source_audit
+    from .f_shell import ROOT, runtime_header_hashes, source_audit
     from .f_shell_cuda import emit_numerical_driver
 
     report = json.loads(json.dumps(report))
@@ -462,10 +462,14 @@ def numerical_matrix(
             raise ValueError("numerical gate cannot use an unverified cached object")
         if source_audit(name, report["architecture"])[0] != row["source"]:
             raise ValueError("source changed between compile and numerical tiers")
+        if compilation["identity"].get("runtime_headers") != runtime_header_hashes():
+            raise ValueError(
+                "runtime headers changed between compile and numerical tiers"
+            )
         driver_source = emit_numerical_driver(name, report["architecture"])
         driver.write_text(driver_source)
         link_started = time.monotonic()
-        link = compiler.link(driver, [obj], executable)
+        link = compiler.link(driver, [obj], executable, includes=(ROOT / "src",))
         link_seconds = time.monotonic() - link_started
         if link.returncode != 0:
             row["numerical"] = outcome(
