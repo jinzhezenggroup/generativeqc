@@ -90,20 +90,20 @@ an integrity check, not an authenticated signature.
 An initial 16-case H100 device probe used CUDA 12.8.61 and passed, but the
 repository's supported CUDA floor is 12.9. The source-frozen qualification
 therefore uses an independently copied, hash-recorded CUDA 12.9.86 toolkit,
-explicitly resolves its cuBLAS and CUDA runtime libraries, and separates
-sccache-wrapped object compilation from native linking. The 12.8 probe is
+explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
+host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `f0c02130c179ca72e8d06d459ed0f695897ee2f0`, qz Job
-`i1877-rankk-h100-1010k` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `cfda44a55c0e9ce185601da6192c369063e9da22`, qz Job
+`i1877-rankk-h100-1010n` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
-hashes, 1,367 file checks, cache receipts and negative trials remain at the
+hashes, 1,576 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.95–21.54 µs for the generated
-route and 23.89–33.69 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 12.48–21.55 µs for the generated
+route and 24.01–42.01 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -115,10 +115,15 @@ the verifier's repository root. Job `j` fixed only that manifest path and
 source-matched `c513dccb`. The subsequent review fixes bound complete source,
 toolchain and compile-recipe inputs, keep layout out of semantic identity, and
 compare dummy axes by scientific domain. Job `k` source-matched those final
-compiler/native/harness inputs at `f0c02130`; its generated header, object,
-binary and raw result hashes are recorded in the compact receipt. Later
-receipt-only commits may reuse `k` only while all qualified implementation blobs
-remain identical and latest-head review verifies that boundary.
+compiler/native/harness inputs at `f0c02130`. Independent review then found the
+host compiler, CUDA headers and ambient override inputs were not fully bound.
+Job `l` proved the task-owned Python and expected host bytes; Job `m` rejected
+the platform's ambient `LIBRARY_PATH` before source checking. Job `n` ran with
+the fixed empty override environment, regenerated identical metadata from the
+actual GPU-side inputs, and source-matched `cfda44a55`. Its generated header,
+object, binary and raw hashes are in the compact receipt. Later receipt-only
+commits may reuse `n` only while all qualified implementation blobs remain
+identical and latest-head review verifies that boundary.
 
 ## Revisit when
 
