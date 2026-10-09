@@ -209,7 +209,7 @@ void print_usage(std::ostream& out) {
          "  --method NAME            gfn2-xtb, rhf/uhf, or a native manifest DFT method\n"
          "  --basis NAME             Bundled Gaussian basis (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
-         "  --density-fitting none|cpu|cuda|auto  HF Coulomb/exchange approximation (default: "
+         "  --density-fitting none|cpu|cuda|auto  HF/DFT fitting policy (default: "
          "none)\n"
          "  --auxiliary-basis NAME   Optional bundled auxiliary basis; default is orbital basis\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
@@ -433,8 +433,6 @@ RunOptions parse_run(int argc, char** argv) {
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
-  if (is_dft(options) && options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
-    throw UsageError("native CLI DFT density fitting is not exposed by this command yet");
   if (is_dft(options) && options.forces)
     throw UsageError("native CLI DFT forces are not exposed by this command yet");
   return options;

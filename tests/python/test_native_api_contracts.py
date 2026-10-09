@@ -56,7 +56,9 @@ class NativeContractTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for header, source in zip(HEADERS, (C, CPP), strict=True):
+        for header, source in zip(
+            HEADERS, (C, CPP, "namespace generativeqc {}"), strict=True
+        ):
             path = self.root / header
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
@@ -79,9 +81,9 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 80)
-        self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 9)
-        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 33)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 82)
+        self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 11)
+        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 42)
         self.assertEqual(
             (ROOT / REFERENCE).read_text(encoding="utf-8"), render(declarations)
         )
@@ -152,6 +154,15 @@ class NativeContractTests(unittest.TestCase):
     def test_new_undocumented_cpp_operation_fails(self) -> None:
         self.mutate(HEADERS[1], "int count{};", "int count{};\n  void run() {}")
         with self.assertRaisesRegex(ContractError, "inventory drift.*Example::run"):
+            validate(self.root)
+
+    def test_new_undocumented_ks_operation_fails(self) -> None:
+        self.mutate(
+            "include/generativeqc/ks.hpp",
+            "namespace generativeqc {}",
+            "namespace generativeqc { inline void new_ks_operation() {} }",
+        )
+        with self.assertRaisesRegex(ContractError, "inventory drift.*new_ks_operation"):
             validate(self.root)
 
     def test_arbitrary_adjacent_comment_is_not_a_contract(self) -> None:
