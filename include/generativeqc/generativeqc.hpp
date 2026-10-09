@@ -6,6 +6,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -44,6 +45,25 @@ inline MethodCapabilities method_capabilities(generativeqc_method method) {
   check(generativeqc_method_get_capabilities(method, &native));
   return {native.method, native.family, native.supported_properties, native.available != 0,
           native.supports_batch != 0};
+}
+
+/** Resolve only names in the compiled native provider manifest.
+ * Compiler-only MethodIR aliases such as pbe0-rks require explicit KS composition. */
+inline generativeqc_method resolve_method(std::string_view canonical_name) {
+  generativeqc_method method{};
+  const std::string name(canonical_name);
+  check(generativeqc_method_from_name(name.c_str(), &method));
+  return method;
+}
+
+/** A zero-initialized descriptor with the required ABI header.
+ * Method-specific zero fields retain the native default contract. */
+inline generativeqc_method_descriptor default_method_descriptor(std::string_view name) {
+  generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = resolve_method(name);
+  return descriptor;
 }
 
 class Context {

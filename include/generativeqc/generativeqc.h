@@ -1264,6 +1264,17 @@ GENERATIVEQC_API const char* generativeqc_status_message(generativeqc_status sta
 GENERATIVEQC_API generativeqc_status generativeqc_method_available(generativeqc_method method,
                                                                    int32_t* available);
 
+/** Resolve an exact canonical native-manifest name (no Python or dynamic Libxc discovery).
+ * On invalid arguments or unknown names returns INVALID_ARGUMENT without writing out.
+ * An accepted name identifies a provider, not contextual method/backend/property support. */
+GENERATIVEQC_API generativeqc_status generativeqc_method_from_name(
+    const char* canonical_name, generativeqc_method* output);
+
+/** Borrow the manifest's canonical NUL-terminated name, valid for process lifetime.
+ * Unknown method IDs or NULL output return INVALID_ARGUMENT. */
+GENERATIVEQC_API generativeqc_status generativeqc_method_get_name(
+    generativeqc_method method, const char** output);
+
 /** Query method family, properties, and batch support without preparing work. */
 GENERATIVEQC_API generativeqc_status generativeqc_method_get_capabilities(
     generativeqc_method method, generativeqc_method_capabilities_descriptor* capabilities);
