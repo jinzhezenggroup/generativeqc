@@ -26,6 +26,7 @@
 #endif
 
 #include "cli/native_basis.hpp"
+#include "cli_method_catalog.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
@@ -60,9 +61,9 @@ struct RunOptions {
   bool auxiliary_basis_explicit{false};
   bool representation_explicit{false};
   bool density_fitting_explicit{false};
-  bool explicit_pbe0_rks{false};
-  bool pbe0_grid_explicit{false};
-  generativeqc::KsGrid pbe0_grid{};
+  const generativeqc::cli::method_generated::Method* composition{nullptr};
+  bool grid_explicit{false};
+  generativeqc::KsGrid grid{};
   bool forces{false};
   bool json{false};
 };
@@ -202,6 +203,7 @@ void print_usage(std::ostream& out) {
   out << "Usage:\n"
          "  generativeqc --version\n"
          "  generativeqc methods [--json]\n"
+         "  generativeqc methods --compositions [--json]\n"
          "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
          "  generativeqc profile show|clear\n"
@@ -210,7 +212,7 @@ void print_usage(std::ostream& out) {
          "  generativeqc profile install|export|diagnose ...  # reserved; Python frontend owns it\n"
          "  generativeqc autotune ...    # tuning remains in the Python frontend\n\n"
          "Native run options:\n"
-         "  --method NAME            gfn2-xtb, rhf/uhf, pbe0-rks, or a native manifest DFT method\n"
+         "  --method NAME            Native name or generated MethodIR RKS/UKS selector\n"
          "  --basis NAME             Bundled Gaussian basis (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
          "  --density-fitting none|cpu|cuda|auto  HF/DFT fitting policy (default: "
@@ -221,9 +223,9 @@ void print_usage(std::ostream& out) {
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
-         "  --pbe0-radial-points N   Radial count for explicit pbe0-rks reference grid\n"
-         "  --pbe0-polar-points N    Polar count for explicit pbe0-rks reference grid\n"
-         "  --pbe0-azimuth-points N  Azimuth count for explicit pbe0-rks reference grid\n"
+         "  --grid-radial-points N  Radial count for explicit MethodIR reference grid\n"
+         "  --grid-polar-points N   Polar count for explicit MethodIR reference grid\n"
+         "  --grid-azimuth-points N Azimuth count for explicit MethodIR reference grid\n"
          "  --forces                 Request analytic forces\n"
          "  --json                   Emit machine-readable output\n";
 }
@@ -253,6 +255,8 @@ int basis_command(int argc, char** argv) {
   }
   return 0;
 }
+
+std::string json_escape(std::string_view value);
 
 void print_methods(bool json) {
   using generativeqc::methods::generated::kMethodManifest;
@@ -284,6 +288,29 @@ void print_methods(bool json) {
                 << (capability.available ? "available" : "unavailable") << '\n';
     }
     first = false;
+  }
+  if (json) std::cout << "\n]\n";
+}
+
+void print_compositions(bool json) {
+  using generativeqc::cli::method_generated::kMethods;
+  if (json) std::cout << "[\n";
+  else std::cout << "METHOD\tSOURCE\tCPU\tCUDA\tSTATUS\n";
+  for (std::size_t i = 0; i < kMethods.size(); ++i) {
+    const auto& entry = kMethods[i];
+    if (json) {
+      if (i) std::cout << ",\n";
+      std::cout << "  {\"name\":\"" << json_escape(entry.name) << "\","
+                << "\"method_ir\":\"" << json_escape(entry.source) << "\","
+                << "\"cpu\":" << (entry.cpu ? "true" : "false") << ","
+                << "\"cuda\":" << (entry.cuda ? "true" : "false") << ","
+                << "\"reason\":\"" << json_escape(entry.reason) << "\"}";
+    } else {
+      std::cout << entry.name << '\t' << entry.source << '\t'
+                << (entry.cpu ? "yes" : "no") << '\t'
+                << (entry.cuda ? "yes" : "no") << '\t'
+                << (entry.reason.empty() ? "qualified by native preparation" : entry.reason) << '\n';
+    }
   }
   if (json) std::cout << "\n]\n";
 }
@@ -353,12 +380,8 @@ RunOptions parse_run(int argc, char** argv) {
 
     if (option == "--method") {
       const std::string selected = lower(std::string(value()));
-      options.explicit_pbe0_rks = selected == "pbe0-rks";
-      if (options.explicit_pbe0_rks) {
-        // Compiler-owned PBE0 has no native ABI ID; use the qualified PBE-RKS carrier.
-        options.method_name = "pbe0-rks";
-        options.method = GENERATIVEQC_METHOD_PBE_RKS;
-      } else if (selected == "gfn2-xtb" || selected == "gfn2") {
+      options.composition = nullptr;
+      if (selected == "gfn2-xtb" || selected == "gfn2") {
         options.method_name = "gfn2-xtb";
         options.method = GENERATIVEQC_METHOD_GFN2_XTB;
       } else if (selected == "rhf") {
@@ -372,10 +395,13 @@ RunOptions parse_run(int argc, char** argv) {
                  entry->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) {
         options.method_name = std::string(entry->name);
         options.method = entry->method;
+      } else if (const auto* compiled =
+                     generativeqc::cli::method_generated::find_method(selected)) {
+        options.method_name = std::string(compiled->name);
+        options.method = compiled->carrier;
+        options.composition = compiled;
       } else {
-        throw UsageError(
-            "native run method must be gfn2-xtb, rhf, uhf, pbe0-rks, or a listed native DFT "
-            "method");
+        throw UsageError("unknown native or compiler MethodIR method selector: " + selected);
       }
     } else if (option == "--basis") {
       options.basis_name = lower(std::string(value()));
@@ -431,15 +457,15 @@ RunOptions parse_run(int argc, char** argv) {
         options.input_angstrom = false;
       else
         throw UsageError("--units must be angstrom or bohr");
-    } else if (option == "--pbe0-radial-points") {
-      options.pbe0_grid.radial_points = parse_positive_u32(value(), "PBE0 radial points");
-      options.pbe0_grid_explicit = true;
-    } else if (option == "--pbe0-polar-points") {
-      options.pbe0_grid.angular_polar = parse_positive_u32(value(), "PBE0 polar points");
-      options.pbe0_grid_explicit = true;
-    } else if (option == "--pbe0-azimuth-points") {
-      options.pbe0_grid.angular_azimuth = parse_positive_u32(value(), "PBE0 azimuth points");
-      options.pbe0_grid_explicit = true;
+    } else if (option == "--grid-radial-points") {
+      options.grid.radial_points = parse_positive_u32(value(), "grid radial points");
+      options.grid_explicit = true;
+    } else if (option == "--grid-polar-points") {
+      options.grid.angular_polar = parse_positive_u32(value(), "grid polar points");
+      options.grid_explicit = true;
+    } else if (option == "--grid-azimuth-points") {
+      options.grid.angular_azimuth = parse_positive_u32(value(), "grid azimuth points");
+      options.grid_explicit = true;
     } else if (option == "--forces") {
       options.forces = true;
     } else if (option == "--json") {
@@ -455,8 +481,20 @@ RunOptions parse_run(int argc, char** argv) {
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
-  if (options.pbe0_grid_explicit && !options.explicit_pbe0_rks)
-    throw UsageError("PBE0 grid controls are only valid with --method pbe0-rks");
+  if (options.grid_explicit && !options.composition)
+    throw UsageError("MethodIR grid controls require a generated RKS/UKS composition");
+  if (options.composition) {
+    const bool admitted = options.backend == GENERATIVEQC_BACKEND_CUDA
+                              ? options.composition->cuda
+                              : options.composition->cpu;
+    if (!admitted) {
+      const std::string why = options.composition->reason.empty()
+                                  ? "no qualified native lowerer on the selected backend"
+                                  : std::string(options.composition->reason);
+      throw UsageError("MethodIR composition " + options.method_name + " is unavailable: " +
+                       why);
+    }
+  }
   if (is_dft(options) && options.forces)
     throw UsageError("native CLI DFT forces are not exposed by this command yet");
   return options;
@@ -526,16 +564,23 @@ int run(const RunOptions& options) {
   const generativeqc_method_descriptor method =
       method_descriptor(options, auxiliary_basis ? &*auxiliary_basis : nullptr);
   generativeqc::Calculation calculation = [&]() -> generativeqc::Calculation {
-    if (!options.explicit_pbe0_rks) return {context, system, method};
-    // Same explicit PBE0 scientific graph and SCF domain as the installed C++ SDK example.
-    // Only the carrier is a native ABI ID; PBE0 itself is not a manifest method.
-    generativeqc::KsComposition pbe0(GENERATIVEQC_METHOD_PBE_RKS,
-                                     "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
-    pbe0.set_grid(options.pbe0_grid)
-        .add_semilocal("GGA_C_PBE", 1.0)
-        .add_semilocal("GGA_X_PBE", 0.75)
-        .add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
-    return pbe0.prepare(context, system, method);
+    const auto* row = options.composition;
+    if (!row) return {context, system, method};
+    // Build the exact build-time-compiled primitive graph through one SDK owner.
+    // Preparation retains authority over basis, device, provider, and SCF admission.
+    generativeqc::KsComposition composed(row->carrier, std::string(row->domain), row->spin);
+    composed.set_grid(options.grid);
+    using namespace generativeqc::cli::method_generated;
+    for (std::uint32_t i = 0; i < row->component_count; ++i) {
+      const auto& term = kComponents[row->component_offset + i];
+      composed.add_semilocal(std::string(term.name), term.coefficient);
+    }
+    for (std::uint32_t i = 0; i < row->exchange_count; ++i) {
+      const auto& term = kExchanges[row->exchange_offset + i];
+      composed.add_exact_exchange(
+          static_cast<generativeqc_ks_exchange_operator>(term.kind), term.coefficient, term.omega);
+    }
+    return composed.prepare(context, system, method);
   }();
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
@@ -545,6 +590,8 @@ int run(const RunOptions& options) {
   if (options.json) {
     std::cout << "{\"method\":\"" << options.method_name << "\","
               << "\"backend\":\"" << backend_name(result.executed_backend) << "\"";
+    if (options.composition)
+      std::cout << ",\"method_ir_identity\":\"" << options.composition->identity << "\"";
     if (!is_gfn2(options)) {
       std::cout << ",\"basis\":\"" << options.basis_name << "\","
                 << "\"representation\":\"" << representation_name(options.representation)
@@ -572,6 +619,8 @@ int run(const RunOptions& options) {
   } else {
     std::cout << "method: " << options.method_name << '\n'
               << "backend: " << backend_name(result.executed_backend) << '\n';
+    if (options.composition)
+      std::cout << "method_ir_identity: " << options.composition->identity << '\n';
     if (!is_gfn2(options)) {
       std::cout << "basis: " << options.basis_name << '\n'
                 << "representation: " << representation_name(options.representation) << '\n'
@@ -880,9 +929,18 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (command == "methods") {
-      if (argc > 3 || (argc == 3 && std::string_view(argv[2]) != "--json"))
-        throw UsageError("methods accepts only the optional --json flag");
-      print_methods(argc == 3);
+      if (argc == 3 && std::string_view(argv[2]) == "--json") {
+        print_methods(true);
+      } else if (argc == 2) {
+        print_methods(false);
+      } else if (argc == 3 && std::string_view(argv[2]) == "--compositions") {
+        print_compositions(false);
+      } else if (argc == 4 && std::string_view(argv[2]) == "--compositions" &&
+                 std::string_view(argv[3]) == "--json") {
+        print_compositions(true);
+      } else {
+        throw UsageError("methods accepts --json or --compositions [--json]");
+      }
       return 0;
     }
     if (command == "basis") return basis_command(argc, argv);
