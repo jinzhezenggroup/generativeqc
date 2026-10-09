@@ -1,0 +1,16 @@
+{
+  "schema": "generativeqc.df-cc-occupied-spectator-validation.v1",
+  "decision_scope": "numerical",
+  "host_scientific_and_integer_metadata_tests": {"passed": 26},
+  "host_action_and_generation_tests": {"passed": 7},
+  "host_constructor_failure_injection": {"passed": 1, "includes_pair_first_oom": true},
+  "host_provider_lifetime_tests": {"passed": 5},
+  "gpu_projection_tests": {"slurm_job": "2802", "passed": 6},
+  "gpu_native_solver_tests": {"slurm_job": "2802", "passed": 36, "skipped": 1},
+  "gpu_projection_memcheck": {"slurm_job": "2802", "errors": 0},
+  "final_library_tests": {"slurm_job": "2804", "passed": 9},
+  "complete_endpoints": {"slurm_job": "2805", "order": ["base", "candidate", "candidate", "base"], "all_numerical_gates_passed": true, "all_actual_contraction_deltas_exact": true},
+  "compiler_structure": {"modules": 509, "dependency_errors": 0},
+  "original_generated_artifacts_byte_identical": 11,
+  "qualification_limits": ["energy-only endpoint", "two observations per selection", "not shared formal or global performance promotion", "no force/Lambda/orbital-response promotion", "CuMetal optional-path refusal"]
+}

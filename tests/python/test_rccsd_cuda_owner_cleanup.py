@@ -72,6 +72,7 @@ PREFIX = r"""
 #include "cc/solver.hpp"
 #include "cc/df_plan.hpp"
 #include "generated_rccsd_cpu.hpp"
+#include "generated_df_ccsd_spectator_pairs_cpu.hpp"
 #include "runtime/allocation_measurement.hpp"
 #include "solver/diis_ring.hpp"
 #include <functional>
@@ -211,6 +212,14 @@ void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t
   prepared_batch=batch; prepared_tail=tail;
 }
 }
+namespace dfpairs {
+struct CudaState : dfhoist::CudaState {
+  tensor::PreparedContractions paired_contractions, paired_batched_contractions;
+};
+constexpr std::size_t contraction_host_bytes(std::size_t variants) { return 768+variants*512; }
+void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t,
+                          std::size_t,std::size_t&,std::size_t&) {}
+}
 }
 std::size_t problem_host_bytes(const Problem&) { return 128; }
 std::uint64_t denominator_identity(const Problem&) { return 1; }
@@ -253,6 +262,11 @@ int main() {
       }
       if (good.replay_matrix)
         expected_capacity+=generativeqc::cc::generated::df::replay_binding_host_bytes();
+      if (good.pairs_enabled) {
+        const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
+        expected_capacity+=generativeqc::cc::generated::dfpairs::contraction_host_bytes(
+          batch>1 ? 1+(tail>1) : 0);
+      }
       if (good.conventional_prepared) {
         expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
           generativeqc::tensor::PreparedContractions::storage_bytes(
@@ -302,6 +316,7 @@ int main() {
     arena_alloc_failures = failures;
     generativeqc::cc::SolverOptions options;
     options.df_replay_matrix_gemm=false;
+    options.df_occupied_pairs=false;
     { generativeqc::cc::Owner retry(p, options, 0);
       if (retry.plan.matrix_gemm != (failures < 2)) return 12;
       if (retry.plan.auxiliary_batch_size != (failures == 0 ? 2U : 1U)) return 13;
@@ -314,6 +329,7 @@ int main() {
     calls = fail_at = 0;
     arena_alloc_failures = failures;
     generativeqc::cc::SolverOptions options;
+    options.df_occupied_pairs=false;
     { generativeqc::cc::Owner retry(p, options, 0);
       if (retry.replay_matrix != (failures == 0)) return 37;
       if (retry.plan.matrix_gemm != (failures < 3)) return 38;
@@ -349,9 +365,23 @@ int main() {
   p.ovvv.assign(432,1.);p.ovoo.assign(48,1.);p.oooo.assign(16,1.);p.vvvv.assign(1296,1.);
   p.d1.assign(12,-2.);p.d2.assign(144,-4.);p.initial_t1.assign(12,0.);p.initial_t2.assign(144,0.);
   p.df_bov.assign(192,.1);p.df_bvv.assign(576,.1);
+  // New optional pair storage yields before the original replay and tile.
+  for (int failures : {0,1,2,3,4}) {
+    calls=fail_at=0;arena_alloc_failures=failures;
+    generativeqc::cc::SolverOptions options;
+    {generativeqc::cc::Owner retry(p,options,0);
+      if(retry.pairs_enabled!=(failures==0)) return 43;
+      if(retry.replay_matrix!=(failures<2)) return 44;
+      if(retry.plan.matrix_gemm!=(failures<4)) return 45;
+      if(retry.plan.auxiliary_batch_size!=(failures<3 ? 8U : 1U)) return 46;
+      if(retry.diagnostic.df_pair_resource_refused!=(failures>0)) return 47;
+    }
+    if(streams || events || allocations || handles || device!=7) return 48;
+  }
   for(const bool packed:{false,true}) {
     generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=packed;
     options.df_replay_matrix_gemm=false;
+    options.df_occupied_pairs=false;
     std::size_t wide_base=0,history_bytes=0,narrow_total=0,wide_non_history_capacity=0;
     {generativeqc::cc::Owner wide(p,options,0);
       wide_base=wide.layout.total;history_bytes=wide.layout.history_bytes;
