@@ -315,6 +315,7 @@ int main(int argc, char** argv) {
     field("pre_cartesian_functions", automatic_guess.cartesian_functions);
     field("pre_work_amortization_ratio", automatic_guess.work_amortization_ratio);
     field("pre_preparation_peak_bytes", automatic_guess.preparation_peak_bytes);
+    field("pre_resident_plan_peak_bytes", automatic_guess.resident_plan_peak_bytes);
     field("pre_value_budget_bytes", automatic_guess.value_budget_bytes);
     field("df_fock_builds", "null");
     field("pre_converged", pre_converged ? "true" : "false");

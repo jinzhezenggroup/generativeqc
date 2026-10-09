@@ -37,7 +37,12 @@ Resolve JK shape without allocating the provisional auxiliary. Use the shared
 Cartesian/public dimensions and raw JK shell counts before preparing it. Reject
 when that preparation peak exceeds the existing capped allowance. The native
 DF tile/SCF planner remains the authoritative complete reservation owner and
-retains its explicit resource refusal. The 32-cycle/512-MiB limits, minimum
+retains its explicit resource refusal. Qualification additionally showed that
+streamed preparation can cost more than the saved exact Focks. Admission now
+queries that same source-backed dense/packed planner with actual combined
+orbital/auxiliary/dummy metadata and lazy DIIS charges, and requires full retained
+three-center storage before generating factors. This is a resource/layout guard,
+not a reintroduced AO upper bound. The 32-cycle/512-MiB limits, minimum
 256-MiB available allowance, density validation and cold retries are unchanged.
 
 Expose source/work/resource admission diagnostics in the benchmark, including
@@ -114,6 +119,121 @@ refusal or seeded-Direct fallback occurs in the admitted cases. DF physical-Fock
 counts remain unknown/null; this statement does not exclude historical internal
 DF retries. The small-case skips and the useful 144-AO measurements demonstrate
 why 200 was not an experimentally established lower crossover.
+
+### Repaired-master work-only policy, before resident admission
+
+The fresh build starts from merged master
+`d02fb5e0c1d5d6c6f6f22ac7ee620d1f6f3c359c` plus the current admission change.
+Its probe/library SHA-256 identities are
+`8fe6c6a50468d4eb642173dfa944bd11767ff6ed074d04f49531a73b07c76c74` /
+`bd433b0a2e3e0ecd68912fa9b54dde74df50b17dce477c8eb946cb7df7264773`.
+Toolchain and matched native descriptor controls remain as above. The retained
+sources exactly match immutable commit `7cc745041`; all 12 scientific/benchmark
+hashes are verified against its Git blobs. To reconstruct the pre-repair cohort,
+apply the retained reverse repair patch to that commit. The original longer
+admission patch remains recoverable in the same commit's Git history. The current
+resident-only change has its own forward patch against `7cc745041`. These deltas
+are not standalone patches against master. Deterministic gzip stores complete reviewed
+records within the repository's aggregate evidence budget, without changing any
+of the seven original #2162 receipt members or publishing external archives.
+
+Slurm 2786 supplies one fresh-process complete E+F pair per case, not another
+five-repeat cohort and not pooled with the historical measurements:
+
+| Case | Direct RHF (s) | Auto RHF incl. DF (s) | Direct E+F (s) | Auto E+F (s) | Direct physical Focks |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 144-AO ethane | 23.761879381 | 16.356134614 | 106.234459272 | 99.032049898 | 18 → 12 |
+| 230-AO ethane | 130.387988312 | 91.270814356 | 524.481676108 | 488.356870697 | 20 → 13 |
+
+Complete E+F decreases **6.7797% / 6.8877%**, including the now genuinely bounded
+single-attempt DF work. Each reports 13 DF SCF cycles with complete preliminary
+cycle counters, no refusal or seeded-Direct fallback, and unknown/null DF physical
+Fock counts. Paired state/full-force, fresh independent conventional RHF, independent
+same-Hamiltonian correlation energy and both directional-force steps pass the
+unchanged gates. Maximum independent correlation energy error is
+`5.4427573559223674e-12`; maximum two-step directional-force error is
+`9.239848795805639e-9`. Physical translation and response residual audits pass.
+
+The same finite GPU allocation passes **96 selected host/native tests** in
+138.73 s, including the inherited exhausted-guess/single-attempt regression and
+ordinary-DF retry-preservation tests. The corresponding host-only run passes
+84 tests with 12 optional CUDA/PySCF skips. Staged hooks and warnings-as-errors
+Sphinx builds pass; the admission change does not modify generic compiler
+`performance`/`production` promotion states or public CC defaults.
+
+### Rejected streamed initialization
+
+Slurm 2787 tests 414-AO butane (470 Cartesian / 876 JK functions) with the
+repaired work-only policy. The 512-MiB plan streams factors. Preliminary DF takes
+`621.562225737` s / 16 SCF cycles; exact Direct work falls from **23 → 18** physical
+Focks, but inclusive RHF rises **1412.964970839 → 1727.131883383 s**. This is a
+**performance rejection**, not evidence supporting a larger default domain.
+The dense-volume heuristic alone misses this recomputation cost.
+
+Paired reference energy/density/orbital differences are
+`1.7053025658242404e-13` / `6.354180792644826e-10` / `1.2740364319085984e-11`,
+but independent RHF density/orbital maxima are `1.995793696973891e-9` /
+`2.137697463489019e-9`, exceeding the unchanged `1e-9` gates. The cold control
+also contributes to these independent failures. Do not loosen the gates or call
+this case fully numerically qualified. The separate 414-AO correlation oracle
+hits its finite 2:30 Slurm limit; an attempted finite extension is denied and
+no independent correlation result is fabricated. Larger complete-force and
+independent correlation qualification remain open work, not prerequisites that
+have silently been declared successful.
+
+The current policy uses the shared executable resident-storage decision to skip
+this streamed proposal before any DF integral/SCF work. It does not raise the
+preliminary memory cap or alter exact-reference convergence controls to rescue
+this case. The qualifying 144/230-AO full E+F observations remain distinct from
+this rejection and from subsequent resident-guard validation.
+
+The separate pre-repair complete **energy-only** pair (Slurm 2783, historical
+probe/library identities above) reaches the same rejection: **4739.969042576 →
+5070.842185943 s**, about 7% slower despite **23 → 18** exact physical Focks.
+Its inclusive RHF is `1409.678828603 → 1723.071871936 s`, including
+`619.865197047 s` of DF work. Paired total-energy error is
+`2.5579538487363607e-13`; independent RHF gates still fail as above and no
+independent correlation or complete-force qualification is claimed. This is
+the complete-endpoint evidence against promoting streamed initialization, not
+an isolated-kernel inference. Historical DF cycles still have the documented
+retry-reporting limitation.
+
+### Final resident-only policy qualification
+
+Slurm **2788** on October 10, 2026 supplies new, separate complete E+F pairs
+after adding the resident-layout admission. Probe/library identities are
+`1f7fd6f62b1aaab88e0973e2bf99d19bf35255a3b2ba54a68c55afae0e503c04` /
+`26c3e4b90c1ea5168de38cd4b97a59baa168f9f2a3d5b0f248eb08f9c34df015`.
+The retained forward patch against `7cc745041` reproduces all 12 measured
+source hashes; original #2162 receipt members remain byte-identical.
+
+| Case | Direct RHF (s) | Auto RHF incl. DF (s) | Direct E+F (s) | Auto E+F (s) | Direct physical Focks |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 144-AO ethane | 23.468501282 | 16.450619956 | 106.274643528 | 99.403362322 | 18 → 12 |
+| 230-AO ethane | 130.483474699 | 87.504512813 | 522.489890368 | 477.593147083 | 20 → 13 |
+
+Both complete endpoints improve (about **6.5% / 8.6%**). Each executes 13
+single-attempt DF SCF cycles without refusal or seeded-Direct fallback. All
+unchanged paired state/full-force, independent RHF, independent correlation
+energy, two-step directional-force, translation and response gates pass.
+Maximum paired force error is `3.2712099695686447e-10`; maximum independent
+energy error is `5.4427573559223674e-12`, and maximum directional-force error
+is `9.239845340236474e-9` under the unchanged `3e-7` gate.
+
+The actual native helper's 414-AO admission query now returns **BudgetSkipped**
+before any DF work: **zero DF cycles/seconds**, detached density empty, and
+`0.000172461 s` complete query time. Its selected streamed value plan has
+532,834,339 workspace bytes under 536,870,912 available bytes, but cannot retain
+the full tensor. A fitting memory limit alone would have admitted that slow
+schedule; the executable storage decision rejects it. This cheap query is an
+admission regression, **not another complete 414-AO endpoint benchmark or an
+independent scientific qualification of that case**.
+
+The same finite GPU allocation passes **96 selected tests** in 138.84 s;
+host-only validation and staged hooks/Sphinx are retained separately. Reviewed
+full-precision records reside in `work-admission-resident.json.gz` in the
+existing benchmark publication, separately from historical and rejected
+work-only cohorts. No universal benefit claim or fixed AO interval is restored.
 
 ## Revisit when
 

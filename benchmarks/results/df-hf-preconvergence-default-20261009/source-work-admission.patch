@@ -1,228 +1,57 @@
 --- a/benchmarks/df_hf_preconvergence.cpp
 +++ b/benchmarks/df_hf_preconvergence.cpp
-@@ -73,5 +73,4 @@
-       throw std::invalid_argument("invalid mode");
--    if (mode == "auto-direct" && (argc > 6 || endpoint == "hf"))
--      throw std::invalid_argument(
--          "auto-direct qualifies native energy/forces with fixed policy controls");
-+    if (mode == "auto-direct" && argc > 6)
-+      throw std::invalid_argument("auto-direct uses fixed policy controls");
-     if (endpoint != "hf" && endpoint != "energy" && endpoint != "forces")
-@@ -126,2 +125,17 @@
+@@ -125,3 +125,2 @@
      bool pre_converged{}, pre_fallback{};
-+    generativeqc::methods::detail::DFHFGuess automatic_guess;
-+    if (mode == "auto-direct" && endpoint == "hf") {
-+      generativeqc_method_descriptor descriptor{};
-+      descriptor.correlation_memory_budget_bytes = budget;
-+      automatic_guess = generativeqc::methods::detail::prepare_df_hf_guess(
-+          orbital, correlation, descriptor, 0, execution.device_id());
-+      seed = std::move(automatic_guess.density);
-+      pre_seconds = automatic_guess.seconds;
-+      pre_cycles = automatic_guess.iterations;
-+      native_jk_functions = automatic_guess.auxiliary_functions;
-+      pre_converged =
-+          automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
-+      pre_fallback =
-+          automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Failed;
-+    }
-     if (mode == "df-direct") {
-@@ -212,3 +226,3 @@
-       descriptor.correlation_memory_budget_bytes = budget;
--      const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
-+      auto result = generativeqc::methods::detail::run_df_ccsdt_native(
-           execution, orbital, correlation, descriptor, endpoint == "forces", true, true, true, true,
-@@ -217,10 +231,11 @@
-       if (mode == "auto-direct") {
--        pre_seconds = result.reference_guess.seconds;
-+        automatic_guess = std::move(result.reference_guess);
-+        pre_seconds = automatic_guess.seconds;
-         direct_seconds -= pre_seconds;
--        pre_cycles = result.reference_guess.iterations;
--        native_jk_functions = result.reference_guess.auxiliary_functions;
-+        pre_cycles = automatic_guess.iterations;
-+        native_jk_functions = automatic_guess.auxiliary_functions;
-         pre_converged =
--            result.reference_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
--        pre_fallback = result.reference_guess.outcome ==
--                       generativeqc::methods::detail::DFHFGuessOutcome::Failed;
-+            automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
-+        pre_fallback =
-+            automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Failed;
-       }
-@@ -292,2 +307,7 @@
-     field("pre_iterations", pre_cycles);
-+    field("pre_policy_outcome", static_cast<unsigned>(automatic_guess.outcome));
-+    field("pre_cartesian_functions", automatic_guess.cartesian_functions);
-+    field("pre_work_amortization_ratio", automatic_guess.work_amortization_ratio);
-+    field("pre_preparation_peak_bytes", automatic_guess.preparation_peak_bytes);
-+    field("pre_value_budget_bytes", automatic_guess.value_budget_bytes);
-     field("df_fock_builds", "null");
---- a/benchmarks/df_hf_preconvergence.py
-+++ b/benchmarks/df_hf_preconvergence.py
-@@ -67,3 +67,3 @@
-         return
--    if case != "propane322":
-+    if case not in {"propane322", "butane414", "methane34", "ethane58", "ethane144"}:
-         raise ValueError("unknown qualification case")
-@@ -84,4 +84,45 @@
-     ]
--    mol = gto.M(atom=atoms, basis="aug-cc-pvtz", unit="Angstrom", verbose=0)
--    auxiliary = df.addons.make_auxmol(mol, "aug-cc-pvtz-ri")
-+    orbital_basis, auxiliary_basis, unit = "aug-cc-pvtz", "aug-cc-pvtz-ri", "Angstrom"
-+    if case == "butane414":
-+        atoms = [
-+            ("C", (-1.89, 0.44, 0)),
-+            ("C", (-0.63, -0.44, 0)),
-+            ("C", (0.63, 0.44, 0)),
-+            ("C", (1.89, -0.44, 0)),
-+            ("H", (-2.80, -0.12, 0)),
-+            ("H", (-1.89, 1.07, 0.89)),
-+            ("H", (-1.89, 1.07, -0.89)),
-+            ("H", (-0.63, -1.07, 0.89)),
-+            ("H", (-0.63, -1.07, -0.89)),
-+            ("H", (0.63, 1.07, 0.89)),
-+            ("H", (0.63, 1.07, -0.89)),
-+            ("H", (2.80, 0.12, 0)),
-+            ("H", (1.89, -1.07, 0.89)),
-+            ("H", (1.89, -1.07, -0.89)),
-+        ]
-+    elif case == "methane34":
-+        atoms = [
-+            ("C", (0, 0, 0)),
-+            ("H", (0.6293, 0.6293, 0.6293)),
-+            ("H", (-0.6293, -0.6293, 0.6293)),
-+            ("H", (-0.6293, 0.6293, -0.6293)),
-+            ("H", (0.6293, -0.6293, -0.6293)),
-+        ]
-+        orbital_basis, auxiliary_basis = "cc-pvdz", "cc-pvdz-ri"
-+    elif case in {"ethane58", "ethane144"}:
-+        source = (
-+            Path(__file__).resolve().parent
-+            / "results/df-lambda-gemm-20261004/ethane230.input"
-+        )
-+        original = read_molecule(source)
-+        atoms = list(
-+            zip(
-+                [original.atom_symbol(index) for index in range(original.natm)],
-+                original.atom_coords(),
-+            )
-+        )
-+        orbital_basis = "cc-pvdz" if case == "ethane58" else "cc-pvtz"
-+        auxiliary_basis, unit = orbital_basis + "-ri", "Bohr"
-+    mol = gto.M(atom=atoms, basis=orbital_basis, unit=unit, verbose=0)
-+    auxiliary = df.addons.make_auxmol(mol, auxiliary_basis)
- 
-@@ -478,3 +519,13 @@
-     geometry.add_argument(
--        "--case", choices=("moved", "budget8", "propane322"), required=True
-+        "--case",
-+        choices=(
-+            "moved",
-+            "budget8",
-+            "propane322",
-+            "butane414",
-+            "methane34",
-+            "ethane58",
-+            "ethane144",
-+        ),
-+        required=True,
-     )
+-    bool pre_work_counters_complete{true};
+     generativeqc::methods::detail::DFHFGuess automatic_guess;
+@@ -135,3 +134,2 @@
+       pre_cycles = automatic_guess.iterations;
+-      pre_work_counters_complete = automatic_guess.work_counters_complete;
+       native_jk_functions = automatic_guess.auxiliary_functions;
+@@ -146,3 +144,2 @@
+       pre_options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+-      pre_options.density_fitting_host_retry = false;
+       pre_options.density_fitting_memory_budget_bytes = budget;
+@@ -169,3 +166,2 @@
+         pre_fallback = true;
+-        pre_work_counters_complete = false;
+         std::cerr << "DF preconvergence refused: " << error.what() << '\n';
+@@ -239,3 +235,2 @@
+         pre_cycles = automatic_guess.iterations;
+-        pre_work_counters_complete = automatic_guess.work_counters_complete;
+         native_jk_functions = automatic_guess.auxiliary_functions;
+@@ -311,4 +306,3 @@
+     field("pre_tolerance", pre_tolerance);
+-    field("pre_iterations", pre_work_counters_complete ? std::to_string(pre_cycles) : "null");
+-    field("pre_work_counters_complete", pre_work_counters_complete ? "true" : "false");
++    field("pre_iterations", pre_cycles);
+     field("pre_policy_outcome", static_cast<unsigned>(automatic_guess.outcome));
 --- a/src/methods/df_hf_guess.cpp
 +++ b/src/methods/df_hf_guess.cpp
-@@ -14,2 +14,4 @@
- #include "posthf/capacity.hpp"
-+#include "scf/cuda/reference_eri_policy.hpp"
-+#include "scf/df_preparation_budget.hpp"
- #include "scf/mean_field.hpp"
-@@ -30,3 +32,3 @@
-   const auto functions = molecule::ao_count(system);
--  if (functions < 200 || functions > 400 ||
-+  if (!functions || system.atoms.empty() ||
-       system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL || system.multiplicity != 1 ||
-@@ -39,2 +41,31 @@
-     return guess;
-+  const auto maximum_angular = std::max_element(
-+      system.shells.begin(), system.shells.end(), [](const auto& left, const auto& right) {
-+        return left.angular_momentum < right.angular_momentum;
-+      });
-+  guess.outcome = DFHFGuessOutcome::CacheSkipped;
-+  if (!scf::cuda_execution::reference_quartet_direct(functions, maximum_angular->angular_momentum))
-+    return guess;
-+
-+  constexpr unsigned preliminary_iterations = 32;
-+  std::size_t auxiliary_shells{};
-+  for (const auto& atom : system.atoms) {
-+    for (const auto& entry : df_hf_guess_basis) {
-+      if (entry.atomic_number != atom.atomic_number) continue;
-+      auxiliary_shells = posthf::checked_add(auxiliary_shells, 1);
-+      guess.auxiliary_functions =
-+          posthf::checked_add(guess.auxiliary_functions, 2 * entry.angular_momentum + 1);
-+    }
-+  }
-+  guess.cartesian_functions = molecule::cartesian_ao_count(system);
-+  // This deliberately conservative dense-volume screen is a performance heuristic,
-+  // not a measured crossover or an integral/Fock census. Normalize the full four-
-+  // center Cartesian volume by the maximum provisional three-center sweep volume;
-+  // the existing 32-cycle work cap supplies the amortization horizon, not an AO cutoff.
-+  const long double cartesian = guess.cartesian_functions;
-+  guess.work_amortization_ratio = static_cast<double>(
-+      cartesian * cartesian /
-+      (preliminary_iterations * static_cast<long double>(guess.auxiliary_functions)));
-+  guess.outcome = DFHFGuessOutcome::WorkSkipped;
-+  if (guess.work_amortization_ratio < 1.0) return guess;
-   const auto requested = descriptor.correlation_memory_budget_bytes;
-@@ -48,2 +79,12 @@
-   if (outside >= budget || budget - outside < (256ULL << 20)) return guess;
-+  guess.value_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
-+  std::size_t orbital_primitives{};
-+  for (const auto& shell : system.shells)
-+    orbital_primitives = posthf::checked_add(orbital_primitives, shell.primitives.size());
-+  guess.preparation_peak_bytes =
-+      scf::df_preparation_storage({guess.cartesian_functions, functions, system.atoms.size(),
-+                                   system.shells.size(), orbital_primitives, auxiliary_shells,
-+                                   auxiliary_shells, false, true})
-+          .peak_bytes;
-+  if (guess.preparation_peak_bytes > guess.value_budget_bytes) return guess;
- 
-@@ -70,5 +111,4 @@
-       throw std::invalid_argument(detail);
--    guess.auxiliary_functions = molecule::ao_count(auxiliary);
-     scf::ScfOptions options;
--    options.max_iterations = 32;
-+    options.max_iterations = preliminary_iterations;
-     options.diis_history = descriptor.diis_history ? descriptor.diis_history : 8;
-@@ -81,3 +121,3 @@
+@@ -121,3 +121,2 @@
      options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
--    options.reference_memory_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
-+    options.reference_memory_budget_bytes = guess.value_budget_bytes;
-     options.density_fitting_memory_budget_bytes = options.reference_memory_budget_bytes;
---- a/src/methods/df_hf_guess.hpp
-+++ b/src/methods/df_hf_guess.hpp
-@@ -8,3 +8,11 @@
- namespace generativeqc::methods::detail {
--enum class DFHFGuessOutcome { Disabled, Ineligible, BudgetSkipped, Failed, Used };
-+enum class DFHFGuessOutcome {
-+  Disabled,
-+  Ineligible,
-+  CacheSkipped,
-+  WorkSkipped,
-+  BudgetSkipped,
-+  Failed,
-+  Used
-+};
- 
-@@ -15,3 +23,8 @@
-   unsigned iterations{};
-+  std::size_t cartesian_functions{};
-   std::size_t auxiliary_functions{};
-+  std::size_t preparation_peak_bytes{};
-+  std::size_t value_budget_bytes{};
-+  /** Dense four-center / bounded three-center sweep volume; not a timing estimate. */
-+  double work_amortization_ratio{};
-   double seconds{};
-@@ -20,3 +33,4 @@
- 
--/** Bounded native JK-fit preparation for the qualified Direct-RHF cold-start domain.
-+/** Bounded native JK-fit preparation with compatibility, source-path and work guards.
-+ * Skip cache-eligible exact references and unamortized dense DF work, not AO intervals.
-  * Live correlation metadata and optional response caches are charged before admission.
+-    options.density_fitting_host_retry = false;
+     options.reference_memory_budget_bytes = guess.value_budget_bytes;
+--- a/src/scf/rhf.cpp
++++ b/src/scf/rhf.cpp
+@@ -1994,11 +1994,2 @@
+     }
+-    if (!options.density_fitting_host_retry) {
+-      if (device_status != GENERATIVEQC_STATUS_SUCCESS || device_records.size() != 1)
+-        throw std::runtime_error(detail.empty() ? "CUDA DF preliminary SCF refused" : detail);
+-      result.iterations = device_records.front().iterations;
+-      result.energy = device_records.front().energy;
+-      result.energy_change = device_records.front().energy_change;
+-      result.density_rms = device_records.front().density_rms;
+-      return result;
+-    }
+   }
+--- a/src/scf/types.hpp
++++ b/src/scf/types.hpp
+@@ -124,6 +124,2 @@
+   std::size_t density_fitting_memory_budget_bytes{};
+-  /** Single-system CUDA RHF may retry its compact solve with host-orchestrated
+-   * DIIS. Provisional density guesses disable this second SCF attempt so their
+-   * iteration limit bounds all preliminary SCF work. */
+-  bool density_fitting_host_retry{true};
+   /** Correlated energy consumers require values-only, bounded direct RHF. */

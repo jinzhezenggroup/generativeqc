@@ -343,6 +343,8 @@ def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
         "guess.work_amortization_ratio < 1.0",
         "cartesian * cartesian",
         "guess.preparation_peak_bytes > guess.value_budget_bytes",
+        "scf::plan_requested_density_fitting_tiles(",
+        "!plan.stores_full_three_center",
         "system.charge != 0",
         "preliminary_iterations = 32",
         "options.max_iterations = preliminary_iterations",

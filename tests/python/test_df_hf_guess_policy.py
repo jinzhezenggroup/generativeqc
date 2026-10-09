@@ -1,4 +1,4 @@
-"""Execute the native default policy with only its expensive DF boundary injected."""
+"""Execute the native policy with SCF and resource-planner boundaries injected."""
 
 import shutil
 import subprocess
@@ -24,8 +24,10 @@ def test_native_df_guess_admission_and_refusal(tmp_path: Path) -> None:
 #include "methods/df_hf_guess.hpp"
 #include "molecule/basis.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/density_fitting.hpp"
 using namespace generativeqc;
 int calls{}, behavior{};
+bool resident = true;
 namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& system) noexcept {
   std::size_t functions{};
@@ -46,6 +48,18 @@ generativeqc_status validate_and_normalize(core::System& system, std::string&) {
 }
 }
 namespace generativeqc::scf {
+std::size_t density_fitting_source_metadata_bytes(std::size_t, std::size_t, std::size_t,
+    std::size_t, std::size_t, std::size_t) {return 0;}
+std::size_t density_fitting_scf_diis_device_bytes(std::size_t, std::size_t, unsigned) noexcept {return 0;}
+DensityFittingTilePlan plan_requested_density_fitting_tiles(DfPairStorageRequest, std::size_t,
+    std::size_t, std::size_t, std::size_t, std::size_t, std::size_t,
+    std::size_t, bool generated, std::size_t rank) {
+  assert(generated && rank > 0);
+  DensityFittingTilePlan plan;
+  plan.stores_full_three_center = resident;
+  plan.peak_workspace_bytes = 128ULL << 20;
+  return plan;
+}
 ScfResult run_rhf_density_fitting_cuda(
     const core::System&, const core::System&, const ScfOptions& options, int device,
     const std::vector<double>* density, initial_guess::OverlapOrthogonalizer*) {
@@ -108,6 +122,9 @@ int main() {
     assert(prepare().outcome == DFHFGuessOutcome::Used);
   }
   assert(calls == 3);
+  resident = false;
+  assert(prepare().outcome == DFHFGuessOutcome::BudgetSkipped && calls == 3);
+  resident = true;
   source.shells.resize(34);
   assert(prepare().outcome == DFHFGuessOutcome::CacheSkipped);
   source.shells[0].angular_momentum = 2;

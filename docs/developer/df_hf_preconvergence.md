@@ -40,13 +40,17 @@ charging live correlation auxiliary metadata and any retained response cache;
 less than 256 MiB available skips preparation. The shared DF preparation
 storage estimator must also admit the actual Cartesian/public matrices,
 primitive/shell metadata and JK auxiliary metadata under that cap. The native
+source-backed dense/packed tile planner must first select full retained
+three-center storage under the same metadata and lazy-DIIS reservations as
+native SCF. A streamed proposal is skipped before factor generation: bounded
+memory alone does not imply bounded work or profitable initialization. The native
 DF tile/SCF planner remains authoritative for subsequent reservations and may
-stream factors or refuse the guess; preflight does not replace its complete
+refuse the guess; preflight does not replace its complete
 live-owner accounting. Its source and SCF owners are
 destroyed before Direct SCF. Only the detached density remains, and its
 **capacity** is reserved in every subsequent phase.
 
-Cache-eligible or unamortized-work cases, unsupported topology and tight budgets retain cold
+Cache-eligible, unamortized-work or streamed-plan cases, unsupported topology and tight budgets retain cold
 Direct RHF. An explicit density seed takes precedence. Refused/nonconverged
 DF preparation retains cold Direct; a failed seeded Direct solve invokes the
 existing bounded cold retry, never acceptance after one exact Fock build.
@@ -144,8 +148,10 @@ reconstructed from the successful attempt's iteration count.
 `endpoint_seconds` includes context initialization, DF work and the complete
 cold requested native endpoint through host-returned forces. Input parsing,
 post-timing orthogonality audits and JSON serialization are outside that timer.
-`native_seconds` omits preliminary DF work and must not be presented as the
-accelerated complete endpoint.
+`native_seconds` measures only the native correlated owner: it includes that
+owner's automatic DF guess, but excludes context initialization and an explicit
+`df-direct` guess prepared outside the owner. It is not the complete cold endpoint
+and must not replace `endpoint_seconds` in acceleration claims.
 
 Run `oracle` for a fresh independent PySCF conventional RHF and `summarize`
 for all-repeat-pair gates. Supply `--correlation-oracle` and
@@ -175,6 +181,9 @@ strict exact reference, but does not qualify correlation or force performance.
 The `pre_policy_outcome` diagnostic distinguishes compatibility/cache/work/budget
 skips from a used or failed preparation. JK auxiliary dimensions in a skipped
 record describe the proposed metadata shape, not executed integral work.
+`pre_resident_plan_peak_bytes` describes the previewed value-plan workspace,
+including a streamed proposal that is rejected; it is not a measured allocation
+or proof that the rejected proposal has resident factors.
 Additional qualification inputs can be reproduced without an energy/SCF oracle:
 
 ```bash
