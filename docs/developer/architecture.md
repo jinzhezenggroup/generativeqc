@@ -346,6 +346,32 @@ and returning all three derivatives from one exact shell-class recurrence.
 Both paths avoid repeating the
 geometry-independent ERI value work for x, y, and z while preserving the same
 screening and symmetry domain.
+
+Prepared full-range Direct stationary integral exports partition an admitted
+materialized dddd consumer from the generic bounded force queue when the packed
+basis proves maximum shell angular momentum two. Order eight then means exactly
+dddd: those tasks retain the materialized consumer's fixed 256-lane component
+packets, while the complementary queue uses the qualified 128-lane generic
+consumer. The pure dddd specialization does not instantiate the unreachable
+generic AD workspace; f-containing angular passes retain that fallback. Both
+Combined and Separate source layouts keep the same scientific
+screening, physical pair orientation and coefficients. The passes reuse output
+and cursor storage sequentially on the owning stream, reset the cursor between
+passes, and propagate submission/reset failures. Missing caches, optional
+recurrence modes, unproved or f-containing bases and nonstandard launch shapes
+retain the complete mixed fallback; no extra retained allocation is required.
+
+The explicitly selected angular force schedule rejects another pass's tasks
+before exact shell-level scientific screening. Its host-proved maximum shell
+angular momentum also bounds the launched orders, without changing recurrence
+or screening: s/p/d bases need at most 1/5/9 passes. The unproved sentinel
+retains all thirteen supported passes. Generic, unpartitioned queue ownership
+does not read angular metadata, and all queue publication/retirement barriers
+remain shared by the force and Fock consumers.
+
+The [queue-split decision note](../../.agents/notes/implemented/performance/2026-10-09-direct-force-dddd-queue-split.md)
+records qualification evidence and the retained fallback rationale.
+
 Canonical AO-pair arrays remain resident for one-electron triangles and
 Schwarz bounds, following gpuxtb's immutable pair-metadata pattern. Their
 one-electron force consumer evaluates every pair once, uses translation for

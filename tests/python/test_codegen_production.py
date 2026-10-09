@@ -478,7 +478,7 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
     # The method-neutral force fallback may use Fock screening while still writing forces.
     # Do not conflate screening purpose with the scientific consumer again.
     force_wrapper = fallback_source.index(
-        "void launch_bounded_direct_shell_quartet_kernel_scaled("
+        "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled("
     )
     assert (
         "bounded_direct_shell_quartet_kernel<Unrestricted, Purpose, true, -1, -1, PairDerivatives>"
