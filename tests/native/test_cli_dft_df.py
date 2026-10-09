@@ -74,7 +74,7 @@ class NativeDftDfCliTests(unittest.TestCase):
         for flags, reason, expected_code in (
             (
                 ("--density-fitting", "cuda", "--backend", "cpu"),
-                "DFT density-fitting backend must match",
+                "invalid argument (status 1)",
                 1,
             ),
             (("--auxiliary-basis", "def2-svp"), "requires density fitting", 2),

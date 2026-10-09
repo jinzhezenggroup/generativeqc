@@ -50,6 +50,8 @@ inline MethodCapabilities method_capabilities(generativeqc_method method) {
 /** Resolve only names in the compiled native provider manifest.
  * Compiler-only MethodIR aliases such as pbe0-rks require explicit KS composition. */
 inline generativeqc_method resolve_method(std::string_view canonical_name) {
+  if (canonical_name.find('\0') != std::string_view::npos)
+    throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "native method name contains NUL");
   generativeqc_method method{};
   const std::string name(canonical_name);
   check(generativeqc_method_from_name(name.c_str(), &method));

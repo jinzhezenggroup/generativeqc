@@ -116,6 +116,16 @@ int main() {
     // as the CLI. Compiler-only names are not implicitly transformed.
     require(generativeqc::resolve_method("pbe-rks") == GENERATIVEQC_METHOD_PBE_RKS,
             "C++ native method name resolution failed");
+    for (const auto name :
+         {std::string_view("pbe-rks\0junk", 12), std::string_view("pbe-rks\0", 8)}) {
+      try {
+        (void)generativeqc::resolve_method(name);
+        throw std::runtime_error("C++ native method lookup truncated an embedded NUL");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "embedded NUL method name did not fail with INVALID_ARGUMENT");
+      }
+    }
     const char* canonical_name = nullptr;
     require(generativeqc_method_get_name(GENERATIVEQC_METHOD_PBE_RKS, &canonical_name) ==
                     GENERATIVEQC_STATUS_SUCCESS &&
