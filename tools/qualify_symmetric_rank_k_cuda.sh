@@ -12,9 +12,15 @@ expected_commit=$3
 repo_root=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$repo_root"
 
-actual_commit=$(git rev-parse HEAD)
-if [[ "$actual_commit" != "$expected_commit" ]] || [[ -n $(git status --porcelain) ]]; then
-  echo "rank-k CUDA qualification requires the exact clean source commit" >&2
+snapshot_root=$(dirname "$repo_root")
+if [[ ! -f "$snapshot_root/source-commit.txt" ]] ||
+   [[ ! -f "$snapshot_root/source-identity.sha256" ]]; then
+  echo "rank-k CUDA qualification requires CPU-prepared source receipts" >&2
+  exit 2
+fi
+actual_commit=$(cat "$snapshot_root/source-commit.txt")
+if [[ "$actual_commit" != "$expected_commit" ]]; then
+  echo "rank-k CUDA qualification source commit differs from the submitted job" >&2
   exit 2
 fi
 if [[ ! -x "$cache_exe" ]]; then
@@ -32,8 +38,15 @@ command -v nvcc >/dev/null || { echo "nvcc is required" >&2; exit 2; }
 command -v nvidia-smi >/dev/null || { echo "NVIDIA device is required" >&2; exit 2; }
 
 mkdir -p "$output_dir/generated" "$output_dir/cache"
+if ! sha256sum -c "$snapshot_root/source-identity.sha256" \
+     > "$output_dir/source-check.txt" 2>&1; then
+  tail -20 "$output_dir/source-check.txt" >&2
+  echo "rank-k CUDA source manifest mismatch" >&2
+  exit 2
+fi
 export SCCACHE_DIR="$output_dir/cache"
 echo "source_commit=$actual_commit" | tee "$output_dir/provenance.txt"
+sha256sum "$snapshot_root/source-identity.sha256" >> "$output_dir/provenance.txt"
 nvcc --version | tee -a "$output_dir/provenance.txt"
 nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader |
   tee -a "$output_dir/provenance.txt"
