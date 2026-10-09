@@ -482,7 +482,10 @@ def lower_precision(
         if node.spec.dtype not in DTYPES:
             mapping[node] = Node(
                 node.op,
-                tuple(mapping[child] for child in node.inputs),
+                tuple(
+                    ensure_dtype(mapping[child], child.spec.dtype)
+                    for child in node.inputs
+                ),
                 node.spec,
                 node.attributes,
             )

@@ -293,6 +293,39 @@ def test_bool_nodes_are_outside_floating_precision_schedules() -> None:
     assert lower_precision(program, {}).logical_hash == program.logical_hash
 
 
+def test_real_precision_rewrite_restores_comparison_operand_dtypes() -> None:
+    real = ir.input_tensor("real", TensorSpec(role="input"))
+    squared = ir.multiply(real, real)
+    predicate = ir.compare("greater", squared, real)
+    viewed = ir.reshape(predicate, (Index("i", IndexSpace("unit", "matrix", 1)),))
+    program = Program({"real": squared, "mask": viewed})
+    lowered = lower_precision(
+        program,
+        {
+            program.debug_names[squared]: PrecisionDirective(
+                "float32", "float32", "float32"
+            )
+        },
+    )
+    source = np.asarray(1.00000001, dtype=np.float64)
+    expected_real = np.asarray(source.astype(np.float32) ** 2, dtype=np.float64)
+    expected_mask = np.greater(expected_real, source).reshape(1)
+    actual = execute(lowered, {"real": source}).outputs
+    np.testing.assert_array_equal(actual["real"], expected_real)
+    np.testing.assert_array_equal(actual["mask"], expected_mask)
+    assert actual["mask"].dtype == np.dtype("bool")
+    assert all(
+        node.spec.dtype in ("float32", "float64")
+        for node in lowered.live_nodes
+        if node.op == "cast"
+    )
+    assert describe_precision(lowered) == describe_precision(
+        Program.loads(lowered.dumps())
+    )
+    with pytest.raises(ValueError, match="does not support bool"):
+        prepare_for_backend(lowered, "cpu")
+
+
 def test_scientific_domain_and_boolean_algebra_fail_closed() -> None:
     ao = Index("i", IndexSpace("ao", "ao", 2))
     occ = Index("i", IndexSpace("occ", "occupied", 2))

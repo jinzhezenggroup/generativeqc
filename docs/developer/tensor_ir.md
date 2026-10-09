@@ -151,7 +151,9 @@ precision changes are visible as `cast` nodes. `describe_precision` produces a
 stable `PrecisionSchedule` identity containing every live floating value's
 resolved dtype, sensitivity class, cast traffic, strict-audit dtype and
 arithmetic mode. Boolean data and `int64` controls are outside floating precision
-schedules, and directives targeting either fail closed.
+schedules, and directives targeting either fail closed. If real arithmetic that
+feeds a comparison is precision-rewritten, the comparison boundary restores each
+operand's declared dtype before rebuilding the Boolean value.
 
 The default schedule remains strict FP64. `conservative_precision_variants`
 only creates an opt-in FP32 candidate for ordinary elementwise/view subgraphs;
