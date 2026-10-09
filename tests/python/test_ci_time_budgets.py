@@ -124,7 +124,7 @@ def test_python_ci_keeps_history_for_offline_retention_checks() -> None:
     )
 
 
-def test_f_shell_release_cache_tracks_only_its_generator_dependencies() -> None:
+def test_f_shell_release_cache_tracks_only_its_compile_dependencies() -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
     section = (
         path.read_text()
@@ -138,6 +138,8 @@ def test_f_shell_release_cache_tracks_only_its_generator_dependencies() -> None:
     for dependency in (
         "'python/generativeqc_compiler/common/**'",
         "'python/generativeqc_compiler/integral/**'",
+        "'src/runtime/compensated_atomic.cuh'",
+        "'src/runtime/compensated_output.hpp'",
         "'tools/validate_f_shells.py'",
         "'tools/generativeqc_validation/f_shell.py'",
     ):

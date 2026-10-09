@@ -105,10 +105,21 @@ def test_compile_cache_checks_toolchain_objects_and_resource_records(
     calls = []
     version = ["test CUDA 12.9"]
     monkeypatch.setattr(f_shell, "_tool_version", lambda tool: version[0])
+    root = tmp_path / "checkout"
+    for name in f_shell.RUNTIME_HEADERS:
+        header = root / "src" / name
+        header.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(f_shell.ROOT / "src" / name, header)
+    monkeypatch.setattr(f_shell, "ROOT", root)
 
     def compile_fake(
-        self: typing.Any, source: typing.Any, output: typing.Any
+        self: typing.Any,
+        source: typing.Any,
+        output: typing.Any,
+        *,
+        includes: tuple[Path, ...],
     ) -> typing.Any:
+        assert includes == (root / "src",)
         calls.append(source)
         output.write_bytes(b"test-only object")
         log = "\n".join(
@@ -149,6 +160,16 @@ def test_compile_cache_checks_toolchain_objects_and_resource_records(
     changed = f_shell.compile_matrix(initial, **kwargs)
     assert len(calls) == 3
     assert changed["rows"][0]["compilation"]["cache_key"] != key
+    for name in f_shell.RUNTIME_HEADERS:
+        previous = changed["rows"][0]["compilation"]["cache_key"]
+        header = root / "src" / name
+        header.write_text(header.read_text() + "\n// changed runtime dependency\n")
+        before = len(calls)
+        changed = f_shell.compile_matrix(initial, **kwargs)
+        assert len(calls) == before + 1
+        assert changed["rows"][0]["compilation"]["cache_key"] != previous
+        f_shell.compile_matrix(initial, **kwargs)
+        assert len(calls) == before + 1
     assert initial["rows"][0]["compilation"]["status"] == "not-run"
 
 
@@ -158,7 +179,11 @@ def test_missing_resource_rows_fail_even_when_compilation_returns_success(
     monkeypatch.setattr(f_shell, "_tool_version", lambda tool: "test only")
 
     def compile_fake(
-        self: typing.Any, source: typing.Any, output: typing.Any
+        self: typing.Any,
+        source: typing.Any,
+        output: typing.Any,
+        *,
+        includes: tuple[Path, ...],
     ) -> typing.Any:
         output.write_bytes(b"test object")
         return CudaCompileResult(0, False, 0.01, "", "no resource records")

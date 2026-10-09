@@ -530,7 +530,7 @@ def test_serialized_examples_are_reproducible_and_report_unavailable_lowering(
 def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
     tmp_path: typing.Any,
 ) -> None:
-    """Pin the legacy registry/shard contract across this semantic refactor."""
+    """Pin the recorded registry/shard ABI, including the compensated Fock sink."""
     from generativeqc_compiler.integral.production import write_production_bundles
 
     baseline = json.loads(

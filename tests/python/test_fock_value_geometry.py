@@ -65,5 +65,5 @@ def test_mixed_fock_rounds_only_density_integral_product_to_fp32() -> None:
     assert "generated_dpps_mixed_accumulate_fock<Unrestricted, true>(" in mixed
     assert "static_cast<float>(density_value) * static_cast<float>(integral)" in mixed
     assert "const double* density" in mixed
-    assert "double* fock" in mixed
+    assert "generativeqc::runtime::CompensatedOutput fock" in mixed
     assert "atomicAdd(fock" in mixed

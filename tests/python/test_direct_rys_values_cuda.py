@@ -90,10 +90,12 @@ def quartet_case(request: pytest.FixtureRequest) -> tuple:
 
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("consumer", ("combined", "j", "k", "hf-k"))
+@pytest.mark.parametrize("compensated", (False, True))
 def test_value_rys_fixed_density_matrices_match_libcint(
     quartet_case: tuple,
     unrestricted: bool,
     consumer: str,
+    compensated: bool,
 ) -> None:
     """Execute one fused queue task, including empty CTA and component tails."""
     import cupy as cp
@@ -126,15 +128,22 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     density = fixture.spin_density if unrestricted else fixture.density[None]
     device_density = cp.asarray(np.concatenate([d.ravel(order="F") for d in density]))
     output = cp.zeros(device_density.size, dtype=cp.float64)
+    correction = cp.zeros_like(output) if compensated else None
     count, head = cp.asarray([1], dtype=cp.uint32), cp.zeros(1, dtype=cp.uint32)
     library = ctypes.CDLL(os.environ["GENERATIVEQC_RYS_VALUE_LIBRARY"])
     launch = getattr(library, f"generativeqc_launch_generated_{name}_fock")
     pointer = ctypes.c_void_p
+
+    class ScatterOutput(ctypes.Structure):
+        """The private launch ABI carries sum and optional residual planes."""
+
+        _fields_ = [("sum", pointer), ("correction", pointer)]
+
     launch.argtypes = (
         [pointer, ctypes.c_bool, ctypes.c_uint]
         + [pointer] * 6
         + [ctypes.c_double]
-        + [pointer] * 5
+        + [pointer, pointer, ScatterOutput, pointer, pointer]
     )
     launch.restype = ctypes.c_int
     stream = cp.cuda.get_current_stream()
@@ -146,13 +155,15 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         0.0,
         None,
         device_density.data.ptr,
-        output.data.ptr,
+        ScatterOutput(output.data.ptr, correction.data.ptr if compensated else None),
         count.data.ptr,
         head.data.ptr,
     )
     assert status == 0
     stream.synchronize()
     raw = cp.asnumpy(output)
+    if correction is not None:
+        raw += cp.asnumpy(correction)
     actual = np.stack(
         [
             raw[s * n * n : (s + 1) * n * n].reshape((n, n), order="F")
