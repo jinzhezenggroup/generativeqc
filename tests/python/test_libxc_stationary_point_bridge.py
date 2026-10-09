@@ -73,11 +73,7 @@ def test_imported_native_point_and_cartesian_derivatives(
     predicted = (
         np.einsum("sp,sp->p", actual["rho"], drho)
         + np.einsum("spa,spa->p", actual["gradient"], dgradient)
-        + (
-            2 * np.einsum("sp,sp->p", actual["kinetic"], dtau)
-            if needs_tau
-            else 0
-        )
+        + (2 * np.einsum("sp,sp->p", actual["kinetic"], dtau) if needs_tau else 0)
     )
     step = 1.0e-5
     displaced = (evaluate(step)["energy"] - evaluate(-step)["energy"]) / (2 * step)
