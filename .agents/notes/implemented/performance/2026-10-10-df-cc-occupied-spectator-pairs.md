@@ -205,6 +205,22 @@ the projection header as runtime metadata/storage and the folded equation and
 majorant as compiler-generated. The inherited matrix-provider migration ledger
 records the additional read of the existing admission gate, not a new selector.
 
+A further CI receipt correction wraps the unchanged four measured observations
+and quantitative energy/physical-residual gates in the shared validation
+envelope. The numerical-only decision remains explicit; missing full-process
+physical memory, compilation cost and formal identity/promotion receipts are
+reported as unavailable rather than invented. The delayed-event owner fixture
+and timing source contract follow the new per-state residual-tolerance argument,
+including a nondefault-tolerance check. These changes alter no runtime/generated
+artifact or measured observation, so they need only focused host/publication
+checks, not new GPU or endpoint qualification.
+
+After publication, master advances to `ad5590e4d` (#2170 DFT force/geometry
+admission). Its changed-file intersection with this branch is empty and a pure
+merge-tree check succeeds. It does not touch CC compiler/native energy paths;
+the evidence remains frozen to `2daa0acea`, without a claim of new-master
+numerical requalification or an unrelated full-test rerun.
+
 An exact-only current-tau gate is another bounded first experiment: copy a
 bitwise-symmetric tau without projection and retain the original action for
 every asymmetric state. Its projection error is zero, so a projection majorant

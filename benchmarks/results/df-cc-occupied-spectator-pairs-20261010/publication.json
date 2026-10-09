@@ -87,8 +87,8 @@
     {
       "path": "validation.json",
       "role": "evidence",
-      "bytes": 1143,
-      "sha256": "1339987a7f5b6e983e0ff67ebd1f7d7e83b3945071644dd1226c2e55a4a5440c"
+      "bytes": 8466,
+      "sha256": "dcb1e8358653b37021b2aa32da5e29da3bf6e7fedf793a120ca3f5df7c9aaf6d"
     },
     {
       "path": "visible-device.cpp.gz",
