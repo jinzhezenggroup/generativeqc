@@ -417,6 +417,16 @@ __device__ void record_numeric_failure(Gfn2SccMixerDeviceState state, std::int64
   state.system_statuses[system] = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
 }
 
+template <bool Record>
+struct MixerReceiptCounters {};
+
+template <>
+struct MixerReceiptCounters<true> {
+  std::uint64_t coefficient[kThreadsPerBlock];
+  std::uint64_t gram[kThreadsPerBlock];
+};
+
+template <bool Record>
 __global__ void mix_broyden_kernel(
     Gfn2SccDeviceBatch batch, Gfn2WavefunctionLayoutView layout, Gfn2SccMixerDevicePolicy policy,
     Gfn2SccIterationDeviceActivity activity, Gfn2SccDeviceConstMultipoles raw,
@@ -433,6 +443,9 @@ __global__ void mix_broyden_kernel(
   __shared__ std::uint64_t old_iteration;
   __shared__ std::int64_t history_count;
   __shared__ std::int64_t new_slot;
+  __shared__ Gfn2SccMixerDeviceReceipt* receipt;
+  __shared__ std::uint64_t stage_start;
+  __shared__ MixerReceiptCounters<Record> receipt_counts;
 
   if (threadIdx.x == 0) {
     active = 0;
@@ -468,6 +481,25 @@ __global__ void mix_broyden_kernel(
   const std::int64_t history_begin = vector_begin * policy.history_size;
   const std::int64_t beta_begin = system * policy.history_size * policy.history_size;
   const std::int64_t coefficient_begin = system * policy.history_size;
+
+  if constexpr (Record) {
+    if (threadIdx.x == 0) {
+      receipt = nullptr;
+      const std::uint64_t invocation =
+          atomicAdd(reinterpret_cast<unsigned long long*>(workspace.receipt_count), 1ULL);
+      if (invocation < static_cast<std::uint64_t>(workspace.receipt_capacity)) {
+        receipt = workspace.receipts + invocation;
+        *receipt = {};
+        receipt->invocation = invocation;
+        receipt->system = system;
+        receipt->iteration_before = state.iterations[system];
+        receipt->restart_before = state.restart_counts[system];
+        receipt->vector_elements = dimension;
+      }
+      stage_start = clock64();
+    }
+    __syncthreads();
+  }
 
   for (std::int64_t component = threadIdx.x; component < dimension; component += blockDim.x) {
     const double raw_value = load_component(batch, layout, raw, system, component);
@@ -537,6 +569,13 @@ __global__ void mix_broyden_kernel(
     return;
   }
   __syncthreads();
+
+  if constexpr (Record) {
+    if (threadIdx.x == 0 && receipt != nullptr) {
+      receipt->residual_elapsed_cycles = clock64() - stage_start;
+      receipt->completed_stages |= kMixerResidual;
+    }
+  }
 
   if (old_iteration == 0u) {
     for (std::int64_t component = threadIdx.x; component < dimension; component += blockDim.x) {
@@ -634,8 +673,36 @@ __global__ void mix_broyden_kernel(
     }
     __syncthreads();
 
+    if constexpr (Record) {
+      if (threadIdx.x == 0) {
+        stage_start = clock64();
+        if (receipt != nullptr) {
+          receipt->live_history = history_count;
+          receipt->new_slot = new_slot;
+        }
+      }
+    }
+
+    std::uint64_t coefficient_visits = 0u;
+    std::uint64_t gram_visits = 0u;
 #include "generated_gfn2_history_cuda_gram.inc"
+    if constexpr (Record) {
+      if (receipt != nullptr) {
+        receipt_counts.coefficient[threadIdx.x] = coefficient_visits;
+        receipt_counts.gram[threadIdx.x] = gram_visits;
+      }
+    }
     __syncthreads();
+    if constexpr (Record) {
+      if (threadIdx.x == 0 && receipt != nullptr) {
+        receipt->history_elapsed_cycles = clock64() - stage_start;
+        for (int lane = 0; lane < kThreadsPerBlock; ++lane) {
+          receipt->coefficient_dot_elements += receipt_counts.coefficient[lane];
+          receipt->gram_dot_elements += receipt_counts.gram[lane];
+        }
+        if (valid != 0) receipt->completed_stages |= kMixerHistory;
+      }
+    }
     if (valid == 0) {
       if (threadIdx.x == 0) {
         record_numeric_failure(state, system);
@@ -643,6 +710,9 @@ __global__ void mix_broyden_kernel(
       return;
     }
     __syncthreads();
+    if constexpr (Record) {
+      if (threadIdx.x == 0) stage_start = clock64();
+    }
     if (threadIdx.x == 0) {
       if (!cholesky_solve(workspace.beta + beta_begin, workspace.coefficients + coefficient_begin,
                           history_count, policy.history_size)) {
@@ -651,6 +721,12 @@ __global__ void mix_broyden_kernel(
       }
     }
     __syncthreads();
+    if constexpr (Record) {
+      if (threadIdx.x == 0 && receipt != nullptr) {
+        receipt->solve_elapsed_cycles = clock64() - stage_start;
+        if (valid != 0) receipt->completed_stages |= kMixerSolve;
+      }
+    }
     if (valid == 0) {
       if (threadIdx.x == 0) {
         record_numeric_failure(state, system);
@@ -658,10 +734,28 @@ __global__ void mix_broyden_kernel(
       return;
     }
     __syncthreads();
+    if constexpr (Record) {
+      if (threadIdx.x == 0) stage_start = clock64();
+    }
 
+    std::uint64_t combination_visits = 0u;
 #include "generated_gfn2_history_cuda_correction.inc"
+    if constexpr (Record) {
+      if (receipt != nullptr) {
+        receipt_counts.coefficient[threadIdx.x] = combination_visits;
+      }
+    }
   }
   __syncthreads();
+  if constexpr (Record) {
+    if (threadIdx.x == 0 && receipt != nullptr && old_iteration != 0u) {
+      receipt->combination_elapsed_cycles = clock64() - stage_start;
+      for (int lane = 0; lane < kThreadsPerBlock; ++lane) {
+        receipt->combination_elements += receipt_counts.coefficient[lane];
+      }
+      if (valid != 0) receipt->completed_stages |= kMixerCombination;
+    }
+  }
   if (valid == 0) {
     if (threadIdx.x == 0) {
       record_numeric_failure(state, system);
@@ -698,6 +792,12 @@ __global__ void mix_broyden_kernel(
                                                system_residual_maximum < policy.maximum_tolerance
                                            ? 1u
                                            : 0u;
+    if constexpr (Record) {
+      if (receipt != nullptr) {
+        receipt->status = GENERATIVEQC_XTB_STATUS_SUCCESS;
+        receipt->completed_stages |= kMixerCommitted;
+      }
+    }
   }
 }
 
@@ -892,7 +992,17 @@ bool valid_activity(const Gfn2SccIterationDeviceActivity& activity,
 
 bool valid_workspace(const Gfn2SccMixerDeviceWorkspace& workspace, const Gfn2SccDeviceBatch& batch,
                      const ValidatedDimensions& dimensions) noexcept {
+  const bool receipts_disabled = workspace.receipts == nullptr &&
+                                 workspace.receipt_count == nullptr &&
+                                 workspace.receipt_capacity == 0;
+  const bool receipts_enabled = workspace.receipts != nullptr &&
+                                workspace.receipt_count != nullptr &&
+                                workspace.receipt_capacity > 0 &&
+                                is_aligned(workspace.receipts,
+                                           alignof(Gfn2SccMixerDeviceReceipt)) &&
+                                is_aligned(workspace.receipt_count, alignof(std::uint64_t));
   return workspace.plan_token == batch.plan_token &&
+         (receipts_disabled || receipts_enabled) &&
          workspace.vector_elements == dimensions.vector_elements &&
          workspace.beta_elements == dimensions.beta_elements &&
          workspace.coefficient_elements == dimensions.coefficient_elements &&
@@ -914,7 +1024,7 @@ bool validate_ranges(const Gfn2SccDeviceBatch& batch, const Gfn2WavefunctionLayo
                      const Gfn2SccMixerDeviceWorkspace& workspace,
                      std::uint32_t* device_error) noexcept {
   std::array<AddressRange, 13> reads{};
-  std::array<AddressRange, 24> writes;
+  std::array<AddressRange, 26> writes{};
   if (!make_address_range(batch.shell_offsets, batch.shell_offset_count,
                           sizeof(*batch.shell_offsets), &reads[0]) ||
       !make_address_range(batch.atom_offsets, batch.atom_offset_count, sizeof(*batch.atom_offsets),
@@ -958,7 +1068,12 @@ bool validate_ranges(const Gfn2SccDeviceBatch& batch, const Gfn2WavefunctionLayo
       !make_address_range(workspace.coefficients, dimensions.coefficient_elements, sizeof(double),
                           &writes[18]) ||
       !make_address_range(workspace.sequence_active, 1, sizeof(std::uint32_t), &writes[19]) ||
-      !make_address_range(device_error, 1, sizeof(std::uint32_t), &writes[23])) {
+      !make_address_range(device_error, 1, sizeof(std::uint32_t), &writes[23]) ||
+      (workspace.receipts != nullptr &&
+       (!make_address_range(workspace.receipts, workspace.receipt_capacity,
+                            sizeof(Gfn2SccMixerDeviceReceipt), &writes[24]) ||
+        !make_address_range(workspace.receipt_count, 1, sizeof(std::uint64_t),
+                            &writes[25])))) {
     return false;
   }
   if (layout.spin_channels != nullptr &&
@@ -1179,8 +1294,15 @@ cudaError_t mix_gfn2_scc_broyden_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  mix_broyden_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
-      batch, layout, policy, activity, raw, next_mixed, state, workspace, device_error);
+  if (workspace.receipts != nullptr) {
+    mix_broyden_kernel<true><<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
+                               stream>>>(batch, layout, policy, activity, raw, next_mixed, state,
+                                         workspace, device_error);
+  } else {
+    mix_broyden_kernel<false><<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
+                                stream>>>(batch, layout, policy, activity, raw, next_mixed, state,
+                                          workspace, device_error);
+  }
   return cudaPeekAtLastError();
 }
 
