@@ -40,8 +40,8 @@ def _project(path: Path) -> Path:
         "if(TARGET generativeqc_cutensor)\n"
         '  file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/provider.txt" CONTENT\n'
         '    "$<TARGET_PROPERTY:generativeqc_cutensor,INTERFACE_INCLUDE_DIRECTORIES>\n'
-        '$<TARGET_PROPERTY:generativeqc_cutensor_library,IMPORTED_LOCATION>\n'
-        '$<TARGET_PROPERTY:generativeqc_cutensor,INTERFACE_COMPILE_DEFINITIONS>\n'
+        "$<TARGET_PROPERTY:generativeqc_cutensor_library,IMPORTED_LOCATION>\n"
+        "$<TARGET_PROPERTY:generativeqc_cutensor,INTERFACE_COMPILE_DEFINITIONS>\n"
         '$<TARGET_PROPERTY:owner,INTERFACE_LINK_LIBRARIES>\n")\n'
         "endif()\n"
         'add_custom_target(admission ALL COMMAND "${CMAKE_COMMAND}" -E touch '
