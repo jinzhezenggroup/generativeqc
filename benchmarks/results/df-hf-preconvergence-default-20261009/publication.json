@@ -47,6 +47,18 @@
       "role": "summary",
       "bytes": 35450,
       "sha256": "470a97cc6b3b31b793c74f303589cc30db169219f4bf4d35dbc04397f23a8c4a"
+    },
+    {
+      "path": "work-admission-qualification.json.gz",
+      "role": "summary",
+      "bytes": 14212,
+      "sha256": "43dd3b0fe1ca0f47c43fb48487d6af6db6c82d14da4e5b8ab8898b7fe84dcedf"
+    },
+    {
+      "path": "source-work-admission.patch",
+      "role": "source-patch",
+      "bytes": 10574,
+      "sha256": "7360f12d683214d4a9364df76262502fa93ec6e38668623e7aa62936ad554b97"
     }
   ],
   "reproduction": {

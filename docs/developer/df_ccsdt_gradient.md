@@ -8,9 +8,10 @@ endpoint and is also the public `df-rccsd(t)` / `df-ccsd(t)` Calculator force
 owner. Public force publication adds no alternate response equations or
 scientific fallback.
 
-A [benchmark-only DF density preconvergence experiment](df_hf_preconvergence.md)
-seeds the same fully converged exact reference without changing public defaults
-or the correlation/response Hamiltonian.
+A [guarded native DF density preconvergence policy](df_hf_preconvergence.md)
+may seed the same fully converged exact reference without changing the
+correlation/response Hamiltonian. Only a detached density crosses this boundary;
+the accepted Fock, orbitals and response remain conventional FP64 Direct RHF.
 
 ## Correlation response
 

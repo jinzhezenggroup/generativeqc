@@ -71,16 +71,28 @@ def test_changed_geometry_and_budget_fixture_metadata(tmp_path: Path) -> None:
             assert actual[0].split()[3] == str(8 << 30)
 
 
-def test_larger_fixture_raw_basis_roundtrip(tmp_path: Path) -> None:
-    """The larger input is metadata only, with 322 spherical AOs and 26 electrons."""
+@pytest.mark.parametrize(
+    "case,functions,electrons",
+    [
+        ("propane322", 322, 26),
+        ("butane414", 414, 34),
+        ("methane34", 34, 10),
+        ("ethane58", 58, 18),
+        ("ethane144", 144, 18),
+    ],
+)
+def test_larger_fixture_raw_basis_roundtrip(
+    tmp_path: Path, case: str, functions: int, electrons: int
+) -> None:
+    """Qualification inputs round-trip raw basis metadata without an oracle computation."""
     pytest.importorskip("pyscf")
     from benchmarks.df_hf_preconvergence import read_molecule
 
-    output = tmp_path / "propane322.input"
-    prepare_case("propane322", output)
+    output = tmp_path / f"{case}.input"
+    prepare_case(case, output)
     molecule = read_molecule(output)
-    assert molecule.nao_nr() == 322
-    assert molecule.nelectron == 26
+    assert molecule.nao_nr() == functions
+    assert molecule.nelectron == electrons
 
 
 def records(tmp_path: Path, *rows: dict) -> list[Path]:

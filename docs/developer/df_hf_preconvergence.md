@@ -1,7 +1,7 @@
 # DF density preconvergence for an exact RHF reference
 
 The native `df-ccsd(t)` owner automatically prepares a CUDA DF-JK density
-guess in its qualified cold-start domain. The **accepted reference remains
+guess behind compatibility, source-path, work and resource guards. The **accepted reference remains
 conventional, unscreened FP64 RHF**, with correlation-only density fitting.
 This does not select RI-HF, change the final Hamiltonian, or alter response
 and gradient equations.
@@ -9,11 +9,26 @@ and gradient equations.
 ## Default admission and fallback
 
 Automatic preparation is limited to neutral, closed-shell H/C systems with
-200–400 spherical orbital AOs, through-f orbital shells and no ECP. The
+spherical orbital AOs, through-f orbital shells and no ECP. There is no fixed
+200–400 AO interval. These are compatibility limits, not a claim that every
+admitted geometry/basis has demonstrated a speedup. The
 independently bundled `aug-cc-pvtz-jkfit` H/C auxiliary records are normalized
 by the native basis owner on the current geometry. They are not the caller's
 correlation RI basis, and no Python/PySCF computation or lookup occurs in
 production.
+
+The shared exact-reference source policy first excludes cache-eligible
+references: adding DF to a potentially resident four-center ERI path is not
+assumed profitable. For the remaining Direct source domain, a conservative
+**dense-volume heuristic** requires
+`N_cartesian^2 / (32 * N_JK_auxiliary) >= 1`. It compares full four-center
+Cartesian volume with the maximum provisional three-center sweep volume;
+32 is the existing DF iteration cap, not a fitted AO threshold. This is not
+an actual screened/symmetry-reduced integral count, hardware timing model,
+or proof of a universal performance crossover. It ignores contraction lengths
+and shell-class cost differences, so measured complete endpoints remain the
+authority for profitability. Both dimensions and the ratio are exported by
+the benchmark; changing either basis can change admission at the same AO count.
 
 The preliminary solve uses FP64, one compact CUDA SCF attempt with at most
 32 iterations, and `1e-4` energy and density tolerances. The ordinary DF
@@ -22,11 +37,16 @@ nonconvergence returns to cold Direct RHF. Physical final-state validation
 after convergence remains required and is separate from the SCF cycle count.
 Its numeric budget is capped at 512 MiB, after
 charging live correlation auxiliary metadata and any retained response cache;
-less than 256 MiB available skips preparation. Its source and SCF owners are
+less than 256 MiB available skips preparation. The shared DF preparation
+storage estimator must also admit the actual Cartesian/public matrices,
+primitive/shell metadata and JK auxiliary metadata under that cap. The native
+DF tile/SCF planner remains authoritative for subsequent reservations and may
+stream factors or refuse the guess; preflight does not replace its complete
+live-owner accounting. Its source and SCF owners are
 destroyed before Direct SCF. Only the detached density remains, and its
 **capacity** is reserved in every subsequent phase.
 
-Small/resident-ERI cases, unsupported topology and tight budgets retain cold
+Cache-eligible or unamortized-work cases, unsupported topology and tight budgets retain cold
 Direct RHF. An explicit density seed takes precedence. Refused/nonconverged
 DF preparation retains cold Direct; a failed seeded Direct solve invokes the
 existing bounded cold retry, never acceptance after one exact Fock build.
@@ -150,6 +170,11 @@ the explicit `GENERATIVEQC_DF_PRECONVERGENCE_CUDA_TEST=1` opt-in inside Slurm.
 `auto-direct` exercises the actual native default owner with fixed preliminary
 controls and no exported JK input. `direct` explicitly suppresses automatic
 preparation, while `df-direct` preserves the original configurable experiment.
+Standalone `auto-direct hf` exercises the same density-preparation policy and
+strict exact reference, but does not qualify correlation or force performance.
+The `pre_policy_outcome` diagnostic distinguishes compatibility/cache/work/budget
+skips from a used or failed preparation. JK auxiliary dimensions in a skipped
+record describe the proposed metadata shape, not executed integral work.
 Additional qualification inputs can be reproduced without an energy/SCF oracle:
 
 ```bash
@@ -159,13 +184,19 @@ python -m benchmarks.df_hf_preconvergence prepare-case \
   --case moved --output .artifacts/df-hf/moved.input
 python -m benchmarks.df_hf_preconvergence prepare-case \
   --case budget8 --output .artifacts/df-hf/budget8.input
+for case in methane34 ethane58 ethane144 butane414; do
+  python -m benchmarks.df_hf_preconvergence prepare-case \
+    --case "$case" --output ".artifacts/df-hf/$case.input"
+done
 ```
 
 The larger case uses raw orbital/RI basis metadata exported offline from PySCF.
 The moved case shifts the first hydrogen by `0.02 bohr` along x; the budget case
 changes only the declared numeric budget to 8 GiB, not measured VRAM.
 Performance evidence and promotion limits are retained in the
-[default-policy decision](../../.agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md).
+[work/resource decision](../../.agents/notes/implemented/performance/2026-10-09-df-rhf-work-admission.md)
+and the historical
+[initial default-policy decision](../../.agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md).
 Do not extrapolate this guarded policy to all bases/elements/backends or to
 full-DF-HF gradients. Expand admission only with fresh independent gates and
 paired complete endpoint evidence.

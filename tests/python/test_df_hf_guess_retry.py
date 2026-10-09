@@ -77,6 +77,7 @@ double density_rms(const Matrix&,const Matrix&){return 1.0;}
 
 _TAIL = r"""namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& s) noexcept {return s.shells.size();}
+std::size_t cartesian_ao_count(const core::System& system) noexcept {return system.shells.size();}
 generativeqc_status validate_and_normalize(core::System&,std::string&){return GENERATIVEQC_STATUS_SUCCESS;}
 }
 namespace generativeqc::scf {
