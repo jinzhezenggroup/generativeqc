@@ -530,8 +530,18 @@ def test_serialized_examples_are_reproducible_and_report_unavailable_lowering(
 def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
     tmp_path: typing.Any,
 ) -> None:
-    """Pin the legacy registry/shard contract across this semantic refactor."""
+    """Pin full bundles and independently retain the pre-task source bytes."""
     from generativeqc_compiler.integral.production import write_production_bundles
+    from generativeqc_compiler.integral.production_emission import emit_profile_shard
+    from generativeqc_compiler.integral.production_k_block import (
+        direct_k_block_candidates,
+    )
+    from generativeqc_compiler.integral.production_profile import (
+        resolve_production_profile,
+    )
+    from generativeqc_compiler.integral.production_rys_values import (
+        direct_rys_value_candidates,
+    )
 
     baseline = json.loads(
         Path("tests/reference_data/integral_ir_legacy_artifacts.json").read_text()
@@ -558,6 +568,27 @@ def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
         for p in paths
     }
     assert actual == baseline["artifacts"]
+    retained = {}
+    for architecture in baseline["architectures"]:
+        profile = resolve_production_profile(
+            manifest,
+            architecture,
+            "portable_cuda" if architecture == "sm_90" else "auto",
+        )
+        for variant, selections in (
+            ("", profile.selections),
+            ("_rys_value", direct_rys_value_candidates(profile)),
+            ("_k_block", direct_k_block_candidates(profile)),
+        ):
+            retained[architecture + variant] = hashlib.sha256(
+                emit_profile_shard(
+                    profile,
+                    selections,
+                    variant=variant,
+                    include_work_buckets=False,
+                ).encode()
+            ).hexdigest()
+    assert retained == baseline["retained_sources"]
 
 
 def test_incompatible_production_profiles_are_rejected(

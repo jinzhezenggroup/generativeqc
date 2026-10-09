@@ -1,19 +1,23 @@
 """Prepared J/K selection is a host adapter over the compiler inventory."""
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tools.check_scf_structure import audit_scf_structure
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
-def test_aot_disabled_registry_links_prepared_launchers(tmp_path: Path) -> None:
+
+def test_aot_disabled_registry_links_prepared_launchers(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     """The real no-AOT registry supplies every prepared streaming selection."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     root = Path(__file__).resolve().parents[2]
     (tmp_path / "cuda_runtime_api.h").write_text(
         "#pragma once\n"
@@ -27,9 +31,11 @@ def test_aot_disabled_registry_links_prepared_launchers(tmp_path: Path) -> None:
         "#include <cassert>\n"
         "int main() {\n"
         "  using namespace generativeqc::scf::cuda_execution;\n"
-        "  for (unsigned choice = 0; choice < 4; ++choice) {\n"
-        "    auto launch = direct_fock_streaming_launcher(\n"
-        "        choice == 1, choice == 2, 0, choice == 3);\n"
+        "  for (unsigned choice = 0; choice < 5; ++choice) {\n"
+        "    DirectExchangeSelection selection{choice == 1, choice == 2, choice == 3};\n"
+        "    if (choice == 4) selection.task_schedule =\n"
+        "        generativeqc::scf::detail::GeneratedExchangeTaskSchedule::Work;\n"
+        "    auto launch = direct_fock_streaming_launcher(selection, 0, false);\n"
         "    assert(launch(0, nullptr, false, 0, nullptr, nullptr, nullptr,\n"
         "                  nullptr, nullptr, 0, false, 0, nullptr, nullptr,\n"
         "                  nullptr, nullptr, nullptr, nullptr) == cudaErrorNotSupported);\n"
@@ -37,21 +43,27 @@ def test_aot_disabled_registry_links_prepared_launchers(tmp_path: Path) -> None:
         "}\n"
     )
     executable = tmp_path / "registry"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            f"-I{tmp_path}",
-            f"-I{root / 'src'}",
-            str(driver),
-            str(root / "src/scf/aot_shell_registry_stub.cpp"),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        timeout=30,
+    native_cxx.build_executable(
+        (driver, root / "src/scf/aot_shell_registry_stub.cpp"),
+        executable,
+        compile_args=("-std=c++17", f"-I{tmp_path}", f"-I{root / 'src'}"),
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_prepared_k_owner_uses_one_selection_for_topology_and_launch() -> None:
+    """Keep the frozen queue schedule and class/spin dispatch in the same policy."""
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "src/scf/cuda/direct_coulomb.cpp").read_text()
+    header = (root / "src/scf/cuda/direct_coulomb.hpp").read_text()
+    assert "DirectExchangeSelection selection{};" in header
+    assert "prepare_direct_exchange_selection(shared->value_class_mask)" in source
+    assert "plan->selection.task_schedule}" in source
+    assert "direct_fock_streaming_launcher(p.selection, cls, unrestricted)" in source
+    assert "prepare_direct_fock_rys_mask(true)" not in source
+    assert "prepare_direct_fock_k_block_mask()" not in source
+    assert "prepare_direct_fock_rys_task_mask()" not in source
 
 
 @pytest.mark.parametrize("owner", ["scf/cuda/direct_coulomb.cpp", "scf/cuda_rhf.cpp"])

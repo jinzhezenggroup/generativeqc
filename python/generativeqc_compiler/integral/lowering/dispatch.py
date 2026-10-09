@@ -40,6 +40,7 @@ from .common import (
 )
 from .fock import _emit_shell_class_fock_cuda, _emit_shell_class_mixed_fock_cuda
 from .fock_component import emit_rys_value_support_cuda
+from .fock_rys_task import emit_rys_task_support_cuda
 from .force_packed import (
     _emit_packed_force_consumer_cuda,
     _emit_scalar_thread_force_consumer_cuda,
@@ -1251,8 +1252,10 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
                 target=plan.kernel.target,
             )
         )
-        source = source[:begin] + emit_rys_value_support_cuda(
-            spec, plan.kernel.integral
+        source = source[:begin] + (
+            emit_rys_task_support_cuda(value_plan)
+            if value_plan.schedule.kind == ScheduleKind.PACKED_TASKS
+            else emit_rys_value_support_cuda(spec, plan.kernel.integral)
         )
         source += _emit_shell_class_fock_cuda(
             spec,

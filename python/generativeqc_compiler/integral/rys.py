@@ -605,8 +605,15 @@ def _emit_fixed_roots_cuda(
     large_r_values: Sequence[float],
     large_w_values: Sequence[float],
     table_values: Sequence[float],
+    forceinline: bool = False,
+    polynomial_unroll: int | None = None,
 ) -> str:
     """Emit one compact fixed-root GPU4PySCF-compatible CUDA evaluator."""
+
+    if polynomial_unroll is not None and (
+        type(polynomial_unroll) is not int or polynomial_unroll < 1
+    ):
+        raise ValueError("polynomial unrolling must be a positive integer or None")
 
     small_r0 = _format_cuda_values(small_r0_values, columns=nroots)
     small_r1 = _format_cuda_values(small_r1_values, columns=nroots)
@@ -642,7 +649,7 @@ __device__ double {symbol_prefix}_rw[{len(table_values)}] = {{
 {table}
 }};
 
-__device__ __noinline__ void {symbol_prefix}_roots(
+__device__ {"__forceinline__" if forceinline else "__noinline__"} void {symbol_prefix}_roots(
     double argument, double* roots_weights, unsigned stride) {{
   if (argument < 3.0e-7) {{
 #pragma unroll
@@ -680,7 +687,7 @@ __device__ __noinline__ void {symbol_prefix}_roots(
     double c1 = coefficients[interval + {degree - 1}U * {intervals}U];
     double c2 = 0.0;
     double c3 = 0.0;
-#pragma unroll
+#pragma unroll{"" if polynomial_unroll is None else f" {polynomial_unroll}"}
     for (int polynomial_degree = {degree - 2}; polynomial_degree > 0;
          polynomial_degree -= 2) {{
       c2 = coefficients[interval + polynomial_degree * {intervals}] - c1;
@@ -695,10 +702,70 @@ __device__ __noinline__ void {symbol_prefix}_roots(
 """
 
 
+def emit_rys1_roots_cuda(*, symbol_prefix: str = "generated_low_order_rys1") -> str:
+    """Emit the exact one-node rule from the existing strict FP64 Boys owner.
+
+    Roots use the squared-node convention of the other Rys tables, not the
+    transformed u/(1-u) convention. F0 is the weight and F1/F0 the squared node;
+    the existing Boys series handles coincident centers without cancellation.
+    """
+    return f"""
+__device__ __forceinline__ void {symbol_prefix}_roots(
+    double argument, double* roots_weights, unsigned stride) {{
+  double moments[2];
+  boys_values<1>(argument, moments);
+  roots_weights[0] = moments[1] / moments[0];
+  roots_weights[stride] = moments[0];
+}}
+"""
+
+
+def emit_rys_value_root_body_cuda(spec: ShellClassSpec, integral: IntegralIR) -> str:
+    """Emit unrolled values using the same TRR/HRR algebra as Rys forces.
+
+    The caller supplies primitive/root geometry, a retained-component bit mask,
+    and lane-local integral accumulators. Normalization is applied after all
+    primitive products, so AO coefficients do not inflate the live root state.
+    """
+    if (
+        integral.spec != spec
+        or integral.derivative is not None
+        or not integral.recurrence.startswith("rys")
+    ):
+        raise ValueError("Rys value body requires the matching derivative-free IR")
+    component_states = tuple(
+        tuple(RysState(*(label.count(axis) for label in component)) for axis in AXES)
+        for component in spec.components
+    )
+    mask_unit = "std::uint64_t{1}" if spec.component_count > 32 else "1U"
+    slots: dict[tuple[str, RysState], int] = {}
+    lines = []
+    for coordinate, axis in enumerate(AXES):
+        program = build_rys_axis_program(
+            tuple(states[coordinate] for states in component_states)
+        )
+        for instruction in program.instructions:
+            slot = len(slots)
+            slots[(axis, instruction.state)] = slot
+            expression = _state_expression(axis, instruction, slots)
+            lines.append(f"const double rys_state_{slot} = {expression};")
+    for component, states in enumerate(component_states):
+        factors = " * ".join(
+            f"rys_state_{slots[(axis, state)]}"
+            for axis, state in zip(AXES, states, strict=True)
+        )
+        lines.append(
+            f"if (retained_components & ({mask_unit} << {component}U)) "
+            f"component_integrals[{component}U] += {factors};"
+        )
+    return "\n".join(lines)
+
+
 def emit_rys2_roots_cuda(
     *,
     symbol_prefix: str = "generated_low_order_rys2",
     high_accuracy: bool = False,
+    forceinline: bool = False,
 ) -> str:
     """Emit the common Rys2 evaluator with optional regenerated strict tables."""
 
@@ -716,6 +783,7 @@ def emit_rys2_roots_cuda(
         large_r_values=RYS2_LARGEX_R_DATA,
         large_w_values=RYS2_LARGEX_W_DATA,
         table_values=table,
+        forceinline=forceinline,
     )
 
 
@@ -723,8 +791,15 @@ def emit_rys3_roots_cuda(
     *,
     symbol_prefix: str = "generated_ppps_rys3",
     high_accuracy: bool = False,
+    forceinline: bool = False,
+    polynomial_unroll: int | None = None,
 ) -> str:
-    """Emit the common Rys3 evaluator with optional regenerated strict tables."""
+    """Emit Rys3 with optional precision and interpolation scheduling hints.
+
+    Defaults preserve the legacy source. Bounded inner-loop unrolling leaves
+    room for a whole quartet's live accumulators in an inlined value worker;
+    coefficient order and the interpolation arithmetic remain unchanged.
+    """
 
     degree, intervals, table = _fixed_root_coefficients(3, high_accuracy)
     return _emit_fixed_roots_cuda(
@@ -740,6 +815,8 @@ def emit_rys3_roots_cuda(
         large_r_values=RYS3_LARGEX_R_DATA,
         large_w_values=RYS3_LARGEX_W_DATA,
         table_values=table,
+        forceinline=forceinline,
+        polynomial_unroll=polynomial_unroll,
     )
 
 

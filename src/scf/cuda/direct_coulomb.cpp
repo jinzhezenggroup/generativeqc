@@ -376,10 +376,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   // The owner drains H2D on failed preparation before this staging is freed.
   std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
-  plan->rys_fock_mask = prepare_direct_fock_rys_mask(true) & shared->value_class_mask;
-  plan->k_block_fock_mask = prepare_direct_fock_k_block_mask() & shared->value_class_mask;
-  const auto exchange_task_schedule = prepare_direct_exchange_task_schedule();
-  plan->task_schedule = exchange_task_schedule;
+  plan->selection = prepare_direct_exchange_selection(shared->value_class_mask);
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
   plan->angular_force_opt_in = angular_force;
@@ -503,7 +500,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
       nullptr,
       plan->shared->active,
       detail::GeneratedFockConsumer::Exchange,
-      exchange_task_schedule};
+      plan->selection.task_schedule};
   plan->topology = static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
   if (bounded_resources) {
     launch_reduce_bounded_shell_pair_block_bounds_kernel(
@@ -615,9 +612,7 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       const auto cls = kernels[i].shell_class;
       if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
         continue;
-      error = direct_fock_streaming_launcher(
-          p.rys_fock_mask, unrestricted ? 0U : p.k_block_fock_mask, cls,
-          p.task_schedule == detail::GeneratedExchangeTaskSchedule::Work)(
+      error = direct_fock_streaming_launcher(p.selection, cls, unrestricted)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
@@ -725,7 +720,8 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
       "direct_k", p.shared->stream,
       {static_cast<std::size_t>(p.shared->batch.batch_size),
        static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
-  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", full_range ? p.rys_fock_mask : 0);
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask",
+                                     full_range ? p.selection.rys_fock_mask : 0);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   return error == cudaSuccess ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange,
                                                                     beta_exchange, range, omega)

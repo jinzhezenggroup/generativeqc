@@ -16,6 +16,7 @@ from .expr import (
     RematerializationPolicy,
 )
 from .ir import IntegralIR, KernelConsumer, OperatorFamily
+from .rys_task import task_parallel_rys_eligible
 from .shell_spec import AXES, ShellClassSpec
 
 if TYPE_CHECKING:
@@ -140,8 +141,11 @@ class CudaScheduleIR:
                 "non-baseline algebra form currently supports packed tasks"
             )
         if self.kind == ScheduleKind.PACKED_TASKS:
-            if self.block_threads != self.warp_size:
-                raise ValueError("packed-task schedules currently use one warp")
+            if (
+                self.block_threads != self.warp_size
+                and self.tasks_per_warp != self.warp_size
+            ):
+                raise ValueError("multiwarp packed tasks require one quartet per lane")
             if self.tasks_per_warp == 1:
                 raise ValueError("packed-task schedules require multiple tasks")
         elif self.kind == ScheduleKind.THREAD_TASKS:
@@ -192,7 +196,7 @@ class CudaScheduleIR:
     @property
     def tasks_per_block(self) -> int:
         if self.kind == ScheduleKind.PACKED_TASKS:
-            return self.warp_size
+            return self.block_threads
         if self.kind == ScheduleKind.THREAD_TASKS:
             return self.block_threads
         if self.kind == ScheduleKind.SUBGROUP_TASKS:
@@ -224,14 +228,24 @@ class CudaKernelIR:
             and self.schedule.component_tile < component_count
         ):
             raise ValueError("non-tiled schedules must cover every shell component")
-        if _uses_component_fixed_root_value(self.integral) and (
-            self.schedule.kind != ScheduleKind.COMPONENT_LANES
-            or self.schedule.warp_size != 32
-            or self.schedule.block_threads < component_count
-        ):
-            raise ValueError(
-                "Rys values require one CUDA component lane per Cartesian component"
+        if _uses_component_fixed_root_value(self.integral):
+            component = (
+                self.integral.required_rys_roots >= 2
+                and self.schedule.kind == ScheduleKind.COMPONENT_LANES
+                and self.schedule.warp_size == 32
+                and self.schedule.block_threads >= component_count
             )
+            packed = (
+                task_parallel_rys_eligible(self.integral)
+                and self.schedule.kind == ScheduleKind.PACKED_TASKS
+                and self.schedule.warp_size == 32
+                and self.schedule.tasks_per_warp == 32
+                and not self.schedule.shared_coulomb
+            )
+            if not (component or packed):
+                raise ValueError(
+                    "Rys values require a legal component lane or packed quartet mapping"
+                )
 
 
 KernelIR = CudaKernelIR
@@ -357,7 +371,10 @@ def _default_schedule_priority(
 ) -> int:
     """Rank correctness fallbacks without shell, recurrence-name, or device tables."""
 
-    if _uses_scalar_fixed_root_force(integral):
+    if _uses_component_fixed_root_value(integral):
+        # New task candidates are explicit experiments, not a default switch.
+        family_rank = 0 if schedule.kind == ScheduleKind.COMPONENT_LANES else 1
+    elif _uses_scalar_fixed_root_force(integral):
         family_rank = 0 if schedule.kind == ScheduleKind.THREAD_TASKS else 4
     elif (
         integral.derivative is None
@@ -403,7 +420,21 @@ def schedule_candidates(
             warp_size=warp_size,
         )
         candidate.validate_for(target)
-        return (candidate,)
+        if integral.required_rys_roots >= 2:
+            candidates.append(candidate)
+        if task_parallel_rys_eligible(integral):
+            candidates.append(
+                CudaScheduleIR(
+                    kind=ScheduleKind.PACKED_TASKS,
+                    block_threads=4 * warp_size,
+                    component_tile=component_count,
+                    tasks_per_warp=warp_size,
+                    shared_coulomb=False,
+                    minimum_blocks_per_sm=1,
+                    warp_size=warp_size,
+                )
+            )
+        return tuple(candidates)
 
     # The two-root fixed-root force backend owns one complete shell task per
     # lane.  Root count comes from IntegralIR mathematics; launch bounds come

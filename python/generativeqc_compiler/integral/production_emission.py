@@ -1148,8 +1148,14 @@ def emit_profile_shard(
     selections: Iterable[KernelSelection],
     *,
     variant: str = "",
+    include_work_buckets: bool = True,
 ) -> str:
-    """Emit one architecture-namespaced shard with collision-free symbols."""
+    """Emit one architecture-namespaced shard with collision-free symbols.
+
+    Work companions are included in production. Disable them only to reproduce
+    the independently pinned incumbent source; a production registry expects
+    the companion symbols and must not link such a validation-only shard.
+    """
 
     items = tuple(selections)
     identifier = _profile_identifier(profile.target.architecture) + variant
@@ -1229,7 +1235,9 @@ def emit_profile_shard(
                 body.append(
                     _scope_profile_identifiers(
                         _streaming_fock_source(
-                            selection, include_work_buckets=not variant
+                            selection,
+                            include_work_buckets=include_work_buckets
+                            and variant in ("", "_rys_task"),
                         ),
                         selection,
                         identifier,
@@ -1248,9 +1256,14 @@ def emit_profile_shard(
                     streaming_symbol,
                 )
                 body.append(streaming_wrapper)
-                if not variant and _streaming_fock_schedule(selection).kind in (
-                    ScheduleKind.PACKED_TASKS,
-                    ScheduleKind.SUBGROUP_TASKS,
+                if (
+                    include_work_buckets
+                    and variant in ("", "_rys_task")
+                    and _streaming_fock_schedule(selection).kind
+                    in (
+                        ScheduleKind.PACKED_TASKS,
+                        ScheduleKind.SUBGROUP_TASKS,
+                    )
                 ):
                     work_symbol = f"{force_symbol}_work_streaming_fock"
                     body.append(

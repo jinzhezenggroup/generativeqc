@@ -49,6 +49,93 @@ __device__ __forceinline__ void {prefix}_sort_exchange_queue(
 """
 
 
+def _warp_private_packed_worker(source: str, block_threads: int, width: int) -> str:
+    """Give each warp its own bounded queue and bra cursor within one CTA.
+
+    Warp membership stays fixed even when another warp exhausts its domain.
+    No CTA barrier can remain after a warp retires; pair screening, queue
+    compaction and counters otherwise retain the single-warp implementation.
+    """
+    if width != 32 or block_threads % width:
+        raise ValueError("packed warp queues require complete 32-lane warps")
+    warps = block_threads // width
+    source = source.replace("threadIdx.x", "warp_lane")
+    source = source.replace("__syncthreads();", "__syncwarp(full_warp_mask);")
+    for kind, name, count in (
+        ("std::uint32_t", "exchange_queue_pairs", 2 * width),
+        ("double", "exchange_queue_bounds", 2 * width),
+        ("std::uint32_t", "exchange_queue_count", None),
+        ("std::uint32_t", "bra_ordinal", None),
+    ):
+        suffix = f"[{count}]" if count is not None else ""
+        declaration = f"__shared__ {kind} {name}{suffix};"
+        if source.count(declaration) != 1:
+            raise ValueError(f"packed queue declaration changed: {name}")
+        alias = f"{kind}*" if count is not None else f"{kind}&"
+        replacement = (
+            f"__shared__ {kind} warp_{name}[{warps}]{suffix};\n"
+            f"  {alias} {name} = warp_{name}[warp_index];"
+        )
+        source = source.replace(declaration, replacement)
+    marker = "constexpr unsigned full_warp_mask = 0xffffffffU;"
+    if source.count(marker) != 1:
+        raise ValueError("packed queue warp-mask declaration changed")
+    return source.replace(
+        marker,
+        marker + "\n  const unsigned warp_index = threadIdx.x / 32U;"
+        "\n  const unsigned warp_lane = threadIdx.x % 32U;",
+    )
+
+
+def _warp_private_packed_work_worker(
+    source: str, block_threads: int, width: int
+) -> str:
+    """Partition bounded work bins without sharing retirement across warps.
+
+    The existing eight-bin admission/flush algorithm and quartet consumer stay
+    unchanged. Each warp owns eight 2W arenas, a selected bin and a bra cursor;
+    all collectives use the full warp even for inactive or tail lanes.
+    """
+    if width != 32 or block_threads % width:
+        raise ValueError("packed work queues require complete 32-lane warps")
+    warps = block_threads // width
+    source = source.replace("threadIdx.x", "warp_lane")
+    source = source.replace("__syncthreads();", "__syncwarp(full_warp_mask);")
+    for kind, name, shape, alias in (
+        (
+            "std::uint32_t",
+            "work_pairs",
+            f"[8][{2 * width}]",
+            f"std::uint32_t (*work_pairs)[{2 * width}]",
+        ),
+        (
+            "double",
+            "work_bounds",
+            f"[8][{2 * width}]",
+            f"double (*work_bounds)[{2 * width}]",
+        ),
+        ("std::uint32_t", "work_counts", "[8]", "std::uint32_t* work_counts"),
+        ("std::uint32_t", "selected_bucket", "", "std::uint32_t& selected_bucket"),
+        ("std::uint32_t", "bra_ordinal", "", "std::uint32_t& bra_ordinal"),
+    ):
+        declaration = f"__shared__ {kind} {name}{shape};"
+        if source.count(declaration) != 1:
+            raise ValueError(f"packed work queue declaration changed: {name}")
+        source = source.replace(
+            declaration,
+            f"__shared__ {kind} warp_{name}[{warps}]{shape};\n"
+            f"  {alias} = warp_{name}[warp_index];",
+        )
+    marker = "constexpr unsigned full_warp_mask = 0xffffffffU;"
+    if source.count(marker) != 1:
+        raise ValueError("packed work queue warp-mask declaration changed")
+    return source.replace(
+        marker,
+        marker + "\n  const unsigned warp_index = threadIdx.x / 32U;"
+        "\n  const unsigned warp_lane = threadIdx.x % 32U;",
+    )
+
+
 def exchange_streaming_worker(
     *,
     prefix: str,
@@ -175,7 +262,7 @@ def exchange_streaming_worker(
     execute_condition = "keep" if packed else "stream_keep[subgroup] != 0U"
     execution_state = retained_state if packed else "stream_keep[subgroup]"
     if work_aware:
-        return f"""
+        source = f"""
 /** Bucket only admitted quartets; angular class and bra contraction are fixed.
  * Each nonsaturated work bin spans less than a factor of two in ket pair work.
  * The two contraction flags distinguish uncontracted, one-sided and two-sided
@@ -319,7 +406,14 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
   }}
 }}
 """
-    return f"""
+        if packed and block_threads > width:
+            if not local_lane_state:
+                raise ValueError(
+                    "multiwarp packed work queues require lane-private storage"
+                )
+            return _warp_private_packed_work_worker(source, block_threads, width)
+        return source
+    source = f"""
 {exchange_queue_sort_source(prefix)}
 template <bool Unrestricted>
 __device__ __forceinline__ void {prefix}_streaming_fock(
@@ -440,3 +534,8 @@ __device__ __forceinline__ void {prefix}_streaming_fock(
   }}
 }}
 """
+    if packed and block_threads > width:
+        if not local_lane_state:
+            raise ValueError("multiwarp packed queues require lane-private storage")
+        return _warp_private_packed_worker(source, block_threads, width)
+    return source
