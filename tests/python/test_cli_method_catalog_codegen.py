@@ -51,9 +51,7 @@ class NativeMethodirProjectionTests(unittest.TestCase):
                 self.assertFalse(row.cpu)
                 self.assertFalse(row.cuda)
                 self.assertEqual(row.identity, "")
-                self.assertIn(
-                    "automatic bulk components cannot mix", row.reason
-                )
+                self.assertIn("automatic bulk components cannot mix", row.reason)
 
         self.assertFalse(table["wb97m-v-rks"].cpu)
         self.assertIn("nonlocal", table["wb97m-v-rks"].reason)
