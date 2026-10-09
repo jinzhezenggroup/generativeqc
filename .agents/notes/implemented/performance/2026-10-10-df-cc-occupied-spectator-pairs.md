@@ -196,6 +196,15 @@ scratch, without releases/assets. Numeric NVML indices did not work in one
 Slurm allocation despite successful CUDA qualification; the ABBA driver now
 records the assigned CUDA device UUID directly without visibility overrides.
 
+The post-measurement CI correction uses typed Fraction-valued dictionaries
+instead of integer-typed Counter containers for rational polynomials. All
+three generated pair CPU/CUDA artifacts compare byte-for-byte with the frozen
+measured library's artifacts, and all 26 focused host tests still pass; no
+unrelated GPU/endpoint rerun is warranted. Current ownership shards classify
+the projection header as runtime metadata/storage and the folded equation and
+majorant as compiler-generated. The inherited matrix-provider migration ledger
+records the additional read of the existing admission gate, not a new selector.
+
 An exact-only current-tau gate is another bounded first experiment: copy a
 bitwise-symmetric tau without projection and retain the original action for
 every asymmetric state. Its projection error is zero, so a projection majorant

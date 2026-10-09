@@ -9,7 +9,7 @@ This compiler transform does not establish that runtime content contract.
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from functools import cache
@@ -77,8 +77,8 @@ def _prove_ladder_pair_symmetry(root: Node) -> None:
             )
         raise ValueError("unsupported ladder symmetry-proof primitive")
 
-    def canonical(terms: list) -> Counter:
-        result = Counter()
+    def canonical(terms: list) -> dict:
+        result = defaultdict(Fraction)
         for coefficient, output, operands in terms:
             if len(operands) > 6:
                 raise ValueError("ladder symmetry proof exceeds its factor limit")
@@ -125,7 +125,7 @@ def _prove_ladder_pair_symmetry(root: Node) -> None:
                         )
                     keys.append(tuple(sorted(factors)))
             result[min(keys)] += coefficient
-        return Counter({key: value for key, value in result.items() if value})
+        return {key: value for key, value in result.items() if value}
 
     original = _expand("abcd->abcd", [expand(root)], 1)
     reflected = _expand("badc->abcd", [original], 1)
@@ -178,8 +178,10 @@ def build_ladder_pair_majorant(program: Program) -> LadderPairMajorant:
             else any(amplitude_dependent(child) for child in node.inputs)
         )
 
-    def multiply_polynomials(first: Counter, second: Counter) -> Counter:
-        result = Counter()
+    def multiply_polynomials(
+        first: dict[tuple[str, ...], Fraction], second: dict[tuple[str, ...], Fraction]
+    ) -> dict[tuple[str, ...], Fraction]:
+        result: dict[tuple[str, ...], Fraction] = defaultdict(Fraction)
         for first_term, first_value in first.items():
             for second_term, second_value in second.items():
                 result[tuple(sorted((*first_term, *second_term)))] += (
@@ -188,20 +190,22 @@ def build_ladder_pair_majorant(program: Program) -> LadderPairMajorant:
         return result
 
     @cache
-    def row_polynomial(node: Node, axes: tuple[int, ...]) -> Counter:
+    def row_polynomial(
+        node: Node, axes: tuple[int, ...]
+    ) -> dict[tuple[str, ...], Fraction]:
         if node.op == "input":
             name = node.attrs["name"]
             if name not in ("bov", "bvv", "t1"):
                 raise ValueError("ladder row-norm proof requires known input factors")
             bound_name = name + "_sum_axes_" + "_".join(map(str, axes))
             norms[bound_name] = (name, axes)
-            return Counter({(bound_name,): Fraction(1)})
+            return {(bound_name,): Fraction(1)}
         if node.op == "transpose":
             return row_polynomial(
                 node.inputs[0], tuple(sorted(node.attrs["axes"][axis] for axis in axes))
             )
         if node.op == "add":
-            result = Counter()
+            result: dict[tuple[str, ...], Fraction] = defaultdict(Fraction)
             for child, coefficient in zip(
                 node.inputs, node.attrs["coefficients"], strict=True
             ):
@@ -234,23 +238,21 @@ def build_ladder_pair_majorant(program: Program) -> LadderPairMajorant:
             )
             for position, child in enumerate(node.inputs)
         ]
-        return Counter(
-            {
-                monomial: abs(Fraction(*node.attrs["coefficient"])) * value
-                for monomial, value in multiply_polynomials(*polynomials).items()
-            }
-        )
+        return {
+            monomial: abs(Fraction(*node.attrs["coefficient"])) * value
+            for monomial, value in multiply_polynomials(*polynomials).items()
+        }
 
     @cache
-    def polynomial(node: Node) -> Counter[tuple[str, ...]]:
+    def polynomial(node: Node) -> dict[tuple[str, ...], Fraction]:
         if node.op == "input":
             if node.attrs["name"] != "df_tau":
                 raise ValueError("ladder majorant must terminate at tau")
-            return Counter({(): Fraction(1)})
+            return {(): Fraction(1)}
         if node.op == "transpose":
             return polynomial(node.inputs[0])
         if node.op == "add":
-            result: Counter[tuple[str, ...]] = Counter()
+            result: dict[tuple[str, ...], Fraction] = defaultdict(Fraction)
             for child, coefficient in zip(
                 node.inputs, node.attrs["coefficients"], strict=True
             ):
@@ -279,15 +281,13 @@ def build_ladder_pair_majorant(program: Program) -> LadderPairMajorant:
             for position, label in enumerate(labels[factor])
             if label in reductions
         )
-        return Counter(
-            {
-                monomial: value * abs(Fraction(*node.attrs["coefficient"]))
-                for monomial, value in multiply_polynomials(
-                    polynomial(node.inputs[carrier]),
-                    row_polynomial(node.inputs[factor], axes),
-                ).items()
-            }
-        )
+        return {
+            monomial: value * abs(Fraction(*node.attrs["coefficient"]))
+            for monomial, value in multiply_polynomials(
+                polynomial(node.inputs[carrier]),
+                row_polynomial(node.inputs[factor], axes),
+            ).items()
+        }
 
     positive = polynomial(program.outputs[LADDER_OUTPUT])
     amplitude = [name for name, (source, _) in norms.items() if source == "t1"]

@@ -36,11 +36,11 @@
     "src/cc/cuda_solver.cu": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "CC solver plumbing still carries matrix-implementation selectors that must be replaced by semantic contraction requests or prepared bindings. The separately admitted expanded-replay lowering shares the existing prepared provider and adds an internal ablation/diagnostic selector, not method-local vendor discovery.",
+      "reason": "CC solver plumbing still carries matrix-implementation selectors that must be replaced by semantic contraction requests or prepared bindings. The separately admitted expanded-replay lowering shares the existing prepared provider and adds an internal ablation/diagnostic selector, not method-local vendor discovery. One additional existing matrix-admission read gates optional occupied-spectator storage after the primal tile and replay; it reuses that provider and introduces no independent vendor selector.",
       "selectors": {
         "df_matrix_gemm": 2,
         "df_replay_matrix_gemm": 2,
-        "matrix_gemm": 13
+        "matrix_gemm": 14
       }
     },
     "src/cc/df_lambda_cuda.cu": {
