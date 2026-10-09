@@ -12,8 +12,9 @@ HF resolves to `CpuIndependent`. Execution uses the resolved Fock specification
 as its sole source of mathematical identity, without a redundant `legacy` bit.
 The resident CUDA DF single/bucket native entry points reject an explicit
 preliminary initial-guess request before allocating GPU resources. Public C API
-admission remains stricter and reports unsupported combinations at preparation. The additive public `generativeqc/fock.h`
-and Python `FockPlan` interfaces expose these choices while the legacy method
+admission remains stricter and reports unsupported combinations at preparation.
+
+The additive public `generativeqc/fock.h` and Python `FockPlan` interfaces expose these choices while the legacy method
 descriptors retain their density-fitting defaults.
 
 The CUDA device-pointer provider can prepare a generated pure-Coulomb consumer
