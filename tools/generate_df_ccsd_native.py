@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,13 +18,17 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT / "python"))
 
 from generativeqc_compiler.cc.df_equations import build_df_virtual_response_programs
+from generativeqc_compiler.cc.df_gemm import pack_df_contractions
 from generativeqc_compiler.tensor import Program, prepare_for_backend
 
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
     _cpu_function,
     _cuda_program,
+    _packed_matrix_gemm,
     _required_function,
+    _size,
+    contraction_query,
 )
 
 INPUTS = (
@@ -75,6 +80,18 @@ def programs(backend: str) -> dict[str, Program]:
     return result
 
 
+@cache
+def packed_replay_program() -> Program:
+    """Pack the original expanded one-Q graph, independently of primal cuts.
+
+    Native replay still consumes every original factor and accepted amplitude.
+    Packing changes layouts and library dispatch and deduplicates one shared
+    contraction. No hoisted primal intermediate or previous replay output
+    supplies an audit input.
+    """
+    return pack_df_contractions(programs("cuda")["virtual"])
+
+
 def cpu_header() -> str:
     """CPU actions and shared exact runtime-shape arena queries."""
     lines = [
@@ -119,7 +136,36 @@ def cpu_header() -> str:
                         output_fields=fields,
                     )
                 )
-    lines += ["}  // namespace generativeqc::cc::generated::df", ""]
+    packed = packed_replay_program()
+    dimensions = sorted(
+        {
+            dimension
+            for node in packed.live_nodes
+            if (binding := _packed_matrix_gemm(node)) is not None
+            for dimension in binding[2:]
+        }
+    )
+    lines += [
+        f'inline constexpr const char* virtual_replay_hash="{packed.logical_hash}";',
+        f"inline constexpr std::size_t virtual_replay_operations={sum(node.op != 'input' for node in packed.live_nodes)};",
+        f"inline constexpr std::size_t virtual_replay_gemms={sum(_packed_matrix_gemm(node) is not None for node in packed.live_nodes)};",
+        _required_function(packed, "virtual_replay_arena_elements"),
+        contraction_query(packed, "virtual_replay_contraction_terms"),
+        "inline bool virtual_replay_dimensions_fit(std::size_t o,std::size_t v) { return "
+        + " && ".join(
+            f"{dimension} <= 2147483647ULL" for dimension in dimensions or ("0",)
+        )
+        + "; }",
+        "inline std::size_t virtual_replay_packing_elements(std::size_t o,std::size_t v) { std::size_t total=0;",
+        *(
+            f"total=checked_add(total,{_size(node.spec)});"
+            for node in packed.live_nodes
+            if node.op == "transpose"
+        ),
+        "return total; }",
+        "}  // namespace generativeqc::cc::generated::df",
+        "",
+    ]
     return "\n".join(lines)
 
 
@@ -130,6 +176,7 @@ def cuda_header() -> str:
             "// Generated DF RCCSD device declarations; do not edit.",
             "#pragma once",
             "#include <cuda_runtime.h>",
+            '#include "tensor/cuda_contraction.cuh"',
             '#include "generated_df_ccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated::df {",
             "struct CudaState : Inputs {",
@@ -138,6 +185,10 @@ def cuda_header() -> str:
             "  int* error{};",
             "  cudaStream_t stream{};",
             "};",
+            "struct ReplayCudaState : CudaState { generativeqc::tensor::PreparedContractions contractions; };",
+            "inline constexpr std::size_t replay_binding_host_bytes() { return generativeqc::tensor::PreparedContractions::storage_bytes(virtual_replay_gemms); }",
+            "void prepare_virtual_replay(ReplayCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t&,std::size_t&);",
+            "VirtualOutputs run_virtual_replay_cuda(ReplayCudaState&);",
             *[
                 f"{output_type} run_{name}_cuda(CudaState& state);"
                 for name, (output_type, _) in OUTPUTS.items()
@@ -188,7 +239,22 @@ def cuda_source() -> str:
         lines.append(
             f"{output_type} run_{name}_cuda(CudaState& state) {{ generativeqc_tensor::cuda_check(cudaMemsetAsync(state.error,0,sizeof(int),state.stream)); return run_df_{name}(state); }}"
         )
-    lines += ["}  // namespace generativeqc::cc::generated::df", ""]
+    lines += [
+        _cuda_program(
+            packed_replay_program(),
+            "df_virtual_replay",
+            "VirtualOutputs",
+            state_type="ReplayCudaState",
+            input_overrides={key: f"s.{key}" for key in INPUTS},
+            output_fields=OUTPUTS["virtual"][1],
+            reset_error=False,
+            prepared_contractions="s.contractions",
+        ),
+        "void prepare_virtual_replay(ReplayCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){bind_df_virtual_replay(s,context,1,calls,summands);}",
+        "VirtualOutputs run_virtual_replay_cuda(ReplayCudaState& s){return run_df_virtual_replay(s);}",
+        "}  // namespace generativeqc::cc::generated::df",
+        "",
+    ]
     return "\n".join(lines)
 
 

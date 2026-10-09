@@ -36,10 +36,11 @@
     "src/cc/cuda_solver.cu": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "CC solver plumbing still carries matrix-implementation selectors that must be replaced by semantic contraction requests or prepared bindings.",
+      "reason": "CC solver plumbing still carries matrix-implementation selectors that must be replaced by semantic contraction requests or prepared bindings. The separately admitted expanded-replay lowering shares the existing prepared provider and adds an internal ablation/diagnostic selector, not method-local vendor discovery.",
       "selectors": {
         "df_matrix_gemm": 2,
-        "matrix_gemm": 12
+        "df_replay_matrix_gemm": 2,
+        "matrix_gemm": 13
       }
     },
     "src/cc/df_lambda_cuda.cu": {
@@ -77,9 +78,10 @@
     "src/cc/solver.hpp": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "CC solver API still exposes the DF matrix-GEMM implementation choice.",
+      "reason": "CC solver API still exposes the DF matrix-GEMM implementation choice, including an internal independent-expanded-replay ablation and selection diagnostic. Retain these under the existing provider-neutral migration contract.",
       "selectors": {
-        "df_matrix_gemm": 2
+        "df_matrix_gemm": 2,
+        "df_replay_matrix_gemm": 2
       }
     },
     "src/methods/df_ccsdt_force.cu": {

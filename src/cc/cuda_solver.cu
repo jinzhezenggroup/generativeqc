@@ -102,6 +102,8 @@ struct Owner {
   Layout layout;
   generated::dfcore::CudaState state;
   generated::df::CudaState df_state;
+  generated::df::ReplayCudaState replay_state;
+  bool replay_matrix{};
   generated::dfhoist::CudaState hoisted_state;
   DFIterationPlan plan;
   double *df_bov{}, *df_bvv{}, *df_sum{};
@@ -173,7 +175,11 @@ struct Owner {
       if (naux) {
         layout.df_bov = reserve(layout, cursor, checked_mul(p.df_bov.size(), sizeof(double)));
         layout.df_bvv = reserve(layout, cursor, checked_mul(p.df_bvv.size(), sizeof(double)));
-        layout.df_arena = reserve(layout, cursor, checked_mul(plan.auxiliary, sizeof(double)));
+        const auto auxiliary =
+            replay_matrix ? std::max(plan.auxiliary,
+                                     generated::df::virtual_replay_arena_elements(p.nocc, p.nvir))
+                          : plan.auxiliary;
+        layout.df_arena = reserve(layout, cursor, checked_mul(auxiliary, sizeof(double)));
         layout.df_sum = reserve(layout, cursor, checked_mul(plan.accumulation, sizeof(double)));
         if (plan.hoisted)
           layout.df_prepare =
@@ -222,6 +228,7 @@ struct Owner {
         return checked_add(checked_add(total, kContractionProviderAllowance),
                            tensor::PreparedContractions::storage_bytes(
                                generated::iteration_prepared_contractions));
+      if (replay_matrix) total = checked_add(total, generated::df::replay_binding_host_bytes());
       return plan.matrix_gemm ? checked_add(checked_add(total, kContractionProviderAllowance),
                                             generated::dfhoist::contraction_host_bytes(
                                                 plan.auxiliary_batch_size > 1
@@ -250,6 +257,7 @@ struct Owner {
       }
     }
     const auto scalar_plan = [&]() {
+      replay_matrix = false;
       if (!naux)
         conventional_prepared = false;
       else
@@ -269,6 +277,23 @@ struct Owner {
     }
     if (combined > options.max_bytes)
       throw std::length_error("RCCSD CUDA resident state exceeds correlation memory budget");
+    // Optional audit storage cannot sacrifice the already admitted primal tile.
+    // The scalar expanded replay remains available under the original budget.
+    if (plan.matrix_gemm && options.df_replay_matrix_gemm) {
+      try {
+        if (generated::df::virtual_replay_dimensions_fit(p.nocc, p.nvir)) {
+          replay_matrix = true;
+          const auto candidate = build_layout();
+          if (candidate <= options.max_bytes)
+            combined = candidate;
+          else
+            replay_matrix = false;
+        }
+      } catch (const std::length_error&) {
+        replay_matrix = false;
+      }
+      if (!replay_matrix) combined = build_layout();
+    }
     try {
       cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
       if (options.diis_size) {
@@ -304,6 +329,12 @@ struct Owner {
         return code;
       };
       auto allocation = allocate_numeric();
+      if (allocation == cudaErrorMemoryAllocation && replay_matrix) {
+        (void)cudaGetLastError();
+        replay_matrix = false;
+        combined = build_layout();
+        allocation = allocate_numeric();
+      }
       if (allocation == cudaErrorMemoryAllocation && plan.auxiliary_batch_size > 1) {
         (void)cudaGetLastError();
         // The same admitted provider can execute one-Q work without the
@@ -382,6 +413,16 @@ struct Owner {
               naux % plan.auxiliary_batch_size, diagnostic.df_gemm_calls,
               diagnostic.df_gemm_summands);
         }
+        if (replay_matrix) {
+          static_cast<generated::df::CudaState&>(replay_state) = df_state;
+          try {
+            generated::df::prepare_virtual_replay(
+                replay_state, contractions, diagnostic.df_gemm_calls, diagnostic.df_gemm_summands);
+          } catch (const std::bad_alloc&) {
+            replay_state.contractions.release();
+            replay_matrix = false;
+          }
+        }
       }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
@@ -407,6 +448,7 @@ struct Owner {
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
+      diagnostic.df_replay_matrix_gemm = replay_matrix;
       diagnostic.conventional_prepared_contractions = conventional_prepared;
       diagnostic.conventional_provider_capacity_bytes =
           conventional_prepared ? kContractionProviderAllowance : 0;
@@ -493,20 +535,34 @@ struct Owner {
     for (std::size_t q = 0; q < naux; ++q) {
       df_state.bov = df_bov + q * n1;
       df_state.bvv = df_bvv + q * state.v * state.v;
-      const auto out = generated::df::run_virtual_accumulate_cuda(df_state);
+      generated::df::VirtualOutputs out{};
+      if (replay_matrix) {
+        static_cast<generated::df::CudaState&>(replay_state) = df_state;
+        out = generated::df::run_virtual_replay_cuda(replay_state);
+        diagnostic.df_packing_bytes = checked_add(
+            diagnostic.df_packing_bytes,
+            checked_mul(generated::df::virtual_replay_packing_elements(state.o, state.v),
+                        2 * sizeof(double)));
+      } else {
+        out = generated::df::run_virtual_accumulate_cuda(df_state);
+      }
       accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n1), 256),
                       256, 0, stream>>>(out.singles, n1, df_sum, state.error);
       accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n2), 256),
                       256, 0, stream>>>(out.doubles, n2, df_sum + n1, state.error);
       ++diagnostic.df_auxiliary_slices;
       ++diagnostic.df_auxiliary_tiles;
-      diagnostic.df_virtual_operations += generated::df::virtual_cuda_operation_count;
+      diagnostic.df_virtual_operations += replay_matrix
+                                              ? generated::df::virtual_replay_operations
+                                              : generated::df::virtual_cuda_operation_count;
       diagnostic.df_accumulation_calls += 2;
       diagnostic.df_accumulation_bytes =
           checked_add(diagnostic.df_accumulation_bytes, checked_mul(elements, 3 * sizeof(double)));
       diagnostic.df_contraction_terms = checked_add(
           diagnostic.df_contraction_terms,
-          generated::dfhoist::fallback_virtual_cuda_contraction_terms(state.o, state.v));
+          replay_matrix
+              ? generated::df::virtual_replay_contraction_terms(state.o, state.v)
+              : generated::dfhoist::fallback_virtual_cuda_contraction_terms(state.o, state.v));
     }
     cuda_check(cudaGetLastError());
   }

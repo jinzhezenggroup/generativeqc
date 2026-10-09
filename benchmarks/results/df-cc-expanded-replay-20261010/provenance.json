@@ -1,0 +1,28 @@
+{
+  "base_commit": "b315d4056f060b639b0d39d3db311a94a28e760c",
+  "slurm_job": "2798",
+  "visibility": "0",
+  "device": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "input_sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+  "measured_patch_sha256": "d19158b2b98ec9335c831320efd10e975ee06f29c7fcb45f2a3fdbed2ca50cbf",
+  "baseline_timer_patch_sha256": "804b2674af7727182606bae2ab4c9b740284bbb01e7ff3a64203a0355fa10425",
+  "libraries": {
+    "base": "588830c0811f815d8c84e278c4c674521c4ee48cbe0b3cec5bc08aeb840cdda7",
+    "candidate": "820557a818d5398a6ff90c1294f5c6c0d903e126ebbdad0f55b6039e8cdb9d60"
+  },
+  "executables": {
+    "base": "ce744d44375e1dcd399bc5ceca685f0431344ead39991a253cac599bc5027acc",
+    "candidate": "4b11e2106d362468c4c58f6fa9762faa13f8fa104a822793025db1a7d952d3cf"
+  },
+  "timing_boundary": "native molecular RHF + DF source + CCSD + independent expanded physical replay + FP64 (T), including phase-owner teardown; process wall also includes startup and final cleanup",
+  "forces_requested": false,
+  "precision": "FP64, pedantic matrix provider, unchanged Q accumulation order",
+  "replay_work_per_q": {
+    "gemm_calls": 27,
+    "gemm_summands": 9030980907,
+    "operation_delta": 29,
+    "packing_bytes": 1402992864,
+    "contraction_terms_saved": 439569
+  }
+}
