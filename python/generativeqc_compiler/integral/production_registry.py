@@ -22,6 +22,10 @@ from .production_profile import (
     ResolvedProductionProfile,
     _profile_identifier,
 )
+from .production_rys_tasks import (
+    direct_rys_task_candidates,
+    preferred_rys_task_candidates,
+)
 from .production_rys_values import direct_rys_value_candidates
 from .production_selection import (
     KernelSelection,
@@ -171,6 +175,7 @@ std::uint64_t enabled_fock_shell_class_mask() noexcept;
 
 /** Legacy single-profile bundles do not compile optional K-block alternatives. */
 std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept;
+std::uint64_t enabled_rys_task_fock_shell_class_mask() noexcept;
 
 /** Return the generated mixed-Fock capability mask. */
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept;
@@ -231,6 +236,22 @@ cudaError_t launch_shell_class_k_block_streaming_fock(
     const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) noexcept;
+
+/** Launch the optional lane-local Rys value worker. */
+cudaError_t launch_shell_class_rys_task_streaming_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted,
+    unsigned worker_blocks, const void* shell_pair_stream,
+    const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
+    const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, bool mixed_precision_enabled,
+    double fp64_threshold, const double* schwarz_bounds,
+    const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
+    unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
+
+/** Launch independent warp-private primitive-work bins for lane-local Rys. */
+cudaError_t launch_shell_class_rys_task_work_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept;
 
 /** Launch the optional resident-bra ppps force worker. */
 cudaError_t launch_ppps_resident(
@@ -415,6 +436,8 @@ std::uint64_t enabled_fock_shell_class_mask() noexcept {{
 }}
 
 std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept {{ return 0; }}
+std::uint64_t enabled_rys_task_fock_shell_class_mask() noexcept {{ return 0; }}
+std::uint64_t preferred_rys_task_fock_shell_class_mask() noexcept {{ return 0; }}
 
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept {{
   const char* selection =
@@ -497,9 +520,19 @@ cudaError_t launch_shell_class_k_block_streaming_fock(
   return cudaErrorNotSupported;
 }}
 
+cudaError_t launch_shell_class_rys_task_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  return cudaErrorNotSupported;
+}}
+
 cudaError_t launch_shell_class_work_streaming_fock(
     {_streaming_fock_launch_parameter_declaration()}) noexcept {{
   return launch_shell_class_streaming_fock(shell_class, {_streaming_fock_launch_argument_list()});
+}}
+
+cudaError_t launch_shell_class_rys_task_work_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  return cudaErrorNotSupported;
 }}
 
 cudaError_t launch_ppps_resident(
@@ -672,6 +705,10 @@ def emit_multi_registry_source(
     streaming_fock_arguments = _streaming_fock_launch_argument_list()
     for index, profile in enumerate(items):
         identifier = _profile_identifier(profile.target.architecture)
+        preferred_rys_task_fock_mask = sum(
+            1 << shell_class_index(candidate.spec)
+            for candidate in preferred_rys_task_candidates(profile)
+        )
         force_cases = []
         fock_cases = []
         mixed_fock_cases = []
@@ -689,6 +726,43 @@ def emit_multi_registry_source(
         rys_fock_cases = []
         k_block_fock_mask = 0
         k_block_fock_cases = []
+        rys_task_fock_mask = 0
+        rys_task_fock_cases = []
+        rys_task_work_fock_cases = []
+        for candidate in direct_rys_task_candidates(profile):
+            shell_class = shell_class_index(candidate.spec)
+            symbol = (
+                f"generativeqc_launch_{identifier}_rys_task_generated_"
+                f"{candidate.spec.name}_streaming_fock"
+            )
+            declarations.append(
+                f'extern "C" cudaError_t {symbol}('
+                "cudaStream_t, bool, unsigned, const void*, "
+                "const std::int64_t*, const void*, const double*, "
+                "const void*, double, bool, double, const double*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
+                "unsigned long long*, unsigned long long*);"
+            )
+            rys_task_fock_cases.append(
+                f"    case {shell_class}U:\n"
+                f"      return {symbol}({streaming_fock_arguments});"
+            )
+            work_symbol = (
+                symbol.removesuffix("_streaming_fock") + "_work_streaming_fock"
+            )
+            declarations.append(
+                f'extern "C" cudaError_t {work_symbol}('
+                "cudaStream_t, bool, unsigned, const void*, "
+                "const std::int64_t*, const void*, const double*, "
+                "const void*, double, bool, double, const double*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
+                "unsigned long long*, unsigned long long*);"
+            )
+            rys_task_work_fock_cases.append(
+                f"    case {shell_class}U:\n"
+                f"      return {work_symbol}({streaming_fock_arguments});"
+            )
+            rys_task_fock_mask |= 1 << shell_class
         for candidate in direct_rys_value_candidates(profile):
             shell_class = shell_class_index(candidate.spec)
             symbol = (
@@ -898,6 +972,22 @@ cudaError_t launch_{identifier}_k_block_streaming_fock(
   }}
 }}
 
+cudaError_t launch_{identifier}_rys_task_streaming_fock(
+    {streaming_fock_parameters}) noexcept {{
+  switch (shell_class) {{
+{chr(10).join(rys_task_fock_cases)}
+    default: return cudaErrorNotSupported;
+  }}
+}}
+
+cudaError_t launch_{identifier}_rys_task_work_streaming_fock(
+    {streaming_fock_parameters}) noexcept {{
+  switch (shell_class) {{
+{chr(10).join(rys_task_work_fock_cases)}
+    default: return launch_{identifier}_rys_task_streaming_fock(shell_class, {streaming_fock_arguments});
+  }}
+}}
+
 cudaError_t launch_{identifier}_resident(
     {_resident_launch_parameter_declaration()}) noexcept {{
   """
@@ -927,6 +1017,7 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       UINT64_C({fock_mask}), UINT64_C({mixed_fock_mask}),
       UINT64_C({preferred_streaming_fock_mask}),
       UINT64_C({rys_fock_mask}), UINT64_C({k_block_fock_mask}),
+      UINT64_C({rys_task_fock_mask}), UINT64_C({preferred_rys_task_fock_mask}),
       kForceNames{index}.data(), kForceNames{index}.size(),
       kFockNames{index}.data(), kFockNames{index}.size(),
       kMixedFockNames{index}.data(), kMixedFockNames{index}.size(),
@@ -936,6 +1027,8 @@ constexpr std::array<ShellKernelMetadata, {len(mixed_fock_names)}> kMixedFockNam
       launch_{identifier}_work_streaming_fock,
       launch_{identifier}_rys_streaming_fock,
       launch_{identifier}_k_block_streaming_fock,
+      launch_{identifier}_rys_task_streaming_fock,
+      launch_{identifier}_rys_task_work_streaming_fock,
       launch_{identifier}_resident}},"""
         )
     return f"""#include "generativeqc_generated_shell_registry.hpp"
@@ -964,6 +1057,8 @@ struct KernelSet {{
   std::uint64_t preferred_streaming_fock_mask;
   std::uint64_t rys_fock_mask;
   std::uint64_t k_block_fock_mask;
+  std::uint64_t rys_task_fock_mask;
+  std::uint64_t preferred_rys_task_fock_mask;
   const ShellKernelMetadata* force_names;
   std::size_t force_name_count;
   const ShellKernelMetadata* fock_names;
@@ -977,6 +1072,8 @@ struct KernelSet {{
   StreamingFockLaunchFunction launch_work_streaming_fock;
   StreamingFockLaunchFunction launch_rys_streaming_fock;
   StreamingFockLaunchFunction launch_k_block_streaming_fock;
+  StreamingFockLaunchFunction launch_rys_task_streaming_fock;
+  StreamingFockLaunchFunction launch_rys_task_work_streaming_fock;
   ResidentLaunchFunction launch_resident;
 }};
 
@@ -1106,6 +1203,20 @@ std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept {{
              : kernels->k_block_fock_mask & enabled_fock_shell_class_mask();
 }}
 
+std::uint64_t enabled_rys_task_fock_shell_class_mask() noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? 0 : environment_mask(
+      "GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES", kernels->rys_task_fock_mask,
+      kernels->fock_names, kernels->fock_name_count)
+      & enabled_fock_shell_class_mask();
+}}
+
+std::uint64_t preferred_rys_task_fock_shell_class_mask() noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? 0 : kernels->preferred_rys_task_fock_mask
+      & enabled_rys_task_fock_shell_class_mask();
+}}
+
 std::uint64_t enabled_shell_class_mask() noexcept {{
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? 0 : environment_mask(
@@ -1176,6 +1287,22 @@ cudaError_t launch_shell_class_k_block_streaming_fock(
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? cudaErrorNotSupported
                             : kernels->launch_k_block_streaming_fock(
+      shell_class, {streaming_fock_arguments});
+}}
+
+cudaError_t launch_shell_class_rys_task_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? cudaErrorNotSupported
+                            : kernels->launch_rys_task_streaming_fock(
+      shell_class, {streaming_fock_arguments});
+}}
+
+cudaError_t launch_shell_class_rys_task_work_streaming_fock(
+    {_streaming_fock_launch_parameter_declaration()}) noexcept {{
+  const KernelSet* kernels = current_kernel_set();
+  return kernels == nullptr ? cudaErrorNotSupported
+                            : kernels->launch_rys_task_work_streaming_fock(
       shell_class, {streaming_fock_arguments});
 }}
 

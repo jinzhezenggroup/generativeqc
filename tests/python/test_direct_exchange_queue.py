@@ -4,22 +4,36 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from generativeqc_compiler.integral.capabilities import CAPABILITY_MIXED_FOCK
 from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
 from generativeqc_compiler.integral.production_emission import _streaming_fock_source
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_rys_tasks import (
+    direct_rys_task_candidates,
+)
 from generativeqc_compiler.integral.production_selection import (
     supports_exchange_work_buckets,
 )
 from generativeqc_compiler.integral.shell_spec import shell_pair_class
 
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
-@pytest.mark.parametrize("name", ["psss", "dppp", "dsds"])
+
+@pytest.mark.parametrize(
+    ("name", "task_parallel"),
+    [("psss", False), ("dppp", False), ("dsds", False), ("dsss", True), ("dsds", True)],
+)
 @pytest.mark.parametrize("work_aware", [False, True])
 def test_emitted_queue_executes_each_survivor_once(
-    tmp_path: Path, name: str, work_aware: bool, native_cxx: object
+    tmp_path: Path,
+    name: str,
+    task_parallel: bool,
+    work_aware: bool,
+    native_cxx: NativeCxx,
 ) -> None:
     """Cover sparse/dense/empty tails, canonical pairs and mixed-precision tags.
 
@@ -33,7 +47,10 @@ def test_emitted_queue_executes_each_survivor_once(
         root / "python/generativeqc_compiler/integral/production_shell_classes.json",
         "sm_120",
     )
-    selection = next(item for item in profile.selections if item.spec.name == name)
+    selections = (
+        direct_rys_task_candidates(profile) if task_parallel else profile.selections
+    )
+    selection = next(item for item in selections if item.spec.name == name)
     schedule = selection.fock_schedule or selection.schedule
     packed = schedule.kind == ScheduleKind.PACKED_TASKS
     mixed = selection.has_capability(CAPABILITY_MIXED_FOCK)
@@ -63,7 +80,7 @@ def test_emitted_queue_executes_each_survivor_once(
     )
     subgroup_parameters = "" if packed else ", unsigned lane, unsigned"
     only_leader = "true" if packed else "lane == 0U"
-    first_slot = "threadIdx.x == 0U" if packed else "index == 0U"
+    first_slot = "threadIdx.x % 32U == 0U" if packed else "index == 0U"
     precision_parameters = (
         "unsigned state, unsigned long long* fp64, unsigned long long* fp32"
         if mixed
@@ -80,6 +97,7 @@ def test_emitted_queue_executes_each_survivor_once(
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <thread>
@@ -95,28 +113,40 @@ constexpr unsigned block_threads = {schedule.block_threads};
 constexpr unsigned execution_width = {width};
 int observed_buckets[block_threads];
 std::vector<unsigned> bucket_labels;
-bool homogeneous_error = false;
-std::barrier rendezvous(block_threads, []() noexcept {{
-  int first_bucket = -1;
-  for (auto& observed : observed_buckets) {{
-    if ({str(work_aware).lower()} && observed >= 0) {{
-      if (first_bucket >= 0 && first_bucket != observed) homogeneous_error = true;
-      first_bucket = observed;
+std::atomic<bool> homogeneous_error = false;
+struct Completion {{
+  unsigned begin, count;
+  void operator()() noexcept {{
+    int first_bucket = -1;
+    for (unsigned index = begin; index < begin + count; ++index) {{
+      auto& observed = observed_buckets[index];
+      if ({str(work_aware).lower()} && observed >= 0) {{
+        if (first_bucket >= 0 && first_bucket != observed) homogeneous_error = true;
+        first_bucket = observed;
+      }}
+      observed = -1;
     }}
-    observed = -1;
   }}
-}});
+}};
+std::barrier rendezvous(block_threads, Completion{{0, block_threads}});
+auto warp_rendezvous = [] {{
+  std::vector<std::unique_ptr<std::barrier<Completion>>> groups;
+  for (unsigned warp = 0; warp < block_threads / 32; ++warp)
+    groups.push_back(std::make_unique<std::barrier<Completion>>(
+        32, Completion{{32 * warp, 32}}));
+  return groups;
+}}();
 thread_local struct Lane {{ unsigned x; }} threadIdx;
 #define __syncthreads() rendezvous.arrive_and_wait()
-void __syncwarp(unsigned) {{ rendezvous.arrive_and_wait(); }}
-bool ballot_votes[32];
+void __syncwarp(unsigned) {{ warp_rendezvous[threadIdx.x / 32]->arrive_and_wait(); }}
+bool ballot_votes[block_threads];
 unsigned __ballot_sync(unsigned, bool keep) {{
   ballot_votes[threadIdx.x] = keep;
-  rendezvous.arrive_and_wait();
+  __syncwarp(0xffffffffU);
   unsigned result = 0;
   for (unsigned lane = 0; lane < 32; ++lane)
-    if (ballot_votes[lane]) result |= 1U << lane;
-  rendezvous.arrive_and_wait();
+    if (ballot_votes[threadIdx.x / 32 * 32 + lane]) result |= 1U << lane;
+  __syncwarp(0xffffffffU);
   return result;
 }}
 unsigned __popc(unsigned value) {{ return __builtin_popcount(value); }}
@@ -313,23 +343,17 @@ int main() {{
     driver_path.write_text(driver)
     executable = tmp_path / "queue"
     native_cxx.build_executable(
-        [driver_path],
+        (driver_path,),
         executable,
-        compile_args=[
-            "-std=c++20",
-            "-O1",
-            "-pthread",
-            "-I",
-            str(root / "src"),
-        ],
-        link_args=["-pthread"],
+        compile_args=("-std=c++20", "-O1", "-pthread", f"-I{root / 'src'}"),
+        link_args=("-pthread",),
         compile_timeout=60,
     )
     subprocess.run([str(executable)], check=True, timeout=120)
 
 
 def test_prepared_schedule_parser_is_explicit_and_fail_closed(
-    tmp_path: Path, native_cxx: object
+    tmp_path: Path, native_cxx: NativeCxx
 ) -> None:
     """Default work and explicit rollback freeze before later environment edits."""
     root = Path(__file__).resolve().parents[2]
@@ -338,9 +362,14 @@ def test_prepared_schedule_parser_is_explicit_and_fail_closed(
     registry.write_text(
         "#include <cstdint>\n"
         "namespace generativeqc::scf::generated {\n"
-        "inline std::uint64_t enabled_rys_fock_shell_class_mask() { return 0; }\n"
-        "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 0; }\n"
+        "inline std::uint64_t enabled_rys_fock_shell_class_mask() { return 2; }\n"
+        "inline std::uint64_t enabled_rys_task_fock_shell_class_mask() { return 24; }\n"
+        "inline std::uint64_t preferred_task_mask = 8;\n"
+        "inline std::uint64_t preferred_rys_task_fock_shell_class_mask() { return preferred_task_mask; }\n"
+        "inline std::uint64_t enabled_k_block_fock_shell_class_mask() { return 4; }\n"
         "inline void launch_shell_class_rys_streaming_fock() {}\n"
+        "inline void launch_shell_class_rys_task_streaming_fock() {}\n"
+        "inline void launch_shell_class_rys_task_work_streaming_fock() {}\n"
         "inline void launch_shell_class_k_block_streaming_fock() {}\n"
         "inline void launch_shell_class_streaming_fock() {}\n"
         "inline void launch_shell_class_work_streaming_fock() {}\n}\n"
@@ -380,20 +409,126 @@ int main() {
     (void)prepare_direct_exchange_task_schedule();
     return 1;
   } catch (const std::invalid_argument&) {}
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr const char* lowering = "GENERATIVEQC_DIRECT_K_FOCK_LOWERING";
+  unsetenv(lowering);
+  const auto default_mask = prepare_direct_fock_rys_task_mask();
+  assert(default_mask == 8);
+  assert(prepare_direct_fock_rys_mask(true) == 0);
+  assert(prepare_direct_fock_rys_mask(false) == 0);
+  assert(prepare_direct_fock_k_block_mask() == 0);
+  setenv(lowering, "", 1);
+  assert(prepare_direct_fock_rys_task_mask() == default_mask);
+  generativeqc::scf::generated::preferred_task_mask = 0;
+  assert(prepare_direct_fock_rys_task_mask() == 0);
+  assert(default_mask == 8);
+  for (const char* mode : {"rys", "block"}) {
+    setenv(lowering, mode, 1);
+    assert(prepare_direct_fock_rys_task_mask() == 0);
+    assert(prepare_direct_fock_rys_mask(true) == (std::strcmp(mode, "rys") == 0 ? 2 : 0));
+    assert(prepare_direct_fock_k_block_mask() == (std::strcmp(mode, "block") == 0 ? 4 : 0));
+  }
+  setenv(lowering, "rys-task", 1);
+  const auto task_mask = prepare_direct_fock_rys_task_mask();
+  assert(task_mask == 24);
+  assert(prepare_direct_fock_rys_mask(true) == 0);
+  assert(prepare_direct_fock_k_block_mask() == 0);
+  const DirectExchangeSelection task_selection{0, 0, task_mask};
+  assert(direct_fock_streaming_launcher(task_selection, 4, false) ==
+      generativeqc::scf::generated::launch_shell_class_rys_task_streaming_fock);
+  assert(direct_fock_streaming_launcher(task_selection, 0, false) ==
+      generativeqc::scf::generated::launch_shell_class_streaming_fock);
+  setenv(lowering, "incumbent", 1);
+  assert(prepare_direct_fock_rys_task_mask() == 0);
+  assert(task_mask == 24);
+
+  // Exhaust both independent controls, reachable coverage and spin contracts.
+  namespace registry = generativeqc::scf::generated;
+  registry::preferred_task_mask = 8;
+  constexpr const char* j_lowering = "GENERATIVEQC_DIRECT_J_FOCK_LOWERING";
+  setenv(j_lowering, "typo", 1);
+  const char* modes[] = {nullptr, "", "incumbent", "rys", "block", "rys-task"};
+  const char* schedules[] = {nullptr, "", "incumbent", "fill", "primitive", "work"};
+  for (const char* mode : modes) {
+    for (const char* schedule : schedules) {
+      for (const std::uint64_t coverage : {0U, 2U, 4U, 8U, 16U, 31U}) {
+        if (mode == nullptr) unsetenv(lowering); else setenv(lowering, mode, 1);
+        if (schedule == nullptr) unsetenv(variable); else setenv(variable, schedule, 1);
+        const auto selection = prepare_direct_exchange_selection(coverage);
+        const bool default_lowering = mode == nullptr || *mode == '\0';
+        const bool work = schedule == nullptr || *schedule == '\0' ||
+                          std::strcmp(schedule, "work") == 0;
+        const std::uint64_t rys = !default_lowering && std::strcmp(mode, "rys") == 0 ? 2 : 0;
+        const std::uint64_t block = !default_lowering && std::strcmp(mode, "block") == 0 ? 4 : 0;
+        const std::uint64_t task = default_lowering ? 8 :
+            (std::strcmp(mode, "rys-task") == 0 ? 24 : 0);
+        const auto expected_schedule = work ? Schedule::Work :
+            (std::strcmp(schedule, "fill") == 0 ? Schedule::Fill :
+             (std::strcmp(schedule, "primitive") == 0 ? Schedule::Primitive : Schedule::Incumbent));
+        assert(selection.rys_fock_mask == (rys & coverage));
+        assert(selection.k_block_fock_mask == (block & coverage));
+        assert(selection.rys_task_fock_mask == (task & coverage));
+        assert(selection.task_schedule == expected_schedule);
+        setenv(lowering, "typo", 1);
+        setenv(variable, "typo", 1);
+        registry::preferred_task_mask = 0;
+        for (bool unrestricted : {false, true}) {
+          for (unsigned cls = 0; cls < 6; ++cls) {
+            const auto bit = std::uint64_t{1} << cls;
+            const auto expected = (task & coverage & bit) ?
+                (work ? registry::launch_shell_class_rys_task_work_streaming_fock :
+                        registry::launch_shell_class_rys_task_streaming_fock) :
+                (!unrestricted && (block & coverage & bit)) ? registry::launch_shell_class_k_block_streaming_fock :
+                (rys & coverage & bit) ? registry::launch_shell_class_rys_streaming_fock :
+                work ? registry::launch_shell_class_work_streaming_fock : registry::launch_shell_class_streaming_fock;
+            assert(direct_fock_streaming_launcher(selection, cls, unrestricted) == expected);
+          }
+        }
+        registry::preferred_task_mask = 8;
+      }
+    }
+  }
+  for (const char* bad : {"typo", "work", "fill"}) {
+    setenv(lowering, bad, 1);
+    unsetenv(variable);
+    try {
+      (void)prepare_direct_exchange_selection(31);
+      return 1;
+    } catch (const std::invalid_argument&) {}
+  }
+  unsetenv(lowering);
+  setenv(variable, "typo", 1);
+  try {
+    (void)prepare_direct_exchange_selection(31);
+    return 1;
+  } catch (const std::invalid_argument&) {}
+  for (const char* bad : {"block", "rys-task", "typo"}) {
+    setenv(j_lowering, bad, 1);
+    try {
+      (void)prepare_direct_fock_rys_mask(false);
+      return 1;
+    } catch (const std::invalid_argument&) {}
+  }
+  for (const char* mode : {"", "incumbent", "rys"}) {
+    setenv(j_lowering, mode, 1);
+    const auto mask = prepare_direct_fock_rys_mask(false);
+    assert(mask == (std::strcmp(mode, "rys") == 0 ? 2 : 0));
+    assert(direct_fock_streaming_launcher(mask, 3) == registry::launch_shell_class_streaming_fock);
+  }
+  // Defensive precedence remains deterministic even for overlapping supplied masks.
+  DirectExchangeSelection overlap{2, 2, 2, Schedule::Work};
+  assert(direct_fock_streaming_launcher(overlap, 1, true) == registry::launch_shell_class_rys_task_work_streaming_fock);
+  overlap.rys_task_fock_mask = 0;
+  assert(direct_fock_streaming_launcher(overlap, 1, false) == registry::launch_shell_class_k_block_streaming_fock);
+  assert(direct_fock_streaming_launcher(overlap, 1, true) == registry::launch_shell_class_rys_streaming_fock);
 }
 """
     )
     executable = tmp_path / "selection"
     native_cxx.build_executable(
-        [driver],
+        (driver,),
         executable,
-        compile_args=[
-            "-std=c++20",
-            "-I",
-            str(tmp_path),
-            "-I",
-            str(root / "src"),
-        ],
+        compile_args=("-std=c++20", f"-I{tmp_path}", f"-I{root / 'src'}"),
         compile_timeout=30,
         link_timeout=30,
     )

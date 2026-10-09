@@ -106,6 +106,88 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
     assert not validate_inventory(payload, root=tmp_path)
 
 
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            'profile.target.architecture != "sm_120"',
+            'profile.target.architecture != "sm_90"',
+        ),
+        ('profile.profile != "sm_120"', 'profile.profile != "portable_cuda"'),
+        (
+            '"dpps", "dspp"}',
+            '"dpps", "dspp", "ssss"}',
+        ),
+    ],
+)
+def test_rys_task_default_admission_requires_renewed_qualification(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Preference must not expand beyond the independently measured domain."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default target/class admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            "return exchange ? DirectFockLowering::Default : DirectFockLowering::Incumbent;",
+            "return exchange ? DirectFockLowering::RysTask : DirectFockLowering::Incumbent;",
+        ),
+        (
+            "selection.rys_task_fock_mask &= class_mask;",
+            "selection.rys_task_fock_mask |= class_mask;",
+        ),
+        (
+            "selection.rys_task_fock_mask = generated::preferred_rys_task_fock_shell_class_mask();",
+            "selection.rys_task_fock_mask = generated::enabled_rys_task_fock_shell_class_mask();",
+        ),
+    ],
+)
+def test_unified_k_selector_cannot_bypass_preference_or_coverage(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_fock_lowering.hpp"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default selection/filter guard drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+def test_work_default_must_be_audited_independently_of_task_preference(
+    tmp_path: Path,
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_fock_lowering.hpp"
+    original = source.read_text()
+    source.write_text(
+        original.replace(
+            "return detail::GeneratedExchangeTaskSchedule::Work;",
+            "return detail::GeneratedExchangeTaskSchedule::Fill;",
+            1,
+        )
+    )
+    assert any(
+        "Direct K work schedule default/selection guard drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_inventory_requires_owner_rationale_and_revisit_condition() -> None:
     payload = _payload()
     for field, value in (
