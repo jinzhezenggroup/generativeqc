@@ -586,10 +586,10 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
         in bridge
     )
     assert (
-        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr'
-        in bridge
+        'std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr && '
+        "cuda_policy::one_electron_derivative_mapping_requested() == 3 ? 3U : 1U"
+        in " ".join(bridge.split())
     )
-    assert "one_electron_derivative_mapping_requested() == 3" in bridge
     assert "hcore_schedule, 1.0, output, source->stream" in bridge
     assert "1, 1.0, output, source->stream" in bridge
     assert (

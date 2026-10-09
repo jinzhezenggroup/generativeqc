@@ -214,6 +214,7 @@ PREFIX = r"""
 #include <vector>
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/matrix_index.cuh"
+#include "scf/generated_shell_task.hpp"
 using cudaError_t = int;
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaMemcpyDeviceToHost=2;
@@ -287,13 +288,13 @@ namespace generativeqc::scf::cuda_execution {
 namespace detail { constexpr unsigned kDirectQuartetShellClassCount=1; }
 enum class DirectCoulombRange { Full, Short, Long };
 struct Batch { int total_atoms=1, batch_size=1, nbf=2; };
-struct GeneratedShellPairStream {};
-const GeneratedShellPairStream topology;
+using GeneratedShellPairStream = generativeqc::scf::detail::GeneratedShellPairStream;
+GeneratedShellPairStream borrowed_topology{};
 struct Shared {
   Batch batch; cudaStream_t stream=1; unsigned worker_blocks=1;
   double screening=0, *shell_bounds=nullptr, *schwarz=nullptr;
   std::uint8_t* active=nullptr;
-  const GeneratedShellPairStream* topology=&cuda_execution::topology;
+  const GeneratedShellPairStream* topology=&borrowed_topology;
 };
 struct GeneratedExchangePlan {
   Shared* shared; bool force_capability=true, angular_force_opt_in=false;
@@ -335,7 +336,8 @@ template<class... Args> cudaError_t launch_bounded_shell_energy_derivative(Args&
   ++full_calls;
   const auto values=std::make_tuple(args...);
   if(std::get<18>(values)!=37) throw std::runtime_error("full range lost borrowed domain");
-  if(std::get<20>(values)!=&topology) throw std::runtime_error("full range lost borrowed topology");
+  if(std::get<20>(values)!=&borrowed_topology)
+    throw std::runtime_error("full range lost borrowed topology");
   full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),
                std::get<17>(values),std::get<19>(values));
   return cudaGetLastError();
