@@ -547,7 +547,8 @@ void verify_preflight_and_approximation_identity() {
   require(cpu_fitted.schedule == FockSchedule::CpuIndependent,
           "CPU DF-HF retained a CUDA-specific SCF schedule");
   const auto cuda_uhf_fitted = resolve_fock_build(
-      make_hf_fock_spec(FockSpin::Unrestricted, FockApproximation::DensityFitted), FockBackend::Cuda);
+      make_hf_fock_spec(FockSpin::Unrestricted, FockApproximation::DensityFitted),
+      FockBackend::Cuda);
   require(cuda_uhf_fitted.schedule == FockSchedule::CudaDfResident,
           "CUDA DF-UHF lost its resident SCF schedule");
 

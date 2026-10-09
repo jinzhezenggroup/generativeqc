@@ -16,8 +16,7 @@ ResolvedFockBuild fock_strategy_for_execution(const ScfOptions& options) {
     throw std::invalid_argument("Fock execution requires a resolved strategy");
   auto strategy = *options.resolved_fock_build;
   validate_resolved_fock_build(strategy);
-  if (strategy.schedule == FockSchedule::CudaDfResident)
-    reject_cuda_df_preliminary_guess(options);
+  if (strategy.schedule == FockSchedule::CudaDfResident) reject_cuda_df_preliminary_guess(options);
   if (strategy.screening_tolerance != options.screening_tolerance ||
       (options.compute_forces && strategy.spec.derivative_order != 1) ||
       (strategy.metric_relative_threshold != 0.0 &&
