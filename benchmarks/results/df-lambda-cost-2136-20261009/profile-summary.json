@@ -1,0 +1,1225 @@
+{
+  "instrumented_not_clean_timing": true,
+  "rows": [
+    {
+      "candidate": 0,
+      "gates": {
+        "energy_error": 2.0321522242738865e-12,
+        "directional_force_errors": [
+          {
+            "step_bohr": 0.0001,
+            "absolute_error": 7.560078535417958e-09
+          },
+          {
+            "step_bohr": 3e-05,
+            "absolute_error": 2.9559160952263852e-09
+          }
+        ]
+      },
+      "trace": {
+        "parent_seconds": 195.954640022,
+        "immediate_children_seconds": {
+          "cc_lambda_initialization": 1.89387283,
+          "cc_lambda_primal_replay": 18.084323326,
+          "cc_lambda_rhs": 0.082613778,
+          "cc_lambda_gmres": 83.712718723,
+          "cc_lambda_independent_audit": 86.65580914,
+          "cc_lambda_parameter_factor_vjp": 5.508686262
+        },
+        "unattributed_parent_seconds": 0.016615963000020884,
+        "nested_physical_actions": [
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.730982573,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 1
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.728133482,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 2
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.725409981,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 3
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.7271035780000004,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 4
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.727496205,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 5
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.727361832,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 6
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.7275947059999996,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 7
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.727108237,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 8
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.728796825,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 9
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.727579325,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 10
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.726683242,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 11
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.726008906,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 12
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.722432767,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 13
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.713726065,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 14
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.713646474,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 15
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.724393427,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 16
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.716485509,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 17
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.7130740099999997,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 18
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.713760123,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 19
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.719501684,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 20
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.7201965500000003,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 21
+            }
+          },
+          {
+            "name": "gmres_exact_residual_replay",
+            "seconds": 3.720238272,
+            "work": {
+              "lambda_gemm_calls": 1767,
+              "lambda_generated_kernels": 6026,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 66027708064,
+              "lambda_contraction_summands": 1178851698575,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 22
+            }
+          }
+        ]
+      }
+    },
+    {
+      "candidate": 1,
+      "gates": {
+        "energy_error": 2.0321522242738865e-12,
+        "directional_force_errors": [
+          {
+            "step_bohr": 0.0001,
+            "absolute_error": 7.560418929797308e-09
+          },
+          {
+            "step_bohr": 3e-05,
+            "absolute_error": 2.955575697377588e-09
+          }
+        ]
+      },
+      "trace": {
+        "parent_seconds": 120.881446188,
+        "immediate_children_seconds": {
+          "cc_lambda_initialization": 2.318953948,
+          "cc_lambda_primal_replay": 18.085193174,
+          "cc_lambda_rhs": 0.081518862,
+          "cc_lambda_gmres": 74.359064121,
+          "cc_lambda_independent_audit": 20.933437793,
+          "cc_lambda_parameter_factor_vjp": 5.084034387
+        },
+        "unattributed_parent_seconds": 0.019243902999988904,
+        "nested_physical_actions": [
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.305171914,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 1
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.302055261,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 2
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301955115,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 3
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.295986305,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 4
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301525163,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 5
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.3004130270000003,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 6
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301670987,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 7
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.300568405,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 8
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301540479,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 9
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301121588,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 10
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.295761873,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 11
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.3012306440000003,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 12
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301534192,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 13
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.301124063,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 14
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.2944657430000004,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 15
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.294182297,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 16
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.290529096,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 17
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.291450914,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 18
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.2891314609999998,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 19
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.2938301510000003,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 20
+            }
+          },
+          {
+            "name": "gmres_arnoldi_action",
+            "seconds": 3.294384498,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 21
+            }
+          },
+          {
+            "name": "gmres_exact_residual_replay",
+            "seconds": 3.288663594,
+            "work": {
+              "lambda_gemm_calls": 1734,
+              "lambda_generated_kernels": 5923,
+              "lambda_q_batches": 61,
+              "lambda_packing_output_bytes": 65250099040,
+              "lambda_contraction_summands": 1143975905283,
+              "lambda_h2d_bytes": 31664880,
+              "lambda_d2h_bytes": 31664884,
+              "lambda_synchronizations": 1,
+              "operator_action": 22
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "actual_endpoint_cuda_activity": {
+    "scope": "entire instrumented complete cold E+F, not Lambda-only",
+    "interpretation": "Kernel/API duration sums can overlap and are not endpoint wall time. Copy bytes are observed CUDA memcpy traffic, not DRAM bytes for packing kernels. No occupancy or DRAM hardware counters are inferred.",
+    "rows": [
+      {
+        "candidate": 0,
+        "activity": {
+          "kernel_launches": 546969,
+          "sum_kernel_seconds_not_endpoint_seconds": 467.06510411,
+          "cuda_runtime_api_calls": 745144,
+          "sum_api_seconds_not_endpoint_seconds": 589.318861127,
+          "copies": [
+            {
+              "kind": "Device-to-Device",
+              "calls": 280,
+              "actual_copy_bytes": 4368391064,
+              "sum_seconds": 0.004795139
+            },
+            {
+              "kind": "Device-to-Host",
+              "calls": 538,
+              "actual_copy_bytes": 1917179701,
+              "sum_seconds": 0.091520096
+            },
+            {
+              "kind": "Host-to-Device",
+              "calls": 268,
+              "actual_copy_bytes": 2386107529,
+              "sum_seconds": 0.102111637
+            }
+          ],
+          "dominant_kernels": [
+            {
+              "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)-1, (int)-1, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)",
+              "launches": 2,
+              "sum_seconds": 81.967581361,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  255,
+                  255
+                ],
+                "threads_per_block_range": [
+                  256,
+                  256
+                ],
+                "maximum_shared_memory_bytes": 29976
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x32_16x4_nn_align1>(T1::Params)",
+              "launches": 24624,
+              "sum_seconds": 39.984320402,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  80,
+                  80
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 49152
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x32_16x5_nn_align1>(T1::Params)",
+              "launches": 23142,
+              "sum_seconds": 32.834105414,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  56,
+                  56
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 40960
+              }
+            },
+            {
+              "name": "generativeqc::cc::generated::df::df_amplitude_vjp_node_64(const double *, const double *, double *, unsigned long, unsigned long, int *)",
+              "launches": 488,
+              "sum_seconds": 30.406554268,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  40,
+                  40
+                ],
+                "threads_per_block_range": [
+                  256,
+                  256
+                ],
+                "maximum_shared_memory_bytes": 0
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)",
+              "launches": 6273,
+              "sum_seconds": 27.919665448,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  210,
+                  210
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 73728
+              }
+            },
+            {
+              "name": "generativeqc::cc::generated::df::df_amplitude_vjp_node_68(const double *, const double *, double *, unsigned long, unsigned long, int *)",
+              "launches": 488,
+              "sum_seconds": 25.743456137,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  40,
+                  40
+                ],
+                "threads_per_block_range": [
+                  256,
+                  256
+                ],
+                "maximum_shared_memory_bytes": 0
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x32_16x5_tn_align1>(T1::Params)",
+              "launches": 23857,
+              "sum_seconds": 19.093867303,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  54,
+                  54
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 40960
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_tn_align1>(T1::Params)",
+              "launches": 3646,
+              "sum_seconds": 14.57164525,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  126,
+                  126
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 65536
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_nn_align1>(T1::Params)",
+              "launches": 2393,
+              "sum_seconds": 14.265778431,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  128,
+                  128
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 65536
+              }
+            },
+            {
+              "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)7, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+              "launches": 6,
+              "sum_seconds": 9.101320278,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  182,
+                  182
+                ],
+                "threads_per_block_range": [
+                  64,
+                  64
+                ],
+                "maximum_shared_memory_bytes": 0
+              }
+            }
+          ],
+          "dominant_runtime_apis": [
+            {
+              "name": "cudaMemcpyAsync_v3020",
+              "calls": 1015,
+              "sum_seconds": 286.736657787
+            },
+            {
+              "name": "cudaLaunchKernel_v7000",
+              "calls": 445959,
+              "sum_seconds": 270.856773808
+            },
+            {
+              "name": "cuLaunchKernel",
+              "calls": 101032,
+              "sum_seconds": 25.772354023
+            },
+            {
+              "name": "cudaStreamSynchronize_v3020",
+              "calls": 277,
+              "sum_seconds": 3.236510586
+            },
+            {
+              "name": "cudaMemsetAsync_v3020",
+              "calls": 3168,
+              "sum_seconds": 2.509760217
+            },
+            {
+              "name": "cuLibraryLoadData",
+              "calls": 15,
+              "sum_seconds": 0.042663609
+            },
+            {
+              "name": "cuKernelGetFunction",
+              "calls": 101032,
+              "sum_seconds": 0.034863178
+            },
+            {
+              "name": "cudaFree_v3020",
+              "calls": 262,
+              "sum_seconds": 0.030344352
+            },
+            {
+              "name": "cudaEventSynchronize_v3020",
+              "calls": 9,
+              "sum_seconds": 0.027145131
+            },
+            {
+              "name": "cudaStreamIsCapturing_v10000",
+              "calls": 89947,
+              "sum_seconds": 0.026981197
+            }
+          ],
+          "sqlite_sha256": "c90397185d36539ef4be583f4a459e9ee0ac87b5847eaa26aaafa3af9e5d473c"
+        },
+        "nsys_report_sha256": "4c3988c8caf00ecbf341adcb617f040f1124b229685e20497417a0cbe2703f9f"
+      },
+      {
+        "candidate": 1,
+        "activity": {
+          "kernel_launches": 501762,
+          "sum_kernel_seconds_not_endpoint_seconds": 392.06016914,
+          "cuda_runtime_api_calls": 706465,
+          "sum_api_seconds_not_endpoint_seconds": 514.468289312,
+          "copies": [
+            {
+              "kind": "Device-to-Device",
+              "calls": 280,
+              "actual_copy_bytes": 4368391064,
+              "sum_seconds": 0.004746365
+            },
+            {
+              "kind": "Device-to-Host",
+              "calls": 539,
+              "actual_copy_bytes": 1917179705,
+              "sum_seconds": 0.091436426
+            },
+            {
+              "kind": "Host-to-Device",
+              "calls": 268,
+              "actual_copy_bytes": 2386107529,
+              "sum_seconds": 0.10062206
+            }
+          ],
+          "dominant_kernels": [
+            {
+              "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)-1, (int)-1, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)",
+              "launches": 2,
+              "sum_seconds": 82.062427818,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  255,
+                  255
+                ],
+                "threads_per_block_range": [
+                  256,
+                  256
+                ],
+                "maximum_shared_memory_bytes": 29976
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x32_16x4_nn_align1>(T1::Params)",
+              "launches": 25189,
+              "sum_seconds": 40.771743456,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  80,
+                  80
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 49152
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x32_16x5_nn_align1>(T1::Params)",
+              "launches": 24255,
+              "sum_seconds": 37.071595789,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  56,
+                  56
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 40960
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_128x64_16x3_nn_align1>(T1::Params)",
+              "launches": 6186,
+              "sum_seconds": 27.70400512,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  210,
+                  210
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 73728
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_32x32_16x5_tn_align1>(T1::Params)",
+              "launches": 24430,
+              "sum_seconds": 19.353059741,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  54,
+                  54
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 40960
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_nn_align1>(T1::Params)",
+              "launches": 2820,
+              "sum_seconds": 17.624541032,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  128,
+                  128
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 65536
+              }
+            },
+            {
+              "name": "void cutlass::Kernel2<cutlass_80_tensorop_d884gemm_64x64_16x4_tn_align1>(T1::Params)",
+              "launches": 3646,
+              "sum_seconds": 14.567897461,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  126,
+                  126
+                ],
+                "threads_per_block_range": [
+                  128,
+                  128
+                ],
+                "maximum_shared_memory_bytes": 65536
+              }
+            },
+            {
+              "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)7, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+              "launches": 6,
+              "sum_seconds": 9.123346366,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  182,
+                  182
+                ],
+                "threads_per_block_range": [
+                  64,
+                  64
+                ],
+                "maximum_shared_memory_bytes": 0
+              }
+            },
+            {
+              "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)8, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+              "launches": 6,
+              "sum_seconds": 8.134766459,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  176,
+                  176
+                ],
+                "threads_per_block_range": [
+                  64,
+                  64
+                ],
+                "maximum_shared_memory_bytes": 0
+              }
+            },
+            {
+              "name": "generativeqc::cc::generated::dflambda::staged_auxiliary_matrix_node_91(const double *, const double *, double *, unsigned long, unsigned long, unsigned long, int *)",
+              "launches": 1342,
+              "sum_seconds": 7.305246109,
+              "launch_metadata_not_achieved_occupancy": {
+                "registers_per_thread_range": [
+                  40,
+                  40
+                ],
+                "threads_per_block_range": [
+                  256,
+                  256
+                ],
+                "maximum_shared_memory_bytes": 0
+              }
+            }
+          ],
+          "dominant_runtime_apis": [
+            {
+              "name": "cudaMemcpyAsync_v3020",
+              "calls": 1016,
+              "sum_seconds": 286.114551225
+            },
+            {
+              "name": "cudaLaunchKernel_v7000",
+              "calls": 397493,
+              "sum_seconds": 196.107926413
+            },
+            {
+              "name": "cuLaunchKernel",
+              "calls": 104291,
+              "sum_seconds": 26.292071911
+            },
+            {
+              "name": "cudaStreamSynchronize_v3020",
+              "calls": 278,
+              "sum_seconds": 3.229608374
+            },
+            {
+              "name": "cudaMemsetAsync_v3020",
+              "calls": 3169,
+              "sum_seconds": 2.509227308
+            },
+            {
+              "name": "cuLibraryLoadData",
+              "calls": 15,
+              "sum_seconds": 0.042976053
+            },
+            {
+              "name": "cuKernelGetFunction",
+              "calls": 104291,
+              "sum_seconds": 0.037426322
+            },
+            {
+              "name": "cudaFree_v3020",
+              "calls": 262,
+              "sum_seconds": 0.031836857
+            },
+            {
+              "name": "cudaStreamIsCapturing_v10000",
+              "calls": 93211,
+              "sum_seconds": 0.028686312
+            },
+            {
+              "name": "cudaEventSynchronize_v3020",
+              "calls": 9,
+              "sum_seconds": 0.027114444
+            }
+          ],
+          "sqlite_sha256": "aecd8ccf9aa288a01fa9aabc08277cb6a2879d90060efa72a01b663778383bd7"
+        },
+        "nsys_report_sha256": "c33ef736bc1a61d5213d61f0987b1f97fd6d5f233871c93d506f5233a18e993b"
+      }
+    ]
+  },
+  "hardware_counters": {
+    "status": "unavailable",
+    "reason": "ERR_NVGPUCTRPERM: driver denies hardware performance counters; no privilege/device-visibility bypass attempted."
+  }
+}

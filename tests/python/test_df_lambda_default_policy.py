@@ -40,7 +40,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
-        "lambda_true_residual_interval}; }\n"
+        "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -91,6 +91,8 @@ struct DFCCSDTResult {
   bool fused_scalar{};
   runtime::PrecisionDirective triples_w;
   std::size_t lambda_interval;
+  bool core_reuse;
+  bool audit_matrix;
 };
 """
         + declaration
@@ -368,7 +370,27 @@ int main() {
     if(select(25,selected).lambda_interval != std::stoull(interval) ||
        select(24,selected).lambda_interval != 30) return 43;
   }
-  for(int argc : {0,1,2,3,26}) {
+  for(const char* reuse : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30",reuse};
+    if(select(26,selected).core_reuse != (reuse[0]=='1') ||
+       !select(25,selected).core_reuse) return 44;
+  }
+  for(const char* token : {"", "2", "true", "1x"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30",token};
+    try { (void)select(26,selected);return 45; } catch(const std::invalid_argument&) {}
+  }
+  for(const char* audit : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1",audit};
+    if(select(27,selected).audit_matrix != (audit[0]=='1') ||
+       !select(26,selected).audit_matrix) return 46;
+  }
+  for(int argc : {0,1,2,3,28}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

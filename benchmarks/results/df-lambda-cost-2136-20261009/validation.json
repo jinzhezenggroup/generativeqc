@@ -1,0 +1,518 @@
+{
+  "attachments": [],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "additional_original_strict_component_sanity": {
+      "atol": 3e-09,
+      "max_absolute_error": 2.367883666920534e-11,
+      "max_scaled_error": 0.007892945556401779,
+      "passed": true,
+      "rms_error": 9.083267623633523e-12,
+      "rtol": 0,
+      "shape": [
+        16,
+        24
+      ]
+    },
+    "all_force_components_common_strict_baseline": {
+      "atol": 3e-07,
+      "max_absolute_error": 2.367883666920534e-11,
+      "max_scaled_error": 7.89294555640178e-05,
+      "passed": true,
+      "rms_error": 9.083267623633523e-12,
+      "rtol": 0,
+      "shape": [
+        16,
+        24
+      ]
+    },
+    "force_translation": {
+      "atol": 3e-08,
+      "max_absolute_error": 1.087256803686265e-12,
+      "max_scaled_error": 3.624189345620884e-05,
+      "passed": true,
+      "rms_error": 5.458983594206752e-13,
+      "rtol": 0,
+      "shape": [
+        16,
+        3
+      ]
+    },
+    "independent_directional_force_0.0001": {
+      "atol": 3e-07,
+      "max_absolute_error": 7.588838543681753e-09,
+      "max_scaled_error": 0.025296128478939178,
+      "passed": true,
+      "rms_error": 7.57446121295377e-09,
+      "rtol": 0,
+      "shape": [
+        16
+      ]
+    },
+    "independent_directional_force_3e-05": {
+      "atol": 3e-07,
+      "max_absolute_error": 2.95594781291042e-09,
+      "max_scaled_error": 0.009853159376368067,
+      "passed": true,
+      "rms_error": 2.9415807895462266e-09,
+      "rtol": 0,
+      "shape": [
+        16
+      ]
+    },
+    "independent_same_hamiltonian_energy": {
+      "atol": 3e-09,
+      "max_absolute_error": 2.6361135496699717e-11,
+      "max_scaled_error": 0.008787045165566573,
+      "passed": true,
+      "rms_error": 1.8695442055992996e-11,
+      "rtol": 0,
+      "shape": [
+        16
+      ]
+    },
+    "lambda_residual": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.116353804038884e-13,
+      "max_scaled_error": 0.0006116353804038884,
+      "passed": true,
+      "rms_error": 6.115604038016789e-13,
+      "rtol": 0,
+      "shape": [
+        16
+      ]
+    },
+    "stationarity": {
+      "atol": 1e-09,
+      "max_absolute_error": 7.672334989550222e-12,
+      "max_scaled_error": 0.0076723349895502215,
+      "passed": true,
+      "rms_error": 5.43836503286086e-12,
+      "rtol": 0,
+      "shape": [
+        16
+      ]
+    },
+    "z_residual": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.3569479381157108e-13,
+      "max_scaled_error": 0.00013569479381157106,
+      "passed": true,
+      "rms_error": 1.3569441775110704e-13,
+      "rtol": 0,
+      "shape": [
+        16
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "description": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+    "slurm_gpu_visibility": "0"
+  },
+  "hardware": {
+    "gpu": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+    "host": "node2",
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "5eed9ac8d9479e9c0f991efa201a5600952d04f1e06ab360fcce1236a698d58d",
+    "ir": "d80da2560390eeff89bd98d371f102035563bb20340faff84805f49692ad5ef0",
+    "schedule": "052d53036bb35260ce54585a74c47efa8be3ff8b45373378f0017a2926642026",
+    "source": "a0f90de6cac8733515f4488d0681a64b8d0abea6868386f1b54c880bbdf550c4"
+  },
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Complete capacity ceilings are retained per sample; these are not measured VRAM peaks or physical DRAM traffic."
+  },
+  "performance": {
+    "reason": "Two repetitions per configuration satisfy #2136's matched ablation but do not meet the shared five-pair promotion gate; measured VRAM peak and full solver trajectories are not captured. Medians/ranges are descriptive, not a promotion or confidence interval.",
+    "status": "not-run"
+  },
+  "residuals": {
+    "0": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.116353804038884e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "1": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "10": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114889824218972e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "11": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114844756423241e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "12": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "13": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.116353804038884e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "14": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "15": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.116353804038884e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "2": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.116353804038884e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "3": {
+      "independently_evaluated": true,
+      "stationarity": 5.356344550257999e-13,
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13
+    },
+    "4": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114844756423241e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "5": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114889824218972e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "6": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114844756423241e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "7": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114889824218972e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "8": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114889824218972e-13,
+      "z": 1.3569404168960082e-13
+    },
+    "9": {
+      "independently_evaluated": true,
+      "stationarity": 7.672334989550222e-12,
+      "value": 6.114844756423241e-13,
+      "z": 1.3569404168960082e-13
+    }
+  },
+  "revision": "957fd60b6fffa267918ab597ceb12fe2b1a8cd81",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "clean_job": "2749",
+    "device": "cuda",
+    "fast_compile": false,
+    "library_and_input_identities": {
+      "/data/jzzeng/qc-2136-lambda-master-20261009/build/endpoint": "d28ddc68f854b3e1f029ce3a4b6544bf5796c6f37b5f777634d98aee5d155c91",
+      "/data/jzzeng/qc-2136-lambda-master-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "/data/jzzeng/qc-2136-lambda-master-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "50beaeb8f14d767135a9a925a00b9f1485bbd740ce002a6190c86ffe8fe664b6"
+    },
+    "mixed_precision_boundary": "opt-in forward triples W only",
+    "native_precision": "FP64",
+    "profile_file": "profile-summary.json",
+    "qualification": "task matched-ablation requirement, not general performance promotion",
+    "repetitions_per_configuration": 2,
+    "sample_file": "samples.json"
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Final iterations/actions and exact residuals are retained; the complete native endpoint does not export every solver iteration.",
+  "stages": {
+    "compilation": {
+      "identities": {
+        "/data/jzzeng/qc-2136-lambda-master-20261009/build/endpoint": "d28ddc68f854b3e1f029ce3a4b6544bf5796c6f37b5f777634d98aee5d155c91",
+        "/data/jzzeng/qc-2136-lambda-master-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+        "/data/jzzeng/qc-2136-lambda-master-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "50beaeb8f14d767135a9a925a00b9f1485bbd740ce002a6190c86ffe8fe664b6"
+      },
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "complete_cold_samples": 16,
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "independent_energy_reference": "oracle-energy.json",
+      "independent_force_reference": "../df-lambda-gemm-20261004/oracle-energy-fd.json",
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "dimensions": {
+        "ao": 230,
+        "auxiliary": 488,
+        "occupied": 9,
+        "virtual": 221
+      },
+      "reason": null,
+      "status": "pass"
+    },
+    "source": {
+      "reason": null,
+      "reconstruction": "measured-source.patch.gz",
+      "status": "pass"
+    }
+  },
+  "subject": "Issue #2136: strict FP64 Lambda core retention and independent expanded audit GEMM",
+  "tier": "endpoint",
+  "timings": [
+    {
+      "diagnostics": {
+        "configuration": "w0_c1_r0",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 669.93970639,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c1_r1",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 584.751255155,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c30_r0",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 594.027621996,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c30_r1",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 518.648431854,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c1_r0",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 660.651539704,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c1_r1",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 576.982956557,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c30_r0",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 586.094211114,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c30_r1",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 0
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 510.953932148,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c30_r1",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 510.970438109,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c30_r0",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 586.137257526,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c1_r1",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 576.966472464,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w1_c1_r0",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 660.498300691,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c30_r1",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 518.65550279,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c30_r0",
+        "lambda_actions": 22,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 593.954974009,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c1_r1",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 584.73254781,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "configuration": "w0_c1_r0",
+        "lambda_actions": 42,
+        "lambda_iterations": 21,
+        "repetition": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 668.506204802,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-plus-force"
+    }
+  ],
+  "toolchain": {
+    "build_type": "Release",
+    "compiler_cache": "ccache 4.5.1",
+    "cuda": "12.9.1",
+    "cuda_architectures": "120",
+    "host": "n2/node2"
+  }
+}

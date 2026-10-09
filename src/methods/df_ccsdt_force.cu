@@ -108,7 +108,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::size_t retained_df_source_bytes = 0, DFGapResponseFingerprints* fingerprints = nullptr,
     DFPhysicalResponseComparison* physical_replay = nullptr,
     bool fused_triples_scalar_response = false, runtime::PrecisionDirective admitted_triples_w = {},
-    std::size_t lambda_true_residual_interval = 1) {
+    std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
+    bool lambda_audit_matrix = true) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
@@ -227,6 +228,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   cc::LambdaOptions lambda_options;
   lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
   lambda_options.df_matrix_gemm = lambda_matrix_gemm;
+  lambda_options.df_core_reuse = lambda_core_reuse;
+  lambda_options.df_audit_matrix_gemm = lambda_audit_matrix;
   lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
   lambda_options.cc_tolerance = 1e-9;
   lambda_options.lambda_tolerance = 1e-9;
@@ -658,7 +661,7 @@ DFCCSDTResult run_df_ccsdt_native(
     const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
     bool parallel_gap_reduction, bool request_triples_gap_cotangents,
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
-    std::size_t lambda_true_residual_interval) {
+    std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix) {
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
@@ -668,7 +671,7 @@ DFCCSDTResult run_df_ccsdt_native(
         df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
-        lambda_true_residual_interval);
+        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix);
   };
   try {
     return attempt();

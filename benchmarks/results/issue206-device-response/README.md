@@ -1,5 +1,12 @@
 # Device response weights for retained DF values (#206)
 
+The full report is retained byte-for-byte as `summary.json.gz`, deterministically
+compressed to keep the unchanged aggregate evidence budget. Decompression
+restores 444,945 bytes with SHA-256
+`102788881db492a5454326fcde8f4cf6a38cbaee290cd31e36f3384482e48368`.
+Use `tools.generativeqc_validation.record.load_json` to read it. All samples,
+numerical values, original failures and scientific identities remain unchanged.
+
 The default retained-value plan now reuses its forward device metric factors and the existing CUDA force-response contraction. Raw auxiliary slices are uploaded into bounded scratch. The full one-electron/Pulay, three-center, auxiliary, metric/subspace and nuclear response is retained. `VIBEQC_DF_HOST_RESPONSE_WEIGHTS=1` selects the former host-weight adapter under the same conservative resource reservation.
 
 Five interleaved warm repeats per engine cover RHF at 96/192/384 AOs and UHF at 19 AOs, each at batch one/four, for energy and complete forces. The external basis data, actual factor ranks, software stack and all raw results are retained. Ordinary timing ratios remain distinct from a demonstrated common SCF iteration branch.

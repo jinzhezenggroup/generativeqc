@@ -79,6 +79,16 @@ struct DeviceAllocationError : std::runtime_error { using std::runtime_error::ru
 DRIVER = r"""
 int main(int argc, char** argv) {
   if (argc != 2) return 10;
+  if (std::string(argv[1]) == "core-fallback" || std::string(argv[1]) == "audit-fallback") {
+    {
+      Storage storage;
+      if (!storage.contractions.prepare(nullptr)) return 11;
+      allocation_fallback(storage, std::string(argv[1]) == "core-fallback",
+                           std::string(argv[1]) == "audit-fallback");
+      if (malloc_calls != 2 || handles != 1 || release_calls) return 12;
+    }
+    return handles || allocations || release_calls != 1;
+  }
   const bool fallback = std::string(argv[1]) == "fallback";
   std::promise<void> started;
   auto entered = started.get_future();
@@ -128,17 +138,22 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     # provider destruction, rather than a model of its ownership decisions.
     fallback = (
         r"""
-void allocation_fallback(Storage& storage) {
-  struct { bool df_matrix_gemm = true, df_auxiliary_reduction = true; } metrics;
+void allocation_fallback(Storage& storage, bool core = false, bool audit = false) {
+  struct { bool df_matrix_gemm = true, df_auxiliary_reduction = true, df_core_reuse = false, df_audit_matrix_gemm = false; } metrics;
   std::size_t cursor = 16, fallback_cursor = 4;
   auto capacity = [] {};
   auto scalar_plan = [&] { metrics.df_matrix_gemm = false; cursor = 8; };
+  metrics.df_core_reuse = core;
+  metrics.df_audit_matrix_gemm = audit;
+  auto drop_core_reuse = [&] { metrics.df_core_reuse = false; cursor = 12; };
+  auto drop_audit = [&] { metrics.df_audit_matrix_gemm = false; cursor = 10; };
   fail_first_allocation = true;
 """
         + source[start:end]
         + r"""
-  if (metrics.df_matrix_gemm || !metrics.df_auxiliary_reduction || cursor != 8)
-    throw std::runtime_error("incorrect scalar fallback");
+  if (metrics.df_matrix_gemm != (core || audit) || !metrics.df_auxiliary_reduction ||
+      metrics.df_core_reuse || metrics.df_audit_matrix_gemm || cursor != (core ? 12 : audit ? 10 : 8))
+    throw std::runtime_error("incorrect optional allocation fallback");
 }
 """
     )
@@ -188,7 +203,7 @@ void allocation_fallback(Storage& storage) {
     return binary
 
 
-@pytest.mark.parametrize("path", ["destructor", "fallback"])
+@pytest.mark.parametrize("path", ["destructor", "fallback", "core-fallback", "audit-fallback"])
 def test_provider_release_serializes_with_measurement(
     provider_lifetime_probe: Path, path: str
 ) -> None:

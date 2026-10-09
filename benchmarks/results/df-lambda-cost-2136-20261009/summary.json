@@ -1,0 +1,594 @@
+{
+  "schema": "generativeqc.df-lambda-core-reuse.ablation.v1",
+  "slurm_job_id": "2749",
+  "cuda_visible_devices": "0",
+  "gpu": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "frozen_sha256": {
+    "/data/jzzeng/qc-2136-lambda-master-20261009/build/endpoint": "d28ddc68f854b3e1f029ce3a4b6544bf5796c6f37b5f777634d98aee5d155c91",
+    "/data/jzzeng/qc-2136-lambda-master-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "50beaeb8f14d767135a9a925a00b9f1485bbd740ce002a6190c86ffe8fe664b6",
+    "/data/jzzeng/qc-2136-lambda-master-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+  },
+  "instrumented": false,
+  "screen_only": false,
+  "repetitions": 2,
+  "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+  "finite_difference_sha256": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29",
+  "summary": {
+    "w0_c1_r0": {
+      "native_seconds": {
+        "median": 669.222955596,
+        "minimum": 668.506204802,
+        "maximum": 669.93970639
+      },
+      "reference_seconds": {
+        "median": 129.47757525650002,
+        "minimum": 129.238080372,
+        "maximum": 129.717070141
+      },
+      "source_seconds": {
+        "median": 3.6109959035,
+        "minimum": 3.608448223,
+        "maximum": 3.613543584
+      },
+      "ccsd_seconds": {
+        "median": 100.02028489950001,
+        "minimum": 99.876358827,
+        "maximum": 100.164210972
+      },
+      "triples_seconds": {
+        "median": 39.4259638785,
+        "minimum": 39.364587641,
+        "maximum": 39.487340116
+      },
+      "lambda_seconds": {
+        "median": 270.88483274600003,
+        "minimum": 270.720561123,
+        "maximum": 271.049104369
+      },
+      "source_response_seconds": {
+        "median": 3.7855240730000004,
+        "minimum": 3.782518254,
+        "maximum": 3.788529892
+      },
+      "orbital_seconds": {
+        "median": 122.0176874025,
+        "minimum": 121.904451214,
+        "maximum": 122.130923591
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 42.0,
+        "minimum": 42,
+        "maximum": 42
+      },
+      "lambda_gemm_calls": {
+        "median": 78066.0,
+        "minimum": 78066,
+        "maximum": 78066
+      },
+      "lambda_work": {
+        "median": 64006668617241.0,
+        "minimum": 64006668617241,
+        "maximum": 64006668617241
+      },
+      "lambda_packing_output_bytes": {
+        "median": 2916716956864.0,
+        "minimum": 2916716956864,
+        "maximum": 2916716956864
+      },
+      "lambda_capacity": {
+        "median": 6844452897.0,
+        "minimum": 6844452897,
+        "maximum": 6844452897
+      }
+    },
+    "w0_c1_r1": {
+      "native_seconds": {
+        "median": 584.7419014825,
+        "minimum": 584.73254781,
+        "maximum": 584.751255155
+      },
+      "reference_seconds": {
+        "median": 129.192958919,
+        "minimum": 129.190615705,
+        "maximum": 129.195302133
+      },
+      "source_seconds": {
+        "median": 3.610607672,
+        "minimum": 3.608989623,
+        "maximum": 3.612225721
+      },
+      "ccsd_seconds": {
+        "median": 99.881514718,
+        "minimum": 99.880271983,
+        "maximum": 99.882757453
+      },
+      "triples_seconds": {
+        "median": 39.369838105,
+        "minimum": 39.362461238,
+        "maximum": 39.377214972
+      },
+      "lambda_seconds": {
+        "median": 186.90157059799998,
+        "minimum": 186.887842869,
+        "maximum": 186.915298327
+      },
+      "source_response_seconds": {
+        "median": 3.7828672325,
+        "minimum": 3.780727714,
+        "maximum": 3.785006751
+      },
+      "orbital_seconds": {
+        "median": 122.00245503400001,
+        "minimum": 121.983360745,
+        "maximum": 122.021549323
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 42.0,
+        "minimum": 42,
+        "maximum": 42
+      },
+      "lambda_gemm_calls": {
+        "median": 80666.0,
+        "minimum": 80666,
+        "maximum": 80666
+      },
+      "lambda_work": {
+        "median": 61015317285123.0,
+        "minimum": 61015317285123,
+        "maximum": 61015317285123
+      },
+      "lambda_packing_output_bytes": {
+        "median": 3186571111792.0,
+        "minimum": 3186571111792,
+        "maximum": 3186571111792
+      },
+      "lambda_capacity": {
+        "median": 10081975949.0,
+        "minimum": 10081975949,
+        "maximum": 10081975949
+      }
+    },
+    "w0_c30_r0": {
+      "native_seconds": {
+        "median": 593.9912980025,
+        "minimum": 593.954974009,
+        "maximum": 594.027621996
+      },
+      "reference_seconds": {
+        "median": 129.2082059245,
+        "minimum": 129.187475375,
+        "maximum": 129.228936474
+      },
+      "source_seconds": {
+        "median": 3.61580326,
+        "minimum": 3.612858234,
+        "maximum": 3.618748286
+      },
+      "ccsd_seconds": {
+        "median": 99.873571219,
+        "minimum": 99.871797191,
+        "maximum": 99.875345247
+      },
+      "triples_seconds": {
+        "median": 39.366359441499995,
+        "minimum": 39.359495998,
+        "maximum": 39.373222885
+      },
+      "lambda_seconds": {
+        "median": 196.190684237,
+        "minimum": 196.177484704,
+        "maximum": 196.20388377
+      },
+      "source_response_seconds": {
+        "median": 3.7847620400000004,
+        "minimum": 3.783042163,
+        "maximum": 3.786481917
+      },
+      "orbital_seconds": {
+        "median": 121.9518223645,
+        "minimum": 121.936126999,
+        "maximum": 121.96751773
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 42726.0,
+        "minimum": 42726,
+        "maximum": 42726
+      },
+      "lambda_work": {
+        "median": 40429634645741.0,
+        "minimum": 40429634645741,
+        "maximum": 40429634645741
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1596162795584.0,
+        "minimum": 1596162795584,
+        "maximum": 1596162795584
+      },
+      "lambda_capacity": {
+        "median": 6844452897.0,
+        "minimum": 6844452897,
+        "maximum": 6844452897
+      }
+    },
+    "w0_c30_r1": {
+      "native_seconds": {
+        "median": 518.651967322,
+        "minimum": 518.648431854,
+        "maximum": 518.65550279
+      },
+      "reference_seconds": {
+        "median": 129.2177208195,
+        "minimum": 129.179635382,
+        "maximum": 129.255806257
+      },
+      "source_seconds": {
+        "median": 3.6049507505,
+        "minimum": 3.591093644,
+        "maximum": 3.618807857
+      },
+      "ccsd_seconds": {
+        "median": 99.87299982100001,
+        "minimum": 99.869394982,
+        "maximum": 99.87660466
+      },
+      "triples_seconds": {
+        "median": 39.373832021,
+        "minimum": 39.370731935,
+        "maximum": 39.376932107
+      },
+      "lambda_seconds": {
+        "median": 120.835509205,
+        "minimum": 120.82734858,
+        "maximum": 120.84366983
+      },
+      "source_response_seconds": {
+        "median": 3.7859655075,
+        "minimum": 3.784789938,
+        "maximum": 3.787141077
+      },
+      "orbital_seconds": {
+        "median": 121.9608986705,
+        "minimum": 121.932716339,
+        "maximum": 121.989081002
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 45986.0,
+        "minimum": 45986,
+        "maximum": 45986
+      },
+      "lambda_work": {
+        "median": 38135799179463.0,
+        "minimum": 38135799179463,
+        "maximum": 38135799179463
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1881569130992.0,
+        "minimum": 1881569130992,
+        "maximum": 1881569130992
+      },
+      "lambda_capacity": {
+        "median": 10081975949.0,
+        "minimum": 10081975949,
+        "maximum": 10081975949
+      }
+    },
+    "w1_c1_r0": {
+      "native_seconds": {
+        "median": 660.5749201975,
+        "minimum": 660.498300691,
+        "maximum": 660.651539704
+      },
+      "reference_seconds": {
+        "median": 129.2001791155,
+        "minimum": 129.195187601,
+        "maximum": 129.20517063
+      },
+      "source_seconds": {
+        "median": 3.611643769,
+        "minimum": 3.60988117,
+        "maximum": 3.613406368
+      },
+      "ccsd_seconds": {
+        "median": 99.8720925125,
+        "minimum": 99.870462552,
+        "maximum": 99.873722473
+      },
+      "triples_seconds": {
+        "median": 31.578577856,
+        "minimum": 31.563953266,
+        "maximum": 31.593202446
+      },
+      "lambda_seconds": {
+        "median": 270.75651693149996,
+        "minimum": 270.725361278,
+        "maximum": 270.787672585
+      },
+      "source_response_seconds": {
+        "median": 3.7824849115,
+        "minimum": 3.781997197,
+        "maximum": 3.782972626
+      },
+      "orbital_seconds": {
+        "median": 121.773334595,
+        "minimum": 121.751368243,
+        "maximum": 121.795300947
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 42.0,
+        "minimum": 42,
+        "maximum": 42
+      },
+      "lambda_gemm_calls": {
+        "median": 78066.0,
+        "minimum": 78066,
+        "maximum": 78066
+      },
+      "lambda_work": {
+        "median": 64006668617241.0,
+        "minimum": 64006668617241,
+        "maximum": 64006668617241
+      },
+      "lambda_packing_output_bytes": {
+        "median": 2916716956864.0,
+        "minimum": 2916716956864,
+        "maximum": 2916716956864
+      },
+      "lambda_capacity": {
+        "median": 6844452897.0,
+        "minimum": 6844452897,
+        "maximum": 6844452897
+      }
+    },
+    "w1_c1_r1": {
+      "native_seconds": {
+        "median": 576.9747145105,
+        "minimum": 576.966472464,
+        "maximum": 576.982956557
+      },
+      "reference_seconds": {
+        "median": 129.202625248,
+        "minimum": 129.186477035,
+        "maximum": 129.218773461
+      },
+      "source_seconds": {
+        "median": 3.6318911959999998,
+        "minimum": 3.627566853,
+        "maximum": 3.636215539
+      },
+      "ccsd_seconds": {
+        "median": 99.869942751,
+        "minimum": 99.861563126,
+        "maximum": 99.878322376
+      },
+      "triples_seconds": {
+        "median": 31.569041724999998,
+        "minimum": 31.567755482,
+        "maximum": 31.570327968
+      },
+      "lambda_seconds": {
+        "median": 186.8866476635,
+        "minimum": 186.868761811,
+        "maximum": 186.904533516
+      },
+      "source_response_seconds": {
+        "median": 3.783637563,
+        "minimum": 3.780983183,
+        "maximum": 3.786291943
+      },
+      "orbital_seconds": {
+        "median": 122.030837957,
+        "minimum": 122.029756558,
+        "maximum": 122.031919356
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 42.0,
+        "minimum": 42,
+        "maximum": 42
+      },
+      "lambda_gemm_calls": {
+        "median": 80666.0,
+        "minimum": 80666,
+        "maximum": 80666
+      },
+      "lambda_work": {
+        "median": 61015317285123.0,
+        "minimum": 61015317285123,
+        "maximum": 61015317285123
+      },
+      "lambda_packing_output_bytes": {
+        "median": 3186571111792.0,
+        "minimum": 3186571111792,
+        "maximum": 3186571111792
+      },
+      "lambda_capacity": {
+        "median": 10081975949.0,
+        "minimum": 10081975949,
+        "maximum": 10081975949
+      }
+    },
+    "w1_c30_r0": {
+      "native_seconds": {
+        "median": 586.11573432,
+        "minimum": 586.094211114,
+        "maximum": 586.137257526
+      },
+      "reference_seconds": {
+        "median": 129.2166748565,
+        "minimum": 129.196855123,
+        "maximum": 129.23649459
+      },
+      "source_seconds": {
+        "median": 3.6194071635,
+        "minimum": 3.607340898,
+        "maximum": 3.631473429
+      },
+      "ccsd_seconds": {
+        "median": 99.875726379,
+        "minimum": 99.875050839,
+        "maximum": 99.876401919
+      },
+      "triples_seconds": {
+        "median": 31.583085636,
+        "minimum": 31.582986729,
+        "maximum": 31.583184543
+      },
+      "lambda_seconds": {
+        "median": 196.2105074725,
+        "minimum": 196.204304242,
+        "maximum": 196.216710703
+      },
+      "source_response_seconds": {
+        "median": 3.7838536554999997,
+        "minimum": 3.782363162,
+        "maximum": 3.785344149
+      },
+      "orbital_seconds": {
+        "median": 121.82638685,
+        "minimum": 121.821507139,
+        "maximum": 121.831266561
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 42726.0,
+        "minimum": 42726,
+        "maximum": 42726
+      },
+      "lambda_work": {
+        "median": 40429634645741.0,
+        "minimum": 40429634645741,
+        "maximum": 40429634645741
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1596162795584.0,
+        "minimum": 1596162795584,
+        "maximum": 1596162795584
+      },
+      "lambda_capacity": {
+        "median": 6844452897.0,
+        "minimum": 6844452897,
+        "maximum": 6844452897
+      }
+    },
+    "w1_c30_r1": {
+      "native_seconds": {
+        "median": 510.9621851285,
+        "minimum": 510.953932148,
+        "maximum": 510.970438109
+      },
+      "reference_seconds": {
+        "median": 129.185689314,
+        "minimum": 129.168733329,
+        "maximum": 129.202645299
+      },
+      "source_seconds": {
+        "median": 3.6293453735,
+        "minimum": 3.613421625,
+        "maximum": 3.645269122
+      },
+      "ccsd_seconds": {
+        "median": 99.87470741,
+        "minimum": 99.867404927,
+        "maximum": 99.882009893
+      },
+      "triples_seconds": {
+        "median": 31.57085144,
+        "minimum": 31.570367949,
+        "maximum": 31.571334931
+      },
+      "lambda_seconds": {
+        "median": 120.8500089005,
+        "minimum": 120.84990432,
+        "maximum": 120.850113481
+      },
+      "source_response_seconds": {
+        "median": 3.7875518140000004,
+        "minimum": 3.787183075,
+        "maximum": 3.787920553
+      },
+      "orbital_seconds": {
+        "median": 122.0639412255,
+        "minimum": 122.063848775,
+        "maximum": 122.064033676
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 45986.0,
+        "minimum": 45986,
+        "maximum": 45986
+      },
+      "lambda_work": {
+        "median": 38135799179463.0,
+        "minimum": 38135799179463,
+        "maximum": 38135799179463
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1881569130992.0,
+        "minimum": 1881569130992,
+        "maximum": 1881569130992
+      },
+      "lambda_capacity": {
+        "median": 10081975949.0,
+        "minimum": 10081975949,
+        "maximum": 10081975949
+      }
+    }
+  }
+}
