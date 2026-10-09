@@ -181,6 +181,12 @@ class CudaSymmetricRankK final {
 #if !defined(GENERATIVEQC_TEST_HOOKS)
     if (library_qualified) throw std::invalid_argument("rank-k library qualification is test-only");
 #endif
+    if (!n || !k || !batches) throw std::invalid_argument("empty rank-k domain");
+    const auto panel = contraction_product(contraction_product(n, k), batches);
+    const auto matrix = contraction_product(contraction_product(n, n), batches);
+    panel_bytes_ = contraction_product(panel, sizeof(double));
+    matrix_bytes_ = contraction_product(matrix, sizeof(double));
+    temporary_bytes_ = runtime::lowering_add(panel_bytes_, matrix_bytes_);
     const bool small_row_request =
         (overwrite_request.identity ==
              rank_k_generated::rank_k_density_row_overwrite_request.identity &&
@@ -240,12 +246,6 @@ class CudaSymmetricRankK final {
     if (!valid(overwrite_request, overwrite_candidates, 3) ||
         !valid(update_request, update_candidates, 4))
       throw std::invalid_argument("rank-k requires its canonical strict-FP64 portfolio");
-    if (!n || !k || !batches) throw std::invalid_argument("empty rank-k domain");
-    const auto panel = contraction_product(contraction_product(n, k), batches);
-    const auto matrix = contraction_product(contraction_product(n, n), batches);
-    panel_bytes_ = contraction_product(panel, sizeof(double));
-    matrix_bytes_ = contraction_product(matrix, sizeof(double));
-    temporary_bytes_ = runtime::lowering_add(panel_bytes_, matrix_bytes_);
     const auto start = std::chrono::steady_clock::now();
     auto offers = update_candidates;
     auto overwrite_offers = overwrite_candidates;

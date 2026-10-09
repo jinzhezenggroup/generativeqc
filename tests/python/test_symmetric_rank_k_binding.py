@@ -154,3 +154,6 @@ def test_all_native_old_output_reads_use_the_generated_binding() -> None:
     ).read_text()
     assert source.count("rank_k_generated::rank_k_bound_old_output(") == 3
     assert source.count("call.beta == 0.0") == 1
+    assert source.index("const auto panel = contraction_product") < source.index(
+        "const bool small_row_request"
+    )
