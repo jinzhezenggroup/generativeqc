@@ -48,6 +48,9 @@ been qualified by this reference contract.
   deterministic serialization, logical hashes, and exact CSE.
 - Scientific equal extents never establish equal index domains.
 - Boolean values never supply tangents, cotangents, or numeric coefficients.
+- Demand-driven generated AD may prune an unrelated Boolean diagnostic, but a
+  selected output with a Boolean ancestor rejects. Runtime JVP/VJP/dot checks
+  retain the full-live-program rejection boundary.
 - The frontend does not expose `__array_namespace__` or claim full conformance.
 
 ## Evidence and remaining scope

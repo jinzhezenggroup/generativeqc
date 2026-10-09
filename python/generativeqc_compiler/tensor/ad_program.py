@@ -957,21 +957,22 @@ def linearize(
     """
     if not isinstance(program, Program):
         raise TypeError("linearize requires a Program")
-    if any(node.spec.dtype == "bool" for node in program.live_nodes):
-        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
     primal_hash = program.logical_hash
     program, _layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
     )
+    selected_outputs = _select_names(program.outputs, outputs, "output")
+    needed = _ancestors(selected_outputs.values())
+    if any(node.spec.dtype == "bool" for node in needed):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     inputs = _input_nodes(program)
     requested = _select_names(
         {name: node for name, node in inputs.items() if node.spec.differentiable},
         tangent_inputs,
         "tangent input",
     )
-    selected_outputs = _select_names(program.outputs, outputs, "output")
     tangent_nodes = {}
     for name, node in requested.items():
         generated = f"{TANGENT_PREFIX}{name}"
@@ -980,7 +981,6 @@ def linearize(
                 f"generated tangent name collides with input/output: {generated}"
             )
         tangent_nodes[name] = _derivative_input(node, generated)
-    needed = _ancestors(selected_outputs.values())
     tangents: dict[Node, Node | None] = {}
     generated_nodes = []
     for node in program.nodes:
@@ -1050,8 +1050,6 @@ def transpose_program(
     """
     if not isinstance(program, Program):
         raise TypeError("transpose_program requires a Program")
-    if any(node.spec.dtype == "bool" for node in program.live_nodes):
-        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     if type(max_elements) is not int or max_elements < 0:
         raise ValueError("max_elements must be a nonnegative integer")
     primal_hash = program.logical_hash
@@ -1061,6 +1059,9 @@ def transpose_program(
     selected_outputs = _select_names(
         program.outputs, cotangent_outputs, "cotangent output"
     )
+    needed = _ancestors(selected_outputs.values())
+    if any(node.spec.dtype == "bool" for node in needed):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     differentiable = {
         name: node
         for name, node in _input_nodes(program).items()
@@ -1069,7 +1070,7 @@ def transpose_program(
     selected_inputs = _select_names(differentiable, inputs, "input")
     groups = _input_groups(program)
     roots = (node for name in selected_inputs for node in groups[name])
-    relevant = _ancestors(selected_outputs.values()) & _descendants_of(program, roots)
+    relevant = needed & _descendants_of(program, roots)
     bars: dict[Node, Node | None] = {}
     for name, node in selected_outputs.items():
         generated = f"{COTANGENT_PREFIX}{name}"

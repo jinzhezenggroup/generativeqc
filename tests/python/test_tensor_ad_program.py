@@ -32,6 +32,7 @@ from generativeqc_compiler.tensor import (
     transpose_program,
     vjp,
 )
+from generativeqc_compiler.tensor import ir as tensor_ir
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 
 RNG = np.random.default_rng(1151)
@@ -183,6 +184,34 @@ def test_generation_is_demand_driven_and_prunes_unrelated_branches() -> None:
         node.attrs["name"] for node in reverse.program.live_nodes if node.op == "input"
     }
     assert live_inputs == {"x", "bar_left"}
+
+
+def test_generated_ad_rejects_only_selected_boolean_paths() -> None:
+    i = _axis("i", 3)
+    x = _parameter("x", (i,))
+    real = multiply(x, x)
+    predicate = tensor_ir.compare("greater", x, x)
+    program = Program({"real": real, "predicate": predicate})
+    values = np.asarray([1.0, 2.0, 3.0])
+    seed = np.asarray([0.5, -1.0, 2.0])
+
+    forward = linearize(program, ["x"], outputs=["real"])
+    reverse = transpose_program(program, ["real"], inputs=["x"])
+    np.testing.assert_array_equal(
+        execute(forward.program, {"x": values, "d_x": seed}).outputs["d_real"],
+        2 * values * seed,
+    )
+    np.testing.assert_array_equal(
+        execute(reverse.program, {"x": values, "bar_real": seed}).outputs["bar_x"],
+        2 * values * seed,
+    )
+    assert all(node.spec.dtype != "bool" for node in forward.program.live_nodes)
+    assert all(node.spec.dtype != "bool" for node in reverse.program.live_nodes)
+
+    with pytest.raises(ValueError, match="non-differentiable"):
+        linearize(program, ["x"], outputs=["predicate"])
+    with pytest.raises(ValueError, match="non-differentiable"):
+        transpose_program(program, ["predicate"], inputs=["x"])
 
 
 def test_generated_programs_link_primal_and_derivative_identity() -> None:

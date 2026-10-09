@@ -44,17 +44,24 @@ are local to each contraction; reusing one label for different populations,
 spins, or selected ranges is an error. Tensor axis names are notation and do
 not alter a logical hash.
 
-`TensorSpec` records ordered indices, real `float64` or `float32` dtype, declared
-symmetries, orbital representation, parameter role, and differentiability.
-Roles are `input`, `parameter`, `constant`, and `intermediate`. Constants cannot
-be differentiable. Result differentiability propagates from operands; this
-marks future AD inputs without claiming implemented derivatives.
+`TensorSpec` records ordered indices, dtype, declared symmetries, orbital
+representation, parameter role, and differentiability. Real scientific values
+use `float64` or `float32`. Boolean data uses one-byte `bool` storage and may be
+an input, constant, or intermediate; it is always general, symmetry-free, and
+non-differentiable. Immutable runtime index controls use `int64` input/parameter
+specs and are likewise general, symmetry-free, and non-differentiable. Roles are
+`input`, `parameter`, `constant`, and `intermediate`. Constants cannot be
+differentiable. Result differentiability propagates only through admitted real
+operations; this marks future AD inputs without claiming implemented derivatives.
 
 Representations are `general`, `restricted_spatial`, and `spin_orbital`.
 Operands of an arithmetic operation must agree on representation and dtype.
 Cross-dtype boundaries are represented only by the explicit `cast` primitive;
-there is no implicit promotion. In particular, restricted spatial amplitudes
-obey the simultaneous exchange
+there is no implicit promotion. The six comparisons require same-domain,
+same-representation real operands and produce Boolean intermediates. Boolean
+transpose, reshape, slice, gather, and broadcast preserve dtype, but Boolean
+arithmetic, reductions, einsum, casts, and AD reject explicitly. In particular,
+restricted spatial amplitudes obey the simultaneous exchange
 
 ```text
 t[i,j,a,b] = t[j,i,b,a]             Symmetry((1,0,3,2), +1)
@@ -122,17 +129,18 @@ division by zero, and arithmetic overflow fail explicitly.
 
 | Factory | Semantics and constraints |
 | --- | --- |
-| `constant(values, spec=None)` | Exact scalar or flattened C-order literals; default is an FP64 scalar |
+| `constant(values, spec=None)` | Exact rational real or literal Boolean scalar/flattened C-order values; default is an FP64 scalar |
 | `cast(value, dtype)` | Explicit real FP32/FP64 storage/compute boundary; logical axes, representation, symmetry and differentiability are preserved |
+| `compare(op, left, right)` | `equal`, `not_equal`, `greater`, `greater_equal`, `less`, or `less_equal` on identical real domains/dtypes; produces non-differentiable Boolean data |
 | `add(*values, coefficients=...)` | Ordered rational-scaled sum; equal domains, no implicit broadcast or dtype promotion |
 | `multiply(a,b)`, `divide(a,b)` | Elementwise operations on equal domains |
 | `einsum("...->...", *values, coefficient=...)` | Explicit-output alphabetic labels; traces/repeated input labels and scalar terms supported; literal ellipses unsupported |
-| `transpose(value, axes)` | Full permutation of logical axes |
-| `reshape(value, indices)` | Explicit C-order logical reshape with equal element count; may require a physical copy; does not transform an orbital basis |
-| `slice_tensor(value, ranges)` | One nonnegative unit-step half-open local range per axis |
-| `gather(value, axis, positions)` | Static validated positions, including repeated and reordered positions |
+| `transpose(value, axes)` | Full permutation of logical axes; preserves real or Boolean dtype |
+| `reshape(value, indices)` | Explicit C-order logical reshape with equal element count; preserves real or Boolean dtype, may require a physical copy, and does not transform an orbital basis |
+| `slice_tensor(value, ranges)` | One nonnegative unit-step half-open local range per axis; preserves real or Boolean dtype |
+| `gather(value, axis, positions)` | Static validated positions, including repeated and reordered positions; preserves real or Boolean dtype |
 | `reduce_sum(value, axes)` | Sum specified axes; full reduction yields a rank-zero scalar |
-| `broadcast(value, indices, axes)` | Insert new axes using an explicit input-to-output map; existing axis domains remain unchanged |
+| `broadcast(value, indices, axes)` | Insert new axes using an explicit input-to-output map; existing axis domains and real/Boolean dtype remain unchanged |
 
 An existing singleton cannot silently become a different population. Reduce
 away that axis before explicitly broadcasting it. Empty tensors and zero-length
@@ -172,10 +180,12 @@ reduced numerator/positive-denominator pairs; conversion happens in the chosen
 real dtype during interpretation. No complex values, conjugation, arbitrary
 expression evaluation, SCF/CC loops, or mutable scatter operations are supported.
 
-`PRIMITIVES` declares differentiable-operand and accumulation contracts.
-`autodiff.py` implements JVP/VJP rules for every primitive; repeated gathers
-use scatter-add in a VJP, and repeated einsum labels use exact identity
-projections in generated reverse programs. Shapes live in each typed node.
+`PRIMITIVES` declares differentiable-operand and accumulation contracts for real
+operations and marks comparisons explicitly non-differentiable. `autodiff.py`
+implements JVP/VJP rules for every differentiable primitive; Boolean-capable
+views participate in AD only for real-valued paths. Repeated gathers use
+scatter-add in a VJP, and repeated einsum labels use exact identity projections
+in generated reverse programs. Shapes live in each typed node.
 
 ## Independent/packed amplitudes
 
@@ -204,13 +214,14 @@ and metric.
 
 ## Derivative programs (#151)
 
-`python/generativeqc_compiler/tensor/autodiff.py` provides a CPU reference for JVP (`jvp`) and
-matrix-free VJP (`vjp`) with an adjoint dot test (`dot_test`). It covers every
-primitive, preserves exact rational coefficients, accumulates multiple
-consumers, and rejects unsupported or non-differentiable requests. The
-interpreter deliberately treats packed/symmetric parameters as dense general
-tensors only through an explicit packing boundary; callers must not replace
-the weighted adjoint with an unweighted Euclidean one.
+`python/generativeqc_compiler/tensor/autodiff.py` provides a CPU reference for
+JVP (`jvp`) and matrix-free VJP (`vjp`) with an adjoint dot test (`dot_test`). It
+covers every differentiable primitive, preserves exact rational coefficients,
+accumulates multiple consumers, and rejects a runtime AD request when its live
+program contains Boolean data. The interpreter deliberately treats
+packed/symmetric parameters as dense general tensors only through an explicit
+packing boundary; callers must not replace the weighted adjoint with an
+unweighted Euclidean one.
 
 Distinct input nodes with the same public name read one feed: VJPs sum all
 their contributions, including before common-subexpression elimination. The
@@ -231,6 +242,10 @@ backend-independent TensorIR `Program` DAGs:
 - Only requested paths produce nodes; an inactive requested output becomes an
   explicit zero-like node. Generated programs are replayable with
   `Program.dumps()` and can be passed directly to `plan_cuda`.
+- Unrelated Boolean diagnostic outputs are pruned from a requested real path.
+  Selecting a Boolean output or a real output whose ancestors contain Boolean
+  data rejects as non-differentiable; selected-branch `where` AD is not part of
+  this contract.
 - Reverse slice/gather use exact incidence matrices. Repeated einsum labels
   use exact identity projections. A packed parameter is expanded through an
   explicit unpack DAG, and its reverse output applies `unpack_transpose`
