@@ -374,7 +374,8 @@ RunOptions parse_run(int argc, char** argv) {
         options.method = entry->method;
       } else {
         throw UsageError(
-            "native run method must be gfn2-xtb, rhf, uhf, pbe0-rks, or a listed native DFT method");
+            "native run method must be gfn2-xtb, rhf, uhf, pbe0-rks, or a listed native DFT "
+            "method");
       }
     } else if (option == "--basis") {
       options.basis_name = lower(std::string(value()));
