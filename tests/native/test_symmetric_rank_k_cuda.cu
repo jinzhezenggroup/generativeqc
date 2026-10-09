@@ -22,16 +22,20 @@ static void check(cudaError_t status) {
   if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
 }
 
-template <class T> class DeviceBuffer {
+template <class T>
+class DeviceBuffer {
  public:
   explicit DeviceBuffer(std::size_t count) : count_(count) {
     check(cudaMalloc(reinterpret_cast<void**>(&pointer_), count * sizeof(T)));
   }
-  ~DeviceBuffer() { if (pointer_) (void)cudaFree(pointer_); }
+  ~DeviceBuffer() {
+    if (pointer_) (void)cudaFree(pointer_);
+  }
   DeviceBuffer(const DeviceBuffer&) = delete;
   DeviceBuffer& operator=(const DeviceBuffer&) = delete;
   T* get() const { return pointer_; }
   std::size_t bytes() const { return count_ * sizeof(T); }
+
  private:
   std::size_t count_{};
   T* pointer_{};
@@ -39,8 +43,8 @@ template <class T> class DeviceBuffer {
 
 __global__ void materialize_weights(const double* occupations, const double* energies,
                                     double* weights, std::size_t count, int* error) {
-  for (std::size_t i = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x;
-       i < count; i += std::size_t(blockDim.x) * gridDim.x) {
+  for (std::size_t i = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; i < count;
+       i += std::size_t(blockDim.x) * gridDim.x) {
     double value{};
     if (!metadata::rank_k_energy_weight(occupations[i], energies[i], value)) {
       atomicCAS(error, 0, 1);
@@ -52,48 +56,46 @@ __global__ void materialize_weights(const double* occupations, const double* ene
 
 static std::size_t panel_index(std::size_t batch, std::size_t row, std::size_t orbital,
                                std::size_t n, std::size_t k, RankKOrder order) {
-  return batch * n * k +
-      (order == RankKOrder::RowMajor ? row * k + orbital : row + orbital * n);
+  return batch * n * k + (order == RankKOrder::RowMajor ? row * k + orbital : row + orbital * n);
 }
 
-static std::size_t matrix_index(std::size_t batch, std::size_t row, std::size_t col,
-                                std::size_t n, RankKOrder order) {
-  return batch * n * n +
-      (order == RankKOrder::RowMajor ? row * n + col : row + col * n);
+static std::size_t matrix_index(std::size_t batch, std::size_t row, std::size_t col, std::size_t n,
+                                RankKOrder order) {
+  return batch * n * n + (order == RankKOrder::RowMajor ? row * n + col : row + col * n);
 }
 
-static const std::array<generativeqc::runtime::NativeLoweringCandidate, 2>&
-candidates(bool weighted, RankKOrder order) {
+static const std::array<generativeqc::runtime::NativeLoweringCandidate, 2>& candidates(
+    bool weighted, RankKOrder order) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_candidates :
-                                           metadata::rank_k_weighted_density_column_candidates;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_candidates :
-                                         metadata::rank_k_density_column_candidates;
+    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_candidates
+                                         : metadata::rank_k_weighted_density_column_candidates;
+  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_candidates
+                                       : metadata::rank_k_density_column_candidates;
 }
 
 static const generativeqc::runtime::NativeLoweringRequest& request(bool weighted,
-                                                                    RankKOrder order) {
+                                                                   RankKOrder order) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_request :
-                                           metadata::rank_k_weighted_density_column_request;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_request :
-                                         metadata::rank_k_density_column_request;
+    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_request
+                                         : metadata::rank_k_weighted_density_column_request;
+  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_request
+                                       : metadata::rank_k_density_column_request;
 }
 
 static std::string_view target(bool weighted, RankKOrder order) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_target :
-                                           metadata::rank_k_weighted_density_column_target;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_target :
-                                         metadata::rank_k_density_column_target;
+    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_target
+                                         : metadata::rank_k_weighted_density_column_target;
+  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_target
+                                       : metadata::rank_k_density_column_target;
 }
 
 static std::string_view compilation(bool weighted, RankKOrder order) {
   if (weighted)
-    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_compilation :
-                                           metadata::rank_k_weighted_density_column_compilation;
-  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_compilation :
-                                         metadata::rank_k_density_column_compilation;
+    return order == RankKOrder::RowMajor ? metadata::rank_k_weighted_density_row_compilation
+                                         : metadata::rank_k_weighted_density_column_compilation;
+  return order == RankKOrder::RowMajor ? metadata::rank_k_density_row_compilation
+                                       : metadata::rank_k_density_column_compilation;
 }
 
 static void verify(const std::vector<double>& result, const std::vector<double>& baseline,
@@ -105,11 +107,15 @@ static void verify(const std::vector<double>& result, const std::vector<double>&
       for (std::size_t col = 0; col < n; ++col) {
         long double sum = 0;
         for (std::size_t orbital = 0; orbital < k; ++orbital)
-          sum += static_cast<long double>(coefficients[panel_index(batch, row, orbital, n, k, order)]) *
-                 static_cast<long double>(weights[batch * k + orbital]) *
-                 static_cast<long double>(coefficients[panel_index(batch, col, orbital, n, k, order)]);
-        const auto old = baseline[matrix_index(batch, std::min(row, col), std::max(row, col), n, order)];
-        const auto expected = static_cast<double>(alpha * sum + beta * static_cast<long double>(old));
+          sum +=
+              static_cast<long double>(
+                  coefficients[panel_index(batch, row, orbital, n, k, order)]) *
+              static_cast<long double>(weights[batch * k + orbital]) *
+              static_cast<long double>(coefficients[panel_index(batch, col, orbital, n, k, order)]);
+        const auto old =
+            baseline[matrix_index(batch, std::min(row, col), std::max(row, col), n, order)];
+        const auto expected =
+            static_cast<double>(alpha * sum + beta * static_cast<long double>(old));
         const auto actual = result[matrix_index(batch, row, col, n, order)];
         const auto tolerance = 2e-11 * std::max(1.0, std::abs(expected));
         if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
@@ -117,11 +123,11 @@ static void verify(const std::vector<double>& result, const std::vector<double>&
       }
 }
 
-static void run_case(std::size_t n, std::size_t k, std::size_t batches,
-                     RankKOrder order, bool weighted, bool want_library) {
+static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrder order,
+                     bool weighted, bool want_library) {
   const auto panel_count = batches * n * k, matrix_count = batches * n * n;
-  std::vector<double> coefficients(panel_count), occupations(batches * k),
-      energies(batches * k), weights(batches * k), baseline(matrix_count);
+  std::vector<double> coefficients(panel_count), occupations(batches * k), energies(batches * k),
+      weights(batches * k), baseline(matrix_count);
   for (std::size_t batch = 0; batch < batches; ++batch) {
     for (std::size_t row = 0; row < n; ++row)
       for (std::size_t orbital = 0; orbital < k; ++orbital)
@@ -129,55 +135,59 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
             (static_cast<double>((row * 7 + orbital * 11 + batch * 3) % 29) - 14.0) / 19.0;
     for (std::size_t orbital = 0; orbital < k; ++orbital) {
       occupations[batch * k + orbital] = orbital % 5 == 0 ? 0.0 : 0.5 + 0.125 * (orbital % 3);
-      energies[batch * k + orbital] = orbital == 0 ? -0.0 :
-          (static_cast<double>((orbital * 7 + batch) % 11) - 6.0) / 3.0;
-      weights[batch * k + orbital] = weighted ?
-          occupations[batch * k + orbital] * energies[batch * k + orbital] :
-          (orbital % 4 == 0 ? -0.75 : occupations[batch * k + orbital]);
+      energies[batch * k + orbital] =
+          orbital == 0 ? -0.0 : (static_cast<double>((orbital * 7 + batch) % 11) - 6.0) / 3.0;
+      weights[batch * k + orbital] =
+          weighted ? occupations[batch * k + orbital] * energies[batch * k + orbital]
+                   : (orbital % 4 == 0 ? -0.75 : occupations[batch * k + orbital]);
     }
     for (std::size_t row = 0; row < n; ++row)
       for (std::size_t col = 0; col < n; ++col)
         baseline[matrix_index(batch, row, col, n, order)] =
-            0.125 * (1 + batch + std::min(row, col) + std::max(row, col)) +
-            (row > col ? 2.0 : 0.0);
+            0.125 * (1 + batch + std::min(row, col) + std::max(row, col)) + (row > col ? 2.0 : 0.0);
   }
   DeviceBuffer<double> d_coefficients(panel_count), d_weights(batches * k),
-      d_occupations(batches * k), d_energies(batches * k),
-      d_output(matrix_count), d_baseline(matrix_count);
+      d_occupations(batches * k), d_energies(batches * k), d_output(matrix_count),
+      d_baseline(matrix_count);
   DeviceBuffer<int> d_error(1);
-  check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(), cudaMemcpyHostToDevice));
+  check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(),
+                   cudaMemcpyHostToDevice));
   check(cudaMemcpy(d_weights.get(), weights.data(), d_weights.bytes(), cudaMemcpyHostToDevice));
-  check(cudaMemcpy(d_occupations.get(), occupations.data(), d_occupations.bytes(), cudaMemcpyHostToDevice));
+  check(cudaMemcpy(d_occupations.get(), occupations.data(), d_occupations.bytes(),
+                   cudaMemcpyHostToDevice));
   check(cudaMemcpy(d_energies.get(), energies.data(), d_energies.bytes(), cudaMemcpyHostToDevice));
   check(cudaMemcpy(d_baseline.get(), baseline.data(), d_baseline.bytes(), cudaMemcpyHostToDevice));
   cudaStream_t stream{};
   check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   const double alpha = 1.25, beta = -0.5;
-  SymmetricRankKInvocation invocation{n, k, batches, d_coefficients.get(), d_weights.get(),
-                                       d_output.get(), d_error.get(), alpha, beta};
+  SymmetricRankKInvocation invocation{
+      n,     k,   batches, d_coefficients.get(), d_weights.get(), d_output.get(), d_error.get(),
+      alpha, beta};
   if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
     bool rejected_overflow = false;
     try {
       CudaSymmetricRankK overflow(request(weighted, order), candidates(weighted, order),
-                                   target(weighted, order), compilation(weighted, order),
-                                   std::numeric_limits<std::size_t>::max(), 2, 2,
-                                   order, stream, 0);
-    } catch (const std::length_error&) { rejected_overflow = true; }
+                                  target(weighted, order), compilation(weighted, order),
+                                  std::numeric_limits<std::size_t>::max(), 2, 2, order, stream, 0);
+    } catch (const std::length_error&) {
+      rejected_overflow = true;
+    }
     if (!rejected_overflow) throw std::runtime_error("rank-k accepted dimension overflow");
   }
   bool rejected_order = false;
   try {
-    CudaSymmetricRankK wrong(request(weighted, order), candidates(weighted, order),
-                              target(weighted, order), compilation(weighted, order),
-                              n, k, batches,
-                              order == RankKOrder::RowMajor ? RankKOrder::ColumnMajor : RankKOrder::RowMajor,
-                              stream, 0);
-  } catch (const std::invalid_argument&) { rejected_order = true; }
+    CudaSymmetricRankK wrong(
+        request(weighted, order), candidates(weighted, order), target(weighted, order),
+        compilation(weighted, order), n, k, batches,
+        order == RankKOrder::RowMajor ? RankKOrder::ColumnMajor : RankKOrder::RowMajor, stream, 0);
+  } catch (const std::invalid_argument&) {
+    rejected_order = true;
+  }
   if (!rejected_order) throw std::runtime_error("rank-k accepted wrong physical order");
   if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
     CudaSymmetricRankK bounded(request(weighted, order), candidates(weighted, order),
-                               target(weighted, order), compilation(weighted, order),
-                               n, k, batches, order, stream, 0, true);
+                               target(weighted, order), compilation(weighted, order), n, k, batches,
+                               order, stream, 0, true);
     if (bounded.diagnostic().selected.provider != "generated.cuda" ||
         bounded.diagnostic().library_rejection.find("allowance") == std::string_view::npos)
       throw std::runtime_error("rank-k resource miss did not retain generated fallback");
@@ -195,9 +205,8 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
   }
   {
     CudaSymmetricRankK binding(request(weighted, order), candidates(weighted, order),
-                                target(weighted, order), compilation(weighted, order),
-                                n, k, batches, order, stream,
-                                want_library ? 256ULL << 20 : 0, want_library);
+                               target(weighted, order), compilation(weighted, order), n, k, batches,
+                               order, stream, want_library ? 256ULL << 20 : 0, want_library);
     const auto& diagnostic = binding.diagnostic();
     if ((diagnostic.selected.provider == "cublas") != want_library)
       throw std::runtime_error("rank-k selected wrong executable provider");
@@ -207,8 +216,7 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
       check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
       if (weighted)
         materialize_weights<<<generativeqc_tensor::blocks(batches * k, 128), 128, 0, stream>>>(
-            d_occupations.get(), d_energies.get(), d_weights.get(), batches * k,
-            d_error.get());
+            d_occupations.get(), d_energies.get(), d_weights.get(), batches * k, d_error.get());
       binding.execute(stream, invocation);
     };
     enqueue();
@@ -248,7 +256,8 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
     // A nonfinite signed weight must leave the entire output intact.
     weights[0] = std::numeric_limits<double>::quiet_NaN();
     check(cudaMemcpy(d_weights.get(), weights.data(), d_weights.bytes(), cudaMemcpyHostToDevice));
-    check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(), cudaMemcpyDeviceToDevice, stream));
+    check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
+                          cudaMemcpyDeviceToDevice, stream));
     check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
     binding.execute(stream, invocation);
     check(cudaStreamSynchronize(stream));
@@ -261,8 +270,10 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
 
     const auto original_coefficient = coefficients[0];
     coefficients[0] = std::numeric_limits<double>::infinity();
-    check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(), cudaMemcpyHostToDevice));
-    check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(), cudaMemcpyDeviceToDevice, stream));
+    check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(),
+                     cudaMemcpyHostToDevice));
+    check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
+                          cudaMemcpyDeviceToDevice, stream));
     check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
     binding.execute(stream, invocation);
     check(cudaStreamSynchronize(stream));
@@ -271,20 +282,27 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
     check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
     if (result != baseline) throw std::runtime_error("rank-k input failure changed output");
     coefficients[0] = original_coefficient;
-    check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(), cudaMemcpyHostToDevice));
+    check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(),
+                     cudaMemcpyHostToDevice));
 
     auto invalid_scalar = invocation;
     invalid_scalar.alpha = std::numeric_limits<double>::quiet_NaN();
     bool rejected_scalar = false;
-    try { binding.execute(stream, invalid_scalar); }
-    catch (const std::invalid_argument&) { rejected_scalar = true; }
+    try {
+      binding.execute(stream, invalid_scalar);
+    } catch (const std::invalid_argument&) {
+      rejected_scalar = true;
+    }
     if (!rejected_scalar) throw std::runtime_error("rank-k nonfinite alpha was accepted");
 
     bool rejected_alias = false;
     auto alias = invocation;
     alias.output = d_coefficients.get();
-    try { binding.execute(stream, alias); }
-    catch (const std::invalid_argument&) { rejected_alias = true; }
+    try {
+      binding.execute(stream, alias);
+    } catch (const std::invalid_argument&) {
+      rejected_alias = true;
+    }
     if (!rejected_alias) throw std::runtime_error("rank-k output alias was accepted");
 
     cudaEvent_t begin{}, end{};
@@ -303,15 +321,13 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
     check(cudaEventDestroy(begin));
     const auto upper = batches * n * (n + 1) / 2;
     const auto products = want_library ? batches * n * n * k : 2 * upper * k;
-    std::cout << std::setprecision(9)
-              << "{\"status\":\"PASS\",\"n\":" << n << ",\"k\":" << k
-              << ",\"batches\":" << batches << ",\"weighted\":" << weighted
-              << ",\"order\":\"" << (order == RankKOrder::RowMajor ? "row" : "column")
-              << "\",\"provider\":\"" << diagnostic.selected.provider
+    std::cout << std::setprecision(9) << "{\"status\":\"PASS\",\"n\":" << n << ",\"k\":" << k
+              << ",\"batches\":" << batches << ",\"weighted\":" << weighted << ",\"order\":\""
+              << (order == RankKOrder::RowMajor ? "row" : "column") << "\",\"provider\":\""
+              << diagnostic.selected.provider
               << "\",\"endpoint_us\":" << (milliseconds * 1000.0 / repetitions)
               << ",\"prepare_us\":" << (diagnostic.prepare_seconds * 1e6)
-              << ",\"logical_products\":" << (upper * k)
-              << ",\"executed_products\":" << products
+              << ",\"logical_products\":" << (upper * k) << ",\"executed_products\":" << products
               << ",\"scale_elements\":" << (want_library ? panel_count : products)
               << ",\"weight_materialization_elements\":" << (weighted ? batches * k : 0)
               << ",\"validation_elements\":" << upper

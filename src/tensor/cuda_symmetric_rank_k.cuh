@@ -4,10 +4,10 @@
 #include <climits>
 #include <cmath>
 
+#include "generated_symmetric_rank_k.cuh"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "tensor/cuda_contraction.cuh"
-#include "generated_symmetric_rank_k.cuh"
 
 namespace generativeqc::tensor {
 
@@ -36,18 +36,17 @@ struct SymmetricRankKDiagnostic {
 };
 
 namespace rank_k_detail {
-__device__ inline std::size_t panel_index(std::size_t row, std::size_t orbital,
-                                          std::size_t n, std::size_t k,
-                                          RankKOrder order) {
+__device__ inline std::size_t panel_index(std::size_t row, std::size_t orbital, std::size_t n,
+                                          std::size_t k, RankKOrder order) {
   return order == RankKOrder::RowMajor ? row * k + orbital : row + orbital * n;
 }
 
 __global__ void scale(const double* coefficients, const double* weights, double* scaled,
-                      std::size_t n, std::size_t k, std::size_t batches,
-                      RankKOrder order, int* error) {
+                      std::size_t n, std::size_t k, std::size_t batches, RankKOrder order,
+                      int* error) {
   const auto count = batches * n * k;
-  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x;
-       linear < count; linear += std::size_t(blockDim.x) * gridDim.x) {
+  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; linear < count;
+       linear += std::size_t(blockDim.x) * gridDim.x) {
     const auto batch = linear / (n * k), physical = linear % (n * k);
     const auto orbital = order == RankKOrder::RowMajor ? physical % k : physical / n;
     const auto coefficient = coefficients[linear], weight = weights[batch * k + orbital];
@@ -61,9 +60,8 @@ __global__ void scale(const double* coefficients, const double* weights, double*
   }
 }
 
-__device__ inline bool generated_value(const SymmetricRankKInvocation call,
-                                       std::size_t batch, std::size_t row,
-                                       std::size_t col, RankKOrder order,
+__device__ inline bool generated_value(const SymmetricRankKInvocation call, std::size_t batch,
+                                       std::size_t row, std::size_t col, RankKOrder order,
                                        double& result) {
   result = 0.0;
   const auto panel = call.coefficients + batch * call.n * call.k;
@@ -80,15 +78,15 @@ __device__ inline bool generated_value(const SymmetricRankKInvocation call,
   return true;
 }
 
-__device__ inline std::size_t matrix_index(std::size_t row, std::size_t col,
-                                           std::size_t n, RankKOrder order) {
+__device__ inline std::size_t matrix_index(std::size_t row, std::size_t col, std::size_t n,
+                                           RankKOrder order) {
   return order == RankKOrder::RowMajor ? row * n + col : row + col * n;
 }
 
 __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder order) {
   const auto count = call.batches * call.n * call.n;
-  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x;
-       linear < count; linear += std::size_t(blockDim.x) * gridDim.x) {
+  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; linear < count;
+       linear += std::size_t(blockDim.x) * gridDim.x) {
     const auto batch = linear / (call.n * call.n), local = linear % (call.n * call.n);
     const auto row = local / call.n, col = local % call.n;
     if (row > col) continue;
@@ -101,48 +99,48 @@ __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder ord
         atomicCAS(call.error, 0, 1);
     }
     double value{};
-    if (!generated_value(call, batch, row, col, order, value))
-      atomicCAS(call.error, 0, 1);
-    const auto old = call.beta == 0.0 ? 0.0 :
-        call.output[batch * call.n * call.n + matrix_index(row, col, call.n, order)];
+    if (!generated_value(call, batch, row, col, order, value)) atomicCAS(call.error, 0, 1);
+    const auto old =
+        call.beta == 0.0
+            ? 0.0
+            : call.output[batch * call.n * call.n + matrix_index(row, col, call.n, order)];
     const auto updated = call.alpha * value + call.beta * old;
-    if (!isfinite(value) || !isfinite(old) || !isfinite(updated))
-      atomicCAS(call.error, 0, 1);
+    if (!isfinite(value) || !isfinite(old) || !isfinite(updated)) atomicCAS(call.error, 0, 1);
   }
 }
 
 __global__ void validate_library(SymmetricRankKInvocation call, const double* product,
                                  RankKOrder order) {
   const auto count = call.batches * call.n * call.n;
-  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x;
-       linear < count; linear += std::size_t(blockDim.x) * gridDim.x) {
+  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; linear < count;
+       linear += std::size_t(blockDim.x) * gridDim.x) {
     const auto batch = linear / (call.n * call.n), local = linear % (call.n * call.n);
     const auto row = local / call.n, col = local % call.n;
     if (row > col) continue;
     const auto address = batch * call.n * call.n + matrix_index(row, col, call.n, order);
     const auto value = product[address];
     const auto old = call.beta == 0.0 ? 0.0 : call.output[address];
-    if (!isfinite(value) || !isfinite(old) ||
-        !isfinite(call.alpha * value + call.beta * old))
+    if (!isfinite(value) || !isfinite(old) || !isfinite(call.alpha * value + call.beta * old))
       atomicCAS(call.error, 0, 1);
   }
 }
 
-__global__ void publish(SymmetricRankKInvocation call, const double* product,
-                        RankKOrder order) {
+__global__ void publish(SymmetricRankKInvocation call, const double* product, RankKOrder order) {
   if (*call.error != 0) return;
   const auto count = call.batches * call.n * call.n;
-  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x;
-       linear < count; linear += std::size_t(blockDim.x) * gridDim.x) {
+  for (std::size_t linear = blockIdx.x * std::size_t(blockDim.x) + threadIdx.x; linear < count;
+       linear += std::size_t(blockDim.x) * gridDim.x) {
     const auto batch = linear / (call.n * call.n), local = linear % (call.n * call.n);
     const auto row = local / call.n, col = local % call.n;
     if (row > col) continue;
     const auto offset = batch * call.n * call.n;
     double value{};
-    if (product) value = product[offset + matrix_index(row, col, call.n, order)];
-    else if (!generated_value(call, batch, row, col, order, value)) return;
-    const auto old = call.beta == 0.0 ? 0.0 :
-        call.output[offset + matrix_index(row, col, call.n, order)];
+    if (product)
+      value = product[offset + matrix_index(row, col, call.n, order)];
+    else if (!generated_value(call, batch, row, col, order, value))
+      return;
+    const auto old =
+        call.beta == 0.0 ? 0.0 : call.output[offset + matrix_index(row, col, call.n, order)];
     const auto updated = call.alpha * value + call.beta * old;
     call.output[offset + matrix_index(row, col, call.n, order)] = updated;
     call.output[offset + matrix_index(col, row, call.n, order)] = updated;
@@ -161,16 +159,14 @@ class CudaSymmetricRankK final {
   template <std::size_t N>
   CudaSymmetricRankK(const runtime::NativeLoweringRequest& request,
                      const std::array<runtime::NativeLoweringCandidate, N>& candidates,
-                     std::string_view target, std::string_view compilation,
-                     std::size_t n, std::size_t k, std::size_t batches,
-                     RankKOrder order, cudaStream_t stream,
+                     std::string_view target, std::string_view compilation, std::size_t n,
+                     std::size_t k, std::size_t batches, RankKOrder order, cudaStream_t stream,
                      std::size_t provider_budget, bool library_qualified = false)
       : n_(n), k_(k), batches_(batches), order_(order) {
     static_assert(N == 2);
     static_assert(sizeof(CudaSymmetricRankK) + 2 * sizeof(candidates) + 8192 <= host_reservation);
 #if !defined(GENERATIVEQC_TEST_HOOKS)
-    if (library_qualified)
-      throw std::invalid_argument("rank-k library qualification is test-only");
+    if (library_qualified) throw std::invalid_argument("rank-k library qualification is test-only");
 #endif
     const bool row_request =
         request.identity == rank_k_generated::rank_k_density_row_request.identity ||
@@ -182,13 +178,13 @@ class CudaSymmetricRankK final {
         row_request == column_request || row_request != (order == RankKOrder::RowMajor))
       throw std::invalid_argument("rank-k physical order does not match the compiled request");
     if (request.dtype != runtime::PrecisionDtype::Fp64 ||
-        request.accumulation_dtype != runtime::PrecisionDtype::Fp64 ||
-        request.inputs != 4 || request.precisions.size() != 1 ||
+        request.accumulation_dtype != runtime::PrecisionDtype::Fp64 || request.inputs != 4 ||
+        request.precisions.size() != 1 ||
         !runtime::strict_requested_precision(request, request.precisions[0]) ||
         request.precisions[0].publication_dtype != runtime::PrecisionDtype::Fp64 ||
         !request.precisions[0].casts.empty() || !request.precisions[0].refinement.empty() ||
-        !request.precisions[0].audit.empty() ||
-        candidates[0].provider != "generated.cuda" || candidates[1].provider != "cublas" ||
+        !request.precisions[0].audit.empty() || candidates[0].provider != "generated.cuda" ||
+        candidates[1].provider != "cublas" ||
         candidates[0].algorithm != "symmetric-rank-k-generated" ||
         candidates[1].algorithm != "symmetric-rank-k-signed-gemm")
       throw std::invalid_argument("rank-k requires its canonical strict-FP64 portfolio");
@@ -214,8 +210,8 @@ class CudaSymmetricRankK final {
       offers[1].rejection = "rank-k provider allocation unavailable";
     if (offers[1].rejection.empty()) {
       bool host_oom = false;
-      const auto status = runtime::resource_cuda_malloc(
-          reinterpret_cast<void**>(&scratch_), temporary_bytes_, &host_oom);
+      const auto status = runtime::resource_cuda_malloc(reinterpret_cast<void**>(&scratch_),
+                                                        temporary_bytes_, &host_oom);
       if (status == cudaErrorMemoryAllocation && !host_oom) {
         (void)cudaGetLastError();
         {
@@ -229,17 +225,21 @@ class CudaSymmetricRankK final {
     }
     try {
       if (!offers[1].rejection.empty()) context_.prepare_generated(stream);
-      const auto selected = runtime::select_native_lowering(
-          request, offers, target, compilation, 1,
-          offers[1].rejection.empty() ? 1 : 0);
+      const auto selected = runtime::select_native_lowering(request, offers, target, compilation, 1,
+                                                            offers[1].rejection.empty() ? 1 : 0);
       library_ = selected.selected == 1;
-      if (!library_ && scratch_) throw std::logic_error("rank-k selected generated with library scratch");
-      diagnostic_ = {offers[selected.selected], offers[1].rejection, host_reservation,
-                     library_ ? temporary_bytes_ : 0,
-                     library_ ? CudaContractionContext::kProviderAllowance : 0,
-                     context_.retained_bytes(), context_.provider_version(),
-                     context_.runtime_version(),
-                     std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()};
+      if (!library_ && scratch_)
+        throw std::logic_error("rank-k selected generated with library scratch");
+      diagnostic_ = {
+          offers[selected.selected],
+          offers[1].rejection,
+          host_reservation,
+          library_ ? temporary_bytes_ : 0,
+          library_ ? CudaContractionContext::kProviderAllowance : 0,
+          context_.retained_bytes(),
+          context_.provider_version(),
+          context_.runtime_version(),
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()};
     } catch (...) {
       release_scratch();
       throw;
@@ -256,13 +256,13 @@ class CudaSymmetricRankK final {
     generativeqc_tensor::cuda_check(cudaGetDevice(&device));
     if (device != context_.device()) throw std::invalid_argument("rank-k device changed");
     if (!call.n || call.n > n_ || !call.k || call.k > k_ || !call.batches ||
-        call.batches > batches_ || !call.coefficients || !call.weights ||
-        !call.output || !call.error || !std::isfinite(call.alpha) || !std::isfinite(call.beta))
+        call.batches > batches_ || !call.coefficients || !call.weights || !call.output ||
+        !call.error || !std::isfinite(call.alpha) || !std::isfinite(call.beta))
       throw std::invalid_argument("rank-k invocation exceeds prepared domain");
     const auto panel_bytes = contraction_product(
         contraction_product(contraction_product(call.n, call.k), call.batches), sizeof(double));
-    const auto weights_bytes = contraction_product(
-        contraction_product(call.k, call.batches), sizeof(double));
+    const auto weights_bytes =
+        contraction_product(contraction_product(call.k, call.batches), sizeof(double));
     const auto matrix_bytes = contraction_product(
         contraction_product(contraction_product(call.n, call.n), call.batches), sizeof(double));
     if (runtime::ranges_overlap(call.output, matrix_bytes, call.coefficients, panel_bytes) ||
@@ -276,35 +276,37 @@ class CudaSymmetricRankK final {
     if (library_) {
       auto* scaled = scratch_;
       auto* product = scratch_ + panel_bytes_ / sizeof(double);
-      const auto scale_count = contraction_product(contraction_product(call.batches, call.n), call.k);
+      const auto scale_count =
+          contraction_product(contraction_product(call.batches, call.n), call.k);
       rank_k_detail::scale<<<generativeqc_tensor::blocks(scale_count, 128), 128, 0, stream>>>(
-          call.coefficients, call.weights, scaled, call.n, call.k, call.batches,
-          order_, call.error);
+          call.coefficients, call.weights, scaled, call.n, call.k, call.batches, order_,
+          call.error);
       const double one = 1.0, zero = 0.0;
       for (std::size_t batch = 0; batch < call.batches; ++batch) {
         const auto* input = call.coefficients + batch * call.n * call.k;
         const auto* weighted = scaled + batch * call.n * call.k;
         auto* result = product + batch * call.n * call.n;
         if (order_ == RankKOrder::RowMajor)
-          generativeqc_tensor::blas_check(cublasDgemm(
-              context_.handle(), CUBLAS_OP_T, CUBLAS_OP_N,
-              static_cast<int>(call.n), static_cast<int>(call.n), static_cast<int>(call.k),
-              &one, input, static_cast<int>(call.k), weighted, static_cast<int>(call.k),
-              &zero, result, static_cast<int>(call.n)));
+          generativeqc_tensor::blas_check(
+              cublasDgemm(context_.handle(), CUBLAS_OP_T, CUBLAS_OP_N, static_cast<int>(call.n),
+                          static_cast<int>(call.n), static_cast<int>(call.k), &one, input,
+                          static_cast<int>(call.k), weighted, static_cast<int>(call.k), &zero,
+                          result, static_cast<int>(call.n)));
         else
-          generativeqc_tensor::blas_check(cublasDgemm(
-              context_.handle(), CUBLAS_OP_N, CUBLAS_OP_T,
-              static_cast<int>(call.n), static_cast<int>(call.n), static_cast<int>(call.k),
-              &one, input, static_cast<int>(call.n), weighted, static_cast<int>(call.n),
-              &zero, result, static_cast<int>(call.n)));
+          generativeqc_tensor::blas_check(
+              cublasDgemm(context_.handle(), CUBLAS_OP_N, CUBLAS_OP_T, static_cast<int>(call.n),
+                          static_cast<int>(call.n), static_cast<int>(call.k), &one, input,
+                          static_cast<int>(call.n), weighted, static_cast<int>(call.n), &zero,
+                          result, static_cast<int>(call.n)));
       }
       rank_k_detail::validate_library<<<generativeqc_tensor::blocks(total, 128), 128, 0, stream>>>(
           call, product, order_);
       rank_k_detail::publish<<<generativeqc_tensor::blocks(total, 128), 128, 0, stream>>>(
           call, product, order_);
     } else {
-      rank_k_detail::validate_generated<<<generativeqc_tensor::blocks(total, 128), 128, 0, stream>>>(
-          call, order_);
+      rank_k_detail::
+          validate_generated<<<generativeqc_tensor::blocks(total, 128), 128, 0, stream>>>(call,
+                                                                                          order_);
       rank_k_detail::publish<<<generativeqc_tensor::blocks(total, 128), 128, 0, stream>>>(
           call, nullptr, order_);
     }
