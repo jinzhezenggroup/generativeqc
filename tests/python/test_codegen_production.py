@@ -268,7 +268,7 @@ def test_high_impact_fock_classes_emit_generated_mixed_capability() -> None:
     assert "struct GeneratedDppsMixedValueTerm" in dpps
     assert "  float component_integral = 0.0F;" in dpps
     assert "const double* density" in dpps
-    assert "double* fock" in dpps
+    assert "generativeqc::runtime::CompensatedOutput fock" in dpps
     assert "generated_ppps_shell_class_mixed_fock" in sources["ppps"]
     assert "generated_ddds_shell_class_mixed_fock" in sources["ddds"]
     assert "generated_dspp_shell_class_mixed_fock" not in sources["dspp"]
@@ -478,7 +478,7 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
     # The method-neutral force fallback may use Fock screening while still writing forces.
     # Do not conflate screening purpose with the scientific consumer again.
     force_wrapper = fallback_source.index(
-        "void launch_bounded_direct_shell_quartet_kernel_scaled("
+        "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled("
     )
     assert (
         "bounded_direct_shell_quartet_kernel<Unrestricted, Purpose, true, -1, -1, PairDerivatives>"

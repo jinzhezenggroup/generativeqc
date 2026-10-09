@@ -35,7 +35,7 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 25)
+    if (argc < 4 || argc > 27)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
@@ -45,7 +45,8 @@ int main(int argc, char** argv) {
           "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO "
           "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO "
           "[FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 "
-          "[LAMBDA_TRUE_RESIDUAL_INTERVAL]]]]]]]]]]]]]]]]]]]]]");
+          "[LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 "
+          "[LAMBDA_AUDIT_MATRIX_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -96,6 +97,8 @@ int main(int argc, char** argv) {
     const bool parallel_gap_reduction = argc <= 19 || selector(19);
     const bool request_triples_gap_cotangents = argc > 20 && selector(20);
     const bool fused_triples_scalar_response = argc > 22 && selector(22);
+    const bool lambda_core_reuse = selector(25);
+    const bool lambda_audit_matrix = selector(26);
     const bool triples_w_fp32 = argc > 23 && selector(23);
     // The complete DF force owner defaults to amortized FP64 Lambda checks.
     // Explicit interval 1 retains the historical per-iteration control.
@@ -159,7 +162,8 @@ int main(int argc, char** argv) {
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
-          admitted_triples_w, lambda_true_residual_interval);
+          admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse,
+          lambda_audit_matrix);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -356,6 +360,30 @@ int main(int argc, char** argv) {
       work_field("lambda_gemm_summands", result.lambda.df_gemm_summands);
       work_field("lambda_packing_output_bytes", result.lambda.df_packing_output_bytes);
       work_field("lambda_provider_allowance", result.lambda.df_provider_allowance_bytes);
+      output << "  \"lambda_shared_program_hash\": "
+             << std::quoted(result.lambda.shared_program_hash ? result.lambda.shared_program_hash
+                                                              : "")
+             << ",\n  \"lambda_independent_program_hash\": "
+             << std::quoted(result.lambda.independent_program_hash
+                                ? result.lambda.independent_program_hash
+                                : "")
+             << ",\n";
+      field("lambda_core_reuse_requested", lambda_core_reuse);
+      field("lambda_core_reuse", result.lambda.df_core_reuse);
+      work_field("lambda_core_reuse_bytes", result.lambda.df_core_reuse_bytes);
+      work_field("lambda_core_reuse_preparations", result.lambda.df_core_reuse_preparations);
+      work_field("lambda_core_reuse_actions", result.lambda.df_core_reuse_actions);
+      field("lambda_audit_matrix_requested", lambda_audit_matrix);
+      field("lambda_audit_matrix", result.lambda.df_audit_matrix_gemm);
+      work_field("lambda_audit_arena_bytes", result.lambda.df_audit_arena_bytes);
+      output << "  \"lambda_audit_schedule_hash\": "
+             << std::quoted(result.lambda.audit_schedule_hash ? result.lambda.audit_schedule_hash
+                                                              : "")
+             << ",\n";
+      output << "  \"lambda_core_reuse_plan_hash\": "
+             << std::quoted(result.lambda.core_reuse_plan_hash ? result.lambda.core_reuse_plan_hash
+                                                               : "")
+             << ",\n";
       field("lambda_reduced", result.lambda.df_auxiliary_reduction ? 1 : 0);
       work_field("lambda_preparations", result.lambda.df_preparation_calls);
       work_field("lambda_reduced_actions", result.lambda.df_reduced_actions);

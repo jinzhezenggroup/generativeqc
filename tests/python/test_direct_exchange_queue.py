@@ -40,6 +40,7 @@ def test_emitted_queue_executes_each_survivor_once(
     Integral arithmetic is stubbed, but the actual emitted worker runs across
     every lane with blocking collectives. GPU matrix/sanitizer gates remain
     separate; this is an independent admission and synchronization census.
+    Mock consumers retain the real two-plane Fock output ABI.
     """
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
@@ -103,6 +104,7 @@ def test_emitted_queue_executes_each_survivor_once(
 #include <tuple>
 #include <utility>
 #include <vector>
+#include "runtime/compensated_output.hpp"
 #include "scf/generated_shell_task.hpp"
 #define __device__
 #define __forceinline__
@@ -192,7 +194,8 @@ void {prefix}_stream_populate_task(
 template<bool Unrestricted> void {prefix}_{consumer}(
     const Generated{class_name}ShellTask* tasks, const Generated{class_name}PrimitivePairData*,
     const std::int64_t*, const double*, const Generated{class_name}Vec3*, double,
-    const double*, const double*, double*, std::size_t index, {storage}&{subgroup_parameters}) {{
+    const double*, const double*, generativeqc::runtime::CompensatedOutput,
+    std::size_t index, {storage}&{subgroup_parameters}) {{
   if ({only_leader}) {{
     std::lock_guard lock(output_mutex);
     actual.emplace_back(tasks[index].shell_pair[0], tasks[index].shell_pair[1], false);
@@ -206,7 +209,7 @@ template<bool Unrestricted> void {prefix}_{consumer}(
 template<bool Unrestricted> void {prefix}_{mixed_consumer}(
     const Generated{class_name}ShellTask* tasks, const Generated{class_name}PrimitivePairData*,
     const std::int64_t*, const double*, const Generated{class_name}Vec3*, double,
-    const double*, const double*, double*, std::size_t index,
+    const double*, const double*, generativeqc::runtime::CompensatedOutput, std::size_t index,
     Generated{class_name}MixedSubgroupFockStorage&{subgroup_parameters}) {{
   if ({only_leader}) {{
     std::lock_guard lock(output_mutex);
@@ -315,7 +318,7 @@ int main() {{
           lanes.emplace_back([&, lane] {{
             threadIdx.x = lane;
             {worker_name}<false>(&topology, nullptr, primitive_offsets.data(),
-                nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, nullptr,
+                nullptr, nullptr, 1., {precision_arguments}nullptr, nullptr, {{nullptr, nullptr}},
                 &head, &fp64{extra_counter});
           }});
         for (auto& lane : lanes) lane.join();
@@ -527,6 +530,7 @@ int main() {
         executable,
         compile_args=("-std=c++20", f"-I{tmp_path}", f"-I{root / 'src'}"),
         compile_timeout=30,
+        link_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 

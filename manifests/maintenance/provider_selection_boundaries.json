@@ -45,9 +45,9 @@
     "src/cc/df_lambda_cuda.cu": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "DF Lambda execution still branches on a method-local GEMM implementation selector.",
+      "reason": "DF Lambda execution still branches on a method-local GEMM implementation selector. Two additional reads gate optional independent-audit GEMM and owner-local core reuse on the existing matrix admission; these remain method-owned selector debt under #1890.",
       "selectors": {
-        "df_matrix_gemm": 8
+        "df_matrix_gemm": 10
       }
     },
     "src/cc/df_plan.hpp": {

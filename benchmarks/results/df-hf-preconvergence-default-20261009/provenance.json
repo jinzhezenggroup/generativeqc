@@ -1,0 +1,32 @@
+{
+  "source": {
+    "revision": "4e20f7a7bcfbff770fefd13fa2777f8ab309679c",
+    "dirty": true,
+    "sha256": {
+      "benchmarks/df_hf_preconvergence.cpp": "55305de9effb902651a4088df44b3b7f66762dc183ff55d1b2c24d6e6736f5fb",
+      "benchmarks/df_hf_preconvergence.py": "030ca7d19b5467cb978451db3945d4d998894cec4e16ddc64fc6dbb142eefdf6",
+      "cmake/GenerativeQCSources.cmake": "ea697fca3d5bacf20ca5b724c8696f82d887c98e4ad0f7347f746cbe31cb04b7",
+      "src/methods/df_ccsdt_force.cu": "1ac6176bf8411d1b30524dfb275ab22474654e8ae29e8e11e62c1983ef676e34",
+      "src/methods/df_ccsdt_force.hpp": "c2323496b9dc2d92ff05e74cd4c7dac6a0239dbb586bf14e2d3e9e5a7fb8dea2",
+      "src/methods/df_hf_guess.cpp": "042ee268d34396a0b01277d3c14b1f914f8c92915ccfd826af54723b50cd2cb8",
+      "src/methods/df_hf_guess.hpp": "110760e755a7d1e885dd94de8b331b61b2ef3ea9d2c1776272d6d51f0293b576",
+      "src/methods/df_hf_guess_basis.hpp": "ab913d1f769af26e346113b1d011b7f6b86a64b959e664a6af4db53689e30cdd",
+      "src/methods/rccsd_method.cpp": "289e07a74e12a02d46fec976abbc91723588354d35f5fe7e2f66433aa139ba9d",
+      "src/methods/rccsd_method.hpp": "e7fa4a9f766863969d944ff73ac74b576d14c0b028049305dedd6c34c6e62c91"
+    }
+  },
+  "probe_sha256": "a71929ccd7954df598e224bb0b5d5020700aadb95d9258a0f007229b3424dd1c",
+  "library_sha256": "d1a9ecb2a9781fa68f29b7a1c5eb9e2f604b53986fcc6a9ff6cea29abae00110",
+  "basis_metadata_sha256": "f3aac69713fb69c025580064892e192d0991e5638a67889f39948fc3b35d5de4",
+  "worker_allocations": {
+    "worker-0.txt": "job=2770 worker=0 devices=2 host=node2\nGPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-cacd0aaf-c80f-41eb-d7a2-4c3a5970f282, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-1979d573-6626-6718-5e52-11741b0a9575, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\na71929ccd7954df598e224bb0b5d5020700aadb95d9258a0f007229b3424dd1c  /data/jzzeng/qc-df-preconverge-experiment-20261009/promotion-build/probe\nd1a9ecb2a9781fa68f29b7a1c5eb9e2f604b53986fcc6a9ff6cea29abae00110  build-cuda/libgenerativeqc.so\n",
+    "worker-1.txt": "job=2770 worker=1 devices=3 host=node2\nGPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-cacd0aaf-c80f-41eb-d7a2-4c3a5970f282, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-1979d573-6626-6718-5e52-11741b0a9575, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\na71929ccd7954df598e224bb0b5d5020700aadb95d9258a0f007229b3424dd1c  /data/jzzeng/qc-df-preconverge-experiment-20261009/promotion-build/probe\nd1a9ecb2a9781fa68f29b7a1c5eb9e2f604b53986fcc6a9ff6cea29abae00110  build-cuda/libgenerativeqc.so\n",
+    "worker-2.txt": "job=2771 worker=2 devices=0 host=node2\nGPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-cacd0aaf-c80f-41eb-d7a2-4c3a5970f282, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\nGPU-1979d573-6626-6718-5e52-11741b0a9575, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07\na71929ccd7954df598e224bb0b5d5020700aadb95d9258a0f007229b3424dd1c  /data/jzzeng/qc-df-preconverge-experiment-20261009/promotion-build/probe\nd1a9ecb2a9781fa68f29b7a1c5eb9e2f604b53986fcc6a9ff6cea29abae00110  build-cuda/libgenerativeqc.so\n"
+  },
+  "limitations": [
+    "RHF orbital/density arrays are transient; full-precision all-pair block errors and complete force vectors are retained.",
+    "Directional finite differences are not independent analytic Cartesian force vectors.",
+    "The declared 64 GiB budget is not measured VRAM.",
+    "No warm-density or prepared-batch mode exists for this public provider."
+  ]
+}

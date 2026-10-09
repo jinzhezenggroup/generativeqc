@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT_SCRIPT = ROOT / "tools/audit_producer_work.py"
 SCHEDULE = "python/generativeqc_compiler/method/df_exchange_schedule.py"
+ANALYZER_SOURCE = "tools/audit_producer_work.py"
 DEPENDENCIES = (
     "python/generativeqc_compiler/__init__.py",
     "python/generativeqc_compiler/method/__init__.py",
@@ -122,12 +123,24 @@ def audit(
             "source-bound static schedule only; not runtime or native binary evidence"
         ),
         "build_sha256": STATIC_NO_BUILD,
+        "analyzer_sha256": None,
         "status": "PASS",
         "cases": [],
     }
     with tempfile.TemporaryDirectory(prefix="gqc-producer-base-") as temp:
         baseline = Path(temp)
         _baseline_tree(root, base_sha, baseline)
+        # The same parser/receipt implementation must define both censuses.
+        # Do not compare different versions under a nominally identical domain.
+        baseline_analyzer = _git(root, "show", f"{base_sha}:{ANALYZER_SOURCE}")
+        current_analyzer = audit_script.read_bytes()
+        report["analyzer_sha256"] = hashlib.sha256(current_analyzer).hexdigest()
+        if baseline_analyzer != current_analyzer:
+            report.update(
+                status="INCOMPLETE",
+                reason=f"producer-work analyzer changed: {ANALYZER_SOURCE}",
+            )
+            return report
         # A changed imported helper changes the meaning of the schedule but is
         # outside the existing single-source receipt digest: do not certify it.
         for path in DEPENDENCIES:
@@ -138,6 +151,7 @@ def audit(
                 return report
         for case in CASES:
             label = case[0]
+            original = candidate = None
             try:
                 original = _schedule(baseline, case, audit_script=audit_script)
                 candidate = _schedule(root, case, audit_script=audit_script)
@@ -151,13 +165,15 @@ def audit(
                 row["candidate_callbacks"] = candidate["work"]["producer_callbacks"]
             except (ReceiptError, OSError) as exc:
                 row = {"case": label, "status": "INCOMPLETE", "reason": str(exc)}
+            row["baseline_receipt"] = original
+            row["candidate_receipt"] = candidate
             report["cases"].append(row)
         outcomes = {row["status"] for row in report["cases"]}
         report["status"] = (
-            "INCOMPLETE"
-            if "INCOMPLETE" in outcomes
-            else "FAIL"
+            "FAIL"
             if "FAIL" in outcomes
+            else "INCOMPLETE"
+            if "INCOMPLETE" in outcomes
             else "PASS"
         )
     return report
@@ -166,6 +182,14 @@ def audit(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-sha", required=True)
+    parser.add_argument(
+        "--fail-on-work-growth",
+        action="store_true",
+        help=(
+            "Fail CI for comparable source-bound increases in DF producer work; "
+            "retain INCOMPLETE as a visible advisory result, never a PASS."
+        ),
+    )
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -188,6 +212,12 @@ def main(argv: list[str] | None = None) -> int:
             f"::warning::Static DF producer-work ratchet {report['status']} "
             "(see artifact); not a numerical or runtime result"
         )
+    # A normal standalone invocation fails closed on INCOMPLETE. The opt-in CI
+    # mode blocks only a proven *comparison* of source-bound static work counts;
+    # changed imports, missing Git history and unsupported schedules cannot be
+    # silently called PASS or used to reject an unrelated PR.
+    if args.fail_on_work_growth:
+        return 1 if report["status"] == "FAIL" else 0
     return 0 if report["status"] == "PASS" else 1
 
 

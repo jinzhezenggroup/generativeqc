@@ -85,6 +85,37 @@ struct Gfn2SccMixerDeviceState {
   std::uint64_t plan_token = 0u;
 };
 
+/* One actual active CTA invocation. Cycles are elapsed on lane zero of that
+ * CTA, across the indicated existing synchronization boundaries. They are
+ * neither nanoseconds nor additive graph/endpoint wall time. A stage bit is
+ * set only after that stage reaches its completion boundary. */
+struct Gfn2SccMixerDeviceReceipt {
+  std::uint64_t invocation = 0;
+  std::uint64_t iteration_before = 0;
+  std::uint64_t restart_before = 0;
+  std::uint64_t coefficient_dot_elements = 0;
+  std::uint64_t gram_dot_elements = 0;
+  std::uint64_t combination_elements = 0;
+  std::uint64_t residual_elapsed_cycles = 0;
+  std::uint64_t history_elapsed_cycles = 0;
+  std::uint64_t solve_elapsed_cycles = 0;
+  std::uint64_t combination_elapsed_cycles = 0;
+  std::int64_t system = -1;
+  std::int64_t vector_elements = 0;
+  std::int64_t live_history = 0;
+  std::int64_t new_slot = -1;
+  std::uint32_t completed_stages = 0;
+  generativeqc_xtb_status_t status = GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+};
+
+enum Gfn2SccMixerReceiptStage : std::uint32_t {
+  kMixerResidual = 1u << 0,
+  kMixerHistory = 1u << 1,
+  kMixerSolve = 1u << 2,
+  kMixerCombination = 1u << 3,
+  kMixerCommitted = 1u << 4,
+};
+
 /*
  * Caller-owned tentative storage for a parallel ragged-batch transition.
  * Four vector arrays have total_vector_elements entries. beta and
@@ -102,6 +133,12 @@ struct Gfn2SccMixerDeviceWorkspace {
   double* beta = nullptr;
   double* coefficients = nullptr;
   std::uint32_t* sequence_active = nullptr;
+  /* Optional, bounded execution receipts. count is reset once per endpoint
+   * before the device graph runs; overflow remains visible as count > capacity.
+   * No receipt or counter is touched when all three fields are zero/null. */
+  Gfn2SccMixerDeviceReceipt* receipts = nullptr;
+  std::uint64_t* receipt_count = nullptr;
+  std::int64_t receipt_capacity = 0;
 
   std::int64_t vector_elements = 0;
   std::int64_t beta_elements = 0;
@@ -116,6 +153,8 @@ static_assert(std::is_trivially_copyable_v<Gfn2SccMixerDeviceState>);
 static_assert(std::is_standard_layout_v<Gfn2SccMixerDeviceState>);
 static_assert(std::is_trivially_copyable_v<Gfn2SccMixerDeviceWorkspace>);
 static_assert(std::is_standard_layout_v<Gfn2SccMixerDeviceWorkspace>);
+static_assert(std::is_trivially_copyable_v<Gfn2SccMixerDeviceReceipt>);
+static_assert(std::is_standard_layout_v<Gfn2SccMixerDeviceReceipt>);
 
 /*
  * Capture finite initial multipoles and clear all history atomically.

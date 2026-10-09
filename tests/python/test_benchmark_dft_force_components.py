@@ -28,12 +28,18 @@ def test_becke_phase_observations_are_not_clean_wall_components(
         "becke_phase_ms": dict.fromkeys(BECKE_PHASES, 2000.0),
         "becke_work_counter_semantics": "launched dense domains",
         "becke_traffic_model": "logical values, not hardware traffic",
+        "becke_zero_seed_elision_enabled": True,
+        "becke_zero_seed_points": 2,
+        "becke_primal_evaluated_pair_visits": 32,
     }
     result = normalize_force_work(work)
     owner = result["becke_owners"]["stationary"]
     assert owner["selection"]["becke_primitive_requested"] == 1
     assert owner["selection"]["becke_primitive_selected"] == 0
     assert owner["work_counters"]["becke_reverse_pair_visits"] == 64
+    assert owner["selection"]["becke_zero_seed_elision_enabled"] is True
+    assert owner["work_counters"]["becke_zero_seed_points"] == 2
+    assert owner["work_counters"]["becke_primal_evaluated_pair_visits"] == 32
     assert owner["logical_traffic_bytes"] == {
         "becke_reverse_pair_panel_write_bytes": 2048
     }

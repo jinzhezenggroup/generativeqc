@@ -135,6 +135,7 @@ class StationaryNuclearBatchResponse:
 
     @property
     def converged(self) -> typing.Any:
+        """Return the convergence flag of the shared nuclear-response solve."""
         return self.solve_result.converged
 
 

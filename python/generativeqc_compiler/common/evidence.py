@@ -129,8 +129,10 @@ def finite_difference(
     xyz = np.asarray(coordinates, dtype=float)
     policy = json.dumps(settings, allow_nan=False)
     rows = []
+    # Each coordinate is rewritten at every step and converted to a detached
+    # list before the next one: retain only one bounded finite-difference buffer.
+    derivative = np.empty_like(xyz)
     for step in steps:
-        derivative = np.empty_like(xyz)
         for index in np.ndindex(xyz.shape):
             plus, minus = xyz.copy(), xyz.copy()
             plus[index] += step

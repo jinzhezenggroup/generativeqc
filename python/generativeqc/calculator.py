@@ -79,7 +79,13 @@ _named_basis_shells = _model_resolution._named_basis_shells
 
 @cache
 def method_capabilities(method: str) -> MethodCapabilities:
-    """Query backend-neutral registry support without preparing execution state."""
+    """Query the backend-neutral native registry without preparing a calculation.
+
+    Return a cached capability record for the selector; unknown names raise
+    ValueError and native loading/query errors propagate. This may load the
+    native library but does not prove device availability or per-system
+    admission. Use ``Calculator.capabilities`` for the selected context.
+    See :ref:`python-calculation-backends`."""
 
     canonical = method.lower()
     from .ks import parse_automatic_libxc_selector
@@ -148,16 +154,18 @@ def method_capabilities(method: str) -> MethodCapabilities:
 
 
 class Calculator:
-    """Prepare and execute a native single-system electronic-structure calculation.
+    """Prepare a context-admitted native electronic-structure calculation.
 
-    Coordinates are in Bohr. The current implementation accepts RHF, UHF, and
-    LDA/PBE RKS/UKS on CPU/CUDA; qualified execution contexts expose analytic
-    forces through the shared stationary-gradient consumers. It also accepts
-    a bundled STO-3G/def2-SVP/def2-TZVP basis for H-Ar, local canonical JSON,
-    immutable `BasisSet` records, or explicit `Shell` objects. Element symbols
-    cover H-Og; execution depends on every actual shell and Hamiltonian. Both the CPU reference and CUDA backend support Cartesian
-    or PySCF/libcint-ordered real spherical AOs through `g` on CPU (`f` on CUDA).
-    """
+    Atoms use Bohr coordinates; energies use Hartree and forces Hartree/Bohr.
+    Select method, basis, backend, precision and resource options once, then
+    inspect ``capabilities`` before requesting properties. Selector discovery
+    alone is not a promise that every method/basis/device combination executes.
+
+    Calls are synchronous. Retained single-point workspace can be released with
+    ``clear_cache``; prepared batches own separate resources. Keep configuration
+    fixed during use and use independent plans for concurrent callers.
+    See :ref:`python-calculation-values`, :ref:`python-calculation-errors`,
+    :ref:`python-calculation-ownership` and :ref:`python-calculation-backends`."""
 
     def __init__(
         self,
@@ -2037,7 +2045,13 @@ class Calculator:
 
         The profiling options are CUDA performance diagnostics and should
         remain disabled during normal endpoint timing.
-        """
+
+        Systems, charges and multiplicities use :ref:`python-batch-values`.
+        Preparation validates/copies system data into a separately owned plan.
+        Unsupported batch contexts raise NotImplementedError; validation,
+        native and resource failures propagate. Close the returned plan or use
+        it as a context manager. It is not concurrently re-entrant.
+        See :ref:`python-batch-errors` and :ref:`python-batch-ownership`."""
 
         if not self._capabilities.supports_batch:
             raise NotImplementedError(
@@ -2065,7 +2079,14 @@ class Calculator:
         multiplicities: Sequence[int] | None = None,
         strict: bool = False,
     ) -> typing.Any:
-        """Execute a one-shot native ragged batch and return per-system status."""
+        """Execute a one-shot native ragged batch and return per-system status.
+
+        Systems are ragged Bohr-coordinate atom sequences. Energies use Hartree;
+        force arrays use Hartree/Bohr. ``strict=False`` returns failed item
+        statuses alongside successes; ``strict=True`` raises on any item failure.
+        The temporary prepared plan closes before return, while result arrays
+        remain valid. Whole-call preparation/native errors always propagate.
+        See :ref:`python-batch-values` and :ref:`python-batch-errors`."""
 
         with self.prepare_batch(
             systems,
@@ -2146,7 +2167,12 @@ class Calculator:
         closed-shell LDA/PBE RKS. Unsupported methods/backends fail before SCF.
         The integral budget bounds generated second-order integral work;
         response/provider diagnostics remain separately reported.
-        """
+
+        ``direction`` must be finite real with shape ``(natoms, 3)``.
+        Return a detached response record whose ``value`` has that shape;
+        the Cartesian Hessian uses Hartree/Bohr squared. Invalid directions,
+        failed response solves and exceeded budgets raise before publication.
+        See :ref:`python-calculation-values` and :ref:`python-calculation-errors`."""
         from .rks_hessian import rks_hvp
         from .rks_hessian_integrals import checked_direction
 
@@ -2186,7 +2212,11 @@ class Calculator:
         The matrix is never post-hoc symmetrized. The output budget must hold
         both the dense matrix and immutable publication; integral/response
         resources retain their independently checked contracts.
-        """
+
+        Return a detached result record with a ``matrix`` of shape
+        ``(3*natoms, 3*natoms)`` in Hartree/Bohr squared. The qualified context
+        and failure/lifetime rules are those of :ref:`python-calculation-backends`,
+        :ref:`python-calculation-errors` and :ref:`python-calculation-ownership`."""
         from .rks_hessian import rks_hessian
 
         native_atoms = self._checked_rks_second_order_atoms(
@@ -2240,7 +2270,14 @@ class Calculator:
         GFN2 retains one native runtime per calculator while starting fresh SCC
         for every call, including changed geometries. Use ``clear_cache()`` to
         release its resident storage; later calls rebuild it automatically.
-        """
+
+        Coordinates are finite ``(natoms, 3)`` Bohr values in atom order.
+        The scalar energy is Hartree; forces are ``(natoms, 3)`` Hartree/Bohr.
+        Invalid inputs raise TypeError/ValueError; unsupported combinations,
+        native failures or nonconvergence raise without publishing a partial
+        Result. Resource-aware failures can carry allocation diagnostics.
+        Returned force storage outlives the synchronous call.
+        See :ref:`python-calculation-errors` and :ref:`python-calculation-ownership`."""
         owner = self._singlepoint_context
         with owner.lock if owner is not None else nullcontext():
             return self._singlepoint(

@@ -8,13 +8,30 @@
 #include "cc/df_triples.hpp"
 #include "cc/lambda_response.hpp"
 #include "hf/rhf_frame_response.hpp"
+#include "methods/df_hf_guess.hpp"
 #include "methods/rccsd_method.hpp"
 
 namespace generativeqc::methods::detail {
+/** Optional density/control handoff and benchmark-only exact-reference diagnostic.
+ * No DF Fock/orbitals enter correlation or response. With no explicit density,
+ * the complete owner may prepare a density in its qualified default domain.
+ * The exact reference solver starts fresh DIIS and retains its original gates.
+ * A refused/unconverged seed retries the ordinary cold Direct reference.
+ * The detached seed must outlive the call. Clear the output reference before
+ * reusing this diagnostic object so a prior frame is not an uncharged owner. */
+struct DFCCSDTReferenceExperiment {
+  const std::vector<double>* initial_density{};
+  bool disable_preconvergence{};
+  bool seed_fallback{};
+  std::shared_ptr<const hf::PhysicalReference> reference;
+  scf::PrecisionProvenance work;
+};
+
 /** Complete native endpoint on an unchanged conventional RHF reference with
  * a DF correlation Hamiltonian. The public DF-RCCSD(T) selector reuses this
  * owner for both energy and force requests. */
 struct DFCCSDTResult {
+  DFHFGuess reference_guess;
   // If true, total_seconds includes a resource-refused precursor whose work
   // counters are unavailable; successful-attempt counters are not endpoint totals.
   bool recycling_discarded_primal_attempt{};
@@ -69,6 +86,11 @@ struct DFCCSDTResult {
  * DF-CCSD(T) owner defaults to 30; explicitly selecting 1 retains the
  * historical per-iteration baseline. Standalone Lambda and shared GMRES
  * defaults remain unchanged; the interval must be positive.
+ * lambda_core_reuse retains compiler-proven primal intermediates in one
+ * immutable Lambda owner. Its complete storage is optional; disabling it or
+ * refusing its budget/allocation preserves the original FP64 matrix actions.
+ * lambda_audit_matrix lowers the original independent expanded equations
+ * through bounded FP64 GEMM; resource refusal retains their scalar schedule.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -79,7 +101,8 @@ DFCCSDTResult run_df_ccsdt_native(
     bool packed_diis = false, bool parallel_gap_reduction = true,
     bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
     runtime::PrecisionDirective admitted_triples_w = {},
-    std::size_t lambda_true_residual_interval = 30);
+    std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
+    bool lambda_audit_matrix = true, DFCCSDTReferenceExperiment* reference_experiment = nullptr);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

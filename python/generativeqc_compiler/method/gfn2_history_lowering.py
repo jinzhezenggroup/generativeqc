@@ -10,6 +10,7 @@ from generativeqc_compiler.tensor.ordered_history_artifacts import (
 from generativeqc_compiler.tensor.ordered_history_emit import (
     CorrectionBindings,
     CudaFlagFailure,
+    CudaVisitCounter,
 )
 from generativeqc_compiler.tensor.ordered_history_gram import GramBindings
 
@@ -37,6 +38,7 @@ def gfn2_history_correction_bindings(backend: str) -> CorrectionBindings:
             code="Gfn2SccMixerDeviceError::kNonfiniteMixedMultipole",
             valid="valid",
         ),
+        visit_counter=CudaVisitCounter("Record", "combination_visits"),
     )
 
 
@@ -67,6 +69,8 @@ def gfn2_history_gram_bindings(backend: str) -> GramBindings:
         overlap_failure=device("kNonfiniteHistory"),
         matrix_failure=device("kNonfiniteHistory"),
         weight_failure=device("kNonfiniteWeight"),
+        coefficient_visit_counter=CudaVisitCounter("Record", "coefficient_visits"),
+        overlap_visit_counter=CudaVisitCounter("Record", "gram_visits"),
     )
 
 

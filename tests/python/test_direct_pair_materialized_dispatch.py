@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_pair_derivative_selector_preserves_spin_screening_and_force_owner() -> None:
     """Both optional specializations write forces for either screening purpose."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
-    begin = source.index("void launch_bounded_direct_shell_quartet_kernel_scaled(")
+    begin = source.index(
+        "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled("
+    )
     end = source.index("void launch_bounded_direct_fock_shell_quartet_kernel(", begin)
     dispatch = source[begin:end]
     assert (
@@ -38,7 +40,9 @@ def test_full_range_force_promotes_qualified_static_128_thread_schedule() -> Non
     """Keep #1978's measured CTA width as the generic full-range force default."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
     constants = (ROOT / "src/scf/cuda/direct_constants.hpp").read_text()
-    begin = source.index("void launch_bounded_direct_shell_quartet_kernel_scaled(")
+    begin = source.index(
+        "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled("
+    )
     end = source.index("void launch_bounded_direct_range_exchange_force_kernel(", begin)
     dispatch = source[begin:end]
 
@@ -55,7 +59,9 @@ def test_force_launch_width_preserves_materialized_component_coverage(
 ) -> None:
     """Execute the production selector and cover both dddd AO domains on the host."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
-    begin = source.index("void launch_bounded_direct_shell_quartet_kernel_scaled(")
+    begin = source.index(
+        "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled("
+    )
     launch = source.index("  auto launch =", begin)
     body = source.index("{", launch) + 1
     end = source.index("    const auto workspace_bytes =", body)

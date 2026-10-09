@@ -57,6 +57,38 @@ def _hf(*, forces: bool, passed: bool) -> dict:
     }
 
 
+@pytest.mark.parametrize("schema_version", [2, 3])
+def test_hf_reduction_preserves_residual_semantics_and_optional_policy(
+    renderer: ModuleType, tmp_path: Path, schema_version: int
+) -> None:
+    """Archived Frobenius values must not silently become normalized RMS."""
+    raw = _hf(forces=True, passed=True)
+    raw["schema_version"] = schema_version
+    residuals = {"density_rms": 0.2}
+    convergence = raw["gpu4pyscf"]["cold_convergence"][0]
+    convergence["final_residuals"] = residuals
+    if schema_version == 3:
+        convergence["residual_schema_version"] = 2
+        residuals.update(density_rms=0.1, density_frobenius=0.2)
+        raw["convergence_policy"] = {
+            "same_stopping_rule": False,
+            "equal_work_verified": False,
+            "reference_diis": "stock, unmodified",
+        }
+    path = tmp_path / "point.json"
+    path.write_text(json.dumps(raw))
+
+    record, _ = renderer.reduce_point(path, tmp_path)
+    reduced = record["engines"]["GPU4PySCF"]
+    assert reduced["cold_convergence"][0] == convergence
+    assert reduced["samples"][0]["convergence"][0] == convergence
+    if schema_version == 3:
+        assert record["convergence_policy"] == raw["convergence_policy"]
+    else:
+        assert "convergence_policy" not in record
+        assert "residual_schema_version" not in reduced["cold_convergence"][0]
+
+
 def _run(
     renderer: ModuleType, monkeypatch: pytest.MonkeyPatch, root: Path, destination: Path
 ) -> None:

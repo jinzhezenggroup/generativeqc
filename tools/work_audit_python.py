@@ -10,10 +10,16 @@ from __future__ import annotations
 
 import ast
 import math
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+
+from generativeqc_compiler.common import materialization
 
 RULE_ID = "python.structured-zero-materialization"
 # Ordinary NumPy array-construction APIs; exclude asarray/reshape/transpose,
@@ -479,6 +485,21 @@ def _candidate(
         evidence.append(
             "Triangular support retains quadratic growth; it is not a lower-order sparse domain."
         )
+    diagnostic = materialization.materialization_diagnostic(
+        origin="python-source",
+        subject={
+            "path": str(path),
+            "line": stmt.lineno,
+            "function": scope,
+            "buffer": name,
+        },
+        dense_elements=dense,
+        support_kind="union-upper-bound",
+        written_elements=upper,
+        domains=writes,
+        certificate_scope="local producer-return under ordinary NumPy semantics; written-coordinate upper bound, not exact cardinality or numerical nonzeros",
+        layout="dense-array",
+    )
     return {
         "rule_id": RULE_ID,
         "path": str(path),
@@ -487,8 +508,9 @@ def _candidate(
         "evidence": evidence,
         "confidence": "high",
         "disposition": "review-required",
-        "action": "Inspect consumer requirements for a structured representation; measure complete endpoints before changing storage.",
+        "action": "Review producer support cardinality and downstream layout requirements before changing storage.",
         "details": {
+            "materialization_diagnostic": diagnostic,
             "allocation": _text(allocation),
             "allocated_elements": dense,
             "write_support": writes,

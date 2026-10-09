@@ -100,6 +100,7 @@ class FunctionalSpec:
     long_range_exchange: Fraction = Fraction(0)
 
     def __post_init__(self) -> None:
+        """Validate audited component IDs, exact coefficients, spin, and range metadata."""
         if (
             not isinstance(self.identifier, str)
             or not self.identifier.strip()
@@ -147,6 +148,7 @@ class FunctionalSpec:
 
     @property
     def ingredients(self) -> typing.Any:
+        """Return rho, sigma, and tau inputs required by nonzero functional components."""
         if any(
             name.startswith(("MGGA", "HYB_MGGA")) and coefficient
             for name, coefficient in self.components
@@ -326,6 +328,7 @@ class FunctionalSpec:
 
     @property
     def identity(self) -> typing.Any:
+        """Return the canonical hash of the versioned functional payload."""
         return canonical_hash(self.to_payload())
 
 

@@ -70,8 +70,11 @@ the unchanged force schedule's flag and emitted `#pragma unroll 1` in the Fock
 helper. Metadata now reflects that rolled source without changing its pragmas.
 Frozen measurements and binary identities below are retained unmodified. No
 new real-GPU or performance qualification is claimed for the repaired source.
-Its source identity is
+The pre-integration compatibility repair's source identity is
 `6d517c95ad467049382bee31d10630150fd706a6e594988423f7d48564c09b8e`.
+The subsequent [compensated Fock integration](../compatibility/2026-10-09-rys-task-compensated-fock-integration.md)
+preserves this arithmetic and records a distinct combined source identity;
+the frozen qualification below remains specific to its original binary.
 
 ## Acceptance and provenance
 

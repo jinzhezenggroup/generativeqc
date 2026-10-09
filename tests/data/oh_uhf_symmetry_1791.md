@@ -87,3 +87,11 @@ passed. It does not assert raw-density PASS, a unique canonical determinant,
 GPU qualification, performance improvement, or complete allocation coverage.
 The canonical determinant/equivalence-class policy remains unresolved in
 #1791; this slice references rather than closes the issue.
+
+## Current comparison policy
+
+The separate [OH comparison policy](../../docs/maintainer/oh_uhf_comparison.md)
+now accepts independently certified spatial equivalence in this frozen domain.
+The original capture, certificate and runner remain unchanged and retain their
+historical unresolved-policy text and raw FAIL decisions. The policy evaluator
+recomputes the certificate from retained tensors without altering that evidence.

@@ -52,6 +52,28 @@ __device__ bool materialized_pair_derivative_task(const DeviceBatch& batch,
          batch.shell_angular[batch.shell_pair_first[task.second_pair]] == 2U &&
          batch.shell_angular[batch.shell_pair_second[task.second_pair]] == 2U;
 }
+
+/** Reject another angular pass before its expensive density/Schwarz predicate.
+ * The unpartitioned queue needs no angular metadata and keeps its original gate.
+ * The -2 partition excludes dddd only under the caller's proved s/p/d bound.
+ * This is ownership, not screening: the owning pass still runs every gate. */
+template <int AngularOrder>
+__host__ __device__ bool bounded_direct_angular_owner(const DeviceBatch& batch,
+                                                      std::size_t first_pair,
+                                                      std::size_t second_pair) {
+  if constexpr (AngularOrder == -1) {
+    return true;
+  } else {
+    const unsigned order = batch.shell_angular[batch.shell_pair_first[first_pair]] +
+                           batch.shell_angular[batch.shell_pair_second[first_pair]] +
+                           batch.shell_angular[batch.shell_pair_first[second_pair]] +
+                           batch.shell_angular[batch.shell_pair_second[second_pair]];
+    if constexpr (AngularOrder == -2)
+      return order != 8U;
+    else
+      return order == AngularOrder;
+  }
+}
 }  // namespace
 
 /**
@@ -66,7 +88,7 @@ __device__ bool materialized_pair_derivative_task(const DeviceBatch& batch,
  */
 template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
           int FixedRadialOperator = -1, bool PairDerivatives = false,
-          bool CooperativeDerivatives = false>
+          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -83,6 +105,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
   static_assert(!PairDerivatives || (Force && (FixedAngularOrder < 0 || FixedAngularOrder == 8)));
   static_assert(!CooperativeDerivatives ||
                 (Force && !PairDerivatives && (FixedAngularOrder == 6 || FixedAngularOrder == 7)));
+  static_assert(!PureMaterializedDerivatives ||
+                (Force && PairDerivatives && FixedAngularOrder == 8));
   extern __shared__ __align__(16) unsigned char materialized_pair_workspace[];
   const auto radial_operator = FixedRadialOperator < 0
                                    ? runtime_radial_operator
@@ -189,7 +213,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
         // Sorting changes scheduling, never the canonical scientific task orientation.
         const std::size_t first_pair = max(first_candidate, second_candidate);
         const std::size_t second_pair = min(first_candidate, second_candidate);
-        if (direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
+        if (bounded_direct_angular_owner<FixedAngularOrder>(batch, first_pair, second_pair) &&
+            direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
                 batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
                 shell_pair_density_bounds, nullptr, exchange_only, coulomb_only)) {
           const std::int32_t first_shell = batch.shell_pair_first[first_pair];
@@ -202,12 +227,9 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
           const bool generated_class =
               bounded_generated_overflow[shell_class] == 0U &&
               bounded_generated_class_enabled(shell_class, enabled_mask_pointer, enabled_mask);
-          const unsigned candidate_order =
-              batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
-              batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
           // An angular pass owns an exact disjoint subset of the original
           // queue. Keep all scientific predicates and physical orientations.
-          if (!generated_class && (FixedAngularOrder < 0 || candidate_order == FixedAngularOrder)) {
+          if (!generated_class) {
             const std::uint32_t slot = atomicAdd(&queue_count, 1U);
             queue[slot] = {static_cast<std::uint32_t>(first_pair),
                            static_cast<std::uint32_t>(second_pair), 0U};
@@ -361,7 +383,11 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
       }
       __syncthreads();
 
-      if constexpr (!CooperativeDerivatives && (FixedAngularOrder < 0 || FixedAngularOrder >= 4)) {
+      // The split caller proves that every order-eight task is dddd. Its pure
+      // consumer must not instantiate the unreachable generic AD frame. Mixed
+      // f-containing angular passes still retain that complete warp fallback.
+      if constexpr (!CooperativeDerivatives && !PureMaterializedDerivatives &&
+                    (FixedAngularOrder < 0 || FixedAngularOrder >= 4)) {
         for (std::uint32_t slot = warp; slot < queue_count;
              slot += blockDim.x / detail::kDirectQuartetThreads) {
           const ActiveShellQuartetTile base = queue[slot];
@@ -505,10 +531,10 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
 /**
  * Diagnostic angular partition of the retained molecular force consumer.
  *
- * Each pass has the same bounded queue and scientific gates. Enumeration is
- * repeated thirteen times, but admitted source evaluation is disjoint. This
- * deliberately exposes the work/occupancy tradeoff before a class-indexed
- * planner is justified; no register cap or different recurrence is introduced.
+ * Only orders reachable under the prepared basis bound are launched. Candidate
+ * enumeration is repeated per pass, but ownership precedes scientific screening
+ * and admitted source evaluation is disjoint. A missing bound retains all
+ * thirteen passes; no register cap or different recurrence is introduced.
  * The cursor is reused sequentially on the caller's stream, so no new storage
  * or lifetime contract is needed.
  */
@@ -521,6 +547,11 @@ cudaError_t launch_angular_force_passes(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient, double omega,
     detail::BoundedDirectBlockDomain domain, DirectForceResidentBraSchedule resident) {
+  // The host packing proves this maximum; 255 is the unproved sentinel and
+  // cannot prune any supported pass. An empty order needs no cursor reset.
+  if constexpr (Order > 0U) {
+    if (Order > 4U * batch.direct_maximum_shell_angular) return cudaSuccess;
+  }
   auto launch_bounded = [&]() {
     auto error = cudaMemsetAsync(cursor, 0, sizeof(*cursor), stream);
     if (error != cudaSuccess) return error;
@@ -613,7 +644,7 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
 #undef GENERATIVEQC_ANGULAR_FORCE
 }
 
-void launch_bounded_direct_shell_quartet_kernel_scaled(
+cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
     std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
@@ -626,6 +657,37 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     detail::BoundedDirectBlockDomain block_domain) {
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
+  auto split = [&]<bool Unrestricted>() {
+    // A proved s/p/d basis makes order eight exactly dddd. Keep its fixed
+    // 256-lane materialized packets separate from the qualified 128-lane
+    // generic force consumer; both own disjoint parts of the original queue.
+    bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, -2>
+        <<<grid, kBoundedDirectForceThreads, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
+            enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
+            global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
+            0.0, false, false, block_domain);
+    auto error = cudaPeekAtLastError();
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);
+    if (error != cudaSuccess) return error;
+    const auto workspace_bytes =
+        std::max(shared_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence));
+    auto materialized = [&]<DirectRangeOperator Range>() {
+      bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, 8,
+                                          static_cast<int>(Range), true, false, true>
+          <<<grid, block, workspace_bytes, stream>>>(
+              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
+              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
+              density, active, output, global_cursor, profile, coulomb_coefficient,
+              exchange_coefficient, Range, 0.0, 0.0, false, false, block_domain);
+      return cudaPeekAtLastError();
+    };
+    return separate_sources ? materialized.template operator()<DirectRangeOperator::FullSources>()
+                            : materialized.template operator()<DirectRangeOperator::Full>();
+  };
   auto launch = [&]<bool Unrestricted, DirectScreeningPurpose Purpose, bool PairDerivatives>() {
     // Promote #1978's generic full-range force schedule. The materialized
     // derivative consumer owns six fixed 256-component slots and still needs
@@ -644,25 +706,32 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
             global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
             0.0, false, false, block_domain);
+    return cudaPeekAtLastError();
   };
   auto select = [&]<bool Unrestricted, DirectScreeningPurpose Purpose>() {
-    // Keep the default-off kernel's register and shared-memory footprint. The
-    // candidate has its own specialization and borrows only per-CTA workspace.
+    if constexpr (Purpose == DirectScreeningPurpose::Force) {
+      if (batch.direct_maximum_shell_angular == 2U &&
+          materialized_pair_derivative_available(batch) && block.x == kBoundedDirectThreads &&
+          block.y == 1U && block.z == 1U)
+        return split.template operator()<Unrestricted>();
+    }
+    // Unproved/f bases, custom launch dimensions and missing optional caches
+    // retain the complete mixed consumer and its original workspace contract.
     if (materialized_pair_derivative_available(batch))
-      launch.template operator()<Unrestricted, Purpose, true>();
+      return launch.template operator()<Unrestricted, Purpose, true>();
     else
-      launch.template operator()<Unrestricted, Purpose, false>();
+      return launch.template operator()<Unrestricted, Purpose, false>();
   };
   if (unrestricted) {
     if (purpose == DirectScreeningPurpose::Fock)
-      select.template operator()<true, DirectScreeningPurpose::Fock>();
+      return select.template operator()<true, DirectScreeningPurpose::Fock>();
     else
-      select.template operator()<true, DirectScreeningPurpose::Force>();
+      return select.template operator()<true, DirectScreeningPurpose::Force>();
   } else {
     if (purpose == DirectScreeningPurpose::Fock)
-      select.template operator()<false, DirectScreeningPurpose::Fock>();
+      return select.template operator()<false, DirectScreeningPurpose::Fock>();
     else
-      select.template operator()<false, DirectScreeningPurpose::Force>();
+      return select.template operator()<false, DirectScreeningPurpose::Force>();
   }
 }
 

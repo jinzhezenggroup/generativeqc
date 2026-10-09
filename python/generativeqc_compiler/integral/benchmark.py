@@ -26,6 +26,7 @@ from pathlib import Path
 
 from generativeqc_compiler.common.cuda_adapter import resolve_cuda_execution_profile
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo, cuda_target_info
+from generativeqc_compiler.common.paths import asset_path
 
 from .cuda_emitter import (
     _emitted_component_names,
@@ -1634,6 +1635,7 @@ def main() -> None:
                 f"-arch={arguments.architecture}",
                 "-O3",
                 "-Xptxas=-v",
+                f"-I{asset_path('src/runtime/compensated_atomic.cuh').parents[1]}",
                 str(cuda_source),
                 "-o",
                 str(executable),

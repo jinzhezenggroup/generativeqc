@@ -128,6 +128,8 @@ def emit_registry_header(
 #include <cstddef>
 #include <cstdint>
 
+#include "runtime/compensated_output.hpp"
+
 namespace generativeqc::scf::generated {{
 
 struct ShellKernelMetadata {{
@@ -197,7 +199,7 @@ cudaError_t launch_shell_class_fock(
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, const double* schwarz_bounds,
-    const double* density, double* fock, const std::uint32_t* task_count,
+    const double* density, runtime::CompensatedOutput fock, const std::uint32_t* task_count,
     std::uint32_t* task_head) noexcept;
 
 /** Launch one generated mixed-precision Fock worker by exact class. */
@@ -208,7 +210,7 @@ cudaError_t launch_shell_class_mixed_fock(
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, const double* schwarz_bounds,
-    const double* density, double* fock, const std::uint32_t* task_count,
+    const double* density, runtime::CompensatedOutput fock, const std::uint32_t* task_count,
     std::uint32_t* task_head) noexcept;
 
 /** Launch one fixed-storage resident-bra Fock stream by exact class. */
@@ -219,7 +221,7 @@ cudaError_t launch_shell_class_streaming_fock(
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled,
     double fp64_threshold, const double* schwarz_bounds,
-    const double* density, double* fock, std::uint32_t* bra_head,
+    const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) noexcept;
 
@@ -231,7 +233,7 @@ cudaError_t launch_shell_class_k_block_streaming_fock(
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled,
     double fp64_threshold, const double* schwarz_bounds,
-    const double* density, double* fock, std::uint32_t* bra_head,
+    const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) noexcept;
 
@@ -243,7 +245,7 @@ cudaError_t launch_shell_class_rys_task_streaming_fock(
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled,
     double fp64_threshold, const double* schwarz_bounds,
-    const double* density, double* fock, std::uint32_t* bra_head,
+    const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) noexcept;
 
@@ -314,7 +316,7 @@ def emit_registry_source(
         f"""extern "C" cudaError_t generativeqc_launch_generated_{spec.name}_fock(
     cudaStream_t, bool, unsigned, const void*, const std::uint32_t*,
     const std::int64_t*, const void*, const double*, const void*, double,
-    const double*, const double*, double*, const std::uint32_t*,
+    const double*, const double*, generativeqc::runtime::CompensatedOutput, const std::uint32_t*,
     std::uint32_t*);"""
         for spec in fock_specs
     )
@@ -331,7 +333,7 @@ def emit_registry_source(
         f"""extern "C" cudaError_t generativeqc_launch_generated_{spec.name}_mixed_fock(
     cudaStream_t, bool, unsigned, const void*, const std::uint32_t*,
     const std::int64_t*, const void*, const double*, const void*, double,
-    const double*, const double*, double*, const std::uint32_t*,
+    const double*, const double*, generativeqc::runtime::CompensatedOutput, const std::uint32_t*,
     std::uint32_t*);"""
         for spec in mixed_fock_specs
     )
@@ -348,7 +350,7 @@ def emit_registry_source(
         f"""extern "C" cudaError_t generativeqc_launch_generated_{spec.name}_streaming_fock(
     cudaStream_t, bool, unsigned, const void*, const std::int64_t*,
     const void*, const double*, const void*, double, bool, double,
-    const double*, const double*, double*, std::uint32_t*,
+    const double*, const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*,
     unsigned long long*, unsigned long long*);"""
         for spec in streaming_fock_specs
     )
@@ -474,7 +476,7 @@ cudaError_t launch_shell_class_fock(
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, const double* schwarz_bounds,
-    const double* density, double* fock, const std::uint32_t* task_count,
+    const double* density, runtime::CompensatedOutput fock, const std::uint32_t* task_count,
     std::uint32_t* task_head) noexcept {{
   switch (shell_class) {{
 {fock_cases}
@@ -489,7 +491,7 @@ cudaError_t launch_shell_class_mixed_fock(
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, const double* schwarz_bounds,
-    const double* density, double* fock, const std::uint32_t* task_count,
+    const double* density, runtime::CompensatedOutput fock, const std::uint32_t* task_count,
     std::uint32_t* task_head) noexcept {{
   switch (shell_class) {{
 {mixed_fock_cases}
@@ -504,7 +506,7 @@ cudaError_t launch_shell_class_streaming_fock(
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled,
     double fp64_threshold, const double* schwarz_bounds,
-    const double* density, double* fock, std::uint32_t* bra_head,
+    const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) noexcept {{
   switch (shell_class) {{
@@ -638,6 +640,14 @@ def _resident_launch_parameter_declaration() -> str:
     std::size_t task_count"""
 
 
+def _fock_launch_parameter_declaration() -> str:
+    """Carry both scatter planes without changing the force launch ABI."""
+
+    return _launch_parameter_declaration().replace(
+        "double* output", "runtime::CompensatedOutput output"
+    )
+
+
 def _streaming_fock_launch_parameter_declaration() -> str:
     """Return the fixed-storage Fock streaming dispatch signature."""
 
@@ -647,7 +657,7 @@ def _streaming_fock_launch_parameter_declaration() -> str:
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled,
     double fp64_threshold, const double* schwarz_bounds,
-    const double* density, double* fock, std::uint32_t* bra_head,
+    const double* density, runtime::CompensatedOutput fock, std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count"""
 
@@ -689,6 +699,7 @@ def emit_multi_registry_source(
     kernel_arrays = []
     kernel_sets = []
     launch_parameters = _launch_parameter_declaration()
+    fock_launch_parameters = _fock_launch_parameter_declaration()
     launch_arguments = _launch_argument_list()
     streaming_fock_parameters = _streaming_fock_launch_parameter_declaration()
     streaming_fock_arguments = _streaming_fock_launch_argument_list()
@@ -729,7 +740,7 @@ def emit_multi_registry_source(
                 "cudaStream_t, bool, unsigned, const void*, "
                 "const std::int64_t*, const void*, const double*, "
                 "const void*, double, bool, double, const double*, "
-                "const double*, double*, std::uint32_t*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
                 "unsigned long long*, unsigned long long*);"
             )
             rys_task_fock_cases.append(
@@ -744,7 +755,7 @@ def emit_multi_registry_source(
                 "cudaStream_t, bool, unsigned, const void*, "
                 "const std::int64_t*, const void*, const double*, "
                 "const void*, double, bool, double, const double*, "
-                "const double*, double*, std::uint32_t*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
                 "unsigned long long*, unsigned long long*);"
             )
             rys_task_work_fock_cases.append(
@@ -763,7 +774,7 @@ def emit_multi_registry_source(
                 "cudaStream_t, bool, unsigned, const void*, "
                 "const std::int64_t*, const void*, const double*, "
                 "const void*, double, bool, double, const double*, "
-                "const double*, double*, std::uint32_t*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
                 "unsigned long long*, unsigned long long*);"
             )
             rys_fock_cases.append(
@@ -782,7 +793,7 @@ def emit_multi_registry_source(
                 "cudaStream_t, bool, unsigned, const void*, "
                 "const std::int64_t*, const void*, const double*, "
                 "const void*, double, bool, double, const double*, "
-                "const double*, double*, std::uint32_t*, "
+                "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
                 "unsigned long long*, unsigned long long*);"
             )
             k_block_fock_cases.append(
@@ -836,7 +847,7 @@ def emit_multi_registry_source(
                     "cudaStream_t, bool, unsigned, const void*, "
                     "const std::uint32_t*, const std::int64_t*, const void*, "
                     "const double*, const void*, double, const double*, "
-                    "const double*, double*, const std::uint32_t*, "
+                    "const double*, generativeqc::runtime::CompensatedOutput, const std::uint32_t*, "
                     "std::uint32_t*);"
                 )
                 fock_cases.append(
@@ -850,7 +861,7 @@ def emit_multi_registry_source(
                         "cudaStream_t, bool, unsigned, const void*, "
                         "const std::uint32_t*, const std::int64_t*, const void*, "
                         "const double*, const void*, double, const double*, "
-                        "const double*, double*, const std::uint32_t*, "
+                        "const double*, generativeqc::runtime::CompensatedOutput, const std::uint32_t*, "
                         "std::uint32_t*);"
                     )
                     mixed_fock_cases.append(
@@ -870,7 +881,7 @@ def emit_multi_registry_source(
                         "cudaStream_t, bool, unsigned, const void*, "
                         "const std::int64_t*, const void*, const double*, "
                         "const void*, double, bool, double, const double*, "
-                        "const double*, double*, std::uint32_t*, "
+                        "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
                         "unsigned long long*, unsigned long long*);"
                     )
                     streaming_fock_cases.append(
@@ -885,7 +896,7 @@ def emit_multi_registry_source(
                             "cudaStream_t, bool, unsigned, const void*, "
                             "const std::int64_t*, const void*, const double*, "
                             "const void*, double, bool, double, const double*, "
-                            "const double*, double*, std::uint32_t*, "
+                            "const double*, generativeqc::runtime::CompensatedOutput, std::uint32_t*, "
                             "unsigned long long*, unsigned long long*);"
                         )
                         work_streaming_fock_cases.append(
@@ -915,14 +926,14 @@ def emit_multi_registry_source(
   }}
 }}
 
-cudaError_t launch_{identifier}_fock({launch_parameters}) noexcept {{
+cudaError_t launch_{identifier}_fock({fock_launch_parameters}) noexcept {{
   switch (shell_class) {{
 {chr(10).join(fock_cases)}
     default: return cudaErrorInvalidValue;
   }}
 }}
 
-cudaError_t launch_{identifier}_mixed_fock({launch_parameters}) noexcept {{
+cudaError_t launch_{identifier}_mixed_fock({fock_launch_parameters}) noexcept {{
   switch (shell_class) {{
 {chr(10).join(mixed_fock_cases)}
     default: return cudaErrorInvalidValue;
@@ -1033,6 +1044,7 @@ namespace generativeqc::scf::generated {{
 namespace {{
 
 using LaunchFunction = cudaError_t (*)({_launch_parameter_declaration()}) noexcept;
+using FockLaunchFunction = cudaError_t (*)({_fock_launch_parameter_declaration()}) noexcept;
 using StreamingFockLaunchFunction = cudaError_t (*)(
     {_streaming_fock_launch_parameter_declaration()}) noexcept;
 using ResidentLaunchFunction = cudaError_t (*)({_resident_launch_parameter_declaration()}) noexcept;
@@ -1054,8 +1066,8 @@ struct KernelSet {{
   const ShellKernelMetadata* mixed_fock_names;
   std::size_t mixed_fock_name_count;
   LaunchFunction launch_force;
-  LaunchFunction launch_fock;
-  LaunchFunction launch_mixed_fock;
+  FockLaunchFunction launch_fock;
+  FockLaunchFunction launch_mixed_fock;
   StreamingFockLaunchFunction launch_streaming_fock;
   StreamingFockLaunchFunction launch_work_streaming_fock;
   StreamingFockLaunchFunction launch_rys_streaming_fock;
@@ -1232,14 +1244,14 @@ cudaError_t launch_shell_class({_launch_parameter_declaration()}) noexcept {{
       shell_class, {launch_arguments});
 }}
 
-cudaError_t launch_shell_class_fock({_launch_parameter_declaration()}) noexcept {{
+cudaError_t launch_shell_class_fock({_fock_launch_parameter_declaration()}) noexcept {{
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? cudaErrorInvalidValue : kernels->launch_fock(
       shell_class, {launch_arguments});
 }}
 
 cudaError_t launch_shell_class_mixed_fock(
-    {_launch_parameter_declaration()}) noexcept {{
+    {_fock_launch_parameter_declaration()}) noexcept {{
   const KernelSet* kernels = current_kernel_set();
   return kernels == nullptr ? cudaErrorInvalidValue
                             : kernels->launch_mixed_fock(

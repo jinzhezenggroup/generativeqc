@@ -73,3 +73,9 @@ certified equivalence classes remains unresolved in #1791. This slice uses
 A reviewer agrees on the determinant policy, AO representations or supported
 geometries change, or a genuine non-equivalent state is found that passes all
 current Hamiltonian, physical-state and transformed-density checks.
+
+## Subsequent policy decision
+
+The [2026-10-08 policy decision](2026-10-08-oh-uhf-equivalence-policy.md) resolves
+the policy question for this exact frozen OH domain. The diagnostic contracts,
+raw failures and evidence above remain unchanged.

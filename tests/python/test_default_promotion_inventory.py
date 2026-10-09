@@ -46,6 +46,29 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 @pytest.mark.parametrize(
     "before,after",
     [
+        ("functions > 400", "functions > 600"),
+        ("options.max_iterations = 32", "options.max_iterations = 50"),
+    ],
+)
+def test_df_rhf_guess_default_domain_is_audited(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """A broader workload or additional provisional work needs a promotion decision."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/methods/df_hf_guess.cpp"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "DF-RHF preconvergence default or admission domain drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
         (
             '"GENERATIVEQC_CUDA_XC_BATCH_TILES", 32',
             '"GENERATIVEQC_CUDA_XC_BATCH_TILES", 1',

@@ -2219,7 +2219,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           allow_mixed_precision && mixed_precision_fock &&
               (host_generated_mixed_fock_shell_class_mask & (std::uint64_t{1} << shell_class)) !=
                   0U,
-          mixed_precision_fock_threshold, schwarz_bounds, quartet_density, quartet_fock,
+          mixed_precision_fock_threshold, schwarz_bounds, quartet_density,
+          {quartet_fock, resources.reference_fock_correction_},
           bounded_direct_generated_task_heads + shell_class,
           bounded_fock_class_timing ? bounded_fock_fp64_work_counts + shell_class : nullptr,
           bounded_fock_class_timing ? bounded_fock_fp32_work_counts + shell_class : nullptr);
@@ -2366,7 +2367,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             bounded_direct_generated_retry_task_offsets + shell_class,
             device_batch.shell_pair_primitive_offsets, device_batch.shell_primitive_pairs,
             device_batch.direct_ao_coefficients, device_batch.positions,
-            options.screening_tolerance, schwarz_bounds, quartet_density, quartet_fock,
+            options.screening_tolerance, schwarz_bounds, quartet_density,
+            {quartet_fock, resources.reference_fock_correction_},
             bounded_direct_generated_task_counts + shell_class,
             bounded_direct_generated_task_heads + shell_class);
         if (error != cudaSuccess) return error;
@@ -2376,8 +2378,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   };
   const auto launch_bounded_generic_fock = [&](bool is_unrestricted, const double* quartet_density,
                                                double* quartet_fock) -> cudaError_t {
-    if (!resources.reference_fock_correction_ &&
-        (host_uncovered_fock_shell_class_mask == 0U || bounded_direct_aot_only_diagnostic)) {
+    if (host_uncovered_fock_shell_class_mask == 0U || bounded_direct_aot_only_diagnostic) {
       return cudaSuccess;
     }
     // Generated/native pages own every class in host_generated_fock_shell_class_mask.
@@ -2397,19 +2398,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         resources.stream_, device_batch, options.screening_tolerance, shell_pair_bounds,
         shell_pair_density_bounds, bounded_direct_shell_pair_order,
         bounded_direct_shell_pair_block_bounds, bounded_direct_system_density_bounds, nullptr,
-        resources.reference_fock_correction_ ? 0U : host_generated_fock_shell_class_mask,
-        bounded_direct_generated_overflow, schwarz_bounds, quartet_density, active, quartet_fock,
-        bounded_direct_cursor);
+        host_generated_fock_shell_class_mask, bounded_direct_generated_overflow, schwarz_bounds,
+        quartet_density, active, quartet_fock, bounded_direct_cursor);
     return cudaPeekAtLastError();
   };
   const auto launch_bounded_generated_fock =
       [&](bool is_unrestricted, const double* quartet_density, double* quartet_fock,
           bool allow_mixed_precision) -> cudaError_t {
-    // Existing generic quartet science accepts the compensated sink. Generated
-    // page ABIs do not yet carry it; never mix corrected and uncorrected sums in
-    // an exported frame. Ordinary energy/force SCF retains its selected pages.
-    if (resources.reference_fock_correction_)
-      return launch_bounded_generic_fock(is_unrestricted, quartet_density, quartet_fock);
+    // Generated pages/streams and uncovered generic classes share the same
+    // optional correction plane. The owner clears and folds it once per Fock
+    // build, including the final physical-reference rebuild.
     if (bounded_direct_fock_only_diagnostic) {
       // The fixed-density measurement uses one uniform streaming schedule.
       // Mark every generated class for that consumer so an all-FP64 page does
@@ -2509,7 +2507,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             bounded_direct_generated_tasks, task_offsets + shell_class,
             device_batch.shell_pair_primitive_offsets, device_batch.shell_primitive_pairs,
             device_batch.direct_ao_coefficients, device_batch.positions,
-            options.screening_tolerance, schwarz_bounds, quartet_density, quartet_fock,
+            options.screening_tolerance, schwarz_bounds, quartet_density,
+            {quartet_fock, resources.reference_fock_correction_},
             bounded_direct_generated_task_counts + shell_class,
             bounded_direct_generated_task_heads + shell_class);
         if (launch_error != cudaSuccess) return launch_error;

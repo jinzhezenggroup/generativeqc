@@ -122,10 +122,32 @@ generativeqc run molecule.xyz \
 ```
 
 The selector is resolved from the native method manifest rather than a second
-CLI-specific DFT list. This slice exposes the manifest DFT energy endpoint with
-conventional Coulomb only. DFT density fitting and DFT forces remain
-fail-closed at argument validation and require separate qualification before
-the CLI exposes them.
+CLI-specific DFT list. Native DFT **energy** can use the same exact
+`--density-fitting none|cpu|cuda|auto` and `--auxiliary-basis` options as
+HF; the backend choice must match the selected fitting provider:
+
+```bash
+generativeqc run molecule.xyz \
+  --method pbe-rks \
+  --basis sto-3g \
+  --backend cpu \
+  --density-fitting cpu \
+  --auxiliary-basis def2-svp \
+  --json
+```
+
+With no explicit auxiliary basis, the orbital basis remains the fitting basis.
+Choose a scientifically appropriate auxiliary basis for production. The
+native method adapter validates method/backend/basis combinations and
+rejects unsupported requests rather than silently running direct J/K.
+
+**DFT analytic forces remain unavailable through the native C++ calculation
+API and this CLI**, even for models whose native derivative kernels are
+accessible through the Python public calculator. The CLI rejects
+`--forces` on DFT explicitly. The native manifest likewise does not
+automatically discover all compiler-only MethodIR names (including PBE0).
+Use the explicit native C++ KS composition builder for those graphs;
+see [C++ SDK usage](native_cpp.md).
 
 ## Manage local profile activation
 

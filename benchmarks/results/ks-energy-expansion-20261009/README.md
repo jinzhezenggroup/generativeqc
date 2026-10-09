@@ -13,9 +13,16 @@ previous double-promoted products through `mixed_pair_products_fp64`, enabled
 only for the tuned `sm_120` `ddds` Fock schedule. Other mixed schedules retain
 their existing arithmetic. Host evaluator regressions verify this repair;
 these frozen GPU receipts do not qualify a rebuilt repaired binary.
-The repaired source identity is
+The pre-integration compatibility repair has source identity
 `6d517c95ad467049382bee31d10630150fd706a6e594988423f7d48564c09b8e`;
 the frozen candidate identity remains `d087c507d3e02b69b224a01d3dbb6bac478f152670452fc7a3710e38d152f9aa`.
+The later integration with master `ec71ef7fea6f705a3623b45c7bfb51105c43337a`
+also carries the compensated generated-Fock ABI through task/work dispatch.
+Its source identity is
+`afa64bf70ddb196e6450ed3f5f8260c69cee2a6137c26e38d55a93eb9a022163`.
+The [integration audit](../../../.agents/notes/implemented/compatibility/2026-10-09-rys-task-compensated-fock-integration.md)
+records exact regenerated artifacts and host ABI checks. Neither these frozen
+receipts nor the separate master measurements qualify that combined binary.
 
 The measured `ddds` helper contains `#pragma unroll 1`. Its Fock metadata is now
 corrected to rolled loops; the repair does not introduce unrolling. The strict

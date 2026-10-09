@@ -75,6 +75,8 @@ def reduce_point(path: Path, root: Path) -> tuple[dict, dict]:
             state["sampling_point"] = "before endpoint measurements"
     if "workload" in raw:
         work = raw["workload"]
+        if "convergence_policy" in raw:
+            record["convergence_policy"] = raw["convergence_policy"]
         record.update(
             family="hf_energy" if work["properties"] == ["energy"] else "hf",
             method="RHF",

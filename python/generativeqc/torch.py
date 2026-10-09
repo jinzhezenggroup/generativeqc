@@ -101,7 +101,15 @@ def energy(
     multiplicity must be exact integers (not bools).
     Differentiable backward (``create_graph=True``), Hessians and HVPs raise an
     error because the native force callback does not provide force derivatives.
-    """
+
+    Coordinates have shape ``(natoms, 3)`` in Bohr; the result is a scalar
+    in Hartree and backward returns ``dE/dR`` in Hartree/Bohr. Forward
+    explicitly stages non-CPU coordinates on the host; the input tensor's
+    device does not select the calculator backend. Validation and native
+    execution failures propagate without an energy tensor. Saved detached
+    forces survive for first-order backward. See :ref:`python-torch-values`,
+    :ref:`python-torch-errors`, :ref:`python-torch-ownership` and
+    :ref:`python-torch-backends`."""
 
     atomic_numbers = _validated_atomic_numbers(coordinates, atomic_numbers)
     charge = checked_integer(charge, "ionic charge", low=-(2**31))
@@ -207,7 +215,17 @@ def batched_energy(
     and multiplicities must be exact integers (not bools). Only first-order
     derivatives are supported; differentiable backward, Hessians and HVPs raise
     an error, including when a prepared batch supplies the detached forces.
-    """
+
+    Each coordinate tensor has shape ``(natoms_i, 3)`` in Bohr; the result
+    has shape ``(nsystems,)`` in Hartree. Forward stages all coordinates as
+    CPU float64 and copies energies/saved forces to the shared input
+    dtype/device. Native execution uses strict mode: any failed item raises
+    rather than publishing a partial energy tensor. A caller-owned prepared
+    batch must remain open and must not be used concurrently. Its default
+    property set (or the calculator batch default) must include forces;
+    this wrapper does not override an energy-only batch default. See
+    :ref:`python-torch-errors`, :ref:`python-torch-ownership` and
+    :ref:`python-torch-backends`."""
 
     if len(coordinates) != len(atomic_numbers) or not coordinates:
         raise ValueError(

@@ -21,6 +21,7 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
+from generativeqc_compiler.dft.ao_map_plan import ExactAoMapResources
 from generativeqc_compiler.dft.cuda import CudaGrid
 from generativeqc_compiler.dft.nonlocal_policy import (
     MOLECULAR_VV10_DENSITY_POLICY,
@@ -218,6 +219,7 @@ class PreparedCompositeStationaryCudaGradient:
             "sampled-jets",
             "pre-ao-envelope",
             "pre-ao-envelope-native-csr",
+            "exact-jets-native-bitmask",
         }:
             raise ValueError("unsupported resident AO domain producer")
         if active_ao_cutoff is not None and (
@@ -302,7 +304,7 @@ class PreparedCompositeStationaryCudaGradient:
             )
         layout = plan_composite_stationary_cuda_resources(
             basis,
-            becke_primitive=_resolve_becke_primitive_policy(),
+            becke_primitive=bool(_resolve_becke_primitive_policy()),
             grid_plan=lambda points: plan_tiles(
                 basis,
                 backend="cuda",
@@ -332,12 +334,19 @@ class PreparedCompositeStationaryCudaGradient:
             if active_ao_cutoff is not None
             else 0
         )
-        if active_ao_producer == "pre-ao-envelope-native-csr":
+        if active_ao_producer in {
+            "pre-ao-envelope-native-csr",
+            "exact-jets-native-bitmask",
+        }:
             # Native CSR/staging must coexist with every complete force owner.
             # Reserve only dense-path headroom, retaining its bounded fallback.
             ao_cache_allowance = min(
                 ao_cache_allowance, max(0, max_device_bytes - device_bound)
             )
+            if active_ao_producer == "exact-jets-native-bitmask":
+                ao_cache_allowance = ExactAoMapResources(
+                    basis.nao, npnt, tile_points
+                ).admitted_bytes(ao_cache_allowance)
             device_bound += ao_cache_allowance
         host_bound += ao_cache_allowance
         cache = Path(cache)
@@ -531,8 +540,14 @@ class PreparedCompositeStationaryCudaGradient:
                         cutoff=active_ao_cutoff,
                         budget_bytes=ao_cache_allowance,
                         max_active_fraction=active_ao_max_active_fraction,
+                        **(
+                            {"producer": active_ao_producer}
+                            if active_ao_producer == "exact-jets-native-bitmask"
+                            else {}
+                        ),
                     )
-                    if active_ao_producer == "pre-ao-envelope-native-csr"
+                    if active_ao_producer
+                    in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
                     else ResidentAoMapCache(
                         self.grid,
                         ao_domain,

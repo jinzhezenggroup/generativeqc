@@ -12,7 +12,6 @@ import argparse
 import hashlib
 import json
 import re
-import subprocess
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +19,6 @@ from typing import Any
 
 try:
     from tools.audit_native_complexity import (
-        SOURCE_SUFFIXES,
         LoopSpan,
         _loop_spans,
         _matching,
@@ -28,12 +26,13 @@ try:
     )
 except ModuleNotFoundError:
     from audit_native_complexity import (  # type: ignore[import-not-found]
-        SOURCE_SUFFIXES,
         LoopSpan,
         _loop_spans,
         _matching,
         _skip_space,
     )
+
+_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 _IDENT = r"[A-Za-z_]\w*"
 _CALL = re.compile(rf"\b({_IDENT}(?:::{_IDENT})*)\s*\(")
@@ -794,29 +793,50 @@ def audit_tree(
         from tools.work_audit_python import audit_python
     except ModuleNotFoundError:
         from work_audit_python import audit_python  # type: ignore[import-not-found]
+    try:
+        from tools.audit_structured_materialization import (
+            audit_tree as structured_audit,
+        )
+    except ModuleNotFoundError:
+        from audit_structured_materialization import (  # type: ignore[import-not-found]
+            audit_tree as structured_audit,
+        )
     root = root.resolve()
     findings = []
     scanned = Counter()
-    source_hashes = {}
-    for directory in paths:
-        target = root / directory
-        candidates = [target] if target.is_file() else sorted(target.rglob("*"))
-        for source in candidates:
-            relative = source.relative_to(root).as_posix()
-            if relative.startswith("src/xtb/native/") or not source.is_file():
-                continue
-            if source.suffix not in SOURCE_SUFFIXES | {".py"}:
-                continue
-            text = source.read_text(errors="replace")
-            source_hashes[relative] = hashlib.sha256(source.read_bytes()).hexdigest()
-            if source.suffix == ".py":
-                findings.extend(audit_python(text, relative))
-                scanned["python_ast"] += 1
-            else:
-                findings.extend(
-                    audit_native(text, relative, max_call_depth=max_call_depth)
-                )
-                scanned["native_lexical"] += 1
+
+    def audit_source(relative: str, data: bytes) -> None:
+        text = data.decode("utf-8", errors="replace")
+        if Path(relative).suffix == ".py":
+            findings.extend(audit_python(text, relative))
+            scanned["python_ast"] += 1
+        else:
+            findings.extend(audit_native(text, relative, max_call_depth=max_call_depth))
+            scanned["native_lexical"] += 1
+
+    # One authoritative strict selection/provenance boundary. Every analyzer
+    # consumes the same captured bytes; a later path replacement cannot redirect
+    # a second read or attach a source hash to different content.
+    structured = structured_audit(
+        root, paths, include_python_sources=True, _source_visitor=audit_source
+    )
+    for candidate in structured["findings"]:
+        findings.append(
+            {
+                "rule_id": "native.structured-zero-materialization",
+                "path": candidate["path"],
+                "line": candidate["line"],
+                "function": candidate["function"],
+                "evidence": [
+                    f"{candidate['buffer']}: zero allocation {candidate['allocation_expression']}; {candidate['classification']}"
+                ],
+                "confidence": "unknown"
+                if candidate["classification"] == "unknown"
+                else "high",
+                "disposition": "review-required",
+                "details": candidate,
+            }
+        )
     occurrences: Counter[str] = Counter()
     for finding in sorted(
         findings, key=lambda item: (item["path"], item["line"], item.get("column", 0))
@@ -825,35 +845,23 @@ def audit_tree(
         occurrences[anchor] += 1
         finding["fingerprint"] = f"{anchor}-{occurrences[anchor]}"
 
-    def git(*args: str) -> str | None:
-        result = subprocess.run(
-            ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
-        )
-        return result.stdout.strip() if result.returncode == 0 else None
-
+    provenance = dict(structured["provenance"])
+    provenance["analyzer_digest"] = provenance["scanner_digest"]
+    diagnostics = [
+        finding["details"]["materialization_diagnostic"]
+        for finding in findings
+        if "materialization_diagnostic" in finding.get("details", {})
+    ]
+    diagnostics.extend(
+        boundary["materialization_diagnostic"]
+        for boundary in structured["production_boundaries"]
+    )
     return {
         "schema": "generativeqc.work-audit.v1",
         "advisory_only": True,
-        "provenance": {
-            "commit": git("rev-parse", "HEAD"),
-            "tree": git("rev-parse", "HEAD^{tree}"),
-            "working_tree_dirty": bool(git("status", "--porcelain")),
-            "scanned_source_dirty": bool(git("status", "--porcelain", "--", *paths)),
-            "analyzer_digest": hashlib.sha256(
-                b"".join(
-                    (Path(__file__).parent / name).read_bytes()
-                    for name in (
-                        "audit_native_work.py",
-                        "audit_native_complexity.py",
-                        "work_audit_python.py",
-                    )
-                )
-            ).hexdigest(),
-            "source_roots": list(paths),
-            "scanned_source_digest": hashlib.sha256(
-                json.dumps(source_hashes, sort_keys=True).encode()
-            ).hexdigest(),
-        },
+        "provenance": provenance,
+        "materialization_diagnostics": diagnostics,
+        "production_boundaries": structured["production_boundaries"],
         "scanned_files": dict(scanned),
         "max_call_depth": max_call_depth,
         "counts": dict(sorted(Counter(f["rule_id"] for f in findings).items())),

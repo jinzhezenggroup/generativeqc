@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -36,15 +37,20 @@ def _scalar(name: str) -> Node:
     return input_tensor(name, TensorSpec((), dtype="float64", role="input"))
 
 
-def test_frozen_cpu_numerical_body_and_cuda_translation_unit_are_preserved() -> None:
+def test_frozen_cpu_body_and_cuda_diagnostic_source_identity() -> None:
     # Keep the pre-extraction CPU source and its original frozen hash as an
     # independent reference. Only names and caller-status encoding may differ
     # in the relocated numerical body; algebra and operation order cannot.
     from generativeqc_compiler.method.gfn2_history_lowering import (
         emit_gfn2_history_artifacts,
+        gfn2_history_correction_bindings,
+        gfn2_history_gram_bindings,
     )
     from generativeqc_compiler.tensor.broyden_cpu_lowering import (
         emit_broyden_cpu_artifacts,
+    )
+    from generativeqc_compiler.tensor.ordered_history_artifacts import (
+        emit_ordered_history_artifacts,
     )
 
     frozen = ROOT / "tests/native/fixtures/johnson_prechange_3b97c234"
@@ -84,6 +90,25 @@ def test_frozen_cpu_numerical_body_and_cuda_translation_unit_are_preserved() -> 
         old_body = old_body.replace(before, after)
     assert numerical_body(source) == old_body
 
+    baseline = emit_ordered_history_artifacts(
+        "cuda",
+        source_prefix="generated_gfn2_history_cuda",
+        gram=replace(
+            gfn2_history_gram_bindings("cuda"),
+            coefficient_visit_counter=None,
+            overlap_visit_counter=None,
+        ),
+        correction=replace(
+            gfn2_history_correction_bindings("cuda"), visit_counter=None
+        ),
+    )
+    assert (
+        json.loads(baseline["generated_gfn2_history_cuda_identity.json"])[
+            "source_identity"
+        ]
+        == "f244c11c54c4124254f69177237a3a1dcccc09580f6a55c7e3f24b707092cf09"
+    )
+
     cuda = (NATIVE / "backends/cuda/gfn2_scc_mixer.cu").read_text()
     for name, body in emit_gfn2_history_artifacts("cuda").items():
         if name.endswith(".inc"):
@@ -91,7 +116,7 @@ def test_frozen_cpu_numerical_body_and_cuda_translation_unit_are_preserved() -> 
             assert cuda.count(include) == 1
             cuda = cuda.replace(include, body)
     assert hashlib.sha256(cuda.encode()).hexdigest() == (
-        "1e96b2154098685b62b5c7be6659daafacc1e0cc29bfc67f273a1896cffa1b68"
+        "b940a59232a672d5b3a81857e5b491a23761e556f4d8fa4311ef536cb0cdb36c"
     )
 
 

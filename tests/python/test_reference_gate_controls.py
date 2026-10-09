@@ -146,7 +146,7 @@ def test_reference_fock_setting_does_not_change_numerical_gates(
     gate: typing.Any, full_fock: bool, density_fitting: bool
 ) -> None:
     comparison = importlib.import_module("compare_gpu4pyscf_batch")
-    engine = SimpleNamespace()
+    engine = SimpleNamespace(get_veff=lambda **kwargs: kwargs)
     comparison._configure_reference_scf(
         engine,
         energy_tolerance=1e-12,
@@ -160,3 +160,35 @@ def test_reference_fock_setting_does_not_change_numerical_gates(
     assert engine.conv_tol_grad == 1e-11
     assert engine.direct_scf_tol == 1e-14
     assert engine.max_cycle == 100
+
+
+def test_full_fock_suppresses_incremental_inputs_and_can_restore_stock(
+    gate: typing.Any,
+) -> None:
+    """The explicit policy must work even for RKS ignoring direct_scf=False."""
+    comparison = importlib.import_module("compare_gpu4pyscf_batch")
+    calls = []
+
+    def potential(
+        mol: typing.Any = None,
+        dm: typing.Any = None,
+        dm_last: typing.Any = None,
+        vhf_last: typing.Any = None,
+        hermi: int = 1,
+    ) -> str:
+        calls.append((mol, dm, dm_last, vhf_last, hermi))
+        return "potential"
+
+    engine = SimpleNamespace(get_veff=potential)
+    controls = {
+        "energy_tolerance": 1e-12,
+        "gradient_tolerance": 1e-10,
+        "max_iterations": 100,
+    }
+    for _ in range(2):
+        comparison._configure_reference_scf(engine, full_fock=True, **controls)
+        assert engine.get_veff("mol", "dm", "delta", "previous", 2) == "potential"
+        assert calls[-1] == ("mol", "dm", None, None, 2)
+    comparison._configure_reference_scf(engine, full_fock=False, **controls)
+    assert engine.get_veff is potential
+    assert engine.direct_scf is True

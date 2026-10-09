@@ -39,16 +39,23 @@ def test_shell_local_projection_is_value_only_spherical_spd() -> None:
     assert "include_derivatives ? sizeof(Jet) : sizeof(double)" in build
     assert "catch" not in build
     assert "production_eri_cartesian(" in build
-    assert "transform_eri(out.eri.data(), out.nbf, target_aos)" in build
+    assert "transform_eri(out.eri.data(), out.nbf, target_aos, true)" in build
 
 
-def test_generic_transform_and_range_paths_do_not_symmetrize_arbitrary_inputs() -> None:
+def test_generic_transform_requires_explicit_producer_symmetry() -> None:
     generic = SOURCE.split("std::vector<double> transform_eri(", 1)[1].split(
         "std::vector<double> transform_three_center(", 1
     )[0]
-    assert "store_eri_symmetry" not in generic
-    for index in ("p", "q", "r", "s"):
-        assert f"{index} = 0; {index} < target_count; ++{index}" in generic
+    assert "bool eightfold_symmetric = false" in generic
+    assert "if (eightfold_symmetric)" in generic
+    assert (
+        "else\n            transformed[eri_index(p, q, r, s, target_count)] = value"
+        in generic
+    )
+    adapter = SOURCE.split("IntegralData transform_integrals(", 1)[1].split(
+        "IntegralData build_integrals(", 1
+    )[0]
+    assert "target_aos, true" not in adapter
     range_values = SOURCE.split("std::vector<double> build_range_eri(", 1)[1].split(
         "std::array<double, 12> contract_weighted_eri_shell_derivative(", 1
     )[0]

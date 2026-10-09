@@ -24,6 +24,7 @@ from generativeqc_compiler.common.resources import (
 
 from .ao import DOUBLE, SIZE, jet_indices, pointer
 from .ao_cuda import emit_grid_source
+from .ao_map_plan import ExactAoMapResources
 from .density_source import DensitySource
 from .features import requested_ingredients, spin_densities
 from .grid import checked_int
@@ -501,6 +502,10 @@ class CudaGrid:
                 ct.c_char_p,
                 ct.c_size_t,
             ]
+            if hasattr(lib, "grid_cuda_prepare_exact_ao_map_device_v1"):
+                lib.grid_cuda_prepare_exact_ao_map_device_v1.argtypes = (
+                    lib.grid_cuda_prepare_ao_map_device_v1.argtypes
+                )
             lib.grid_cuda_run_ao_map_device_deferred_v1.argtypes = [
                 ct.c_void_p,
                 ct.c_void_p,
@@ -1200,17 +1205,28 @@ class CudaGrid:
         cutoff: float,
         budget_bytes: int,
         identity: str,
+        exact: bool = False,
     ) -> dict[str, int]:
-        """Build native CSR once without evaluating or downloading AO jets.
+        """Build a resident indexed domain without downloading AO jets.
 
         The caller owns scientific identity and immutable point lifetime. This
         mechanism provides no default omission policy or endpoint error bound.
-        Numeric peak includes temporary masks/boxes and the host offset mirror.
-        A budget miss leaves no partially usable CSR inventory.
+        Exact mode evaluates the canonical sampled-jet predicate directly into
+        bitmasks, without writing a dense jet panel. It retains one rebased AO
+        span for same-stream compaction, not all CSR labels. Envelope mode keeps
+        the existing conservative CSR producer. Numeric peak includes all map
+        staging and the host offset mirror; budget misses publish no inventory.
         """
         with self._lock:
             self._check_open()
-            if not hasattr(self._library, "grid_cuda_prepare_ao_map_device_v1"):
+            if type(exact) is not bool:
+                raise TypeError("resident AO exact selector must be boolean")
+            symbol = (
+                "grid_cuda_prepare_exact_ao_map_device_v1"
+                if exact
+                else "grid_cuda_prepare_ao_map_device_v1"
+            )
+            if not hasattr(self._library, symbol):
                 raise NotImplementedError("CUDA grid artifact lacks resident AO CSR")
             if type(device_points) is not int or device_points <= 0:
                 raise ValueError("invalid resident CUDA point binding")
@@ -1227,7 +1243,7 @@ class CudaGrid:
             info = (ct.c_size_t * 8)()
             # The grid ABI returns OUT_OF_MEMORY=7 before publishing any CSR.
             checked_native_call(
-                self._library.grid_cuda_prepare_ao_map_device_v1,
+                getattr(self._library, symbol),
                 self._handle,
                 ct.c_void_p(device_points),
                 count,
@@ -1247,7 +1263,25 @@ class CudaGrid:
                 "discovery_offsets_h2d_bytes",
                 "discovery_region_bounds",
             )
-            return dict(zip(names, info, strict=True))
+            result = dict(zip(names, info, strict=True))
+            if exact:
+                resources = ExactAoMapResources(
+                    self.plan.nao, count, self.plan.tile_points
+                )
+                if (
+                    result["ready"]
+                    and result["numeric_peak_bound_bytes"]
+                    != resources.numeric_peak_bound_bytes
+                ):
+                    raise RuntimeError(
+                        "native exact AO map violates its compiler resource bound"
+                    )
+                result["discovery_ao_jet_values"] = (
+                    count * self.plan.nao * len(jet_indices(self.plan.order))
+                    if result["discovery_d2h_bytes"]
+                    else 0
+                )
+            return result
 
     @contextmanager
     def feature_task_resident_ao_map(

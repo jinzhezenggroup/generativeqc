@@ -21,4 +21,5 @@ MP2, RCCSD, triples, Lambda and correlated nuclear gradients. Read the shared po
 ../ccsd_gradient
 ../df_ccsdt
 ../df_ccsdt_gradient
+../df_hf_preconvergence
 ```

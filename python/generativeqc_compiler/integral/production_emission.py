@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from .production_profile import ResolvedProductionProfile
 
 _PRODUCTION_PRELUDE = r"""#include "scf/generated_shell_task.hpp"
+#include "runtime/compensated_atomic.cuh"
 
 #include <cuda_runtime.h>
 #include <cmath>
@@ -182,7 +183,7 @@ def _fock_launch_wrapper(
     spec: ShellClassSpec,
     symbol: str | None = None,
 ) -> str:
-    """Emit the stable C ABI wrapper for one generated Fock worker."""
+    """Emit the private two-plane output ABI for one generated Fock worker."""
 
     class_name = spec.name[0].upper() + spec.name[1:]
     return f"""
@@ -192,7 +193,8 @@ extern "C" cudaError_t {symbol or f"generativeqc_launch_generated_{spec.name}_fo
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
     const double* ao_coefficients,
     const void* atom_positions, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, double* fock,
+    const double* schwarz_bounds, const double* density,
+    generativeqc::runtime::CompensatedOutput fock,
     const std::uint32_t* task_count, std::uint32_t* task_head) {{
   if (worker_blocks == 0U) return cudaSuccess;
   const auto* typed_tasks =
@@ -224,7 +226,7 @@ def _mixed_fock_launch_wrapper(
     spec: ShellClassSpec,
     symbol: str | None = None,
 ) -> str:
-    """Emit the stable C ABI wrapper for one generated mixed Fock worker."""
+    """Emit the same two-plane ABI for one generated mixed Fock worker."""
 
     class_name = spec.name[0].upper() + spec.name[1:]
     return f"""
@@ -234,7 +236,8 @@ extern "C" cudaError_t {symbol or f"generativeqc_launch_generated_{spec.name}_mi
     const std::int64_t* primitive_pair_offsets, const void* primitive_pairs,
     const double* ao_coefficients,
     const void* atom_positions, double screening_tolerance,
-    const double* schwarz_bounds, const double* density, double* fock,
+    const double* schwarz_bounds, const double* density,
+    generativeqc::runtime::CompensatedOutput fock,
     const std::uint32_t* task_count, std::uint32_t* task_head) {{
   if (worker_blocks == 0U) return cudaSuccess;
   const auto* typed_tasks =
@@ -303,9 +306,9 @@ def _streaming_fock_internal_signature(
 ) -> GeneratedKernelSignature:
     """Derive the specialized compiler-owned streaming-kernel ABI.
 
-    The public registry ABI remains stable. Only the generated device/kernel
-    boundary is specialized, and launch forwarding is rendered from this same
-    manifest so a removed parameter cannot remain in host-side packing.
+    The registry and specialized boundary share a runtime-owned output value.
+    Other device/kernel parameters may be pruned. Launch forwarding is rendered
+    from this manifest so a removed parameter cannot remain in host-side packing.
     """
 
     spec = selection.spec
@@ -345,7 +348,7 @@ def _streaming_fock_internal_signature(
             GeneratedKernelArgument("double", "fp64_threshold"),
             GeneratedKernelArgument("const double*", "schwarz_bounds"),
             GeneratedKernelArgument("const double*", "density"),
-            GeneratedKernelArgument("double*", "fock"),
+            GeneratedKernelArgument("generativeqc::runtime::CompensatedOutput", "fock"),
             GeneratedKernelArgument("std::uint32_t*", head_name, "bra_head"),
             GeneratedKernelArgument("unsigned long long*", "fp64_work_count"),
             GeneratedKernelArgument("unsigned long long*", "fp32_work_count"),
@@ -922,7 +925,8 @@ extern "C" cudaError_t {symbol or f"generativeqc_launch_generated_{spec.name}_st
     const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled,
     double fp64_threshold, const double* schwarz_bounds,
-    const double* density, double* fock, std::uint32_t* bra_head,
+    const double* density, generativeqc::runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head,
     unsigned long long* fp64_work_count,
     unsigned long long* fp32_work_count) {{
   if (worker_blocks == 0U) return cudaSuccess;
@@ -1100,8 +1104,9 @@ def emit_production_shard(
 
 
 def _strip_emitter_includes(source: str) -> str:
-    """Remove global standard includes before placing source in a namespace."""
+    """Keep standard and runtime declarations outside the profile namespace."""
 
+    source = source.replace('#include "runtime/compensated_atomic.cuh"\n', "")
     return re.sub(
         r"^#include <(?:cstddef|cstdint)>\n",
         "",

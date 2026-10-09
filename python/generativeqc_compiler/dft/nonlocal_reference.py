@@ -245,10 +245,13 @@ def nonlocal_explicit_geometry_derivatives_reference(
     weight_derivative = np.empty_like(weights)
     ngrid = density.size
 
+    # The coordinate accumulator is consumed into the owned output row before
+    # the next point. Avoid allocating another three-vector for each grid point.
+    coordinate_sum = np.zeros(3, dtype=np.float64)
     with np.errstate(over="raise", invalid="raise", divide="raise"):
         for i in range(ngrid):
             kernel_sum = 0.0
-            coordinate_sum = np.zeros(3, dtype=np.float64)
+            coordinate_sum.fill(0.0)
             for start in range(0, ngrid, tile_size):
                 stop = min(start + tile_size, ngrid)
                 delta = coords[i] - coords[start:stop]

@@ -15,6 +15,7 @@ from .ordered_history import (
     require_history_schedule,
 )
 from .ordered_history_emit import (
+    CudaVisitCounter,
     FailureEffect,
     _failure_lines,
     _statement,
@@ -42,6 +43,8 @@ class GramBindings:
     matrix_failure: FailureEffect
     history_slots: str = ""
     weight_failure: FailureEffect | None = None
+    coefficient_visit_counter: CudaVisitCounter | None = None
+    overlap_visit_counter: CudaVisitCounter | None = None
 
     def validate(self, schedule: RetainedHistorySchedule) -> None:
         for name in (
@@ -69,6 +72,11 @@ class GramBindings:
             self.matrix_failure,
         ):
             _failure_lines(schedule, "checked-value", effect)
+        if schedule.name == "compact-cpu" and (
+            self.coefficient_visit_counter is not None
+            or self.overlap_visit_counter is not None
+        ):
+            raise ValueError("visit counters require the CUDA history schedule")
 
 
 def _first_iteration() -> tuple[str, str]:
@@ -229,6 +237,11 @@ def emit_history_gram(
                 extent="dimension",
                 failure=effect,
                 indent=indent,
+                visit_counter=(
+                    b.coefficient_visit_counter
+                    if role == "row"
+                    else b.overlap_visit_counter
+                ),
             ),
         ]
 

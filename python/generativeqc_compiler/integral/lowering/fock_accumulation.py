@@ -21,8 +21,8 @@ def emit_fock_accumulation_cuda(
 ) -> str:
     """Emit one canonical-ERI scatter with shared J/K spin semantics.
 
-    Direct response may supply a runtime-owned accumulation sink. Leave other
-    consumers' source/ABI unchanged; the sink does not own the contraction.
+    Direct response and generated Fock workers may supply a runtime-owned
+    accumulation sink. The sink does not own the contraction or spin policy.
     """
 
     unroll_directive = "#pragma unroll\n" if unroll_permutations else ""
@@ -222,6 +222,7 @@ def emit_generated_shell_fock_accumulation() -> str:
         description=(
             "Scatter one canonical integral using GENERATIVEQC's shared HF/J-only/K-only convention."
         ),
+        polymorphic_output=True,
     ).rstrip("\n")
 
 

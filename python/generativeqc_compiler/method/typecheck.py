@@ -90,6 +90,11 @@ class BackendCapability:
     operators: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        """Validate immutable, duplicate-free execution domains.
+
+        Raise TypeError for malformed tuple fields and ValueError for unknown
+        dtypes, spin modes, ingredients or derivative orders outside [0, 2].
+        This record declares lowering capability; it does not probe hardware."""
         if not isinstance(self.backend, str) or not self.backend:
             raise ValueError("backend capability requires a nonempty name")
         for field in (
@@ -134,6 +139,11 @@ class TypedMethodIR:
     features: tuple[FeatureType, ...]
 
     def __post_init__(self) -> None:
+        """Check exact feature binding against the method and execution type.
+
+        Raise TypeError for malformed records and MethodTypeError for mismatched
+        spin, dtype, derivative order or logical per-point component shapes.
+        No runtime buffers are allocated and no backend is executed."""
         if not isinstance(self.method, MethodIR):
             raise TypeError("typed method requires MethodIR")
         if not isinstance(self.backend, str) or not self.backend:
@@ -183,6 +193,7 @@ class TypedMethodIR:
                 )
 
     def to_payload(self) -> typing.Any:
+        """Return a fresh execution-type payload including the method identity."""
         return {
             "method_identity": self.method.identity,
             "backend": self.backend,
@@ -193,6 +204,7 @@ class TypedMethodIR:
 
     @property
     def identity(self) -> typing.Any:
+        """Hash the execution-type payload without replacing mathematical identity."""
         return canonical_hash(self.to_payload())
 
 

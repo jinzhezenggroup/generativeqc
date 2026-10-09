@@ -36,6 +36,7 @@ class ResponseSolveError(RuntimeError):
     """A response solve failed without producing a valid converged solution."""
 
     def __init__(self, result: typing.Any) -> None:
+        """Attach a failed solve result and format its convergence diagnostics."""
         self.result = result
         super().__init__(
             f"response solve failed after {result.iterations} iterations "
@@ -60,6 +61,7 @@ class RotationLayout:
     spin_blocks: tuple[str, ...] = ("restricted",)
 
     def __post_init__(self) -> None:
+        """Normalize and validate the restricted occupied-virtual spaces."""
         object.__setattr__(self, "occupied", tuple(self.occupied))
         object.__setattr__(self, "virtual", tuple(self.virtual))
         object.__setattr__(self, "spin_blocks", tuple(self.spin_blocks))
@@ -91,22 +93,27 @@ class RotationLayout:
 
     @property
     def nocc(self) -> typing.Any:
+        """Return the number of occupied spatial orbitals."""
         return len(self.occupied)
 
     @property
     def nvirt(self) -> typing.Any:
+        """Return the number of virtual spatial orbitals."""
         return len(self.virtual)
 
     @property
     def nmo(self) -> typing.Any:
+        """Return the total number of orbitals in the response layout."""
         return self.nocc + self.nvirt
 
     @property
     def dimension(self) -> typing.Any:
+        """Return the number of independent occupied-virtual rotations."""
         return self.nocc * self.nvirt
 
     @property
     def identity(self) -> typing.Any:
+        """Return the canonical hash of orbital layout and ordering."""
         return canonical_hash(
             {
                 "occupied": self.occupied,
@@ -181,6 +188,7 @@ class ResponseProblem:
     identity: str = field(init=False)
 
     def __post_init__(self) -> None:
+        """Validate method/reference compatibility and freeze response identity."""
         if self.method not in ("rhf", "cpks"):
             raise ResponseUnsupported(f"unsupported response method {self.method!r}")
         if self.reference.algorithm == "RHF":
@@ -301,10 +309,12 @@ class ResponseProblem:
 
     @property
     def dimension(self) -> typing.Any:
+        """Return the active response-vector dimension."""
         return self.layout.dimension
 
     @property
     def reference_identity(self) -> typing.Any:
+        """Return the immutable identity of the referenced electronic state."""
         return self.reference.identity
 
     def _active_rotation_gaps(self) -> typing.Any:

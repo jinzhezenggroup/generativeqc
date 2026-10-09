@@ -13,8 +13,8 @@ vendored `src/xtb/native/`. Repeat `--path` for individual files or directories;
 missing or outside-root inputs are errors, including recursively discovered
 links. Sources are resolved before containment checks, vendored exclusions and
 deduplication; overlapping inputs and same-root symlink aliases are scanned once.
-The JSON includes byte SHA-256 identities for all scanned sources and all three
-consumed scanner modules, Git commit/tree, and source/working-tree dirty state.
+The JSON includes byte SHA-256 identities for all scanned sources and all consumed
+scanner modules and the compiler-owned shared materialization policy, Git commit/tree, and source/working-tree dirty state.
 Line endings affect byte identities; compare receipts using their recorded bytes.
 Source dirty state checks selected paths, resolved selection roots and canonical
 source paths, including untracked sources. Ignored-file detection is limited to
@@ -76,22 +76,67 @@ writes. No numerical threshold, screening or approximation is used.
 
 Every candidate carries its producer/allocation location, dense vector or member
 ABI evidence, syntactic same-file caller locations, and explicit unresolved
-consumer/structured-IR fields. A caller location does not establish overload
+consumer/structured-IR fields. The additive `materialization_diagnostic` uses
+the same compiler-owned policy as Python source audits and TensorIR. A caller location does not establish overload
 resolution, executed reachability, required dense layout or consumer support.
 Before changing a representation, review the returned/escaped object's entire
-consumer lifetime and its layout contract. This slice provides a standalone
-CLI/API; common work-audit and TensorIR integration remain follow-up scope under
-[#1631](https://github.com/jinzhezenggroup/generativeqc/issues/1631).
+consumer lifetime and its layout contract.
+
+The common `tools/audit_native_work.py` entrypoint consumes this strict native
+selection/provenance path, includes every native candidate (including unknowns)
+in its `findings`, and exposes normalized `materialization_diagnostics` and the
+MP2 `production_boundaries` census. Python sources are selected and hashed through
+the same boundary before the existing AST analyzer runs. Every analyzer consumes the same captured source bytes; the common audit never
+reopens a path after selection. Missing paths and outside-root aliases are errors.
+Filesystem dirty/alias state records scan-time observations, not a promise about
+subsequent filesystem changes. A policy file edited after its module was imported
+fails the report rather than hashing new bytes while executing stale policy.
+Source/scanner hashes include the common policy and every consumed analyzer.
+
+`generativeqc_compiler.common.materialization` owns only evidence normalization
+and recommendation/blocker policy. Existing native/Python analyzers still own
+parsing and certificates. `analyze_complexity(program).materialization_diagnostics()`
+explicitly reports TensorIR logical element counts, symbolic degree, retained
+output layout, and missing exact-support evidence. It does not infer zero sectors
+from arbitrary TensorIR shapes or factorized equations. The ordinary complexity
+summary, equation serialization/hash, AD, and normal preparation are unchanged.
+
+Normalized blockers distinguish unsupported producer writes, full-domain writes,
+unresolved union cardinality, downstream consumer uncertainty, declared vector or
+aggregate-member layout, retained TensorIR outputs, and missing structured IR.
+Unknown consumers are never reported as proved dense-layout requirements. Only
+an exact single-domain certificate permits a conservative block/diagonal or
+packed-storage review recommendation; union upper bounds, unknown aggregate
+writes, and shape-only IR do not. The adapter performs no automatic rewrite.
 
 In current MP2 source, dense `initial_orbital_weights` and the corresponding
-canonical dense APIs coexist with separate streamed force producers and
-`FactorizedTwoElectronWeights`. Aggregate type/constructor semantics, qualified
-checked arithmetic, and later response/derivative consumers are outside this
-closed subset. Those candidates remain unknown without representation advice.
-Do not interpret their presence as proof of a current production `N^4` defect,
-or infer a hard native oracle size gate from an oracle comment. The historical
-[#1574](https://github.com/jinzhezenggroup/generativeqc/issues/1574) production
-description is not the current execution contract.
+canonical dense APIs coexist with streamed/factorized owners. The scanner
+reports the rank-four `result.two_electron.assign(fourth_power(n), 0.0)` as
+**unknown**, not as a certified sparse tensor, because this is an aggregate
+member with several exact sectors and later mutation. No automatic N^4
+representation rewrite is authorized.
+
+The full PR source-audit JSON now includes an additive
+`production_boundaries` array. For
+`src/posthf/mp2_gradient.cpp`, the `mp2-representation-boundary.v1`
+census binds the actual source SHA-256 and checks eight specific, same-file
+free-function and source-expression anchors: checked extent helpers, canonical
+N^4 allocation and caller, streamed Fock-weight storage/caller, factorized
+Lagrangian ownership, and the RI reverse consumer. `SOURCE_VISIBLE` means
+**only** that those source paths coexist in the scanned revision. The shared
+diagnostic retains the observed `fourth_power(n)` expression with unknown certified
+growth degree: helper anchors alone are not a proof of their full arithmetic.
+`INCOMPLETE` makes changed or missing anchors explicit. Neither status
+proves the selected public endpoint, consumer ABI/lifetime, complete
+scientific write support, or runtime allocation bytes. The linked #1574
+implementation remains a separate performance decision.
+
+CI publishes `native-structured-materialization.json` and
+`native-complexity.json` beside the existing work audit and DF ratchet.
+Existing exact rank-2 matrix-chain findings use the strict
+`audit_native_complexity.py --fail-on-matrix-chain` rule; **other**
+high-rank/materialization candidates are advisory. No numerical sparsification,
+source filename exemption, or synthetic performance claim is introduced.
 
 The tool reports source evidence only: no runtime allocated bytes, endpoint
 speedup, scientific validation, ABI migration or zero-allocation guarantee.

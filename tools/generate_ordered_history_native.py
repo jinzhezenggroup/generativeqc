@@ -31,7 +31,10 @@ def main() -> None:
 
             artifacts = emit_gfn2_history_artifacts("cuda")
         for name, source in artifacts.items():
-            (args.output_directory / name).write_text(source, encoding="utf-8")
+            with (args.output_directory / name).open(
+                "w", encoding="utf-8", newline="\n"
+            ) as output:
+                output.write(source)
 
 
 if __name__ == "__main__":

@@ -530,7 +530,7 @@ def test_serialized_examples_are_reproducible_and_report_unavailable_lowering(
 def test_production_artifacts_and_catalog_are_byte_identical_to_baseline(
     tmp_path: typing.Any,
 ) -> None:
-    """Pin full bundles and independently retain the pre-task source bytes."""
+    """Pin full bundles and retained scientific sources with the Fock sink ABI."""
     from generativeqc_compiler.integral.production import write_production_bundles
     from generativeqc_compiler.integral.production_emission import emit_profile_shard
     from generativeqc_compiler.integral.production_k_block import (

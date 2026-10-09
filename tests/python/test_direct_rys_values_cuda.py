@@ -101,13 +101,15 @@ def quartet_case(request: pytest.FixtureRequest) -> tuple:
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("consumer", ("combined", "j", "k", "hf-k"))
 @pytest.mark.parametrize("task_count", (1, 33, 129))
+@pytest.mark.parametrize("compensated", (False, True))
 def test_value_rys_fixed_density_matrices_match_libcint(
     quartet_case: tuple,
     unrestricted: bool,
     consumer: str,
     task_count: int,
+    compensated: bool,
 ) -> None:
-    """Execute one fused queue task, including empty CTA and component tails."""
+    """Exercise task tails with ordinary and compensated Fock output planes."""
     import cupy as cp
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
@@ -140,15 +142,22 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     output = cp.zeros(device_density.size, dtype=cp.float64)
     count = cp.asarray([task_count], dtype=cp.uint32)
     head = cp.zeros(1, dtype=cp.uint32)
+    correction = cp.zeros_like(output) if compensated else None
     library = ctypes.CDLL(os.environ["GENERATIVEQC_RYS_VALUE_LIBRARY"])
     prefix = os.environ.get("GENERATIVEQC_RYS_VALUE_SYMBOL_PREFIX", "generated")
     launch = getattr(library, f"generativeqc_launch_{prefix}_{name}_fock")
     pointer = ctypes.c_void_p
+
+    class ScatterOutput(ctypes.Structure):
+        """The private launch ABI carries sum and optional residual planes."""
+
+        _fields_ = [("sum", pointer), ("correction", pointer)]
+
     launch.argtypes = (
         [pointer, ctypes.c_bool, ctypes.c_uint]
         + [pointer] * 6
         + [ctypes.c_double]
-        + [pointer] * 5
+        + [pointer, pointer, ScatterOutput, pointer, pointer]
     )
     launch.restype = ctypes.c_int
     stream = cp.cuda.get_current_stream()
@@ -160,13 +169,15 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         0.0,
         None,
         device_density.data.ptr,
-        output.data.ptr,
+        ScatterOutput(output.data.ptr, correction.data.ptr if compensated else None),
         count.data.ptr,
         head.data.ptr,
     )
     assert status == 0
     stream.synchronize()
     raw = cp.asnumpy(output)
+    if correction is not None:
+        raw += cp.asnumpy(correction)
     actual = np.stack(
         [
             raw[s * n * n : (s + 1) * n * n].reshape((n, n), order="F")

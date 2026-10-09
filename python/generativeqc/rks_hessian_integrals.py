@@ -101,6 +101,7 @@ class RKSIntegralTopology:
 
     @classmethod
     def from_basis(cls, basis: typing.Any) -> RKSIntegralTopology:
+        """Capture a live Cartesian NativeAO topology for derivative integrals."""
         if not isinstance(basis, NativeAO):
             raise TypeError("RKS Hessian integral topology requires NativeAO")
         if not basis._handle:
@@ -126,6 +127,7 @@ class RKSIntegralTopology:
         )
 
     def check_current(self) -> None:
+        """Reject use after the borrowed native AO basis is closed."""
         if not self.basis._handle:
             raise RuntimeError("RKS Hessian AO basis is closed")
 
@@ -143,6 +145,7 @@ def rks_integral_topology(operator: typing.Any) -> RKSIntegralTopology:
 
 
 def checked_direction(direction: typing.Any, natoms: int) -> np.ndarray:
+    """Return a detached finite Cartesian direction of shape (natoms, 3)."""
     value = np.asarray(direction)
     if (
         value.shape != (natoms, 3)
@@ -316,6 +319,7 @@ def generated_directional_semilocal_rks_integral_first_order(
     *,
     cache: typing.Any = ".artifacts",
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Contract first-order RKS integral derivatives with a nuclear direction."""
     topology.check_current()
     vector = checked_direction(direction, len(topology.atoms))
     ao_density = _checked_ao_weight(density, topology.nbf, "RKS reference density")
@@ -689,6 +693,7 @@ def generated_weighted_first_integral_gradient(
     eri_shell_weights: typing.Any = None,
     cache: typing.Any = ".artifacts",
 ) -> np.ndarray:
+    """Contract named first-integral sources into a Cartesian nuclear gradient."""
     if source_name not in ("one_electron", "coulomb", "overlap_pulay"):
         raise ValueError("unknown stationary first-integral source")
     topology.check_current()
@@ -826,8 +831,11 @@ def _run_kernel_hvp(
     center_direction = mapping.expand_direction(direction[list(mapping.atom_indices)])
     full = np.zeros(len(center_indices) * 3)
     signature = ir.signature
+    # The public shell-stream adapter freezes its weight tile before the
+    # next AO chunk: one FP64 backing buffer can be reset and reused.
+    weights = np.zeros(component_count)
     for ao_chunk in _component_tiles(component_count):
-        weights = np.zeros(component_count)
+        weights.fill(0.0)
         weights[list(ao_chunk)] = weight_flat[list(ao_chunk)]
         for output_indices in second_coordinate_tiles(
             center_indices, packing="dense", hvp=True
@@ -1117,6 +1125,10 @@ def generated_weighted_second_integral_hvp(
     compiler: typing.Any = None,
     device_id: int = 0,
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
+    """Contract a selected second-integral source with a nuclear direction.
+
+    Return its Cartesian Hessian-vector action and resource diagnostics.
+    """
     if source_name not in ("one_electron", "coulomb", "overlap_pulay"):
         raise ValueError("unknown stationary second-integral source")
     data = _second_data(
@@ -1154,6 +1166,7 @@ def generated_weighted_second_integral_hvp(
 def nuclear_hvp_from_topology(
     topology: RKSIntegralTopology, direction: typing.Any
 ) -> np.ndarray:
+    """Return the nuclear-repulsion Hessian-vector action on atom coordinates."""
     topology.check_current()
     vector = checked_direction(direction, len(topology.atoms))
     coords = np.asarray([atom.position for atom in topology.atoms], dtype=np.float64)

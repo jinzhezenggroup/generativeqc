@@ -55,6 +55,8 @@ wheel.py-api = "py3"
 [tool.scikit-build.wheel.force-include]
 "manifests/public_methods.json" = "generativeqc/data/public_methods.json"
 "src/runtime/compiled_execution_region.hpp" = "generativeqc_compiler/assets/src/runtime/compiled_execution_region.hpp"
+"src/runtime/compensated_atomic.cuh" = "generativeqc_compiler/assets/src/runtime/compensated_atomic.cuh"
+"src/runtime/compensated_output.hpp" = "generativeqc_compiler/assets/src/runtime/compensated_output.hpp"
 "src/runtime/cuda_graph_region.cuh" = "generativeqc_compiler/assets/src/runtime/cuda_graph_region.cuh"
 "src/tensor/cuda_graph_context.cuh" = "generativeqc_compiler/assets/src/tensor/cuda_graph_context.cuh"
 # JIT templates need their transitive local headers in installed wheels too.

@@ -47,7 +47,7 @@ cudaError_t launch_shell_class(unsigned, cudaStream_t, bool, unsigned, const voi
 cudaError_t launch_shell_class_fock(unsigned, cudaStream_t, bool, unsigned, const void*,
                                     const std::uint32_t*, const std::int64_t*, const void*,
                                     const double*, const void*, double, const double*,
-                                    const double*, double*, const std::uint32_t*,
+                                    const double*, runtime::CompensatedOutput, const std::uint32_t*,
                                     std::uint32_t*) noexcept {
   return cudaErrorInvalidValue;
 }
@@ -55,8 +55,8 @@ cudaError_t launch_shell_class_fock(unsigned, cudaStream_t, bool, unsigned, cons
 cudaError_t launch_shell_class_mixed_fock(unsigned, cudaStream_t, bool, unsigned, const void*,
                                           const std::uint32_t*, const std::int64_t*, const void*,
                                           const double*, const void*, double, const double*,
-                                          const double*, double*, const std::uint32_t*,
-                                          std::uint32_t*) noexcept {
+                                          const double*, runtime::CompensatedOutput,
+                                          const std::uint32_t*, std::uint32_t*) noexcept {
   return cudaErrorInvalidValue;
 }
 
@@ -69,49 +69,44 @@ cudaError_t launch_ppps_resident(cudaStream_t, bool, const void*, const void*, c
 cudaError_t launch_shell_class_streaming_fock(unsigned, cudaStream_t, bool, unsigned, const void*,
                                               const std::int64_t*, const void*, const double*,
                                               const void*, double, bool, double, const double*,
-                                              const double*, double*, std::uint32_t*,
-                                              unsigned long long*, unsigned long long*) noexcept {
+                                              const double*, runtime::CompensatedOutput,
+                                              std::uint32_t*, unsigned long long*,
+                                              unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 
-cudaError_t launch_shell_class_work_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
-                                                   const void*, const std::int64_t*, const void*,
-                                                   const double*, const void*, double, bool, double,
-                                                   const double*, const double*, double*,
-                                                   std::uint32_t*, unsigned long long*,
-                                                   unsigned long long*) noexcept {
+cudaError_t launch_shell_class_work_streaming_fock(
+    unsigned, cudaStream_t, bool, unsigned, const void*, const std::int64_t*, const void*,
+    const double*, const void*, double, bool, double, const double*, const double*,
+    runtime::CompensatedOutput, std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 
-cudaError_t launch_shell_class_rys_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
-                                                  const void*, const std::int64_t*, const void*,
-                                                  const double*, const void*, double, bool, double,
-                                                  const double*, const double*, double*,
-                                                  std::uint32_t*, unsigned long long*,
-                                                  unsigned long long*) noexcept {
+cudaError_t launch_shell_class_rys_streaming_fock(
+    unsigned, cudaStream_t, bool, unsigned, const void*, const std::int64_t*, const void*,
+    const double*, const void*, double, bool, double, const double*, const double*,
+    runtime::CompensatedOutput, std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 
-cudaError_t launch_shell_class_k_block_streaming_fock(unsigned, cudaStream_t, bool, unsigned,
-                                                      const void*, const std::int64_t*, const void*,
-                                                      const double*, const void*, double, bool,
-                                                      double, const double*, const double*, double*,
-                                                      std::uint32_t*, unsigned long long*,
-                                                      unsigned long long*) noexcept {
+cudaError_t launch_shell_class_k_block_streaming_fock(
+    unsigned, cudaStream_t, bool, unsigned, const void*, const std::int64_t*, const void*,
+    const double*, const void*, double, bool, double, const double*, const double*,
+    runtime::CompensatedOutput, std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 
 cudaError_t launch_shell_class_rys_task_streaming_fock(
     unsigned, cudaStream_t, bool, unsigned, const void*, const std::int64_t*, const void*,
-    const double*, const void*, double, bool, double, const double*, const double*, double*,
-    std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
+    const double*, const void*, double, bool, double, const double*, const double*,
+    runtime::CompensatedOutput, std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 
 cudaError_t launch_shell_class_rys_task_work_streaming_fock(
     unsigned, cudaStream_t, bool, unsigned, const void*, const std::int64_t*, const void*,
-    const double*, const void*, double, bool, double, const double*, const double*, double*,
-    std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
+    const double*, const void*, double, bool, double, const double*, const double*,
+    runtime::CompensatedOutput, std::uint32_t*, unsigned long long*, unsigned long long*) noexcept {
   return cudaErrorNotSupported;
 }
 

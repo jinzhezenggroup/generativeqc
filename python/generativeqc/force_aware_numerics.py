@@ -58,6 +58,7 @@ class ObservableDelta:
     force_components: tuple[tuple[float, float, float], ...]
 
     def __post_init__(self) -> None:
+        """Validate nonnegative energy/force errors and freeze force components."""
         object.__setattr__(self, "energy_abs", _number(self.energy_abs, "energy error"))
         values = _forces(self.force_components, "force-component errors")
         if np.any(values < 0):
@@ -89,10 +90,12 @@ class ObservableDelta:
 
     @property
     def force_max_abs(self) -> float:
+        """Return the largest absolute force-component error."""
         return float(np.max(self.force_array))
 
     @property
     def force_rms(self) -> float:
+        """Return the force-component RMS error with scaling for finite extremes."""
         values = self.force_array
         scale = float(np.max(values))
         if scale == 0.0:
@@ -103,21 +106,25 @@ class ObservableDelta:
 
     @property
     def per_atom_max_abs(self) -> tuple[float, ...]:
+        """Return each atom's largest absolute Cartesian force-component error."""
         return tuple(float(v) for v in np.max(self.force_array, axis=1))
 
     @property
     def per_atom_l2(self) -> tuple[float, ...]:
         # hypot.reduce scales internally, avoiding the square/accumulate
         # underflow/overflow of an ordinary Euclidean norm for finite extremes.
+        """Return stable Euclidean norms of the per-atom force errors."""
         return tuple(float(v) for v in np.hypot.reduce(self.force_array, axis=1))
 
     @property
     def force_array(self) -> np.ndarray:
+        """Return force-component errors as a floating-point NumPy array."""
         return np.asarray(self.force_components, dtype=float)
 
     def scaled(
         self, energy_factor: typing.Any, force_factor: typing.Any
     ) -> ObservableDelta:
+        """Return energy and force errors multiplied by separate nonnegative factors."""
         energy_factor = _number(energy_factor, "energy scale")
         force_factor = _number(force_factor, "force scale")
         return ObservableDelta(
@@ -146,6 +153,7 @@ class TargetErrorBudget:
     force_rms: float | None = None
 
     def __post_init__(self) -> None:
+        """Require positive energy, maximum-force, and optional RMS-force tolerances."""
         object.__setattr__(
             self, "energy_abs", _number(self.energy_abs, "energy target", positive=True)
         )
@@ -162,6 +170,7 @@ class TargetErrorBudget:
             )
 
     def ratios(self, delta: ObservableDelta) -> tuple[float, ...]:
+        """Return energy, maximum-force, and optional RMS errors divided by targets."""
         values = (
             delta.energy_abs / self.energy_abs,
             delta.force_max_abs / self.force_max_abs,
@@ -171,6 +180,7 @@ class TargetErrorBudget:
         return values
 
     def accepts(self, delta: ObservableDelta) -> bool:
+        """Report whether every configured error-to-target ratio is at most one."""
         return max(self.ratios(delta)) <= 1.0
 
 
@@ -190,6 +200,7 @@ class NumericalTargetModel:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
+        """Validate target identities, derivative semantics, and fitting metadata."""
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ValueError("unsupported numerical-target-model schema")
         for name in (
@@ -228,6 +239,7 @@ class NumericalTargetModel:
 
     @property
     def identity(self) -> str:
+        """Return the canonical hash of all numerical target fields."""
         return canonical_hash(asdict(self))
 
 
@@ -253,6 +265,7 @@ class NumericalContribution:
     block_kind: str = "aggregate"
 
     def __post_init__(self) -> None:
+        """Validate contribution scope, typed errors, timing, and unique metadata."""
         for name in ("source", "block_id", "estimator_kind"):
             _identity(getattr(self, name), name)
         if self.scope not in ("fixed_density", "relaxed_target"):
@@ -308,6 +321,7 @@ class ContributionLedger:
     entries: tuple[NumericalContribution, ...] = ()
 
     def __post_init__(self) -> None:
+        """Freeze typed contributions with unique source/block/scope identities."""
         _identity(self.target_id, "target identity")
         _identity(self.geometry_id, "geometry identity")
         entries = tuple(self.entries)
@@ -321,6 +335,11 @@ class ContributionLedger:
     def estimated_absolute_envelope(
         self, *, scope: str, sources: typing.Iterable[str] | None = None
     ) -> ObservableDelta:
+        """Sum selected absolute error estimates for a scope and optional sources.
+
+        Raise ValueError if no estimates match. The envelope aggregates empirical
+        estimates; it is not a rigorous error bound.
+        """
         selected_sources = None if sources is None else set(sources)
         selected = [
             item.estimate
@@ -346,6 +365,7 @@ class ContributionLedger:
 
     @property
     def estimator_seconds(self) -> float:
+        """Return the total estimator time recorded by all ledger entries."""
         return sum(item.estimator_seconds for item in self.entries)
 
 
@@ -361,6 +381,7 @@ class PairedCalibrationSample:
     strict_error: ObservableDelta
 
     def __post_init__(self) -> None:
+        """Validate calibration identities and matching paired/strict force shapes."""
         for name in ("family", "sample_id", "method", "numerical_family_id"):
             _identity(getattr(self, name), name)
         if self.paired_delta.force_array.shape != self.strict_error.force_array.shape:
@@ -378,6 +399,7 @@ class NumericalEstimate:
     method: str | None = None
 
     def __post_init__(self) -> None:
+        """Validate the typed error estimate, calibration assumptions, and timing."""
         if self.method is not None:
             _identity(self.method, "estimate method")
         if not isinstance(self.delta, ObservableDelta):
@@ -412,6 +434,7 @@ class PairedDifferenceEstimator:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
+        """Validate calibration domains, positive scales/floors, and safety factor."""
         if self.schema_version != 1 or type(self.schema_version) is not int:
             raise ValueError("unsupported paired-estimator schema")
         methods = tuple(sorted(set(self.methods)))
@@ -452,6 +475,12 @@ class PairedDifferenceEstimator:
         energy_floor: typing.Any = 1e-12,
         force_floor: typing.Any = 1e-10,
     ) -> PairedDifferenceEstimator:
+        """Calibrate conservative empirical scale factors from paired/strict errors.
+
+        Require unique samples spanning at least two molecular families in one
+        numerical-level family. Apply the safety factor to maximum observed error
+        ratios and retain scale factors of at least one.
+        """
         samples = tuple(samples)
         if not samples or any(
             not isinstance(x, PairedCalibrationSample) for x in samples
@@ -492,6 +521,7 @@ class PairedDifferenceEstimator:
 
     @property
     def identity(self) -> str:
+        """Return the canonical hash of calibration domains, scales, and provenance."""
         return canonical_hash(asdict(self))
 
     def predict(
@@ -502,6 +532,11 @@ class PairedDifferenceEstimator:
         numerical_family_id: str,
         estimator_seconds: typing.Any = 0.0,
     ) -> NumericalEstimate:
+        """Scale floored paired errors within the calibrated method and level family.
+
+        Return an empirical estimate carrying calibration identity, assumptions,
+        and timing. Reject methods or numerical families outside calibration.
+        """
         if method not in self.methods:
             raise ValueError("method is outside paired-estimator calibration domain")
         if numerical_family_id != self.numerical_family_id:
@@ -640,6 +675,7 @@ class NumericalLevel:
     strict: bool = False
 
     def __post_init__(self) -> None:
+        """Validate level/grid identities, nonnegative rank/screening, and strict flag."""
         _identity(self.name, "level name")
         _identity(self.grid_identity, "grid identity")
         if type(self.rank) is not int or self.rank < 0:
@@ -665,6 +701,7 @@ class DiscreteTransition:
     to_mask: str | None = None
 
     def __post_init__(self) -> None:
+        """Validate transition, geometry, reason, and optional mask identities."""
         for name in ("from_level", "to_level", "reason", "geometry_id"):
             _identity(getattr(self, name), name)
         for name in ("from_mask", "to_mask"):
@@ -675,6 +712,8 @@ class DiscreteTransition:
 
 @dataclass(frozen=True)
 class AdaptiveNumericsState:
+    "Selected numerical level and hysteresis history for one geometry sequence."
+
     level_index: int
     safe_streak: int = 0
     transitions: tuple[DiscreteTransition, ...] = ()
@@ -683,6 +722,8 @@ class AdaptiveNumericsState:
 
 @dataclass(frozen=True)
 class NumericalDecision:
+    "Proposed numerical policy action, resulting state, and error-budget evidence."
+
     action: str
     state: AdaptiveNumericsState
     reason: str
@@ -700,6 +741,7 @@ class AdaptiveNumericsPolicy:
     strict_reproducible: bool = False
 
     def __post_init__(self) -> None:
+        """Require ordered unique levels ending in one strict level and valid controls."""
         levels = tuple(self.levels)
         if not levels or any(not isinstance(x, NumericalLevel) for x in levels):
             raise ValueError("policy requires typed numerical levels")
@@ -729,6 +771,7 @@ class AdaptiveNumericsPolicy:
     def initial_state(
         self, *, start_index: int = 0, mask_identity: str | None = None
     ) -> AdaptiveNumericsState:
+        """Create a validated state, forcing the final level in strict reproducible mode."""
         if type(start_index) is not int or not 0 <= start_index < len(self.levels):
             raise ValueError("invalid initial numerical level")
         if mask_identity is not None:

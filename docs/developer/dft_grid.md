@@ -305,6 +305,74 @@ jets as O(njet*npoint_tile*NAO), and partition scratch as O(npoint_tile*natom).
 A complete molecular grid-by-AO-by-jet array is never required.
 `NativeAO.evaluate` additionally supports partial AO slices for validation.
 
+### Resident exact AO maps
+
+`CudaGrid.prepare_ao_map_device_points(..., exact=True)` evaluates the same
+through-order sampled-jet predicate as `select_ao_device_points`, including its
+strict `abs(jet) > cutoff` boundary. Here **exact** means identical AO labels at
+the explicit cutoff, not an unscreened energy/force calculation or an error
+certificate. The generated producer shares the radial/axis arithmetic emitter
+with collocation, checks every jet for nonfinite values and writes tile bitmasks
+instead of a full discovery jet panel. It still evaluates the full point/AO/jet
+domain; diagnostics count that work rather than claiming it disappeared.
+
+The private `exact-jets-native-bitmask` force producer reuses the existing
+compiler-visible `AoGridBlockLayout` and density gather/contraction/scatter
+schedules. Labels stay on device: compact per-tile counts cross the host
+boundary once, and same-stream sorted compaction supplies one rebased AO span
+per indexed tile. Retained numeric storage is
+`4 * tiles * ceil(nao/32) + 16 * (tiles+1) + 8 * nao` bytes, independent of
+occupancy. Counts include both the host offset mirror and device offsets.
+The existing full-capacity consumer arena remains charged separately.
+`ExactAoMapResources` admits this finite numeric owner, not the caller's entire
+optional cache allowance. Insufficient headroom reserves zero and keeps dense
+execution; unused cache allowance remains available to the integral provider.
+
+Maps bind immutable basis/geometry/grid identities, point order, device,
+derivative order and tile shape. An order-1 map cannot serve an order-2 force.
+Budget, capability and high-occupancy misses retain the dense domain, and map
+admission cannot spend the native integral provider's reserved allowance.
+Production producer/crossover selection is unchanged. Use the qualification
+runner `python -m benchmarks.readme_pbe0_indexed_becke` with
+`--force-producer exact-jets-native-bitmask` to compare complete endpoints.
+
+### Generated Becke atom adjoints
+
+`GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE=normalized-adjoints` selects an
+experimental lowering of the authenticated equal-radius normalized-product AD
+composition. The canonical scalar graph emits the exp pullback with its primal
+product already bound and the log pullback without an unused primal logarithm.
+Atom adjoints are produced at the normalization boundary and reused by incident
+pairs. Exact single-zero and multiple-zero semantics, ordered four-word reverse
+and atom gather, moving points and geometry rebinding remain intact. The dead
+distance-adjoint field is reused until gather; no additional scratch or launch
+is required. Overflow/premature-underflow cuts use the original pair reverse.
+
+The default remains `off`. The older `coefficients` experiment and ordinary
+phased/generic AD routes remain available; old artifacts lacking the normalized
+adjoint ABI retain their ordinary route. This lowering reassociates pullback
+arithmetic and requires independent derivative and complete E/F gates. The
+qualification runner accepts `--becke-primitive normalized-adjoints`; isolated
+kernel timing or producer selection alone does not authorize promotion.
+
+An admitted normalized-adjoint first-derivative owner also skips partition VJP
+work for an exactly zero FP64 cotangent. This is not a weight/product cutoff:
+point/center distance and owner validation still run, skipped gather outputs
+are explicitly zeroed, and AO, external and moving-grid contributions remain
+independent. The shortcut requires the geometry separation tolerance to be at
+least `1e-12`; smaller tolerances and other derivative routes retain ordinary
+execution. It does not apply to Hessians or response.
+
+`GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED=off|on` is a qualification override
+configured once before topology installation. Unspecified controls preserve
+older artifacts; an explicit override requires the new native capability.
+The default primitive selection is still `off`. Work metrics distinguish dense
+launched domains from actually evaluated pairs and report elided logical
+pair-panel bytes, not hardware transactions. The cumulative device count uses
+the existing control allocation; its readback is charged to D2H and
+synchronization metrics. See the
+[decision and qualification evidence](../../.agents/notes/implemented/performance/2026-10-09-becke-zero-cotangent-elision.md).
+
 CUDA selection is explicit and requires an artifact from
 `compile_cuda(CudaCompilerAdapter(...), cache)`, using the shared finite NVCC
 adapter and verified native-runtime cache. The source also compiles in the

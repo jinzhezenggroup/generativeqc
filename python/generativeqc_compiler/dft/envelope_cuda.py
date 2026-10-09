@@ -170,13 +170,13 @@ __global__ void ao_region_mask_kernel(const double* basis, size_t atoms,
 
 __global__ void ao_region_compact_kernel(const unsigned* masks, size_t words,
                                         size_t tiles, const size_t* offsets,
-                                        size_t* indices) {
+                                        size_t* indices, bool rebase = false) {
   // Ascending word/lane order is the sorted-unique AO invariant. Only integer
   // prefix sums are parallelized; this is not a scientific reduction.
   __shared__ size_t prefix[5];
   const unsigned lane = threadIdx.x % 32, warp = threadIdx.x / 32;
   for (size_t tile = blockIdx.x; tile < tiles; tile += gridDim.x) {
-    if (!threadIdx.x) prefix[4] = offsets[tile];
+    if (!threadIdx.x) prefix[4] = rebase ? 0 : offsets[tile];
     __syncthreads();
     for (size_t first = 0; first < words; first += 4) {
       const size_t word = first + warp;

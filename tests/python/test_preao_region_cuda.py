@@ -42,10 +42,14 @@ def download(
 
 @pytest.mark.parametrize("name", NAMES)
 @pytest.mark.parametrize("order", range(4))
+@pytest.mark.parametrize(
+    "producer", ["pre-ao-envelope-native-csr", "exact-jets-native-bitmask"]
+)
 def test_preao_csr_matches_independent_box_and_full_ao_oracles(
     artifact: typing.Any,
     name: str,
     order: int,
+    producer: str,
 ) -> None:
     """Cover signed contractions, spherical/cartesian jets, nodes and empty tails."""
     import cupy as cp
@@ -86,11 +90,28 @@ def test_preao_csr_matches_independent_box_and_full_ao_oracles(
                 7,
                 order,
             )
+            exact_labels = {}
+            if producer == "exact-jets-native-bitmask":
+                for begin in range(0, len(points), 7):
+                    exact_labels[begin] = cuda.select_ao_device_points(
+                        domain.point_pointer + 24 * begin,
+                        min(7, len(points) - begin),
+                        cutoff=cutoff,
+                    )
+            discovery_before = cuda.metrics()["ao_grid_work"]["discovery_ao_jet_values"]
             maps = ResidentDeviceAoMapOwner(
-                cuda, domain, cutoff=cutoff, budget_bytes=1 << 20
+                cuda,
+                domain,
+                cutoff=cutoff,
+                budget_bytes=1 << 20,
+                producer=producer,
             )
             assert maps.work["native_csr_ready"]
-            assert cuda.metrics()["ao_grid_work"]["discovery_ao_jet_values"] == 0
+            assert cuda.metrics()["ao_grid_work"][
+                "discovery_ao_jet_values"
+            ] - discovery_before == (
+                len(points) * basis.nao * len(jet_indices(order)) if exact_labels else 0
+            )
             expected_visits = 0
             for begin in range(0, len(points), 7):
                 end = min(begin + 7, len(points))
@@ -122,7 +143,10 @@ def test_preao_csr_matches_independent_box_and_full_ao_oracles(
                         task,
                     )
                 assert np.all(ids[:-1] < ids[1:])
-                assert set(required) <= set(ids)
+                if exact_labels:
+                    np.testing.assert_array_equal(ids, exact_labels[begin])
+                else:
+                    assert set(required) <= set(ids)
                 omitted = np.setdiff1d(np.arange(basis.nao), ids)
                 if len(omitted):
                     assert np.max(np.abs(full[:, begin:end, omitted])) <= cutoff
@@ -156,8 +180,12 @@ def test_preao_csr_matches_independent_box_and_full_ao_oracles(
                 pass
 
 
+@pytest.mark.parametrize(
+    "producer", ["pre-ao-envelope-native-csr", "exact-jets-native-bitmask"]
+)
 def test_preao_occupancy_guard_executes_the_complete_dense_domain(
     artifact: typing.Any,
+    producer: str,
 ) -> None:
     """Declining sparsity changes scheduling, never the evaluated AO inventory."""
     import cupy as cp
@@ -195,6 +223,7 @@ def test_preao_occupancy_guard_executes_the_complete_dense_domain(
             cutoff=1e-16,
             budget_bytes=1 << 20,
             max_active_fraction=1e-6,
+            producer=producer,
         )
         assert maps.work["occupancy_declined"]
         assert not maps.work["native_csr_ready"]
@@ -213,8 +242,70 @@ def test_preao_occupancy_guard_executes_the_complete_dense_domain(
         assert maps.work["point_ao_visits"] == view.npoint * basis.nao
 
 
+@pytest.mark.parametrize("budget_delta", [-1, 0, 1])
+def test_exact_bitmask_budget_boundary_and_empty_tail(
+    artifact: typing.Any, budget_delta: int
+) -> None:
+    """Admit the complete bitmask/span reservation, never a partial inventory."""
+    import cupy as cp
+
+    meta, arrays = load_fixture("water")
+    with (
+        NativeAO(**basis_arguments(meta)) as basis,
+        CudaGrid(
+            basis,
+            artifact,
+            order=2,
+            tile_points=7,
+            active_ao_capacity=basis.nao,
+            ingredients=("rho", "gradient"),
+        ) as cuda,
+    ):
+        points = np.ascontiguousarray(
+            np.concatenate(
+                (
+                    arrays["points"][:7],
+                    np.array([[100.0, 101.0, 102.0]]),
+                )
+            )
+        )
+        device_points = cp.asarray(points)
+        cp.cuda.get_current_stream().synchronize()
+        cuda.set_density(arrays["density"])
+        domain = ResidentAoMapDomain(
+            basis.identity,
+            "fixture-centers",
+            "exact-budget-tail",
+            cuda.device_id,
+            device_points.data.ptr,
+            len(points),
+            7,
+            2,
+        )
+        peak = 4 * 2 * ((basis.nao + 31) // 32) + 16 * 3 + 8 * basis.nao
+        maps = ResidentDeviceAoMapOwner(
+            cuda,
+            domain,
+            cutoff=1e-16,
+            budget_bytes=peak + budget_delta,
+            producer="exact-jets-native-bitmask",
+        )
+        assert maps.work["native_csr_ready"] is (budget_delta >= 0)
+        assert maps.work["retained_map_bytes"] == (peak if budget_delta >= 0 else 0)
+        with maps.feature_task(cuda, domain, 7, 1, ("rho", "sigma")) as task:
+            assert task.layout.nactive == (0 if budget_delta >= 0 else basis.nao)
+            task.scatter(
+                np.zeros((2, task.layout.nactive, task.layout.nactive)), download=True
+            )
+        assert maps.work["dense_budget_tiles"] == int(budget_delta < 0)
+
+
+@pytest.mark.parametrize("exact", [False, True])
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf, -np.inf])
 def test_preao_overflow_retains_and_bad_points_fail_closed(
     artifact: typing.Any,
+    exact: bool,
+    bad_value: float,
 ) -> None:
     """The producer must not use underflow or invalid coordinates to omit AOs."""
     import cupy as cp
@@ -239,7 +330,7 @@ def test_preao_overflow_retains_and_bad_points_fail_closed(
             producer="pre-ao-envelope",
         )
         assert len(selected) == basis.nao
-        points = cp.asarray([[np.nan, 0.0, 0.0]])
+        points = cp.asarray([[bad_value, 0.0, 0.0]])
         cp.cuda.get_current_stream().synchronize()
         with pytest.raises(RuntimeError, match="nonfinite"):
             cuda.prepare_ao_map_device_points(
@@ -248,4 +339,5 @@ def test_preao_overflow_retains_and_bad_points_fail_closed(
                 cutoff=1e-16,
                 budget_bytes=8192,
                 identity="bad-points",
+                exact=exact,
             )

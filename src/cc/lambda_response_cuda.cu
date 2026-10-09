@@ -21,6 +21,7 @@
 #include "cc/df_lambda.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "response/solve.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "tensor/cuda_error.hpp"
 
 namespace generativeqc::cc {
@@ -282,6 +283,14 @@ class CudaLambdaActions {
     target.df_gemm_summands = d.df_gemm_summands;
     target.df_packing_output_bytes = d.df_packing_output_bytes;
     target.df_provider_allowance_bytes = d.df_provider_allowance_bytes;
+    target.df_core_reuse = d.df_core_reuse;
+    target.df_core_reuse_bytes = d.df_core_reuse_bytes;
+    target.df_core_reuse_preparations = d.df_core_reuse_preparations;
+    target.df_core_reuse_actions = d.df_core_reuse_actions;
+    target.core_reuse_plan_hash = d.core_reuse_plan_hash;
+    target.df_audit_matrix_gemm = d.df_audit_matrix_gemm;
+    target.df_audit_arena_bytes = d.df_audit_arena_bytes;
+    target.audit_schedule_hash = d.audit_schedule_hash;
 
     target.shared_program_hash = d.shared_program_hash;
     target.independent_program_hash = d.independent_program_hash;
@@ -456,6 +465,9 @@ double max_abs(std::span<const double> values) {
 LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<const double> t1_source,
                         std::span<const double> t2_source, int device, const LambdaOptions& options,
                         CudaFixedOrbitalResponseResult* fixed_orbital) {
+  using Trace = runtime::df_progress::Scope;
+  Trace complete("cc_lambda_complete");
+  Trace initialization("cc_lambda_initialization");
   validate_problem(p, true);
   validate_lambda_options(options);
   if (!cc.converged())
@@ -475,6 +487,35 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
         throw std::invalid_argument("nonfinite RCCSD CUDA Lambda energy source");
 
   CudaLambdaActions owner(p, cc, options, device, with_source, fixed_orbital != nullptr);
+  const auto work_snapshot = [&] {
+    LambdaDiagnostic snapshot;
+    if (complete.enabled()) {
+      owner.df_diagnostic(snapshot);
+      snapshot.h2d_bytes = owner.h2d_bytes();
+      snapshot.d2h_bytes = owner.d2h_bytes();
+      snapshot.synchronizations = owner.synchronizations();
+    }
+    return snapshot;
+  };
+  const auto trace_work = [&](const LambdaDiagnostic& before) {
+    if (!complete.enabled()) return;
+    const auto after = work_snapshot();
+    Trace::number("lambda_gemm_calls", after.df_gemm_calls - before.df_gemm_calls);
+    Trace::number("lambda_generated_kernels",
+                  after.df_generated_kernels - before.df_generated_kernels);
+    Trace::number("lambda_q_batches", after.df_auxiliary_batches - before.df_auxiliary_batches);
+    Trace::number("lambda_packing_output_bytes",
+                  after.df_packing_output_bytes - before.df_packing_output_bytes);
+    Trace::number("lambda_contraction_summands",
+                  after.df_contraction_terms - before.df_contraction_terms);
+    Trace::number("lambda_h2d_bytes", after.h2d_bytes - before.h2d_bytes);
+    Trace::number("lambda_d2h_bytes", after.d2h_bytes - before.d2h_bytes);
+    Trace::number("lambda_synchronizations", after.synchronizations - before.synchronizations);
+  };
+  trace_work(LambdaDiagnostic{});
+  initialization.finish();
+  Trace primal_replay("cc_lambda_primal_replay");
+  auto phase_work = work_snapshot();
   const auto& layout = owner.layout();
   double replay_energy = 0.0;
   std::vector<double> dense_one, dense_two;
@@ -485,6 +526,10 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
       std::abs(replay_energy - cc.correlation_energy) > 1e-10)
     throw std::runtime_error("RCCSD CUDA Lambda fresh primal replay gate failed");
 
+  trace_work(phase_work);
+  primal_replay.finish();
+  Trace rhs_trace("cc_lambda_rhs");
+  phase_work = work_snapshot();
   owner.rhs(false, dense_one, dense_two);
   std::vector<double> rhs(layout.dimension());
   layout.pack_weighted(dense_one, dense_two, rhs);
@@ -505,9 +550,11 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
 
   std::vector<double> seed_one(layout.n1), seed_two(layout.n2), action_one, action_two;
   auto apply = [&](std::span<const double> input, std::span<double> output) {
+    const auto before = work_snapshot();
     layout.unpack_weighted(input, seed_one, seed_two);
     owner.transpose(false, seed_one, seed_two, action_one, action_two);
     layout.pack_weighted(action_one, action_two, output);
+    trace_work(before);
   };
 
   const auto response_problem =
@@ -521,11 +568,17 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
       options.diagonal_preconditioning &&
       detail::fill_lambda_diagonal_preconditioner(p, layout.representatives, layout.partners,
                                                   options.gmres.breakdown_tolerance, independent);
+  trace_work(phase_work);
+  rhs_trace.finish();
+  Trace gmres_trace("cc_lambda_gmres");
   auto solved = response::solve_response(
       response_plan, response_problem, rhs, {},
       preconditioned ? std::span<const double>(independent) : std::span<const double>{});
   if (!solved.converged()) throw std::runtime_error("RCCSD CUDA Lambda GMRES did not converge");
 
+  gmres_trace.finish();
+  Trace audit_trace("cc_lambda_independent_audit");
+  phase_work = work_snapshot();
   layout.unpack_weighted(solved.solution, seed_one, seed_two);
   owner.transpose(true, seed_one, seed_two, action_one, action_two);
   layout.pack_weighted(action_one, action_two, independent);
@@ -548,6 +601,10 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
       options.lambda_tolerance)
     throw std::runtime_error("RCCSD CUDA Lambda independent physical residual gate failed");
 
+  trace_work(phase_work);
+  audit_trace.finish();
+  Trace publication_trace("cc_lambda_parameter_factor_vjp");
+  phase_work = work_snapshot();
   LambdaResult result;
   result.lambda1.resize(layout.n1);
   result.lambda2.resize(layout.n2);
@@ -596,6 +653,7 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   result.diagnostic.d2h_bytes = owner.d2h_bytes();
   result.diagnostic.synchronizations = owner.synchronizations();
   result.diagnostic.cuda_actions = true;
+  trace_work(phase_work);
   result.diagnostic.shared_program_hash = generated::lambda_transpose_program_hash;
   result.diagnostic.independent_program_hash =
       generated::lambda_independent_transpose_selected_program_hash(p.nocc, p.nvir);
