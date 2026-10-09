@@ -54,6 +54,8 @@ struct Fixture {
   Device<double> residual{kTotal}, mixed{kTotal}, delta_f{kTotal}, new_u{kTotal};
   Device<double> beta, coefficients;
   Device<std::uint32_t> stage_sequence{1}, canonical_sequence{1}, device_error{1};
+  Device<Gfn2SccMixerDeviceReceipt> receipts{3};
+  Device<std::uint64_t> receipt_count{1};
   Gfn2SccDeviceBatch batch;
   Gfn2SccDeviceConstMultipoles raw;
   Gfn2SccDeviceMultipoles output;
@@ -104,6 +106,9 @@ struct Fixture {
     workspace.beta = beta.p;
     workspace.coefficients = coefficients.p;
     workspace.sequence_active = stage_sequence.p;
+    workspace.receipts = receipts.p;
+    workspace.receipt_count = receipt_count.p;
+    workspace.receipt_capacity = 3;
     workspace.vector_elements = kTotal;
     workspace.beta_elements = 3 * m * m;
     workspace.coefficient_elements = 3 * m;
@@ -155,6 +160,7 @@ struct Fixture {
     }
   }
   void launch() {
+    receipt_count.p[0] = 0;
     if (graph_mode)
       checked(cudaGraphLaunch(executable, stream));
     else
@@ -191,6 +197,31 @@ struct Fixture {
     if (device_error.p[0] != sticky_before)
       throw std::runtime_error("CUDA transition reported device error " +
                                std::to_string(device_error.p[0]));
+    if (receipt_count.p[0] != 3)
+      throw std::runtime_error("ragged CUDA mixer receipt count disagrees with active members");
+    std::array<bool, 3> seen{};
+    for (std::size_t index = 0; index < 3; ++index) {
+      const auto& receipt = receipts.p[index];
+      if (receipt.invocation != index || receipt.system < 0 || receipt.system >= 3 ||
+          seen[receipt.system])
+        throw std::runtime_error("ragged CUDA mixer receipt identity is invalid");
+      const auto s = static_cast<std::size_t>(receipt.system);
+      seen[s] = true;
+      const auto live = std::min<std::uint64_t>(memory, old[s]);
+      const auto dimension = static_cast<std::uint64_t>(kVectorOffsets[s + 1] - kVectorOffsets[s]);
+      const auto expected_stages = kMixerResidual | kMixerCommitted |
+                                   (live ? kMixerHistory | kMixerSolve | kMixerCombination : 0u);
+      if (receipt.iteration_before != old[s] || receipt.restart_before != restarts.p[s] ||
+          receipt.vector_elements != static_cast<std::int64_t>(dimension) ||
+          receipt.live_history != static_cast<std::int64_t>(live) ||
+          (live && receipt.new_slot != static_cast<std::int64_t>((old[s] - 1) % memory)) ||
+          receipt.coefficient_dot_elements != live * dimension ||
+          receipt.gram_dot_elements != live * live * dimension ||
+          receipt.combination_elements != live * dimension ||
+          receipt.completed_stages != expected_stages ||
+          receipt.status != GENERATIVEQC_XTB_STATUS_SUCCESS)
+        throw std::runtime_error("ragged CUDA mixer receipt disagrees with ring work");
+    }
     for (std::size_t s = 0; s < 3; ++s) {
       if (statuses.p[s] != GENERATIVEQC_XTB_STATUS_SUCCESS || iterations.p[s] != old[s] + 1)
         throw std::runtime_error("CUDA transition did not commit every healthy member");
@@ -278,6 +309,14 @@ struct Fixture {
     const auto previous_status = statuses.p[0];
     const auto sticky_before = device_error.p[0];
     launch();
+    if (receipt_count.p[0] != 1 || receipts.p[0].system != 0 ||
+        receipts.p[0].status != GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR ||
+        (receipts.p[0].completed_stages & kMixerCommitted) != 0)
+      throw std::runtime_error("failed CUDA member leaked a peer or committed receipt");
+    if (kind == 1 && (receipts.p[0].coefficient_dot_elements >=
+                          std::min<std::uint64_t>(memory, iterations.p[0]) * 10u ||
+                      receipts.p[0].completed_stages != kMixerResidual))
+      throw std::runtime_error("nonfinite dot completed history or counted unvisited components");
     const bool failed = statuses.p[0] == GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR &&
                         device_error.p[0] != 0 &&
                         (sticky_before == 0 || device_error.p[0] == sticky_before);

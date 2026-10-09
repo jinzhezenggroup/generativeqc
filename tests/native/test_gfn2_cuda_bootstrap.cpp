@@ -3,6 +3,7 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -131,6 +132,148 @@ void failed(const Result& result) {
   }
 }
 
+void verify_mixer_receipts(const Molecule& molecule, bool device_input) {
+  Gfn2CudaExecutionCache baseline_cache(0, nullptr);
+  Gfn2CudaExecutionCache measured_cache(0, nullptr);
+  require(measured_cache.enable_mixer_diagnostics(), "could not enable mixer receipts");
+  const auto baseline_start = std::chrono::steady_clock::now();
+  const auto baseline = run(baseline_cache, molecule, device_input);
+  const auto baseline_stop = std::chrono::steady_clock::now();
+  const auto measured = run(measured_cache, molecule, device_input);
+  const auto measured_stop = std::chrono::steady_clock::now();
+  oracle(baseline, molecule);
+  oracle(measured, molecule);
+  const auto maximum_force_difference = [](const Result& first, const Result& second) {
+    double maximum = 0.0;
+    for (std::size_t index = 0; index < first.forces.size(); ++index)
+      maximum = std::max(maximum, std::abs(first.forces[index] - second.forces[index]));
+    return maximum;
+  };
+  constexpr double kEndpointAgreement = 5e-14;
+  const bool equivalent = std::abs(measured.energy[0] - baseline.energy[0]) <= kEndpointAgreement &&
+                          maximum_force_difference(measured, baseline) <= kEndpointAgreement &&
+                          measured.iterations == baseline.iterations &&
+                          measured.statuses == baseline.statuses &&
+                          measured.converged == baseline.converged;
+  if (!equivalent) {
+    Gfn2CudaExecutionCache control_cache(0, nullptr);
+    const auto control = run(control_cache, molecule, device_input);
+    oracle(control, molecule);
+    std::fprintf(stderr,
+                 "MIXER_AB_DIAGNOSTIC case=%s ingress=%s baseline_energy=%.17g "
+                 "control_energy=%.17g measured_energy=%.17g "
+                 "aa_force_max=%.17g ab_force_max=%.17g "
+                 "iterations=%d,%d,%d statuses=%d,%d,%d\n",
+                 molecule.name.c_str(), device_input ? "device" : "host", baseline.energy[0],
+                 control.energy[0], measured.energy[0], maximum_force_difference(baseline, control),
+                 maximum_force_difference(baseline, measured), baseline.iterations[0],
+                 control.iterations[0], measured.iterations[0], baseline.statuses[0],
+                 control.statuses[0], measured.statuses[0]);
+  }
+  require(equivalent, "mixer receipts changed the complete energy/host-force endpoint");
+
+  Gfn2CudaMixerDiagnosticSnapshot snapshot;
+  std::string error;
+  require(measured_cache.read_mixer_diagnostics(snapshot, error),
+          "completed mixer diagnostic readback failed");
+  require(snapshot.graph_submitted && snapshot.endpoint_completed && snapshot.graph_family != 0 &&
+              snapshot.plan_token != 0 && snapshot.device_id == 0 && snapshot.call_id == 1,
+          "mixer receipts are not bound to a completed device graph call");
+  require(snapshot.attempted_receipts == snapshot.receipts.size() && !snapshot.receipts.empty() &&
+              snapshot.receipts.size() <= static_cast<std::size_t>(measured.iterations[0]),
+          "mixer receipt count is missing or overflowed");
+  std::uint64_t coefficient_elements = 0, gram_elements = 0, combination_elements = 0;
+  std::uint64_t residual_cycles = 0, history_cycles = 0, solve_cycles = 0, combination_cycles = 0;
+  for (std::size_t index = 0; index < snapshot.receipts.size(); ++index) {
+    const auto& receipt = snapshot.receipts[index];
+    coefficient_elements += receipt.coefficient_dot_elements;
+    gram_elements += receipt.gram_dot_elements;
+    combination_elements += receipt.combination_elements;
+    residual_cycles += receipt.residual_elapsed_cycles;
+    history_cycles += receipt.history_elapsed_cycles;
+    solve_cycles += receipt.solve_elapsed_cycles;
+    combination_cycles += receipt.combination_elapsed_cycles;
+    const auto live = std::min<std::uint64_t>(8u, receipt.iteration_before);
+    require(receipt.invocation == index && receipt.system == 0 &&
+                receipt.iteration_before == index && receipt.restart_before == 0 &&
+                receipt.vector_elements > 0 && receipt.status == GENERATIVEQC_XTB_STATUS_SUCCESS &&
+                (receipt.completed_stages & cuda::kMixerCommitted) != 0,
+            "mixer invocation identity or terminal status disagrees with fresh SCC");
+    if (live == 0u) {
+      require(receipt.coefficient_dot_elements == 0 && receipt.gram_dot_elements == 0 &&
+                  receipt.combination_elements == 0 && receipt.live_history == 0,
+              "first mixer invocation falsely reported history algebra");
+      continue;
+    }
+    const auto length = static_cast<std::uint64_t>(receipt.vector_elements);
+    require(receipt.live_history == static_cast<std::int64_t>(live) &&
+                receipt.new_slot == static_cast<std::int64_t>((index - 1u) % 8u) &&
+                receipt.coefficient_dot_elements == live * length &&
+                receipt.gram_dot_elements == live * live * length &&
+                receipt.combination_elements == live * length &&
+                (receipt.completed_stages & (cuda::kMixerResidual | cuda::kMixerHistory |
+                                             cuda::kMixerSolve | cuda::kMixerCombination)) ==
+                    (cuda::kMixerResidual | cuda::kMixerHistory | cuda::kMixerSolve |
+                     cuda::kMixerCombination),
+            "actual mixer history work disagrees with independent ring trajectory");
+  }
+  std::printf(
+      "MIXER_RECEIPT case=%s ingress=%s call=%llu graph=%u invocations=%llu "
+      "coefficient_elements=%llu gram_elements=%llu combination_elements=%llu "
+      "residual_cycles=%llu history_cycles=%llu solve_cycles=%llu "
+      "combination_cycles=%llu\n",
+      molecule.name.c_str(), device_input ? "device" : "host",
+      static_cast<unsigned long long>(snapshot.call_id), snapshot.graph_family,
+      static_cast<unsigned long long>(snapshot.attempted_receipts),
+      static_cast<unsigned long long>(coefficient_elements),
+      static_cast<unsigned long long>(gram_elements),
+      static_cast<unsigned long long>(combination_elements),
+      static_cast<unsigned long long>(residual_cycles),
+      static_cast<unsigned long long>(history_cycles),
+      static_cast<unsigned long long>(solve_cycles),
+      static_cast<unsigned long long>(combination_cycles));
+
+  const auto replay_start = std::chrono::steady_clock::now();
+  const auto replay = run(measured_cache, molecule, device_input);
+  const auto replay_stop = std::chrono::steady_clock::now();
+  oracle(replay, molecule);
+  require(std::abs(replay.energy[0] - measured.energy[0]) <= kEndpointAgreement &&
+              maximum_force_difference(replay, measured) <= kEndpointAgreement &&
+              replay.iterations == measured.iterations && replay.statuses == measured.statuses,
+          "mixer graph replay changed the complete endpoint");
+  Gfn2CudaMixerDiagnosticSnapshot replay_snapshot;
+  require(measured_cache.read_mixer_diagnostics(replay_snapshot, error) &&
+              replay_snapshot.call_id == 2 && replay_snapshot.plan_token == snapshot.plan_token &&
+              replay_snapshot.graph_family == snapshot.graph_family &&
+              replay_snapshot.graph_submitted && replay_snapshot.endpoint_completed &&
+              replay_snapshot.attempted_receipts == snapshot.attempted_receipts &&
+              replay_snapshot.receipts.size() == snapshot.receipts.size(),
+          "mixer graph replay did not reset its call-owned receipts");
+  for (std::size_t index = 0; index < snapshot.receipts.size(); ++index) {
+    const auto& before = snapshot.receipts[index];
+    const auto& after = replay_snapshot.receipts[index];
+    require(after.invocation == before.invocation && after.system == before.system &&
+                after.iteration_before == before.iteration_before &&
+                after.restart_before == before.restart_before &&
+                after.vector_elements == before.vector_elements &&
+                after.live_history == before.live_history && after.new_slot == before.new_slot &&
+                after.coefficient_dot_elements == before.coefficient_dot_elements &&
+                after.gram_dot_elements == before.gram_dot_elements &&
+                after.combination_elements == before.combination_elements &&
+                after.completed_stages == before.completed_stages && after.status == before.status,
+            "mixer graph replay changed semantic work or retained a stale receipt");
+  }
+  const auto seconds = [](auto first, auto last) {
+    return std::chrono::duration<double>(last - first).count();
+  };
+  std::printf(
+      "MIXER_ENDPOINT case=%s ingress=%s baseline_seconds=%.9f "
+      "measured_seconds=%.9f replay_seconds=%.9f\n",
+      molecule.name.c_str(), device_input ? "device" : "host",
+      seconds(baseline_start, baseline_stop), seconds(baseline_stop, measured_stop),
+      seconds(replay_start, replay_stop));
+}
+
 int main(int argc, char** argv) {
   try {
     require(argc == 2, "expected independent fixture path");
@@ -157,6 +300,7 @@ int main(int argc, char** argv) {
     }
     check(cudaSetDevice(0));
     for (bool device_input : {false, true}) {
+      for (const auto& molecule : molecules) verify_mixer_receipts(molecule, device_input);
       Gfn2CudaExecutionCache reused(0, nullptr);
       for (const auto& molecule : molecules) {
         Gfn2CudaExecutionCache cold(0, nullptr);

@@ -9,7 +9,7 @@
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
     "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science and radial Cartesian projection; retain native element-pair parameter composition, CUDA reduction, and error ownership.",
     "src/backends/cuda/gfn2_repulsion.cuh": "Add explicit generated-pair nonfinite arithmetic status.",
-    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback. Build topology storage with neutral numerical images and identity overlap; remove artificial-geometry CPU evaluators and synthetic energy/force smoke. Retain provider factorization checks, invalidate placeholder factor provenance, and require real CUDA epoch-one refresh before SCC/publication. Transfer solver/Params/Jacobi handle lifetime to the shared prepared symmetric-eigen owner; retain context device restoration, staged provider/BLAS call order, epsilon Jacobi settings, numeric arenas and graph/SCC paths.",
+    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback. Build topology storage with neutral numerical images and identity overlap; remove artificial-geometry CPU evaluators and synthetic energy/force smoke. Retain provider factorization checks, invalidate placeholder factor provenance, and require real CUDA epoch-one refresh before SCC/publication. Transfer solver/Params/Jacobi handle lifetime to the shared prepared symmetric-eigen owner; retain context device restoration, staged provider/BLAS call order, epsilon Jacobi settings, numeric arenas and graph/SCC paths. Add a separate default-off, bounded call-owned modified-Broyden receipt diagnostic with graph execution-mode and synchronous endpoint evidence.",
     "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, AO contraction arithmetic and bounded shell-pair schedules; retain native ragged traversal, once-per-system validation/seeding, FP64 atomics, thresholds and whole-system failure publication.",
     "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces. Use compiler-selected 64/256-thread force preflight widths for small/large mean matrix extents; retain once-per-system validation and seed scans, all launches, and fixed 64-lane scientific reductions.",
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
@@ -25,7 +25,7 @@
     "src/backends/cuda/gfn2_scc_setup_topology.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/runtime/gfn2_cuda_topology_staging.cu": "Retire duplicate size arithmetic in favor of GenerativeQC runtime/bounded_workspace.hpp; preserve kernel bodies, host execution order, signed descriptor validation and exact-capacity workspace policy.",
     "src/backends/cuda/gfn2_eigensolver.cu": "Consume the shared method-neutral symmetric-eigen provider and prepared workspace service; declare exact-capacity/mode domains while shared setup owns transactional maxima and checked Jacobi units; retain padded-capacity Jacobi binding, method arena validation, tridiagonal path, host execution order and every CUDA kernel byte. Consume shared phased generalized-eigen reduction and recovery through backend-only lower-triangular tensor lowering; bind actual solve count independently of physical system count and borrowed pointer-table capacity, preserving host call order, separate compacted recovery, provider selection and every device body. Keep the private CUDA ABI isolated from official provider headers through the shared opaque-handle, raw-32-bit-status generalized phase boundary.",
-    "src/backends/cuda/gfn2_scc_mixer.cu": "Consume candidate-selected shared ordered-history TensorIR scalar algebra and chronological-overlay, full Gram/RHS, strided Cholesky and seeded-correction schedules; generated include expansion preserves the complete incumbent translation unit byte-for-byte. Retain native packing, norms, weight/convergence policy, activity guards, launch/barrier order, error wrappers, scratch and persistent publication, and existing compiler FMA policy."
+    "src/backends/cuda/gfn2_scc_mixer.cu": "Consume candidate-selected shared ordered-history TensorIR scalar algebra and chronological-overlay, full Gram/RHS, strided Cholesky and seeded-correction schedules. Retain native packing, norms, weight/convergence policy, activity guards, launch/barrier order, error wrappers, scratch and persistent publication, and existing compiler FMA policy. Add default-off CTA stage-cycle and actual history-visit receipts without changing the ordered arithmetic."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -509,12 +509,12 @@
     "src/backends/cuda/gfn2_scc_mixer.cu": {
       "adapted": true,
       "upstream_sha256": "459cc3347ae983fbb88080dcba6e37951baafda57b3e9c060503bafa094b1bb1",
-      "vendored_sha256": "c4443a26ec4b27a77072f4e26e7f325d2e5b29dcd76fe4a348aa4d504fa953c6"
+      "vendored_sha256": "680502dc15af74512c805092d06b3503f5b1dc0dcf71ed720a59df4a2b1ef1f7"
     },
     "src/backends/cuda/gfn2_scc_mixer.cuh": {
       "adapted": true,
       "upstream_sha256": "60ba9a13d8836614afbdb373ec156cd6ff471d0d03417371aad5c2f472eea3d5",
-      "vendored_sha256": "f5e5ba46749324f136275b48e49e901bffee6a3e834a66ee5d6356162677eb72"
+      "vendored_sha256": "b636b23b26ccd41afcf4418bc0ca1e24400b4cc63cc316a155e514708d683a98"
     },
     "src/backends/cuda/gfn2_scc_potential.cu": {
       "adapted": true,
@@ -614,12 +614,12 @@
     "src/runtime/gfn2_cuda_execution.cu": {
       "adapted": true,
       "upstream_sha256": "593eb50ce83db6f066748a29f41f09438c3cc142b5fc45408fefccf4fed317af",
-      "vendored_sha256": "c79c515ffa76f68cf7035aa1f279927a3bc79fd173f6f5c62487600349096c50"
+      "vendored_sha256": "bf783a65b51ac2e0a14e7b790aeaff65bba6642e3066b27b07d09967bb334980"
     },
     "src/runtime/gfn2_cuda_execution.hpp": {
       "adapted": true,
       "upstream_sha256": "6c2a16e4fcaf87b1731d101976360cce27dc15bdef01e8165cacc136d9cbf974",
-      "vendored_sha256": "87e0e175e0839abf48e0735c46dfc210fd17bac3220fb8a24cd04cb2341c0ab0"
+      "vendored_sha256": "2c36766e13e2a4fa2f63d98423f1df6b8882d2436d939ba6b33741f445cfffc8"
     },
     "src/runtime/gfn2_cuda_topology_staging.cu": {
       "adapted": true,
