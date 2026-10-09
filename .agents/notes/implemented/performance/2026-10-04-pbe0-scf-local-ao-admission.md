@@ -256,7 +256,7 @@ Actual warm work confirms the selected paths:
   still lack an endpoint observer. No task or work proxy is converted to FLOPs.
 
 Machine-readable evidence is
-`benchmarks/results/pbe0-scf-local-ao-20261004/integrated-summary.json`, binding
+`benchmarks/results/pbe0-scf-local-ao-20261004/integrated-summary.json.gz`, binding
 every sample and validation file by SHA256, with actual work and resource
 observers. Raw receipts are retained under the integration checkout's
 `.artifacts/endpoint-5757/` on both local storage and n1. The composition branch

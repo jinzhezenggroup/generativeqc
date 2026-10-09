@@ -40,7 +40,7 @@ the remaining telemetry and prepared-policy mutation regressions independently.
 The earlier statement that #1833 lacks a current-source GPU campaign is
 historical. The frozen Slurm5757 composition at `d40aeafee0bb1e73fc130a9a253efdbf9beb31e8`
 retains 216 independent energy/force pairings in
-`benchmarks/results/pbe0-scf-local-ao-20261004/integrated-summary.json`.
+`benchmarks/results/pbe0-scf-local-ao-20261004/integrated-summary.json.gz`.
 It qualifies that source composition, not each PR's isolated gain or the moving
 master binary. The sampled-jet cutoff remains heuristic, not a certified
 force-error bound.

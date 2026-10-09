@@ -107,6 +107,9 @@ int main() {
         const auto passes = owning_passes(batch, first_pair, second_pair,
                                          std::make_index_sequence<13>{});
         assert(bounded_direct_angular_owner<-2>(batch, first_pair, second_pair) == !passes[8]);
+        const bool complement = bounded_direct_angular_owner<-3>(batch, first_pair, second_pair);
+        assert(complement == (!passes[7] && !passes[8]));
+        assert(unsigned(complement) + unsigned(passes[7]) + unsigned(passes[8]) == 1U);
         unsigned owners = 0;
         for (std::size_t pass = 0; pass < passes.size(); ++pass) {
           assert(passes[pass] == (pass == static_cast<std::size_t>(expected)));

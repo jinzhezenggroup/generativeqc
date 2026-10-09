@@ -46,7 +46,7 @@ iteration limit is modified to force equal work.
 independent references, source/harness checks, native/runtime binary identities,
 compiler-cache receipts, actual launch assessments and rejected experiments.
 `manifest.json` authenticates every stream. `qualification.json` is independently
-recomputed, not trusted as a passing flag. `evidence.json` is the shared numerical
+recomputed, not trusted as a passing flag. `evidence.json.gz` is the shared numerical
 validation envelope; `publication.json` binds the selected files.
 
 Failed/malformed device prerequisites are retained honestly: n4's driver-library
