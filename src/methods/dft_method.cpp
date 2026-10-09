@@ -1225,10 +1225,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto& one = fock_.one_electron();
     const auto matrix_elements = one.nbf * one.nbf;
     const auto coordinates = 3 * system_.atoms.size();
-    if (spins < 1 || spins > 2 || density.size() != spins || weighted_density.size() != spins ||
-        one.ncoord != coordinates || one.hcore_derivative.size() != coordinates * matrix_elements ||
-        one.overlap_derivative.size() != coordinates * matrix_elements) {
-      detail = "density-fitted stationary D/W or one-electron derivative shape mismatch";
+    if (spins < 1 || spins > 2 || density.size() != spins || weighted_density.size() != spins) {
+      detail = "density-fitted stationary D/W shape mismatch";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (unsigned spin = 0; spin < spins; ++spin)
@@ -1284,6 +1282,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
       // contraction. CUDA only reaches this branch when the optional resident
       // one-electron consumer cannot be admitted; J/K response ownership is
       // unaffected.
+      fock_.ensure_one_electron_derivatives();
+      if (one.ncoord != coordinates ||
+          one.hcore_derivative.size() != coordinates * matrix_elements ||
+          one.overlap_derivative.size() != coordinates * matrix_elements) {
+        detail = "density-fitted stationary one-electron derivative shape mismatch";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
       hcore.assign(coordinates, 0.0);
       pulay.assign(coordinates, 0.0);
       for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {

@@ -69,5 +69,8 @@ for this repair; no new device qualification or speedup is claimed.
 
 ## References
 
+- [Subsequent qualified cold-value crossover and bounded resource policy](2026-10-09-ks-df-cold-resident-values.md)
+  supersedes the automatic-layout boundary, not the projection provenance guards.
+
 - [Fixed-commit non-hit receipt](https://github.com/jinzhezenggroup/generativeqc/pull/1686#issuecomment-5947873701)
 - #1661 (final projection producer), #1686 (method/force integration)

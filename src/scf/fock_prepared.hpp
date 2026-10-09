@@ -18,6 +18,7 @@ struct FockExecutionVariant {
   runtime::CudaProviderKind cuda_provider{runtime::CudaProviderKind::None};
   unsigned one_electron_value_mapping{}, df_value_mapping{}, df_derivative_mapping{};
   bool one_electron_value_override{}, one_electron_value_capability_fallback{};
+  DfPairStorageRequest df_pair_storage_request{DfPairStorageRequest::Automatic};
   DfPairStorage df_pair_storage{DfPairStorage::Dense};
   bool operator==(const FockExecutionVariant&) const = default;
 };
@@ -77,6 +78,11 @@ class PreparedFockPlan {
   const ResolvedFockBuild& strategy() const noexcept;
   const core::System& system() const noexcept;
   const integrals::IntegralData& one_electron() const noexcept;
+  /** Materialize deferred CUDA H'/S' only for the exact host force fallback.
+   * The ordinary stationary CUDA consumer contracts D/W directly and does not
+   * require coordinate-major matrices. Serialized owner use is required, as
+   * for SCF replay; successful materialization is retained for later forces. */
+  void ensure_one_electron_derivatives() const;
   /** The stage selects only explicit diagnostic provider controls; it never
    * changes the mathematical Fock operator or authorizes a reference retry. */
   enum class EigenUse { Setup, Iteration, Finalization };
