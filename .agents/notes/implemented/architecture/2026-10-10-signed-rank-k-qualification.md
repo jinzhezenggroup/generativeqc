@@ -21,7 +21,10 @@ request composes that original Gram with explicit FP64 alpha, beta and
 old-output TensorIR inputs; its full update root, not the unit Gram alone, owns
 scientific identity. The same `_rank_k_update` formula is scalarized into the
 native checked helper, so runtime publication has no second formula. The request
-records upper-triangle ownership, complete mirroring, and one all-batch
+also validates and binds the original Gram program, scientific request and
+precision identities before composition; unsupported audit/lowered provenance
+fails closed rather than being normalized. It records upper-triangle ownership,
+complete mirroring, and one all-batch
 transaction: a detected numerical failure publishes no output block.
 
 Two candidates share that request. The generated fallback uses the existing
@@ -97,16 +100,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `66208b3e00aa190ad0fc3ac0373b006a9a3bdd52`, qz Job
-`i1877-rankk-h100-1010q` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `c6eebd3555754157dc8ad353243460d6c94f4c68`, qz Job
+`i1877-rankk-h100-1010r` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,576 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.97–21.53 µs for the generated
-route and 24.23–34.63 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 12.63–21.12 µs for the generated
+route and 23.60–34.35 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -126,10 +129,13 @@ the fixed empty override environment before the cache-version parser repair.
 Job `o` regenerated identical metadata from the actual GPU-side inputs and
 accepted the numeric sccache floor, but still carried only the unit-Gram
 scientific identity. Job `q` bound the complete alpha/beta/old-output update
-root and scalar helper, then source-matched `66208b3e0`. Its generated header,
-object, binary and raw hashes are in the compact receipt. Later receipt-only
-commits may reuse `q` only while all qualified implementation blobs remain
-identical and latest-head review verifies that boundary.
+root and scalar helper but normalized original precision provenance. Job `r`
+first validated and bound the original source request/scientific/precision
+identities, rejected unsupported audit/lowered provenance, and source-matched
+`c6eebd355`. Its generated header, object, binary and raw hashes are in the
+compact receipt. Later receipt-only commits may reuse `r` only while all
+qualified implementation blobs remain identical and latest-head review verifies
+that boundary.
 
 ## Revisit when
 
