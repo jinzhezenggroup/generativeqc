@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -29,10 +30,11 @@ _TOOLCHAIN_FILES = (
 )
 
 
-def compiler_identity(root: Path, toolkit_root: Path) -> str:
-    """Bind generated metadata to the complete source and compile inputs."""
+def compiler_identity(root: Path, toolkit_root: Path, host_compiler: Path) -> str:
+    """Bind inventoried inputs for the fixed recipe; not a hermetic build proof."""
     root = root.resolve()
     toolkit_root = toolkit_root.resolve()
+    host_compiler = host_compiler.resolve()
     manifest = root / "cmake/GenerativeQCSourceIdentity.json"
     toolchain = {}
     for relative in _TOOLCHAIN_FILES:
@@ -40,20 +42,57 @@ def compiler_identity(root: Path, toolkit_root: Path) -> str:
         if not path.is_file():
             raise FileNotFoundError(f"missing rank-k toolchain input: {relative}")
         toolchain[relative] = file_hash(path)
+    headers = {
+        path.relative_to(toolkit_root).as_posix(): file_hash(path)
+        for path in sorted((toolkit_root / "include").rglob("*"))
+        if path.is_file()
+    }
+    if not headers:
+        raise FileNotFoundError("missing rank-k toolkit headers")
+    toolchain["host_compiler"] = file_hash(host_compiler)
+    environment = {}
+    for name in (
+        "NVCC_PREPEND_FLAGS",
+        "NVCC_APPEND_FLAGS",
+        "CPATH",
+        "C_INCLUDE_PATH",
+        "CPLUS_INCLUDE_PATH",
+        "LIBRARY_PATH",
+        "COMPILER_PATH",
+        "GCC_EXEC_PREFIX",
+    ):
+        if os.environ.get(name, ""):
+            raise ValueError(
+                f"{name} is unsupported by the fixed rank-k qualification recipe; "
+                "unset it or explicitly inventory its inputs in a reviewed recipe"
+            )
+        environment[name] = ""
     return canonical_hash(
         {
-            "schema": "generativeqc.rank-k-compilation.v1",
+            "schema": "generativeqc.rank-k-compilation.v2",
             "source": _source_identity(root, _inventory(root, manifest)),
             "toolchain": toolchain,
+            "toolkit_headers": headers,
+            "environment": environment,
             "compile": [
-                "sccache>=0.16.0",
-                "nvcc==12.9.86",
                 "-std=c++20",
                 "-O2",
                 "-arch=sm_90",
                 "-DGENERATIVEQC_TEST_HOOKS",
+                "-ccbin={host_compiler}",
+                "-I{source}/src",
+                "-I{generated}",
+                "-c",
+            ],
+            "link": [
                 "--cudart=shared",
+                "-ccbin={host_compiler}",
+                "-L{toolkit}/lib64",
                 "-lcublas",
+                "-Xlinker",
+                "-rpath",
+                "-Xlinker",
+                "{toolkit}/lib64",
             ],
         }
     )
@@ -95,10 +134,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--toolkit-root", type=Path, required=True)
+    parser.add_argument("--host-compiler", type=Path, required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        render(compiler_identity(ROOT, args.toolkit_root)), encoding="utf-8"
+        render(compiler_identity(ROOT, args.toolkit_root, args.host_compiler)),
+        encoding="utf-8",
     )
 
 

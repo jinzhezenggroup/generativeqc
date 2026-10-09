@@ -135,6 +135,7 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
     for relative in (
         "bin/nvcc",
         "bin/ptxas",
+        "include/cuda_runtime.h",
         "lib64/libcublas.so.12",
         "lib64/libcublasLt.so.12",
         "lib64/libcudart.so.12",
@@ -142,6 +143,8 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
         path = toolkit / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative)
+    host_compiler = tmp_path / "host-compiler"
+    host_compiler.write_text("qualified host compiler bytes")
     output = tmp_path / "generated.cuh"
 
     def generate() -> bytes:
@@ -153,6 +156,8 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
                 str(output),
                 "--toolkit-root",
                 str(toolkit),
+                "--host-compiler",
+                str(host_compiler),
             ],
             cwd=tmp_path,
             env=environment,
