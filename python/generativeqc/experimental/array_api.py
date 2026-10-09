@@ -701,9 +701,21 @@ def asarray(
     source_array = (
         np.asarray(value) if source_kinds == frozenset(("unknown",)) else None
     )
+    if source_array is not None and source_array.dtype.hasobject:
+        source_kinds = _check_host_values(source_array)
+        if "unknown-nested" in source_kinds:
+            raise TypeError(
+                "host array-like object data require scalar or NumPy array leaves"
+            )
+        if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
+            raise TypeError("mixed bool/real host values are unsupported")
     target = None if dtype is None else _data_dtype_name(dtype)
     if source_array is not None:
-        source_is_bool = source_array.dtype.name == "bool"
+        source_is_bool = (
+            source_kinds == frozenset(("bool",))
+            if source_array.dtype.hasobject
+            else source_array.dtype.name == "bool"
+        )
     elif source_kinds:
         source_is_bool = source_kinds == frozenset(("bool",))
     else:

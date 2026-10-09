@@ -220,6 +220,31 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     with pytest.raises(TypeError, match="nested host"):
         xp.asarray([source], dtype=xp.bool)
 
+    class ObjectArrayLike:
+        def __init__(self, values: list[object]) -> None:
+            self.values = values
+            self.calls = 0
+
+        def __array__(
+            self, dtype: object = None, copy: builtins.bool | None = None
+        ) -> np.ndarray:
+            assert dtype is None
+            assert copy is None
+            self.calls += 1
+            return np.asarray(self.values, dtype=object)
+
+    object_bool = ObjectArrayLike([True, False])
+    np.testing.assert_array_equal(xp.asarray(object_bool, dtype=xp.bool), [True, False])
+    assert object_bool.calls == 1
+    object_bool_to_real = ObjectArrayLike([True, False])
+    with pytest.raises(TypeError, match="cross-kind"):
+        xp.asarray(object_bool_to_real, dtype=xp.float64)
+    assert object_bool_to_real.calls == 1
+    object_mixed = ObjectArrayLike([True, 0.5])
+    with pytest.raises(TypeError, match="mixed bool/real"):
+        xp.asarray(object_mixed, dtype=xp.float64)
+    assert object_mixed.calls == 1
+
 
 def test_tensor_facade_exports_comparison_factory() -> None:
     x = ir.input_tensor("x", TensorSpec(dtype="float64", role="input"))
@@ -297,7 +322,7 @@ def test_boolean_views_do_not_admit_floating_arithmetic(
     with pytest.raises(TypeError, match="floating arithmetic"):
         operation(mask)
     with pytest.raises((TypeError, ValueError), match="bool|floating arithmetic"):
-        xp.compile(operation)(mask)
+        xp.compile(lambda x: operation(x))(mask)
 
 
 def test_compiler_namespace_bool_creation_uses_boolean_literals() -> None:
