@@ -40,6 +40,21 @@ class NativeMethodirProjectionTests(unittest.TestCase):
                 self.assertFalse(table[name].cpu)
                 self.assertTrue(table[name].cuda)
 
+        for name in (
+            "b3lyp3-rks",
+            "b3lyp3-uks",
+            "mb3lyp-rc04-rks",
+            "mb3lyp-rc04-uks",
+        ):
+            with self.subTest(nonserializable=name):
+                row = table[name]
+                self.assertFalse(row.cpu)
+                self.assertFalse(row.cuda)
+                self.assertEqual(row.identity, "")
+                self.assertIn(
+                    "automatic bulk components cannot mix", row.reason
+                )
+
         self.assertFalse(table["wb97m-v-rks"].cpu)
         self.assertIn("nonlocal", table["wb97m-v-rks"].reason)
         self.assertFalse(table["r2scan-3c-rks"].cuda)
