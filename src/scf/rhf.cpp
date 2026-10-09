@@ -1992,6 +1992,15 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system,
                                    plan.get(), 0, true);
       return result;
     }
+    if (!options.density_fitting_host_retry) {
+      if (device_status != GENERATIVEQC_STATUS_SUCCESS || device_records.size() != 1)
+        throw std::runtime_error(detail.empty() ? "CUDA DF preliminary SCF refused" : detail);
+      result.iterations = device_records.front().iterations;
+      result.energy = device_records.front().energy;
+      result.energy_change = device_records.front().energy_change;
+      result.density_rms = device_records.front().density_rms;
+      return result;
+    }
   }
   host_trace::Region retry_trace("diis_retry");
   runtime::df_progress::label("seed_generation", "original_caller_density");

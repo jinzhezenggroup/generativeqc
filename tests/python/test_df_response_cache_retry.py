@@ -23,6 +23,7 @@ _SHIM = r"""
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -64,6 +65,7 @@ namespace runtime {
 using generativeqc::runtime::PrecisionDirective;
 struct ExecutionContext {
   bool cuda_requested() { return true; }
+  int device_id() { return 0; }
 };
 namespace df_progress {
 struct Scope {
@@ -95,8 +97,30 @@ struct RccsdNativeState {
   } solved;
   std::size_t budget{};
   std::unique_ptr<ResourceOwner> resource;
+  int reference{}, reference_work{};
 };
+struct DFCCSDTReferenceExperiment {
+  const std::vector<double>* initial_density{};
+  bool disable_preconvergence{};
+  bool seed_fallback{};
+  std::optional<int> reference;
+  int work{};
+};
+std::size_t checked_mul(std::size_t left, std::size_t right) { return left * right; }
+struct DFHFGuess {
+  std::vector<double> density;
+  double seconds{};
+};
+int preparations{};
+DFHFGuess prepare_df_hf_guess(const core::System&, const core::System&,
+                            const generativeqc_method_descriptor&,
+                            std::size_t, int, bool enabled) {
+  ++preparations;
+  return enabled ? DFHFGuess{{1.0}, 0.125} : DFHFGuess{};
+}
 struct DFCCSDTResult {
+  DFHFGuess reference_guess;
+  struct { double reference_seconds{}; } primal;
   bool recycling_discarded_primal_attempt = false;
   double total_seconds = 0;
   int semantic_work = 13;
@@ -106,7 +130,7 @@ struct DFPhysicalResponseComparison {
   std::size_t output_bytes{};
 };
 RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::System&,
-                                        const generativeqc_method_descriptor& d, void*, void*,
+                                        const generativeqc_method_descriptor& d, void*, const std::vector<double>*,
                                         void*, std::size_t reserve, const core::System*, bool, bool,
                                         void*, std::size_t, bool, bool packed_diis) {
   assert(packed_diis == expected_packed);
@@ -166,7 +190,7 @@ int main() {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
-                               expected_w, expected_lambda_interval, true, true, true);
+                               expected_w, expected_lambda_interval, true, true, true, nullptr);
   };
   for (bool mixed_w : {false, true})
   for (std::size_t interval : {1, 30})
@@ -185,7 +209,7 @@ int main() {
   expected_gap_cotangents = gap_cotangents;
   auto reset = [&] {
     assert(live == 0);
-    calls = drains = clears = late_calls = 0;
+    calls = drains = clears = late_calls = preparations = 0;
     failure = 0;
     cache.retained = 40;
     descriptor.limit = 100;
@@ -194,6 +218,8 @@ int main() {
     reset();
     phase = p;
     auto r = call();
+    assert(preparations == 1 && r.primal.reference_seconds == 0.125 &&
+           r.reference_guess.density.capacity() == 0);
     assert(calls == 2 && late_calls == 2 && drains == 2 && live == 0 && clears == 1 &&
            cache.retained == 0 && r.recycling_discarded_primal_attempt && r.semantic_work == 13 &&
            r.total_seconds >= 0);
@@ -257,6 +283,15 @@ int main() {
     republished_failure = true;
   }
   assert(republished_failure && calls == 2 && drains == 2 && clears == 1 && cache.retained == 10);
+  reset();
+  DFCCSDTReferenceExperiment experiment;
+  r = run_df_ccsdt_native(
+      execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
+      true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
+      expected_w, expected_lambda_interval, true, true, true, &experiment);
+  assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
+  assert(preparations == 1 && calls == 2 && clears == 1 &&
+         r.recycling_discarded_primal_attempt);
   // The diagnostic output stays live beside the retained cache during primal
   // admission. Exercise that reservation without changing the retry wrapper.
   auto diagnostic_call = [&](DFPhysicalResponseComparison& comparison) {

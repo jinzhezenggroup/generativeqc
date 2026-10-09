@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HEADERS = (
     "include/generativeqc/generativeqc.h",
     "include/generativeqc/generativeqc.hpp",
+    "include/generativeqc/ks.hpp",
 )
 MANIFEST = "manifests/native_api_contracts.json"
 REFERENCE = "docs/reference/native_symbols.md"
@@ -383,7 +384,8 @@ def scan_cpp(source: str) -> list[Declaration]:
 
 def discover(root: Path) -> list[Declaration]:
     declarations = []
-    for path, scanner in zip(HEADERS, (scan_c, scan_cpp), strict=True):
+    for path in HEADERS:
+        scanner = scan_c if path.endswith(".h") else scan_cpp
         found = scanner((root / path).read_text(encoding="utf-8"))
         for declaration in found:
             declaration.header = path

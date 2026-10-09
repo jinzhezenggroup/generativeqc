@@ -8,6 +8,10 @@ endpoint and is also the public `df-rccsd(t)` / `df-ccsd(t)` Calculator force
 owner. Public force publication adds no alternate response equations or
 scientific fallback.
 
+A [benchmark-only DF density preconvergence experiment](df_hf_preconvergence.md)
+seeds the same fully converged exact reference without changing public defaults
+or the correlation/response Hamiltonian.
+
 ## Correlation response
 
 `solve_lambda_parameter_response_cuda` differentiates the retained RCCSD core

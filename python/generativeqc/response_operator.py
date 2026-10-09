@@ -235,8 +235,11 @@ class _BaseResponseOperator:
         if self.dimension > 4096:
             raise ValueError("dense response materialization is tiny-system only")
         result = np.empty((self.dimension, self.dimension))
+        # Only the current column is nonzero; reuse one input vector rather
+        # than allocating a fresh full-length array for every oracle action.
+        basis = np.zeros(self.dimension)
         for column in range(self.dimension):
-            basis = np.zeros(self.dimension)
+            basis.fill(0.0)
             basis[column] = 1.0
             result[:, column] = self.apply(basis)
         return result

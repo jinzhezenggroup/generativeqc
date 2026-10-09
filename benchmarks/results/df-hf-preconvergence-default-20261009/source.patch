@@ -1,0 +1,1170 @@
+--- /dev/null
++++ b/benchmarks/df_hf_preconvergence.cpp
+@@ -0,0 +1,343 @@
++// Geometry-only DF guess -> fully converged unscreened FP64 Direct RHF experiment.
++#include <algorithm>
++#include <chrono>
++#include <cmath>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <stdexcept>
++#include <string>
++#include <type_traits>
++
++#include "methods/df_ccsdt_force.hpp"
++#include "molecule/basis.hpp"
++#include "posthf/capacity.hpp"
++#include "runtime/execution_context.hpp"
++#include "scf/mean_field.hpp"
++#include "scf/warm_state.hpp"
++
++namespace {
++using Clock = std::chrono::steady_clock;
++using generativeqc::core::System;
++
++double seconds(Clock::time_point start) {
++  return std::chrono::duration<double>(Clock::now() - start).count();
++}
++
++/** Read the existing geometry/basis-only force-probe format, never oracle state. */
++void read_shells(std::istream& input, System& system, std::size_t count) {
++  system.shells.resize(count);
++  for (auto& shell : system.shells) {
++    std::size_t primitives{};
++    input >> shell.atom_index >> shell.angular_momentum >> primitives;
++    if (!input || !primitives || primitives > 1000)
++      throw std::invalid_argument("invalid shell dimensions");
++    shell.primitives.resize(primitives);
++    for (auto& primitive : shell.primitives) input >> primitive.exponent >> primitive.coefficient;
++  }
++  if (!input) throw std::invalid_argument("truncated shell data");
++  std::string detail;
++  if (generativeqc::molecule::validate_and_normalize(system, detail) != GENERATIVEQC_STATUS_SUCCESS)
++    throw std::invalid_argument(detail);
++}
++
++/** Strict selectors fail before CUDA setup, including malformed numeric suffixes. */
++double tolerance(const char* text) {
++  std::size_t consumed{};
++  const std::string token(text);
++  const double value = std::stod(token, &consumed);
++  if (consumed != token.size() || !std::isfinite(value) || value <= 0 || value > 1e-3)
++    throw std::invalid_argument("invalid preconvergence tolerance");
++  return value;
++}
++
++unsigned iteration_limit(const char* text) {
++  const std::string token(text);
++  if (token.empty() || token.find_first_not_of("0123456789") != std::string::npos)
++    throw std::invalid_argument("invalid preconvergence iteration limit");
++  const auto value = std::stoul(token);
++  if (!value || value > 150) throw std::invalid_argument("invalid preconvergence iteration limit");
++  return static_cast<unsigned>(value);
++}
++}  // namespace
++
++int main(int argc, char** argv) {
++  try {
++    if (argc < 6 || argc > 8)
++      throw std::invalid_argument(
++          "usage: df-hf-preconvergence INPUT JK_SHELLS OUTPUT direct|df-direct|auto-direct "
++          "hf|energy|forces "
++          "[PRE_TOLERANCE [PRE_MAX_ITERATIONS]]");
++    const std::string mode(argv[4]), endpoint(argv[5]);
++    if (mode != "direct" && mode != "df-direct" && mode != "auto-direct")
++      throw std::invalid_argument("invalid mode");
++    if (mode == "auto-direct" && (argc > 6 || endpoint == "hf"))
++      throw std::invalid_argument(
++          "auto-direct qualifies native energy/forces with fixed policy controls");
++    if (endpoint != "hf" && endpoint != "energy" && endpoint != "forces")
++      throw std::invalid_argument("invalid endpoint");
++    const double pre_tolerance = mode == "auto-direct" ? 1e-4
++                                 : argc > 6            ? tolerance(argv[6])
++                                                       : 1e-6;
++    const unsigned pre_iterations = argc > 7 ? iteration_limit(argv[7]) : 50;
++    std::ifstream input(argv[1]);
++    std::size_t atoms{}, orbital_shells{}, correlation_shells{}, budget{};
++    input >> atoms >> orbital_shells >> correlation_shells >> budget;
++    if (!input || !atoms || atoms > 1000 || !orbital_shells || orbital_shells > 10000 ||
++        !correlation_shells || correlation_shells > 10000 || !budget)
++      throw std::invalid_argument("invalid molecular probe dimensions");
++    System orbital;
++    orbital.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
++    orbital.atoms.resize(atoms);
++    for (auto& atom : orbital.atoms)
++      input >> atom.atomic_number >> atom.position[0] >> atom.position[1] >> atom.position[2];
++    System correlation = orbital;
++    read_shells(input, orbital, orbital_shells);
++    read_shells(input, correlation, correlation_shells);
++    System jk = orbital;
++    if (mode == "df-direct") {
++      std::ifstream jk_input(argv[2]);
++      std::size_t jk_shells{};
++      jk_input >> jk_shells;
++      if (!jk_input || !jk_shells || jk_shells > 10000)
++        throw std::invalid_argument("invalid JK shell dimensions");
++      read_shells(jk_input, jk, jk_shells);
++    }
++    std::ofstream output(argv[3]);
++    if (!output) throw std::invalid_argument("cannot open output");
++
++    generativeqc::core::ContextState context;
++    context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
++    const auto start = Clock::now();
++    generativeqc::runtime::ExecutionContext execution(context);
++    generativeqc::scf::ScfOptions exact_options;
++    exact_options.max_iterations = 150;
++    exact_options.energy_tolerance = 1e-12;
++    exact_options.density_tolerance = 1e-11;
++    exact_options.screening_tolerance = 0;
++    exact_options.precision_mode = GENERATIVEQC_PRECISION_FP64;
++    exact_options.compute_forces = false;
++    exact_options.export_physical_reference = true;
++    exact_options.reference_memory_budget_bytes = budget;
++    std::vector<double> seed;
++    double pre_seconds{}, pre_energy{}, pre_density_rms{}, pre_energy_change{};
++    std::size_t native_jk_functions{};
++    unsigned pre_cycles{};
++    bool pre_converged{}, pre_fallback{};
++    if (mode == "df-direct") {
++      auto pre_options = exact_options;
++      pre_options.export_physical_reference = false;
++      pre_options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
++      pre_options.density_fitting_memory_budget_bytes = budget;
++      pre_options.energy_tolerance = pre_tolerance;
++      pre_options.density_tolerance = pre_tolerance;
++      pre_options.max_iterations = pre_iterations;
++      const auto pre_start = Clock::now();
++      try {
++        auto pre = generativeqc::scf::run_rhf_density_fitting_cuda(orbital, jk, pre_options,
++                                                                   execution.device_id());
++        pre_cycles = pre.iterations;
++        pre_energy = pre.energy;
++        pre_energy_change = pre.energy_change;
++        pre_density_rms = pre.density_rms;
++        pre_converged = pre.converged;
++        if (pre.converged) {
++          generativeqc::scf::validate_hf_warm_density(orbital, GENERATIVEQC_METHOD_RHF,
++                                                      pre.density);
++          seed = std::move(pre.density);
++        } else {
++          pre_fallback = true;
++        }
++      } catch (const std::exception& error) {
++        pre_fallback = true;
++        std::cerr << "DF preconvergence refused: " << error.what() << '\n';
++      }
++      pre_seconds = seconds(pre_start);
++    }
++
++    generativeqc::methods::detail::DFCCSDTReferenceExperiment experiment;
++    experiment.disable_preconvergence = mode != "auto-direct";
++    const auto seed_bytes = generativeqc::posthf::checked_mul(seed.capacity(), sizeof(double));
++    if (seed_bytes >= budget) {
++      seed = std::vector<double>{};
++      pre_fallback = true;
++    } else {
++      exact_options.reference_memory_budget_bytes = budget - seed_bytes;
++    }
++    experiment.initial_density = seed.empty() ? nullptr : &seed;
++    double direct_seconds{}, native_seconds{}, energy{}, energy_change{}, density_rms{};
++    double ccsd_seconds{}, triples_seconds{}, lambda_seconds{}, orbital_seconds{};
++    double lambda_residual{}, z_residual{}, stationarity{};
++    bool discarded_primal_attempt{}, discarded_response_attempt{};
++    unsigned direct_cycles{};
++    std::vector<double> forces;
++    if (endpoint == "hf") {
++      const auto direct_start = Clock::now();
++      auto direct = [&] {
++        try {
++          return generativeqc::scf::run_rhf_cuda(orbital, exact_options, execution.device_id(),
++                                                 experiment.initial_density);
++        } catch (...) {
++          if (!experiment.initial_density) throw;
++          experiment.seed_fallback = true;
++          return generativeqc::scf::run_rhf_cuda(orbital, exact_options, execution.device_id());
++        }
++      }();
++      if ((!direct.converged || !direct.reference) && experiment.initial_density) {
++        experiment.seed_fallback = true;
++        direct = generativeqc::scf::run_rhf_cuda(orbital, exact_options, execution.device_id());
++      }
++      direct_seconds = seconds(direct_start);
++      if (!direct.converged || !direct.reference)
++        throw std::runtime_error("Direct RHF not converged");
++      experiment.reference = direct.reference;
++      experiment.work = direct.precision;
++      direct_cycles = direct.iterations;
++      energy = direct.energy;
++      energy_change = direct.energy_change;
++      density_rms = direct.density_rms;
++    } else {
++      generativeqc_method_descriptor descriptor{};
++      descriptor.struct_size = sizeof(descriptor);
++      descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
++      descriptor.method = GENERATIVEQC_METHOD_RCCSD;
++      descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
++      descriptor.max_iterations = exact_options.max_iterations;
++      descriptor.energy_tolerance = exact_options.energy_tolerance;
++      descriptor.density_tolerance = exact_options.density_tolerance;
++      descriptor.ccsd_max_iterations = 150;
++      descriptor.ccsd_diis_history = 8;
++      descriptor.ccsd_energy_tolerance = 1e-12;
++      descriptor.ccsd_residual_tolerance = 1e-10;
++      descriptor.correlation_memory_budget_bytes = budget;
++      const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
++          execution, orbital, correlation, descriptor, endpoint == "forces", true, true, true, true,
++          8, 8, {}, true, true, true, false, false, {}, 30, true, true, &experiment);
++      direct_seconds = result.primal.reference_seconds;
++      if (mode == "auto-direct") {
++        pre_seconds = result.reference_guess.seconds;
++        direct_seconds -= pre_seconds;
++        pre_cycles = result.reference_guess.iterations;
++        native_jk_functions = result.reference_guess.auxiliary_functions;
++        pre_converged =
++            result.reference_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
++        pre_fallback = result.reference_guess.outcome ==
++                       generativeqc::methods::detail::DFHFGuessOutcome::Failed;
++      }
++      native_seconds = result.total_seconds;
++      direct_cycles = result.reference_iterations;
++      energy = result.energy;
++      energy_change = result.reference_energy_change;
++      density_rms = result.reference_density_rms;
++      forces = result.forces;
++      ccsd_seconds = result.primal.solver_seconds;
++      triples_seconds = result.triples_seconds;
++      lambda_seconds = result.lambda_seconds;
++      orbital_seconds = result.orbital_seconds;
++      lambda_residual = result.lambda.independent_residual_norm;
++      z_residual = result.orbital.orbital_residual;
++      stationarity = result.orbital.maximum_stationarity;
++      discarded_primal_attempt = result.recycling_discarded_primal_attempt;
++      discarded_response_attempt = result.orbital.resident_jk_discarded_attempt;
++    }
++    const double endpoint_seconds = seconds(start);
++    const auto& reference = *experiment.reference;
++    double orthogonality_max{};
++    const auto nbf = reference.nbf;
++    std::vector<double> overlap_coefficients(nbf * nbf);
++    for (std::size_t row = 0; row < nbf; ++row)
++      for (std::size_t col = 0; col < nbf; ++col)
++        for (std::size_t inner = 0; inner < nbf; ++inner)
++          overlap_coefficients[row * nbf + col] +=
++              reference.overlap[row * nbf + inner] * reference.coefficients[inner * nbf + col];
++    for (std::size_t row = 0; row < nbf; ++row)
++      for (std::size_t col = 0; col < nbf; ++col) {
++        double value = row == col ? -1 : 0;
++        for (std::size_t inner = 0; inner < nbf; ++inner)
++          value +=
++              reference.coefficients[inner * nbf + row] * overlap_coefficients[inner * nbf + col];
++        orthogonality_max = std::max(orthogonality_max, std::abs(value));
++      }
++    output << std::setprecision(17) << "{\n";
++    const auto field = [&](const char* name, auto value) {
++      output << std::quoted(name) << ": ";
++      // A refused one-cycle DF solve can report an infinite initial energy change.
++      if constexpr (std::is_floating_point_v<decltype(value)>) {
++        if (std::isfinite(value))
++          output << value;
++        else
++          output << "null";
++      } else {
++        output << value;
++      }
++      output << ",\n";
++    };
++    const auto array = [&](const char* name, const std::vector<double>& values) {
++      output << std::quoted(name) << ": [";
++      for (std::size_t index = 0; index < values.size(); ++index) {
++        if (index) output << ',';
++        output << values[index];
++      }
++      output << "],\n";
++    };
++    field("mode", std::quoted(mode == "auto-direct" ? "df-direct" : mode));
++    field("reference_policy", std::quoted(mode));
++    field("endpoint", std::quoted(endpoint));
++    field("nbf", nbf);
++    field("naux_correlation", generativeqc::molecule::ao_count(correlation));
++    field("naux_jk", mode == "auto-direct" ? native_jk_functions
++                     : mode == "df-direct" ? generativeqc::molecule::ao_count(jk)
++                                           : 0);
++    field("pre_tolerance", pre_tolerance);
++    field("pre_iterations", pre_cycles);
++    field("df_fock_builds", "null");
++    field("pre_converged", pre_converged ? "true" : "false");
++    field("pre_fallback", pre_fallback ? "true" : "false");
++    field("seed_fallback", experiment.seed_fallback ? "true" : "false");
++    field("pre_energy", pre_energy);
++    field("pre_energy_change", pre_energy_change);
++    field("pre_density_rms", pre_density_rms);
++    field("pre_seconds", pre_seconds);
++    field("direct_seconds", direct_seconds);
++    field("rhf_seconds", pre_seconds + direct_seconds);
++    field("direct_iterations", direct_cycles);
++    field("direct_fock_builds",
++          experiment.seed_fallback || !experiment.work.operator_work_counters_valid ||
++                  experiment.work.execution_retries || discarded_primal_attempt
++              ? "null"
++              : std::to_string(experiment.work.strict_stage_fock_builds +
++                               experiment.work.post_scf_fock_builds));
++    field("direct_work_counters_valid", experiment.work.operator_work_counters_valid);
++    field("direct_execution_retries", experiment.work.execution_retries);
++    field("recycling_discarded_primal_attempt", discarded_primal_attempt ? "true" : "false");
++    field("resident_jk_discarded_attempt", discarded_response_attempt ? "true" : "false");
++    field("direct_post_scf_fock_builds", experiment.work.post_scf_fock_builds);
++    field("energy_change", energy_change);
++    field("density_rms", density_rms);
++    field("reference_energy", reference.energy);
++    field("commutator_residual", reference.commutator_residual);
++    field("canonical_density_drift", reference.canonical_density_drift);
++    field("eigen_residual", reference.eigen_residual);
++    field("orthogonality_max", orthogonality_max);
++    field("energy", energy);
++    field("endpoint_seconds", endpoint_seconds);
++    field("native_seconds", native_seconds);
++    field("ccsd_seconds", ccsd_seconds);
++    field("triples_seconds", triples_seconds);
++    field("lambda_seconds", lambda_seconds);
++    field("orbital_seconds", orbital_seconds);
++    field("lambda_residual", lambda_residual);
++    field("z_residual", z_residual);
++    field("stationarity", stationarity);
++    array("density", reference.density);
++    array("orbital_energies", reference.orbital_energies);
++    array("forces", forces);
++    output << "\"converged\": true\n}\n";
++    std::cout << mode << ' ' << endpoint << " RHF " << pre_seconds + direct_seconds
++              << " s; Direct cycles " << direct_cycles << "; endpoint " << endpoint_seconds
++              << " s\n";
++  } catch (const std::exception& error) {
++    std::cerr << error.what() << '\n';
++    return 1;
++  }
++}
+--- /dev/null
++++ b/benchmarks/df_hf_preconvergence.py
+@@ -0,0 +1,445 @@
++"""Prepare JK basis metadata, independent RHF audits, and all-repeat experiment gates.
++
++PySCF is used explicitly for offline basis metadata and the independent oracle,
++never to generate the density consumed by the native production endpoint.
++Raw outputs belong under .artifacts/, not benchmarks/results/.
++"""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import math
++import os
++from pathlib import Path
++from statistics import median
++from time import perf_counter
++from typing import TYPE_CHECKING
++
++from benchmarks._retention import raw_output_path
++
++if TYPE_CHECKING:
++    from pyscf.gto import Mole
++
++
++def read_molecule(path: Path) -> Mole:
++    """Reconstruct atom-specific raw orbital shells without a named-basis assumption."""
++    from pyscf import gto
++
++    tokens = iter(path.read_text().split())
++    atom_count, shell_count, _, _ = (int(next(tokens)) for _ in range(4))
++    atoms = []
++    basis = {}
++    for index in range(atom_count):
++        element = gto.mole._symbol(int(next(tokens)))
++        label = f"{element}{index}"
++        atoms.append((label, tuple(float(next(tokens)) for _ in range(3))))
++        basis[label] = []
++    for _ in range(shell_count):
++        atom, angular, primitives = (int(next(tokens)) for _ in range(3))
++        shell = [angular]
++        shell.extend(
++            [float(next(tokens)), float(next(tokens))] for _ in range(primitives)
++        )
++        basis[atoms[atom][0]].append(shell)
++    return gto.M(atom=atoms, basis=basis, unit="Bohr", verbose=0, max_memory=32000)
++
++
++def prepare_jk(source: Path, destination: Path, auxiliary: str) -> None:
++    """Export raw JK-fit contractions on exactly the input's atom order and geometry."""
++    from pyscf import df
++
++    mol = read_molecule(source)
++    auxmol = df.addons.make_auxmol(mol, auxiliary)
++    shells = []
++    for atom in range(mol.natm):
++        for shell in auxmol._basis[auxmol.atom_symbol(atom)]:
++            angular, *rows = shell
++            for contraction in range(len(rows[0]) - 1):
++                shells.append(
++                    (atom, angular, [(row[0], row[contraction + 1]) for row in rows])
++                )
++    destination.parent.mkdir(parents=True, exist_ok=True)
++    with destination.open("w") as stream:
++        stream.write(f"{len(shells)}\n")
++        for atom, angular, rows in shells:
++            stream.write(f"{atom} {angular} {len(rows)}\n")
++            for exponent, coefficient in rows:
++                stream.write(f"{exponent:.17g} {coefficient:.17g}\n")
++    destination.with_suffix(".metadata.json").write_text(
++        json.dumps(
++            {
++                "jk_basis": auxiliary,
++                "nbf": mol.nao_nr(),
++                "naux": auxmol.nao_nr(),
++                "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
++                "jk_sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
++                "contract": "offline basis metadata only; no SCF/integral oracle",
++            },
++            indent=2,
++        )
++        + "\n"
++    )
++
++
++def oracle(source: Path, destination: Path, threads: int) -> None:
++    """Run a fresh independent conventional RHF, retaining gauge-independent state."""
++    import pyscf
++    from pyscf import lib, scf
++
++    lib.num_threads(threads)
++    mol = read_molecule(source)
++    reference = scf.RHF(mol)
++    reference.conv_tol = 1e-13
++    reference.conv_tol_grad = 1e-10
++    reference.direct_scf_tol = 0
++    reference.max_cycle = 150
++    start = perf_counter()
++    reference.kernel()
++    if not reference.converged:
++        raise RuntimeError("independent conventional RHF did not converge")
++    destination.parent.mkdir(parents=True, exist_ok=True)
++    destination.write_text(
++        json.dumps(
++            {
++                "pyscf_version": pyscf.__version__,
++                "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
++                "reference_mode": "conventional FP64 RHF",
++                "input_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
++                "reference_energy": float(reference.e_tot),
++                "density": reference.make_rdm1().ravel().tolist(),
++                "orbital_energies": reference.mo_energy.tolist(),
++                "seconds": perf_counter() - start,
++            },
++            indent=2,
++        )
++        + "\n"
++    )
++
++
++def maximum_difference(first: list[float], second: list[float]) -> float:
++    """Compare all entries, rejecting truncated or incompatible payloads."""
++    if (
++        not first
++        or len(first) != len(second)
++        or not all(math.isfinite(value) for value in (*first, *second))
++    ):
++        raise ValueError("incompatible or empty physical arrays")
++    return max(abs(left - right) for left, right in zip(first, second, strict=True))
++
++
++def metric_median(rows: list[dict], name: str) -> float | None:
++    """An uncounted retry invalidates the whole group census, not only that sample."""
++    values = [row[name] for row in rows]
++    return None if any(value is None for value in values) else median(values)
++
++
++def correlation_audit(
++    rows: list[dict], oracle_path: Path, differences_path: Path
++) -> dict:
++    """Audit same-Hamiltonian energy and two independent directional force differences.
++
++    These retained PySCF references complement the fresh RHF oracle. They are
++    not an independent analytic oracle for every Cartesian force component.
++    """
++    oracle_record = json.loads(oracle_path.read_text())
++    finite_differences = json.loads(differences_path.read_text())
++    if oracle_record["pyscf_version"] != "2.14.0":
++        raise ValueError("requires the retained pinned PySCF 2.14.0 oracle")
++    # The pinned oracle schema stores its central geometry in Angstrom.
++    center_atoms = oracle_record.get("atoms_bohr")
++    if center_atoms is None:
++        atomic_numbers = {"H": 1, "C": 6}
++        center_atoms = [
++            (atomic_numbers[element], [value / 0.52917721092 for value in coordinates])
++            for element, coordinates in oracle_record["atoms_angstrom"]
++        ]
++    force_rows = [row for row in rows if row["endpoint"] == "forces"]
++    energy_rows = [row for row in rows if row["endpoint"] in {"energy", "forces"}]
++    if not energy_rows:
++        raise ValueError("correlation audit requires a correlation endpoint")
++    if any(
++        row["nbf"] != oracle_record["nbf"]
++        or row["naux_correlation"] != oracle_record["naux"]
++        for row in energy_rows
++    ):
++        raise ValueError("correlation oracle dimensions differ from native input")
++    energy_error = max(
++        abs(row["energy"] - oracle_record["total_energy"]) for row in energy_rows
++    )
++    directional = []
++    for difference in finite_differences["rows"]:
++        step = difference["step_bohr"]
++        minus, plus = difference["minus"], difference["plus"]
++        if minus["pyscf_version"] != "2.14.0" or plus["pyscf_version"] != "2.14.0":
++            raise ValueError("finite-difference version mismatch")
++        for (low_z, low), (high_z, high), (center_z, center) in zip(
++            minus["atoms_bohr"],
++            plus["atoms_bohr"],
++            center_atoms,
++            strict=True,
++        ):
++            if (
++                low_z != high_z
++                or low_z != center_z
++                or any(
++                    abs((lower + upper) / 2 - middle) > 1e-12
++                    for lower, upper, middle in zip(low, high, center, strict=True)
++                )
++            ):
++                raise ValueError(
++                    "finite-difference center differs from correlation oracle"
++                )
++        direction = [
++            (upper - lower) / (2 * step)
++            for (_, low), (_, high) in zip(
++                minus["atoms_bohr"], plus["atoms_bohr"], strict=True
++            )
++            for lower, upper in zip(low, high, strict=True)
++        ]
++        derivative = (plus["total_energy"] - minus["total_energy"]) / (2 * step)
++        if force_rows:
++            error = max(
++                abs(
++                    sum(
++                        force * component
++                        for force, component in zip(
++                            row["forces"], direction, strict=True
++                        )
++                    )
++                    + derivative
++                )
++                for row in force_rows
++            )
++            directional.append({"step_bohr": step, "absolute_error": error})
++    if {item["step_bohr"] for item in finite_differences["rows"]} != {1e-4, 3e-5}:
++        raise ValueError("both retained finite-difference steps are required")
++    translation = (
++        None
++        if not force_rows
++        else max(
++            abs(sum(row["forces"][axis::3])) for row in force_rows for axis in range(3)
++        )
++    )
++    residual = (
++        None
++        if not force_rows
++        else max(
++            abs(row[name])
++            for row in force_rows
++            for name in ("lambda_residual", "z_residual", "stationarity")
++        )
++    )
++    passed = (
++        math.isfinite(energy_error)
++        and energy_error <= 3e-9
++        and all(
++            math.isfinite(item["absolute_error"]) and item["absolute_error"] <= 3e-7
++            for item in directional
++        )
++        and (translation is None or translation <= 3e-8)
++        and (residual is None or residual <= 1e-9)
++    )
++    return {
++        "energy_maximum_error": energy_error,
++        "directional_force_errors": directional,
++        "translation_maximum": translation,
++        "response_residual_maximum": residual,
++        "oracle_sha256": hashlib.sha256(oracle_path.read_bytes()).hexdigest(),
++        "finite_differences_sha256": hashlib.sha256(
++            differences_path.read_bytes()
++        ).hexdigest(),
++        "gates_pass": passed,
++    }
++
++
++def summarize(paths: list[Path], independent: Path | None) -> dict:
++    """Gate every repeat pair; never select accurate samples by iteration count."""
++    rows = [json.loads(path.read_text()) for path in paths]
++    audit_fields = (
++        "reference_energy",
++        "energy",
++        "energy_change",
++        "density_rms",
++        "commutator_residual",
++        "canonical_density_drift",
++        "eigen_residual",
++        "orthogonality_max",
++    )
++    if any(not math.isfinite(row[name]) for row in rows for name in audit_fields):
++        raise ValueError("nonfinite final physical reference")
++    reference = None if independent is None else json.loads(independent.read_text())
++    result = {"groups": {}, "all_gates_pass": True}
++    for endpoint in sorted({row["endpoint"] for row in rows}):
++        controls = [
++            row
++            for row in rows
++            if row["mode"] == "direct" and row["endpoint"] == endpoint
++        ]
++        candidates = [
++            row
++            for row in rows
++            if row["mode"] == "df-direct" and row["endpoint"] == endpoint
++        ]
++        if not controls or not candidates:
++            raise ValueError("both Direct and DF-to-Direct controls are required")
++        for pre_tolerance in sorted({row["pre_tolerance"] for row in candidates}):
++            selected = [
++                row for row in candidates if row["pre_tolerance"] == pre_tolerance
++            ]
++            errors = {
++                "reference_energy": max(
++                    abs(control["reference_energy"] - candidate["reference_energy"])
++                    for control in controls
++                    for candidate in selected
++                ),
++                "energy": max(
++                    abs(control["energy"] - candidate["energy"])
++                    for control in controls
++                    for candidate in selected
++                ),
++                "density": max(
++                    maximum_difference(control["density"], candidate["density"])
++                    for control in controls
++                    for candidate in selected
++                ),
++                "orbital_energies": max(
++                    maximum_difference(
++                        control["orbital_energies"], candidate["orbital_energies"]
++                    )
++                    for control in controls
++                    for candidate in selected
++                ),
++                "forces": None
++                if endpoint != "forces"
++                else max(
++                    maximum_difference(control["forces"], candidate["forces"])
++                    for control in controls
++                    for candidate in selected
++                ),
++            }
++            gates = {
++                "reference_energy": 1e-10,
++                "energy": 1e-9,
++                "density": 1e-9,
++                "orbital_energies": 1e-9,
++                "forces": 3e-9,
++            }
++            passed = all(
++                value is None or value <= gates[name] for name, value in errors.items()
++            )
++            audits = controls + selected
++            passed &= all(
++                row["converged"]
++                and abs(row["energy_change"]) <= 1e-12
++                and row["density_rms"] <= 1e-11
++                and row["commutator_residual"] <= 1e-9
++                and row["canonical_density_drift"] <= 1e-9
++                and row["eigen_residual"] <= 1e-9
++                and row["orthogonality_max"] <= 1e-9
++                for row in audits
++            )
++            independent_errors = None
++            if reference is not None:
++                independent_errors = {
++                    "energy": max(
++                        abs(row["reference_energy"] - reference["reference_energy"])
++                        for row in audits
++                    ),
++                    "density": max(
++                        maximum_difference(row["density"], reference["density"])
++                        for row in audits
++                    ),
++                    "orbital_energies": max(
++                        maximum_difference(
++                            row["orbital_energies"], reference["orbital_energies"]
++                        )
++                        for row in audits
++                    ),
++                }
++                passed &= (
++                    independent_errors["energy"] <= 1e-10
++                    and independent_errors["density"] <= 1e-9
++                    and independent_errors["orbital_energies"] <= 1e-9
++                )
++            key = f"{endpoint}/pre-{pre_tolerance:g}"
++            result["groups"][key] = {
++                "repeats": {"control": len(controls), "candidate": len(selected)},
++                "control_median": {
++                    name: metric_median(controls, name)
++                    for name in (
++                        "rhf_seconds",
++                        "endpoint_seconds",
++                        "direct_iterations",
++                        "direct_fock_builds",
++                    )
++                },
++                "candidate_median": {
++                    name: metric_median(selected, name)
++                    for name in (
++                        "rhf_seconds",
++                        "endpoint_seconds",
++                        "pre_seconds",
++                        "pre_iterations",
++                        "direct_iterations",
++                        "direct_fock_builds",
++                    )
++                },
++                "maximum_errors": errors,
++                "independent_maximum_errors": independent_errors,
++                "gates": gates,
++                "gates_pass": bool(passed),
++                "fallbacks": sum(
++                    row["pre_fallback"] or row["seed_fallback"] for row in selected
++                ),
++            }
++            result["all_gates_pass"] &= bool(passed)
++    return result
++
++
++def main() -> None:
++    """Separate preparation and oracle work from measured native executions."""
++    parser = argparse.ArgumentParser(description=__doc__)
++    commands = parser.add_subparsers(dest="command", required=True)
++    prepare = commands.add_parser("prepare-jk")
++    prepare.add_argument("--input", type=Path, required=True)
++    prepare.add_argument("--output", type=raw_output_path, required=True)
++    prepare.add_argument("--basis", default="aug-cc-pvtz-jkfit")
++    independent = commands.add_parser("oracle")
++    independent.add_argument("--input", type=Path, required=True)
++    independent.add_argument("--output", type=raw_output_path, required=True)
++    independent.add_argument("--threads", type=int, default=8)
++    summary = commands.add_parser("summarize")
++    summary.add_argument("inputs", nargs="+", type=Path)
++    summary.add_argument("--oracle", type=Path)
++    summary.add_argument("--correlation-oracle", type=Path)
++    summary.add_argument("--finite-differences", type=Path)
++    summary.add_argument("--output", type=raw_output_path, required=True)
++    args = parser.parse_args()
++    if args.command == "prepare-jk":
++        prepare_jk(args.input, args.output, args.basis)
++    elif args.command == "oracle":
++        oracle(args.input, args.output, args.threads)
++    else:
++        record = summarize(args.inputs, args.oracle)
++        if bool(args.correlation_oracle) != bool(args.finite_differences):
++            parser.error(
++                "correlation oracle and finite differences must be supplied together"
++            )
++        if args.correlation_oracle:
++            record["correlation_audit"] = correlation_audit(
++                [json.loads(path.read_text()) for path in args.inputs],
++                args.correlation_oracle,
++                args.finite_differences,
++            )
++            record["all_gates_pass"] &= record["correlation_audit"]["gates_pass"]
++        args.output.parent.mkdir(parents=True, exist_ok=True)
++        args.output.write_text(json.dumps(record, indent=2) + "\n")
++        print(json.dumps(record, indent=2))
++        if not record["all_gates_pass"]:
++            raise SystemExit(1)
++
++
++if __name__ == "__main__":
++    main()
+--- a/cmake/GenerativeQCSources.cmake
++++ b/cmake/GenerativeQCSources.cmake
+@@ -97,6 +97,7 @@
+     src/methods/rccsd_method.cpp
+     src/methods/rccsdt_method.cpp
+     src/methods/df_rccsdt_method.cpp
++    src/methods/df_hf_guess.cpp
+     src/posthf/bridge.cpp
+     src/posthf/cuda_derivative.cpp
+     src/posthf/mp2_derivative_common.cpp
+--- a/src/methods/df_ccsdt_force.cu
++++ b/src/methods/df_ccsdt_force.cu
+@@ -109,7 +109,7 @@
+     DFPhysicalResponseComparison* physical_replay = nullptr,
+     bool fused_triples_scalar_response = false, runtime::PrecisionDirective admitted_triples_w = {},
+     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
+-    bool lambda_audit_matrix = true) {
++    bool lambda_audit_matrix = true, DFCCSDTReferenceExperiment* reference_experiment = nullptr) {
+   const auto started = Clock::now();
+   if (!lambda_true_residual_interval)
+     throw std::invalid_argument("Lambda true residual interval must be positive");
+@@ -126,17 +126,28 @@
+         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
+       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
+   const auto recycle_bytes = frame_options.recycling ? frame_options.recycling->storage_bytes() : 0;
++  const auto* reference_seed =
++      reference_experiment ? reference_experiment->initial_density : nullptr;
++  const auto seed_bytes =
++      reference_seed ? checked_mul(reference_seed->capacity(), sizeof(double)) : 0;
+   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
+   // in every phase, then let the response owner rebind/release it explicitly.
+   auto state =
+       replay_state
+           ? std::move(*replay_state)
+           : run_rccsd_native_state(
+-                execution, system, descriptor, nullptr, nullptr, nullptr,
+-                checked_add(recycle_bytes, physical_replay ? physical_replay->output_bytes : 0),
++                execution, system, descriptor, nullptr, reference_seed,
++                reference_experiment ? &reference_experiment->seed_fallback : nullptr,
++                checked_add(seed_bytes,
++                            checked_add(recycle_bytes,
++                                        physical_replay ? physical_replay->output_bytes : 0)),
+                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
+                 packed_diis);
+   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
++  if (reference_experiment) {
++    reference_experiment->reference = state.reference;
++    reference_experiment->work = state.reference_work;
++  }
+   DFCCSDTResult result;
+   result.reference_energy = state.reference->energy;
+   result.reference_energy_change = state.reference_energy_change;
+@@ -661,20 +672,46 @@
+     const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
+     bool parallel_gap_reduction, bool request_triples_gap_cotangents,
+     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
+-    std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix) {
++    std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
++    DFCCSDTReferenceExperiment* reference_experiment) {
++  if (reference_experiment && reference_experiment->reference)
++    throw std::invalid_argument("clear the previous experiment reference before reuse");
+   const auto started = Clock::now();
+   auto* const recycling = frame_options.recycling;
+   const bool had_retained_cache = recycling && recycling->storage_bytes();
++  DFCCSDTReferenceExperiment local_reference;
++  auto* const diagnostic = reference_experiment ? reference_experiment : &local_reference;
++  auto guess =
++      prepare_df_hf_guess(system, auxiliary, descriptor, recycling ? recycling->storage_bytes() : 0,
++                          execution.cuda_requested() ? execution.device_id() : -1,
++                          !diagnostic->disable_preconvergence && !diagnostic->initial_density);
++  const auto* const borrowed_seed = diagnostic->initial_density;
++  if (!guess.density.empty()) diagnostic->initial_density = &guess.density;
++  struct RestoreSeed {
++    DFCCSDTReferenceExperiment* diagnostic;
++    const std::vector<double>* seed;
++    ~RestoreSeed() { diagnostic->initial_density = seed; }
++  } restore_seed{diagnostic, borrowed_seed};
++  const auto finish = [&](DFCCSDTResult result) {
++    result.primal.reference_seconds += guess.seconds;
++    result.total_seconds = elapsed(started);
++    guess.density = std::vector<double>{};
++    result.reference_guess = std::move(guess);
++    return result;
++  };
+   const auto attempt = [&] {
++    diagnostic->reference.reset();
++    diagnostic->work = {};
++    diagnostic->seed_fallback = false;
+     return run_df_ccsdt_native_attempt(
+         execution, system, auxiliary, descriptor, forces, with_triples, df_auxiliary_reduction,
+         df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
+         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
+         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
+-        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix);
++        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, diagnostic);
+   };
+   try {
+-    return attempt();
++    return finish(attempt());
+   } catch (const MethodError& error) {
+     if (!had_retained_cache || !recycling->storage_bytes() ||
+         error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+@@ -692,6 +729,6 @@
+   auto result = attempt();
+   result.recycling_discarded_primal_attempt = true;
+   result.total_seconds = elapsed(started);
+-  return result;
++  return finish(std::move(result));
+ }
+ }  // namespace generativeqc::methods::detail
+--- a/src/methods/df_ccsdt_force.hpp
++++ b/src/methods/df_ccsdt_force.hpp
+@@ -8,13 +8,28 @@
+ #include "cc/df_triples.hpp"
+ #include "cc/lambda_response.hpp"
+ #include "hf/rhf_frame_response.hpp"
++#include "methods/df_hf_guess.hpp"
+ #include "methods/rccsd_method.hpp"
+ 
+ namespace generativeqc::methods::detail {
++/** Benchmark-only density handoff; no DF Fock/orbitals enter correlation or response.
++ * The exact reference solver starts fresh DIIS and retains its original gates.
++ * A refused/unconverged seed retries the ordinary cold Direct reference.
++ * The detached seed must outlive the call. Clear the output reference before
++ * reusing this diagnostic object so a prior frame is not an uncharged owner. */
++struct DFCCSDTReferenceExperiment {
++  const std::vector<double>* initial_density{};
++  bool disable_preconvergence{};
++  bool seed_fallback{};
++  std::shared_ptr<const hf::PhysicalReference> reference;
++  scf::PrecisionProvenance work;
++};
++
+ /** Complete native endpoint on an unchanged conventional RHF reference with
+  * a DF correlation Hamiltonian. The public DF-RCCSD(T) selector reuses this
+  * owner for both energy and force requests. */
+ struct DFCCSDTResult {
++  DFHFGuess reference_guess;
+   // If true, total_seconds includes a resource-refused precursor whose work
+   // counters are unavailable; successful-attempt counters are not endpoint totals.
+   bool recycling_discarded_primal_attempt{};
+@@ -85,7 +100,7 @@
+     bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
+     runtime::PrecisionDirective admitted_triples_w = {},
+     std::size_t lambda_true_residual_interval = 30, bool lambda_core_reuse = true,
+-    bool lambda_audit_matrix = true);
++    bool lambda_audit_matrix = true, DFCCSDTReferenceExperiment* reference_experiment = nullptr);
+ 
+ /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
+  * Empty payloads remain distinguishable through their explicit element counts.
+--- /dev/null
++++ b/src/methods/df_hf_guess.cpp
+@@ -0,0 +1,97 @@
++#include "methods/df_hf_guess.hpp"
++
++#include <algorithm>
++#include <chrono>
++#include <cstdlib>
++#include <limits>
++#include <stdexcept>
++#include <string>
++#include <string_view>
++#include <utility>
++
++#include "methods/df_hf_guess_basis.hpp"
++#include "molecule/basis.hpp"
++#include "posthf/capacity.hpp"
++#include "scf/mean_field.hpp"
++
++namespace generativeqc::methods::detail {
++DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& correlation_auxiliary,
++                              const generativeqc_method_descriptor& descriptor,
++                              std::size_t retained_bytes, int device_id, bool enabled) {
++  DFHFGuess guess;
++  if (const char* selector = std::getenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS")) {
++    const std::string_view value(selector);
++    if (value != "direct" && value != "auto")
++      throw std::invalid_argument("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS must be auto or direct");
++    enabled = enabled && value == "auto";
++  }
++  if (!enabled || device_id < 0) return guess;
++  guess.outcome = DFHFGuessOutcome::Ineligible;
++  const auto functions = molecule::ao_count(system);
++  if (functions < 200 || functions > 400 ||
++      system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL || system.multiplicity != 1 ||
++      system.charge != 0 || !system.ecp_terms.empty() ||
++      std::any_of(system.shells.begin(), system.shells.end(),
++                  [](const auto& shell) { return shell.angular_momentum > 3; }) ||
++      std::any_of(system.atoms.begin(), system.atoms.end(), [](const auto& atom) {
++        return atom.atomic_number != 1 && atom.atomic_number != 6;
++      }))
++    return guess;
++  const auto requested = descriptor.correlation_memory_budget_bytes;
++  if (requested > static_cast<std::uint64_t>(INT64_MAX) ||
++      requested > std::numeric_limits<std::size_t>::max())
++    throw std::invalid_argument("RCCSD budget exceeds numeric capacity");
++  const auto budget = requested ? static_cast<std::size_t>(requested) : 256ULL << 20;
++  const auto outside =
++      posthf::checked_add(retained_bytes, posthf::source_capacity(correlation_auxiliary));
++  guess.outcome = DFHFGuessOutcome::BudgetSkipped;
++  if (outside >= budget || budget - outside < (256ULL << 20)) return guess;
++
++  const auto started = std::chrono::steady_clock::now();
++  guess.outcome = DFHFGuessOutcome::Failed;
++  try {
++    core::System auxiliary;
++    auxiliary.atoms = system.atoms;
++    auxiliary.charge = system.charge;
++    auxiliary.multiplicity = system.multiplicity;
++    auxiliary.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
++    for (std::size_t atom_index = 0; atom_index < system.atoms.size(); ++atom_index) {
++      for (const auto& entry : df_hf_guess_basis) {
++        if (entry.atomic_number != system.atoms[atom_index].atomic_number) continue;
++        core::Shell shell;
++        shell.atom_index = static_cast<std::uint32_t>(atom_index);
++        shell.angular_momentum = entry.angular_momentum;
++        shell.primitives.push_back({entry.exponent, 1.0});
++        auxiliary.shells.push_back(std::move(shell));
++      }
++    }
++    std::string detail;
++    if (molecule::validate_and_normalize(auxiliary, detail) != GENERATIVEQC_STATUS_SUCCESS)
++      throw std::invalid_argument(detail);
++    guess.auxiliary_functions = molecule::ao_count(auxiliary);
++    scf::ScfOptions options;
++    options.max_iterations = 32;
++    options.diis_history = descriptor.diis_history ? descriptor.diis_history : 8;
++    options.energy_tolerance = 1e-4;
++    options.density_tolerance = 1e-4;
++    options.screening_tolerance = 0;
++    options.precision_mode = GENERATIVEQC_PRECISION_FP64;
++    options.compute_forces = false;
++    options.export_physical_reference = false;
++    options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
++    options.reference_memory_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
++    options.density_fitting_memory_budget_bytes = options.reference_memory_budget_bytes;
++    auto preliminary = scf::run_rhf_density_fitting_cuda(system, auxiliary, options, device_id);
++    guess.iterations = preliminary.iterations;
++    if (preliminary.converged) {
++      scf::validate_hf_warm_density(system, GENERATIVEQC_METHOD_RHF, preliminary.density);
++      guess.density = std::move(preliminary.density);
++      guess.outcome = DFHFGuessOutcome::Used;
++    }
++  } catch (const std::exception&) {
++    guess.work_counters_complete = false;
++  }
++  guess.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
++  return guess;
++}
++}  // namespace generativeqc::methods::detail
+--- /dev/null
++++ b/src/methods/df_hf_guess.hpp
+@@ -0,0 +1,29 @@
++#pragma once
++
++#include <cstddef>
++#include <vector>
++
++#include "core/types.hpp"
++
++namespace generativeqc::methods::detail {
++enum class DFHFGuessOutcome { Disabled, Ineligible, BudgetSkipped, Failed, Used };
++
++/** A provisional density only. No fitted reference, Fock or DIIS state survives. */
++struct DFHFGuess {
++  std::vector<double> density;
++  DFHFGuessOutcome outcome{DFHFGuessOutcome::Disabled};
++  unsigned iterations{};
++  std::size_t auxiliary_functions{};
++  double seconds{};
++  bool work_counters_complete{true};
++};
++
++/** Bounded native JK-fit preparation for the qualified Direct-RHF cold-start domain.
++ * Live correlation metadata and optional response caches are charged before admission.
++ * Unsupported topology, a tight budget or a refused guess retains cold Direct RHF.
++ * GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS=direct explicitly disables this policy;
++ * auto (or an unset variable) enables it. Invalid selectors are errors. */
++DFHFGuess prepare_df_hf_guess(const core::System&, const core::System& correlation_auxiliary,
++                              const generativeqc_method_descriptor&, std::size_t retained_bytes,
++                              int device_id, bool enabled = true);
++}  // namespace generativeqc::methods::detail
+--- /dev/null
++++ b/src/methods/df_hf_guess_basis.hpp
+@@ -0,0 +1,62 @@
++#pragma once
++
++#include <array>
++
++namespace generativeqc::methods::detail {
++/** Offline aug-cc-pVTZ-JKFIT H/C records from PySCF 2.14.0.
++ * Exponents are raw; native normalization owns all AO conventions.
++ * This basis is used only for a provisional density, never the accepted reference.
++ * Reproduce with benchmarks/df_hf_preconvergence.py prepare-jk; provenance and
++ * the frozen metadata SHA-256 are retained in the default-policy Agent Note. */
++struct DFHFGuessBasisShell {
++  int atomic_number;
++  unsigned angular_momentum;
++  double exponent;
++};
++inline constexpr std::array<DFHFGuessBasisShell, 44> df_hf_guess_basis{{
++    {6, 0, 1113.9867718999999},
++    {6, 0, 369.16234179999998},
++    {6, 0, 121.79275232000001},
++    {6, 0, 48.127114540000001},
++    {6, 0, 20.365074},
++    {6, 0, 8.0883596900000008},
++    {6, 0, 2.5068656599999999},
++    {6, 0, 1.24385374},
++    {6, 0, 0.48449900000000001},
++    {6, 0, 0.19185160000000001},
++    {6, 0, 0.075969270000000005},
++    {6, 1, 102.99176249},
++    {6, 1, 28.132594009999998},
++    {6, 1, 9.8364318199999996},
++    {6, 1, 3.3490544999999998},
++    {6, 1, 1.4947618600000001},
++    {6, 1, 0.57690109000000001},
++    {6, 1, 0.20320062999999999},
++    {6, 1, 0.071572919999999998},
++    {6, 2, 10.59406836},
++    {6, 2, 3.5997195400000002},
++    {6, 2, 1.33556911},
++    {6, 2, 0.51949765000000003},
++    {6, 2, 0.19954125},
++    {6, 2, 0.07664464},
++    {6, 3, 1.1948663399999999},
++    {6, 3, 0.41586634},
++    {6, 3, 0.14473987999999999},
++    {6, 4, 0.85886633999999995},
++    {6, 4, 0.34354654000000001},
++    {1, 0, 9.5302493300000002},
++    {1, 0, 1.9174506200000001},
++    {1, 0, 0.68424048999999998},
++    {1, 0, 0.28413255999999998},
++    {1, 0, 0.11798675},
++    {1, 1, 2.9133231999999998},
++    {1, 1, 1.26212054},
++    {1, 1, 0.50199775999999996},
++    {1, 1, 0.19966535999999999},
++    {1, 2, 2.3135329100000002},
++    {1, 2, 0.71290724000000005},
++    {1, 2, 0.21967992},
++    {1, 3, 1.65657261},
++    {1, 3, 0.66262904},
++}};
++}  // namespace generativeqc::methods::detail
+--- a/src/methods/rccsd_method.cpp
++++ b/src/methods/rccsd_method.cpp
+@@ -476,6 +476,7 @@
+     state.reference_energy_change = hf.energy_change;
+     state.reference_density_rms = hf.density_rms;
+     state.reference_iterations = static_cast<int>(hf.iterations);
++    state.reference_work = hf.precision;
+     const auto o = reference->nocc;
+     state.eps_o.assign(reference->orbital_energies.begin(),
+                        reference->orbital_energies.begin() + static_cast<std::ptrdiff_t>(o));
+--- a/src/methods/rccsd_method.hpp
++++ b/src/methods/rccsd_method.hpp
+@@ -5,6 +5,7 @@
+ #include "cc/solver.hpp"
+ #include "hf/reference.hpp"
+ #include "methods/method.hpp"
++#include "scf/types.hpp"
+ 
+ namespace generativeqc::integrals {
+ class ElectronInteractionSource;
+@@ -35,6 +36,8 @@
+   double reference_energy_change{};
+   double reference_density_rms{};
+   int reference_iterations{};
++  /** Complete reference operator census, distinct from SCF iteration count. */
++  scf::PrecisionProvenance reference_work;
+ };
+ 
+ // The optional auxiliary selects the internal correlation-only DF Hamiltonian.

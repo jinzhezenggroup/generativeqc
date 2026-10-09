@@ -1,0 +1,16 @@
+{
+  "revision": "4e20f7a7bcfbff770fefd13fa2777f8ab309679c",
+  "dirty": true,
+  "sha256": {
+    "benchmarks/df_hf_preconvergence.cpp": "55305de9effb902651a4088df44b3b7f66762dc183ff55d1b2c24d6e6736f5fb",
+    "benchmarks/df_hf_preconvergence.py": "030ca7d19b5467cb978451db3945d4d998894cec4e16ddc64fc6dbb142eefdf6",
+    "cmake/GenerativeQCSources.cmake": "ea697fca3d5bacf20ca5b724c8696f82d887c98e4ad0f7347f746cbe31cb04b7",
+    "src/methods/df_ccsdt_force.cu": "1ac6176bf8411d1b30524dfb275ab22474654e8ae29e8e11e62c1983ef676e34",
+    "src/methods/df_ccsdt_force.hpp": "c2323496b9dc2d92ff05e74cd4c7dac6a0239dbb586bf14e2d3e9e5a7fb8dea2",
+    "src/methods/df_hf_guess.cpp": "042ee268d34396a0b01277d3c14b1f914f8c92915ccfd826af54723b50cd2cb8",
+    "src/methods/df_hf_guess.hpp": "110760e755a7d1e885dd94de8b331b61b2ef3ea9d2c1776272d6d51f0293b576",
+    "src/methods/df_hf_guess_basis.hpp": "ab913d1f769af26e346113b1d011b7f6b86a64b959e664a6af4db53689e30cdd",
+    "src/methods/rccsd_method.cpp": "289e07a74e12a02d46fec976abbc91723588354d35f5fe7e2f66433aa139ba9d",
+    "src/methods/rccsd_method.hpp": "e7fa4a9f766863969d944ff73ac74b576d14c0b028049305dedd6c34c6e62c91"
+  }
+}

@@ -5,6 +5,7 @@
 #include "cc/solver.hpp"
 #include "hf/reference.hpp"
 #include "methods/method.hpp"
+#include "scf/types.hpp"
 
 namespace generativeqc::integrals {
 class ElectronInteractionSource;
@@ -35,6 +36,8 @@ struct RccsdNativeState {
   double reference_energy_change{};
   double reference_density_rms{};
   int reference_iterations{};
+  /** Complete reference operator census, distinct from SCF iteration count. */
+  scf::PrecisionProvenance reference_work;
 };
 
 // The optional auxiliary selects the internal correlation-only DF Hamiltonian.

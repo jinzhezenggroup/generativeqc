@@ -1,102 +1,82 @@
 # Scientific CUDA ownership
 
-The compiler owns integral recurrences, operator-specific derivatives and
-contractions, XC expressions, method equations represented in TensorIR, and
-precision/schedule variants of those definitions. Native CUDA continues to own
-allocation, streams/events/graphs, queues, generic packing and reductions,
-library integration, stable task/ABI structures and failure diagnostics.
-Operator-specific primitive/AO traversal and contraction glue is a migration
-target even when its scalar arithmetic is already generated.
+Use the CUDA ownership ledger to prevent two independently maintained
+production implementations of the same scientific mathematics. A shorter
+`.cu` file is not, by itself, a scientific retirement, a speedup or a
+reduction in total source work.
 
-`cuda_ownership/` is the versioned semantic ledger and the only
-repository-tracked current ownership source. It records current defaults,
-generated capabilities, missing replacement capabilities, evidence and retirement
-conditions. The ledger is sharded by generated family, subsystem and native source file; the
-reporter discovers those shards deterministically, so unrelated CUDA branches do
-not rewrite one aggregate semantic ledger. The mechanically derived current report
-is generated on demand and in CI rather than committed. A generic runtime primitive is not a duplicate
-scientific implementation. A retained production exception must be measured and tracked; calling it
-"reference" does not make it an independent oracle. CPU and external independent
-references remain outside the maintained CUDA counts.
+The semantic source of truth is the sharded
+[CUDA ownership ledger](../cuda_ownership/README.md) under
+`docs/cuda_ownership/`. The derived current report is generated from this
+ledger and the actual source tree; it is **not** a committed snapshot.
+The completed ownership consolidation is tracked in
+[issue #231](https://github.com/jinzhezenggroup/generativeqc/issues/231).
+The historical phases and measured deltas are preserved in the
+[retirement provenance note](../../.agents/notes/implemented/architecture/2026-10-09-cuda-retirement-provenance.md),
+not as current baseline numbers on this page.
 
-Run the reproducible report with standard Python; no CUDA device is needed:
+## Which layer owns each computation?
+
+| Owner / classification | Responsibility | Review rule |
+| --- | --- | --- |
+| Generated scientific program | Integral recurrences, operator derivatives/contractions, XC expressions, TensorIR method equations, scientific precision variants and generated operator-specific schedules | Keep the mathematical definition in the compiler/IR, not in a second handwritten kernel |
+| Native runtime CUDA | Allocation, streams/events/graphs, queues, compaction, topology, generic tiling/reductions, vendor libraries, ABI/task formats and diagnostics | Retain native code when it is generic execution infrastructure |
+| Independent oracle | Independently implemented numerical reference used for validation | Prove independence; a file named `reference` is not automatically an oracle |
+| Explicit fallback | A bounded supported domain the generated route cannot yet execute | Record its domain, default, owner and retirement condition |
+| Performance exception | A measured native implementation retained because its qualified generated alternative is still worse | Preserve complete-endpoint, numerical and resource evidence and re-qualification conditions |
+
+Native C++ scientific contractions are still scientific work even when a
+`.cu`/`.cuh` source census no longer counts them. Moving DF J/K
+composition into `df_coulomb.cpp`, `df_exchange.cpp` or a force-response
+adapter therefore must not be described as mathematical retirement.
+See [SCF module boundaries](../developer/scf_module_boundaries.md).
+
+## Read and regenerate the current inventory
+
+From the repository root:
 
 ```bash
 python tools/report_cuda_ownership.py --check
+mkdir -p .artifacts
 python tools/report_cuda_ownership.py --output .artifacts/cuda-ownership.json
-python tools/report_cuda_ownership.py --build build/cuda-release \
+python tools/report_cuda_ownership.py \
+  --build build/cuda-release \
   --baseline manifests/maintenance/cuda_ownership_baseline.json \
   --output .artifacts/cuda-ownership-with-build.json
 ```
 
-For the remaining Direct-HF scientific CUDA retirement surface,
-`cuda_ownership/direct_hf_retirement.json` provides the issue-356 family overlay.
-It does not change semantic ownership roles. Instead, it groups every non-runtime
-`src/scf/cuda/direct_*` ownership entry by current disposition, generated
-alternative, scheduling/resource gap, evidence and retirement condition. Keep it
-exactly synchronized with the semantic ledger:
+Only pass `--build` for the matching built source; missing generated-build
+measurements are *unknown*, not zero. The source census counts nonblank,
+noncomment physical lines in maintained CUDA files and CUDA-bearing shared
+headers, including host code compiled in those units. This is not an AST,
+instruction, throughput or total scientific-work metric.
+Generated build/JIT artifacts are reported separately from maintained source.
+Stable source anchors, region hashes, role classifications and deterministic
+shard discovery make additions/deletions auditable.
+
+The CI-derived current report is regenerated for the checked-out source and
+uploaded as an artifact. Do not commit a report mechanically regenerated by
+unrelated PRs. Preserve historical baselines, original source identities and
+source-matched comparison bundles independently for reproducibility.
+The [evidence-retention policy](evidence_retention.md) controls their lifespan.
+
+For Direct-HF retirement classification, the authoritative overlay is
+`docs/cuda_ownership/direct_hf_retirement.json`, kept in sync with the
+semantic ledger. Validate it using:
 
 ```bash
 python tools/check_direct_hf_retirement.py
 python tools/check_direct_hf_retirement.py --json
 ```
 
-The check fails when a new Direct scientific CUDA file is not classified, a file
-is classified twice, a runtime-only file is presented as retirement science, or
-evidence becomes stale. Screening/error-policy entries are deliberately marked as
-scientific policy rather than counted as duplicate formulas; similarly, a file
-named `reference` is not treated as an independent oracle unless the semantic
-ownership ledger actually establishes that role.
+New/removed scientific CUDA owners, duplicate classifications, stale source
+anchors or stale supporting evidence must fail the inventory checks. Generic
+runtime and scientific policy must not be conflated just because both are
+implemented in CUDA.
 
-Create the output parent directory first. The report counts nonblank,
-noncomment physical lines in native `.cu`/`.cuh` files and CUDA-bearing shared
-C++ headers. Counts include host launch/ownership code in those translation
-units. Quoted literals, raw strings and numeric digit separators are handled
-by the counting lexer. This is a source metric, not an AST expression count,
-compiled instruction count, performance claim or estimate of scientific value.
+## Promotion and retirement gates
 
-Mixed files use unique exact source anchors. Each owning region has a semantic
-classification; operator-specific functions conservatively retain their local
-validation/dispatch glue in the scientific count. Source hashes, region ranges,
-per-file and subsystem totals make those choices reviewable. New or removed
-CUDA files, stale/ambiguous anchors and overlapping regions fail the check.
-Subsystem totals use the file's primary native owner; shared translation units
-remain visible in the per-file/region breakdown and the capability ledger.
-Classification requires review; keywords do not decide whether arithmetic is
-scientific. An existing region is not permission to add a second formula.
-
-The native DIIS kernels are method-specific scientific regions: they select
-live circular histories, build the residual Gram matrix, normalize and solve
-the augmented system, retire dependent histories, and extrapolate Fock matrices.
-Their launch wrappers and declarations remain runtime. This classification
-includes pre-existing numerical code; moving it from runtime to scientific
-ownership is reported separately from physical additions or retirement. The
-`scf_tensor` ledger records the missing generated replacement and its gates.
-
-The #240 DF runtime extraction moves the existing cuBLAS J/K composition and
-generated-force adapter from `cuda_density_fitting.cu` to `cuda/df_coulomb.cpp`,
-`df_exchange.cpp` and `df_force_response.cpp`. These native equations remain
-maintained scientific code even though ordinary C++ implementations fall outside
-this CUDA-source line counter. Their lower counted total is an ownership move,
-not scientific retirement. The scalar/reduction equations retained in
-`df_jk_kernels.cu` and `df_scf_kernels.cu` keep their scientific classification;
-generic metric preparation and launch wrappers retain runtime classification.
-
-Generated CMake output is measured only from an explicitly supplied build and
-reported separately with hashes and byte counts. It never enters maintained
-CUDA totals. JIT families are catalogued but their cache files are not blindly
-classified by extension: existing artifact provenance must distinguish generated
-programs from copies of native runtime source. An absent build measurement is
-not a claim of zero generated code.
-
-The baseline records the source before this issue's production migrations.
-Use `--baseline` to expose added/removed files, classification changes and
-maintained-code deltas. The aggregate of scientific, oracle, fallback and
-performance-exception code prevents an oracle rename from being advertised as
-deletion. Classification changes remain explicit and must not be presented as
-physical retirement. Generated byte growth cannot offset handwritten growth.
-
-For each substantive scientific CUDA/codegen change, report:
+A PR introducing or changing compiler-owned scientific CUDA should report:
 
 ```text
 generated capability: ...
@@ -106,156 +86,58 @@ legacy production path removed: yes/no
 retained duplicate reason: oracle | fallback | performance_exception | none
 ```
 
-A retained duplicate needs a real independent validation role, an unpromoted
-fallback capability or measured production advantage, with an owner and
-retirement condition. Positive scientific growth is allowed when explained.
-Do not remove a production path before independent numerical, resource and
-complete endpoint gates pass. Correct but slower generated candidates remain
-experimental. Once promoted, retire the superseded production implementation
-unless its independently documented role still requires it.
+1. Audit the same operator, derivative order, method, representation,
+   numerical precision and admitted resource domain on both paths.
+   Include independent CPU/libcint/PySCF oracle checks as applicable;
+   generated-versus-handwritten agreement alone is not independent validation.
+2. Compare complete cold and reused/changed-geometry energy-plus-force
+   endpoints using matched builds, fixed controls and multiple samples,
+   in addition to kernel counters, compile/link and memory costs.
+3. Retire a superseded maintained scientific path after the generated
+   replacement passes the numerical, resource and endpoint gates.
+   A correct but slower generated candidate remains an experiment.
+4. If an oracle, fallback or performance exception must remain, record
+   the owner, scope, current default, measured basis and retirement condition
+   in the ledger. Positive scientific-source growth is permissible when
+   explicitly explained; an ownership-role reclassification is not deletion.
 
-One-electron values and normal S/T/V derivative/weighted-force execution are
-compiler-owned production paths. The derivative shell-warp schedule is the
-default after #357; the native cooperative route remains only as an explicitly
-selected measured performance exception, and its slower scalar sibling is
-retired. Generated DF values have archived promotion evidence; their superseded
-value selector is removed. DF values, raw/source derivatives and weighted HF
-response now share generated scientific policies and generic normalized traversal;
-the superseded coordinate-wise CUDA response has been removed. New
-XC/TensorIR/CC/AD work follows the same ownership boundary and reuses the
-existing compiler, native cache and resource planner.
+The historical one-electron/DF ownership campaign used a **2% per-workload
+median non-regression gate** with independent energy/force tolerances.
+That historical gate is documented in the
+[retained comparison protocol](../../benchmarks/results/cuda-ownership/README.md).
+Do not elevate it into an unqualified universal speedup claim, and do not
+apply old acceptance values to different scientific domains without checking
+their own current rules.
 
-The one-electron candidate now instantiates `runtime/cuda_ao_pairs.cuh` with a
-generated `ValuePolicy`. The runtime owns normalized primitive/AO traversal,
-thread/shell-warp pair ownership and symmetric channel stores. The compiler
-owns nuclear-charge reduction, S/T/V accumulation and the H=T+V output map.
-Adding an operator class within the scalar family's supported domain therefore
-does not require another native contraction kernel. The policy is a separate
-generated artifact so changes to execution glue do not rewrite the existing
-scalar mathematical header. The optimized five-sample, 20-case comparison passed the existing numerical
-and 2% endpoint gates. The shared shell-warp policy is now the value default;
-the handwritten value kernel and all value dispatch branches are removed.
-
-`tools/benchmark_cuda_ownership.py compare` compares explicit clean source
-checkouts and matching optimized libraries in separate processes. It retains
-five or more samples in the shared ABBA order, resource plans/observations,
-and all final energies, forces, residuals and iteration counts. Cold, unchanged,
-changed and restored geometries have separate timing records. The structural
-retirement gate permits at most 2% median regression in each workload and keeps
-the existing energy (3e-10 Hartree) and force (3e-9 Hartree/Bohr) tolerances.
-The common significance/noise report is retained separately; non-regression
-does not establish a speedup. Native compilation and independent integral
-validation remain required alongside these complete HF measurements.
-
-The same benchmark's `--domain df` inventory includes through-f fitted RHF/UHF,
-Cartesian/spherical representations, batches of one/three, constrained source
-budgets, and water/OH with def2-SVP. Each worker additionally times fresh public
-energy-only singlepoints, so changing shared value traversal cannot hide its
-cost inside a faster force response. Those samples have their own numerical
-and 2% median endpoint gates. Publication retains their energies, residuals,
-iteration counts, and individual timings and recomputes all gates from workers.
-Use explicit clean historical and candidate checkouts; the benchmark rejects
-selection of a retired reference route on a current tree.
-
-
-The accepted one-electron comparison measured clean candidate `fdc7f40` against
-clean baseline `1ba6f17` with Release, CUDA fast compilation disabled, CUDA
-12.9.1 and sm_120. All 20 cases and four phases passed: maximum energy error
-7.1055e-15 Hartree, force error 9.437e-15 Hartree/Bohr, and maximum median ratio
-1.019427. This establishes non-regression, not a universal speedup. Nineteen
-cases used explicit shared total budgets; the 18-AO Cartesian direct case
-retained the legacy unbudgeted scope because HF inventory v1 supports at most
-16 public AOs. Its scope note remains part of the evidence. The checksum-bound
-[bundle](../../benchmarks/results/cuda-ownership/README.md) retains all samples,
-inputs, resource observations and the complete per-workload assessments.
-
-`GENERATIVEQC_ONE_ELECTRON_VALUES` and `GENERATIVEQC_DF_VALUES` are retired internal controls
-and no longer affect production dispatch or execution identities. The value
-mapping controls still select measured/diagnostic schedules of the same
-compiler-owned definitions. Historical old/new reproduction must use the exact
-older source checkout; current DF endpoint tools explicitly compare generated
-schedules and no longer label another generated execution a handwritten oracle.
-The ownership benchmark rejects reference selection on a retired checkout.
-
-Retirement removes the double one-electron value kernel and Hermite DF value
-dispatch. It does not delete shared overlap/Hcore/ERI recurrences needed by Dual
-derivatives or other integral paths. The remaining one-electron response kernel
-is classified as a derivative performance exception, so that reclassification
-cannot be counted as physical deletion. Native generic traversal growth and
-scientific region changes are disclosed separately in the reproducible report.
-
-## Completion across both retirement phases
-
-PR #252 delivered the first value retirement and uses `Refs #231`. Its minimum
-acceptance result did not complete the parent's broader DF work. The second
-phase completes that work: generated DF value/center-derivative policies share
-rank-generic normalized AO/primitive traversal, bounded two-dimensional weight
-ranges, subgroup reductions and physical-atom scatter. The compiler owns the
-four-lane weighted and transformed-source schedules. Bulk/source derivatives
-no longer call the handwritten four-center Dual contraction.
-
-The final [DF evidence bundle](../../benchmarks/results/cuda-ownership/df/README.md)
-validates the source that removes the coordinate-wise raw/source RHF/UHF force
-implementations, obsolete metric/coordinate scratch and the derivative selector.
-Generated weighted response is the sole CUDA HF finalizer; its failures propagate.
-Independent CPU/libcint/PySCF oracles and generated raw derivative APIs remain.
-Native metric factors, J/K equations, cuBLAS/cuSOLVER and solver/plan infrastructure
-retain their explicit owners. Their continued presence does not create a second
-DF integral recurrence.
-
-| #231 work items | Delivered behavior and review surface |
-| --- | --- |
-| 1–3: inventory, reproducible report, migration ledger | Complete file/region and generated-family inventory, checked source anchors, current defaults, evidence and retirement conditions in `cuda_ownership/`; the current report is generated reproducibly from that ledger and source tree. |
-| 4: reduce operator-specific glue | Shared AO-pair and rank-generic Gaussian products, bounded strided ranges, subgroup reductions and generic stores/scatter; generated policies supply operator semantics. |
-| 5: one-electron values | Phase 1 promoted shared generated S/T/V values after the 20-case comparison and removed the handwritten double-value kernel and dispatches. |
-| 6: DF values and derivatives | Phase 2 unifies bulk/source/weighted mathematics and removes the old CUDA coordinate response after independent numerical, resource and full endpoint gates. |
-| 7 and 9: prospective rule and duplication guard | PR disclosure, compiler dependency checks and CI/pre-commit ownership inventory checks remain required for substantive scientific CUDA/codegen changes. |
-| 8 and 10: measured retirement and compiler-directed specialization | Immutable baseline/candidate builds, full unchanged per-case gates, original-object resources and compiler-owned schedules support actual removal. Slower exceptions retain their recorded evidence and conditions. |
-
-Against phase 2's exact baseline `4f36c6e`, scientific CUDA has **+23 / -512**
-physical code lines, while runtime CUDA has **+243 / -444**. The 23 added
-scientific lines are conservatively counted launch/range adapters (6) and
-output/transformed-source mapping (17); integral recurrences remain generated.
-Another **37
-unchanged lines** move from scientific to runtime classification; these are not
-physical deletion. The reconciled category deltas are scientific **-526** and
-runtime **-164**, a total maintained-CUDA reduction of **690** lines. The
-original pre-phase-1 baseline remains in `cuda_ownership_baseline.json`; the
-current report separately exposes the overall change against it. Across both
-phases, the combined scientific/oracle/exception count falls from **10,192 to
-9,499** (**-693**); generic runtime rises from **15,573 to 15,665** (**+92**).
-The overall maintained-CUDA change is therefore **-601**, with the runtime
-growth and classification changes visible independently.
-
-Reproduce both the semantic report and physical edit accounting without a GPU:
+The source-matched benchmark helper can compare explicit clean checkouts:
 
 ```bash
-python tools/report_cuda_ownership.py --check
-python tools/report_cuda_ownership.py --build <matching-candidate-build> \
-  --baseline manifests/maintenance/cuda_ownership_baseline.json --output .artifacts/current.json
-python tools/compare_cuda_ownership.py \
-  --baseline-root <phase-2-baseline-checkout> \
-  --baseline-report benchmarks/results/cuda-ownership/df/ownership-baseline.json \
-  --candidate-root . --candidate-report .artifacts/current.json \
-  --output .artifacts/physical-lines.json
+python tools/benchmark_cuda_ownership.py compare --help
 ```
 
-The current report is not tracked in Git. CI regenerates
-`.artifacts/cuda-ownership-current.json` from the checked-out source and
-`docs/cuda_ownership/`, validates it, and uploads it as a workflow artifact.
-For local review, generate the same file with
-`python tools/report_cuda_ownership.py --check --output .artifacts/cuda-ownership-current.json`.
-Historical baselines and benchmark evidence remain versioned where their exact
-old bytes are part of the scientific comparison contract. The bundle's ownership
-provenance binds the phase-2 sources and report commands. The physical comparison
-verifies each source hash and reconciles edits/reclassification with every role's
-totals.
+Its historical runs covered cold, repeated, changed and restored geometry,
+numerical outputs, resource observations and five-or-more ABBA-order samples.
+The related [DF comparison evidence](../../benchmarks/results/cuda-ownership/df/README.md)
+retains the actual source, gate decisions and measurement record.
 
-The existing one-electron derivative and Direct schedule exceptions retain
-their owners, measured regressions and retirement conditions in the ledger.
-They are not claimed as delivered replacements. Native SCF/low-rank method
-adapters have no equivalent integrated TensorIR endpoint yet; XC GPU and complete
-stationary integration remain scoped to #162/#163/#168. These cases follow the
-issue's explicit oracle/fallback/performance-exception and prospective rules;
-adding their future capabilities requires its own full promotion and removal
-evidence. Completing DF consolidation does not erase or relabel that work.
+## Current-state interpretation and decisions
+
+Generated S/T/V and DF value/derivative families replaced their qualifying
+handwritten production routes through the #231 campaign. Retained native
+exceptions, CUDA runtime and other method families must still be classified
+by the **current ledger**. Removed internal selectors are not reproducible
+controls on new checkouts; use the pinned historical source when repeating a
+before/after measurement.
+
+The Direct-HF subsequent cleanup is tracked in
+[issue #356](https://github.com/jinzhezenggroup/generativeqc/issues/356);
+its closed status is not a guarantee that every current CUDA scientific
+exception has a generated replacement. New XC, AD, TensorIR and correlated
+methods must preserve the same rules without assuming uniform kernel
+implementations across CPU and CUDA.
+
+See [Performance engineering](performance_engineering.md) for work/traffic
+optimization methods and [Validation](validation.md) for endpoint acceptance.
+Historical one-electron and DF promotion decisions, rejected alternatives,
+source deltas and benchmark identities are captured in the
+[provenance note](../../.agents/notes/implemented/architecture/2026-10-09-cuda-retirement-provenance.md).

@@ -97,6 +97,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/methods/rccsd_method.cpp
     src/methods/rccsdt_method.cpp
     src/methods/df_rccsdt_method.cpp
+    src/methods/df_hf_guess.cpp
     src/posthf/bridge.cpp
     src/posthf/cuda_derivative.cpp
     src/posthf/mp2_derivative_common.cpp

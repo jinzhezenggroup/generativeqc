@@ -10,15 +10,24 @@ def test_codspeed_pr_tier_stays_bounded_and_change_aware() -> None:
     job = workflow.split("\n  cpu-benchmark:\n", 1)[1].split(
         "\n  upload-coverage:\n", 1
     )[0]
-    assert (
-        "if: github.event_name != 'merge_group' && github.event_name != 'push'" in job
-    )
+    assert "if: github.event_name != 'merge_group'" in job
     assert (
         "GENERATIVEQC_CODSPEED_TIER: "
-        "${{ github.event_name == 'pull_request' && 'pr' || 'full' }}"
+        "${{ (github.event_name == 'pull_request' || "
+        "github.event_name == 'push') && 'pr' || 'full' }}"
+    ) in job
+    assert (
+        "GENERATIVEQC_CODSPEED_EXTRA_CASES: "
+        "${{ github.event_name == 'push' && 'wb97mv' || '' }}"
     ) in job
     assert "Select change-aware PR CodSpeed coverage" in job
     assert "GENERATIVEQC_CODSPEED_EXTRA_CASES=" in job
+    assert "GENERATIVEQC_CODSPEED_RUN=0" in job
+    assert "Qualify PR CodSpeed comparison" in job
+    assert "steps.baseline.outputs.qualified == 'true'" in job
+    assert "Record successful master CodSpeed baseline" in job
+    assert "codspeed-cpu-baseline-${{ github.sha }}" in job
+    assert "github.event_name == 'push'" in job
     assert "src/dft/" in job
     assert "python/generativeqc_compiler/(dft|xc)/" in job
     assert "cpu-benchmark" not in workflow.split("\n  pass:\n", 1)[1]

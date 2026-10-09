@@ -1226,6 +1226,9 @@ def _block_solve(
     )
     ortho_seconds += time.perf_counter() - ortho_started
     hbar = np.zeros((max_columns, max_columns))
+    # Reuse the growing Arnoldi projection panel; all active columns are
+    # overwritten each iteration before their values enter hbar.
+    h_top_workspace = np.empty((max_columns, max_columns))
     solution = [engine.zeros() for _ in b]
     action_seconds = 0.0
     actions = 0
@@ -1254,7 +1257,8 @@ def _block_solve(
         q = len(basis)
         block = basis[last_start:q]
         images = [apply(vector) for vector in block]
-        h_top = np.zeros((q, len(block)))
+        h_top = h_top_workspace[:q, : len(block)]
+        h_top.fill(0.0)
         work = []
         ortho_started = time.perf_counter()
         for column, image in enumerate(images):

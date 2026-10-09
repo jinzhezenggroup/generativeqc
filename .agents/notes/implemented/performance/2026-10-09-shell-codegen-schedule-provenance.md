@@ -1,0 +1,624 @@
+# Decision: retain shell-class CUDA scheduling trials as historical evidence
+
+Status: implemented (retrospective record of accepted and rejected schedules)
+Date: 2026-10-09
+Original documentation snapshot: `fb9586569769fccac67bc23411d902e08119024d`
+
+## Problem and decision
+
+The original current-state codegen guide mixed stable compiler/AOT
+contracts with repeated class-specific experiments, synthetic resource
+tables, historical PR promotion results, and machine-specific Slurm
+reproduction commands. These trials are preserved below without
+claiming their source-era defaults remain active.
+
+Use the [current codegen guide](../../../../docs/developer/shell_codegen.md)
+and [target manifest](../../../../python/generativeqc_compiler/integral/production_shell_classes.json)
+for production behavior. At this snapshot, the `sm_120` manifest had
+22 rows, including 21 force and
+21 Fock consumer declarations.
+
+All source-era language such as 'now', 'promoted', 'remaining',
+'default', and old performance ratios below is historical,
+not a current capability or end-to-end speedup promise.
+
+## Experimental Rys backend
+
+The compiler also contains a backend-independent Rys/TRR/HRR state IR. It
+constructs a topologically ordered, duplicate-free one-dimensional recurrence
+program from any catalog shell specification while retaining the existing
+component order and translation recovery for center D. For `dddd`, this model
+requires five roots, 1296 Cartesian components, 162 requested axis states, and
+216 recurrence instructions. This exposes the high-order state surface without
+expanding it into the subset/Wick scalar expression DAG.
+
+An experimental CUDA lowering tests the approach on force-only `ppps`. It uses
+the same persistent exact-class queue ABI as production, assigns one complete
+shell task to each lane, evaluates a three-root interpolation table, and
+contracts the explicit recurrence states immediately into nine force
+accumulators. The three-root numerical data and interpolation are attributed to
+GPU4PySCF/PySCF under Apache-2.0 in the generated source. Independent tests
+cover the first six Boys moments, every Cartesian component, all four force
+centers, and translation recovery.
+
+The `sm_120` experiment rejects this lowering for production. The RHF and UHF
+wrappers compile at 255 registers per thread, a 56-byte stack, 64-byte spill
+stores, 64-byte spill loads, and 8528 bytes of shared memory. The 1,110,608-byte
+cubin took 4.67 seconds to compile and embeds a 27,024-byte root table. In two
+paired RTX 5090 runs, the Rys kernel took 1.315 ms and 1.032 ms versus 0.455 ms
+and 0.456 ms for the production component-lane recurrence: a 2.89x and 2.27x
+slowdown, respectively. Maximum force disagreement was `1.19e-13`.
+
+Consequently, the `ppps` thread-task production dispatch remains unchanged. No
+force endpoint was run for that candidate and no five-root `dddd` CUDA emitter
+was added: the simpler three-root case already fails the zero-spill/resource
+gate and loses the isolated timing gate by more than twofold. Reaching
+high-order production performance requires a materially different cooperative
+primitive/root/component mapping, not direct scaling of this thread-task
+prototype. The full measurements are in
+`benchmarks/results/rtx5090-ac39177-issue-3-rys3-rejection.json`.
+
+`dppp` now exercises that cooperative alternative. One 192-thread block owns
+one canonical task, lane zero evaluates the four-root interpolation once per
+primitive quartet, and the 162 active component lanes execute the same
+runtime-indexed one-dimensional TRR/HRR program. Each axis uses an explicitly
+addressed `5x4` table and returns only its base value and three independent
+first derivatives; this avoids both a 162-way divergent switch and the
+shell-wide scalar state graph. The fourth center is still recovered from
+translation after the six-warp force reduction. The fixed four-root table is a
+reproducible, Apache-attributed slice extracted from GPU4PySCF.
+
+On CUDA 12.9 `sm_120`, all four RHF/UHF ordinary and persistent wrappers use
+168 registers, a 160-byte stack, zero spills, and at most 960 bytes of shared
+memory. The checked-in 8192-task, three-primitive isolated gate improved from
+218.329 ms to 183.241 ms (`1.191x`) with `8.32e-12` maximum force disagreement.
+In the fixed-`dm0`, one-iteration 384-AO endpoint, the `dppp` kernel fell from
+167.420 ms to 139.197 ms and the GenerativeQC median moved from 3.327 s to 3.298 s.
+The smaller endpoint gain is expected: current profiling places the remaining
+GenerativeQC/GPU4PySCF force-kernel gap across many exact shell classes rather than
+inside `dppp` alone. The raw evidence is the
+[isolated gate](../../../../benchmarks/results/rtx5090-26ef747-dppp-cooperative-rys4-isolated.json),
+[384-AO endpoint](../../../../benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4.json),
+and [kernel summary](../../../../benchmarks/results/rtx5090-26ef747-384ao-dppp-cooperative-rys4-kernel-summary.csv).
+
+The fixed-root component-lane emitter is now generalized across the measured
+`dpps`, `dsps`, and `pppp` force classes, while their Fock consumers remain on
+the validated value recurrence. Isolated 8192-task gates improved by `1.239x`,
+`1.342x`, and `1.040x`, with maximum force disagreements of `6.51e-12`,
+`1.13e-11`, and `6.12e-12`, respectively. All generated RHF/UHF ordinary and
+persistent kernels remain spill-free on CUDA 12.9 `sm_120`.
+
+The production decision uses the real fixed-`dm0` endpoint rather than the
+isolated gate. In the three-class candidate profile, `dpps` fell from 148.233
+to 124.349 ms and `dsps` from 139.192 to 129.825 ms, but `pppp` regressed from
+99.936 to 102.041 ms. Production therefore promotes only `dpps` and `dsps` and
+keeps `pppp` on subset/Wick. The accepted 384-AO median falls from 3.298 to
+3.269 s; all three repeats use one SCF iteration on both engines, with maximum
+energy and force disagreements of `1.68e-11 Eh` and `3.15e-8 Eh/bohr`. The
+remaining endpoint is `0.655x` GPU4PySCF, so this is an incremental force
+improvement rather than a claim that the large-system gap is closed. Raw
+evidence is retained in the [accepted endpoint](../../../../benchmarks/results/rtx5090-259c256-384ao-dpps-dsps-rys3.json)
+and [candidate kernel summary](../../../../benchmarks/results/rtx5090-259c256-384ao-cooperative-rys3-kernel-summary_cuda_gpu_kern_sum.csv).
+
+The force-only density contraction now algebraically collapses the generic
+eight-permutation orbit before entering each generated recurrence. Direct SCF
+symmetrizes every accepted external or internally generated density, so the
+orbit is exactly one Coulomb product and two exchange products, multiplied by
+the diagonal and pair-equality orbit factors. This preserves the former
+unique-permutation semantics while removing its nested comparison loop from
+every Cartesian component. Exhaustive AO-index equality patterns agree with
+the old RHF/UHF expressions to roundoff, and the allocated CUDA suites cover
+the resulting production kernels. In the 384-AO fixed-`dm0` profile, `ppps`,
+`psps`, `dppp`, `dpps`, and `dsps` move from
+182.462/141.303/139.335/124.349/129.825 ms to
+178.344/140.030/137.922/122.614/127.782 ms. The matching three-repeat endpoint
+median is 3.258 s versus the preceding 3.269 s observation, with the same
+one-iteration branch and existing energy/force limits. This is a small
+instruction-path improvement; it does not close the remaining direct-force
+architecture gap.
+
+Issue #41 adds an opt-in final-density PPPS queue profile alongside the shell
+class counters. The diagnostic preserves the actual device materialization
+order in one compact signature per ket task, so its lane and primitive-warp
+efficiencies describe the production queue rather than a topology estimate.
+On the 384-AO fixed-`dm0` workload it reproduces all 1,863,242 screened PPPS
+shell tasks and reports 18,528 descriptor slots, but only 894 non-empty
+descriptors. Those live descriptors are large: the ket-count median/p90/p99 is
+2,401/3,010/3,266. Consequently, scalar lane efficiency remains 94.29% at 256
+threads and rises only to 97.07% at 128 and 98.42% at 64 threads. The original
+average over holes therefore does not demonstrate an underfilled live CTA.
+
+The stronger signal is mixed primitive work. With
+`p_t = nprim_bra * nprim_ket`, the measured production ordering has only
+25.995% primitive-work warp efficiency. The 1110 and 1011 orientations are
+balanced at 923,243 and 939,999 tasks, while primitive-weighted descriptor
+tail estimates remain roughly one ideal makespan beyond the mean. This rejects
+smaller whole-descriptor CTAs as the primary PPPS remedy and prioritizes
+primitive-signature bucketing plus compile-time orientation specialization.
+The complete counters, histograms, environment, and active class ledger are
+retained in the
+[issue #41 queue artifact](../../../../benchmarks/results/rtx5090-0b6a573-issue-41-ppps-queue-profile.json).
+
+The promoted Phase-3 path buckets each fixed-bra queue by the original
+`1110`/`1011` orientation and exact ket primitive-pair count. Its two-pass
+device histogram/prefix/scatter adds no host synchronization, global worker
+head, primitive-loop barrier, or component reduction. It is enabled by
+default and can be disabled for same-binary A/B measurements with
+`GENERATIVEQC_PPPS_SIGNATURE_BUCKETING=0`.
+
+On the same 384-AO queue, bucketing raises primitive-work warp efficiency from
+25.995% to 86.813% while preserving all 1,863,242 tasks and 10,300,330 units
+of primitive work. A five-repeat fixed-`dm0` ABBA endpoint comparison changed
+the median from 5.289540 s to 5.168806 s, saving 120.733 ms (2.34%). All
+samples retained the one-iteration branch; the maximum A/B differences were
+`1.36e-12 Eh` for energy and `2.21e-12 Eh/bohr` for force. The same protocol
+also improved the 96-AO endpoint by 2.89% and the 192-AO endpoint by 3.39%, so
+the preparation pass does not consume the smaller-case 2% regression budget.
+The compact raw
+timings, queue invariants, gates, and machine metadata are retained in the
+[signature-bucketing artifact](../../../../benchmarks/results/rtx5090-0b6a573-issue-41-ppps-signature-bucketing.json).
+
+The generated scalar worker also accepts 32, 64, 128, or 256 threads from the
+same binary via `GENERATIVEQC_PPPS_BLOCK_THREADS`; 256 remains the default. With
+signature bucketing enabled on both sides, five-repeat whole-descriptor ABBA
+comparisons found 128 threads 0.07% slower, 64 threads 0.40% slower, and the
+diagnostic 32-thread CTA 1.59% slower than 256. These measured results agree
+with the live-descriptor lane-efficiency counters and reject smaller
+whole-descriptor CTAs as a production follow-up. The variants do not change
+scalar quartet ownership, generated recurrence code, or primitive-loop
+synchronization and remain available for reproducible A/B checks.
+
+A device-side chunked-descriptor candidate was also implemented and measured,
+then fully reverted under the issue gate. At 256 threads, chunking improved
+the endpoint by 13.70 ms. At 128 threads it recovered 28.93 ms relative to the
+slower unchunked 128-thread mode, but the decisive interleaved comparison of
+the production 256-thread whole descriptor against 128-thread chunks saved
+only 20.86 ms (5.178864 s to 5.158004 s). That misses the required 25 ms
+standalone promotion threshold. The rejected candidate retained numerical and
+iteration parity; its raw samples remain in the signature-bucketing artifact.
+
+The same device histogram/prefix/scatter strategy now covers the scalar
+whole-task `psps` and `ppss` force workers. Each exact-class slice is grouped
+by the ordered primitive-pair counts `(nprim_pair0, nprim_pair1)` in a 65x65
+signature space; counts through 63 are exact and 64 is the overflow bucket.
+The two classes share one small 66 KiB metadata allocation but retain separate
+histograms and class offsets, so no task queue is duplicated and all other
+generated classes keep their existing order. Both paths are enabled by default
+and can be disabled independently with `GENERATIVEQC_PSPS_SIGNATURE_BUCKETING=0` and
+`GENERATIVEQC_PPSS_SIGNATURE_BUCKETING=0`.
+
+On the 384-AO fixed-`dm0` endpoint, five-repeat ABBA comparisons measured
+`psps` at 5.210367 s versus 5.101462 s, saving 108.905 ms (2.13%), and `ppss`
+at 5.106538 s versus 5.036536 s, saving 70.002 ms (1.39%). The maximum A/B
+differences were respectively `9.09e-13 Eh`/`1.77e-12 Eh/bohr` and
+`9.09e-13 Eh`/`1.47e-12 Eh/bohr`; every sample retained the one-iteration
+branch. The comparisons are independent and their endpoint savings should not
+be added. Raw samples and promotion gates are retained in the
+[low-order signature-bucketing artifact](../../../../benchmarks/results/rtx5090-0b6a573-issue-41-low-order-signature-bucketing.json).
+
+The pre-DSPS Phase-0 ledger joins an unprofiled, iteration-matched endpoint
+with five Nsight warm replays and the exact final-density shell-class profile.
+At 384 AOs, the accepted endpoint is 2.887663 s for GenerativeQC versus 2.139527 s
+for GPU4PySCF (`1.350x`). Relative to the issue baseline, the GenerativeQC endpoint
+is 293.829 ms lower and the engine gap is 290.173 ms smaller. Maximum energy
+and force errors are `1.55e-11 Eh` and `3.15e-8 Eh/bohr`, respectively.
+
+The profiled GenerativeQC host interval is 2886.001 ms per replay. Device kernels
+account for 1526.090 ms: 1458.804 ms in two-electron force, 27.542 ms in
+one-electron force, 27.447 ms in screening and queue preparation, and 12.297 ms
+in the remaining measured components. The remaining 1359.911 ms is explicitly
+reported as host/API/synchronization/idle time that cannot be assigned from a
+kernel summary. The range contains only the 0.001 ms final-Fock-rebuild
+selector; no Fock-build kernel ran because the replay reused the converged
+cold-path Fock state.
+
+The largest exact force classes are now `psss` at 137.054 ms, `dsps` at
+127.806 ms, `dpps` at 122.625 ms, `ddpp` at 118.595 ms, and `dpdp` at
+114.502 ms per replay. `ppps`, `psps`, and `ppss` account for 55.983, 33.695,
+and 19.696 ms, respectively. This establishes `dsps` and `dpps` as the next
+generalized roots-at-most-three queue/backend targets; the larger `psss` entry
+remains on its separate resident-kernel path. The complete joined evidence is
+retained in the
+[current-head component ledger](../../../../benchmarks/results/rtx5090-0b6a573-issue-41-current-head-component-ledger.json).
+
+### DSPS scalar Rys3 promotion
+
+The PPPS scalar whole-task Rys3 emitter is now generated from the catalog shell
+specification rather than a PPPS-only expression. DSPS therefore uses the same
+one-task-per-lane mathematical backend with 32 threads, 32 tasks per warp, and
+an eight-block-per-SM launch bound. The Fock consumer deliberately retains its
+previous component-lane schedule so the production change isolates force
+performance.
+
+The isolated DSPS gate improves from 19.122454 ms for component lanes to
+6.183466 ms for scalar thread tasks (`3.093x`) with a maximum force difference
+of `1.13e-11 Eh/bohr`. The promoted force kernel uses 252 registers, 7,248 B
+shared memory, and no stack or local memory. Its production shell-class time
+falls from 127.806 ms to 52.621 ms per replay (`2.429x`), saving 75.185 ms.
+
+On the five-repeat, iteration-matched 384-AO endpoint, GenerativeQC falls from
+2.887663 s to 2.810138 s while GPU4PySCF measures 2.135372 s. The change saves
+77.525 ms end to end; maximum energy and force errors remain `1.64e-11 Eh` and
+`3.15e-8 Eh/bohr`. The 96-AO guard regresses by 0.74%, below its 2% limit, and
+the 192-AO guard is neutral. The complete measurements and resource decisions
+are retained in the
+[DSPS scalar Rys3 artifact](../../../../benchmarks/results/rtx5090-176b07d-issue-41-dsps-scalar-rys3.json).
+
+The same generalized emitter can produce DPPS, but that scalar candidate is
+not promoted: PTXAS reports 255 registers, an 832 B stack, and 1,768/2,752 B
+of spill stores/loads. DPPS therefore needs lower live ranges or a different
+execution mapping rather than production timing of a known-spilling kernel.
+Primitive-signature sorting was also rejected for DSPS and DPPS because it was
+neutral to slower for their cooperative block workers.
+
+### DPPS uniform component warps
+
+The scalar Rys3 generator also exposed why DPPS needs a different execution
+mapping: one thread owning all 54 Cartesian components compiled with 255
+registers, an 832 B stack, and 1,768/2,752 B of spill stores/loads. DPPS now
+reuses the DPPP uniform-warp geometry instead. Each 256-thread block advances
+32 quartets; the hardware lane is the task coordinate and eight warps own
+disjoint component slices. The existing 64-thread component-lane Fock worker
+is retained unchanged.
+
+The isolated force gate improves from 39.521587 ms for component lanes to
+7.822773 ms for uniform component warps (`5.052x`) with a `6.51e-12 Eh/bohr`
+maximum force difference. Production kernels use 216--218 registers, a 56 B
+explicit stack, 36,360 B shared memory, and no spills. On the real 384-AO
+profile, DPPS falls from 122.643 ms to 91.341 ms per replay (`1.343x`), saving
+31.302 ms.
+
+The five-repeat endpoint correspondingly improves from 2.810138 s to
+2.779508 s; GPU4PySCF measures 2.139936 s, leaving a `1.299x` ratio. Maximum
+energy and force errors are `1.59e-11 Eh` and `3.15e-8 Eh/bohr`. The 96- and
+192-AO checks retain the one-iteration branch and pass the same accuracy gates.
+The complete resource and timing evidence is retained in the
+[DPPS uniform Rys3 artifact](../../../../benchmarks/results/rtx5090-908bc46-issue-41-dpps-uniform-rys3.json).
+
+### PPPP uniform component warps
+
+PPPP now uses the same 32-task/eight-component-warp force geometry as DPPS.
+This supersedes the earlier component-lane Rys3 experiment, which regressed
+the production PPPP kernel from 99.936 ms to 102.041 ms and was therefore not
+promoted. The new mapping assigns the 81 Cartesian components across eight
+uniform hardware warps while preserving the accepted 96-thread Fock worker.
+
+The isolated force gate improves from 63.000351 ms for component-lane Rys3 to
+10.214315 ms for uniform component warps (`6.168x`) with a `6.12e-12 Eh/bohr`
+maximum force difference. Production kernels use 230--232 registers, an 88 B
+explicit stack, 36,360 B shared memory, and no spills. On the real 384-AO
+profile, PPPP falls from 99.109 ms to 69.975 ms per replay (`1.416x`), saving
+29.134 ms.
+
+The five-repeat endpoint improves from 2.779508 s to 2.751221 s while
+GPU4PySCF measures 2.143309 s, leaving a `1.284x` ratio. Maximum energy and
+force errors are `1.64e-11 Eh` and `3.15e-8 Eh/bohr`. The 96-AO check regresses
+by 0.91%, below the 2% gate, while the 192-AO check improves by 1.31%. Full
+evidence is retained in the
+[PPPP uniform Rys3 artifact](../../../../benchmarks/results/rtx5090-6a9f20d-issue-41-pppp-uniform-rys3.json).
+
+### Batched DSPP and DPSS Rys3 promotion
+
+DSPP and DPSS were screened together so their independent PTXAS and isolated
+force gates could share one production build, endpoint, profile, and pair of
+small-system checks. DSPP uses the same 32-task/eight-component-warp Rys3
+mapping as DPPS and PPPP while retaining its accepted 64-thread Fock worker.
+DPSS uses one complete Rys3 quartet per lane with 32 lanes and an
+eight-block-per-SM launch bound. Generalizing the scalar path also exposed and
+fixed a cross-shard helper collision: fixed-root symbols are now shell-scoped
+rather than hard-coded to PPPS.
+
+The isolated DSPP force gate improves from 47.847149 ms to 8.043763 ms
+(`5.948x`), while DPSS improves from 22.699392 ms to 6.103693 ms (`3.719x`).
+Both remain within `1.24e-11 Eh/bohr` of their oracles. DSPP compiles with
+214--216 registers, a 56 B stack, 36,360 B shared memory, and no spills; DPSS
+uses 252 registers, 6,224 B shared memory, no stack, and no spills.
+
+In the three-replay 384-AO profile, DSPP falls from 79.903 ms to 55.288 ms and
+DPSS from 71.554 ms to 29.451 ms, jointly saving 66.718 ms. Total two-electron
+force device time falls from 1,323.313 ms to 1,256.506 ms. The five-repeat
+endpoint correspondingly improves from 2.751221 s to 2.684645 s while
+GPU4PySCF measures 2.136467 s, leaving a `1.257x` ratio. Maximum energy and
+force errors are `1.55e-11 Eh` and `3.15e-8 Eh/bohr`; the 96- and 192-AO
+checks both improve by about 1.6%. Complete evidence is retained in the
+[batched DSPP/DPSS Rys3 artifact](../../../../benchmarks/results/rtx5090-31c3cd7-issue-41-dspp-dpss-rys3.json).
+
+### Batched DPDP and DPDS Rys4 promotion
+
+DPDP and DPDS were screened in the same batch so four PTXAS candidates and
+three resource-safe isolated candidates could share one production build,
+endpoint, profile, and pair of small-system checks. Force and Fock now have
+independently selectable schedules: DPDP uses a 352-thread component-lane Rys4
+force worker while retaining its 64-thread tiled Fock worker, and DPDS uses 32
+tasks across eight uniform component warps while retaining its 128-thread
+component-lane Fock worker. This separation also fixed the tiled Fock Coulomb
+initialization stride, which must use the Fock block size rather than the
+unrelated force block size.
+
+The isolated DPDP force gate improves from 1308.244630 ms to 399.939026 ms
+(`3.271x`) with a `7.28e-12 Eh/bohr` maximum force difference. DPDS improves
+from 152.188477 ms to 15.383649 ms (`9.893x`) with a
+`6.38e-12 Eh/bohr` difference; its component-lane Rys4 alternative reached
+109.091446 ms and was not selected. DPDP compiles with 168 registers, a 200 B
+stack, 1,312--1,320 B shared memory, and no spills. DPDS uses 254 registers, a
+112 B stack, 36,872 B shared memory, and no spills. A DPDP uniform-warp mapping
+was rejected before endpoint work because it compiled with 255 registers, a
+1,048 B stack, and roughly 6.3/6.7 KiB of helper spill stores/loads.
+
+In the three-replay 384-AO profile, DPDP falls from 114.339 ms to 35.610 ms and
+DPDS from 63.136 ms to 23.361 ms, jointly saving 118.505 ms. Total
+two-electron force device time falls from 1256.506 ms to 1137.411 ms. The
+five-repeat endpoint correspondingly improves from 2.684645 s to 2.565502 s
+while GPU4PySCF measures 2.134699 s, leaving a `1.202x` ratio. Maximum energy
+and force errors are `1.46e-11 Eh` and `3.15e-8 Eh/bohr`; the 96- and 192-AO
+checks improve by 3.50% and 5.15%. Complete evidence is retained in the
+[batched DPDP/DPDS Rys4 artifact](../../../../benchmarks/results/rtx5090-dcff605-issue-41-dpdp-dpds-rys4.json).
+
+### Batched DDPP, DDPS, and DDDS Rys4 promotion
+
+The next batch generalized the runtime-indexed Rys component worker from a
+`p` to a `d` shell on the second center. A raised first derivative needs the
+exact third-order HRR state, so the generator now emits the bounded cubic HRR
+formula while retaining the existing addressed TRR table. The larger task is
+kept behind a device-call boundary only for second-center `d` shells; this
+removed the final 16 B persistent spill from DDPP without changing the earlier
+DPPP/DPDP/DPDS code shape.
+
+PTXAS and reduced 2048-task isolated gates screened all three classes before
+the shared production build. DDPP selects a 352-thread component-lane worker
+and improves from 535.169800 ms to 122.601616 ms (`4.365x`). DDPS selects the
+same 32-task/eight-component-warp geometry as DPDS and improves from
+45.304180 ms to 8.872075 ms (`5.106x`); its safe component-lane alternative
+reached only 40.866753 ms. DDDS selects a 224-thread component-lane worker and
+improves from 358.775848 ms to 76.304947 ms (`4.702x`). Maximum isolated force
+differences remain below `4.44e-12 Eh/bohr`.
+
+The selected DDPP kernels use at most 168 registers, a 192 B stack,
+1,312--1,320 B shared memory, and no spills. DDPS uses 254 registers, a 112 B
+stack, 36,872 B shared memory, and no spills. DDDS uses 254 registers, a 192 B
+stack, 1,024--1,032 B shared memory, and no spills. Uniform-warp DDPP and DDDS
+were rejected before endpoint testing: DDPP generated roughly 9.3/10.0 KiB of
+helper spill stores/loads, while DDDS still spilled roughly 0.46/0.60 KiB.
+
+In the three-replay 384-AO profile, DDPP falls from 118.711 ms to 30.322 ms,
+DDPS from 47.369 ms to 15.490 ms, and DDDS from 44.560 ms to 11.027 ms. They
+jointly save 153.801 ms, while total two-electron force device time falls from
+1137.411 ms to 983.954 ms. The five-repeat endpoint improves from 2.565502 s
+to 2.411606 s; GPU4PySCF measures 2.144806 s, leaving a `1.124x` ratio.
+Maximum energy and force errors are `1.64e-11 Eh` and
+`3.15e-8 Eh/bohr`. The 96- and 192-AO checks improve by 13.55% and 7.38%.
+Complete evidence is retained in the
+[batched DDPP/DDPS/DDDS Rys4 artifact](../../../../benchmarks/results/rtx5090-541acc3-issue-41-ddpp-ddps-ddds-rys4.json).
+
+### 768-AO Fock follow-up for issue #52
+
+The 96-atom/768-AO warm profile is dominated by bounded streaming Fock, so
+similar-looking classes are screened as groups but promoted independently. The
+accepted changes are DSDS (Rys3, 128-thread subgroup, four tasks per warp,
+materialized pair terms) and DPDP (Rys4, 128-thread subgroup, two tasks per
+warp, recomputed pair terms with unrolling disabled). DPDP's isolated Fock
+timer fell from a five-run median of about 131 ms to 104 ms; DSDS fell from
+about 314 ms to roughly 40 ms in the same diagnostic.
+
+The final 768-AO endpoint (five interleaved one-iteration warm replays, loose
+`1e-8` SCF tolerances) measures 4.442 s for GenerativeQC versus 3.727 s for
+GPU4PySCF. All replays converge in one iteration; the maximum paired errors are
+`1.41e-11 Eh` and `1.13e-7 Eh/bohr`. Alternative shared candidates are not
+promoted solely from a common lowering shape: DDPP's subgroup variant regressed
+its Fock timer, DDDP's higher task count exceeded the 49,152 B static shared
+memory limit, and PPPS with four tasks per warp was slower than its eight-task
+schedule.
+
+### Measured schedule evidence on `sm_120`
+
+The largest recent end-to-end gain came from optimizing shared recurrence
+structure rather than promoting one more exact class. For small Boys arguments,
+the runtime and generated CUDA now evaluate only the highest requested order by
+power series and recover lower orders by downward recurrence. The committed
+192-AO batch-one measurement improved from about 4.49 s to 3.60 s (`1.25x`).
+Keeping the Boys implementation in production and benchmark templates means
+this algebraic optimization automatically reaches every generated class.
+
+The complete Fock autotune uses 128 synthetic `dpps` tasks with two primitives
+per shell. Searching both pair orientations expands the component schedule
+space from four to eight variants. Canonical/shared/unrolled value lowering
+remains the winner at 0.365 ms versus 0.485 ms for independent per-component
+recomputation (`1.33x`), with maximum Fock disagreement `1.39e-17`, at most
+138 registers, zero stack, and zero spills. Swapped/shared/unrolled is only
+`0.5%` slower at 0.367 ms, while swapping improves the rolled shared variant
+from 0.401 ms to 0.369 ms. Both recomputed-Coulomb orientations lose, and both
+unrolled variants spill. The measured winner matches the current production
+`dpps` schedule, but endpoint promotion remains governed by the separate
+real-molecule gate.
+
+The same eight-way search on the generated `dpps` first-gradient consumer
+selects swapped/shared/unrolled at 0.604 ms, versus 0.630 ms for the previous
+canonical orientation (`1.044x`). It is `2.89x` faster than the independent
+per-component gradient oracle, with maximum force disagreement `8.67e-19`,
+151 registers, a 40-byte stack, and zero spills. Pair orientation changes only
+the contraction loop/materialized pair, not physical center routing, so this
+gain required no shell-specific gradient algebra. Because the joint production
+row also owns Fock, a real-molecule endpoint gate must decide whether to retain
+one compromise schedule or justify consumer-specific schedules.
+
+The first full tiled search covers 24 `dddd` variants: tile 64/128/256,
+canonical/swapped contraction order, rolled/unrolled loops, and materialized
+versus recomputed pair storage. Materializing a 16-entry order-four pair table
+puts 720--1136 bytes in the per-thread stack and makes every original variant
+fail; unrolled variants also spill. Recomputing pair terms removes the array
+and lowers the accepted production wrappers to an 80-byte stack with zero
+spills. Autotuning selects tile 128/shared/unrolled/swapped/recomputed at
+5.302 ms, with maximum force disagreement `4.34e-19`, 168 registers, and all
+four production wrappers passing. Tile 256 is arithmetically faster in several
+variants but spills, demonstrating why tile timing alone is insufficient.
+
+The same search succeeds for the 2160-component `fddd` class. The selected
+tile 128/shared/rolled/canonical/recomputed schedule runs in 42.789 ms, has
+maximum force disagreement `8.67e-19`, and uses at most 160 registers, an
+80-byte stack, and zero spills across all production wrappers. The shared
+noinline oracle is a correctness reference rather than a production-speed
+baseline; candidate ranking uses fused kernel time, while real-molecule
+promotion still requires the endpoint gate.
+
+For 128 synthetic `dpds` tasks with two primitives per shell, the bounded
+search produced:
+
+| Schedule | Time | Registers | Stack | Shared | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| component/shared/unrolled | 1.880 ms | 156 | 40 B | 1880 B | winner |
+| component/shared/rolled | 1.941 ms | 154 | 40 B | 1880 B | accepted |
+| tiled 64/shared/unrolled | 3.503 ms | 162 | 40 B | 1688 B | accepted |
+| component/recomputed/unrolled | 4.489 ms | 168 | 40 B | 1216 B | too slow |
+| component/recomputed/rolled | 4.159 ms | 163 | 208 B | 1216 B | stack/slow |
+
+The measured winner matches the current production `dpds` policy. Tiling is
+correct and resource-safe, but is retained for larger component products where
+the non-tiled mapping is impossible.
+
+For 128 synthetic `ddps` tasks with two primitives per shell, the matching
+component/shared/unrolled schedule ran in 2.022 ms versus 4.515 ms for the
+independent recompute oracle (`2.23x`). With primitive-pair cache reuse it uses
+at most 164 registers, a
+64-byte stack, 1880 bytes of shared memory, and zero spills. The real-spherical
+def2-SVP water-tetramer promotion gate then measured `1.0099x` speedup for
+batch one and `1.0078x` for batch four, with maximum energy and force
+differences of `1.48e-12 Eh` and `4.01e-13 Eh/bohr`. This positive endpoint
+result promoted `ddps` to the `sm_120` production profile.
+
+An active def2-TZVP water profile shows that classes containing at least one
+f shell account for `46.6%` of screened primitive work. `fpps` is the largest
+single f-shell class at `4.49%`. Its generated component/shared/unrolled
+schedule ran in 1.989 ms versus 4.514 ms for the recompute oracle (`2.27x`),
+using at most 157 registers, a 64-byte stack, and zero spills. A 15-sample
+real-molecule gate measured `1.0022x`, `1.0054x`, and `1.0060x` end-to-end
+speedups for batches one, four, and eight. The maximum force difference was
+`7.17e-13 Eh/bohr`. `fpps` is therefore the first production f-shell gradient
+class selected entirely by the generic IR, emitter, autotuner, and endpoint
+gates.
+
+Shell-wide density-weighted CSE now interns all three `psss` component DAGs in
+one graph, shares primitive geometry, contracts the density weights before the
+recurrence, emits only centers zero through two, and restores center three by
+translation. The independent component graphs contain 375 nodes in total;
+the weighted graph contains 318.
+
+For 1024 synthetic `psss` tasks with two primitives per shell, ten iterations,
+and seven timing samples, autotuning selected a 32-thread packed schedule at
+0.539 ms versus 0.932 ms for the independent recompute oracle (`1.73x`). The
+kernel uses 208 registers, a 96-byte stack, and zero spills on `sm_120`.
+
+That older component-cloning kernel did not beat the then-committed handwritten
+endpoint. On the real-spherical def2-SVP water tetramer after one-pass bucketing,
+it produced `0.9933x` speedup for batch one and `0.9952x` for batch four.
+Maximum energy and force differences remained below `1.0e-12 Eh` and
+`6.4e-13 Eh/bohr`, respectively. That candidate therefore remains rejected;
+the later force-only weighted-ERI lowering is a distinct implementation and is
+qualified separately under #356.
+
+## Earlier Fock promotion observation
+
+The `dpps` production row enables both `fock` and `force`. Its coefficient-only
+Fock worker measured `1.02249x` end-to-end speedup on the real-spherical
+def2-SVP S4 water octamer, with maximum energy and force differences of
+`1.36e-12 Eh` and `4.58e-12 Eh/bohr`. `ppps` and `dsps` Fock candidates were
+rejected by the same endpoint gate, demonstrating that automatic emission does
+not imply automatic promotion.
+
+## Earlier task classification and repository integration
+
+Before the incremental `ddps` promotion, the six generated force classes made
+the water-tetramer endpoint
+`1.065x` faster than the all-handwritten fallback for batch one and `1.089x`
+for batch four. Maximum energy and force differences are `8.0e-13 Eh` and
+`4.8e-13 Eh/bohr`. The seventh class, `ddps`, independently adds the positive
+`1.0099x`/`1.0078x` endpoint improvement reported above. The eighth class,
+`fpps`, adds a smaller but repeatable `1.0022x` to `1.0060x` on the f-shell
+def2-TZVP workload. These results include bucketing and registry dispatch.
+
+`cuda_rhf.cu` is also under active development in `../qc`. The codegen branch
+is synchronized only from committed upstream history; the latest integration
+fast-forwarded through `84152e3`, including the generated `dpps` Fock route,
+highest-order-only Boys-series evaluation, primitive-pair cache reuse in both
+handwritten and generated Fock/force kernels, and resident-bra chunking for the
+handwritten `psss` force fallback.
+Uncommitted or untracked state in `../qc` is never copied, overwritten, or used
+as a merge source. IR, emitters, autotuning, and manifests remain in independent
+modules so future upstream merges touch the hot runtime file only when dispatch
+behavior actually changes.
+
+## Historical machine-specific 768-AO reproduction commands
+
+The CUDA/Slurm/virtualenv paths below were valid for their original
+experiment only. They require a matching source and environment.
+
+To reproduce the current 768-AO class timing without enabling the expensive
+descriptor-count compaction, run the focused profile through Slurm:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:12:00 bash -lc \
+  'GENERATIVEQC_LIBRARY=$PWD/build/libgenerativeqc.so.0.1.0 \
+   PYTHONPATH=$PWD/python:$PWD \
+   python -u benchmarks/issue52_current_fock_profile.py \
+   --output build/issue52-current-fock-profile.json \
+   2> build/issue52-current-fock-profile.stderr'
+```
+
+The script converges once, freezes the resulting density, and then reports
+the per-class `gpu_ms`/launch counters for fixed-`dm0` Fock replays. The
+native class rows are written to the redirected stderr file. `--fock-classes`
+can restrict warm profiling to a comma-separated subset while leaving the cold
+convergence on the complete production registry. The optional `--count` switch
+is intentionally separate because it routes through descriptor compaction and
+can be much slower on the 768-AO topology.
+
+For the cross-engine regression gate, use the same fixed topology with the
+interleaved warm replay harness and an explicit upper bound on the
+iteration-matched GenerativeQC/GPU4PySCF ratio. The bound is supplied by the
+acceptance job rather than inferred from a stale artifact:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:20:00 bash -lc \
+  'export LD_PRELOAD=/group/software/cuda-12.9.1/targets/x86_64-linux/lib/libcublasLt.so.12:/group/software/cuda-12.9.1/targets/x86_64-linux/lib/libcublas.so.12; \
+   GENERATIVEQC_LIBRARY=$PWD/build/cuda-release-sm120/libgenerativeqc.so \
+   PYTHONPATH=$PWD/python:$PWD/benchmarks:$PWD \
+   /home/jzzeng/codes/qc/build/gpu4pyscf-venv/bin/python \
+   benchmarks/compare_gpu4pyscf_batch.py \
+   --case water-32mer-4s4-def2-svp-spherical --batch 1 --repeats 3 \
+   --max-iterations 100 --energy-tolerance 1e-12 \
+   --density-tolerance 1e-10 --reference-gradient-tolerance 1e-8 \
+   --screening-tolerance 1e-14 \
+   --maximum-generativeqc-over-gpu4pyscf 1.30 \
+   --output build/issue52-768-regression-gate.json'
+```
+
+The command fails on a timeout, non-converged replay, numerical mismatch, or
+an iteration-matched warm ratio above the supplied limit; a partial or missing
+JSON artifact is never treated as a pass.
+
+## Historical next-step queue (not a current roadmap)
+
+## Remaining work
+
+1. Reduce the remaining generated `psss` endpoint gap or retain the handwritten
+   kernel; do not promote the current synthetic winner.
+2. Continue profile-driven f-shell promotion with `fsps` and the first tiled
+   class; `fddd` now passes synthetic correctness/resource/timing gates, but do
+   not infer endpoint value from primitive-work fraction alone.
+3. Benchmark tiled d/f candidates on real molecular profiles, not only
+   synthetic shell tasks.
+4. Profile additional value-only Fock classes through the shared device slices;
+   retain endpoint rejection as a normal outcome.
+5. Add a tensor-shaped nuclear-derivative result ABI and corresponding CUDA
+   lowering before claiming Hessian automation; `IntegralIR` now preserves
+   explicit second/higher-order intent and reports this backend boundary.
+6. Extend the per-consumer production schedule support only when an endpoint
+   workload demonstrates a material Fock/force execution-geometry tradeoff.
+
+## Invariants and revisit when
+
+Require independent numerical oracles, bounded architecture resource
+gates, and source-matched complete molecular endpoints before
+promoting generated CUDA. When new evidence supersedes a choice, add
+a new decision and link it rather than rewriting this snapshot.

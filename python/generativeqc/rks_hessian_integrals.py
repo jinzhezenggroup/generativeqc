@@ -831,8 +831,11 @@ def _run_kernel_hvp(
     center_direction = mapping.expand_direction(direction[list(mapping.atom_indices)])
     full = np.zeros(len(center_indices) * 3)
     signature = ir.signature
+    # The public shell-stream adapter freezes its weight tile before the
+    # next AO chunk: one FP64 backing buffer can be reset and reused.
+    weights = np.zeros(component_count)
     for ao_chunk in _component_tiles(component_count):
-        weights = np.zeros(component_count)
+        weights.fill(0.0)
         weights[list(ao_chunk)] = weight_flat[list(ao_chunk)]
         for output_indices in second_coordinate_tiles(
             center_indices, packing="dense", hvp=True
