@@ -372,6 +372,18 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
       if (!rejected_smaller)
         throw std::runtime_error("rank-k accepted a smaller shape under larger metadata");
     }
+    if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
+      auto smaller_batch = invocation;
+      smaller_batch.batches = 1;
+      bool rejected_smaller_batch = false;
+      try {
+        binding.execute(stream, smaller_batch);
+      } catch (const std::invalid_argument&) {
+        rejected_smaller_batch = true;
+      }
+      if (!rejected_smaller_batch)
+        throw std::runtime_error("rank-k accepted a smaller logical batch prefix");
+    }
     auto enqueue = [&] {
       check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
                             cudaMemcpyDeviceToDevice, stream));

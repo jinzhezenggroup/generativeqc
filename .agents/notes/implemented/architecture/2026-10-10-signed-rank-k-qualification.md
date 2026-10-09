@@ -158,7 +158,7 @@ The CI mode repair marks the manifest generator executable without changing its
 bytes. Review then found one prepared diagnostic still labeled every invocation
 with the update candidate. The binding now retains immutable overwrite/update
 diagnostics and selects by invocation beta without last-mode state. Final review
-also required exact invocation `n/k` (batch repetition alone remains bounded),
+also required exact invocation `n/k` and flattened batch/spin prefix,
 an overwrite-specific semantic formula, and accurate timing language for the
 device reset. Job `z5` source-matches that exact `2268c159c` tree and is the
 accepted run. Its generated header, object, binary and raw hashes are in the

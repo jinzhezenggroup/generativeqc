@@ -44,6 +44,8 @@ compilation. Ambient compiler/include/library overrides remain rejected.
 ## Invariants
 
 - Every timed row uses metadata emitted from its exact `n/k` TensorIR program.
+- Runtime `n/k` and the flattened logical batch/spin prefix exactly match the
+  fixed request; no capacity-subset polymorphism is inferred.
 - Missing shapes, host roles, compiler bytes or manifest mismatches fail before
   compilation.
 - Source generation remains stdlib-only and never probes a compiler or GPU.

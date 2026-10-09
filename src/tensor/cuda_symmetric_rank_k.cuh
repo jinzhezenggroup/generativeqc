@@ -330,9 +330,9 @@ class CudaSymmetricRankK final {
     int device{};
     generativeqc_tensor::cuda_check(cudaGetDevice(&device));
     if (device != context_.device()) throw std::invalid_argument("rank-k device changed");
-    if (call.n != n_ || call.k != k_ || !call.batches || call.batches > batches_ ||
-        !call.coefficients || !call.weights || !call.output || !call.error ||
-        !std::isfinite(call.alpha) || !std::isfinite(call.beta))
+    if (call.n != n_ || call.k != k_ || call.batches != batches_ || !call.coefficients ||
+        !call.weights || !call.output || !call.error || !std::isfinite(call.alpha) ||
+        !std::isfinite(call.beta))
       throw std::invalid_argument("rank-k invocation exceeds prepared domain");
     const auto panel_bytes = contraction_product(
         contraction_product(contraction_product(call.n, call.k), call.batches), sizeof(double));
