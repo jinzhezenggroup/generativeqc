@@ -203,7 +203,9 @@ void allocation_fallback(Storage& storage, bool core = false, bool audit = false
     return binary
 
 
-@pytest.mark.parametrize("path", ["destructor", "fallback", "core-fallback", "audit-fallback"])
+@pytest.mark.parametrize(
+    "path", ["destructor", "fallback", "core-fallback", "audit-fallback"]
+)
 def test_provider_release_serializes_with_measurement(
     provider_lifetime_probe: Path, path: str
 ) -> None:
