@@ -334,6 +334,8 @@ void verify_density_endpoint_timing(const Molecule& molecule, bool device_input)
   require(cache.enable_density_diagnostics(), "could not enable timed density receipts");
   constexpr const char* arm = "on";
 #else
+  require(!cache.enable_density_diagnostics(),
+          "OFF timing arm must link a default-off density artifact");
   constexpr const char* arm = "off";
 #endif
   oracle(run(cache, molecule, device_input), molecule);
