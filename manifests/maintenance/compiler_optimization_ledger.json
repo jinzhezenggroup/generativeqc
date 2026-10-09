@@ -329,8 +329,7 @@
           "methods": [
             "HF",
             "DFT",
-            "MP2",
-            "CCSD(T)"
+            "MP2"
           ],
           "backends": [
             "cpu",
@@ -343,6 +342,22 @@
             "#933"
           ],
           "note": "The shared owner can represent this optimization family for these cells. This baseline does not claim method-consumer wiring, production selection, or benchmark qualification."
+        },
+        {
+          "methods": [
+            "CCSD(T)"
+          ],
+          "backends": [
+            "cpu",
+            "cuda"
+          ],
+          "status": "production",
+          "refs": [
+            "#831",
+            "#682",
+            "#933"
+          ],
+          "note": "tensor.native_arena owns the symbolic materialized FP64 slot schedule used by native RCCSD/triples/response and DF Lambda emission. CPU conventional invariant reuse remains default-off; CUDA DF Lambda core retention has its existing native complete-budget admission and bounded fallback. Generated conventional CUDA reuse entry points alone are not an active CUDA solver consumer. This row records production-connected arena planning, not complete-family adoption, a new default, or benchmark qualification. See docs/developer/iteration_reuse.md."
         }
       ]
     },

@@ -33,6 +33,25 @@ def _qualify_one_cell(payload: dict[str, object]) -> dict[str, object]:
     return qualified
 
 
+def test_native_arena_adoption_does_not_claim_cross_method_qualification() -> None:
+    group = next(
+        group
+        for group in _payload()["groups"]
+        if group["id"] == "data-residency-lifetime"
+    )
+    cells = {
+        (method, backend): row["status"]
+        for row in group["adoption"]
+        for method in row["methods"]
+        for backend in row["backends"]
+    }
+    for backend in ("cpu", "cuda"):
+        assert cells["CCSD(T)", backend] == "production"
+        for method in ("HF", "DFT", "MP2"):
+            assert cells[method, backend] == "represented"
+    assert "benchmark-qualified" not in cells.values()
+
+
 def test_repository_ledger_is_complete() -> None:
     assert ledger.validate(_payload()) == {
         "groups": 8,
