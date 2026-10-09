@@ -139,6 +139,7 @@ struct ArenaLayout {
   std::size_t fock_history{};
   std::size_t residual_history{};
   std::size_t diis_linear_system{};
+  std::size_t diis_raw_gram{};
   std::size_t diis_coefficients{};
   std::size_t diis_count{};
   std::size_t diis_head{};
@@ -175,7 +176,8 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
                  std::size_t spin_count, bool persistent_eri, bool transformed_direct,
                  bool shell_class_profiling, bool inactive_eigensolver_profiling,
                  bool bounded_fock_class_timing, bool bounded_direct_streaming,
-                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout);
+                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout,
+                 bool incremental_diis_gram = false);
 
 /** Borrow an array from the already allocated and validated arena. */
 template <typename T>

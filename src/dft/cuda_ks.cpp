@@ -109,7 +109,7 @@ std::size_t sum(std::size_t a, std::size_t b) {
 struct KsStateStorage {
   double *hcore{}, *overlap{}, *x{}, *j{}, *exchange{}, *range_exchange{}, *density{}, *proposal{},
       *warm{}, *warm_orbitals{}, *fock{}, *residual{}, *tmp1{}, *tmp2{}, *effective{},
-      *fock_history{}, *residual_history{}, *gram{}, *weights{}, *eigenvalues{},
+      *fock_history{}, *residual_history{}, *gram{}, *raw_gram{}, *weights{}, *eigenvalues{},
       *final_coefficients{}, *final_eigenvalues{}, *cold_seed{}, *incremental_anchor_density{},
       *incremental_delta_density{}, *incremental_anchor_j{}, *incremental_anchor_exchange{},
       *incremental_anchor_range_exchange{}, *incremental_max_abs_delta_density{};
@@ -124,7 +124,8 @@ struct KsStateStorage {
   /** The dry run and actual partition share one checked, typed layout. All
    * persistent and phase-local numeric buffers are explicitly charged. */
   std::size_t partition(std::size_t n, unsigned spins, unsigned history, bool exact_exchange,
-                        bool range_correction, bool incremental_direct_jk, void* storage) {
+                        bool range_correction, bool incremental_direct_jk,
+                        bool incremental_diis_gram, void* storage) {
     const auto matrix = product(n, n), elements = product(spins, matrix);
     std::size_t bytes = 0;
     const auto reserve = [&](auto*& pointer, std::size_t count) {
@@ -170,6 +171,10 @@ struct KsStateStorage {
     reserve(fock_history, product(history, elements));
     reserve(residual_history, product(history, elements));
     reserve(gram, product(history + 1, history + 1));
+    if (incremental_diis_gram)
+      reserve(raw_gram, product(history, history));
+    else
+      raw_gram = nullptr;
     reserve(weights, history + 1);
     reserve(eigenvalues, product(spins, n));
     reserve(final_coefficients, elements);
@@ -214,7 +219,9 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
     throw std::invalid_argument("invalid CUDA KS resource shape");
   KsStateStorage layout;
   return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
-                              incremental_direct_jk, nullptr),
+                              incremental_direct_jk,
+                              history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(),
+                              nullptr),
              n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
@@ -233,6 +240,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   int device{};
   std::size_t n{}, matrix{}, elements{};
   unsigned spins{}, history{};
+  bool incremental_diis_gram{};
   std::array<std::size_t, 2> occupations{};
   std::vector<double> host_xc_density, host_xc_alpha, host_xc_beta, host_xc_potential;
   // Async H2D copies retain these controls through the existing stream drain.
@@ -782,6 +790,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !std::all_of(integrals.hcore.begin(), integrals.hcore.end(), finite))
       throw std::runtime_error("nonfinite CUDA KS one-electron or nuclear energy");
     history = std::max(1U, options.diis_history);
+    incremental_diis_gram = history >= 2 && scf::cuda_execution::incremental_diis_gram_requested();
     device = fock_binding.device_id;
     stream = fock_binding.stream;
     if (range_provider) {
@@ -881,7 +890,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
             "resident CUDA KS nonlocal workspace exceeds the prepared VV10 device bound");
     }
     ks_arena_bytes = partition(n, spins, history, has_exchange, has_range_correction,
-                               incremental_direct_jk, nullptr);
+                               incremental_direct_jk, incremental_diis_gram, nullptr);
     resource.state_device_bytes = sum(ks_arena_bytes, nonlocal_arena_bytes);
     resource.xc_device_bytes =
         host_unfused ? 0 : (admit_ao ? ao_selection_bound.device_bytes : xc_layout.device_bytes);
@@ -915,7 +924,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       check(runtime::resource_cuda_malloc(&arena, ks_arena_bytes));
       partition(n, spins, history, has_exchange, has_range_correction, incremental_direct_jk,
-                arena);
+                incremental_diis_gram, arena);
       if (nonlocal_arena_bytes) {
         check(runtime::resource_cuda_malloc(&nonlocal_arena, nonlocal_arena_bytes));
         partition_nonlocal(nonlocal_arena);
@@ -1339,9 +1348,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
     launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                           residual);
     check(cudaGetLastError());
+    const bool incremental_gram = incremental_diis_gram;
+    if (incremental_gram)
+      check(launch_diis_pending_gram(stream, 1, n, spins, history, residual,
+                                     residual_history, enabled, history_count,
+                                     history_head, raw_gram));
     launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                               fock_history, residual_history, gram, weights, history_count,
-                              history_head, effective, true);
+                              history_head, effective, true, false, nullptr, 0,
+                              raw_gram);
     check(cudaGetLastError());
     multiply(effective, true, false, x, false, enabled, tmp1);
     multiply(x, false, true, tmp1, true, enabled, tmp2);
@@ -1864,9 +1879,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(effective, fock, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
       } else {
+        const bool incremental_gram = incremental_diis_gram;
+        if (incremental_gram)
+          check(launch_diis_pending_gram(stream, 1, n, spins, history, residual,
+                                         residual_history, enabled, history_count,
+                                         history_head, raw_gram));
         launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                                   fock_history, residual_history, gram, weights, history_count,
-                                  history_head, effective, true);
+                                  history_head, effective, true, false, nullptr, 0,
+                                  raw_gram);
         check(cudaGetLastError());
       }
       if (stabilize_occupations) {

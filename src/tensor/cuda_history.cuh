@@ -43,6 +43,44 @@ static __global__ void history_gram_row(const double* errors, I elements, int ca
   }
 }
 
+/** The pending residual is still outside the physical ring. Each block owns
+ * one output pair and reads only a live old slot or the pending self norm.
+ * The next stream operation may overwrite the pending slot after this grid.
+ */
+template <class Step>
+static __global__ void history_gram_pending_rows(
+    const double* pending, const double* errors, I elements, unsigned capacity,
+    const unsigned char* active, const unsigned* counts, const unsigned* heads,
+    double* raw_gram) {
+  const unsigned system = blockIdx.x / capacity, column = blockIdx.x % capacity;
+  if (!active[system]) return;
+  const unsigned count = counts[system], inserted = heads[system];
+  if (count > capacity || inserted >= capacity) return;
+  const unsigned first = (inserted + capacity - count) % capacity;
+  if (column != inserted && (column + capacity - first) % capacity >= count) return;
+  const auto* current = pending + I(system) * elements;
+  const auto* old = column == inserted
+                        ? current
+                        : errors + (I(system) * capacity + column) * elements;
+  __shared__ double partial[256];
+  double sum = 0.0;
+  for (I i = threadIdx.x; i < elements; i += 256)
+    sum = Step::dot_update(sum, old[i], current[i]);
+  partial[threadIdx.x] = sum;
+  __syncthreads();
+  for (unsigned stride = 128; stride; stride /= 2) {
+    if (threadIdx.x < stride)
+      partial[threadIdx.x] = Step::merge(partial[threadIdx.x], partial[threadIdx.x + stride]);
+    __syncthreads();
+  }
+  if (!threadIdx.x) {
+    const I base = I(system) * capacity * capacity;
+    raw_gram[base + I(inserted) * capacity + column] = partial[0];
+    if (column != inserted)
+      raw_gram[base + I(column) * capacity + inserted] = partial[0];
+  }
+}
+
 /** Insert a singleton prefix and generic size-one/two permutation orbits.
  * The compiler-owned map supplies coordinates, weights and projection. Read
  * both orbit members before admitting rounding-only asymmetry; never silently

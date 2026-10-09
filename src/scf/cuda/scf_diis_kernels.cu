@@ -1,9 +1,15 @@
 #include <math_constants.h>
 
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <limits>
+#include <stdexcept>
 
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_diis_kernels.hpp"
+#include "tensor/cuda_history.cuh"
+#include "generated_scf_array_native.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -87,7 +93,36 @@ void launch_diis_dot_partials(cudaStream_t stream, std::int32_t batch_size, std:
       counts, heads, parts, partials);
 }
 
-template <bool CooperativeDots>
+bool incremental_diis_gram_requested() {
+  const char* selection = std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM");
+  if (!selection || std::strcmp(selection, "0") == 0) return false;
+  if (std::strcmp(selection, "1") == 0) return true;
+  throw std::invalid_argument("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM must be 0 or 1");
+}
+
+cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_size,
+                                     std::int32_t nbf, std::int32_t spins,
+                                     std::uint32_t history, const double* residual,
+                                     const double* residual_history, const std::uint8_t* active,
+                                     const std::uint32_t* counts, const std::uint32_t* heads,
+                                     double* raw_gram) {
+  if (batch_size <= 0 || nbf <= 0 || (spins != 1 && spins != 2) || history < 2 || history > 64 ||
+      !residual || !residual_history || !active || !counts || !heads || !raw_gram)
+    return cudaErrorInvalidValue;
+  const auto vector_size = std::size_t(nbf) * nbf * spins;
+  const auto maximum = std::size_t(std::numeric_limits<generativeqc_tensor::I>::max());
+  if (vector_size > maximum / (std::size_t(batch_size) * history) ||
+      std::size_t(batch_size) > maximum / (std::size_t(history) * history) ||
+      std::size_t(batch_size) > std::size_t(std::numeric_limits<std::int32_t>::max()) / history)
+    return cudaErrorInvalidValue;
+  generativeqc_tensor::history_gram_pending_rows<generated::DiisNewRowStep>
+      <<<static_cast<unsigned>(batch_size) * history, 256, 0, stream>>>(
+      residual, residual_history, static_cast<generativeqc_tensor::I>(vector_size), history,
+      active, counts, heads, raw_gram);
+  return cudaGetLastError();
+}
+
+template <bool CooperativeDots, bool IncrementalGram>
 __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
                                    std::int32_t matrices_per_system, std::uint32_t history_capacity,
                                    const double* fock, const double* residual,
@@ -96,7 +131,7 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
                                    double* coefficients, std::uint32_t* history_count,
                                    std::uint32_t* history_head, double* effective_fock,
                                    bool normalize_metric, const double* dot_partials,
-                                   std::size_t parts) {
+                                   std::size_t parts, const double* raw_gram) {
   constexpr bool cooperative_dots = CooperativeDots;
   // One warp owns one system.  History vectors and the O(N^2) residual-dot
   // products are distributed across lanes, while the small dense DIIS solve
@@ -107,6 +142,21 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = matrix_size * static_cast<std::size_t>(matrices_per_system);
   const std::size_t matrix_offset = static_cast<std::size_t>(system) * vector_size;
+  if constexpr (IncrementalGram) {
+    unsigned valid = 0;
+    if (threadIdx.x == 0)
+      valid = history_count[system] <= history_capacity && history_head[system] < history_capacity;
+    valid = __shfl_sync(0xffffffffU, valid, 0);
+    if (!valid) {
+      if (threadIdx.x == 0) {
+        history_count[system] = 0;
+        history_head[system] = 0;
+      }
+      for (std::size_t element = threadIdx.x; element < vector_size; element += blockDim.x)
+        effective_fock[matrix_offset + element] = fock[matrix_offset + element];
+      return;
+    }
+  }
   if (history_capacity < 2) {
     for (std::size_t element = threadIdx.x; element < vector_size; element += blockDim.x) {
       effective_fock[matrix_offset + element] = fock[matrix_offset + element];
@@ -187,7 +237,12 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
           static_cast<std::size_t>(system) * history_stride +
           static_cast<std::size_t>((first + column) % history_capacity) * vector_size;
       double dot = 0.0;
-      if (cooperative_dots && dot_partials) {
+      if constexpr (IncrementalGram) {
+        const auto row_slot = (first + row) % history_capacity;
+        const auto column_slot = (first + column) % history_capacity;
+        dot = raw_gram[(static_cast<std::size_t>(system) * history_capacity + row_slot) *
+                           history_capacity + column_slot];
+      } else if (cooperative_dots && dot_partials) {
         const auto row_slot = (first + row) % history_capacity;
         const auto column_slot = (first + column) % history_capacity;
         const auto offset =
@@ -306,19 +361,24 @@ void launch_update_diis_kernel(
     const double* fock, const double* residual, const std::uint8_t* active, double* fock_history,
     double* residual_history, double* linear_system, double* coefficients,
     std::uint32_t* history_count, std::uint32_t* history_head, double* effective_fock,
-    bool normalize_metric, bool cooperative_dots, const double* dot_partials, std::size_t parts) {
+    bool normalize_metric, bool cooperative_dots, const double* dot_partials, std::size_t parts,
+    const double* raw_gram) {
+  if (raw_gram && (cooperative_dots || raw_gram == linear_system))
+    throw std::invalid_argument("invalid incremental DIIS solve binding");
   // Separate instantiations preserve the existing Direct/KS register and
   // instruction path; only the admitted DF policy uses collective dot work.
-  const auto launch = [&]<bool CooperativeDots>() {
-    update_diis_kernel<CooperativeDots><<<grid, block, shared_bytes, stream>>>(
+  const auto launch = [&]<bool CooperativeDots, bool IncrementalGram>() {
+    update_diis_kernel<CooperativeDots, IncrementalGram><<<grid, block, shared_bytes, stream>>>(
         batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active,
         fock_history, residual_history, linear_system, coefficients, history_count, history_head,
-        effective_fock, normalize_metric, dot_partials, parts);
+        effective_fock, normalize_metric, dot_partials, parts, raw_gram);
   };
-  if (cooperative_dots)
-    launch.template operator()<true>();
+  if (raw_gram)
+    launch.template operator()<false, true>();
+  else if (cooperative_dots)
+    launch.template operator()<true, false>();
   else
-    launch.template operator()<false>();
+    launch.template operator()<false, false>();
 }
 
 }  // namespace generativeqc::scf::cuda_execution
