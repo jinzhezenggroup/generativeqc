@@ -17,11 +17,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from generativeqc_compiler.dft._generated_native_semilocal import SEMILOCAL_FAMILIES  # noqa: E402
-from generativeqc_compiler.method._generated_xc_aliases import METHOD_ALIASES  # noqa: E402
-from generativeqc_compiler.method.ks_execution import compile_ks_execution_plan  # noqa: E402
-from generativeqc_compiler.method.spec import METHOD_CATALOG, resolve_method  # noqa: E402
-from generativeqc_compiler.xc._generated_split_hybrids import SPLIT_HYBRIDS  # noqa: E402
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SEMILOCAL_FAMILIES,
+)
+from generativeqc_compiler.method._generated_xc_aliases import (
+    METHOD_ALIASES,
+)
+from generativeqc_compiler.method.ks_execution import (
+    compile_ks_execution_plan,
+)
+from generativeqc_compiler.method.spec import (
+    METHOD_CATALOG,
+    resolve_method,
+)
+from generativeqc_compiler.xc._generated_split_hybrids import (
+    SPLIT_HYBRIDS,
+)
 
 
 @dataclass(frozen=True)
@@ -72,9 +83,19 @@ def _match_split(plan: object) -> bool:
 
 def _admit(plan: object) -> tuple[bool, bool, str, str]:
     if plan.method.basis is not None or plan.post_scf:
-        return False, False, "", "basis/dispersion/gCP correction is not natively composed"
+        return (
+            False,
+            False,
+            "",
+            "basis/dispersion/gCP correction is not natively composed",
+        )
     if plan.nonlocal_correlation is not None:
-        return False, False, "", "nonlocal contribution needs a complete native composition"
+        return (
+            False,
+            False,
+            "",
+            "nonlocal contribution needs a complete native composition",
+        )
     if any(term.operator != "full-range" or term.omega for term in plan.exchange):
         return False, False, "", "range exchange needs a complete native composition"
     if len(plan.exchange) > 1:
@@ -83,7 +104,12 @@ def _admit(plan: object) -> tuple[bool, bool, str, str]:
     record = _match_curated(plan)
     if record is not None:
         if record["exchange_policy"] == "canonical":
-            return False, False, "", "canonical semilocal family requires its full method graph"
+            return (
+                False,
+                False,
+                "",
+                "canonical semilocal family requires its full method graph",
+            )
         if plan.exchange and record["exchange_policy"] == "none":
             return False, False, "", "semilocal family has no exact-exchange lowerer"
         if any(value < 0 for _, value in plan.semilocal.functional.components):
@@ -96,8 +122,10 @@ def _admit(plan: object) -> tuple[bool, bool, str, str]:
             if record["coefficient_policy"] == "native-scales":
                 components = dict(plan.semilocal.functional.components)
                 x_name, c_name = (entry[0] for entry in record["components"])
-                if (components[x_name] != 1 - plan.exchange[0].coefficient
-                        or components[c_name] != 1):
+                if (
+                    components[x_name] != 1 - plan.exchange[0].coefficient
+                    or components[c_name] != 1
+                ):
                     cuda = False
         return True, cuda, str(record["scf_domain"]), ""
 
@@ -160,12 +188,24 @@ def render(items: tuple[Row, ...]) -> str:
         offset_c, offset_e = len(components), len(exchanges)
         components.extend(row.components)
         exchanges.extend(row.exchange)
-        carrier = "GENERATIVEQC_METHOD_PBE_RKS" if row.spin == 1 else "GENERATIVEQC_METHOD_PBE_UKS"
+        carrier = (
+            "GENERATIVEQC_METHOD_PBE_RKS"
+            if row.spin == 1
+            else "GENERATIVEQC_METHOD_PBE_UKS"
+        )
         fields = (
-            _q(row.name), _q(row.source), _q(row.identity), _q(row.domain),
-            carrier, f"{row.spin}u", f"{offset_c}u", f"{len(row.components)}u",
-            f"{offset_e}u", f"{len(row.exchange)}u",
-            "true" if row.cpu else "false", "true" if row.cuda else "false",
+            _q(row.name),
+            _q(row.source),
+            _q(row.identity),
+            _q(row.domain),
+            carrier,
+            f"{row.spin}u",
+            f"{offset_c}u",
+            f"{len(row.components)}u",
+            f"{offset_e}u",
+            f"{len(row.exchange)}u",
+            "true" if row.cpu else "false",
+            "true" if row.cuda else "false",
             _q(row.reason),
         )
         rows_cpp.append("    {" + ", ".join(fields) + "},")
@@ -192,27 +232,33 @@ def render(items: tuple[Row, ...]) -> str:
         f"inline constexpr std::array<Component, {len(components)}> kComponents{{{{",
     ]
     output.extend(
-        f"    {{{_q(name)}, {repr(coefficient)}}},"
-        for name, coefficient in components
+        f"    {{{_q(name)}, {coefficient!r}}}," for name, coefficient in components
     )
-    output.extend(["}};", f"inline constexpr std::array<Exchange, {len(exchanges)}> kExchanges{{{{"])
     output.extend(
-        f"    {{{kind}, {repr(coefficient)}, {repr(omega)}}},"
+        [
+            "}};",
+            f"inline constexpr std::array<Exchange, {len(exchanges)}> kExchanges{{{{",
+        ]
+    )
+    output.extend(
+        f"    {{{kind}, {coefficient!r}, {omega!r}}},"
         for kind, coefficient, omega in exchanges
     )
-    output.extend([
-        "}};",
-        f"inline constexpr std::array<Method, {len(items)}> kMethods{{{{",
-        *rows_cpp,
-        "}};",
-        "inline constexpr const Method* find_method(std::string_view name) noexcept {",
-        "  for (const auto& entry : kMethods)",
-        "    if (entry.name == name) return &entry;",
-        "  return nullptr;",
-        "}",
-        "}  // namespace generativeqc::cli::method_generated",
-        "",
-    ])
+    output.extend(
+        [
+            "}};",
+            f"inline constexpr std::array<Method, {len(items)}> kMethods{{{{",
+            *rows_cpp,
+            "}};",
+            "inline constexpr const Method* find_method(std::string_view name) noexcept {",
+            "  for (const auto& entry : kMethods)",
+            "    if (entry.name == name) return &entry;",
+            "  return nullptr;",
+            "}",
+            "}  // namespace generativeqc::cli::method_generated",
+            "",
+        ]
+    )
     return "\n".join(output)
 
 
