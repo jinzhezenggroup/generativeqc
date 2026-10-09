@@ -18,6 +18,11 @@ from pathlib import Path
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 
 def quartet_census(shells: tuple) -> dict[str, int]:
     """Count canonical Cartesian work and eligible shared-geometry evaluations."""
@@ -81,7 +86,7 @@ def main() -> None:
     )
     parser.add_argument("--forces", action="store_true")
     parser.add_argument("--repeats", type=int, default=3)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("repeats must be positive")
