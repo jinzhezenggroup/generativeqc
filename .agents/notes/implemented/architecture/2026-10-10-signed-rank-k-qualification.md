@@ -70,6 +70,9 @@ destroys and drains captured graphs before destroying the binding.
 - `beta=+0` and `beta=-0` select the overwrite request/helper and never read old
   output; all other beta values select the update request/helper. Both providers
   must agree on the selected request identity.
+- Preparation retains immutable diagnostics for both roots. Queries select the
+  record from the invocation beta; no mutable last-mode state may race captured
+  replay or concurrent submissions.
 - A single error word intentionally means all-batch failure isolation, not
   per-system isolation or ragged production admission.
 

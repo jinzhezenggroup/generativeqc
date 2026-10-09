@@ -320,8 +320,9 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
         request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
         target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
         compiled_n(n, k), compiled_k(n, k), n, k, batches, order, stream, 0, true);
-    if (bounded.diagnostic().selected.provider != "generated.cuda" ||
-        bounded.diagnostic().library_rejection.find("allowance") == std::string_view::npos)
+    if (bounded.prepared_diagnostic(invocation).selected.provider != "generated.cuda" ||
+        bounded.prepared_diagnostic(invocation).library_rejection.find("allowance") ==
+            std::string_view::npos)
       throw std::runtime_error("rank-k resource miss did not retain generated fallback");
     check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
                           cudaMemcpyDeviceToDevice, stream));
@@ -343,9 +344,21 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
         target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
         compiled_n(n, k), compiled_k(n, k), n, k, batches, order, stream,
         want_library ? 256ULL << 20 : 0, want_library);
-    const auto& diagnostic = binding.diagnostic();
+    const auto& diagnostic = binding.prepared_diagnostic(invocation);
+    auto overwrite_probe = invocation;
+    overwrite_probe.beta = 0.0;
+    const auto& overwrite_diagnostic = binding.prepared_diagnostic(overwrite_probe);
     if ((diagnostic.selected.provider == "cublas") != want_library)
       throw std::runtime_error("rank-k selected wrong executable provider");
+    if (diagnostic.selected.request_identity != request(weighted, order, false, n, k).identity ||
+        overwrite_diagnostic.selected.request_identity !=
+            request(weighted, order, true, n, k).identity ||
+        diagnostic.selected.identity == overwrite_diagnostic.selected.identity ||
+        diagnostic.selected.semantic_identity == overwrite_diagnostic.selected.semantic_identity ||
+        diagnostic.selected.compilation_identity != compilation(weighted, order, false, n, k) ||
+        overwrite_diagnostic.selected.compilation_identity !=
+            compilation(weighted, order, true, n, k))
+      throw std::runtime_error("rank-k prepared diagnostic mislabeled its update mode");
     auto enqueue = [&] {
       check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
                             cudaMemcpyDeviceToDevice, stream));
@@ -519,8 +532,11 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
               << ",\"provider_allowance\":" << diagnostic.provider_allowance
               << ",\"provider_retained\":" << diagnostic.retained_provider_bytes
               << ",\"provider_version\":" << diagnostic.provider_version
-              << ",\"runtime_version\":" << diagnostic.runtime_version
-              << ",\"scientific_identity\":\""
+              << ",\"runtime_version\":" << diagnostic.runtime_version << ",\"request_identity\":\""
+              << diagnostic.selected.request_identity << "\",\"candidate_identity\":\""
+              << diagnostic.selected.identity << "\",\"semantic_identity\":\""
+              << diagnostic.selected.semantic_identity << "\",\"compilation_identity\":\""
+              << diagnostic.selected.compilation_identity << "\",\"scientific_identity\":\""
               << request(weighted, order, false, n, k).scientific_identity << "\"}" << std::endl;
   }
   check(cudaStreamDestroy(stream));

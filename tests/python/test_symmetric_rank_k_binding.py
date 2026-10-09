@@ -153,7 +153,11 @@ def test_all_native_old_output_reads_use_the_generated_binding() -> None:
         Path(__file__).resolve().parents[2] / "src/tensor/cuda_symmetric_rank_k.cuh"
     ).read_text()
     assert source.count("rank_k_generated::rank_k_bound_old_output(") == 3
-    assert source.count("call.beta == 0.0") == 1
+    assert source.count("call.beta == 0.0") == 2
+    assert (
+        "SymmetricRankKDiagnostic overwrite_diagnostic_, update_diagnostic_;" in source
+    )
+    assert "call.beta == 0.0 ? overwrite_diagnostic_ : update_diagnostic_" in source
     assert source.index("const auto panel = contraction_product") < source.index(
         "const bool small_row_request"
     )

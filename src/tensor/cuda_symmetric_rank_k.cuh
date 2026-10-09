@@ -295,16 +295,26 @@ class CudaSymmetricRankK final {
       library_ = selected.selected == 1;
       if (!library_ && scratch_)
         throw std::logic_error("rank-k selected generated with library scratch");
-      diagnostic_ = {
-          offers[selected.selected],
-          offers[1].rejection,
-          host_reservation,
-          library_ ? temporary_bytes_ : 0,
-          library_ ? CudaContractionContext::kProviderAllowance : 0,
-          context_.retained_bytes(),
-          context_.provider_version(),
-          context_.runtime_version(),
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()};
+      const auto prepare_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+      update_diagnostic_ = {offers[selected.selected],
+                            offers[1].rejection,
+                            host_reservation,
+                            library_ ? temporary_bytes_ : 0,
+                            library_ ? CudaContractionContext::kProviderAllowance : 0,
+                            context_.retained_bytes(),
+                            context_.provider_version(),
+                            context_.runtime_version(),
+                            prepare_seconds};
+      overwrite_diagnostic_ = {overwrite_offers[overwrite_selected.selected],
+                               overwrite_offers[1].rejection,
+                               host_reservation,
+                               library_ ? temporary_bytes_ : 0,
+                               library_ ? CudaContractionContext::kProviderAllowance : 0,
+                               context_.retained_bytes(),
+                               context_.provider_version(),
+                               context_.runtime_version(),
+                               prepare_seconds};
     } catch (...) {
       release_scratch();
       throw;
@@ -378,7 +388,11 @@ class CudaSymmetricRankK final {
     generativeqc_tensor::cuda_check(cudaGetLastError());
   }
 
-  const SymmetricRankKDiagnostic& diagnostic() const noexcept { return diagnostic_; }
+  const SymmetricRankKDiagnostic& prepared_diagnostic(const SymmetricRankKInvocation& call) const {
+    if (!std::isfinite(call.beta))
+      throw std::invalid_argument("rank-k diagnostic requires a finite beta");
+    return call.beta == 0.0 ? overwrite_diagnostic_ : update_diagnostic_;
+  }
 
  private:
   void release_scratch() noexcept {
@@ -395,7 +409,7 @@ class CudaSymmetricRankK final {
   std::size_t n_{}, k_{}, batches_{}, panel_bytes_{}, matrix_bytes_{}, temporary_bytes_{};
   RankKOrder order_{};
   CudaContractionContext context_;
-  SymmetricRankKDiagnostic diagnostic_;
+  SymmetricRankKDiagnostic overwrite_diagnostic_, update_diagnostic_;
   double* scratch_{};
   bool library_{};
 };
