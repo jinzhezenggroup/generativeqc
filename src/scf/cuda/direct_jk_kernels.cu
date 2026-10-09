@@ -1078,7 +1078,7 @@ void launch_bounded_shell_range_exchange_source(
       radial_operator, omega);
 }
 
-void launch_bounded_shell_energy_derivative(
+cudaError_t launch_bounded_shell_energy_derivative(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
@@ -1087,7 +1087,7 @@ void launch_bounded_shell_energy_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
     detail::BoundedDirectBlockDomain block_domain, bool separate_sources) {
-  launch_bounded_direct_shell_quartet_kernel_scaled(
+  return launch_bounded_direct_shell_quartet_kernel_scaled(
       unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
       batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
       shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,

@@ -38,8 +38,11 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
 /** Force-output fallback; purpose selects screening semantics, not the scientific output. */
 /** Method-neutral force variant. Coefficients multiply the Coulomb and exchange
  * density contractions without changing topology, screening, or recurrence.
- * separate_sources requires two total_atoms*3 output channels, [J', K']. */
-void launch_bounded_direct_shell_quartet_kernel_scaled(
+ * separate_sources requires two total_atoms*3 output channels, [J', K'].
+ * Proved s/p/d materialized force consumers partition dddd from the generic
+ * queue on the same stream, reusing its cursor and output. Submission/reset
+ * errors are returned without clearing CUDA's last launch error. */
+cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
     std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch, double screening_tolerance,
     const double* shell_pair_bounds, const ShellPairDensityBounds* shell_pair_density_bounds,
