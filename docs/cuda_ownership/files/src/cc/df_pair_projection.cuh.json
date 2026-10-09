@@ -1,0 +1,7 @@
+{
+  "path": "src/cc/df_pair_projection.cuh",
+  "reason": "Runtime storage projection and conservative admission metadata: call the compiler-owned pair mean and coordinate map, retain original tau, and reduce outward-distance/current-T1 magnitude bits without modifying physical arithmetic status. The ladder equation, reflection proof, coefficient majorant and physical residual gain remain compiler-owned.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

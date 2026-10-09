@@ -1,0 +1,269 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "gpu-numerical",
+  "subject": "bounded occupied-spectator DF CCSD(T) energy-only qualification",
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "revision": "2daa0aceaf6d140389ac5a183ead8b0ac3d3cd4a",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": null,
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "Exact original-DAG reflection and signed-rational majorant proofs are qualified; no shared formal equation digest was registered by this run.",
+    "ir": "Original and folded generated artifacts are retained by the reconstruction recipe; no shared formal IR digest was registered by this run.",
+    "source": "Frozen parent plus measured-source.patch.gz reconstruct the dirty measured source; provenance retains overlay/binary hashes, not a complete tree digest.",
+    "schedule": "The reproduction script freezes FP64 pedantic GEMMs, Q8 and ordinary full DIIS8; no shared formal schedule digest was emitted."
+  },
+  "device": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+    "cuda_driver_api": 13020,
+    "cuda_runtime": 12090
+  },
+  "toolchain": {
+    "cuda_toolkit": "12.9.1",
+    "cuda_runtime_api": 12090,
+    "cuda_driver_api": 13020,
+    "build_type": "Release",
+    "architecture": "sm_120",
+    "aot_profile": "portable_cuda",
+    "build_recipe": "build.sh.gz"
+  },
+  "settings": {
+    "device": "cuda",
+    "precision": "FP64, pedantic matrix GEMMs, original ordered Q accumulation",
+    "forces_requested": false,
+    "packed_diis": false,
+    "diis_history": 8,
+    "q_batch_limit": 8,
+    "correlation_budget_bytes": 68719476736,
+    "timing_boundary": "fresh process: native molecular RHF, DF source, CCSD including per-state admission/projection, independent expanded replay, FP64 (T), and owner teardown",
+    "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+    "qualification_limits": [
+      "energy-only endpoint",
+      "two observations per selection",
+      "not shared formal or global performance promotion",
+      "no force/Lambda/orbital-response promotion",
+      "CuMetal optional-path refusal"
+    ]
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": "Assigned CUDA runtime device identified under preserved Slurm visibility.",
+    "slurm_job": "2805",
+    "visibility": "0"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": "Exact signed-rational reflection/majorant proof and original-cut identity checks pass."
+    },
+    "source": {
+      "status": "pass",
+      "reason": "Compiler-only generation and native action checks pass; original eleven generated artifacts remain byte-identical."
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": "Retained Release CUDA libraries execute focused native/projection tests and every complete endpoint."
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": "All four retained independent total/(T) energy and original physical-replay residual gates pass."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "Four fresh complete native molecular energy-only endpoints execute matched physical work and exact contraction deltas."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "No shared formal/global performance or force/Lambda/response promotion."
+    }
+  },
+  "timings": [
+    {
+      "selection": "baseline",
+      "seconds": 187.32307570893317,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "seconds": 165.5804124288261,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "seconds": 165.73452182486653,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "baseline",
+      "seconds": 187.66751661198214,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    }
+  ],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Complete process physical allocation/peak is not measured; per-solver numeric capacity and owned-device byte receipts remain in samples.json.gz."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "Build recipes and successful library receipts are retained, but complete compilation cost was not registered for formal promotion."
+  },
+  "residuals": {
+    "physical_replay_r1": {
+      "maximum": 5.315799883609529e-13,
+      "tolerance": 1e-10
+    },
+    "physical_replay_r2": {
+      "maximum": 2.620571945208261e-13,
+      "tolerance": 1e-10
+    }
+  },
+  "block_errors": {
+    "total_energy_error": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0.0,
+      "max_absolute_error": 2.2026824808563106e-12,
+      "max_scaled_error": 0.00022026824808563106,
+      "rms_error": 2.2026824808563106e-12,
+      "shape": [
+        4
+      ]
+    },
+    "triples_energy_error": {
+      "passed": true,
+      "atol": 1e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 8.44810332800705e-14,
+      "max_scaled_error": 0.0008448103328007051,
+      "rms_error": 8.448016592278514e-14,
+      "shape": [
+        4
+      ]
+    },
+    "physical_replay_r1": {
+      "passed": true,
+      "atol": 1e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 5.315799883609529e-13,
+      "max_scaled_error": 0.005315799883609529,
+      "rms_error": 5.315773862821076e-13,
+      "shape": [
+        4
+      ]
+    },
+    "physical_replay_r2": {
+      "passed": true,
+      "atol": 1e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 2.620571945208261e-13,
+      "max_scaled_error": 0.002620571945208261,
+      "rms_error": 2.620571945208261e-13,
+      "shape": [
+        4
+      ]
+    }
+  },
+  "solver_iterations": [
+    {
+      "sample_index": 0,
+      "observations": 20,
+      "evaluations": 38
+    },
+    {
+      "sample_index": 1,
+      "observations": 20,
+      "evaluations": 38
+    },
+    {
+      "sample_index": 2,
+      "observations": 20,
+      "evaluations": 38
+    },
+    {
+      "sample_index": 3,
+      "observations": 20,
+      "evaluations": 38
+    }
+  ],
+  "solver_trace_reason": "Complete iteration/evaluation counts and final physical residuals are retained; per-iteration formal promotion traces were not exposed.",
+  "attachments": [
+    {
+      "path": "provenance.json",
+      "sha256": "5e7323ac6b592cbdfdccc576b38dcc1bee2c5bc8e5f68a755837f51327acb3e7"
+    },
+    {
+      "path": "samples.json.gz",
+      "sha256": "84b1d21271797f9d7ed8a2023f992fb5a002d52933037c80128a7ea61f9d578f"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Two observations per selection retain a scoped endpoint timing observation, not shared formal performance promotion."
+  },
+  "qualification_schema": "generativeqc.df-cc-occupied-spectator-validation.v1",
+  "decision_scope": "numerical",
+  "host_scientific_and_integer_metadata_tests": {
+    "passed": 26
+  },
+  "host_action_and_generation_tests": {
+    "passed": 7
+  },
+  "host_constructor_failure_injection": {
+    "passed": 1,
+    "includes_pair_first_oom": true
+  },
+  "host_provider_lifetime_tests": {
+    "passed": 5
+  },
+  "gpu_projection_tests": {
+    "slurm_job": "2802",
+    "passed": 6
+  },
+  "gpu_native_solver_tests": {
+    "slurm_job": "2802",
+    "passed": 36,
+    "skipped": 1
+  },
+  "gpu_projection_memcheck": {
+    "slurm_job": "2802",
+    "errors": 0
+  },
+  "final_library_tests": {
+    "slurm_job": "2804",
+    "passed": 9
+  },
+  "complete_endpoints": {
+    "slurm_job": "2805",
+    "order": [
+      "base",
+      "candidate",
+      "candidate",
+      "base"
+    ],
+    "all_numerical_gates_passed": true,
+    "all_actual_contraction_deltas_exact": true
+  },
+  "compiler_structure": {
+    "modules": 509,
+    "dependency_errors": 0
+  },
+  "original_generated_artifacts_byte_identical": 11,
+  "qualification_limits": [
+    "energy-only endpoint",
+    "two observations per selection",
+    "not shared formal or global performance promotion",
+    "no force/Lambda/orbital-response promotion",
+    "CuMetal optional-path refusal"
+  ]
+}
