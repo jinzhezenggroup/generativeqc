@@ -476,6 +476,7 @@ RccsdNativeState execute_rccsd_prepared(
     state.reference_energy_change = hf.energy_change;
     state.reference_density_rms = hf.density_rms;
     state.reference_iterations = static_cast<int>(hf.iterations);
+    state.reference_work = hf.precision;
     const auto o = reference->nocc;
     state.eps_o.assign(reference->orbital_energies.begin(),
                        reference->orbital_energies.begin() + static_cast<std::ptrdiff_t>(o));

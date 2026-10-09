@@ -1,0 +1,1686 @@
+{
+  "attachments": [],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "0-0.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "0-0.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-0.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271440895957767e-10,
+      "max_scaled_error": 0.1090480298652589,
+      "passed": true,
+      "rms_error": 1.4933506442371967e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "0-0.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "0-0.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-1.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "0-1.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-1.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271354298561846e-10,
+      "max_scaled_error": 0.10904514328539487,
+      "passed": true,
+      "rms_error": 1.4931214237945262e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "0-1.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "0-1.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-2.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "0-2.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-2.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271011239647237e-10,
+      "max_scaled_error": 0.10903370798824123,
+      "passed": true,
+      "rms_error": 1.4934676654227907e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "0-2.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "0-2.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-3.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "0-3.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-3.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2710589792372957e-10,
+      "max_scaled_error": 0.10903529930790985,
+      "passed": true,
+      "rms_error": 1.493341480768891e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "0-3.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "0-3.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-4.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "0-4.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "0-4.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2714264630584466e-10,
+      "max_scaled_error": 0.10904754876861489,
+      "passed": true,
+      "rms_error": 1.493395615470471e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "0-4.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "0-4.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-0.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "1-0.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-0.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2713376452164766e-10,
+      "max_scaled_error": 0.10904458817388256,
+      "passed": true,
+      "rms_error": 1.4931676029667975e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "1-0.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "1-0.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-1.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "1-1.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-1.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271251047820556e-10,
+      "max_scaled_error": 0.10904170159401853,
+      "passed": true,
+      "rms_error": 1.492938090046935e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "1-1.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "1-1.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-2.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "1-2.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-2.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2709079889059467e-10,
+      "max_scaled_error": 0.1090302662968649,
+      "passed": true,
+      "rms_error": 1.4932846397453592e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "1-2.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "1-2.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-3.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "1-3.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-3.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2709557284960056e-10,
+      "max_scaled_error": 0.10903185761653351,
+      "passed": true,
+      "rms_error": 1.49315857234049e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "1-3.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "1-3.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-4.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "1-4.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "1-4.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2713232123171565e-10,
+      "max_scaled_error": 0.10904410707723855,
+      "passed": true,
+      "rms_error": 1.4932122108309185e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "1-4.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "1-4.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-0.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "2-0.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-0.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2717883957644744e-10,
+      "max_scaled_error": 0.10905961319214914,
+      "passed": true,
+      "rms_error": 1.4931105568387454e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "2-0.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "2-0.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-1.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "2-1.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-1.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2717017983685537e-10,
+      "max_scaled_error": 0.10905672661228512,
+      "passed": true,
+      "rms_error": 1.4928809320589752e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "2-1.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "2-1.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-2.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "2-2.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-2.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2713587394539445e-10,
+      "max_scaled_error": 0.10904529131513148,
+      "passed": true,
+      "rms_error": 1.4932278102897686e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "2-2.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "2-2.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-3.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "2-3.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-3.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2714064790440034e-10,
+      "max_scaled_error": 0.10904688263480011,
+      "passed": true,
+      "rms_error": 1.4931015095254402e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "2-3.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "2-3.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-4.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "2-4.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "2-4.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2717739628651543e-10,
+      "max_scaled_error": 0.10905913209550515,
+      "passed": true,
+      "rms_error": 1.4931551701500252e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "2-4.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "2-4.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-0.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "3-0.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-0.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271892756728789e-10,
+      "max_scaled_error": 0.10906309189095964,
+      "passed": true,
+      "rms_error": 1.4935454320841288e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "3-0.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "3-0.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-1.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "3-1.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-1.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2718061593328684e-10,
+      "max_scaled_error": 0.10906020531109561,
+      "passed": true,
+      "rms_error": 1.493315764196243e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "3-1.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "3-1.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-2.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "3-2.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-2.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2714631004182593e-10,
+      "max_scaled_error": 0.10904877001394198,
+      "passed": true,
+      "rms_error": 1.4936627780994322e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "3-2.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "3-2.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-3.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "3-3.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-3.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271510840008318e-10,
+      "max_scaled_error": 0.10905036133361061,
+      "passed": true,
+      "rms_error": 1.4935364229413165e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "3-3.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "3-3.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-4.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "3-4.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "3-4.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271878323829469e-10,
+      "max_scaled_error": 0.10906261079431563,
+      "passed": true,
+      "rms_error": 1.4935901903100627e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "3-4.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "3-4.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-0.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "4-0.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-0.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2713198816480826e-10,
+      "max_scaled_error": 0.10904399605493609,
+      "passed": true,
+      "rms_error": 1.4932549548468018e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "4-0.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "4-0.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-1.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "4-1.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-1.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.271233284252162e-10,
+      "max_scaled_error": 0.10904110947507206,
+      "passed": true,
+      "rms_error": 1.4930252946464526e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "4-1.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "4-1.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-2.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "4-2.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-2.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2708902253375527e-10,
+      "max_scaled_error": 0.10902967417791842,
+      "passed": true,
+      "rms_error": 1.493372196567802e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "4-2.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "4-2.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-3.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "4-3.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-3.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2709379649276116e-10,
+      "max_scaled_error": 0.10903126549758706,
+      "passed": true,
+      "rms_error": 1.493245948983756e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "4-3.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "4-3.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-4.density": {
+      "atol": 1e-09,
+      "max_absolute_error": 5.911893370680321e-11,
+      "max_scaled_error": 0.059118933706803205,
+      "passed": true,
+      "rms_error": 2.0053051200010314e-12,
+      "rtol": 0,
+      "shape": [
+        52900
+      ]
+    },
+    "4-4.energy": {
+      "atol": 1e-09,
+      "max_absolute_error": 1.7053025658242404e-13,
+      "max_scaled_error": 0.00017053025658242404,
+      "passed": true,
+      "rms_error": 1.7053025658242404e-13,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    },
+    "4-4.forces": {
+      "atol": 3e-09,
+      "max_absolute_error": 3.2713054487487625e-10,
+      "max_scaled_error": 0.10904351495829208,
+      "passed": true,
+      "rms_error": 1.4932996986130948e-10,
+      "rtol": 0,
+      "shape": [
+        24
+      ]
+    },
+    "4-4.orbital_energies": {
+      "atol": 1e-09,
+      "max_absolute_error": 6.675549002466141e-12,
+      "max_scaled_error": 0.006675549002466141,
+      "passed": true,
+      "rms_error": 8.127438951970941e-13,
+      "rtol": 0,
+      "shape": [
+        230
+      ]
+    },
+    "4-4.reference_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 4.263256414560601e-14,
+      "max_scaled_error": 0.0004263256414560601,
+      "passed": true,
+      "rms_error": 4.263256414560601e-14,
+      "rtol": 0,
+      "shape": [
+        1
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "allocation": "Slurm 2770/2771, assigned devices preserved",
+    "driver": "595.91.07",
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "node": "node2"
+  },
+  "hardware": {
+    "device": {
+      "allocation": "Slurm 2770/2771, assigned devices preserved",
+      "driver": "595.91.07",
+      "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "node": "node2"
+    },
+    "reason": null,
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "23e78659f0c425843a0fb9d82d39a0ddfb0181659f190e83253263c00a3dbd44",
+    "ir": "90d4c6e34229d3cd11766364f2e42b74b8454e61d917c641b254190f5ad829ff",
+    "schedule": "9d4a441ffddaf868c04a9d630d17796d35a64dfc4806d076d4e57e8cc3e83f11",
+    "source": "c3de73ba733b1d6545dfe3474bd9a3d0683aed4a6575b1dcd4d000dbf37ece4b"
+  },
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Complete paired timings and physical Direct work counts are measured, but the compiler solver-performance envelope requires every SCF iteration trajectory, which this endpoint does not export. No fixed-state kernel or compiler solver promotion is claimed.",
+    "status": "not-run"
+  },
+  "residuals": {
+    "auto-direct-1": {
+      "canonical_density_drift": 7.654941784618341e-11,
+      "commutator": 2.1884161149898773e-12,
+      "eigen": 1.2405110563265236e-12,
+      "lambda": 6.116119587560638e-13,
+      "orthogonality": 2.0341581717653323e-11,
+      "z": 1.3570056221767523e-13
+    },
+    "auto-direct-2": {
+      "canonical_density_drift": 7.654941784618341e-11,
+      "commutator": 2.1884161149898773e-12,
+      "eigen": 1.2405110563265236e-12,
+      "lambda": 6.116119587560638e-13,
+      "orthogonality": 2.0341581717653323e-11,
+      "z": 1.3570056221767523e-13
+    },
+    "auto-direct-3": {
+      "canonical_density_drift": 7.654941784618341e-11,
+      "commutator": 2.1884161149898773e-12,
+      "eigen": 1.2405110563265236e-12,
+      "lambda": 6.116119587560638e-13,
+      "orthogonality": 2.0341581717653323e-11,
+      "z": 1.3570056221767523e-13
+    },
+    "auto-direct-4": {
+      "canonical_density_drift": 7.654941784618341e-11,
+      "commutator": 2.1884161149898773e-12,
+      "eigen": 1.2405110563265236e-12,
+      "lambda": 6.116119587560638e-13,
+      "orthogonality": 2.0341581717653323e-11,
+      "z": 1.3570056221767523e-13
+    },
+    "auto-direct-5": {
+      "canonical_density_drift": 7.654941784618341e-11,
+      "commutator": 2.1884161149898773e-12,
+      "eigen": 1.2405110563265236e-12,
+      "lambda": 6.116119587560638e-13,
+      "orthogonality": 2.0341581717653323e-11,
+      "z": 1.3570056221767523e-13
+    },
+    "direct-1": {
+      "canonical_density_drift": 9.434579853473402e-11,
+      "commutator": 1.4943046799942294e-12,
+      "eigen": 1.4582987595268548e-12,
+      "lambda": 6.11632758978413e-13,
+      "orthogonality": 2.2812932098936756e-11,
+      "z": 1.3569479381157108e-13
+    },
+    "direct-2": {
+      "canonical_density_drift": 9.434579853473402e-11,
+      "commutator": 1.4943046799942294e-12,
+      "eigen": 1.4582987595268548e-12,
+      "lambda": 6.11632758978413e-13,
+      "orthogonality": 2.2812932098936756e-11,
+      "z": 1.3569479381157108e-13
+    },
+    "direct-3": {
+      "canonical_density_drift": 9.434579853473402e-11,
+      "commutator": 1.4943046799942294e-12,
+      "eigen": 1.4582987595268548e-12,
+      "lambda": 6.11632758978413e-13,
+      "orthogonality": 2.2812932098936756e-11,
+      "z": 1.3569479381157108e-13
+    },
+    "direct-4": {
+      "canonical_density_drift": 9.434579853473402e-11,
+      "commutator": 1.4943046799942294e-12,
+      "eigen": 1.4582987595268548e-12,
+      "lambda": 6.11632758978413e-13,
+      "orthogonality": 2.2812932098936756e-11,
+      "z": 1.3569479381157108e-13
+    },
+    "direct-5": {
+      "canonical_density_drift": 9.434579853473402e-11,
+      "commutator": 1.4943046799942294e-12,
+      "eigen": 1.4582987595268548e-12,
+      "lambda": 6.11632758978413e-13,
+      "orthogonality": 2.2812932098936756e-11,
+      "z": 1.3569479381157108e-13
+    }
+  },
+  "revision": "4e20f7a7bcfbff770fefd13fa2777f8ab309679c",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "ccsd_diis_history": 8,
+    "declared_numeric_budget_bytes": 68719476736,
+    "fast_compile": false,
+    "kind": "solver",
+    "naux_correlation": 488,
+    "naux_jk": 484,
+    "nbf": 230,
+    "packed_cc_diis": true,
+    "prepared_batch": "unsupported by the public DF-CCSD(T) provider",
+    "reference": "unscreened FP64 Direct RHF; DF density only",
+    "warm_density": "unsupported by the public DF-CCSD(T) provider"
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Endpoint exports final reference audits and actual Direct Fock census, not every SCF iteration energy/residual.",
+  "stages": {
+    "compilation": {
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "Native default admission is decided under the method endpoint protocol in the Agent Note; this publication does not promote a new compiler kernel/solver primitive.",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": null,
+      "status": "pass"
+    },
+    "source": {
+      "reason": null,
+      "status": "pass"
+    }
+  },
+  "subject": "native DF density -> exact Direct RHF -> DF CCSD(T) E+F",
+  "tier": "endpoint",
+  "timings": [
+    {
+      "diagnostics": {
+        "df_cycles": 13,
+        "df_physical_focks": null,
+        "direct_physical_focks": 13,
+        "iterations": 12,
+        "pair": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 474.384852924,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 13,
+        "df_physical_focks": null,
+        "direct_physical_focks": 13,
+        "iterations": 12,
+        "pair": 2
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 480.554258746,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 13,
+        "df_physical_focks": null,
+        "direct_physical_focks": 13,
+        "iterations": 12,
+        "pair": 3
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 495.214363574,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 13,
+        "df_physical_focks": null,
+        "direct_physical_focks": 13,
+        "iterations": 12,
+        "pair": 4
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 474.590338736,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 13,
+        "df_physical_focks": null,
+        "direct_physical_focks": 13,
+        "iterations": 12,
+        "pair": 5
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 483.172343411,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 0,
+        "df_physical_focks": null,
+        "direct_physical_focks": 20,
+        "iterations": 19,
+        "pair": 1
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 516.443619047,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 0,
+        "df_physical_focks": null,
+        "direct_physical_focks": 20,
+        "iterations": 19,
+        "pair": 2
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 526.590930116,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 0,
+        "df_physical_focks": null,
+        "direct_physical_focks": 20,
+        "iterations": 19,
+        "pair": 3
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 537.403089648,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 0,
+        "df_physical_focks": null,
+        "direct_physical_focks": 20,
+        "iterations": 19,
+        "pair": 4
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 516.578786513,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "diagnostics": {
+        "df_cycles": 0,
+        "df_physical_focks": null,
+        "direct_physical_focks": 20,
+        "iterations": 19,
+        "pair": 5
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 526.206855745,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    }
+  ],
+  "toolchain": {
+    "aot_profile": "portable_cuda",
+    "architecture": 120,
+    "build": "Release",
+    "ccache": "4.5.1",
+    "cuda": "12.9.1",
+    "gcc": "11.4.0"
+  }
+}

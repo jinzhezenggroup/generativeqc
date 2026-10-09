@@ -1,0 +1,65 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Every measured control/candidate state and force comparison passes, with independent conventional RHF and same-Hamiltonian correlation/two-step force differences. Native default performance evidence is recorded separately as complete paired endpoints, not a compiler primitive promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 43494,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "a31002afe7d26a9f148332ed2239e3579d9b17ddeb47481216776313ac8082da"
+    },
+    {
+      "bytes": 1871,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "6df94287d7d1f55d705036d17d227725f0ecf5fa885bb34eea78739f190ec393"
+    },
+    {
+      "bytes": 23363,
+      "path": "samples.json",
+      "role": "samples",
+      "sha256": "20330c1b9fca87d8b8c111196be4b0ce9a558a11607903c677d29329fcc2fd22"
+    },
+    {
+      "bytes": 4031,
+      "path": "provenance.json",
+      "role": "input",
+      "sha256": "4e839d63f1e460452547cef46d22c48f4cd1d0cc8682583f0b91a9e8c3d6bc2b"
+    },
+    {
+      "bytes": 1158,
+      "path": "source-files.json",
+      "role": "input",
+      "sha256": "d6ff1c11d3917965a9f5752f341679776b023ac4ff98886cd32b28a813869b5f"
+    },
+    {
+      "bytes": 52036,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "c3de73ba733b1d6545dfe3474bd9a3d0683aed4a6575b1dcd4d000dbf37ece4b"
+    },
+    {
+      "path": "additional-qualification.json",
+      "role": "summary",
+      "bytes": 35450,
+      "sha256": "470a97cc6b3b31b793c74f303589cc30db169219f4bf4d35dbc04397f23a8c4a"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.df_hf_preconvergence",
+      "summarize"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "4e20f7a7bcfbff770fefd13fa2777f8ab309679c"
+  }
+}
