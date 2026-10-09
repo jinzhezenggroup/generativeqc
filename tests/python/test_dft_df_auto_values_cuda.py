@@ -58,10 +58,14 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
     reference_forces = cupy.asnumpy(-gradient.kernel())
 
     ordinary_derivatives = NativeKsSnapshot.density_fitted_integral_derivatives
-    for storage in ("auto", "dense", "auto-host-response"):
+    for storage in ("auto", "auto-panels", "dense", "auto-host-response"):
         trace_path = tmp_path / f"{storage}.jsonl"
         progress_path = tmp_path / f"{storage}-progress.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_VALUE_STORAGE", storage.split("-")[0])
+        monkeypatch.setenv(
+            "GENERATIVEQC_DF_COULOMB_RESPONSE",
+            "panels" if storage == "auto-panels" else "auto",
+        )
         monkeypatch.setenv("GENERATIVEQC_DF_TRACE", str(trace_path))
         monkeypatch.setenv("GENERATIVEQC_DF_PROGRESS_TRACE", str(progress_path))
         if storage == "auto-host-response":
@@ -95,6 +99,22 @@ def test_restricted_df_auto_retains_values_and_preserves_force_oracle(
             cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
             metrics = batch.last_density_fitting_metric_diagnostics()
             cold_rows = read_trace(trace_path)
+            retained_coulomb = [
+                row["counters"]
+                for row in cold_rows
+                if row["counters"].get("response_retained_coulomb_completed", 0)
+            ]
+            if storage in {"auto", "auto-host-response"}:
+                assert len(retained_coulomb) == 1
+                assert (
+                    retained_coulomb[0]["response_retained_coulomb_factor_passes"] == 1
+                )
+                assert not retained_coulomb[0].get(
+                    "response_inverse_applied_factor_gemms", 0
+                )
+                assert not retained_coulomb[0].get("response_metric_blas_dots", 0)
+            else:
+                assert not retained_coulomb
             assert metrics and all(
                 entry.streamed == (storage == "dense") for entry in metrics
             )

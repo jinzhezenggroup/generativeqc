@@ -559,6 +559,25 @@ class NativeKsSnapshot:
         self.check_current()
         return immutable(output)
 
+    def stationary_integral_device_reserve(
+        self, *, atoms: int, aos: int, primitives: int
+    ) -> int:
+        """Expose the known DF provider's concurrent-consumer byte envelope.
+
+        This is not its DF response allowance: the prepared DF owner accounts
+        that separately. Unknown/custom providers keep the legacy full reserve.
+        """
+        from generativeqc_compiler.method.stationary_resources import (
+            stationary_fitted_integral_reserve,
+        )
+
+        self.check_current()
+        if not self.density_fitted:
+            raise ValueError("bounded integral reserve requires a fitted snapshot")
+        return stationary_fitted_integral_reserve(
+            atoms=atoms, aos=aos, primitives=primitives
+        )
+
     def density_fitted_integral_derivatives(
         self,
         atom_count: int,

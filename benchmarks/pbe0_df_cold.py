@@ -105,6 +105,7 @@ def main() -> None:
                 "GENERATIVEQC_DF_VALUE_STORAGE",
                 "GENERATIVEQC_DF_EXCHANGE",
                 "GENERATIVEQC_DF_RESIDENT_EXCHANGE",
+                "GENERATIVEQC_DF_COULOMB_RESPONSE",
                 "GENERATIVEQC_DF_TRACE",
                 "GENERATIVEQC_DF_PROGRESS_TRACE",
             )
@@ -169,6 +170,7 @@ def main() -> None:
                 force_started = perf_counter()
                 result = original_force(*arguments, **keywords)
                 force_times.append(perf_counter() - force_started)
+                record["force_work"] = dict(result[1])
                 return result
 
             if include_forces:

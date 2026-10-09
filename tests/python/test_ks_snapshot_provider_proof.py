@@ -93,6 +93,29 @@ def test_provider_proof_checks_token_before_and_after_native_read(
     assert ("native" in checks) == (failure_check == 2)
 
 
+def test_fitted_integral_reserve_checks_the_live_snapshot() -> None:
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_fitted_integral_reserve,
+    )
+
+    checks = []
+    snapshot = SimpleNamespace(
+        density_fitted=True, check_current=lambda: checks.append("current")
+    )
+    assert NativeKsSnapshot.stationary_integral_device_reserve(
+        snapshot, atoms=96, aos=768, primitives=704
+    ) == stationary_fitted_integral_reserve(atoms=96, aos=768, primitives=704)
+    assert checks == ["current"]
+
+
+def test_direct_snapshot_cannot_offer_a_fitted_integral_reserve() -> None:
+    snapshot = SimpleNamespace(density_fitted=False, check_current=lambda: None)
+    with pytest.raises(ValueError, match="fitted snapshot"):
+        NativeKsSnapshot.stationary_integral_device_reserve(
+            snapshot, atoms=3, aos=24, primitives=22
+        )
+
+
 def test_missing_native_proof_never_guesses_a_fitted_provider() -> None:
     snapshot, _ = _snapshot()
     snapshot._library = SimpleNamespace()
