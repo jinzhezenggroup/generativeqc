@@ -45,8 +45,7 @@ generativeqc_status generativeqc_method_from_name(const char* canonical_name,
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
-generativeqc_status generativeqc_method_get_name(generativeqc_method method,
-                                                 const char** output) {
+generativeqc_status generativeqc_method_get_name(generativeqc_method method, const char** output) {
   if (output == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   const auto* entry = generativeqc::methods::generated::find_method(method);
   if (entry == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

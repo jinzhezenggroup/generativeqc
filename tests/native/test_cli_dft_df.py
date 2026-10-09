@@ -72,11 +72,13 @@ class NativeDftDfCliTests(unittest.TestCase):
 
     def test_rejected_requests_are_not_silently_downgraded(self) -> None:
         for flags, reason, expected_code in (
-            (("--density-fitting", "cuda", "--backend", "cpu"),
-             "DFT density-fitting backend must match", 1),
+            (
+                ("--density-fitting", "cuda", "--backend", "cpu"),
+                "DFT density-fitting backend must match",
+                1,
+            ),
             (("--auxiliary-basis", "def2-svp"), "requires density fitting", 2),
-            (("--density-fitting", "cpu", "--forces"),
-             "DFT forces are not exposed", 2),
+            (("--density-fitting", "cpu", "--forces"), "DFT forces are not exposed", 2),
         ):
             with self.subTest(flags=flags):
                 result = self.call(*flags)

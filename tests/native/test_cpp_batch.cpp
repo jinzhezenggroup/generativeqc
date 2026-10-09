@@ -139,8 +139,8 @@ int main() {
     // The builder is destroyed as soon as native preparation succeeds.
     // The returned Calculation must own the full KS snapshot independently.
     auto prepared = [&]() {
-      generativeqc::KsComposition pbe0(
-          GENERATIVEQC_METHOD_PBE_RKS, "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
+      generativeqc::KsComposition pbe0(GENERATIVEQC_METHOD_PBE_RKS,
+                                       "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
       pbe0.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
           .add_semilocal("GGA_C_PBE", 1.0)
           .add_semilocal("GGA_X_PBE", 0.75)

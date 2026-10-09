@@ -34,10 +34,8 @@ struct KsGrid {
  */
 class KsComposition {
  public:
-  KsComposition(generativeqc_method carrier, std::string scf_domain,
-                std::uint32_t spin_channels)
-      : carrier_(carrier), scf_domain_(std::move(scf_domain)),
-        spin_channels_(spin_channels) {
+  KsComposition(generativeqc_method carrier, std::string scf_domain, std::uint32_t spin_channels)
+      : carrier_(carrier), scf_domain_(std::move(scf_domain)), spin_channels_(spin_channels) {
     if (scf_domain_.empty() || (spin_channels_ != 1 && spin_channels_ != 2))
       throw std::invalid_argument("KS composition requires a domain and one/two spin channels");
   }
@@ -63,8 +61,8 @@ class KsComposition {
     return *this;
   }
 
-  KsComposition& add_exact_exchange(generativeqc_ks_exchange_operator operation,
-                                    double coefficient, double omega = 0.0) {
+  KsComposition& add_exact_exchange(generativeqc_ks_exchange_operator operation, double coefficient,
+                                    double omega = 0.0) {
     const double divisor = spin_channels_ == 1 ? 2.0 : 1.0;
     exchange_.push_back({operation, coefficient, omega, -coefficient / divisor});
     return *this;
