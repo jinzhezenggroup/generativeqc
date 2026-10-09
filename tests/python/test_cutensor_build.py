@@ -105,11 +105,6 @@ def _build(src: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _bump_mtime(path: Path) -> None:
-    stat = path.stat()
-    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
-
-
 @pytest.fixture(autouse=True)
 def _require_cmake_and_ninja() -> None:
     if shutil.which("cmake") is None or shutil.which("ninja") is None:
@@ -204,16 +199,16 @@ def test_in_place_header_upgrade_rechecks_on_incremental_build(tmp_path: Path) -
     header.write_text(
         header.read_text().replace("CUTENSOR_MAJOR 2", "CUTENSOR_MAJOR 3")
     )
-    _bump_mtime(header)
     built = _build(src)
     assert built.returncode != 0
+    assert "Re-running CMake" in built.stdout
     assert "requires cuTENSOR 2.8 or later in 2.x" in built.stderr
     header.write_text(
         header.read_text().replace("CUTENSOR_MAJOR 3", "CUTENSOR_MAJOR 2")
     )
-    _bump_mtime(header)
     built = _build(src)
     assert built.returncode == 0, built.stdout + built.stderr
+    assert "Re-running CMake" in built.stdout
     _assert_sdk(src, sdk)
 
 
