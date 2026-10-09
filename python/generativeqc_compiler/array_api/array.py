@@ -61,33 +61,38 @@ class VibeArray:
         """Reject use of symbolic array values in Python control flow."""
         raise TypeError("symbolic VibeArray values cannot drive Python control flow")
 
-    def __eq__(self, other: object) -> VibeArray:
+    def __eq__(self, other: object) -> VibeArray:  # ty: ignore[invalid-method-override]
         """Build a symbolic Boolean equality value."""
         from . import namespace
 
         return namespace.equal(self, other)
 
-    def __ne__(self, other: object) -> VibeArray:
+    def __ne__(self, other: object) -> VibeArray:  # ty: ignore[invalid-method-override]
+        """Build a symbolic Boolean inequality value."""
         from . import namespace
 
         return namespace.not_equal(self, other)
 
     def __gt__(self, other: object) -> VibeArray:
+        """Build a symbolic Boolean greater-than value."""
         from . import namespace
 
         return namespace.greater(self, other)
 
     def __ge__(self, other: object) -> VibeArray:
+        """Build a symbolic Boolean greater-than-or-equal value."""
         from . import namespace
 
         return namespace.greater_equal(self, other)
 
     def __lt__(self, other: object) -> VibeArray:
+        """Build a symbolic Boolean less-than value."""
         from . import namespace
 
         return namespace.less(self, other)
 
     def __le__(self, other: object) -> VibeArray:
+        """Build a symbolic Boolean less-than-or-equal value."""
         from . import namespace
 
         return namespace.less_equal(self, other)

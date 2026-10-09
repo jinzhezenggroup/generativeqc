@@ -184,26 +184,32 @@ def _compare(op: str, x1: object, x2: object) -> typing.Any:
 
 
 def equal(x1: object, x2: object) -> typing.Any:
+    """Compare finite real operands elementwise for equality."""
     return _compare("equal", x1, x2)
 
 
 def not_equal(x1: object, x2: object) -> typing.Any:
+    """Compare finite real operands elementwise for inequality."""
     return _compare("not_equal", x1, x2)
 
 
 def greater(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is greater than its peer."""
     return _compare("greater", x1, x2)
 
 
 def greater_equal(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is at least its peer."""
     return _compare("greater_equal", x1, x2)
 
 
 def less(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is less than its peer."""
     return _compare("less", x1, x2)
 
 
 def less_equal(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is at most its peer."""
     return _compare("less_equal", x1, x2)
 
 
@@ -576,7 +582,7 @@ def astype(
 
 
 def can_cast(from_: object, to: object, /) -> bool:
-    """Check safe promotion within the admitted real floating-point dtype lattice."""
+    """Check Boolean identity or safe promotion in the real-float dtype lattice."""
     source, target = _dtype_of(from_), _dtype_of(to)
     return source == target or (source == float32 and target == float64)
 
@@ -614,7 +620,7 @@ def isdtype(dtype: object, kind: object) -> bool:
 
 
 def result_type(*arrays_and_dtypes: object) -> np.dtype:
-    """Infer the float32/float64 common dtype, treating Python scalars as weak."""
+    """Infer Boolean identity or a real-float common dtype with weak scalars."""
     dtypes: list[np.dtype] = []
     for value in arrays_and_dtypes:
         if type(value) in (int, float):
@@ -690,7 +696,7 @@ def full(
     dtype: object = None,
     device: object = None,
 ) -> typing.Any:
-    """Create a finite uniform array, or capture an exact TensorIR constant."""
+    """Create a uniform Boolean or finite real array with an exact constant."""
     _creation_device(device)
     target = _namespace._creation_shape(shape)
     name = (

@@ -61,11 +61,12 @@ of every Array API dtype, device or dynamic shape.
 
 Tensor `SCHEMA_VERSION` versions serialized programs and `PRIMITIVE_VERSION`
 versions primitive semantics. Preserve these when reading/writing artifacts;
-do not use a package version as an interchangeable identity. The `float32` and
-`float64` exports are NumPy dtype objects, not conversion functions or device
-selectors. `ExactScalar` and XC `Coefficient` are type aliases for `int | str |
-Fraction`. Their consuming constructors validate rational spelling and reject
-unsupported float/bool coefficients; the alias itself performs no validation.
+do not use a package version as an interchangeable identity. The experimental
+array `bool`, `float32` and `float64` exports are NumPy dtype objects, not
+conversion functions or device selectors. `ExactScalar` and XC `Coefficient`
+are type aliases for `int | str | Fraction`. Their consuming constructors
+validate rational spelling and reject unsupported float/bool coefficients; the
+alias itself performs no validation.
 
 (python-basis-values)=
 ## Basis and electron-state values
@@ -360,11 +361,14 @@ promotes an arbitrary graph into a built-in method/property domain.
 
 The [experimental array guide](../user/experimental_array_api.md) defines the
 versioned subset. Generic arrays use static shape/broadcasting and float32/float64
-promotion. Scientific `VibeArray` values retain full TensorSpec index identities
-and require explicit compatible operations. `trace`/`input_array` build symbolic
-graphs; `compile` captures a callable for `backend="reference"` execution. Static creation supports finite uniform values; `_like`
-creation does not erase scientific metadata. Static reshape permits its single
-inferred dimension where documented; indexing/gather maps are bounded. `T`
+promotion. Finite real comparisons produce genuine Boolean arrays; Boolean data
+is distinct from floating data and integer TensorIR controls. Scientific
+`VibeArray` values retain full TensorSpec index identities and require explicit
+compatible operations. `trace`/`input_array` build symbolic graphs; `compile`
+captures a callable for `backend="reference"` execution. Static creation supports
+finite real or Boolean uniform values; `_like` creation does not erase scientific
+metadata. Static reshape permits its single inferred dimension where documented;
+indexing/gather maps are bounded. `T`
 reverses all axes; `mT` swaps only the last two and requires rank at least two.
 Both properties build new symbolic transpose nodes and preserve scientific
 index metadata, rather than returning a stored scalar attribute.
@@ -372,18 +376,20 @@ index metadata, rather than returning a stored scalar attribute.
 Eager mathematical operations use NumPy host arrays. There is no chemistry-unit
 conversion; the mathematical caller supplies consistent units. `DLPackDevice`
 records `(device_type, device_id)` and `DLPackImport` records the verified array,
-source/target device and copy-control contract. `float32`/`float64` are dtype
-tokens; dtype helpers do not add integer, complex or device domains.
+source/target device and copy-control contract. `bool`, `float32` and `float64`
+are dtype tokens. Boolean/real casts and promotion, integer/complex dtypes and
+additional device domains are not part of this slice.
 
 (python-array-errors)=
 ## Experimental array failures
 
 Invalid shape/axes, unsafe dtype requests, unsupported devices or symbolic
 Python control flow fail closed with the operation's TypeError/ValueError or
-backend error. Symbolic truth/comparison cannot be used as a dynamic Python
-branch. Eager operations retain NumPy's numerical behavior; capture/interpreter
-execution additionally enforces its finite/domain checks. A failed capture or
-execution does not publish a successful compiled result. Foreign device arrays
+backend error. Symbolic Boolean values, including comparison results, cannot be
+used as a dynamic Python branch. Comparison operands are finite real values;
+non-finite comparison semantics remain unsupported. Capture/interpreter execution
+enforces the bounded finite/domain checks. A failed capture or execution does not
+publish a successful compiled result. Foreign device arrays
 are rejected before hidden host conversion, including nested host containers.
 DLPack protocol/device/copy failures raise `DLPackInteropError`; a failed handoff
 is never retried with weaker copy requirements.
@@ -406,11 +412,12 @@ writes across consumers. Device relocation needs a separate explicit copy.
 (python-array-backends)=
 ## Experimental array backend boundary
 
-Eager and reference compiled-call paths admit CPU/NumPy float32/float64 with
-`device=None`. `xp.asarray` does not silently stage a foreign CUDA/DLPack array
-to host. The experimental `compile` accepts only `backend="reference"`; native
-compilation is a separate `extensions.tensor.compile` operation. Unsupported
-backends fail rather than falling back. Capability
+Eager and reference compiled-call paths admit CPU/NumPy bool/float32/float64 with
+`device=None`; comparisons consume finite real operands and return detached bool
+outputs. `xp.asarray` does not silently stage a foreign CUDA/DLPack array to host.
+The experimental `compile` accepts only `backend="reference"`; native TensorIR
+backends reject live Boolean data and comparisons instead of reinterpreting their
+storage. Unsupported backends fail rather than falling back. Capability
 reports separate frontend representation, execution and production qualification.
 DLPack interop verifies same-device transfer, but accepting a DLPack producer
 does not add that device to the eager namespace or native chemistry support.

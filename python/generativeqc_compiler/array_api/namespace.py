@@ -275,8 +275,9 @@ def _generic_binary(
 def _comparison(op: str, x1: object, x2: object) -> VibeArray:
     if isinstance(x1, VibeArray) and isinstance(x2, VibeArray):
         left, right = x1, x2
-        if _is_generic_array(left) and _is_generic_array(right):
-            left, right = _generic_binary(left, right)
+        operands = _generic_binary(left, right)
+        if operands is not None:
+            left, right = operands
     elif isinstance(x1, VibeArray):
         left, right = _generic_array_and_scalar(x1, x2, name=op)
     elif isinstance(x2, VibeArray):
