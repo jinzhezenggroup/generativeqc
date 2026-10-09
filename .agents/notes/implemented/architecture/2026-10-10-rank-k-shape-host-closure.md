@@ -55,8 +55,8 @@ compilation. Ambient compiler/include/library overrides remain rejected.
 Mutation/missing-input tests cover CUDA and staged host manifests. Shape tests
 require distinct request/scientific identities for `3x5` and `17x9`. qz Job
 `i1877-rankk-host-1010y2` generated a 3,666-role GCC closure; Job
-`i1877-rankk-h100-1010z2` regenerated the same manifest, compiled exact commit
-`c89ead5cd7b76ffe06bfb43cb66114e94ca386df`, and passed the complete H100 matrix
+`i1877-rankk-h100-1010z3` regenerated the same manifest, compiled exact commit
+`3715893dc2f15789bf0b8cd52384a6558ace4c6e`, and passed the complete H100 matrix
 with distinct identities for every weighted/shape family.
 
 ## Revisit when

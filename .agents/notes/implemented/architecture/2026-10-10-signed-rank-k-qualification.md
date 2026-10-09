@@ -105,16 +105,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `c89ead5cd7b76ffe06bfb43cb66114e94ca386df`, qz Job
-`i1877-rankk-h100-1010z2` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `3715893dc2f15789bf0b8cd52384a6558ace4c6e`, qz Job
+`i1877-rankk-h100-1010z3` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,581 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 13.14–21.34 µs for the generated
-route and 25.48–35.59 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 13.10–21.44 µs for the generated
+route and 25.50–35.89 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -150,11 +150,13 @@ the `3x5` request and that only the host compiler driver was hashed. Job `y`
 failed before manifest generation because the CUDA image has no Git; Job `y2`
 generated the 3,666-role fixed GCC closure. Job `z` failed closed before timed
 rows because the new shape gate preceded the existing overflow classification.
-Job `z2` preserves overflow admission, uses distinct per-shape identities,
-source-matches `c89ead5cd`, and is the accepted run. Its generated header,
-object, binary and raw hashes are in the compact receipt. Later receipt-only
-commits may reuse `z2` only while all qualified implementation blobs remain
-identical and latest-head review verifies that boundary.
+Job `z2` preserves overflow admission and uses distinct per-shape identities.
+The final CI mode repair marks the manifest generator executable without changing
+its bytes; Job `z3` source-matches that exact `3715893dc` tree and is the accepted
+run. Its generated header, object, binary and raw hashes are in the compact
+receipt. Later receipt-only commits may reuse `z3` only while all qualified
+implementation blobs and modes remain identical and latest-head review verifies
+that boundary.
 
 ## Revisit when
 
