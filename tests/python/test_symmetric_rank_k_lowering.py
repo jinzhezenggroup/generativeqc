@@ -178,10 +178,17 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
     toolkit = tmp_path / "cuda"
     for relative in (
         "bin/nvcc",
+        "bin/cudafe++",
+        "bin/fatbinary",
+        "bin/nvlink",
         "bin/ptxas",
+        "bin/crt/link.stub",
+        "nvvm/bin/cicc",
+        "nvvm/libdevice/libdevice.10.bc",
         "include/cuda_runtime.h",
         "lib64/libcublas.so.12",
         "lib64/libcublasLt.so.12",
+        "lib64/libcudadevrt.a",
         "lib64/libcudart.so.12",
     ):
         path = toolkit / relative

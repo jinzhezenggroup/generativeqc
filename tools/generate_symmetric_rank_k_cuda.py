@@ -26,9 +26,16 @@ from tools.generate_build_identity import _inventory, _source_identity
 
 _TOOLCHAIN_FILES = (
     "bin/nvcc",
+    "bin/cudafe++",
+    "bin/fatbinary",
+    "bin/nvlink",
     "bin/ptxas",
+    "bin/crt/link.stub",
+    "nvvm/bin/cicc",
+    "nvvm/libdevice/libdevice.10.bc",
     "lib64/libcublas.so.12",
     "lib64/libcublasLt.so.12",
+    "lib64/libcudadevrt.a",
     "lib64/libcudart.so.12",
 )
 
@@ -72,7 +79,7 @@ def compiler_identity(root: Path, toolkit_root: Path, host_compiler: Path) -> st
         environment[name] = ""
     return canonical_hash(
         {
-            "schema": "generativeqc.rank-k-compilation.v2",
+            "schema": "generativeqc.rank-k-compilation.v3",
             "source": _source_identity(root, _inventory(root, manifest)),
             "toolchain": toolchain,
             "toolkit_headers": headers,

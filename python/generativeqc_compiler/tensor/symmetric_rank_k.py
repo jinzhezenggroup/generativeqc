@@ -298,6 +298,7 @@ def symmetric_rank_k_request(
         scalar_update = symmetric_rank_k_scalar_update_program()
     if invalid_composition:
         raise ValueError("rank-k dense update TensorIR changed")
+    assert alpha is not None
     scalar_inputs = {
         value.attrs["name"]: value
         for value in scalar_update.live_nodes

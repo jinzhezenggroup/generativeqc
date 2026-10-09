@@ -69,6 +69,20 @@ if [[ ! -x "$nvcc_exe" ]]; then
   echo "explicit supported CUDA compiler is required" >&2
   exit 2
 fi
+toolchain_files=(
+  "$toolkit_root/bin/nvcc"
+  "$toolkit_root/bin/cudafe++"
+  "$toolkit_root/bin/fatbinary"
+  "$toolkit_root/bin/nvlink"
+  "$toolkit_root/bin/ptxas"
+  "$toolkit_root/bin/crt/link.stub"
+  "$toolkit_root/nvvm/bin/cicc"
+  "$toolkit_root/nvvm/libdevice/libdevice.10.bc"
+  "$toolkit_root/lib64/libcublas.so.12"
+  "$toolkit_root/lib64/libcublasLt.so.12"
+  "$toolkit_root/lib64/libcudadevrt.a"
+  "$toolkit_root/lib64/libcudart.so.12"
+)
 nvcc_version=$($nvcc_exe --version)
 if [[ "$nvcc_version" != *"V12.9.86"* ]]; then
   echo "this qualification is pinned to CUDA toolkit 12.9.86" >&2
@@ -95,10 +109,7 @@ echo "source_commit=$actual_commit" | tee "$output_dir/provenance.txt"
 sha256sum "$snapshot_root/source-identity.sha256" >> "$output_dir/provenance.txt"
 sha256sum "$snapshot_root/generated.sha256" >> "$output_dir/provenance.txt"
 "$nvcc_exe" --version | tee -a "$output_dir/provenance.txt"
-sha256sum "$nvcc_exe" "$toolkit_root/bin/ptxas" \
-  "$toolkit_root/lib64/libcublas.so.12" \
-  "$toolkit_root/lib64/libcublasLt.so.12" \
-  "$toolkit_root/lib64/libcudart.so.12" >> "$output_dir/provenance.txt"
+sha256sum "${toolchain_files[@]}" >> "$output_dir/provenance.txt"
 sha256sum "$host_exe" "$python_exe" >> "$output_dir/provenance.txt"
 nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader |
   tee -a "$output_dir/provenance.txt"

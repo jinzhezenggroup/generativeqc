@@ -50,6 +50,16 @@ def test_native_input_mutation_invalidates_identity(
     assert generator.compiler_identity(*inputs) != before
 
 
+@pytest.mark.parametrize("relative", generator._TOOLCHAIN_FILES)
+def test_fixed_recipe_input_mutation_invalidates_identity(
+    inputs: tuple[Path, Path, Path], relative: str
+) -> None:
+    _, toolkit, _ = inputs
+    before = generator.compiler_identity(*inputs)
+    (toolkit / relative).write_text("changed fixed recipe input")
+    assert generator.compiler_identity(*inputs) != before
+
+
 @pytest.mark.parametrize(
     "name",
     [
@@ -171,8 +181,17 @@ def test_missing_native_inputs_fail_closed(inputs: tuple[Path, Path, Path]) -> N
         generator.compiler_identity(*inputs)
 
 
+def test_missing_device_subtool_fails_closed(inputs: tuple[Path, Path, Path]) -> None:
+    _, toolkit, _ = inputs
+    (toolkit / "nvvm/bin/cicc").unlink()
+    with pytest.raises(FileNotFoundError, match="nvvm/bin/cicc"):
+        generator.compiler_identity(*inputs)
+
+
 def test_qualifier_verifies_staged_identity_before_compilation() -> None:
     script = (ROOT / "tools/qualify_symmetric_rank_k_cuda.sh").read_text()
+    for relative in generator._TOOLCHAIN_FILES:
+        assert f'"$toolkit_root/{relative}"' in script
     assert script.index("for variable in NVCC_PREPEND_FLAGS") < script.index(
         "cache_version="
     )
