@@ -84,6 +84,7 @@ struct CudaRhfBucketPlan {
   unsigned one_electron_value_mapping{};
   std::size_t primitive_count{};
   std::size_t diis_history{};
+  bool incremental_diis_gram{};
   int lwork{};
   bool persistent_eri{};
   bool quartet_direct{};

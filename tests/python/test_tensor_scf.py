@@ -9,6 +9,7 @@ from generativeqc_compiler.tensor import (
     density_program,
     diis_extrapolation_program,
     diis_gram_program,
+    diis_new_row_program,
     energy_program,
     execute,
     fock_composition_program,
@@ -211,6 +212,23 @@ def test_diis_pure_tensor_parts_match_fixed_history_equations() -> None:
     np.testing.assert_allclose(
         gram,
         np.einsum("bhspq,bkspq->bhk", residual, residual),
+        atol=1e-12,
+        rtol=1e-12,
+    )
+    pending = rng.normal(size=(2, 2, 3, 3))
+    new_row = execute(
+        diis_new_row_program(2, 4, 3, spin_count=2),
+        {"residual_history": residual, "pending_residual": pending},
+    ).outputs
+    np.testing.assert_allclose(
+        new_row["new_row"],
+        np.einsum("bhspq,bspq->bh", residual, pending),
+        atol=1e-12,
+        rtol=1e-12,
+    )
+    np.testing.assert_allclose(
+        new_row["new_norm"],
+        np.einsum("bspq,bspq->b", pending, pending),
         atol=1e-12,
         rtol=1e-12,
     )
