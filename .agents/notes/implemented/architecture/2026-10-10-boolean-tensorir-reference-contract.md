@@ -24,6 +24,9 @@ Boolean graphs reject explicitly. Floating precision schedules omit Boolean
 values and reject directives that target them. When a precision rewrite changes
 real arithmetic feeding a comparison, the Boolean boundary restores each
 operand's declared source dtype instead of assigning the predicate a float dtype.
+Host list/tuple and object-array admission classifies Boolean and real leaves
+before NumPy inference, with finite depth/item limits, so mixed source kinds
+cannot collapse into an apparently real array.
 
 The NumPy TensorIR interpreter is the bounded reference executor. It checks
 input dtype/shape, finite real inputs, output dtype/shape, detached results, and

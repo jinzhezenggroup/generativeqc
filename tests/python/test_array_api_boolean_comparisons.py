@@ -12,6 +12,7 @@ from generativeqc.experimental import array_api as xp
 from generativeqc_compiler.array_api import namespace as compiler_namespace
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.precision import PrecisionDirective
+from generativeqc_compiler.tensor import compare as tensor_compare
 from generativeqc_compiler.tensor import ir
 from generativeqc_compiler.tensor.ad_program import linearize, transpose_program
 from generativeqc_compiler.tensor.autodiff import dot_test, jvp, vjp
@@ -152,6 +153,40 @@ def test_public_bool_admission_and_bounded_creation() -> None:
         xp.add(mask, mask)
     with pytest.raises(TypeError, match="array operand"):
         xp.equal(1.0, 2.0)
+
+
+def test_mixed_bool_real_host_containers_fail_before_numpy_promotion() -> None:
+    mixed_values = (
+        [True, 0.5],
+        [[True, False], [0.25, 0.75]],
+        [np.asarray([True, False]), np.asarray([0.25, 0.75])],
+    )
+    for value in mixed_values:
+        with pytest.raises(TypeError, match="mixed bool/real"):
+            xp.asarray(value)
+        with pytest.raises(TypeError, match="mixed bool/real"):
+            xp.asarray(value, dtype=xp.float64)
+    with pytest.raises(TypeError, match="mixed bool/real"):
+        xp.add([True, 0.5], np.ones(2, dtype=np.float64))
+
+    np.testing.assert_array_equal(
+        xp.asarray([True, False], dtype=xp.bool), [True, False]
+    )
+    np.testing.assert_array_equal(
+        xp.add([0.25, 0.5], np.ones(2, dtype=np.float64)), [1.25, 1.5]
+    )
+    deep: object = True
+    for _ in range(65):
+        deep = [deep]
+    with pytest.raises(ValueError, match="nesting"):
+        xp.asarray(deep)
+
+
+def test_tensor_facade_exports_comparison_factory() -> None:
+    x = ir.input_tensor("x", TensorSpec(dtype="float64", role="input"))
+    predicate = tensor_compare("equal", x, x)
+    assert predicate.op == "equal"
+    assert predicate.spec.dtype == "bool"
 
 
 @pytest.mark.parametrize(

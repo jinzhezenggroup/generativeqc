@@ -135,9 +135,12 @@ external-device transfer remain unsupported. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
 same-device handoff. Every eager namespace operation checks this host boundary
 before NumPy dispatch, including nested host containers and foreign DLPack/CUDA
-array protocols. Exact scalar literals (`int`, `Fraction`, or rational
-strings) and finite Python floats are converted to the array operand dtype;
-mixed supported array dtypes promote according to the float32/float64 subset.
+array protocols. Before dtype inference, bounded host-container inspection rejects
+mixed Boolean/real leaves (up to 64 nesting levels and 1,000,000 inspected
+items), so NumPy cannot silently promote predicates into floating data. Exact
+scalar literals (`int`, `Fraction`, or rational strings) and finite Python floats
+are converted to the array operand dtype; mixed supported real array dtypes
+promote according to the float32/float64 subset.
 
 The dtype-introspection subset includes `astype` (explicit float32/float64
 casts), `can_cast` (promotion-safe), `finfo`, `isdtype`, and `result_type`

@@ -51,21 +51,31 @@ API_VERSION = 1
 
 float32 = np.dtype("float32")
 float64 = np.dtype("float64")
+_HOST_CONTAINER_MAX_DEPTH = 64
+_HOST_CONTAINER_MAX_ITEMS = 1_000_000
 
 
 def _symbolic(*values: object) -> builtins.bool:
     return any(isinstance(value, VibeArray) for value in values)
 
 
-def _check_host_values(value: object) -> None:
-    pending = [value]
+def _check_host_values(value: object) -> frozenset[str]:
+    """Reject hidden devices and classify bounded host leaves before coercion."""
+    pending = [(value, 0)]
     seen: set[int] = set()
+    kinds: set[str] = set()
+    inspected = 0
     while pending:
-        item = pending.pop()
+        item, depth = pending.pop()
+        inspected += 1
+        if inspected > _HOST_CONTAINER_MAX_ITEMS:
+            raise ValueError("host container inspection exceeds 1000000 items")
         if isinstance(item, np.ndarray):
             if not item.dtype.hasobject:
+                kinds.add("bool" if item.dtype == np.dtype("bool") else "real")
                 continue
             children = item.flat
+            child_count = item.size
         else:
             if callable(getattr(item, "__dlpack_device__", None)) or (
                 inspect.getattr_static(item, "__cuda_array_interface__", None)
@@ -76,12 +86,23 @@ def _check_host_values(value: object) -> None:
                     "use import_dlpack for an explicit handoff"
                 )
             if not isinstance(item, (list, tuple)):
+                kinds.add(
+                    "bool"
+                    if type(item) is builtins.bool or isinstance(item, np.bool_)
+                    else "real"
+                )
                 continue
             children = item
+            child_count = len(item)
         identity = id(item)
         if identity not in seen:
+            if child_count and depth >= _HOST_CONTAINER_MAX_DEPTH:
+                raise ValueError("host container nesting exceeds 64 levels")
+            if inspected + len(pending) + child_count > _HOST_CONTAINER_MAX_ITEMS:
+                raise ValueError("host container inspection exceeds 1000000 items")
             seen.add(identity)
-            pending.extend(children)
+            pending.extend((child, depth + 1) for child in children)
+    return frozenset(kinds)
 
 
 def _eager_data_array(value: object) -> np.ndarray:
@@ -669,11 +690,16 @@ def asarray(
         if name == "bool" or value.dtype == "bool":
             raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
         return VibeArray(_cast(value.node, name))
-    _check_host_values(value)
+    source_kinds = _check_host_values(value)
+    if len(source_kinds) > 1:
+        raise TypeError("mixed bool/real host values are unsupported")
     target = None if dtype is None else _data_dtype_name(dtype)
-    if target is not None and (target == "bool") != (
-        np.asarray(value).dtype.name == "bool"
-    ):
+    source_is_bool = (
+        source_kinds == frozenset(("bool",))
+        if source_kinds
+        else np.asarray(value).dtype.name == "bool"
+    )
+    if target is not None and (target == "bool") != source_is_bool:
         raise TypeError("cross-kind bool/real input conversion is unsupported")
     if copy is True:
         array = np.array(value, dtype=target, copy=True)
