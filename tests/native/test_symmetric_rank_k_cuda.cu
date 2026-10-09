@@ -155,6 +155,16 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
   const double alpha = 1.25, beta = -0.5;
   SymmetricRankKInvocation invocation{n, k, batches, d_coefficients.get(), d_weights.get(),
                                        d_output.get(), d_error.get(), alpha, beta};
+  if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
+    bool rejected_overflow = false;
+    try {
+      CudaSymmetricRankK overflow(request(weighted, order), candidates(weighted, order),
+                                   target(weighted, order), compilation(weighted, order),
+                                   std::numeric_limits<std::size_t>::max(), 2, 2,
+                                   order, stream, 0);
+    } catch (const std::overflow_error&) { rejected_overflow = true; }
+    if (!rejected_overflow) throw std::runtime_error("rank-k accepted dimension overflow");
+  }
   bool rejected_order = false;
   try {
     CudaSymmetricRankK wrong(request(weighted, order), candidates(weighted, order),
@@ -164,6 +174,25 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
                               stream, 0);
   } catch (const std::invalid_argument&) { rejected_order = true; }
   if (!rejected_order) throw std::runtime_error("rank-k accepted wrong physical order");
+  if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
+    CudaSymmetricRankK bounded(request(weighted, order), candidates(weighted, order),
+                               target(weighted, order), compilation(weighted, order),
+                               n, k, batches, order, stream, 0, true);
+    if (bounded.diagnostic().selected.provider != "generated.cuda" ||
+        bounded.diagnostic().library_rejection.find("allowance") == std::string_view::npos)
+      throw std::runtime_error("rank-k resource miss did not retain generated fallback");
+    check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(),
+                          cudaMemcpyDeviceToDevice, stream));
+    check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
+    bounded.execute(stream, invocation);
+    check(cudaStreamSynchronize(stream));
+    int error{};
+    check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+    if (error) throw std::runtime_error("rank-k resource fallback failed");
+    std::vector<double> result(matrix_count);
+    check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
+    verify(result, baseline, coefficients, weights, n, k, batches, order, alpha, beta);
+  }
   {
     CudaSymmetricRankK binding(request(weighted, order), candidates(weighted, order),
                                 target(weighted, order), compilation(weighted, order),
@@ -223,6 +252,27 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
     weights[0] = weighted ? occupations[0] * energies[0] : -0.75;
     check(cudaMemcpy(d_weights.get(), weights.data(), d_weights.bytes(), cudaMemcpyHostToDevice));
 
+    const auto original_coefficient = coefficients[0];
+    coefficients[0] = std::numeric_limits<double>::infinity();
+    check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(), cudaMemcpyHostToDevice));
+    check(cudaMemcpyAsync(d_output.get(), d_baseline.get(), d_output.bytes(), cudaMemcpyDeviceToDevice, stream));
+    check(cudaMemsetAsync(d_error.get(), 0, sizeof(int), stream));
+    binding.execute(stream, invocation);
+    check(cudaStreamSynchronize(stream));
+    check(cudaMemcpy(&error, d_error.get(), sizeof(int), cudaMemcpyDeviceToHost));
+    if (!error) throw std::runtime_error("rank-k nonfinite coefficient was accepted");
+    check(cudaMemcpy(result.data(), d_output.get(), d_output.bytes(), cudaMemcpyDeviceToHost));
+    if (result != baseline) throw std::runtime_error("rank-k input failure changed output");
+    coefficients[0] = original_coefficient;
+    check(cudaMemcpy(d_coefficients.get(), coefficients.data(), d_coefficients.bytes(), cudaMemcpyHostToDevice));
+
+    auto invalid_scalar = invocation;
+    invalid_scalar.alpha = std::numeric_limits<double>::quiet_NaN();
+    bool rejected_scalar = false;
+    try { binding.execute(stream, invalid_scalar); }
+    catch (const std::invalid_argument&) { rejected_scalar = true; }
+    if (!rejected_scalar) throw std::runtime_error("rank-k nonfinite alpha was accepted");
+
     bool rejected_alias = false;
     auto alias = invocation;
     alias.output = d_coefficients.get();
@@ -252,13 +302,19 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches,
               << ",\"order\":\"" << (order == RankKOrder::RowMajor ? "row" : "column")
               << "\",\"provider\":\"" << diagnostic.selected.provider
               << "\",\"endpoint_us\":" << (milliseconds * 1000.0 / repetitions)
-              << ",\"semantic_products\":" << products
-              << ",\"scale_elements\":" << (want_library ? panel_count : 0)
+              << ",\"prepare_us\":" << (diagnostic.prepare_seconds * 1e6)
+              << ",\"logical_products\":" << (upper * k)
+              << ",\"executed_products\":" << products
+              << ",\"scale_elements\":" << (want_library ? panel_count : products)
+              << ",\"weight_materialization_elements\":" << (weighted ? batches * k : 0)
+              << ",\"validation_elements\":" << upper
               << ",\"mirror_elements\":" << (upper - batches * n)
+              << ",\"output_reset_bytes\":" << d_output.bytes()
               << ",\"temporary_bytes\":" << diagnostic.temporary_bytes
               << ",\"provider_allowance\":" << diagnostic.provider_allowance
               << ",\"provider_retained\":" << diagnostic.retained_provider_bytes
               << ",\"provider_version\":" << diagnostic.provider_version
+              << ",\"runtime_version\":" << diagnostic.runtime_version
               << ",\"scientific_identity\":\"" << request(weighted, order).scientific_identity
               << "\"}" << std::endl;
   }

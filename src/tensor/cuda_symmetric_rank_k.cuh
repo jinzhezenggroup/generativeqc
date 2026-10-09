@@ -31,7 +31,7 @@ struct SymmetricRankKDiagnostic {
   runtime::NativeLoweringCandidate selected;
   std::string_view library_rejection;
   std::size_t host_bytes{}, temporary_bytes{}, provider_allowance{}, retained_provider_bytes{};
-  int provider_version{};
+  int provider_version{}, runtime_version{};
   double prepare_seconds{};
 };
 
@@ -238,6 +238,7 @@ class CudaSymmetricRankK final {
                      library_ ? temporary_bytes_ : 0,
                      library_ ? CudaContractionContext::kProviderAllowance : 0,
                      context_.retained_bytes(), context_.provider_version(),
+                     context_.runtime_version(),
                      std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count()};
     } catch (...) {
       release_scratch();
