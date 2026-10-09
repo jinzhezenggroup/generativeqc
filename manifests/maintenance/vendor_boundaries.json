@@ -364,6 +364,14 @@
         "cutensorGetVersion": 1
       }
     },
+    "src/tensor/cuda_symmetric_rank_k.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/symmetric_rank_k.py",
+      "reason": "Shared prepared signed rank-k executor consumes canonical TensorIR requests and owns bounded generated/cuBLAS execution, provider lifetime and finite symmetric publication; library admission remains qualification-only.",
+      "references": {
+        "cublasDgemm": 2
+      }
+    },
     "src/tensor/cuda_cublaslt.cuh": {
       "classification": "provider",
       "contract": "src/tensor/native_matrix_view.hpp",

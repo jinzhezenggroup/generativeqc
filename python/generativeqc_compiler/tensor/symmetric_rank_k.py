@@ -36,6 +36,11 @@ if TYPE_CHECKING:
 MatrixOrder = Literal["row-major", "column-major"]
 
 
+def _domains(indices: tuple) -> tuple:
+    """Compare scientific index domains without treating notation as identity."""
+    return tuple(index.domain for index in indices)
+
+
 def symmetric_rank_k_request(
     program: Program,
     output: str,
@@ -78,8 +83,8 @@ def symmetric_rank_k_request(
     ):
         raise ValueError("rank-k einsum labels do not describe a symmetric Gram")
     if (
-        left.spec.indices[:-2] != weights.spec.indices[:-1]
-        or left.spec.indices[:-2] != node.spec.indices[:-2]
+        _domains(left.spec.indices[:-2]) != _domains(weights.spec.indices[:-1])
+        or _domains(left.spec.indices[:-2]) != _domains(node.spec.indices[:-2])
         or left.spec.indices[-1].domain != weights.spec.indices[-1].domain
         or left.spec.indices[-2].domain != node.spec.indices[-2].domain
         or left.spec.indices[-2].domain != node.spec.indices[-1].domain
@@ -97,7 +102,7 @@ def symmetric_rank_k_request(
         and len(weights.inputs) == 2
         and all(
             term.op == "input"
-            and term.spec.indices == weights.spec.indices
+            and _domains(term.spec.indices) == _domains(weights.spec.indices)
             and term.spec.dtype == weights.spec.dtype
             for term in weights.inputs
         )
@@ -152,7 +157,6 @@ def symmetric_rank_k_request(
     semantics.update(
         parent_node_hash=adapter.hashes[node],
         symmetric_rank_k=True,
-        coefficient_storage=order,
         transpose="coefficient-times-weighted-coefficient-transpose",
         signed_weights=True,
         weights_materialization="preceding-multiply"

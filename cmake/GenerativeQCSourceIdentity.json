@@ -91,6 +91,8 @@
     "tools/xtb/resolve-openblas-wheel.py",
     "tools/xtb/scipy_openblas32_manifest.json",
     "tools/generate_scf_density_cuda.py",
+    "tools/generate_symmetric_rank_k_cuda.py",
+    "tools/qualify_symmetric_rank_k_cuda.sh",
     "tools/generate_weighted_gram_native.py",
     "tools/generate_gfn2_density_cuda.py",
     "tools/generate_ordered_history_native.py",

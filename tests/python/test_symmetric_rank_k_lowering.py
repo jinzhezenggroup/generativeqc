@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from hashlib import sha256
+from pathlib import Path
 from typing import Literal
 
 import pytest
@@ -14,6 +18,9 @@ from generativeqc_compiler.tensor.symmetric_rank_k import (
     emit_symmetric_rank_k_portfolio,
     symmetric_rank_k_request,
 )
+from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("weighted", [False, True])
@@ -79,9 +86,87 @@ def test_rank_k_layout_changes_physical_identity_but_not_science() -> None:
     row = symmetric_rank_k_request(program, "density", order="row-major")
     column = symmetric_rank_k_request(program, "density", order="column-major")
     assert row.scientific_identity == column.scientific_identity
+    assert row.semantic_identity == column.semantic_identity
     assert row.identity != column.identity
     assert row.operands[0].strides == (5, 1)
     assert column.operands[0].strides == (1, 3)
+
+
+def test_rank_k_batch_dummy_names_do_not_change_domains() -> None:
+    batch = IndexSpace("batch", "batch", 1)
+    spin = IndexSpace("spin", "spin", 2)
+    ao = IndexSpace("ao", "ao", 3)
+    orbital = IndexSpace("orbital", "orbital", 5)
+    coefficients = input_tensor(
+        "coefficients",
+        TensorSpec(
+            (
+                Index("coefficient_batch", batch),
+                Index("coefficient_spin", spin),
+                Index("coefficient_ao", ao),
+                Index("coefficient_orbital", orbital),
+            ),
+            role="input",
+        ),
+    )
+    weights = input_tensor(
+        "weights",
+        TensorSpec(
+            (
+                Index("weight_batch", batch),
+                Index("weight_spin", spin),
+                Index("weight_orbital", orbital),
+            ),
+            role="input",
+        ),
+    )
+    program = Program(
+        {"density": einsum("bspi,bsi,bsqi->bspq", coefficients, weights, coefficients)}
+    )
+    assert symmetric_rank_k_request(program, "density").scientific_identity
+
+
+def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
+    tmp_path: Path,
+) -> None:
+    environment = dict(os.environ)
+    environment.pop("PYTHONPATH", None)
+    toolkit = tmp_path / "cuda"
+    for relative in (
+        "bin/nvcc",
+        "bin/ptxas",
+        "lib64/libcublas.so.12",
+        "lib64/libcublasLt.so.12",
+        "lib64/libcudart.so.12",
+    ):
+        path = toolkit / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative)
+    output = tmp_path / "generated.cuh"
+
+    def generate() -> bytes:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tools/generate_symmetric_rank_k_cuda.py"),
+                "--output",
+                str(output),
+                "--toolkit-root",
+                str(toolkit),
+            ],
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        return output.read_bytes()
+
+    before = generate()
+    (toolkit / "bin/nvcc").write_text("changed compiler bytes")
+    assert generate() != before
 
 
 def test_rank_k_rejects_mixed_precision() -> None:
