@@ -25,6 +25,7 @@ thread_local bool fail_next_grid_runtime = false;
  */
 struct ResidentAoMap {
   generativeqc::runtime::OwnedCudaBuffer<size_t> offsets_device, indices;
+  generativeqc::runtime::OwnedCudaBuffer<unsigned> masks;
   std::vector<size_t> offsets;
   std::string identity;
   const double* points{};
@@ -34,6 +35,17 @@ struct ResidentAoMap {
   int map_derivative_order{};
   bool local_ao = true;
 };
+
+/** Count exact labels after all point workers finish their bitwise unions. */
+__global__ void ao_exact_counts_kernel(const unsigned* masks, size_t words, size_t tiles,
+                                       size_t* counts) {
+  for (size_t tile = size_t(blockIdx.x) * blockDim.x + threadIdx.x; tile < tiles;
+       tile += size_t(blockDim.x) * gridDim.x) {
+    size_t count = 0;
+    for (size_t word = 0; word < words; ++word) count += __popc(masks[tile * words + word]);
+    counts[tile + 1] = count;
+  }
+}
 struct GridPlan {
   Context context;
   // The CSR buffers synchronize their lifetime stream before it is destroyed.
@@ -528,13 +540,14 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         throw std::invalid_argument("stale resident AO map owner");
       const auto& owner = *p.resident_map;
       const auto block = generativeqc::dft::bind_native_ao_grid_block(
-          owner, owner.offsets, owner.indices.get(), resident_begin);
+          owner, owner.offsets, owner.indices.get(), resident_begin, bool(owner.masks.get()));
       if (npoint != block.npoint || points != owner.points + 3 * resident_begin)
         throw std::invalid_argument("resident AO map point order mismatch");
       active = block.nactive;
       identity_map = !block.indexed;
-      ao_ids = block.indexed ? owner.indices.get() + owner.offsets[resident_begin / p.capacity]
-                             : nullptr;
+      // The borrowed view uses pointer presence to distinguish an indexed empty
+      // domain from a dense identity. Empty spans never dereference this marker.
+      ao_ids = block.indexed ? (block.ao_ids ? block.ao_ids : owner.indices.get()) : nullptr;
     }
     if (!p.local) {
       if (ao_ids) throw std::invalid_argument("dense plan does not own AO gather buffers");
@@ -584,6 +597,13 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
         cuda_check(
             cudaMemcpyAsync(p.points, points, 3 * npoint * 8, cudaMemcpyHostToDevice, ctx.stream));
       cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
+      if (resident && active && !identity_map && p.resident_map->masks.get()) {
+        const auto words = (p.nao + 31) / 32;
+        ao_region_compact_kernel<<<1, 128, 0, ctx.stream>>>(
+            p.resident_map->masks.get() + (resident_begin / p.capacity) * words, words, 1, nullptr,
+            p.resident_map->indices.get(), true);
+        cuda_check(cudaGetLastError());
+      }
       if (features) cuda_check(cudaMemsetAsync(p.features, 0, 13 * npoint * 8, ctx.stream));
       if (!resident && p.local && active && !identity_map)
         cuda_check(cudaMemcpyAsync(p.ao_ids, ao_ids, active * sizeof(size_t),
@@ -746,9 +766,10 @@ int grid_cuda_run_selected_device_deferred_v1(void* pointer, const double* point
  * info: ready, retained bytes, numeric peak, labels, tiles, D2H bytes,
  * offsets H2D bytes, conservative AO-region classifications.
  */
-int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size_t npoint,
-                                       double cutoff, size_t budget, const char* identity,
-                                       size_t* info, char* error, size_t size) {
+static int grid_cuda_prepare_ao_map_device_impl(void* pointer, const double* points, size_t npoint,
+                                                double cutoff, size_t budget, const char* identity,
+                                                size_t* info, char* error, size_t size,
+                                                bool exact) {
   return guarded(error, size, [&] {
     if (!pointer || !points || !npoint || !identity || !*identity || !info ||
         !std::isfinite(cutoff) || cutoff <= 0)
@@ -770,10 +791,11 @@ int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size
     const size_t words = add(p.nao, 31) / 32;
     const size_t offset_bytes = mul(add(tiles, 1), sizeof(size_t));
     const size_t mask_bytes = mul(mul(tiles, words), sizeof(unsigned));
-    const size_t bounds_bytes = mul(mul(tiles, 6), sizeof(double));
+    const size_t bounds_bytes = exact ? 0 : mul(mul(tiles, 6), sizeof(double));
     const size_t staging = add(mul(offset_bytes, 2), add(mask_bytes, bounds_bytes));
     info[4] = tiles;
-    if (add(staging, sizeof(size_t)) > budget) return;
+    const size_t compact_bytes = mul(p.nao, sizeof(size_t));
+    if (add(staging, exact ? compact_bytes : sizeof(size_t)) > budget) return;
     auto owner = std::make_unique<ResidentAoMap>();
     owner->identity = identity;
     owner->points = points;
@@ -786,18 +808,45 @@ int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size
     while (jet_counts[owner->map_derivative_order] != p.jets) ++owner->map_derivative_order;
     owner->offsets.resize(tiles + 1);
     generativeqc::runtime::OwnedCudaBuffer<unsigned> masks(ctx.device, tiles * words, ctx.stream);
-    generativeqc::runtime::OwnedCudaBuffer<double> bounds(ctx.device, tiles * 6, ctx.stream);
+    generativeqc::runtime::OwnedCudaBuffer<double> bounds;
+    if (!exact) bounds.allocate(ctx.device, tiles * 6, ctx.stream);
     owner->offsets_device.allocate(ctx.device, tiles + 1, ctx.stream);
     cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
     cuda_check(cudaMemsetAsync(owner->offsets_device.get(), 0, offset_bytes, ctx.stream));
-    ao_region_boxes_kernel<<<blocks(tiles, 1), 1, 0, ctx.stream>>>(points, npoint, p.capacity,
-                                                                   tiles, bounds.get(), ctx.error);
-    cuda_check(cudaGetLastError());
-    ao_region_mask_kernel<<<dim3((words + 3) / 4, std::min(size_t{65535}, tiles)), 128, 0,
-                            ctx.stream>>>(
-        p.basis, p.natom, p.nprimitive, p.nao, p.jets, bounds.get(), tiles, cutoff, masks.get(),
-        reinterpret_cast<unsigned long long*>(owner->offsets_device.get()), ctx.error);
-    cuda_check(cudaGetLastError());
+    if (exact) {
+      cuda_check(cudaMemsetAsync(masks.get(), 0, mask_bytes, ctx.stream));
+      const auto point_ao = mul(npoint, mul(words, 32));
+      const auto launch_blocks = blocks(point_ao, 128);
+      switch (p.jets) {
+#define GENERATIVEQC_EXACT_MAP(JETS)                                                            \
+  case JETS:                                                                                    \
+    ao_exact_mask_kernel_##JETS<<<launch_blocks, 128, 0, ctx.stream>>>(                         \
+        p.basis, p.natom, p.nprimitive, p.nao, points, npoint, p.capacity, cutoff, masks.get(), \
+        ctx.error);                                                                             \
+    break
+        GENERATIVEQC_EXACT_MAP(1);
+        GENERATIVEQC_EXACT_MAP(4);
+        GENERATIVEQC_EXACT_MAP(10);
+        GENERATIVEQC_EXACT_MAP(20);
+#undef GENERATIVEQC_EXACT_MAP
+        default:
+          throw std::invalid_argument("unsupported exact AO jet domain");
+      }
+      cuda_check(cudaGetLastError());
+      ao_exact_counts_kernel<<<blocks(tiles, 128), 128, 0, ctx.stream>>>(
+          masks.get(), words, tiles, owner->offsets_device.get());
+      cuda_check(cudaGetLastError());
+      p.work_metrics.record_ao(npoint, p.nao, p.nao, p.jets, true);
+    } else {
+      ao_region_boxes_kernel<<<blocks(tiles, 1), 1, 0, ctx.stream>>>(
+          points, npoint, p.capacity, tiles, bounds.get(), ctx.error);
+      cuda_check(cudaGetLastError());
+      ao_region_mask_kernel<<<dim3((words + 3) / 4, std::min(size_t{65535}, tiles)), 128, 0,
+                              ctx.stream>>>(
+          p.basis, p.natom, p.nprimitive, p.nao, p.jets, bounds.get(), tiles, cutoff, masks.get(),
+          reinterpret_cast<unsigned long long*>(owner->offsets_device.get()), ctx.error);
+      cuda_check(cudaGetLastError());
+    }
     int failure = 0;
     cuda_check(cudaMemcpyAsync(owner->offsets.data(), owner->offsets_device.get(), offset_bytes,
                                cudaMemcpyDeviceToHost, ctx.stream));
@@ -805,7 +854,7 @@ int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size
         cudaMemcpyAsync(&failure, ctx.error, sizeof(int), cudaMemcpyDeviceToHost, ctx.stream));
     cuda_check(cudaStreamSynchronize(ctx.stream));
     info[5] = add(offset_bytes, sizeof(int));
-    info[7] = mul(mul(tiles, p.nao), p.jets);
+    info[7] = exact ? 0 : mul(mul(tiles, p.nao), p.jets);
     if (failure) throw std::runtime_error("nonfinite resident AO map points");
     for (size_t tile = 0; tile < tiles; ++tile) {
       if (owner->offsets[tile + 1] > p.nao)
@@ -813,23 +862,46 @@ int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size
       owner->offsets[tile + 1] = add(owner->offsets[tile], owner->offsets[tile + 1]);
     }
     owner->ao_map_entries = owner->offsets.back();
-    const size_t index_bytes = mul(std::max(size_t{1}, owner->ao_map_entries), sizeof(size_t));
+    const size_t index_bytes =
+        exact ? compact_bytes : mul(std::max(size_t{1}, owner->ao_map_entries), sizeof(size_t));
     info[2] = staging;
     if (add(staging, index_bytes) > budget) return;
     info[2] = add(staging, index_bytes);
     owner->indices.allocate(ctx.device, index_bytes / sizeof(size_t), ctx.stream);
     cuda_check(cudaMemcpyAsync(owner->offsets_device.get(), owner->offsets.data(), offset_bytes,
                                cudaMemcpyHostToDevice, ctx.stream));
-    ao_region_compact_kernel<<<blocks(tiles, 1), 128, 0, ctx.stream>>>(
-        masks.get(), words, tiles, owner->offsets_device.get(), owner->indices.get());
-    cuda_check(cudaGetLastError());
+    if (exact)
+      owner->masks = std::move(masks);
+    else {
+      ao_region_compact_kernel<<<blocks(tiles, 1), 128, 0, ctx.stream>>>(
+          masks.get(), words, tiles, owner->offsets_device.get(), owner->indices.get());
+      cuda_check(cudaGetLastError());
+    }
     cuda_check(cudaStreamSynchronize(ctx.stream));
     info[0] = 1;
-    info[1] = add(mul(offset_bytes, 2), index_bytes);
+    info[1] = add(add(mul(offset_bytes, 2), index_bytes), exact ? mask_bytes : 0);
     info[3] = owner->ao_map_entries;
     info[6] = offset_bytes;
     p.resident_map = std::move(owner);
   });
+}
+
+int grid_cuda_prepare_ao_map_device_v1(void* pointer, const double* points, size_t npoint,
+                                       double cutoff, size_t budget, const char* identity,
+                                       size_t* info, char* error, size_t size) {
+  return grid_cuda_prepare_ao_map_device_impl(pointer, points, npoint, cutoff, budget, identity,
+                                              info, error, size, false);
+}
+
+/** Exact sampled-jet predicate; only compact offsets cross the device boundary.
+ * Immutable bitmasks and one rebased AO span keep storage independent of occupancy.
+ * "Exact" refers to labels at the explicit cutoff, not unscreened mathematics.
+ */
+int grid_cuda_prepare_exact_ao_map_device_v1(void* pointer, const double* points, size_t npoint,
+                                             double cutoff, size_t budget, const char* identity,
+                                             size_t* info, char* error, size_t size) {
+  return grid_cuda_prepare_ao_map_device_impl(pointer, points, npoint, cutoff, budget, identity,
+                                              info, error, size, true);
 }
 
 int grid_cuda_run_ao_map_device_deferred_v1(void* pointer, const double* points, size_t npoint,

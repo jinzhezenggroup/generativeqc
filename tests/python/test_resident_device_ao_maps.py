@@ -94,6 +94,28 @@ def owner(grid: CsrGrid) -> ResidentDeviceAoMapOwner:
     return ResidentDeviceAoMapOwner(grid, domain(), cutoff=1e-16, budget_bytes=512)
 
 
+def test_exact_bitmask_producer_has_distinct_identity_and_discovery_counters() -> None:
+    """Exact and conservative inventories may not share immutable map epochs."""
+    grid = CsrGrid()
+    envelope = owner(grid)
+    maps = ResidentDeviceAoMapOwner(
+        grid,
+        domain(),
+        cutoff=1e-16,
+        budget_bytes=512,
+        producer="exact-jets-native-bitmask",
+    )
+    assert maps.identity != envelope.identity
+    assert grid.calls[-1][3]["exact"] is True
+    assert maps.work["discovery_producer"] == "exact-jets-native-bitmask"
+    with maps.feature_task(grid, domain(), 0, 4, ("rho",)):
+        pass
+    assert maps.work["map_compaction_launches"] == 1
+    maps.reset_work()
+    assert maps.work["discoveries"] == 0
+    assert maps.work["map_compaction_launches"] == 0
+
+
 def test_high_occupancy_declines_the_whole_domain_without_truncating_ao_labels() -> (
     None
 ):

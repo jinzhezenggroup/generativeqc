@@ -124,7 +124,7 @@ def native() -> SimpleNamespace:
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
 @pytest.mark.parametrize("external", [False, True])
-@pytest.mark.parametrize("primitive", [False, True])
+@pytest.mark.parametrize("primitive", [False, True, 2])
 @pytest.mark.parametrize("profiled", [False, True])
 def test_shared_owner_phases_preserve_sources_and_work(
     native: SimpleNamespace,
@@ -132,7 +132,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
     implicit: bool,
     selection: str,
     external: bool,
-    primitive: bool,
+    primitive: bool | int,
     profiled: bool,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
@@ -145,6 +145,10 @@ def test_shared_owner_phases_preserve_sources_and_work(
         native.library, "stationary_configure_becke_primitive_v1"
     ):
         pytest.skip("artifact predates whole-domain primitive admission")
+    if primitive == 2 and not hasattr(
+        native.library, "stationary_configure_becke_normalized_adjoint_v1"
+    ):
+        pytest.skip("artifact predates generated normalized atom adjoints")
     if profiled and not hasattr(native.library, "stationary_becke_phase_profile_v1"):
         pytest.skip("artifact predates separate Becke phase profiling")
     cupy = native.cupy
@@ -364,7 +368,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 )
                 points = 3 * 257 if phased else 0
                 pairs = points * atoms * (atoms - 1) // 2
-                words = 2 if primitive and phased else 4
+                words = 2 if primitive == 1 and phased else 4
                 profiled_batches = 6 if profiled and phased else 0
                 assert tuple(phase_work) == (
                     6 if phased else 0,
@@ -380,7 +384,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                     4 * 8 * pairs,
                     words * 8 * pairs,
                     2 * words * 8 * pairs,
-                    2 * 3 * 8 * pairs if primitive and phased else 0,
+                    2 * 3 * 8 * pairs if primitive == 1 and phased else 0,
                     profiled_batches,
                     8 * profiled_batches,
                     profiled_batches,
@@ -431,7 +435,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 )
                 assert tuple(primitive_metrics) == (
                     int(primitive),
-                    int(primitive and phased),
+                    int(primitive) if phased else 0,
                     6 if primitive and phased else 0,
                     3 * 257 * atoms * (atoms - 1) // 2 if primitive and phased else 0,
                 )

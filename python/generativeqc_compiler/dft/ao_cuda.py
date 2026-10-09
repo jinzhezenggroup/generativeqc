@@ -915,16 +915,18 @@ def emit_native_xc_contraction_kernels(
     )
 
 
-def _emit_ao_radial_kernels() -> str:
+def _emit_ao_radial_kernels(*, selection_only: bool = False) -> str:
     """Emit fixed 4/10-jet producers without runtime-indexed accumulators.
 
     Each output retains the scalar kernel's primitive/Cartesian-term sum and
     multiplication order. Share the radial factor and identical axis DAG calls,
     not products or accumulated contributions. Axis DAGs remain noinline; 1/20
-    jets retain the bounded scalar fallback.
+    jets retain the bounded scalar fallback. Selection-only kernels share this
+    arithmetic emitter, but publish tile bitmasks rather than an AO panel.
+    Every jet is checked even after a column has already been selected.
     """
     kernels = []
-    for scalar in ("double", "float"):
+    for scalar in ("double",) if selection_only else ("double", "float"):
         narrow = (
             (lambda value: value)
             if scalar == "double"
@@ -932,7 +934,7 @@ def _emit_ao_radial_kernels() -> str:
         )
         suffix = "" if scalar == "double" else "_fp32"
         zero = "0.0" if scalar == "double" else "0.0f"
-        for jets in (4, 10):
+        for jets in (1, 4, 10, 20) if selection_only else (4, 10):
             lines = [
                 f"__global__ void ao_radial_kernel_{jets}{suffix}(",
                 "    const double* basis, I natom, I nprimitive, I nao, const double* points,",
@@ -947,6 +949,25 @@ def _emit_ao_radial_kernels() -> str:
                 "    const I atom = static_cast<I>(record[0]);",
                 "    // Subtract in FP64 before narrowing local coordinates, including FP32.",
             ]
+            if selection_only:
+                lines = [
+                    f"__global__ void ao_exact_mask_kernel_{jets}(",
+                    "    const double* basis, I natom, I nprimitive, I nao, const double* points,",
+                    "    I npoint, size_t tile_points, double cutoff, unsigned* masks, int* error) {",
+                    "  const double* primitives = basis + 3 * natom;",
+                    "  const double* records = primitives + 2 * nprimitive;",
+                    "  const I words = (nao + 31) / 32, padded_aos = 32 * words;",
+                    "  for (I index = I(blockIdx.x) * blockDim.x + threadIdx.x;",
+                    "       index < npoint * padded_aos; index += I(blockDim.x) * gridDim.x) {",
+                    "    const I ao = index % padded_aos, point = index / padded_aos;",
+                    "    if (ao == 0 && (!isfinite(points[3 * point]) ||",
+                    "        !isfinite(points[3 * point + 1]) || !isfinite(points[3 * point + 2])))",
+                    "      atomicExch(error, 1);",
+                    "    bool retained = false;",
+                    "    if (ao < nao) {",
+                    "    const double* record = records + 16 * ao;",
+                    "    const I atom = static_cast<I>(record[0]);",
+                ]
             for axis, offset in zip("xyz", range(3), strict=True):
                 delta = f"points[3 * point + {offset}] - basis[3 * atom + {offset}]"
                 lines.append(f"    const {scalar} {axis} = {narrow(delta)};")
@@ -965,7 +986,7 @@ def _emit_ao_radial_kernels() -> str:
             # Reuse exact scalar DAG results inside each primitive/Cartesian
             # term. Computing them after the radial underflow guard preserves
             # the scalar producer's finite-publication and overflow behavior.
-            axis_orders = range(2 if jets == 4 else 3)
+            axis_orders = range({1: 1, 4: 2, 10: 3, 20: 4}[jets])
             for axis_name, offset in zip("xyz", range(4, 7), strict=True):
                 for derivative_order in axis_orders:
                     lines.append(
@@ -973,7 +994,9 @@ def _emit_ao_radial_kernels() -> str:
                         f"axis_jet(static_cast<int>(record[{offset} + 4 * term]), "
                         f"{derivative_order}, alpha, {axis_name});"
                     )
-            for jet, derivative in enumerate(jet_indices(2)[:jets]):
+            for jet, derivative in enumerate(
+                jet_indices(3 if jets == 20 else 2)[:jets]
+            ):
                 lines.append(
                     f"        value{jet} += radial * {narrow('record[7 + 4 * term]')} *"
                 )
@@ -987,8 +1010,21 @@ def _emit_ao_radial_kernels() -> str:
                     if scalar == "double"
                     else f"static_cast<double>(value{jet})"
                 )
-                lines.append(
-                    f"    output[{jet} * stride + index] = finite({value}, error, 0);"
+                if selection_only:
+                    lines.append(f"    if (!isfinite({value})) atomicExch(error, 1);")
+                    lines.append(f"    retained |= fabs({value}) > cutoff;")
+                else:
+                    lines.append(
+                        f"    output[{jet} * stride + index] = finite({value}, error, 0);"
+                    )
+            if selection_only:
+                lines.extend(
+                    (
+                        "    }",
+                        "    const unsigned mask = __ballot_sync(0xffffffff, retained);",
+                        "    if (threadIdx.x % 32 == 0 && mask)",
+                        "      atomicOr(masks + (point / tile_points) * words + ao / 32, mask);",
+                    )
                 )
             lines.extend(("  }", "}", ""))
             kernels.append("\n".join(lines))
@@ -1041,6 +1077,9 @@ def emit_grid_scientific_kernels(*, ao_radial_reuse: bool = False) -> str:
             "@AO_RADIAL_KERNELS@", _emit_ao_radial_kernels() if ao_radial_reuse else ""
         ).replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
         + emit_ao_region_screen_cuda()
+        + "namespace {\n"
+        + _emit_ao_radial_kernels(selection_only=True)
+        + "}\n"
     )
 
 

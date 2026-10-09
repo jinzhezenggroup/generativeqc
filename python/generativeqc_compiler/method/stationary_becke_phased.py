@@ -8,6 +8,9 @@ the native owner. Scalar science stays in the authoritative grid-response AD.
 from functools import lru_cache
 
 from generativeqc_compiler.xc.becke_coefficients import emit_becke_pair_coefficients
+from generativeqc_compiler.xc.becke_normalized_adjoint import (
+    emit_becke_normalized_adjoint,
+)
 from generativeqc_compiler.xc.becke_partition import (
     recognize_becke_partition_domain_graph,
 )
@@ -27,6 +30,7 @@ struct PhasedBeckeInput {
   const uint2* indices;
   double* partial;
   int* error;
+  bool normalized_adjoints{};
   __device__ size_t owner(size_t point) const {
     return owners ? size_t(owners[point])
         : (points_per_atom ? (owner_offset + point) / points_per_atom : size_t(-1));
@@ -73,7 +77,7 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   if (!valid) atomicExch(input.error, 1);
 }
 
-template <bool Reverse, bool Primitive = false>
+template <bool Reverse, bool Primitive = false, bool Normalized = false>
 __global__ void phased_becke_pair(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   if (point >= input.work.points || input.failed()) return;
@@ -84,7 +88,10 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
       input.center_pairs, local_ratio_prepared};
   bool valid;
   if constexpr (Reverse) {
-    if constexpr (Primitive)
+    if constexpr (Normalized)
+      valid = generativeqc_grid_normalized::pair_reverse_phase(
+          input.work, point, indices.x, indices.y, geometry, local_log);
+    else if constexpr (Primitive)
       valid = generativeqc_grid_coefficients::pair_coefficient_reverse_phase(
           input.work, point, indices.x, indices.y, geometry, local_log);
     else valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
@@ -98,6 +105,9 @@ __global__ void phased_becke_normalize(PhasedBeckeInput input) {
   if (point >= input.work.points || input.failed()) return;
   if (!generativeqc_grid_phased::point_normalize_phase(input.work, point,
           input.owner(point), input.seeds[point], local_ratio)) atomicExch(input.error, 1);
+  if (input.normalized_adjoints)
+    for (size_t atom = 0; atom < input.work.atoms; ++atom)
+      generativeqc_grid_normalized::prepare_atom_weight(input.work, point, atom);
 }
 
 // Point lanes are contiguous in every global panel. Sixteen atom lanes share
@@ -164,9 +174,12 @@ __device__ void normalize_cooperative(PhasedBeckeInput input) {
   if (active_points[lane]) {
     const std::array<double, 3> objective{objectives[lane],
         objectives[point_lanes + lane], objectives[2 * point_lanes + lane]};
-    for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes)
+    for (size_t atom = atom_lane; atom < input.work.atoms; atom += atom_lanes) {
       input.work.field(6, point)[atom] = normalized_product_bar(atom,
           input.owner(point), input.seeds[point], objective);
+      if (input.normalized_adjoints)
+        generativeqc_grid_normalized::prepare_atom_weight(input.work, point, atom);
+    }
   }
 }
 __global__ void phased_becke_normalize_cooperative(PhasedBeckeInput input) {
@@ -198,6 +211,7 @@ def emit_stationary_phased_becke_cuda(
         raise ValueError("stationary Becke domain does not match canonical AD")
     return (
         emit_becke_pair_coefficients(operation)
+        + emit_becke_normalized_adjoint(operation)
         + "namespace generativeqc_stationary_cuda {\n"
         + f"constexpr size_t stationary_becke_primitive_max_atoms = {atom_limit};\n"
         + f"constexpr size_t stationary_becke_normalize_max_atoms = {min(atom_limit, 128)};\n"
