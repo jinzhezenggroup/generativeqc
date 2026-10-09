@@ -93,9 +93,9 @@ def test_cuda_first_transaction_and_recovery(tmp_path: Path) -> None:
         fixture = Path(override).resolve()
         assert fixture.is_file(), "requested independent GFN2 oracle is missing"
     else:
-        fixtures = json.loads((ROOT / "tests/data/gfn2_native_tblite.json").read_text())[
-            "cases"
-        ]
+        fixtures = json.loads(
+            (ROOT / "tests/data/gfn2_native_tblite.json").read_text()
+        )["cases"]
         numbers = {"H": 1, "C": 6, "N": 7, "O": 8, "F": 9, "Si": 14, "Cl": 17}
         lines = [str(len(fixtures))]
         for case in fixtures:

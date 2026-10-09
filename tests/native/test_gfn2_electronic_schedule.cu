@@ -4,8 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -165,8 +165,7 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
       launch();
     check(cudaStreamSynchronize(stream));
 #if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
-    if (*workspace.diagnostic_receipt_count != static_cast<std::uint64_t>(receipt_slots))
-      return 20;
+    if (*workspace.diagnostic_receipt_count != static_cast<std::uint64_t>(receipt_slots)) return 20;
     const char* const evidence_path = std::getenv("GENERATIVEQC_GFN2_DENSITY_LOWLEVEL_CSV");
     if (evidence_path != nullptr && *evidence_path != '\0') {
       std::ofstream evidence(evidence_path, std::ios::app);
@@ -181,8 +180,8 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
         evidence << spin << ',' << capture << ',' << scenario << ',' << systems << ',' << n << ','
                  << item.slot << ',' << item.system << ',' << item.spin_channels << ','
                  << item.channel << ',' << item.tile << ',' << item.orbital_count << ','
-                 << item.pair_count << ',' << item.pairs_visited << ',' << item.plain_visits
-                 << ',' << item.plain_completed << ',' << item.weighted_visits << ','
+                 << item.pair_count << ',' << item.pairs_visited << ',' << item.plain_visits << ','
+                 << item.plain_completed << ',' << item.weighted_visits << ','
                  << item.weighted_completed << ',' << item.failed_pairs << ','
                  << item.published_pairs << ',' << item.cta_cycles << ',' << item.status << '\n';
       }
@@ -211,8 +210,7 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
         continue;
       }
       if (invalid_active && system == 2) {
-        if (receipt.status != kDensityInvalidActiveMask || receipt.pairs_visited != 0)
-          return 34;
+        if (receipt.status != kDensityInvalidActiveMask || receipt.pairs_visited != 0) return 34;
         continue;
       }
       if (spin && receipt.channel >= static_cast<std::uint32_t>(layout.spin_channels[system])) {
@@ -227,9 +225,10 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
       }
       if (!(arithmetic_failed && system == 1) &&
           (receipt.status != kDensityContractCompleted || receipt.failed_pairs != 0 ||
-           receipt.orbital_count != batch.orbital_offsets[system + 1] -
-                                        batch.orbital_offsets[system] ||
-           receipt.cta_cycles == 0)) return 24;
+           receipt.orbital_count !=
+               batch.orbital_offsets[system + 1] - batch.orbital_offsets[system] ||
+           receipt.cta_cycles == 0))
+        return 24;
       const auto key = system * (spin ? 2 : 1) + receipt.channel;
       pair_visits[key] += receipt.pairs_visited;
       plain_visits[key] += receipt.plain_visits;
@@ -237,18 +236,19 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
       published[key] += receipt.published_pairs;
     }
     if (arithmetic_failed && !saw_local_failure) return 25;
-    if ((scenario == 2 && !saw_plain_partial) ||
-        (scenario == 3 && !saw_weighted_partial)) return 30;
+    if ((scenario == 2 && !saw_plain_partial) || (scenario == 3 && !saw_weighted_partial))
+      return 30;
     for (I system = 0; system < systems; ++system) {
       if ((scenario == 1 && system == 2) || (invalid_active && system == 2) ||
-          (arithmetic_failed && system == 1)) continue;
+          (arithmetic_failed && system == 1))
+        continue;
       const I extent = batch.orbital_offsets[system + 1] - batch.orbital_offsets[system];
       for (I channel = 0; channel < (spin ? layout.spin_channels[system] : 1); ++channel) {
         const auto key = system * (spin ? 2 : 1) + channel;
         const auto triangular = static_cast<std::uint64_t>(extent * (extent + 1) / 2);
         if (pair_visits[key] != triangular || published[key] != triangular ||
-            plain_visits[key] != triangular * extent ||
-            weighted_visits[key] != triangular * extent) return 26;
+            plain_visits[key] != triangular * extent || weighted_visits[key] != triangular * extent)
+          return 26;
       }
     }
 #endif
@@ -266,8 +266,8 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
       const I extent = batch.orbital_offsets[s + 1] - batch.orbital_offsets[s];
       const I count = layout.spin_channels[s];
       const bool suppressed = (active[s] != 1 || (arithmetic_failed && s == 1));
-      if ((errors[s] != 0) !=
-          ((arithmetic_failed && s == 1) || (invalid_active && s == 2))) return 12;
+      if ((errors[s] != 0) != ((arithmetic_failed && s == 1) || (invalid_active && s == 2)))
+        return 12;
       long double system_p = 0, system_w = 0, system_band = 0, system_occ = 0;
       for (I channel = 0; channel < count; ++channel) {
         const I start = layout.spin_matrix_offsets[s] + channel * extent * extent;
@@ -353,8 +353,7 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
                                                 stream));
   check(cudaStreamSynchronize(stream));
 #if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
-  if (*workspace.diagnostic_receipt_count != static_cast<std::uint64_t>(receipt_slots))
-    return 27;
+  if (*workspace.diagnostic_receipt_count != static_cast<std::uint64_t>(receipt_slots)) return 27;
   for (I slot = 0; slot < receipt_slots; ++slot)
     if (workspace.diagnostic_receipts[slot].status != kDensitySequenceClosed ||
         workspace.diagnostic_receipts[slot].pairs_visited != 0)
@@ -379,17 +378,16 @@ int run_density(Storage& storage, const Gfn2HamiltonianDeviceBatch& topology,
     check(evaluate_gfn2_restricted_density_cuda(batch, input, results, workspace, errors, error,
                                                 stream));
   check(cudaStreamSynchronize(stream));
-  if (*error != 0 || *workspace.diagnostic_receipt_count !=
-                         static_cast<std::uint64_t>(receipt_slots) ||
-      workspace.diagnostic_receipts[0].slot != 0) return 31;
+  if (*error != 0 ||
+      *workspace.diagnostic_receipt_count != static_cast<std::uint64_t>(receipt_slots) ||
+      workspace.diagnostic_receipts[0].slot != 0)
+    return 31;
   auto* const saved_receipts = workspace.diagnostic_receipts;
-  workspace.diagnostic_receipts =
-      reinterpret_cast<Gfn2DensityDeviceReceipt*>(results.density);
-  const auto alias_status = spin
-      ? evaluate_gfn2_spin_density_cuda(batch, layout, input, results, workspace, errors, error,
-                                        stream)
-      : evaluate_gfn2_restricted_density_cuda(batch, input, results, workspace, errors, error,
-                                              stream);
+  workspace.diagnostic_receipts = reinterpret_cast<Gfn2DensityDeviceReceipt*>(results.density);
+  const auto alias_status = spin ? evaluate_gfn2_spin_density_cuda(batch, layout, input, results,
+                                                                   workspace, errors, error, stream)
+                                 : evaluate_gfn2_restricted_density_cuda(
+                                       batch, input, results, workspace, errors, error, stream);
   workspace.diagnostic_receipts = saved_receipts;
   workspace.diagnostic_receipt_capacity = receipt_slots;
   if (alias_status != cudaErrorInvalidValue) return 32;

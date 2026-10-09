@@ -31,12 +31,18 @@ def _block(source: str, marker: str, start: int = 0) -> str:
 
 
 def _probe_source(runtime: str, runtime_header: str, density_header: str) -> str:
-    entry = runtime.index("generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(")
+    entry = runtime.index(
+        "generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl("
+    )
     failure = runtime.index("const auto fail_working_transaction =", entry)
     inference = runtime.index("generativeqc_xtb_status_t execute_inference_locked(")
-    construction = runtime.index("if (density_diagnostics_enabled) {", runtime.index("report factory rejected"))
+    construction = runtime.index(
+        "if (density_diagnostics_enabled) {", runtime.index("report factory rejected")
+    )
     members_start = runtime.index("  bool density_diagnostics_enabled = false;")
-    members_end = runtime.index("  bool failed_density_snapshot_valid = false;", members_start)
+    members_end = runtime.index(
+        "  bool failed_density_snapshot_valid = false;", members_start
+    )
     members_end += len("  bool failed_density_snapshot_valid = false;")
     fragments = {
         "STATUS": _block(density_header, "enum Gfn2DensityReceiptStatus"),
@@ -47,12 +53,32 @@ def _probe_source(runtime: str, runtime_header: str, density_header: str) -> str
         "COPY": _block(runtime, "bool copy_density_diagnostics_locked("),
         "ALLOCATE": _block(runtime, "if (density_diagnostics_enabled) {", construction),
         "RESET": _block(runtime, "if (density_diagnostics_enabled) {", inference),
-        "GRAPH": _block(runtime, "if (density_diagnostics_enabled) {", runtime.index("const Gfn2SccLoopLaunchResult loop =")),
-        "BEGIN": _block(runtime, "if (implementation.density_diagnostics_enabled) {", entry),
-        "FAILED": _block(runtime, "if (candidate != nullptr && implementation.density_diagnostics_enabled &&", failure),
-        "FINISH": _block(runtime, "if (implementation.density_diagnostics_enabled) {", runtime.index("const auto final_status = finish(transaction_status);", entry)),
-        "ENABLE": _block(runtime, "bool Gfn2CudaExecutionCache::enable_density_diagnostics()"),
-        "READ": _block(runtime, "bool Gfn2CudaExecutionCache::read_density_diagnostics("),
+        "GRAPH": _block(
+            runtime,
+            "if (density_diagnostics_enabled) {",
+            runtime.index("const Gfn2SccLoopLaunchResult loop ="),
+        ),
+        "BEGIN": _block(
+            runtime, "if (implementation.density_diagnostics_enabled) {", entry
+        ),
+        "FAILED": _block(
+            runtime,
+            "if (candidate != nullptr && implementation.density_diagnostics_enabled &&",
+            failure,
+        ),
+        "FINISH": _block(
+            runtime,
+            "if (implementation.density_diagnostics_enabled) {",
+            runtime.index(
+                "const auto final_status = finish(transaction_status);", entry
+            ),
+        ),
+        "ENABLE": _block(
+            runtime, "bool Gfn2CudaExecutionCache::enable_density_diagnostics()"
+        ),
+        "READ": _block(
+            runtime, "bool Gfn2CudaExecutionCache::read_density_diagnostics("
+        ),
     }
     source = r"""
 #include <algorithm>
@@ -409,7 +435,9 @@ def density_transaction_probe(
         "failed_host_allocation",
     ),
 )
-def test_density_receipt_lifecycle(density_transaction_probe: Path, scenario: str) -> None:
+def test_density_receipt_lifecycle(
+    density_transaction_probe: Path, scenario: str
+) -> None:
     result = subprocess.run(
         [str(density_transaction_probe), scenario],
         check=False,

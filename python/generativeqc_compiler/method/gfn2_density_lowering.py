@@ -14,12 +14,32 @@ def _instrument_checked_pairs(source: str) -> str:
     emitter changes its schedule rather than silently emitting stale counts.
     """
     insertions = (
-        ("    const MatrixPair indices = matrix_pair(pair);", "    ++density_pairs_visited;", False),
-        ("      const double first = @COEFFICIENTS@[matrix_begin + indices.row * count + local];", "      ++density_plain_visits;", True),
-        ("      double weighted_left = 0.0;", "      ++density_plain_completed;\n      ++density_weighted_visits;", True),
-        ("      weighted_density = weighted_updated;", "      ++density_weighted_completed;", False),
+        (
+            "    const MatrixPair indices = matrix_pair(pair);",
+            "    ++density_pairs_visited;",
+            False,
+        ),
+        (
+            "      const double first = @COEFFICIENTS@[matrix_begin + indices.row * count + local];",
+            "      ++density_plain_visits;",
+            True,
+        ),
+        (
+            "      double weighted_left = 0.0;",
+            "      ++density_plain_completed;\n      ++density_weighted_visits;",
+            True,
+        ),
+        (
+            "      weighted_density = weighted_updated;",
+            "      ++density_weighted_completed;",
+            False,
+        ),
         ("    if (finite) {", "    if (!finite) ++density_failed_pairs;", True),
-        ("      @WEIGHTED_OUTPUT@[second] = weighted_density;", "      ++density_published_pairs;", False),
+        (
+            "      @WEIGHTED_OUTPUT@[second] = weighted_density;",
+            "      ++density_published_pairs;",
+            False,
+        ),
     )
     # Bindings have already been substituted by emit_checked_pair().
     for marker, addition, before in insertions:
@@ -30,7 +50,9 @@ def _instrument_checked_pairs(source: str) -> str:
             raise ValueError(f"weighted-Gram diagnostic anchor changed: {bound_marker}")
         source = source.replace(
             bound_marker,
-            addition + "\n" + bound_marker if before else bound_marker + "\n" + addition,
+            addition + "\n" + bound_marker
+            if before
+            else bound_marker + "\n" + addition,
             1,
         )
     return source
