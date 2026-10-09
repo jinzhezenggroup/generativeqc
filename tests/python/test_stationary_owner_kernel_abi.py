@@ -54,6 +54,24 @@ class StationaryOwnerKernelTests(unittest.TestCase):
         self.assertEqual(signatures[0], signatures[1])
         self.assertEqual(len(signatures[0]), 19)
 
+    def test_point_producer_declaration_matches_definition(self) -> None:
+        """Keep the bulk point producer's borrowed-scratch launch ABI exact."""
+        signatures = []
+        for source, ending in ((HEADER.read_text(), ";"), (COMPILER.read_text(), "{")):
+            match = re.search(
+                r"__global__ void geometry_point_kernel\((.*?)\)\s*"
+                + re.escape(ending),
+                source,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match)
+            assert match is not None
+            signatures.append(
+                [" ".join(item.split()) for item in match.group(1).split(",")]
+            )
+        self.assertEqual(signatures[0], signatures[1])
+        self.assertEqual(len(signatures[0]), 13)
+
     def test_emitted_explicit_and_implicit_owner_expression(self) -> None:
         compiler = shutil.which("c++")
         if compiler is None:
@@ -67,7 +85,7 @@ class StationaryOwnerKernelTests(unittest.TestCase):
 #include <cstddef>
 #include <cstdint>
 int64_t select_owner(const int64_t* owners, size_t owner_offset,
-                     size_t points_per_atom, size_t p) {
+                     size_t points_per_atom, size_t point) {
   OWNER_STATEMENT
   return owner;
 }
