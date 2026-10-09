@@ -15,7 +15,6 @@ from dataclasses import asdict, dataclass, replace
 from fractions import Fraction
 
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
@@ -29,6 +28,7 @@ from generativeqc_compiler.tensor import (
     reduce_sum,
     transpose_program,
 )
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 
 from .nonlocal_correlation import NonlocalCorrelationPrimitive
 from .spec import (
