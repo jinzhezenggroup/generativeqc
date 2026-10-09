@@ -54,10 +54,11 @@ been qualified by this reference contract.
 
 `tests/python/test_array_api_boolean_comparisons.py` checks all six operators
 against NumPy across scalar, empty, broadcast, mixed dtype, and signed-zero
-cases, plus an `array-api-strict` finite reference. It also checks serialization,
-hashes, bounded bytes, optimizer identity, AD/backend rejection, and scientific
-domain guards. The larger #2137 still owns `where`, real-branch AD, native
-CPU/CUDA qualification, nonfinite comparison support, and conformance testing.
+cases, plus a six-operation `array-api-strict==2.6.1` finite reference installed
+by the CI `reference-test` extra. It also checks serialization, hashes, bounded
+bytes, optimizer identity, AD/backend rejection, and scientific domain guards.
+The larger #2137 still owns `where`, real-branch AD, native CPU/CUDA
+qualification, nonfinite comparison support, and conformance testing.
 
 ## Revisit when
 

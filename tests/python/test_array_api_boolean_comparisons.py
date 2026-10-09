@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import typing
 
+import array_api_strict as strict
 import numpy as np
 import pytest
 from generativeqc.experimental import array_api as xp
@@ -382,10 +383,11 @@ def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
         xp.compile(lambda x, y: x > y)(bad, array)
 
 
-def test_array_api_strict_finite_reference_if_installed() -> None:
-    strict = pytest.importorskip("array_api_strict")
+@pytest.mark.parametrize("name", tuple(name for name, _ in COMPARISONS))
+def test_array_api_strict_finite_reference(name: str) -> None:
     left = np.asarray([[1.0], [-2.0]], dtype=np.float32)
     right = np.asarray([[0.0, 1.0]], dtype=np.float64)
-    actual = xp.compile(lambda x, y: xp.less_equal(x, y))(left, right)
-    oracle = strict.less_equal(strict.asarray(left), strict.asarray(right))
+    operation = getattr(xp, name)
+    actual = xp.compile(lambda x, y: operation(x, y))(left, right)
+    oracle = getattr(strict, name)(strict.asarray(left), strict.asarray(right))
     np.testing.assert_array_equal(actual, np.asarray(oracle))
