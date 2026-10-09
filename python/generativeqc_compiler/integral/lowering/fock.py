@@ -586,7 +586,11 @@ __device__ __forceinline__ void generated_dppp_shell_class_fock_task("""
             plan,
             minimum_blocks_per_sm,
         )
-    return source
+    # Keep the recurrence and scatter equations shared; only the runtime-owned
+    # output address carries the optional rounding-residual plane.
+    return '#include "runtime/compensated_atomic.cuh"\n' + source.replace(
+        "double* fock", "generativeqc::runtime::CompensatedOutput fock"
+    )
 
 
 def _emit_shell_class_mixed_fock_cuda(

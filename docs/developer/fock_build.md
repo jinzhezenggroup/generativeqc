@@ -72,6 +72,25 @@ kernel timings and incomplete cohorts do not qualify a cold advantage.
 See the [default decision](../../.agents/notes/implemented/performance/2026-10-08-md-j-default-cold.md)
 for error-budget rationale, measured evidence and rejected residual schedules.
 
+## Compensated exported RHF references
+
+Restricted bounded quartet-direct RHF reserves a Cartesian FP64 correction plane
+when exporting a physical reference for a correlated method. Generated Fock
+pages, their retry waves and streaming workers receive the same runtime-owned
+`CompensatedOutput` as the retained generic scatter. Each atomic addition records
+its magnitude-ordered rounding residual; the owner clears the plane before each
+Fock build and folds it after all writers, before any public-AO projection or
+physical-reference validation. This improves accuracy without promising bitwise
+reproducibility.
+
+Compensation does not bypass the generated class inventory. Generated/native
+classes and uncovered generic classes retain disjoint masks and bounded storage.
+A null correction preserves ordinary accumulation. The private generated launch
+ABI carries two pointers by value, so generated artifacts must be rebuilt
+together; the 192-byte quartet task ABI, public APIs, screening predicates and
+reference acceptance gates remain unchanged. See the
+[sink decision](../../.agents/notes/implemented/numerics/2026-10-09-generated-fock-compensation.md).
+
 ## Bounded indexed force schedule
 
 Derivative-capable generated exchange owners use the per-system descending

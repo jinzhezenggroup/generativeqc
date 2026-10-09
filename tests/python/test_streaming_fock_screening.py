@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,17 +11,17 @@ from generativeqc_compiler.integral.production_emission import _streaming_fock_s
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
 
 
-def test_component_worker_continues_after_screened_candidate(tmp_path: Path) -> None:
+def test_component_worker_continues_after_screened_candidate(
+    tmp_path: Path, native_cxx: object
+) -> None:
     """A bra-local screened tail must not retire a global pair-product worker.
 
     Run the actual emitted control flow as one host CTA leader. Integral math,
     atomics between concurrent CTAs and barriers are outside this scheduler
     test; the independent nested-loop census checks every retained task once.
-    Numerical CUDA qualification remains separate.
+    The mock retains the real two-plane output ABI but does not implement its
+    arithmetic. Numerical CUDA qualification remains separate.
     """
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
     root = Path(__file__).resolve().parents[2]
     profile = resolve_production_profile(
         root / "python/generativeqc_compiler/integral/production_shell_classes.json",
@@ -43,6 +42,7 @@ def test_component_worker_continues_after_screened_candidate(tmp_path: Path) -> 
 #include <iostream>
 #include <utility>
 #include <vector>
+#include "runtime/compensated_output.hpp"
 #include "scf/generated_shell_task.hpp"
 #define __device__
 #define __forceinline__
@@ -74,7 +74,7 @@ void generated_ddpp_stream_populate_task(
 template<bool U> void generated_ddpp_shell_class_fock_task(
     const GeneratedDdppShellTask* task, const GeneratedDdppPrimitivePairData*,
     const std::int64_t*, const double*, const GeneratedDdppVec3*, double,
-    const double*, const double*, double*, std::size_t) {
+    const double*, const double*, generativeqc::runtime::CompensatedOutput, std::size_t) {
   actual.emplace_back(task[0].shell_pair[0], task[0].shell_pair[1]);
 }
 """
@@ -127,18 +127,11 @@ int main() {
 """
     )
     executable = tmp_path / "stream"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-I",
-            str(root / "src"),
-            str(driver),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [driver],
+        executable,
+        compile_args=["-std=c++20", "-I", str(root / "src")],
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 
