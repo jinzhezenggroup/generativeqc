@@ -80,6 +80,15 @@ int main(int argc, char** argv) {
   Owner replacement = owner;
   const auto other = bind_native_ao_grid_block(replacement, offsets, ids, 0);
   if (block.owner_identity == other.owner_identity) return 6;
+  const std::vector<std::size_t> logical_offsets{0, 2, 5, 7};
+  const std::vector<std::size_t> rebased_span{0, 2, 4, 0, 0};
+  for (const std::size_t start : {std::size_t{3}, std::size_t{6}}) {
+    const auto rebased = bind_native_ao_grid_block(
+        owner, logical_offsets, rebased_span.data(), start, true);
+    if (!rebased.indexed || rebased.ao_ids != rebased_span.data()) return 8;
+    if (rebased.nactive != logical_offsets[start / 3 + 1] - logical_offsets[start / 3])
+      return 9;
+  }
   owner.local_ao = false;
   owner.map_derivative_order = -1;
   const auto dense = bind_native_ao_grid_block(owner, {}, nullptr, 0);

@@ -40,6 +40,7 @@ from generativeqc_compiler.common.runtime_domain import (
     RuntimeTaskDomain,
     RuntimeTaskPage,
 )
+from generativeqc_compiler.dft.ao_map_plan import ExactAoMapResources
 from generativeqc_compiler.dft.cuda import (
     CudaGrid,
     GridTaskView,
@@ -149,7 +150,7 @@ def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
     return selection
 
 
-def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool:
+def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool | int:
     """Keep the measured losing primitive qualification-only and method-neutral.
 
     Explicit owner selections take precedence over the experiment environment.
@@ -161,8 +162,12 @@ def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool:
             raise TypeError("Becke primitive selection must be boolean or None")
         return selection
     mode = os.environ.get("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "off")
+    if mode == "normalized-adjoints":
+        return 2
     if mode not in {"off", "coefficients"}:
-        raise ValueError("Becke primitive mode must be 'off' or 'coefficients'")
+        raise ValueError(
+            "Becke primitive mode must be 'off', 'coefficients' or 'normalized-adjoints'"
+        )
     return mode == "coefficients"
 
 
@@ -547,7 +552,7 @@ class _CudaSources:
         integral_derivatives: bool = True,
         cooperative_becke: bool | None = None,
         phased_becke: bool | None = None,
-        becke_primitive: bool | None = None,
+        becke_primitive: bool | int | None = None,
         becke_normalize: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
@@ -555,7 +560,8 @@ class _CudaSources:
         if becke_normalize is not None and type(becke_normalize) is not bool:
             raise TypeError("Becke normalization selection must be boolean or None")
         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
-        becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
+        if type(becke_primitive) is not int or becke_primitive != 2:
+            becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
         self.source_names = source_names
         self.integral_derivatives = integral_derivatives
         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
@@ -782,7 +788,7 @@ class _CudaSources:
             budget_bytes=budget,
             cooperative_becke=cooperative_becke,
             phased_becke=phased_becke,
-            becke_primitive=becke_primitive,
+            becke_primitive=bool(becke_primitive),
         )
         self._call(
             "stationary_create",
@@ -825,7 +831,17 @@ class _CudaSources:
         self.becke_primitive_supported = configure_primitive is not None and hasattr(
             lib, "stationary_becke_primitive_metrics_v1"
         )
-        if self.becke_primitive_supported:
+        configure_normalized = getattr(
+            lib, "stationary_configure_becke_normalized_adjoint_v1", None
+        )
+        if becke_primitive == 2:
+            self.becke_primitive_supported = (
+                self.becke_primitive_supported and configure_normalized is not None
+            )
+        if self.becke_primitive_supported and becke_primitive == 2:
+            configure_normalized.argtypes = [ct.c_void_p, *tail]
+            self._call("stationary_configure_becke_normalized_adjoint_v1", self.handle)
+        elif self.becke_primitive_supported:
             configure_primitive.argtypes = [ct.c_void_p, ct.c_int, *tail]
             self._call(
                 "stationary_configure_becke_primitive_v1",
@@ -2055,7 +2071,10 @@ class PreparedStationaryCudaExecution:
 
         tensor_peak = sum(value.peak_bytes for value in tensor_plans.values())
         device_peak_bound = grid_plan.peak_bytes + source_bytes + tensor_peak
-        if resident_ao_producer == "pre-ao-envelope-native-csr":
+        if resident_ao_producer in {
+            "pre-ao-envelope-native-csr",
+            "exact-jets-native-bitmask",
+        }:
             device_peak_bound += resident_ao_cache_bytes
         if device_peak_bound > max_device_bytes:
             raise ValueError("prepared stationary CUDA device budget exceeded")
@@ -2525,7 +2544,7 @@ def _plan_stationary_cuda_tile(
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
         phased_becke=_resolve_phased_becke_policy(na, None),
-        becke_primitive=_resolve_becke_primitive_policy(),
+        becke_primitive=bool(_resolve_becke_primitive_policy()),
     )
     return _StationaryCudaTileLayout(
         grid_plan,
@@ -2632,8 +2651,13 @@ def _stationary_resident_ao_cache(
                 cutoff=cutoff,
                 budget_bytes=budget_bytes,
                 max_active_fraction=max_active_fraction,
+                **(
+                    {"producer": producer}
+                    if producer == "exact-jets-native-bitmask"
+                    else {}
+                ),
             )
-            if producer == "pre-ao-envelope-native-csr"
+            if producer in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
             else ResidentAoMapCache(
                 grid,
                 domain,
@@ -2890,14 +2914,22 @@ def _complete_rks_cuda_gradient_diagnostic(
         "sampled-jets",
         "pre-ao-envelope",
         "pre-ao-envelope-native-csr",
+        "exact-jets-native-bitmask",
     }:
         raise ValueError("unsupported resident AO domain producer")
-    if resident_ao_producer == "pre-ao-envelope-native-csr":
+    if resident_ao_producer in {
+        "pre-ao-envelope-native-csr",
+        "exact-jets-native-bitmask",
+    }:
         # Charge both device storage/staging and the host offset mirror without
         # consuming the already admitted native integral provider's allowance.
         ao_map_reserve = _stationary_device_ao_map_reserve(
             layout, ao_map_reserve, max_device_bytes
         )
+    if resident_ao_producer == "exact-jets-native-bitmask":
+        ao_map_reserve = ExactAoMapResources(
+            n, len(state.grid.points), tile_points
+        ).admitted_bytes(ao_map_reserve)
     host_bound += ao_map_reserve
     cache = Path(cache)
     spec = state._source.grid_spec
@@ -3565,7 +3597,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             "cache_host_reserve_bytes": ao_map_reserve,
             "cache_device_reserve_bytes": (
                 ao_map_reserve
-                if resident_ao_producer == "pre-ao-envelope-native-csr"
+                if resident_ao_producer
+                in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
                 else 0
             ),
             "full_ao_capacity": n,
@@ -3631,7 +3664,9 @@ def _complete_rks_cuda_gradient_diagnostic(
         additional_device_peak_bound=peak
         + (
             ao_map_reserve
-            if prepared is None and resident_ao_producer == "pre-ao-envelope-native-csr"
+            if prepared is None
+            and resident_ao_producer
+            in {"pre-ao-envelope-native-csr", "exact-jets-native-bitmask"}
             else 0
         )
         + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),

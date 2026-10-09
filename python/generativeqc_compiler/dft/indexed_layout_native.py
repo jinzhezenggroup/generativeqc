@@ -11,6 +11,9 @@ def emit_native_ao_grid_binding() -> str:
     Map capability is still independent of the currently evaluated jet order.
     Admission validates CSR labels once; this binding checks the current span.
     A full sorted unique physical map is the identity and uses the dense route.
+    Rebased bindings borrow one same-stream compacted span rather than all CSR
+    labels. Logical offsets still authenticate the immutable tile/count domain;
+    they must not be added to that smaller physical allocation.
     """
     return r"""
 #include <algorithm>
@@ -34,7 +37,7 @@ struct NativeAoGridBlockLayout {
 template <class Layout>
 NativeAoGridBlockLayout bind_native_ao_grid_block(
     const Layout& owner, const std::vector<std::size_t>& offsets,
-    const std::size_t* indices, std::size_t begin) {
+    const std::size_t* indices, std::size_t begin, bool rebased_indices = false) {
   if (!owner.nao || !owner.tile_points || begin >= owner.npoint ||
       begin % owner.tile_points)
     throw std::invalid_argument("indexed AO/grid point domain mismatch");
@@ -58,7 +61,8 @@ NativeAoGridBlockLayout bind_native_ao_grid_block(
     active = offsets[tile + 1] - offsets[tile];
     if (active > owner.nao || (active && !indices))
       throw std::invalid_argument("indexed AO/grid AO domain mismatch");
-    if (active && active < owner.nao) ids = indices + offsets[tile];
+    if (active && active < owner.nao)
+      ids = indices + (rebased_indices ? 0 : offsets[tile]);
   }
   return {owner.nao, active, count, begin, order,
           owner.local_ao ? owner.map_derivative_order : -1,
