@@ -70,7 +70,7 @@ def test_reference_tolerance_rejects_invalid_or_looser_values(
 
 
 def test_reference_tolerance_rejects_extra_arguments(endpoint_binary: str) -> None:
-    completed = invoke(endpoint_binary, "auto", "1", "0", "1", "extra")
+    completed = invoke(endpoint_binary, "auto", "1", "0", "1", "0", "0", "extra")
     assert completed.returncode != 0
     assert "usage: df-force-endpoint" in completed.stderr
 

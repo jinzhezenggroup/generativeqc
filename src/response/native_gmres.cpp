@@ -5,6 +5,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include "runtime/df_progress_trace.hpp"
+
 namespace generativeqc::response {
 namespace {
 using WorkspaceVector = runtime::TrackedVector<double>;
@@ -144,10 +146,13 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
 
   std::size_t operator_actions = 0;
   std::size_t preconditioner_actions = 0;
-  auto apply_checked = [&](std::span<const double> input, std::span<double> output) {
+  auto apply_checked = [&](std::span<const double> input, std::span<double> output,
+                           const char* phase) {
+    runtime::df_progress::Scope action(phase);
     std::fill(output.begin(), output.end(), 0.0);
     apply(input, output);
     ++operator_actions;
+    if (action.enabled()) runtime::df_progress::Scope::number("operator_action", operator_actions);
     return finite(output);
   };
   auto precondition = [&](std::span<const double> input, std::span<double> output) {
@@ -175,7 +180,7 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
       std::max(plan.options.absolute_tolerance, plan.options.relative_tolerance * rhs_norm);
   WorkspaceVector image(n, 0.0, allocator), residual(rhs.begin(), rhs.end(), allocator);
   if (!initial_guess.empty()) {
-    if (!apply_checked(x, image))
+    if (!apply_checked(x, image, "gmres_initial_residual"))
       return result_for(plan, std::move(x), GmresStatus::nonfinite_operator,
                         std::numeric_limits<double>::infinity(), rhs_norm, 0, 0, operator_actions,
                         preconditioner_actions);
@@ -223,7 +228,7 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
       if (!finite(z_column))
         return result_for(plan, std::move(best_x), GmresStatus::nonfinite_preconditioner, best_norm,
                           rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
-      if (!apply_checked(z_column, work))
+      if (!apply_checked(z_column, work, "gmres_arnoldi_action"))
         return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
                           rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
       for (unsigned pass = 0; pass < plan.options.reorthogonalize; ++pass) {
@@ -286,7 +291,7 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
         for (std::size_t vector = 0; vector < columns; ++vector)
           for (std::size_t index = 0; index < n; ++index)
             candidate[index] += preconditioned[vector * n + index] * coefficients[vector];
-      if (!apply_checked(candidate, candidate_image))
+      if (!apply_checked(candidate, candidate_image, "gmres_exact_residual_replay"))
         return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
                           rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
       for (std::size_t index = 0; index < n; ++index)

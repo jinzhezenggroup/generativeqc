@@ -12,6 +12,7 @@
 #include "posthf/capacity.hpp"
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/df_progress_trace.hpp"
 
 namespace generativeqc::cc::detail {
 namespace {
@@ -80,7 +81,8 @@ struct Stage {
 const Stage primal_prepare = GQC_STAGE(staged_primal_prepare),
             primal_auxiliary = GQC_STAGE(staged_primal_auxiliary),
             core_stage = GQC_STAGE(staged_core), auxiliary_stage = GQC_STAGE(staged_auxiliary),
-            prepare_stage = GQC_STAGE(staged_prepare), factor_stage = GQC_STAGE(staged_factors);
+            prepare_stage = GQC_STAGE(staged_prepare), factor_stage = GQC_STAGE(staged_factors),
+            audit_core = GQC_STAGE(audit_core), audit_auxiliary = GQC_STAGE(audit_auxiliary);
 using Runner = generated::DeviceParameterOutput (*)(generated_response::CudaState&);
 using StagedRunner = generated::DeviceParameterOutput (*)(generated_response::StagedCudaState&);
 struct Parameter {
@@ -227,7 +229,7 @@ struct DFLambdaActions::Impl {
     // is optional and includes explicit IR packing/broadcast intermediates.
     const auto scalar_cursor = cursor, scalar_staged_arena = staged_arena;
     const bool scalar_reduction = metrics.df_auxiliary_reduction;
-    std::size_t binding_host_bytes = 0;
+    std::size_t binding_host_bytes = 0, core_reuse_offset = 0, audit_offset = 0;
     auto capacity = [&] {
       metrics.owned_device_bytes = checked_add(cursor, metrics.df_provider_allowance_bytes);
       metrics.numeric_capacity_bytes =
@@ -236,6 +238,10 @@ struct DFLambdaActions::Impl {
     auto scalar_plan = [&] {
       binding_host_bytes = 0;
       metrics.df_matrix_gemm = false;
+      metrics.df_core_reuse = false;
+      metrics.df_core_reuse_bytes = 0;
+      metrics.df_audit_matrix_gemm = false;
+      metrics.df_audit_arena_bytes = 0;
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
       metrics.df_auxiliary_reduction = scalar_reduction;
@@ -276,6 +282,57 @@ struct DFLambdaActions::Impl {
         }
       }
     }
+    const auto operator_cursor = cursor, operator_binding_host_bytes = binding_host_bytes;
+    auto drop_audit = [&] {
+      metrics.df_audit_matrix_gemm = false;
+      metrics.df_audit_arena_bytes = 0;
+      cursor = operator_cursor;
+      binding_host_bytes = operator_binding_host_bytes;
+      capacity();
+    };
+    if (metrics.df_matrix_gemm && options.df_audit_matrix_gemm) {
+      const auto batch = metrics.df_auxiliary_batch_size;
+      if (audit_core.fit(o, v, 1) && audit_auxiliary.fit(o, v, batch)) {
+        auto candidate = cursor;
+        const auto arena_bytes = bytes(
+            std::max(audit_core.matrix_arena(o, v, 1), audit_auxiliary.matrix_arena(o, v, batch)));
+        const auto offset = reserve(candidate, arena_bytes);
+        const auto descriptors =
+            generated_response::audit_contraction_host_bytes(q % batch ? 2 : 1);
+        if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
+                        checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
+            options.max_bytes) {
+          metrics.df_audit_matrix_gemm = true;
+          metrics.df_audit_arena_bytes = arena_bytes;
+          cursor = candidate;
+          audit_offset = offset;
+          binding_host_bytes = checked_add(binding_host_bytes, descriptors);
+        }
+      }
+    }
+    const auto matrix_cursor = cursor, matrix_binding_host_bytes = binding_host_bytes;
+    auto drop_core_reuse = [&] {
+      metrics.df_core_reuse = false;
+      metrics.df_core_reuse_bytes = 0;
+      cursor = matrix_cursor;
+      binding_host_bytes = matrix_binding_host_bytes;
+      capacity();
+    };
+    if (metrics.df_matrix_gemm && options.df_core_reuse) {
+      auto candidate = cursor;
+      const auto retained_bytes = bytes(generated_response::staged_core_reuse_arena_elements(o, v));
+      const auto offset = reserve(candidate, retained_bytes);
+      const auto descriptors = generated_response::core_reuse_contraction_host_bytes();
+      if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
+                      checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
+          options.max_bytes) {
+        metrics.df_core_reuse = true;
+        metrics.df_core_reuse_bytes = retained_bytes;
+        core_reuse_offset = offset;
+        cursor = candidate;
+        binding_host_bytes = checked_add(binding_host_bytes, descriptors);
+      }
+    }
     capacity();
     if (metrics.numeric_capacity_bytes > options.max_bytes)
       throw std::length_error("DF Lambda complete numeric storage exceeds budget");
@@ -283,6 +340,18 @@ struct DFLambdaActions::Impl {
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
     if (metrics.df_matrix_gemm && !storage.contractions.prepare(storage.stream)) scalar_plan();
     auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    if (allocation == cudaErrorMemoryAllocation && metrics.df_core_reuse) {
+      // Refuse only the optional owner-local retention before dropping GEMM.
+      // Numerical, launch and driver failures must propagate, not retry.
+      (void)cudaGetLastError();
+      drop_core_reuse();
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    }
+    if (allocation == cudaErrorMemoryAllocation && metrics.df_audit_matrix_gemm) {
+      (void)cudaGetLastError();
+      drop_audit();
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_matrix_gemm) {
       (void)cudaGetLastError();
       std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
@@ -357,6 +426,27 @@ struct DFLambdaActions::Impl {
             metrics.df_gemm_summands);
       }
       prepare_cuts();
+      if (metrics.df_audit_matrix_gemm) {
+        staged.audit_arena = at(audit_offset);
+        generated_response::prepare_audit_contractions(
+            staged, storage.contractions, metrics.df_auxiliary_batch_size,
+            q % metrics.df_auxiliary_batch_size, metrics.df_gemm_calls, metrics.df_gemm_summands);
+        metrics.audit_schedule_hash = generated_response::audit_matrix_operator_hash;
+      }
+      if (metrics.df_core_reuse) {
+        staged.core_reuse_arena = at(core_reuse_offset);
+        generated_response::prepare_core_reuse_contractions(
+            staged, storage.contractions, metrics.df_gemm_calls, metrics.df_gemm_summands);
+        runtime::df_progress::Scope preparation("df_lambda_core_reuse_preparation");
+        clear_error();
+        // Q preparation may leave a tail extent; core bindings always use q=1.
+        staged.q = 1;
+        generated_response::run_staged_core_reuse_prepare_cuda(staged);
+        record_core_reuse(true);
+        finish();
+        ++metrics.df_core_reuse_preparations;
+        metrics.core_reuse_plan_hash = generated_response::staged_core_reuse_hash;
+      }
     } else {
       cuda_check(cudaStreamSynchronize(storage.stream));
       ++metrics.synchronizations;
@@ -382,6 +472,22 @@ struct DFLambdaActions::Impl {
         checked_add(metrics.df_generated_kernels, stage.matrix_operations);
     metrics.df_packing_output_bytes = checked_add(metrics.df_packing_output_bytes,
                                                   bytes(stage.packing(state.o, state.v, staged.q)));
+  }
+  void record_core_reuse(bool preparation) {
+    const auto terms = preparation
+                           ? generated_response::staged_core_reuse_prepare_contraction_terms
+                           : generated_response::staged_core_reuse_dynamic_contraction_terms;
+    const auto packing = preparation
+                             ? generated_response::staged_core_reuse_prepare_packing_elements
+                             : generated_response::staged_core_reuse_dynamic_packing_elements;
+    metrics.df_contraction_terms =
+        checked_add(metrics.df_contraction_terms, terms(state.o, state.v));
+    metrics.df_generated_kernels =
+        checked_add(metrics.df_generated_kernels,
+                    preparation ? generated_response::staged_core_reuse_prepare_operations
+                                : generated_response::staged_core_reuse_dynamic_operations);
+    metrics.df_packing_output_bytes =
+        checked_add(metrics.df_packing_output_bytes, bytes(packing(state.o, state.v)));
   }
   void upload(double* target, const double* source, std::size_t count) {
     cuda_check(
@@ -430,6 +536,7 @@ struct DFLambdaActions::Impl {
         cudaMemcpyAsync(target, source, bytes(count), cudaMemcpyDeviceToDevice, storage.stream));
   }
   void prepare_cuts() {
+    runtime::df_progress::Scope preparation("df_lambda_cuts_preparation");
     clear_error();
     staged.q = 1;
     const auto prepared = generated_response::run_staged_primal_prepare_cuda(staged);
@@ -450,7 +557,9 @@ struct DFLambdaActions::Impl {
   }
   void core_seeds() {
     staged.q = 1;
-    const auto out = generated_response::run_staged_core_cuda(staged);
+    const auto out = metrics.df_core_reuse
+                         ? generated_response::run_staged_core_reuse_dynamic_cuda(staged)
+                         : generated_response::run_staged_core_cuda(staged);
     // Borrowed adjoints must survive reuse of the graph arena by every Q VJP.
     const std::array sources{out.bar_df_Lvv, out.bar_df_Wvoov,         out.bar_df_Wvovo,
                              out.bar_df_Xv,  out.bar_df_D05_vv_ladder, out.bar_df_singles_residual};
@@ -458,7 +567,12 @@ struct DFLambdaActions::Impl {
       copy_buffer(sources[x], cut_sizes[x], cut_seeds[x]);
     copy_buffer(out.bar_t1, n1, sum1);
     copy_buffer(out.bar_t2, n2, sum2);
-    record_stage(core_stage);
+    if (metrics.df_core_reuse) {
+      record_core_reuse(false);
+      ++metrics.df_core_reuse_actions;
+    } else {
+      record_stage(core_stage);
+    }
   }
   void reduced_transpose() {
     core_seeds();
@@ -554,6 +668,26 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
   s.upload(s.state.bar_doubles_residual, two.data(), s.n2);
   if (s.metrics.df_auxiliary_reduction && !independent) {
     s.reduced_transpose();
+    s.output(s.sum1, s.sum2, out_one, out_two);
+    fence.complete();
+    return;
+  }
+  if (independent && s.metrics.df_audit_matrix_gemm) {
+    // Keep the expanded independent core and original per-Q virtual adjoint;
+    // only their compiler lowering changes, never the solver's staged cuts.
+    s.staged.q = 1;
+    const auto core = generated_response::run_audit_core_cuda(s.staged);
+    s.copy_buffer(core.bar_t1, s.n1, s.sum1);
+    s.copy_buffer(core.bar_t2, s.n2, s.sum2);
+    s.record_stage(audit_core);
+    for (std::size_t auxiliary_begin = 0; auxiliary_begin < s.q;
+         auxiliary_begin += s.metrics.df_auxiliary_batch_size) {
+      s.select(auxiliary_begin, std::min(s.metrics.df_auxiliary_batch_size, s.q - auxiliary_begin));
+      const auto out = generated_response::run_audit_auxiliary_cuda(s.staged);
+      generated_response::accumulate_audit_auxiliary_cuda(s.staged, out, s.sum1, s.sum2);
+      ++s.metrics.df_generated_kernels;
+      s.record_stage(audit_auxiliary);
+    }
     s.output(s.sum1, s.sum2, out_one, out_two);
     fence.complete();
     return;
