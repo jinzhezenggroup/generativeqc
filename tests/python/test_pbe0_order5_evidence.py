@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tools.generativeqc_validation.record import load_publication_record
+
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "benchmarks/results/pbe0-weighted-order5-20261005"
 
@@ -27,6 +29,13 @@ def test_complete_geometry_inventory(
 ) -> None:
     """Re-sign modified storage so the regression reaches semantic validation."""
     shutil.copytree(EVIDENCE, tmp_path, dirs_exist_ok=True)
+    # Verify and decode the declared envelope before mutating any stored bytes.
+    validation = load_publication_record(tmp_path)
+    manifest_path = tmp_path / "publication.json"
+    manifest = json.loads(manifest_path.read_text())
+    validation_path = tmp_path / next(
+        member["path"] for member in manifest["files"] if member["role"] == "evidence"
+    )
     name = "reference-96.json.gz"
     path = tmp_path / name
     record = json.loads(gzip.decompress(path.read_bytes()))
@@ -43,14 +52,15 @@ def test_complete_geometry_inventory(
     path.write_bytes(payload)
     # Update both storage envelopes: the changed samples must get past hash
     # binding before the semantic inventory check can reject the mutation.
-    validation_path = tmp_path / "validation.json"
-    validation = json.loads(validation_path.read_text())
     for attachment in validation["attachments"]:
         if attachment["path"] == name:
             attachment["sha256"] = hashlib.sha256(payload).hexdigest()
-    validation_path.write_text(json.dumps(validation) + "\n")
-    manifest_path = tmp_path / "publication.json"
-    manifest = json.loads(manifest_path.read_text())
+    validation_bytes = (json.dumps(validation) + "\n").encode()
+    validation_path.write_bytes(
+        gzip.compress(validation_bytes, mtime=0)
+        if validation_path.suffix == ".gz"
+        else validation_bytes
+    )
     for member in manifest["files"]:
         content = (tmp_path / member["path"]).read_bytes()
         member.update(bytes=len(content), sha256=hashlib.sha256(content).hexdigest())

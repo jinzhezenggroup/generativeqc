@@ -55,8 +55,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void direct_order_seven_f
     if (threadIdx.x < page.ket_end - page.ket_begin) {
       const auto bra = topology.pair_order[page.bra];
       const auto ket = topology.pair_order[page.ket_begin + threadIdx.x];
-      const auto first_pair = max(bra, ket);
-      const auto second_pair = min(bra, ket);
+      const auto first_pair = bra > ket ? bra : ket;
+      const auto second_pair = bra < ket ? bra : ket;
       if (direct_shell_quartet_survives_screening<Unrestricted, DirectScreeningPurpose::Force>(
               batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
               shell_pair_density_bounds, nullptr, false, false)) {

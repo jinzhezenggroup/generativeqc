@@ -25,6 +25,71 @@ def test_order_seven_pages_own_exact_same_system_rectangle(
     assert result.returncode == 0, result.stderr
 
 
+def test_order_seven_physical_pair_ids_remain_unsigned(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Compile actual canonicalization with the signed-only CuMetal overloads."""
+    source = (ROOT / "src/scf/cuda/direct_order_seven_force.cu").read_text()
+    begin = source.index("const auto bra = topology.pair_order[page.bra];")
+    end = source.index("if (direct_shell_quartet_survives_screening", begin)
+    canonicalize = source[begin:end]
+    task = source.split("const ActiveShellQuartetTile task", 1)[1].split(";", 1)[0]
+    metadata = (ROOT / "src/scf/cuda/direct_metadata.hpp").read_text()
+    tile = metadata.split("struct ActiveShellQuartetTile {", 1)[1].split("};", 1)[0]
+    probe = tmp_path / "pair_ids.cpp"
+    probe.write_text(
+        PAIR_ID_DRIVER.replace("// PRODUCTION_TILE_FIELDS", tile)
+        .replace("// PRODUCTION_CANONICALIZATION", canonicalize)
+        .replace("// PRODUCTION_TASK", "const ActiveShellQuartetTile task" + task + ";")
+    )
+    executable = native_cxx.build_executable(
+        [probe],
+        tmp_path / "pair_ids",
+        compile_args=["-std=c++20", "-O2", "-Werror=narrowing", f"-I{ROOT / 'src'}"],
+    )
+    result = subprocess.run([executable], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+
+
+PAIR_ID_DRIVER = r"""
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
+#include "scf/generated_shell_task.hpp"
+#define __host__
+#define __device__
+#include "scf/cuda/direct_order_seven_pages.cuh"
+using namespace generativeqc::scf::cuda_execution;
+// CuMetal provides these signed overloads; an unsigned-to-int-to-unsigned
+// round trip must not define physical shell-pair ordering.
+int max(int a, int b) { return a > b ? a : b; }
+int min(int a, int b) { return a < b ? a : b; }
+struct ActiveShellQuartetTile {
+// PRODUCTION_TILE_FIELDS
+};
+int main() {
+  const std::uint32_t values[]{0U, 1U, 2147483647U, 2147483648U,
+                             std::numeric_limits<std::uint32_t>::max()};
+  for (auto first : values) for (auto second : values) {
+    const std::uint32_t order[]{first, second};
+    generativeqc::scf::detail::GeneratedShellPairStream topology{};
+    topology.pair_order = order;
+    const DirectOrderSevenPairPage page{0U, 0U, 1U, 2U};
+    const struct { std::uint32_t x; } threadIdx{0U};
+    // PRODUCTION_CANONICALIZATION
+    static_assert(std::is_same_v<decltype(first_pair), const std::uint32_t>);
+    static_assert(std::is_same_v<decltype(second_pair), const std::uint32_t>);
+    // PRODUCTION_TASK
+    assert(task.first_pair == std::max(first, second));
+    assert(task.second_pair == std::min(first, second));
+    assert(task.tile == 0U);
+  }
+}
+"""
+
+
 DRIVER = r"""
 #include <algorithm>
 #include <cassert>
