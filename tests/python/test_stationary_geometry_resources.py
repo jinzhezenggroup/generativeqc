@@ -209,6 +209,7 @@ def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -232,6 +233,8 @@ struct DeviceAllocationError : std::runtime_error { using std::runtime_error::ru
 int cudaGetLastError() { return 0; }
 struct Context {
   unsigned char* arena{};
+  int* error{};
+  cudaStream_t stream{};
   Context() { ++owners; }
   ~Context() { if(arena) --arenas; delete[] arena; --owners; }
   void prepare(int,int,int,size_t bytes,size_t error_offset,size_t,size_t,size_t,bool) {
@@ -240,11 +243,15 @@ struct Context {
     if(oom) throw std::bad_alloc();
     if(runtime_failure) throw std::runtime_error("injected non-allocation failure");
     arena=new unsigned char[bytes]; ++arenas;
+    error=reinterpret_cast<int*>(arena+error_offset);
     if(bytes>oom_above) throw DeviceAllocationError("injected post-allocation cache OOM");
   }
 };
 struct cudaDeviceProp { int maxThreadsPerBlock{}, maxThreadsDim[3]{}, maxGridSize[3]{}; };
 int cudaGetDeviceCount(int* count) { *count=1; return 0; }
+int cudaMemsetAsync(void* destination,int value,size_t bytes,cudaStream_t) {
+  std::memset(destination,value,bytes); return 0;
+}
 int cudaGetDeviceProperties(cudaDeviceProp* p,int) {
   p->maxThreadsPerBlock=max_threads; p->maxThreadsDim[0]=max_threads;
   p->maxGridSize[0]=65535; return 0;

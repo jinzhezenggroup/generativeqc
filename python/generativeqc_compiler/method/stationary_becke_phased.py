@@ -31,6 +31,8 @@ struct PhasedBeckeInput {
   double* partial;
   int* error;
   bool normalized_adjoints{};
+  bool zero_seed_elision{};
+  unsigned long long* zero_seed_points{};
   __device__ size_t owner(size_t point) const {
     return owners ? size_t(owners[point])
         : (points_per_atom ? (owner_offset + point) / points_per_atom : size_t(-1));
@@ -38,6 +40,9 @@ struct PhasedBeckeInput {
   __device__ bool failed() const {
     return cuda::atomic_ref<int, cuda::thread_scope_device>(*error)
         .load(cuda::memory_order_relaxed) != 0;
+  }
+  __device__ bool zero_seed(size_t point) const {
+    return zero_seed_elision && seeds[point] == 0;
   }
 };
 
@@ -57,6 +62,16 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   if (point >= input.work.points || input.failed()) return;
   using namespace generativeqc_grid_phased;
   bool valid = true;
+  // Distance validation is never elided: zero cotangents must still reject a
+  // nonfinite/coincident point. Gather initializes the skipped reverse output.
+  if constexpr (Phase == 1)
+    if (input.zero_seed(point)) return;
+  if constexpr (Phase == 2) {
+    if (input.zero_seed(point)) {
+      for (size_t word = 0; word < 4; ++word) input.work.field(7 + word, point)[atom] = 0;
+      return;
+    }
+  }
   if constexpr (Phase == 0)
     valid = distance_phase(input.work, point, atom, input.points, input.centers, local_norm);
   if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom);
@@ -81,6 +96,9 @@ template <bool Reverse, bool Primitive = false, bool Normalized = false>
 __global__ void phased_becke_pair(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   if (point >= input.work.points || input.failed()) return;
+  // These rows have no pair-panel consumer: logs/normalization/reverse skip
+  // together, and gather writes exact zeros before point-motion publication.
+  if (input.zero_seed(point)) return;
   using namespace generativeqc_grid_adjoint;
   using namespace generativeqc_grid_phased;
   const auto indices = input.indices[blockIdx.y];
@@ -103,6 +121,11 @@ __global__ void phased_becke_pair(PhasedBeckeInput input) {
 __global__ void phased_becke_normalize(PhasedBeckeInput input) {
   const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
   if (point >= input.work.points || input.failed()) return;
+  if (input.zero_seed(point)) {
+    if (input.owner(point) >= input.work.atoms) atomicExch(input.error, 1);
+    else atomicAdd(input.zero_seed_points, 1ULL);
+    return;
+  }
   if (!generativeqc_grid_phased::point_normalize_phase(input.work, point,
           input.owner(point), input.seeds[point], local_ratio)) atomicExch(input.error, 1);
   if (input.normalized_adjoints)
@@ -120,11 +143,27 @@ __device__ void normalize_cooperative(PhasedBeckeInput input) {
   __shared__ double maxima[atom_lanes * point_lanes];
   __shared__ double objectives[3 * point_lanes];
   __shared__ bool active_points[point_lanes];
+  __shared__ unsigned skipped_points[point_lanes];
   const size_t lane = threadIdx.x, atom_lane = threadIdx.y;
   const size_t point = blockIdx.x * point_lanes + lane;
-  if (atom_lane == 0)
-    active_points[lane] = point < input.work.points && !input.failed();
+  if (atom_lane == 0) {
+    bool active = point < input.work.points && !input.failed();
+    skipped_points[lane] = 0;
+    if (active && input.zero_seed(point)) {
+      if (input.owner(point) >= input.work.atoms) atomicExch(input.error, 1);
+      else skipped_points[lane] = 1;
+      active = false;
+    }
+    active_points[lane] = active;
+  }
   __syncthreads();
+  // One atomic per cooperative block, outside the scientific ordered sums.
+  // The cumulative count measures actual elision, not a launched-domain model.
+  if (input.zero_seed_elision && lane == 0 && atom_lane == 0) {
+    unsigned skipped = 0;
+    for (size_t source = 0; source < point_lanes; ++source) skipped += skipped_points[source];
+    if (skipped) atomicAdd(input.zero_seed_points, static_cast<unsigned long long>(skipped));
+  }
   const bool active = active_points[lane];
   if (input.work.atoms > stationary_becke_normalize_max_atoms) {
     if (active && atom_lane == 0 &&

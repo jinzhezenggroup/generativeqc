@@ -127,6 +127,23 @@ def test_becke_primitive_policy_is_explicit_and_never_promotes_losing_schedule(
         runtime._resolve_becke_primitive_policy()
 
 
+def test_becke_zero_seed_override_preserves_legacy_and_rejects_bad_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unspecified diagnostic override must not demand a newer native ABI."""
+    from generativeqc import _stationary_cuda as runtime
+
+    monkeypatch.delenv("GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED", raising=False)
+    assert runtime._resolve_becke_zero_seed_policy() is None
+    for mode, expected in (("off", False), ("on", True)):
+        monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED", mode)
+        assert runtime._resolve_becke_zero_seed_policy() is expected
+    for invalid in ("auto", "", "0", "1"):
+        monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED", invalid)
+        with pytest.raises(ValueError, match="zero-seed mode"):
+            runtime._resolve_becke_zero_seed_policy()
+
+
 @pytest.mark.parametrize("primitive_abi", [False, True])
 @pytest.mark.parametrize("normalized_abi", [False, True])
 @pytest.mark.parametrize("primitive_mode", ["coefficients", "normalized-adjoints"])
