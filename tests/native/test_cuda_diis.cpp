@@ -26,9 +26,8 @@ bool notebook_allocation(std::string& pod, std::string& namespace_name) {
   std::ifstream hostname("/etc/hostname");
   std::ifstream namespace_file("/var/run/secrets/kubernetes.io/serviceaccount/namespace");
   std::string actual_hostname;
-  if (!std::getline(hostname, actual_hostname) ||
-      !std::getline(namespace_file, namespace_name) || namespace_name.empty() ||
-      actual_hostname != named_pod)
+  if (!std::getline(hostname, actual_hostname) || !std::getline(namespace_file, namespace_name) ||
+      namespace_name.empty() || actual_hostname != named_pod)
     return false;
   pod = named_pod;
   return true;
@@ -134,9 +133,8 @@ void check_incremental_history(unsigned spins) {
     active = {1, static_cast<std::uint8_t>(step % 2 == 0), 0};
     for (unsigned system = 0; system < batch; ++system)
       for (std::size_t i = 0; i < elements; ++i)
-        current[system * elements + i] =
-            std::sin(0.13 * (step + 1) * (i + 1 + system)) +
-            std::cos(0.07 * (step + 3 + system) * (i + 1));
+        current[system * elements + i] = std::sin(0.13 * (step + 1) * (i + 1 + system)) +
+                                         std::cos(0.07 * (step + 3 + system) * (i + 1));
     upload(d_current, current);
     upload(d_active, active);
     const auto previous = gram;
@@ -150,20 +148,19 @@ void check_incremental_history(unsigned spins) {
       for (unsigned row = 0; row < history; ++row)
         for (unsigned column = 0; column < history; ++column) {
           const auto index = (system * history + row) * history + column;
-          const bool live_row = row == inserted ||
-                                (row + history - first) % history < count[system];
-          const bool live_column = column == inserted ||
-                                   (column + history - first) % history < count[system];
-          const bool new_pair = active[system] && live_row && live_column &&
-                                (row == inserted || column == inserted);
+          const bool live_row =
+              row == inserted || (row + history - first) % history < count[system];
+          const bool live_column =
+              column == inserted || (column + history - first) % history < count[system];
+          const bool new_pair =
+              active[system] && live_row && live_column && (row == inserted || column == inserted);
           if (!new_pair) {
             if (!same(gram[index], previous[index]))
               throw std::runtime_error("DIIS recomputed an old-old or inactive Gram pair");
             continue;
           }
-          const auto* left = row == inserted
-                                 ? current.data() + system * elements
-                                 : stored.data() + (system * history + row) * elements;
+          const auto* left = row == inserted ? current.data() + system * elements
+                                             : stored.data() + (system * history + row) * elements;
           const auto* right = column == inserted
                                   ? current.data() + system * elements
                                   : stored.data() + (system * history + column) * elements;
@@ -176,9 +173,8 @@ void check_incremental_history(unsigned spins) {
     }
     generativeqc::scf::cuda_execution::launch_update_diis_kernel(
         batch, 32, 0, nullptr, batch, n, spins, history, d_current.data, d_current.data,
-        d_active.data, d_fock_history.data, d_stored.data, d_linear.data,
-        d_coefficients.data, d_count.data, d_head.data, d_effective.data,
-        false, false, nullptr, 0, d_gram.data);
+        d_active.data, d_fock_history.data, d_stored.data, d_linear.data, d_coefficients.data,
+        d_count.data, d_head.data, d_effective.data, false, false, nullptr, 0, d_gram.data);
     check(cudaGetLastError());
     for (unsigned system = 0; system < batch; ++system) {
       if (!active[system]) continue;
@@ -204,8 +200,8 @@ void check_incremental_history(unsigned spins) {
   upload(d_current, current);
   upload(d_active, active);
   check(generativeqc::scf::cuda_execution::launch_diis_pending_gram(
-      nullptr, batch, n, spins, history, d_current.data, d_stored.data, d_active.data,
-      d_count.data, d_head.data, d_gram.data));
+      nullptr, batch, n, spins, history, d_current.data, d_stored.data, d_active.data, d_count.data,
+      d_head.data, d_gram.data));
   download(gram, d_gram);
   if (!std::isnan(gram[head[0] * history + head[0]]))
     throw std::runtime_error("nonfinite pending residual was hidden by the Gram reduction");
@@ -218,17 +214,16 @@ void check_incremental_history(unsigned spins) {
   upload(d_head, head);
   const auto before_invalid = gram;
   check(generativeqc::scf::cuda_execution::launch_diis_pending_gram(
-      nullptr, batch, n, spins, history, d_current.data, d_stored.data, d_active.data,
-      d_count.data, d_head.data, d_gram.data));
+      nullptr, batch, n, spins, history, d_current.data, d_stored.data, d_active.data, d_count.data,
+      d_head.data, d_gram.data));
   download(gram, d_gram);
   for (std::size_t i = 0; i < gram.size(); ++i)
     if (!same(gram[i], before_invalid[i]))
       throw std::runtime_error("invalid DIIS state wrote a Gram entry");
   generativeqc::scf::cuda_execution::launch_update_diis_kernel(
       batch, 32, 0, nullptr, batch, n, spins, history, d_current.data, d_current.data,
-      d_active.data, d_fock_history.data, d_stored.data, d_linear.data,
-      d_coefficients.data, d_count.data, d_head.data, d_effective.data,
-      false, false, nullptr, 0, d_gram.data);
+      d_active.data, d_fock_history.data, d_stored.data, d_linear.data, d_coefficients.data,
+      d_count.data, d_head.data, d_effective.data, false, false, nullptr, 0, d_gram.data);
   check(cudaGetLastError());
   download(count, d_count);
   download(head, d_head);
@@ -268,8 +263,7 @@ void check_normalized_retirement(unsigned spins) {
     check(cudaMemcpy(d_fock.data, fock.data(), elements * sizeof(double), cudaMemcpyHostToDevice));
     check(generativeqc::scf::cuda_execution::launch_diis_pending_gram(
         nullptr, 1, n, spins, history, d_residual.data, d_incremental_residual_history.data,
-        d_active.data, d_incremental_count.data, d_incremental_head.data,
-        d_incremental_gram.data));
+        d_active.data, d_incremental_count.data, d_incremental_head.data, d_incremental_gram.data));
     generativeqc::scf::cuda_execution::launch_update_diis_kernel(
         1, 32, 0, nullptr, 1, n, spins, history, d_fock.data, d_residual.data, d_active.data,
         d_incremental_fock_history.data, d_incremental_residual_history.data,
@@ -298,8 +292,8 @@ void check_normalized_retirement(unsigned spins) {
     std::vector<double> incremental_effective(elements), default_effective(elements);
     check(cudaMemcpy(incremental_effective.data(), d_incremental_effective.data,
                      elements * sizeof(double), cudaMemcpyDeviceToHost));
-    check(cudaMemcpy(default_effective.data(), d_default_effective.data,
-                     elements * sizeof(double), cudaMemcpyDeviceToHost));
+    check(cudaMemcpy(default_effective.data(), d_default_effective.data, elements * sizeof(double),
+                     cudaMemcpyDeviceToHost));
     if (incremental_effective != default_effective || incremental_effective != fock)
       throw std::runtime_error("dependent DIIS fallback changed effective Fock");
   }

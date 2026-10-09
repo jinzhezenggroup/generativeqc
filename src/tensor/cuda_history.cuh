@@ -48,10 +48,11 @@ static __global__ void history_gram_row(const double* errors, I elements, int ca
  * The next stream operation may overwrite the pending slot after this grid.
  */
 template <class Step>
-static __global__ void history_gram_pending_rows(
-    const double* pending, const double* errors, I elements, unsigned capacity,
-    const unsigned char* active, const unsigned* counts, const unsigned* heads,
-    double* raw_gram) {
+static __global__ void history_gram_pending_rows(const double* pending, const double* errors,
+                                                 I elements, unsigned capacity,
+                                                 const unsigned char* active,
+                                                 const unsigned* counts, const unsigned* heads,
+                                                 double* raw_gram) {
   const unsigned system = blockIdx.x / capacity, column = blockIdx.x % capacity;
   if (!active[system]) return;
   const unsigned count = counts[system], inserted = heads[system];
@@ -59,13 +60,11 @@ static __global__ void history_gram_pending_rows(
   const unsigned first = (inserted + capacity - count) % capacity;
   if (column != inserted && (column + capacity - first) % capacity >= count) return;
   const auto* current = pending + I(system) * elements;
-  const auto* old = column == inserted
-                        ? current
-                        : errors + (I(system) * capacity + column) * elements;
+  const auto* old =
+      column == inserted ? current : errors + (I(system) * capacity + column) * elements;
   __shared__ double partial[256];
   double sum = 0.0;
-  for (I i = threadIdx.x; i < elements; i += 256)
-    sum = Step::dot_update(sum, old[i], current[i]);
+  for (I i = threadIdx.x; i < elements; i += 256) sum = Step::dot_update(sum, old[i], current[i]);
   partial[threadIdx.x] = sum;
   __syncthreads();
   for (unsigned stride = 128; stride; stride /= 2) {
@@ -76,8 +75,7 @@ static __global__ void history_gram_pending_rows(
   if (!threadIdx.x) {
     const I base = I(system) * capacity * capacity;
     raw_gram[base + I(inserted) * capacity + column] = partial[0];
-    if (column != inserted)
-      raw_gram[base + I(column) * capacity + inserted] = partial[0];
+    if (column != inserted) raw_gram[base + I(column) * capacity + inserted] = partial[0];
   }
 }
 

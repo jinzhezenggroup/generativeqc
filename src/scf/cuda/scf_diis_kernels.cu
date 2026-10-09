@@ -6,10 +6,10 @@
 #include <limits>
 #include <stdexcept>
 
+#include "generated_scf_array_native.hpp"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "tensor/cuda_history.cuh"
-#include "generated_scf_array_native.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -100,12 +100,11 @@ bool incremental_diis_gram_requested() {
   throw std::invalid_argument("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM must be 0 or 1");
 }
 
-cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_size,
-                                     std::int32_t nbf, std::int32_t spins,
-                                     std::uint32_t history, const double* residual,
-                                     const double* residual_history, const std::uint8_t* active,
-                                     const std::uint32_t* counts, const std::uint32_t* heads,
-                                     double* raw_gram) {
+cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
+                                     std::int32_t spins, std::uint32_t history,
+                                     const double* residual, const double* residual_history,
+                                     const std::uint8_t* active, const std::uint32_t* counts,
+                                     const std::uint32_t* heads, double* raw_gram) {
   if (batch_size <= 0 || nbf <= 0 || (spins != 1 && spins != 2) || history < 2 || history > 64 ||
       !residual || !residual_history || !active || !counts || !heads || !raw_gram)
     return cudaErrorInvalidValue;
@@ -117,8 +116,8 @@ cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_siz
     return cudaErrorInvalidValue;
   generativeqc_tensor::history_gram_pending_rows<generated::DiisNewRowStep>
       <<<static_cast<unsigned>(batch_size) * history, 256, 0, stream>>>(
-      residual, residual_history, static_cast<generativeqc_tensor::I>(vector_size), history,
-      active, counts, heads, raw_gram);
+          residual, residual_history, static_cast<generativeqc_tensor::I>(vector_size), history,
+          active, counts, heads, raw_gram);
   return cudaGetLastError();
 }
 
@@ -241,7 +240,8 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
         const auto row_slot = (first + row) % history_capacity;
         const auto column_slot = (first + column) % history_capacity;
         dot = raw_gram[(static_cast<std::size_t>(system) * history_capacity + row_slot) *
-                           history_capacity + column_slot];
+                           history_capacity +
+                       column_slot];
       } else if (cooperative_dots && dot_partials) {
         const auto row_slot = (first + row) % history_capacity;
         const auto column_slot = (first + column) % history_capacity;

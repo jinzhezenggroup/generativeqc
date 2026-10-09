@@ -3126,19 +3126,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     const bool incremental_gram = plan.incremental_diis_gram;
     if (incremental_gram) {
       const auto gram_status = launch_diis_pending_gram(
-          resources.stream_, static_cast<std::int32_t>(batch_size),
-          static_cast<std::int32_t>(nbf), unrestricted ? 2 : 1,
-          static_cast<std::uint32_t>(diis_history), residual, residual_history, active,
-          diis_count, diis_head, diis_raw_gram);
+          resources.stream_, static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf),
+          unrestricted ? 2 : 1, static_cast<std::uint32_t>(diis_history), residual,
+          residual_history, active, diis_count, diis_head, diis_raw_gram);
       if (gram_status != cudaSuccess) return cuda_status(gram_status);
     }
-    launch_update_diis_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
-                              resources.stream_, static_cast<std::int32_t>(batch_size),
-                              static_cast<std::int32_t>(nbf), unrestricted ? 2 : 1,
-                              static_cast<std::uint32_t>(diis_history), fock, residual, active,
-                              fock_history, residual_history, diis_linear_system, diis_coefficients,
-                              diis_count, diis_head, eigensystem, false, false, nullptr, 0,
-                              diis_raw_gram);
+    launch_update_diis_kernel(
+        static_cast<unsigned>(batch_size), matrix_reduction_threads, 0, resources.stream_,
+        static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(nbf), unrestricted ? 2 : 1,
+        static_cast<std::uint32_t>(diis_history), fock, residual, active, fock_history,
+        residual_history, diis_linear_system, diis_coefficients, diis_count, diis_head, eigensystem,
+        false, false, nullptr, 0, diis_raw_gram);
     if (unrestricted) {
       iteration_status =
           multiply_spin_matrices(eigensystem, true, false, orthogonalizer, false, temporary);

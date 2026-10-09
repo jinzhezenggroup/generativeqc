@@ -22,12 +22,11 @@ void launch_diis_dot_partials(cudaStream_t stream, std::int32_t batch_size, std:
 
 /** Update a physical raw Gram cache for the not-yet-stored residual. The cache
  * is disjoint from the augmented-system solve scratch. Only live slots are read. */
-cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_size,
-                                     std::int32_t nbf, std::int32_t spins,
-                                     std::uint32_t history, const double* residual,
-                                     const double* residual_history, const std::uint8_t* active,
-                                     const std::uint32_t* counts, const std::uint32_t* heads,
-                                     double* raw_gram);
+cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_size, std::int32_t nbf,
+                                     std::int32_t spins, std::uint32_t history,
+                                     const double* residual, const double* residual_history,
+                                     const std::uint8_t* active, const std::uint32_t* counts,
+                                     const std::uint32_t* heads, double* raw_gram);
 
 /** A prepared owner fixes this experimental reduction policy for its lifetime.
  * Unset or 0 retains the qualified serial reduction. */
@@ -40,16 +39,13 @@ bool incremental_diis_gram_requested();
  * keeping the normalized metric, pivot gate, chronological history retirement
  * and Fock proposal unchanged.
  */
-void launch_update_diis_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
-                               std::int32_t batch_size, std::int32_t nbf,
-                               std::int32_t matrices_per_system, std::uint32_t history_capacity,
-                               const double* fock, const double* residual,
-                               const std::uint8_t* active, double* fock_history,
-                               double* residual_history, double* linear_system,
-                               double* coefficients, std::uint32_t* history_count,
-                               std::uint32_t* history_head, double* effective_fock,
-                               bool normalize_metric = false, bool cooperative_dots = false,
-                               const double* dot_partials = nullptr, std::size_t parts = 0,
-                               const double* raw_gram = nullptr);
+void launch_update_diis_kernel(
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
+    std::int32_t nbf, std::int32_t matrices_per_system, std::uint32_t history_capacity,
+    const double* fock, const double* residual, const std::uint8_t* active, double* fock_history,
+    double* residual_history, double* linear_system, double* coefficients,
+    std::uint32_t* history_count, std::uint32_t* history_head, double* effective_fock,
+    bool normalize_metric = false, bool cooperative_dots = false,
+    const double* dot_partials = nullptr, std::size_t parts = 0, const double* raw_gram = nullptr);
 
 }  // namespace generativeqc::scf::cuda_execution

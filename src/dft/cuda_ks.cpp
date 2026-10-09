@@ -218,11 +218,11 @@ std::size_t cuda_ks_state_bytes(std::size_t n, unsigned spins, unsigned history,
       (spins != 1 && spins != 2) || history > 64)
     throw std::invalid_argument("invalid CUDA KS resource shape");
   KsStateStorage layout;
-  return sum(layout.partition(n, spins, std::max(1U, history), exact_exchange, range_correction,
-                              incremental_direct_jk,
-                              history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(),
-                              nullptr),
-             n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
+  return sum(
+      layout.partition(
+          n, spins, std::max(1U, history), exact_exchange, range_correction, incremental_direct_jk,
+          history >= 2 && scf::cuda_execution::incremental_diis_gram_requested(), nullptr),
+      n <= kSmallEigensolverLimit ? 0 : scf::ordinary_eigensolver_workspace_allowance(n));
 }
 
 struct CudaKsPlan::Impl : KsStateStorage {
@@ -1350,13 +1350,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     check(cudaGetLastError());
     const bool incremental_gram = incremental_diis_gram;
     if (incremental_gram)
-      check(launch_diis_pending_gram(stream, 1, n, spins, history, residual,
-                                     residual_history, enabled, history_count,
-                                     history_head, raw_gram));
+      check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
+                                     enabled, history_count, history_head, raw_gram));
     launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                               fock_history, residual_history, gram, weights, history_count,
-                              history_head, effective, true, false, nullptr, 0,
-                              raw_gram);
+                              history_head, effective, true, false, nullptr, 0, raw_gram);
     check(cudaGetLastError());
     multiply(effective, true, false, x, false, enabled, tmp1);
     multiply(x, false, true, tmp1, true, enabled, tmp2);
@@ -1881,13 +1879,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       } else {
         const bool incremental_gram = incremental_diis_gram;
         if (incremental_gram)
-          check(launch_diis_pending_gram(stream, 1, n, spins, history, residual,
-                                         residual_history, enabled, history_count,
-                                         history_head, raw_gram));
+          check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
+                                         enabled, history_count, history_head, raw_gram));
         launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                                   fock_history, residual_history, gram, weights, history_count,
-                                  history_head, effective, true, false, nullptr, 0,
-                                  raw_gram);
+                                  history_head, effective, true, false, nullptr, 0, raw_gram);
         check(cudaGetLastError());
       }
       if (stabilize_occupations) {

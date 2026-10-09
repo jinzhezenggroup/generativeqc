@@ -151,7 +151,8 @@ def test_fixed_native_specialization_rejects_changed_hf_force_topology(
 
 
 @pytest.mark.parametrize(
-    "builder_name", ("diis_gram_program", "diis_new_row_program", "diis_extrapolation_program")
+    "builder_name",
+    ("diis_gram_program", "diis_new_row_program", "diis_extrapolation_program"),
 )
 def test_fixed_native_specialization_rejects_changed_diis_topology(
     monkeypatch: pytest.MonkeyPatch, builder_name: str
