@@ -1,12 +1,31 @@
 # Documentation work for agents
 
-Choose the destination from the reader's question:
+The authoritative scope and update rules are in the repository's
+[docs/AGENTS.md](https://github.com/jinzhezenggroup/generativeqc/blob/master/docs/AGENTS.md).
+Follow that file, the root `AGENTS.md` and the nearest scoped instructions.
+Use [documentation home](../index.md) to choose a reader and destination;
+do not create a second audience taxonomy in this page.
 
-- “What does this quantum-chemistry concept mean?” → `docs/learn/`
-- “How do I run this?” → `docs/user/`
-- “What exact name/unit/capability is supported?” → `docs/reference/`
-- “How is this implemented or extended?” → `docs/developer/`
-- “How do we validate, benchmark, generate, or maintain this?” → `docs/maintainer/`
-- “How should an agent navigate the repository?” → `docs/agent/`
+## Before changing a guide
 
-Keep current-state docs out of chronological project history; preserve durable investigation rationale in `.agents/notes/`.
+1. Find the **current-state owner** of the fact: public workflow,
+   API/capability lookup, scientific implementation, or operational
+   qualification. Link to it instead of copying a second specification.
+2. Compare any status sentence with the current implementation and
+   issue/PR state. A pinned historical failed gate is not a claim about
+   current `master`, and issue closure is not proof of unrelated runtime gates.
+3. Put past choices, rejected alternatives and dated observations in a
+   purpose-specific `.agents/notes/` decision record; retain raw evidence
+   with immutable source/protocol identity in `benchmarks/results/`.
+4. When consolidating a page, **preserve its path** for ledger, external and
+   older-source references. Summarize the stable contract at that path,
+   redirect readers to the authoritative topic and verify relative links.
+5. Check the Sphinx build with warnings as errors and the applicable API,
+   link or inventory tests. Do not change generated reference data manually.
+
+For examples of the intended split, compare the current
+[SCF ownership map](../developer/scf_module_boundaries.md) with its
+[historical decision record](../../.agents/notes/implemented/architecture/2026-10-09-scf-decomposition-provenance.md),
+and the current
+[CUDA ownership rules](../maintainer/cuda_ownership.md) with their
+[retirement evidence index](../../.agents/notes/implemented/architecture/2026-10-09-cuda-retirement-provenance.md).

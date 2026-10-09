@@ -27,3 +27,25 @@ Historical benchmark snapshots, migration narratives, discarded designs, and one
 - Prefer stable repository-relative links and commands.
 - Do not manually copy generated method/capability tables into prose; link the authoritative reference.
 - Keep machine-readable checker inputs and repository inventories under `manifests/` unless they are themselves rendered reference documentation.
+
+## One authority per topic
+
+- A current scientific, API, method-capability or operational rule has one
+  authoritative guide/reference owner. Link to that owner rather than
+  repeating the same contract under several audiences.
+- Distinguish three lifetimes: current behavior and runnable procedures in
+  `docs/`; durable choices and rejected alternatives in `.agents/notes/`;
+  source-matched raw measurements and past acceptance in
+  `benchmarks/results/`. Historical one-time timing/object-size tables should
+  not grow indefinitely in a current-state guide.
+- When consolidating, preserve existing public documentation paths as a
+  concise current contract or forwarding page. Verify links, toctrees,
+  code references and generated-ledger evidence paths before deleting
+  or relocating material.
+- Do not write issue state or production-gate status from a stale snapshot.
+  Confirm the current issue/PR state, name the measurement source SHA,
+  and distinguish delivered structural work from unresolved numerical
+  or runtime qualification.
+- Avoid making a new summary page the authority for facts owned by the
+  generated method manifest, public API reference or scientific CUDA ledger.
+  Keep the existing Sphinx warnings-as-errors and documentation tests.
