@@ -67,14 +67,68 @@ function(generativeqc_configure_cpu_linalg target)
       set(_lapack_probe
           "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
     endif()
-    # Capability results depend on the selected provider, not merely the build
-    # directory. Re-probe if callers switch OpenBLAS implementations in place.
-    unset(GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS CACHE)
-    unset(GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS CACHE)
-    unset(GENERATIVEQC_OPENBLAS_HAS_LAPACKE CACHE)
+    # Only invalidate the expensive try-compiles if their effective provider or
+    # toolchain inputs changed. An imported target can keep its name when its
+    # include paths, link libraries, or options change in the same build tree.
+    set(_generativeqc_openblas_probe_inputs
+        "libraries=${_provider_libraries}\nincludes=${_include_dirs}\n"
+        "scipy_prefix=${_scipy_prefix}\nlocal=${_thread_probe}\n"
+        "global=${_global_thread_probe}\nlapacke=${_lapack_probe}\n")
+    foreach(_variable IN ITEMS
+        GENERATIVEQC_CPU_LINALG_PROVIDER
+        OpenBLAS_DIR OpenBLAS_VERSION OpenBLAS_LIBRARIES OpenBLAS_INCLUDE_DIRS
+        GENERATIVEQC_OPENBLAS_VERSION GENERATIVEQC_OPENBLAS_LINK_LIBRARIES
+        GENERATIVEQC_OPENBLAS_LDFLAGS GENERATIVEQC_OPENBLAS_CFLAGS
+        GENERATIVEQC_SCIPY_OPENBLAS_VERSION GENERATIVEQC_SCIPY_OPENBLAS_LINK_LIBRARIES
+        GENERATIVEQC_SCIPY_OPENBLAS_LDFLAGS GENERATIVEQC_SCIPY_OPENBLAS_CFLAGS
+        CMAKE_CXX_COMPILER CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION
+        CMAKE_CXX_COMPILER_TARGET CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN
+        CMAKE_TOOLCHAIN_FILE CMAKE_SYSROOT CMAKE_BUILD_TYPE
+        CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+        CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_MINSIZEREL
+        CMAKE_EXE_LINKER_FLAGS CMAKE_REQUIRED_FLAGS CMAKE_REQUIRED_DEFINITIONS
+        CMAKE_REQUIRED_LINK_OPTIONS CMAKE_REQUIRED_LINK_DIRECTORIES
+        CMAKE_TRY_COMPILE_TARGET_TYPE)
+      string(APPEND _generativeqc_openblas_probe_inputs
+             "${_variable}=${${_variable}}\n")
+    endforeach()
+    foreach(_library IN LISTS _provider_libraries)
+      if(TARGET "${_library}")
+        foreach(_property IN ITEMS
+            IMPORTED_LOCATION IMPORTED_IMPLIB INTERFACE_INCLUDE_DIRECTORIES
+            INTERFACE_COMPILE_OPTIONS INTERFACE_COMPILE_DEFINITIONS
+            INTERFACE_LINK_LIBRARIES INTERFACE_LINK_OPTIONS INTERFACE_LINK_DIRECTORIES)
+          get_target_property(_value "${_library}" "${_property}")
+          string(APPEND _generativeqc_openblas_probe_inputs
+                 "${_library}.${_property}=${_value}\n")
+        endforeach()
+      endif()
+    endforeach()
+    # A provider can be replaced in place without changing its CMake/package
+    # version. Include the probed header content in the cache identity.
+    foreach(_include_dir IN LISTS _include_dirs)
+      foreach(_header IN ITEMS cblas.h lapacke.h)
+        if(EXISTS "${_include_dir}/${_header}")
+          file(SHA256 "${_include_dir}/${_header}" _header_sha256)
+          string(APPEND _generativeqc_openblas_probe_inputs
+                 "${_include_dir}/${_header}=${_header_sha256}\n")
+        endif()
+      endforeach()
+    endforeach()
+    string(SHA256 _generativeqc_openblas_probe_key
+           "${_generativeqc_openblas_probe_inputs}")
+    if(NOT "${GENERATIVEQC_OPENBLAS_PROBE_CACHE_KEY}" STREQUAL
+           "${_generativeqc_openblas_probe_key}")
+      unset(GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS CACHE)
+      unset(GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS CACHE)
+      unset(GENERATIVEQC_OPENBLAS_HAS_LAPACKE CACHE)
+    endif()
     check_cxx_source_compiles("${_thread_probe}" GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS)
     check_cxx_source_compiles("${_global_thread_probe}" GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS)
     check_cxx_source_compiles("${_lapack_probe}" GENERATIVEQC_OPENBLAS_HAS_LAPACKE)
+    set(GENERATIVEQC_OPENBLAS_PROBE_CACHE_KEY
+        "${_generativeqc_openblas_probe_key}" CACHE INTERNAL
+        "Inputs to GenerativeQC's OpenBLAS capability checks" FORCE)
     unset(CMAKE_REQUIRED_INCLUDES)
     unset(CMAKE_REQUIRED_LIBRARIES)
 
