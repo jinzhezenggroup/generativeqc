@@ -18,6 +18,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 GENERATED_CLASS = re.compile(
     r"generated_\w+_([spdf]{4})_shell_class_fock_rhf_(?:work_)?streaming_kernel"
 )
@@ -121,7 +126,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trace", required=True, type=Path)
     parser.add_argument("--endpoint", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=raw_output_path)
     args = parser.parse_args()
     endpoint = json.loads(args.endpoint.read_text())
     if endpoint.get("protocol", {}).get("method") != "PBE0/RKS":

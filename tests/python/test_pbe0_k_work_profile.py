@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from benchmarks.pbe0_k_work_profile import summarize_classes
 
@@ -75,3 +79,26 @@ def test_refuses_ambiguous_dispatches(corruption: str) -> None:
 def test_refuses_missing_fock_work() -> None:
     with trace_database() as connection, pytest.raises(ValueError):
         summarize_classes(connection, 0)
+
+
+def test_cli_rejects_retained_output_before_reading_inputs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A reducer run cannot overwrite reviewed evidence, even before input I/O."""
+    from benchmarks import pbe0_k_work_profile
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "pbe0_k_work_profile",
+            "--trace",
+            str(tmp_path / "missing.sqlite"),
+            "--endpoint",
+            str(tmp_path / "missing.json"),
+            "--output",
+            "benchmarks/results/unreviewed.json",
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        pbe0_k_work_profile.main()
+    assert error.value.code == 2
