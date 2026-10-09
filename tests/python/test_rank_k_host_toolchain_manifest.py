@@ -6,10 +6,8 @@ import importlib.util
 import shutil
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import pytest
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -94,3 +92,29 @@ def test_manifest_is_relocation_independent_and_byte_sensitive(
 
     (relocated / "include/vector").write_text("changed header")
     assert manifest.inventory(relocated / "bin/g++") != before
+
+
+@pytest.mark.parametrize("name", ["as", "ld"])
+def test_bare_program_name_uses_path_not_adjacent_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    compiler = _fake_toolchain(tmp_path / "host")
+    selected = tmp_path / "selected-bin" / name
+    selected.parent.mkdir()
+    selected.write_text("PATH-selected tool")
+
+    def bare(
+        arguments: list[str], *, stdin: str | None = None
+    ) -> subprocess.CompletedProcess:
+        del stdin
+        assert arguments == [str(compiler), f"-print-prog-name={name}"]
+        return subprocess.CompletedProcess(arguments, 0, name + "\n", "")
+
+    monkeypatch.setattr(manifest, "_run", bare)
+    monkeypatch.setattr(
+        manifest.shutil, "which", lambda value: str(selected) if value == name else None
+    )
+    assert manifest._program(compiler, name) == selected.resolve()
+    selected.unlink()
+    with pytest.raises(FileNotFoundError, match="missing GCC host program"):
+        manifest._program(compiler, name)

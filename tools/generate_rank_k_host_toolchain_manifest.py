@@ -68,8 +68,7 @@ def _program(compiler: Path, name: str) -> Path:
     value: str = _run([str(compiler), f"-print-prog-name={name}"]).stdout.strip()
     candidate = Path(value)
     if not candidate.is_absolute():
-        adjacent = compiler.parent / candidate
-        resolved = adjacent if adjacent.is_file() else Path(shutil.which(value) or "")
+        resolved = Path(shutil.which(value) or "")
     else:
         resolved = candidate
     if not resolved.is_file():

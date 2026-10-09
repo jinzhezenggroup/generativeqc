@@ -16,7 +16,8 @@ system headers, startup objects and libraries.
 
 Emit independent lowering portfolios for every fixed qualification shape. The
 native harness selects request, candidates, target and compilation identity by
-`n/k`, and rejects a shape for which no request was emitted. This is a finite
+`n/k`; generated request identities map to the exact flattened prefix count,
+which construction and execution both enforce. This is a finite
 qualification matrix, not a shape-polymorphic production contract.
 
 The fixed GCC 11 host closure is a staged manifest with path-independent roles
@@ -29,7 +30,9 @@ manifest must match the explicitly selected `-ccbin` executable.
 CPU source staging reads that manifest without executing a compiler. GPU
 qualification regenerates it from the actual compiler, requires byte equality
 with the staged manifest, then regenerates and compares the CUDA metadata before
-compilation. Ambient compiler/include/library overrides remain rejected.
+compilation. Bare GCC child names resolve from the same final PATH used by
+compilation. Ambient compiler/include/library overrides remain rejected. The
+directly compiled native harness is a separate fixed-recipe identity input.
 
 ## Rejected alternatives
 

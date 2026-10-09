@@ -35,6 +35,9 @@ def inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         path = toolkit / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative)
+    harness = root / "tests/native/test_symmetric_rank_k_cuda.cu"
+    harness.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / "tests/native/test_symmetric_rank_k_cuda.cu", harness)
     host.write_text("host compiler fixture")
     manifest = tmp_path / "host-toolchain.json"
     digest = hashlib.sha256(host.read_bytes()).hexdigest()
@@ -63,6 +66,35 @@ def inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
         )
     )
     return root, toolkit, host, manifest
+
+
+def test_compiled_harness_mutation_invalidates_identity(
+    inputs: tuple[Path, Path, Path, Path],
+) -> None:
+    root, *_ = inputs
+    harness = root / generator._COMPILATION_SOURCES[0]
+    before = generator.compiler_identity(*inputs)
+    harness.write_text(harness.read_text() + "\n// changed compile input\n")
+    assert generator.compiler_identity(*inputs) != before
+
+
+def test_missing_compiled_harness_fails_closed(
+    inputs: tuple[Path, Path, Path, Path],
+) -> None:
+    root, *_ = inputs
+    (root / generator._COMPILATION_SOURCES[0]).unlink()
+    with pytest.raises(FileNotFoundError, match="test_symmetric_rank_k_cuda"):
+        generator.compiler_identity(*inputs)
+
+
+def test_uncompiled_test_source_does_not_change_identity(
+    inputs: tuple[Path, Path, Path, Path],
+) -> None:
+    root, *_ = inputs
+    before = generator.compiler_identity(*inputs)
+    unrelated = root / "tests/native/uncompiled_rank_k_probe.cu"
+    unrelated.write_text("uncompiled")
+    assert generator.compiler_identity(*inputs) == before
 
 
 @pytest.mark.parametrize("target", ["host", "header"])
@@ -207,6 +239,7 @@ def test_generation_only_hashes_inputs_without_executing_compilers(
     assert "rank_k_density_row_overwrite_candidates" in rendered
     assert "rank_k_density_row_update_candidates" in rendered
     assert "rank_k_density_n17_k9_row_update_candidates" in rendered
+    assert "rank_k_compiled_batches" in rendered
 
 
 def test_checkout_generation_needs_no_installed_python_packages(
@@ -240,6 +273,7 @@ def test_checkout_generation_needs_no_installed_python_packages(
     assert "rank_k_density_row_overwrite_candidates" in rendered
     assert "rank_k_density_row_update_candidates" in rendered
     assert "rank_k_density_n17_k9_row_update_candidates" in rendered
+    assert "rank_k_compiled_batches" in rendered
 
 
 def test_missing_native_inputs_fail_closed(
@@ -275,6 +309,7 @@ def test_qualifier_verifies_staged_identity_before_compilation() -> None:
     host_inventory = script.index(
         '"$python_exe" -I -S tools/generate_rank_k_host_toolchain_manifest.py'
     )
+    final_path = script.index('export PATH="$toolkit_root/bin:$PATH"')
     host_compare = script.index(
         'if ! cmp "$snapshot_root/host-toolchain-manifest.json"'
     )
@@ -286,7 +321,8 @@ def test_qualifier_verifies_staged_identity_before_compilation() -> None:
     link_command = script.index('"$cache_exe" "$nvcc_exe" --cudart shared')
     final_stats = script.rindex('"$cache_exe" --show-stats')
     assert (
-        host_inventory
+        final_path
+        < host_inventory
         < host_compare
         < verify
         < compare
@@ -301,6 +337,7 @@ def test_qualifier_verifies_staged_identity_before_compilation() -> None:
     )
     assert "exit 2" in script[compare:compile_command]
     assert script.count('"-ccbin=$host_exe"') == 2
+    assert script.count("export PATH=") == 1
     assert "BASH_REMATCH[2] < 16" in script
     assert "0.1[7-9]" not in script
 

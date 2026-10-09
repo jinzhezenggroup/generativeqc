@@ -26,6 +26,8 @@ from generativeqc_compiler.tensor.weighted_gram_emit import emit_scalar_stages
 
 from tools.generate_build_identity import _inventory, _source_identity
 
+_COMPILATION_SOURCES = ("tests/native/test_symmetric_rank_k_cuda.cu",)
+
 _TOOLCHAIN_FILES = (
     "bin/nvcc",
     "bin/nvcc.profile",
@@ -154,8 +156,12 @@ def compiler_identity(
         environment[name] = ""
     return canonical_hash(
         {
-            "schema": "generativeqc.rank-k-compilation.v3",
+            "schema": "generativeqc.rank-k-compilation.v4",
             "source": _source_identity(root, _inventory(root, manifest)),
+            "compilation_sources": {
+                relative: file_hash(root / relative)
+                for relative in _COMPILATION_SOURCES
+            },
             "toolchain": toolchain,
             "toolkit_headers": headers,
             "environment": environment,
@@ -224,12 +230,16 @@ def render(source: str) -> str:
         1,
     )
     bodies.append(update)
+    batch_domains = []
     for name, builder in (
         ("density", density_program),
         ("weighted_density", weighted_density_program),
     ):
         for n, k, shape_suffix in ((3, 5, ""), (17, 9, "_n17_k9")):
             program = builder(1, n, spin_count=2, orbital_count=k)
+            batches = 1
+            for extent in program.outputs[name].spec.shape[:-2]:
+                batches *= extent
             for suffix, order in (
                 ("row", "row-major"),
                 ("column", "column-major"),
@@ -252,6 +262,14 @@ def render(source: str) -> str:
                     bodies.append(
                         f"inline constexpr std::size_t {portfolio_name}_k = {k};"
                     )
+                    batch_domains.append(
+                        f"  if (identity == {portfolio_name}_request.identity) return {batches};"
+                    )
+    bodies.append(
+        "inline std::size_t rank_k_compiled_batches(std::string_view identity) noexcept {\n"
+        + "\n".join(batch_domains)
+        + "\n  return 0;\n}"
+    )
     bodies.append("}  // namespace generativeqc::tensor::rank_k_generated")
     return "\n".join(bodies) + "\n"
 

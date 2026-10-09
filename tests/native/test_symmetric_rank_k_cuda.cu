@@ -344,6 +344,22 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
         target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
         compiled_n(n, k), compiled_k(n, k), n, k, batches, order, stream,
         want_library ? 256ULL << 20 : 0, want_library);
+    if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
+      for (const auto different_batches : {batches - 1, batches + 1}) {
+        bool rejected = false;
+        try {
+          CudaSymmetricRankK mismatched_batches(
+              request(weighted, order, true, n, k), candidates(weighted, order, true, n, k),
+              target(weighted, order, true, n, k), compilation(weighted, order, true, n, k),
+              request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
+              target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
+              compiled_n(n, k), compiled_k(n, k), n, k, different_batches, order, stream, 0);
+        } catch (const std::invalid_argument&) {
+          rejected = true;
+        }
+        if (!rejected) throw std::runtime_error("rank-k accepted a different compiled batch count");
+      }
+    }
     const auto& diagnostic = binding.prepared_diagnostic(invocation);
     auto overwrite_probe = invocation;
     overwrite_probe.beta = 0.0;

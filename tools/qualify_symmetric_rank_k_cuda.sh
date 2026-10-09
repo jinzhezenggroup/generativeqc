@@ -106,6 +106,7 @@ if ! sha256sum -c "$snapshot_root/generated.sha256" \
   echo "rank-k generated header mismatch" >&2
   exit 2
 fi
+export PATH="$toolkit_root/bin:$PATH"
 "$python_exe" -I -S tools/generate_rank_k_host_toolchain_manifest.py \
   --compiler "$host_exe" --output "$output_dir/host-toolchain-manifest.json"
 if ! cmp "$snapshot_root/host-toolchain-manifest.json" \
@@ -114,7 +115,6 @@ if ! cmp "$snapshot_root/host-toolchain-manifest.json" \
   exit 2
 fi
 export SCCACHE_DIR="$snapshot_root/cache"
-export PATH="$toolkit_root/bin:$PATH"
 echo "source_commit=$actual_commit" | tee "$output_dir/provenance.txt"
 sha256sum "$snapshot_root/source-identity.sha256" >> "$output_dir/provenance.txt"
 sha256sum "$snapshot_root/generated.sha256" >> "$output_dir/provenance.txt"

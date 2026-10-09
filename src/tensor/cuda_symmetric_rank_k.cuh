@@ -229,7 +229,9 @@ class CudaSymmetricRankK final {
     if ((order != RankKOrder::RowMajor && order != RankKOrder::ColumnMajor) ||
         row_request == column_request || row_request != (order == RankKOrder::RowMajor) ||
         (!large_shape && !(compiled_n == 3 && compiled_k == 5)) || large_request != large_shape ||
-        compiled_n != n || compiled_k != k)
+        compiled_n != n || compiled_k != k ||
+        batches != rank_k_generated::rank_k_compiled_batches(overwrite_request.identity) ||
+        batches != rank_k_generated::rank_k_compiled_batches(update_request.identity))
       throw std::invalid_argument("rank-k runtime shape/order differs from the compiled request");
     const auto valid = [](const auto& request, const auto& candidates, std::size_t inputs) {
       return request.dtype == runtime::PrecisionDtype::Fp64 &&
