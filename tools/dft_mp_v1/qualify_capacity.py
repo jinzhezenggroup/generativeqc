@@ -454,8 +454,12 @@ NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
+# The phased point/AO split borrows the existing per-lane inline scratch and
+# preserves the existing point/AO work and the seven Becke phases.
+# Its additional producer launch changes neither retained capacity nor pair
+# visits; bind the scratch admission and launch/publication gates explicitly.
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "e2887ec3f402a587417cd16180d09f3df3e25988ddf52a0416e454b4ba0afe62"
+    "e02f5be7f21d9505421efdde2e0b24a9b0a24b2c5b10d7b81c1c2cab0d682bc8"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
