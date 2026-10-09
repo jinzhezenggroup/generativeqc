@@ -1,0 +1,51 @@
+{
+  "provenance": {
+    "base_commit": "ec71ef7fea6f705a3623b45c7bfb51105c43337a",
+    "slurm_job": "2795",
+    "visibility": "0",
+    "device": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+    "input_sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+    "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+    "measured_patch_sha256": "4f9d9a35921825c37f62e06383d4e41adb0e28ba9ac1252bdfa91a68f84ddadc",
+    "libraries": {
+      "base": "71d509d25e4f3a67ced5003fb3d47b7e9affe7b2e03df20490bb07bd386ec097",
+      "candidate": "21f9644b323be44fa3e24cc7e65c8f9331b55a6f7e68162fcc34f94581692d8e"
+    },
+    "executables": {
+      "base": "b8683698887d3a7172d460ee8e1cd3ad101dce60c575c44bde92ce999e350957",
+      "candidate": "96f6fc6c95a3fcacf18418e096ff32c69efd173f06c17d80ecfce10c4e712610"
+    },
+    "timing_boundary": "native helper: molecular RHF, DF source, CCSD, independent expanded replay and FP64 (T), including inner phase-owner teardown; fresh-process wall additionally includes startup and all final caller/reference cleanup",
+    "forces_requested": false
+  },
+  "medians": {
+    "base": {
+      "native_seconds": 195.641452994,
+      "reference_seconds": 87.0423553455,
+      "source_seconds": 3.5562960314999996,
+      "ccsd_seconds": 99.84701228349999,
+      "triples_seconds": 5.168089515,
+      "ccsd_packing_bytes": 5578493904992.0,
+      "ccsd_capacity": 4130767416.0,
+      "ccsd_q_operations": 172386.0,
+      "complete_process_wall_seconds": 195.9543645690428
+    },
+    "candidate": {
+      "native_seconds": 195.3119576675,
+      "reference_seconds": 87.21211776550001,
+      "source_seconds": 3.538609291,
+      "ccsd_seconds": 99.3684630455,
+      "triples_seconds": 5.168167024000001,
+      "ccsd_packing_bytes": 5001216728672.0,
+      "ccsd_capacity": 4162416184.0,
+      "ccsd_q_operations": 163114.0,
+      "complete_process_wall_seconds": 195.62963785557076
+    }
+  },
+  "native_speedup": 1.001687020756102,
+  "complete_process_wall_speedup": 1.0016599055083453,
+  "ccsd_speedup": 1.004815906609936,
+  "all_scientific_gates_passed": true,
+  "all_semantic_work_matched": true,
+  "interpretation": "four observations; no broad public performance claim; phase times are disjoint and not attributed across modified/unmodified phases"
+}

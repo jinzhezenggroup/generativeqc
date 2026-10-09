@@ -1,0 +1,245 @@
+{
+  "attachments": [],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "physical_doubles_residual": {
+      "atol": 1e-10,
+      "max_absolute_error": 2.6205751978147784e-13,
+      "max_scaled_error": 0.0026205751978147784,
+      "passed": true,
+      "rms_error": 2.6205751978147784e-13,
+      "rtol": 0,
+      "shape": [
+        4
+      ]
+    },
+    "physical_singles_residual": {
+      "atol": 1e-10,
+      "max_absolute_error": 5.315782536374769e-13,
+      "max_scaled_error": 0.005315782536374769,
+      "passed": true,
+      "rms_error": 5.315782536374769e-13,
+      "rtol": 0,
+      "shape": [
+        4
+      ]
+    },
+    "separate_triples_energy": {
+      "atol": 1e-10,
+      "max_absolute_error": 8.447756383311855e-14,
+      "max_scaled_error": 0.0008447756383311855,
+      "passed": true,
+      "rms_error": 8.447756383311855e-14,
+      "rtol": 0,
+      "shape": [
+        4
+      ]
+    },
+    "total_energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 2.2026824808563106e-12,
+      "max_scaled_error": 0.00022026824808563106,
+      "passed": true,
+      "rms_error": 2.2026824808563106e-12,
+      "rtol": 0,
+      "shape": [
+        4
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Verified ccache builds succeed; isolated compile wall/cold-compile cost is not measured.",
+    "seconds": null
+  },
+  "device": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "hardware": {
+    "reason": null,
+    "slurm_job": "2798",
+    "status": "pass",
+    "visibility": "0"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "98fc4de32f63064d4a4475b25a1ab65472262cfa9960b4a3e9a2bbd9ea92eab8",
+    "ir": "83897491af50dd86ff4b054efdb67f9f960cea064278030e20f143bcf153f6d6",
+    "schedule": "b0a211a4952b652f0400c46c3e5c353eab024ce2bb68a72ed7659e14f1f939c7",
+    "source": "d19158b2b98ec9335c831320efd10e975ee06f29c7fcb45f2a3fdbed2ca50cbf"
+  },
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Complete numeric/device capacities are reported in samples; a separately instrumented full-process physical allocation peak was not measured."
+  },
+  "performance": {
+    "reason": "Four complete samples show a conditional 4.23% wall reduction, but do not satisfy the shared five-pair/history/compile-cost promotion envelope.",
+    "status": "not-run"
+  },
+  "residuals": {
+    "0": {
+      "independently_evaluated": true,
+      "value": 5.315782536374769e-13
+    },
+    "1": {
+      "independently_evaluated": true,
+      "value": 5.315782536374769e-13
+    },
+    "2": {
+      "independently_evaluated": true,
+      "value": 5.315782536374769e-13
+    },
+    "3": {
+      "independently_evaluated": true,
+      "value": 5.315782536374769e-13
+    }
+  },
+  "revision": "b315d4056f060b639b0d39d3db311a94a28e760c",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "comparison_kind": "solver",
+    "complete_observations": 4,
+    "correlation_max_bytes": 68719476736,
+    "device": "cuda",
+    "diis_history": 8,
+    "fast_compile": false,
+    "forces_requested": false,
+    "latest_integration_revision": "4183fa70b12f4cc2b0326e8fb3fd61b5b1c1b858",
+    "latest_integration_scope": "compile-only endpoint and CUDA solver; unchanged CC codegen; frozen timings are not latest-master RHF timing claims",
+    "precision": "FP64 storage/compute/accumulation; pedantic matrix provider",
+    "primary_q_tile_limit": 8,
+    "regressions": {
+      "cuda_actions": 17,
+      "frozen_cuda_library": 6,
+      "host_graph": 28,
+      "native_cpu_solver": 22,
+      "standalone_cuda_solver": 33
+    },
+    "residual_limit": 1e-10,
+    "source_provenance": {
+      "base_commit": "b315d4056f060b639b0d39d3db311a94a28e760c",
+      "baseline_timer_patch_sha256": "804b2674af7727182606bae2ab4c9b740284bbb01e7ff3a64203a0355fa10425",
+      "device": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+      "executables": {
+        "base": "ce744d44375e1dcd399bc5ceca685f0431344ead39991a253cac599bc5027acc",
+        "candidate": "4b11e2106d362468c4c58f6fa9762faa13f8fa104a822793025db1a7d952d3cf"
+      },
+      "forces_requested": false,
+      "input_sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "libraries": {
+        "base": "588830c0811f815d8c84e278c4c674521c4ee48cbe0b3cec5bc08aeb840cdda7",
+        "candidate": "820557a818d5398a6ff90c1294f5c6c0d903e126ebbdad0f55b6039e8cdb9d60"
+      },
+      "measured_patch_sha256": "d19158b2b98ec9335c831320efd10e975ee06f29c7fcb45f2a3fdbed2ca50cbf",
+      "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+      "precision": "FP64, pedantic matrix provider, unchanged Q accumulation order",
+      "replay_work_per_q": {
+        "contraction_terms_saved": 439569,
+        "gemm_calls": 27,
+        "gemm_summands": 9030980907,
+        "operation_delta": 29,
+        "packing_bytes": 1402992864
+      },
+      "slurm_job": "2798",
+      "timing_boundary": "native molecular RHF + DF source + CCSD + independent expanded physical replay + FP64 (T), including phase-owner teardown; process wall also includes startup and final cleanup",
+      "visibility": "0"
+    }
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Every primary iteration/evaluation count matches, but timed per-iteration energy/residual histories are not exposed.",
+  "stages": {
+    "compilation": {
+      "frozen_libraries": {
+        "base": "588830c0811f815d8c84e278c4c674521c4ee48cbe0b3cec5bc08aeb840cdda7",
+        "candidate": "820557a818d5398a6ff90c1294f5c6c0d903e126ebbdad0f55b6039e8cdb9d60"
+      },
+      "latest_master": "endpoint and CUDA solver compile-only",
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "complete_processes": 4,
+      "reason": null,
+      "status": "pass",
+      "work_deltas_exact": true
+    },
+    "numerical": {
+      "independent_oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "Broader/shared formal performance/default promotion is not established by this conditional two-pair campaign.",
+      "status": "not-run"
+    },
+    "representation": {
+      "maximum_virtual_axes": 2,
+      "naux": 488,
+      "nocc": 9,
+      "nvir": 221,
+      "reason": null,
+      "status": "pass"
+    },
+    "source": {
+      "primary_codegen": "byte-identical baseline/candidate",
+      "reason": null,
+      "reconstruction": "measured-source.patch.gz",
+      "status": "pass"
+    }
+  },
+  "subject": "independently packed original expanded DF CCSD physical replay: ethane230 energy-only",
+  "tier": "endpoint",
+  "timings": [
+    {
+      "diagnostics": {
+        "evaluations": 38,
+        "iterations": 20
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 195.6862128279172,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-only"
+    },
+    {
+      "diagnostics": {
+        "evaluations": 38,
+        "iterations": 20
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 187.625209558988,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-only"
+    },
+    {
+      "diagnostics": {
+        "evaluations": 38,
+        "iterations": 20
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 187.62401593616232,
+      "selection": "candidate",
+      "synchronized": true,
+      "workload": "energy-only"
+    },
+    {
+      "diagnostics": {
+        "evaluations": 38,
+        "iterations": 20
+      },
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "seconds": 196.13929404201917,
+      "selection": "baseline",
+      "synchronized": true,
+      "workload": "energy-only"
+    }
+  ],
+  "toolchain": {
+    "aot_profile": "portable_cuda",
+    "build_type": "Release",
+    "compiler_cache": "ccache version 4.5.1",
+    "cuda": "12.9.1",
+    "cuda_architectures": "120"
+  }
+}

@@ -136,6 +136,7 @@ COLUMNS = (
     "diis_metric_weight_terms",
     "diis_pack_calls",
     "diis_maximum_pair_asymmetry",
+    "replay_matrix",
 )
 
 
@@ -288,6 +289,7 @@ def _stream(
     canonical_eps: np.ndarray | None = None,
     level_shift: float = 0.0,
     packed_diis: bool = False,
+    replay_matrix: bool = True,
     max_iterations: int = 100,
 ) -> bytes:
     o, v = arrays["t1"].shape
@@ -305,6 +307,7 @@ def _stream(
             | (0 if matrix else 8)
             | (16 if canonical_eps is not None else 0)
             | (32 if packed_diis else 0)
+            | (0 if replay_matrix else 64)
             | (batch_limit << 8),
         ],
         dtype=np.uint64,
@@ -675,7 +678,7 @@ def test_matrix_schedule_matches_scalar_and_budget_fallback(
     np.testing.assert_allclose(t2, s2, atol=2e-11, rtol=0)
     admitted, _, _ = _run(solver_probe, arrays, budget=int(fast["capacity"]))
     assert admitted["matrix_gemm"] == 1
-    one_q, _, _ = _run(solver_probe, arrays, batch_limit=1)
+    one_q, _, _ = _run(solver_probe, arrays, batch_limit=1, replay_matrix=False)
     for budget in (int(one_q["capacity"]) - 1, int(scalar["capacity"])):
         bounded, b1, b2 = _run(solver_probe, arrays, budget=budget)
         assert bounded["matrix_gemm"] == 0 and bounded["hoisted_evaluations"] > 0
@@ -711,10 +714,46 @@ def test_auxiliary_tiles_preserve_tail_and_budget(
         assert tiled["accumulation_bytes"] < one["accumulation_bytes"]
         for budget in (int(tiled["capacity"]) - 1, int(one["capacity"])):
             short, b1, b2 = _run(solver_probe, arrays, batch_limit=batch, budget=budget)
-            assert short["batch_size"] < tiled["batch_size"]
+            assert short["batch_size"] < tiled["batch_size"] or (
+                tiled["replay_matrix"] and not short["replay_matrix"]
+            )
             assert short["capacity"] <= budget
             np.testing.assert_allclose(b1, s1, atol=2e-11, rtol=0)
             np.testing.assert_allclose(b2, s2, atol=2e-11, rtol=0)
+
+
+def test_expanded_matrix_replay_ablation_and_optional_capacity(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """Audit storage is optional and cannot displace an admitted primal tile."""
+    if not solver_probe[1]:
+        pytest.skip("matrix replay is a CUDA execution plan")
+    _, _, arrays = _case(2, 3, 5)
+    original, reference_t1, reference_t2 = _run(
+        solver_probe, arrays, replay_matrix=False
+    )
+    selected, actual_t1, actual_t2 = _run(solver_probe, arrays)
+    assert selected["replay_matrix"] and not original["replay_matrix"]
+    assert selected["gemm_calls"] > original["gemm_calls"]
+    assert selected["iterations"] == original["iterations"]
+    assert selected["replays_called"] == original["replays_called"]
+    assert selected["q_calls"] == original["q_calls"]
+    assert selected["accumulations"] == original["accumulations"]
+    assert (
+        original["contraction_terms"] - selected["contraction_terms"]
+        == 5 * 2 * 3 * 3 * selected["replays_called"]
+    )
+    np.testing.assert_allclose(actual_t1, reference_t1, atol=2e-11, rtol=0)
+    np.testing.assert_allclose(actual_t2, reference_t2, atol=2e-11, rtol=0)
+    exact, _, _ = _run(solver_probe, arrays, budget=int(selected["capacity"]))
+    assert exact["replay_matrix"] and exact["capacity"] <= selected["capacity"]
+    for budget in (int(selected["capacity"]) - 1, int(original["capacity"])):
+        refused, bounded_t1, bounded_t2 = _run(solver_probe, arrays, budget=budget)
+        assert not refused["replay_matrix"] and refused["matrix_gemm"]
+        assert refused["batch_size"] == original["batch_size"]
+        assert refused["capacity"] <= budget
+        np.testing.assert_allclose(bounded_t1, reference_t1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(bounded_t2, reference_t2, atol=2e-11, rtol=0)
 
 
 @pytest.mark.parametrize("o,v,q", [(2, 3, 4), (4, 1, 1), (2, 6, 1)])

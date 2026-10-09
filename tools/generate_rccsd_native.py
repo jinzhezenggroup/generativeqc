@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 import typing
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
@@ -62,10 +63,37 @@ from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from generativeqc_compiler.tensor import Node
     from generativeqc_compiler.tensor.types import Index, TensorSpec
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)
+
+
+def contraction_query(
+    program: Program,
+    name: str,
+    *,
+    batch_dim: bool = False,
+    nodes: Iterable[Node] | None = None,
+) -> str:
+    """Query exact scalar summands, not hardware FLOPs or measured traffic."""
+    terms: Counter[tuple[str, ...]] = Counter()
+    for node in program.live_nodes if nodes is None else nodes:
+        if node.op == "einsum":
+            terms[tuple(sorted(_label_dims(node).values()))] += 1
+    lines = [
+        f"inline std::size_t {name}(std::size_t o,std::size_t v{',std::size_t q' if batch_dim else ''}) {{",
+        "  std::size_t total=0;",
+    ]
+    if any("n" in dimensions for dimensions in terms):
+        lines.append("  const auto n=checked_add(o,v);")
+    for dimensions, count in sorted(terms.items()):
+        factors = ",".join((str(count), *dimensions))
+        lines.append(f"  total=checked_add(total,checked_product({{{factors}}}));")
+    return "\n".join([*lines, "  return total;", "}"])
 
 
 def _prepare_production(

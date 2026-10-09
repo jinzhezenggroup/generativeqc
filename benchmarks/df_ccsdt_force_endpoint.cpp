@@ -207,6 +207,7 @@ int main(int argc, char** argv) {
       work_field("source_seconds", result.primal.problem_seconds);
       work_field("ccsd_seconds", result.primal.solver_seconds);
       field("ccsd_matrix_gemm", result.solver.df_matrix_gemm ? 1 : 0);
+      field("ccsd_replay_matrix_gemm", result.solver.df_replay_matrix_gemm ? 1 : 0);
       work_field("ccsd_gemm_calls", result.solver.df_gemm_calls);
       work_field("ccsd_gemm_summands", result.solver.df_gemm_summands);
       work_field("ccsd_packing_bytes", result.solver.df_packing_bytes);
@@ -230,6 +231,9 @@ int main(int argc, char** argv) {
       field("ccsd_replay_r2_max", result.solver.replay_r2_max);
       field("ccsd_diis_history", diis_history);
       work_field("ccsd_diis_seconds", result.solver.diis_seconds);
+      work_field("ccsd_iteration_seconds", result.solver.iteration_seconds);
+      work_field("ccsd_replay_seconds", result.solver.replay_seconds);
+      work_field("ccsd_update_seconds", result.solver.update_seconds);
       work_field("ccsd_diis_restarts", result.solver.diis_restarts);
       field("ccsd_packed_diis", result.solver.packed_diis ? 1 : 0);
       field("ccsd_packed_diis_refused", result.solver.packed_diis_refused ? 1 : 0);
