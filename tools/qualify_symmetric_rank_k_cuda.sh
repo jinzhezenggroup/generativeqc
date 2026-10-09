@@ -62,12 +62,18 @@ nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader |
 
 cp "$snapshot_root/generated/generated_symmetric_rank_k.cuh" \
   "$output_dir/generated/generated_symmetric_rank_k.cuh"
+set +e
 "$cache_exe" nvcc -std=c++20 -O2 -arch=sm_90 -DGENERATIVEQC_TEST_HOOKS \
   -I "$repo_root/src" -I "$output_dir/generated" \
   "$repo_root/tests/native/test_symmetric_rank_k_cuda.cu" \
   -o "$output_dir/test_symmetric_rank_k_cuda" -lcublas \
   2>&1 | tee "$output_dir/compile.log"
+compile_status=${PIPESTATUS[0]}
+set -e
 "$cache_exe" --show-stats > "$output_dir/sccache-after.txt"
+if [[ "$compile_status" -ne 0 ]]; then
+  exit "$compile_status"
+fi
 sha256sum \
   python/generativeqc_compiler/tensor/scf.py \
   python/generativeqc_compiler/tensor/weighted_gram.py \

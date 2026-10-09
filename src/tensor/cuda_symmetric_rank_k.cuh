@@ -61,10 +61,11 @@ __global__ void scale(const double* coefficients, const double* weights, double*
   }
 }
 
-__device__ inline double generated_value(const SymmetricRankKInvocation call,
-                                         std::size_t batch, std::size_t row,
-                                         std::size_t col, RankKOrder order) {
-  double result = 0.0;
+__device__ inline bool generated_value(const SymmetricRankKInvocation call,
+                                       std::size_t batch, std::size_t row,
+                                       std::size_t col, RankKOrder order,
+                                       double& result) {
+  result = 0.0;
   const auto panel = call.coefficients + batch * call.n * call.k;
   const auto weights = call.weights + batch * call.k;
   for (std::size_t orbital = 0; orbital < call.k; ++orbital) {
@@ -73,10 +74,10 @@ __device__ inline double generated_value(const SymmetricRankKInvocation call,
     double weighted{}, updated{};
     if (!rank_k_generated::rank_k_scale(left, weights[orbital], weighted) ||
         !rank_k_generated::rank_k_update(weighted, right, result, updated))
-      return CUDART_NAN;
+      return false;
     result = updated;
   }
-  return result;
+  return true;
 }
 
 __device__ inline std::size_t matrix_index(std::size_t row, std::size_t col,
@@ -99,7 +100,9 @@ __global__ void validate_generated(SymmetricRankKInvocation call, RankKOrder ord
       if (!isfinite(left) || !isfinite(right) || !isfinite(weights[orbital]))
         atomicCAS(call.error, 0, 1);
     }
-    const auto value = generated_value(call, batch, row, col, order);
+    double value{};
+    if (!generated_value(call, batch, row, col, order, value))
+      atomicCAS(call.error, 0, 1);
     const auto old = call.beta == 0.0 ? 0.0 :
         call.output[batch * call.n * call.n + matrix_index(row, col, call.n, order)];
     const auto updated = call.alpha * value + call.beta * old;
@@ -135,8 +138,9 @@ __global__ void publish(SymmetricRankKInvocation call, const double* product,
     const auto row = local / call.n, col = local % call.n;
     if (row > col) continue;
     const auto offset = batch * call.n * call.n;
-    const auto value = product ? product[offset + matrix_index(row, col, call.n, order)] :
-                                 generated_value(call, batch, row, col, order);
+    double value{};
+    if (product) value = product[offset + matrix_index(row, col, call.n, order)];
+    else if (!generated_value(call, batch, row, col, order, value)) return;
     const auto old = call.beta == 0.0 ? 0.0 :
         call.output[offset + matrix_index(row, col, call.n, order)];
     const auto updated = call.alpha * value + call.beta * old;
