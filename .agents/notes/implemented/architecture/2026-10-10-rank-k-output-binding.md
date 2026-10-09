@@ -48,9 +48,10 @@ inputs using reserved rank-k binding names fail closed before composition.
 Focused interpreter tests compare both roots with an independent
 upper-authoritative oracle over both storage orders, signed beta, poisoned lower
 cells, and zero-beta no-read. Collision and request-identity regressions fail
-closed, while the native H100 harness covers the emitted reader and both
-providers. This remains qualification-only and is not a production caller or
-complete method endpoint.
+closed. qz Job `i1877-rankk-h100-1010x` compiled exact commit
+`451045b18613281a2da61212012478cba9900a05` and passed all 16 H100 cases for the
+emitted reader and both providers. This remains qualification-only and is not a
+production caller or complete method endpoint.
 
 ## Revisit when
 

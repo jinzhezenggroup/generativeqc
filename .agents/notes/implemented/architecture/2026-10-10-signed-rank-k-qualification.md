@@ -18,8 +18,10 @@ C[...,q,i]` node. It requires the same coefficient node on both legs, matching
 scientific index domains, strict FP64, and dense row- or column-major physical
 views. A preceding multiplication may materialize the weights. The scientific
 request has two explicit roots: overwrite owns `alpha * Gram` without a beta or
-old-output input, while update owns `alpha * Gram + beta * old_output`. Both
-formulas are scalarized into separate native checked helpers, so runtime
+old-output input, while update owns `alpha * Gram + beta * old_output`. The
+update input is a symmetric logical view bound from the physical upper triangle
+by one generated reader used in validation and publication. Both formulas are
+scalarized into separate native checked helpers, so runtime
 publication has no second algebra. Each request validates and binds the original
 Gram program, scientific request and precision identities before composition;
 unsupported audit/lowered provenance fails closed rather than being normalized.
@@ -103,16 +105,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `cf41294a1b6408e20b6ed721cb402e48bd5b7442`, qz Job
-`i1877-rankk-h100-1010v` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `451045b18613281a2da61212012478cba9900a05`, qz Job
+`i1877-rankk-h100-1010x` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
-hashes, 1,576 file checks, cache receipts and negative trials remain at the
+hashes, 1,580 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.78–21.42 µs for the generated
-route and 25.67–36.42 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 13.92–20.84 µs for the generated
+route and 30.70–41.96 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -139,11 +141,14 @@ the later overwrite/update split, including zero-beta no-read behavior, but its
 compiler digest still omitted CUDA child tools. Dry-run Job `u` identified the
 fixed recipe's actual `cudafe++`, `cicc`, `ptxas`, `fatbinary` and `nvlink`
 invocations plus libdevice, link stub and device-runtime inputs. Job `v` hashes
-that complete fixed device-tool closure, source-matches `cf41294a1`, and is the
-accepted run. Its generated header, object, binary and raw hashes are in the
-compact receipt. Later receipt-only commits may reuse `v` only while all
-qualified implementation blobs remain identical and latest-head review verifies
-that boundary.
+that closure but predates the old-output binding and `nvcc.profile` inventory.
+Job `w` qualifies those two repairs at `9b9b2a02c`, but a concurrent upstream
+merge changed the full repository source inventory. The branch therefore merged
+current `origin/master` without rewriting history, and Job `x` source-matches
+that resulting `451045b18` tree. Job `x` is the accepted run; its generated
+header, object, binary and raw hashes are in the compact receipt. Later
+receipt-only commits may reuse `x` only while all qualified implementation blobs
+remain identical and latest-head review verifies that boundary.
 
 ## Revisit when
 
