@@ -612,9 +612,6 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
     if (threadIdx.x == 0) atomicExch(error, 1);
     return;
   }
-  if constexpr (precomputed_point) {
-    if (*error) return;
-  }
   extern __shared__ double geometry_pair_storage[];
   auto* states = reinterpret_cast<generativeqc_grid_adjoint::PointPair*>(geometry_pair_storage);
   // Pair state is dead until AO/grid-motion publication completes. Reuse it
@@ -642,6 +639,8 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
     if (threadIdx.x == 0) {
       control.collective_valid = 1;
       control.valid = owner >= 0 && owner < int64_t(na) && isfinite(weights[p]) && isfinite(raw[p]);
+      // A concurrent CTA may set sticky status: keep this CTA's participation uniform.
+      if constexpr (precomputed_point) control.valid = control.valid && !*error;
       if (control.valid) {
         if constexpr (precomputed_point) {
           *point_value = *reinterpret_cast<const StationaryPointValue*>(ws);

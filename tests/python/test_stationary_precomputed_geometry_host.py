@@ -11,9 +11,31 @@ import pytest
 from generativeqc_compiler.method.stationary_cuda import _STATIONARY_SCIENTIFIC_KERNELS
 from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_partials
 from test_stationary_geometry_kernel_host import PREFIX
+from test_stationary_task_work_budget import _block
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
+
+
+def test_precomputed_status_joins_the_block_vote_before_scratch_reads() -> None:
+    """A mutable sticky status must not independently remove CTA participants."""
+    kernel = _block(
+        _STATIONARY_SCIENTIFIC_KERNELS,
+        "__global__ void geometry_cooperative_kernel(",
+    )
+    entry, point_loop = kernel.split("{", 1)[1].split("for (size_t p = lane;", 1)
+    assert not re.search(r"\*\s*error\b", entry)
+    vote = _block(point_loop, "if (threadIdx.x == 0) {")
+    status = vote.index("!*error")
+    assert "control.valid" in vote[:status].splitlines()[-1]
+    assert status < vote.index("if (control.valid)")
+    assert vote.index("if (control.valid)") < vote.index(
+        "reinterpret_cast<const StationaryPointValue*>(ws)"
+    )
+    publication = point_loop[point_loop.index(vote) + len(vote) :]
+    assert publication.index("__syncthreads()") < publication.index(
+        "if (!control.valid)"
+    )
 
 
 @pytest.mark.parametrize(("atoms", "aos"), [(12, 0), (12, 96), (12, 1024), (96, 768)])
