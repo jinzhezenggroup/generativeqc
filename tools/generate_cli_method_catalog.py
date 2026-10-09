@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate a native CLI catalog from compiler MethodIR, with strict admission.
 
 Only build-time Python is needed. Representable methods without qualified native
@@ -10,7 +9,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Mapping
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
@@ -51,7 +49,7 @@ class Row:
     reason: str
 
 
-def _match_curated(plan: Any) -> Mapping[str, Any] | None:
+def _match_curated(plan: Any) -> Any:
     actual = dict(plan.semilocal.functional.components)
     omega = plan.semilocal.functional.range_omega
     for record in SEMILOCAL_FAMILIES:
