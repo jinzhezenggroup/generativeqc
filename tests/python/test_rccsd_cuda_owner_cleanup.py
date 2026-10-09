@@ -50,7 +50,7 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
         PREFIX
         + "namespace generativeqc::tensor {\n"
         + provider
-        + "struct PreparedContractions { static constexpr std::size_t storage_bytes(std::size_t n) {return 128*n;} };\n"
+        + "struct PreparedContractions { static constexpr std::size_t storage_bytes(std::size_t n) {return 128*n;} void release() {} };\n"
         + "}\n"
         + OPEN_CC
         + state
@@ -193,7 +193,12 @@ struct CudaState {
   int* error{};
   double* response_arena{};
 };
-
+struct ReplayCudaState : CudaState {
+  tensor::PreparedContractions contractions;
+};
+constexpr std::size_t replay_binding_host_bytes() { return 128; }
+void prepare_virtual_replay(ReplayCudaState&,tensor::CudaContractionContext&,
+                            std::size_t&,std::size_t&) {}
 }
 namespace dfhoist {
 struct CudaState : dfcore::CudaState {
@@ -246,6 +251,8 @@ int main() {
         if(generativeqc::cc::generated::dfhoist::prepared_batch!=batch ||
            generativeqc::cc::generated::dfhoist::prepared_tail!=tail) return 17;
       }
+      if (good.replay_matrix)
+        expected_capacity+=generativeqc::cc::generated::df::replay_binding_host_bytes();
       if (good.conventional_prepared) {
         expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
           generativeqc::tensor::PreparedContractions::storage_bytes(
@@ -294,11 +301,25 @@ int main() {
     calls = fail_at = 0;
     arena_alloc_failures = failures;
     generativeqc::cc::SolverOptions options;
+    options.df_replay_matrix_gemm=false;
     { generativeqc::cc::Owner retry(p, options, 0);
       if (retry.plan.matrix_gemm != (failures < 2)) return 12;
       if (retry.plan.auxiliary_batch_size != (failures == 0 ? 2U : 1U)) return 13;
     }
     if (streams || events || allocations || handles || device != 7) return 14;
+  }
+  // Replay admission is optional after the primal tile: its OOM retry must
+  // keep the provider and Q batch before trying the existing primal fallbacks.
+  for (int failures : {0, 1, 2, 3}) {
+    calls = fail_at = 0;
+    arena_alloc_failures = failures;
+    generativeqc::cc::SolverOptions options;
+    { generativeqc::cc::Owner retry(p, options, 0);
+      if (retry.replay_matrix != (failures == 0)) return 37;
+      if (retry.plan.matrix_gemm != (failures < 3)) return 38;
+      if (retry.plan.auxiliary_batch_size != (failures < 2 ? 2U : 1U)) return 39;
+    }
+    if (streams || events || allocations || handles || device != 7) return 40;
   }
   calls = fail_at = 0;
   provider_alloc_failures = 1;
@@ -330,6 +351,7 @@ int main() {
   p.df_bov.assign(192,.1);p.df_bvv.assign(576,.1);
   for(const bool packed:{false,true}) {
     generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=packed;
+    options.df_replay_matrix_gemm=false;
     std::size_t wide_base=0,history_bytes=0,narrow_total=0,wide_non_history_capacity=0;
     {generativeqc::cc::Owner wide(p,options,0);
       wide_base=wide.layout.total;history_bytes=wide.layout.history_bytes;
