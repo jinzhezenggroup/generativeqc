@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from generativeqc_compiler.tensor.ir import einsum, input_tensor
+from generativeqc_compiler.tensor.ir import add, einsum, input_tensor
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scf import density_program, weighted_density_program
 from generativeqc_compiler.tensor.symmetric_rank_k import (
     emit_symmetric_rank_k_portfolio,
     symmetric_rank_k_request,
+    symmetric_rank_k_scalar_update_program,
     symmetric_rank_k_update_program,
 )
 from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
@@ -37,7 +38,7 @@ def test_rank_k_reuses_original_equation_and_has_one_signed_contract(
     )
     request = symmetric_rank_k_request(program, name, order=order)
     assert request.scientific_identity
-    assert request.operation == "einsum"
+    assert request.operation == "add"
     assert request.input_dtypes == ("float64",) * 4
     assert dict(request.semantics)["signed_weights"] is True
     assert dict(request.semantics)["weights_materialization"] == (
@@ -50,12 +51,20 @@ def test_rank_k_reuses_original_equation_and_has_one_signed_contract(
     assert request.effects == (
         ("output", "transactional-symmetric-overwrite-or-accumulate"),
     )
+    update = symmetric_rank_k_update_program(program, name)
+    assert request.scientific_identity == update.logical_hash
+    assert request.scientific_identity != program.logical_hash
+    assert dict(request.semantics)["update_program_hash"] == update.logical_hash
     assert dict(request.semantics)["scalar_update_hash"] == (
-        symmetric_rank_k_update_program().logical_hash
+        symmetric_rank_k_scalar_update_program().logical_hash
     )
     assert dict(request.semantics)["scalar_input_roles"] == (
         "alpha,product,beta,old_output"
     )
+    changed = Program(
+        {"updated": add(*update.outputs["updated"].inputs, coefficients=(2, 1))}
+    )
+    assert changed.logical_hash != request.scientific_identity
     emitted = emit_symmetric_rank_k_portfolio(
         program, name, sha256(b"source").hexdigest(), name="rank_k", order=order
     )

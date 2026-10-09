@@ -27,7 +27,7 @@ from generativeqc_compiler.common.specialization import (
     TargetCapabilities,
 )
 
-from .ir import Node, add, input_tensor, multiply
+from .ir import Node, add, broadcast, input_tensor, multiply
 from .lowering import TensorLoweringAdapter
 from .program import Program
 from .types import TensorSpec, checked_shape
@@ -40,8 +40,13 @@ def _domains(indices: tuple) -> tuple:
     return tuple(index.domain for index in indices)
 
 
-def symmetric_rank_k_update_program() -> Program:
-    """Own the runtime ``alpha * product + beta * old_output`` scalar update."""
+def _rank_k_update(alpha: Node, product: Node, beta: Node, old_output: Node) -> Node:
+    """One TensorIR formula shared by the dense root and scalarized helper."""
+    return add(multiply(alpha, product), multiply(beta, old_output))
+
+
+def symmetric_rank_k_scalar_update_program() -> Program:
+    """Scalarize the checked runtime update without inventing another formula."""
 
     def scalar(name: str) -> Node:
         return input_tensor(name, TensorSpec((), dtype="float64", role="input"))
@@ -51,8 +56,30 @@ def symmetric_rank_k_update_program() -> Program:
     beta = scalar("beta")
     old_output = scalar("old_output")
     return Program(
-        {"updated": add(multiply(alpha, product), multiply(beta, old_output))},
+        {"updated": _rank_k_update(alpha, product, beta, old_output)},
         provenance={"source": "tensor symmetric rank-k scalar update"},
+    )
+
+
+def symmetric_rank_k_update_program(program: Program, output: str) -> Program:
+    """Compose the original Gram with explicit scalar and old-output inputs."""
+    product = program.outputs[output]
+    alpha = input_tensor("rank_k_alpha", TensorSpec((), dtype="float64", role="input"))
+    beta = input_tensor("rank_k_beta", TensorSpec((), dtype="float64", role="input"))
+    old_output = input_tensor("rank_k_old_output", replace(product.spec, role="input"))
+    updated = _rank_k_update(
+        broadcast(alpha, product.spec.indices, ()),
+        product,
+        broadcast(beta, product.spec.indices, ()),
+        old_output,
+    )
+    return Program(
+        {"updated": updated},
+        provenance={
+            "source": "tensor symmetric rank-k dense update composition",
+            "rank_k_product_program": program.logical_hash,
+            "rank_k_product_output": output,
+        },
     )
 
 
@@ -128,12 +155,13 @@ def symmetric_rank_k_request(
         for value in (left, weights, node, *weights.inputs)
     ):
         raise ValueError("rank-k currently requires strict FP64 storage")
-    adapter = TensorLoweringAdapter(program)
-    base = adapter.request(node, backend="cuda")
-    arithmetic = adapter.directives[node]
+    update = symmetric_rank_k_update_program(program, output)
+    update_root = update.outputs["updated"]
+    adapter = TensorLoweringAdapter(update)
+    base = adapter.request(update_root, backend="cuda")
+    arithmetic = adapter.directives[update_root]
     if arithmetic.storage_dtype != "float64" or any(
-        adapter.directives[value] != arithmetic
-        for value in (left, weights, *weights.inputs)
+        adapter.directives[value] != arithmetic for value in update.live_nodes
     ):
         raise ValueError(
             "rank-k weight and contraction require one strict FP64 schedule"
@@ -147,27 +175,68 @@ def symmetric_rank_k_request(
         for precision in base.precisions
     ):
         raise ValueError("rank-k cannot silently change arithmetic or audit")
-    update = symmetric_rank_k_update_program()
-    update_inputs = {
+    named_inputs = {
         value.attrs["name"]: value for value in update.live_nodes if value.op == "input"
     }
-    update_root = update.outputs["updated"]
+    alpha = named_inputs.get("rank_k_alpha")
+    beta = named_inputs.get("rank_k_beta")
+    old_output = named_inputs.get("rank_k_old_output")
     update_products = [value for value in update_root.inputs if value.op == "multiply"]
+    alpha_views = [
+        value
+        for value in update.live_nodes
+        if value.op == "broadcast" and value.inputs == (alpha,)
+    ]
+    beta_views = [
+        value
+        for value in update.live_nodes
+        if value.op == "broadcast" and value.inputs == (beta,)
+    ]
     if (
-        set(update_inputs) != {"alpha", "product", "beta", "old_output"}
-        or any(
-            value.spec.shape or value.spec.dtype != "float64"
-            for value in update.live_nodes
-        )
+        alpha is None
+        or beta is None
+        or old_output is None
+        or any(value.spec.dtype != "float64" for value in update.live_nodes)
         or update_root.op != "add"
         or update_root.attrs["coefficients"] != ((1, 1), (1, 1))
         or len(update_products) != 2
+        or len(alpha_views) != 1
+        or len(beta_views) != 1
         or {frozenset(value.inputs) for value in update_products}
         != {
-            frozenset((update_inputs["alpha"], update_inputs["product"])),
-            frozenset((update_inputs["beta"], update_inputs["old_output"])),
+            frozenset((alpha_views[0], node)),
+            frozenset((beta_views[0], old_output)),
         }
-        or len(update.live_nodes) != 7
+        or alpha.spec.shape
+        or beta.spec.shape
+        or _domains(old_output.spec.indices) != _domains(node.spec.indices)
+        or any(view.attrs["axes"] for view in (*alpha_views, *beta_views))
+        or base.scientific_identity != update.logical_hash
+    ):
+        raise ValueError("rank-k dense update TensorIR changed")
+    scalar_update = symmetric_rank_k_scalar_update_program()
+    scalar_inputs = {
+        value.attrs["name"]: value
+        for value in scalar_update.live_nodes
+        if value.op == "input"
+    }
+    scalar_root = scalar_update.outputs["updated"]
+    scalar_products = [value for value in scalar_root.inputs if value.op == "multiply"]
+    if (
+        set(scalar_inputs) != {"alpha", "product", "beta", "old_output"}
+        or any(
+            value.spec.shape or value.spec.dtype != "float64"
+            for value in scalar_update.live_nodes
+        )
+        or scalar_root.op != "add"
+        or scalar_root.attrs["coefficients"] != ((1, 1), (1, 1))
+        or len(scalar_products) != 2
+        or {frozenset(value.inputs) for value in scalar_products}
+        != {
+            frozenset((scalar_inputs["alpha"], scalar_inputs["product"])),
+            frozenset((scalar_inputs["beta"], scalar_inputs["old_output"])),
+        }
+        or len(scalar_update.live_nodes) != 7
     ):
         raise ValueError("rank-k scalar update TensorIR changed")
     n, k = left.spec.shape[-2:]
@@ -194,6 +263,11 @@ def symmetric_rank_k_request(
     semantics = dict(base.semantics)
     semantics.update(
         parent_node_hash=adapter.hashes[node],
+        alpha_input_hash=adapter.hashes[alpha],
+        beta_input_hash=adapter.hashes[beta],
+        old_output_hash=adapter.hashes[old_output],
+        update_root_hash=adapter.hashes[update_root],
+        update_program_hash=update.logical_hash,
         symmetric_rank_k=True,
         transpose="coefficient-times-weighted-coefficient-transpose",
         signed_weights=True,
@@ -202,16 +276,16 @@ def symmetric_rank_k_request(
         else "borrowed",
         publication="upper-triangle-mirrored",
         scalar_input_roles="alpha,product,beta,old_output",
-        scalar_update_hash=update.logical_hash,
+        scalar_update_hash=scalar_update.logical_hash,
         update="alpha-product-plus-beta-output",
     )
     return replace(
         base,
         semantics=tuple(semantics.items()),
         operands=physical,
-        input_dtypes=(*base.input_dtypes, "float64"),
+        input_dtypes=("float64",) * 4,
         precisions=tuple(
-            replace(precision, input_dtypes=(*precision.input_dtypes, "float64"))
+            replace(precision, input_dtypes=("float64",) * 4)
             for precision in base.precisions
         ),
         effects=(("output", "transactional-symmetric-overwrite-or-accumulate"),),

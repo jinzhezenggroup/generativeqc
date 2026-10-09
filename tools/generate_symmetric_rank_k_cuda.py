@@ -17,7 +17,7 @@ from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 from generativeqc_compiler.tensor.scf import density_program, weighted_density_program
 from generativeqc_compiler.tensor.symmetric_rank_k import (
     emit_symmetric_rank_k_portfolio,
-    symmetric_rank_k_update_program,
+    symmetric_rank_k_scalar_update_program,
 )
 from generativeqc_compiler.tensor.weighted_gram_emit import emit_scalar_stages
 
@@ -118,7 +118,7 @@ def render(source: str) -> str:
     )
     bodies.extend(stages.values())
     update = emit_scalar_cpp(
-        symmetric_rank_k_update_program(),
+        symmetric_rank_k_scalar_update_program(),
         function_name="rank_k_alpha_beta_update",
         input_order=("alpha", "product", "beta", "old_output"),
         output_order=("updated",),
