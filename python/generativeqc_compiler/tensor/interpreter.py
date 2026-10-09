@@ -84,7 +84,9 @@ def _evaluate(
             raise ValueError(f"missing tensor input: {name}")
         value = np.asarray(feeds[name])
         if value.dtype != np.dtype(node.spec.dtype) or value.shape != node.spec.shape:
-            label = "real dtype" if node.spec.dtype in ("float32", "float64") else "dtype"
+            label = (
+                "real dtype" if node.spec.dtype in ("float32", "float64") else "dtype"
+            )
             raise ValueError(
                 f"input {name} must have {label} {node.spec.dtype} and shape {node.spec.shape}"
             )

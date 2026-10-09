@@ -242,9 +242,12 @@ def _infer(
             raise ValueError(f"{op} requires exactly two operands")
         left, right = inputs
         if left.spec.dtype not in ("float32", "float64") or (
-            left.spec.dtype, left.spec.representation
+            left.spec.dtype,
+            left.spec.representation,
         ) != (right.spec.dtype, right.spec.representation):
-            raise ValueError("comparison operands require the same real float dtype and representation")
+            raise ValueError(
+                "comparison operands require the same real float dtype and representation"
+            )
         if tuple(i.domain for i in left.spec.indices) != tuple(
             i.domain for i in right.spec.indices
         ):
@@ -392,7 +395,9 @@ def _infer(
         )
     base = _common(inputs)
     if base.dtype == "bool" and op not in BOOLEAN_VIEWS:
-        raise ValueError("bool TensorIR data cannot enter floating arithmetic or reductions")
+        raise ValueError(
+            "bool TensorIR data cannot enter floating arithmetic or reductions"
+        )
     if op in TRANSCENDENTALS:
         if len(inputs) != 1:
             raise ValueError(f"{op} requires exactly one operand")
@@ -633,7 +638,9 @@ def constant(values: typing.Any, spec: TensorSpec | None = None) -> Node:
         spec = TensorSpec(role="constant")
     if type(values) in (bool, int, str, Fraction):
         values = (values,)
-    literals = tuple(values) if spec.dtype == "bool" else tuple(rational(x) for x in values)
+    literals = (
+        tuple(values) if spec.dtype == "bool" else tuple(rational(x) for x in values)
+    )
     return Node("constant", (), spec, (("values", literals),))
 
 

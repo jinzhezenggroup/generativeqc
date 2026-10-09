@@ -222,7 +222,13 @@ class TensorSpec:
     @property
     def itemsize(self) -> int:
         """Return the tensor dtype size in bytes."""
-        return 1 if self.dtype == "bool" else 8 if self.dtype in ("float64", "int64") else 4
+        return (
+            1
+            if self.dtype == "bool"
+            else 8
+            if self.dtype in ("float64", "int64")
+            else 4
+        )
 
     @property
     def size(self) -> int:

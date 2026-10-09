@@ -33,9 +33,15 @@ COMPARISONS = (
     "left,right",
     (
         (np.array(1.0, dtype=np.float64), np.array(2.0, dtype=np.float32)),
-        (np.array([[1.0], [2.0]], dtype=np.float32), np.array([[1.0, 3.0]], dtype=np.float64)),
+        (
+            np.array([[1.0], [2.0]], dtype=np.float32),
+            np.array([[1.0, 3.0]], dtype=np.float64),
+        ),
         (np.empty((0, 1), dtype=np.float64), np.ones((1, 3), dtype=np.float32)),
-        (np.array([-0.0, 1.0], dtype=np.float64), np.array([0.0, -1.0], dtype=np.float64)),
+        (
+            np.array([-0.0, 1.0], dtype=np.float64),
+            np.array([0.0, -1.0], dtype=np.float64),
+        ),
     ),
 )
 def test_eager_and_captured_comparisons_match_numpy(
@@ -80,9 +86,13 @@ def test_operator_comparisons_remain_symbolic_and_immutable() -> None:
 
 
 def test_bool_input_constants_views_and_identity_roundtrip() -> None:
-    spec = TensorSpec((Index("i", IndexSpace("mask", "matrix", 3)),), dtype="bool", role="input")
+    spec = TensorSpec(
+        (Index("i", IndexSpace("mask", "matrix", 3)),), dtype="bool", role="input"
+    )
     mask = ir.input_tensor("mask", spec)
-    literal = ir.constant((True, False, True), TensorSpec(spec.indices, dtype="bool", role="constant"))
+    literal = ir.constant(
+        (True, False, True), TensorSpec(spec.indices, dtype="bool", role="constant")
+    )
     viewed = ir.reshape(ir.transpose(mask, (0,)), spec.indices)
     program = Program({"input": viewed, "literal": literal})
     restored = Program.loads(program.dumps())
@@ -92,7 +102,10 @@ def test_bool_input_constants_views_and_identity_roundtrip() -> None:
     bool_literal = ir.constant(True, TensorSpec(dtype="bool", role="constant"))
     real_literal = ir.constant(1, TensorSpec(role="constant"))
     assert bool_literal.attributes != real_literal.attributes
-    assert Program({"out": bool_literal}).logical_hash != Program({"out": real_literal}).logical_hash
+    assert (
+        Program({"out": bool_literal}).logical_hash
+        != Program({"out": real_literal}).logical_hash
+    )
     values = np.asarray([True, False, True], dtype=np.bool_)
     result = execute(restored, {"mask": values})
     np.testing.assert_array_equal(result.outputs["input"], values)
@@ -138,9 +151,13 @@ def test_optimizer_cse_and_backend_gates() -> None:
     optimized = optimize(program)
     assert optimized.outputs["a"] is optimized.outputs["b"]
     feeds = {"x": np.asarray(1.0, dtype=np.float64)}
-    assert execute(program, feeds).outputs["a"] == execute(optimized, feeds).outputs["a"]
+    assert (
+        execute(program, feeds).outputs["a"] == execute(optimized, feeds).outputs["a"]
+    )
     for backend in ("cpu", "cuda", "portable", "scalar"):
-        with pytest.raises(ValueError, match="does not support bool data or comparisons"):
+        with pytest.raises(
+            ValueError, match="does not support bool data or comparisons"
+        ):
             prepare_for_backend(program, backend)
     with pytest.raises(ValueError, match="does not support bool data or comparisons"):
         emit_cpu(program)

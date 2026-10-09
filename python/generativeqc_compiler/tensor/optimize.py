@@ -645,7 +645,9 @@ def prepare_for_backend(
     if backend not in PRODUCTION_BACKENDS:
         raise ValueError(f"unsupported TensorIR production backend: {backend}")
     if any(
-        node.spec.dtype == "bool" or node.op in {"equal", "not_equal", "greater", "greater_equal", "less", "less_equal"}
+        node.spec.dtype == "bool"
+        or node.op
+        in {"equal", "not_equal", "greater", "greater_equal", "less", "less_equal"}
         for node in program.live_nodes
     ):
         raise ValueError(

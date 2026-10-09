@@ -536,7 +536,9 @@ def _data_dtype_name(dtype: object) -> str:
     except TypeError as exc:
         raise TypeError("dtype must describe bool, float32 or float64") from exc
     if name not in ("bool", "float32", "float64"):
-        raise TypeError("experimental Array API supports bool and real float32/float64 data")
+        raise TypeError(
+            "experimental Array API supports bool and real float32/float64 data"
+        )
     return name
 
 
@@ -652,7 +654,9 @@ def asarray(
         return VibeArray(_cast(value.node, name))
     _check_host_values(value)
     target = None if dtype is None else _data_dtype_name(dtype)
-    if target is not None and (target == "bool") != (np.asarray(value).dtype.name == "bool"):
+    if target is not None and (target == "bool") != (
+        np.asarray(value).dtype.name == "bool"
+    ):
         raise TypeError("cross-kind bool/real input conversion is unsupported")
     if copy is True:
         array = np.array(value, dtype=target, copy=True)
@@ -689,7 +693,11 @@ def full(
     """Create a finite uniform array, or capture an exact TensorIR constant."""
     _creation_device(device)
     target = _namespace._creation_shape(shape)
-    name = "bool" if dtype is None and type(fill_value) is builtins.bool else _creation_dtype(dtype)
+    name = (
+        "bool"
+        if dtype is None and type(fill_value) is builtins.bool
+        else _creation_dtype(dtype)
+    )
     if dtype is None and type(fill_value) is int:
         raise TypeError(
             "full with an integer fill_value requires an integer dtype "
@@ -703,7 +711,12 @@ def full(
         factor = _namespace._generic_scalar(fill_value, "full fill value")
     if _active_capture():
         return _namespace.full(target, factor, dtype=name)
-    return _eager_compute(np.full, target, factor if name == "bool" else float(factor), dtype=np.dtype(name))
+    return _eager_compute(
+        np.full,
+        target,
+        factor if name == "bool" else float(factor),
+        dtype=np.dtype(name),
+    )
 
 
 def zeros(
@@ -749,7 +762,12 @@ def full_like(
         factor = fill_value
     else:
         factor = _namespace._generic_scalar(fill_value, "full_like fill value")
-    return _eager_compute(np.full_like, array, factor if name == "bool" else float(factor), dtype=np.dtype(name))
+    return _eager_compute(
+        np.full_like,
+        array,
+        factor if name == "bool" else float(factor),
+        dtype=np.dtype(name),
+    )
 
 
 def _like_dtype(x: object, dtype: object) -> str:

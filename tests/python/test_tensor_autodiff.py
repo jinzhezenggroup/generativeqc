@@ -543,10 +543,24 @@ def test_capabilities_cover_every_primitive_and_claim_only_slice_a() -> None:
     report = capabilities()
     non_differentiable = set(report["non_differentiable_primitives"])
     assert non_differentiable == {
-        "equal", "not_equal", "greater", "greater_equal", "less", "less_equal"
+        "equal",
+        "not_equal",
+        "greater",
+        "greater_equal",
+        "less",
+        "less_equal",
     }
-    assert set(report["primitives"]) == set(PRIMITIVES) - non_differentiable == set(AD_PRIMITIVES)
-    assert set(AD_RULES) == set(_JVP_RULES) == set(_VJP_RULES) == set(PRIMITIVES) - non_differentiable
+    assert (
+        set(report["primitives"])
+        == set(PRIMITIVES) - non_differentiable
+        == set(AD_PRIMITIVES)
+    )
+    assert (
+        set(AD_RULES)
+        == set(_JVP_RULES)
+        == set(_VJP_RULES)
+        == set(PRIMITIVES) - non_differentiable
+    )
     assert report["rule_version"] == AD_RULE_VERSION
     assert report["packed_symmetry"] is False
     assert report["derivative_dag_generation"] is False
