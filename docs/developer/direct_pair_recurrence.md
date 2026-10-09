@@ -29,7 +29,7 @@ reachable-Coulomb/Hermite-convolution value schedules and SR/LR operators retain
 their existing owners. The value switch does not select derivatives or establish
 an endpoint speedup.
 
-The separate default-off switch
+The separate preparation selector
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES=1` is also frozen at preparation.
 It selects dddd tasks in the stationary DFT `Full` (Combined) and
 `FullSources` (Separate) bounded scheduler,
@@ -50,7 +50,7 @@ footprint. Missing primitive-pair data/offsets, reachable/convolution derivative
 schedules, non-dddd shells and other radial operators use existing consumers.
 The value and derivative switches are independently selectable.
 
-`GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES=1` is a separate default-off
+`GENERATIVEQC_DIRECT_PAIR_COOPERATIVE_DERIVATIVES=1` selects a separate
 force schedule, frozen at preparation. With angular force partitioning and a
 proved s/p/d basis, order-seven tasks use a dedicated CTA consumer. The
 lowering also supports the three order-six classes for native qualification;
@@ -61,12 +61,34 @@ Each lane holds at most three weights per source and contracts them directly
 into atom gradients; a CTA reduction limits global force atomics to at most
 three per unique atom per source. The omitted atom follows from translation.
 
+The ordinary bounded full-range force route also uses that order-seven consumer
+when the prepared maximum shell angular momentum is exactly two and the
+materialized derivative cache/recurrence and cooperative selectors admit it,
+and the caller lends the same plan's immutable class-major shell-pair topology.
+The original shell domain is partitioned into three sequential owners:
+128-lane generic orders zero through six, 256-lane class-major cooperative order seven,
+and 256-lane materialized dddd. All three retain the original class masks,
+canonical physical orientation and exact scientific screening. The same cursor
+is reset on the caller's stream between owners; no new retained queue or pair
+cache is allocated. The order-seven producer claims pages of at most 32 dp kets
+per dd bra in the same physical system, including partial tails. Under the
+proved s/p/d bound, dd x dp is exactly the order-seven domain; it does not scan
+the complete shell-pair triangle again. Ordered indices are canonicalized by
+physical pair ID before the unchanged Force predicate and generated-class
+exclusions. Force-owner density bounds are passed explicitly, never borrowed
+from the Coulomb-owner bounds stored in the topology. Submission/reset failures
+stop before subsequent owners.
+Missing coherent class-major topology or explicit cooperative disable (`0` or
+`none`) keeps the previous two-owner
+generic-plus-dddd control. These native selectors are enabled when unset.
+
 The cooperative workspace is bounded below 44 KiB. Its kernel omits the generic
 per-AO recurrence frame rather than carrying it in an unused runtime branch.
-Mixed f bases, an unproved angular bound, missing pair caches, non-angular
-schedules and reachable/convolution derivative selections retain existing
-consumers. Materialized dddd and cooperative order-seven selection are
-independent. The weighted summation order changes, so independent force oracles
+Mixed f bases, an unproved angular bound, missing pair caches, custom bounded
+launch shapes and reachable/convolution derivative selections retain existing
+consumers. The angular route keeps independent materialized dddd and cooperative
+order-seven selections; the bounded split requires the materialized cache guard
+as well. The weighted summation order changes, so independent force oracles
 and complete endpoint measurements remain prerequisites for default promotion.
 
 `tests/python/test_direct_pair_materialized_cuda.py` emits and checks the

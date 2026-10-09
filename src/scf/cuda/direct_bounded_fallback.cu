@@ -18,6 +18,7 @@
 #include "scf/cuda/direct_force_order4_sources.cuh"
 #include "scf/cuda/direct_force_order5_sources.cuh"
 #include "scf/cuda/direct_metadata.hpp"
+#include "scf/cuda/direct_order_seven_force.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/direct_queue_profile.cuh"
 #include "scf/cuda/direct_screening.cuh"
@@ -70,6 +71,8 @@ __host__ __device__ bool bounded_direct_angular_owner(const DeviceBatch& batch,
                            batch.shell_angular[batch.shell_pair_second[second_pair]];
     if constexpr (AngularOrder == -2)
       return order != 8U;
+    else if constexpr (AngularOrder == -3)
+      return order != 7U && order != 8U;
     else
       return order == AngularOrder;
   }
@@ -654,24 +657,46 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
-    detail::BoundedDirectBlockDomain block_domain) {
+    detail::BoundedDirectBlockDomain block_domain, const GeneratedShellPairStream* force_topology) {
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   auto split = [&]<bool Unrestricted>() {
-    // A proved s/p/d basis makes order eight exactly dddd. Keep its fixed
-    // 256-lane materialized packets separate from the qualified 128-lane
-    // generic force consumer; both own disjoint parts of the original queue.
-    bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true, -2>
-        <<<grid, kBoundedDirectForceThreads, shared_bytes, stream>>>(
-            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
-            shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
-            enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, output,
-            global_cursor, profile, coulomb_coefficient, exchange_coefficient, radial_operator, 0.0,
-            0.0, false, false, block_domain);
+    // The admitted resident s/p/d cache supports the existing order-seven
+    // cooperative algebra without another retained allocation. Its producer
+    // needs the same plan's coherent class-major topology; without that view,
+    // keep the qualified two-pass route rather than a third full-domain scan.
+    const bool cooperative_available =
+        force_topology != nullptr && cooperative_pair_derivative_available(batch);
+    auto generic = [&]<int AngularOrder>() {
+      bounded_direct_shell_quartet_kernel<Unrestricted, DirectScreeningPurpose::Force, true,
+                                          AngularOrder>
+          <<<grid, kBoundedDirectForceThreads, shared_bytes, stream>>>(
+              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
+              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
+              density, active, output, global_cursor, profile, coulomb_coefficient,
+              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+    };
+    if (cooperative_available)
+      generic.template operator()<-3>();
+    else
+      generic.template operator()<-2>();
     auto error = cudaPeekAtLastError();
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);
     if (error != cudaSuccess) return error;
+    // The existing explicit cooperative disable retains the qualified
+    // two-pass control, including the generic order-seven fallback.
+    if (cooperative_available) {
+      error = launch_direct_order_seven_force(
+          Unrestricted, grid, shared_bytes, stream, batch, force_topology, screening_tolerance,
+          shell_pair_bounds, shell_pair_density_bounds, enabled_mask_pointer, enabled_mask,
+          bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+          profile, coulomb_coefficient, exchange_coefficient, separate_sources);
+      if (error != cudaSuccess) return error;
+      error = cudaMemsetAsync(global_cursor, 0, sizeof(*global_cursor), stream);
+      if (error != cudaSuccess) return error;
+    }
     const auto workspace_bytes =
         std::max(shared_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence));
     auto materialized = [&]<DirectRangeOperator Range>() {

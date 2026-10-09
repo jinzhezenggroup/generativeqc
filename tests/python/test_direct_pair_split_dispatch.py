@@ -18,15 +18,23 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
 ) -> None:
     """Exercise every admission guard, both source layouts and all failed steps."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
+    cooperative_source = (ROOT / "src/scf/cuda/direct_order_seven_force.cu").read_text()
     definitions = "\n".join(
-        _definition(source, marker)
+        _definition(
+            cooperative_source
+            if marker == "cudaError_t launch_direct_order_seven_force("
+            else source,
+            marker,
+        )
         for marker in (
             "bool materialized_pair_derivative_available(",
+            "bool cooperative_pair_derivative_available(",
+            "cudaError_t launch_direct_order_seven_force(",
             "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(",
         )
     )
     production, launches = re.subn(r"<<<([^<>]+)>>>\s*\(", r"(\1, ", definitions)
-    assert launches == 3
+    assert launches == 4
     probe = tmp_path / "split.cpp"
     probe.write_text(PREFIX + production + DRIVER)
     executable = native_cxx.build_executable(
@@ -52,9 +60,11 @@ struct dim3 {
   bool operator==(const dim3&) const = default;
 };
 enum class DirectRangeOperator { Full = 0, FullSources = 4 };
+enum class DirectForceOutputMode { Combined, Separate };
 enum class DirectScreeningPurpose { Fock, Force };
 struct DeviceBatch {
   bool direct_pair_materialized_derivatives{};
+  bool direct_pair_cooperative_derivatives{};
   const void* shell_primitive_pairs{};
   const void* shell_pair_primitive_offsets{};
   unsigned direct_coulomb_reachable{}, direct_hermite_convolution{};
@@ -62,8 +72,10 @@ struct DeviceBatch {
   bool operator==(const DeviceBatch&) const = default;
 };
 struct ShellPairDensityBounds {};
+struct GeneratedShellPairStream {};
 struct DeviceShellClassProfileEntry {};
 struct MaterializedDirectPairDerivativeRecurrence { unsigned char bytes[513]; };
+struct CooperativeDirectPairDerivativeRecurrence { unsigned char bytes[1537]; };
 namespace detail {
 struct BoundedDirectBlockDomain {
   unsigned identity{};
@@ -79,6 +91,7 @@ struct Event {
   bool pure{};
   unsigned width{};
   std::size_t bytes{};
+  bool cooperative{};
   bool operator==(const Event&) const = default;
 };
 std::vector<Event> events;
@@ -86,6 +99,8 @@ int fail_event = -1;
 cudaError_t last_error = cudaSuccess;
 unsigned long long cursor{};
 DeviceBatch expected_batch;
+GeneratedShellPairStream topology;
+const GeneratedShellPairStream* expected_topology;
 bool expected_spin, expected_separate;
 DirectScreeningPurpose expected_purpose;
 double shell_bounds, block_bounds, system_bounds, schwarz, density, output;
@@ -114,6 +129,27 @@ cudaError_t cudaMemsetAsync(void* target, int value, std::size_t bytes, cudaStre
   if (error == cudaSuccess) cursor = 0;
   return error;
 }
+template<bool Unrestricted, DirectForceOutputMode Mode>
+void direct_order_seven_force_kernel(
+    dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
+    const GeneratedShellPairStream* force_topology, double screening, const double* shell,
+    const ShellPairDensityBounds* shell_density, const std::uint64_t* enabled_pointer,
+    std::uint64_t enabled_mask, const std::uint32_t* state, const double* schwarz_pointer,
+    const double* density_pointer, const std::uint8_t* active_pointer, double* output_pointer,
+    unsigned long long* cursor_pointer, DeviceShellClassProfileEntry* profile_pointer,
+    double j_coefficient, double k_coefficient) {
+  assert(Unrestricted == expected_spin && expected_purpose == DirectScreeningPurpose::Force);
+  assert((Mode == DirectForceOutputMode::Separate) == expected_separate);
+  assert(batch == expected_batch && grid == dim3{7} && block == dim3{256} && stream == stream_id);
+  assert(force_topology == expected_topology && force_topology != nullptr);
+  assert(screening == tolerance && shell == &shell_bounds && shell_density == &density_bounds);
+  assert(enabled_pointer == &mask_pointer && enabled_mask == mask && state == &class_state);
+  assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
+  assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
+  assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
+  last_error = record({Launch,7,false,false,256,bytes,true});
+  cursor = 999;
+}
 template<bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
          int AngularOrder = -1, int Radial = -1, bool PairDerivatives = false,
          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false>
@@ -129,7 +165,9 @@ void bounded_direct_shell_quartet_kernel(
     double omega, double secondary, bool coulomb_only, bool exchange_only,
     detail::BoundedDirectBlockDomain block_domain) {
   static_assert(Force);
-  static_assert(!CooperativeDerivatives);
+  if constexpr (CooperativeDerivatives)
+    assert(!PairDerivatives && !PureMaterializedDerivatives && AngularOrder == 7 &&
+           batch.direct_maximum_shell_angular == 2);
   if constexpr (PureMaterializedDerivatives)
     assert(PairDerivatives && AngularOrder == 8 && batch.direct_maximum_shell_angular == 2);
   assert(Unrestricted == expected_spin && Purpose == expected_purpose);
@@ -143,8 +181,8 @@ void bounded_direct_shell_quartet_kernel(
   assert(!coulomb_only && !exchange_only && block_domain == domain);
   assert(range == (expected_separate ? DirectRangeOperator::FullSources : DirectRangeOperator::Full));
   assert(Radial == -1 || Radial == static_cast<int>(range));
-  if constexpr (AngularOrder == -2 || AngularOrder == 8) assert(cursor == 0);
-  last_error = record({Launch, AngularOrder, PairDerivatives, PureMaterializedDerivatives, block.x, bytes});
+  if constexpr (AngularOrder == -2 || AngularOrder == -3 || AngularOrder == 7 || AngularOrder == 8) assert(cursor == 0);
+  last_error = record({Launch, AngularOrder, PairDerivatives, PureMaterializedDerivatives, block.x, bytes, CooperativeDerivatives});
   cursor = 999;
 }
 """
@@ -155,23 +193,31 @@ int main() {
     for (bool separate : {false, true})
       for (auto purpose : {DirectScreeningPurpose::Fock, DirectScreeningPurpose::Force})
         for (unsigned maximum : {0U, 1U, 2U, 3U, 255U})
-          for (unsigned state_bits = 0; state_bits < 32; ++state_bits)
+          for (unsigned state_bits = 0; state_bits < 128; ++state_bits)
             for (dim3 block : {dim3{256}, dim3{128}, dim3{64}, dim3{256,2}, dim3{256,1,2}})
-              for (std::size_t requested_bytes : {0U, 1024U}) {
+              for (std::size_t requested_bytes : {0U, 1024U, 4096U}) {
                 expected_spin = spin;
                 expected_separate = separate;
                 expected_purpose = purpose;
-                expected_batch = {bool(state_bits & 1), state_bits & 2 ? &profile : nullptr,
+                expected_topology = state_bits & 64 ? &topology : nullptr;
+                expected_batch = {bool(state_bits & 1), bool(state_bits & 32), state_bits & 2 ? &profile : nullptr,
                     state_bits & 4 ? &profile : nullptr, state_bits & 8 ? 2U : 0U,
                     state_bits & 16 ? 2U : 0U, maximum};
                 const bool pair = expected_batch.direct_pair_materialized_derivatives &&
                     expected_batch.shell_primitive_pairs && expected_batch.shell_pair_primitive_offsets &&
                     !expected_batch.direct_coulomb_reachable && !expected_batch.direct_hermite_convolution;
                 const bool split = pair && purpose == DirectScreeningPurpose::Force && maximum == 2 && block == dim3{256};
+                const bool cooperative = split && expected_batch.direct_pair_cooperative_derivatives && expected_topology;
                 const auto workspace = pair ? std::max(requested_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence)) : requested_bytes;
+                const auto cooperative_workspace = std::max(requested_bytes, sizeof(CooperativeDirectPairDerivativeRecurrence));
                 std::vector<Event> expected;
-                if (split)
-                  expected = {{Launch,-2,false,false,128,requested_bytes},{Peek},{Reset},{Launch,8,true,true,256,workspace},{Peek}};
+                if (cooperative)
+                  expected = {{Launch,-3,false,false,128,requested_bytes},{Peek},{Reset},
+                              {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
+                              {Launch,8,true,true,256,workspace},{Peek}};
+                else if (split)
+                  expected = {{Launch,-2,false,false,128,requested_bytes},{Peek},{Reset},
+                              {Launch,8,true,true,256,workspace},{Peek}};
                 else
                   expected = {{Launch,-1,pair,false,!pair && block == dim3{256} ? 128U : block.x,workspace},{Peek}};
                 for (int failed = -1; failed < static_cast<int>(expected.size()); ++failed) {
@@ -181,7 +227,7 @@ int main() {
                       spin,purpose,7,block,requested_bytes,stream_id,expected_batch,tolerance,
                       &shell_bounds,&density_bounds,&pair_order,&block_bounds,&system_bounds,
                       &mask_pointer,mask,&class_state,&schwarz,&density,&active,&output,
-                      &cursor,&profile,coulomb,exchange,separate,domain);
+                      &cursor,&profile,coulomb,exchange,separate,domain,expected_topology);
                   assert(error == (failed < 0 ? cudaSuccess : cudaErrorUnknown));
                   std::size_t completed = expected.size();
                   if (failed >= 0) {

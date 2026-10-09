@@ -41,7 +41,10 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
  * separate_sources requires two total_atoms*3 output channels, [J', K'].
  * Proved s/p/d materialized force consumers partition dddd from the generic
  * queue on the same stream, reusing its cursor and output. Submission/reset
- * errors are returned without clearing CUDA's last launch error. */
+ * errors are returned without clearing CUDA's last launch error. Optional
+ * force_topology must borrow that same batch's immutable class-major view;
+ * it enables dd x dp pages instead of a third whole-domain traversal. Without
+ * the view, order seven remains on the qualified generic owner. */
 cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
     std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch, double screening_tolerance,
@@ -52,7 +55,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources = false,
-    detail::BoundedDirectBlockDomain block_domain = {});
+    detail::BoundedDirectBlockDomain block_domain = {},
+    const GeneratedShellPairStream* force_topology = nullptr);
 
 /** Range-separated exchange derivative on the same bounded shell scheduler.
  * Full-range Schwarz bounds remain a conservative gate for SR/LR operators. */

@@ -1,0 +1,274 @@
+{
+  "status": "pass",
+  "scope": "composed explicit Hcore/class-major-force warm endpoints, not Hcore-alone or cold promotion",
+  "sizes": {
+    "48": {
+      "status": "pass",
+      "record_sha256": "7a72355b99fca8780844f983928799a0887475eec25fdaa158ef433d043d3091",
+      "reference_sha256": "dea65338702bca3cea6676c3b0e26b17f767e730fcdcbc4f9f7852a7337f555e",
+      "complete_calls": 46,
+      "cross_owner_identical_blobs": {
+        "warm": false,
+        "moved-warm": false
+      },
+      "energy_error_max_eh": 6.139089236967266e-12,
+      "force_error_max_eh_per_bohr": 2.4695356870552132e-11,
+      "phases": {
+        "warm": {
+          "baseline": {
+            "raw_seconds": [
+              5.680148810148239,
+              5.582238133996725,
+              5.699008759111166,
+              5.530434533953667,
+              5.481355421245098
+            ],
+            "median_seconds": 5.582238133996725,
+            "relative_mad": 0.017539681002718667
+          },
+          "candidate": {
+            "raw_seconds": [
+              5.333044238388538,
+              5.334443360567093,
+              5.357314862310886,
+              5.321287181228399,
+              5.299908056855202
+            ],
+            "median_seconds": 5.333044238388538,
+            "relative_mad": 0.0022045677167852745
+          },
+          "relative_improvement": 0.044640498958751995,
+          "noise_floor": 0.03948849743900788,
+          "significant": true,
+          "work_counts": {
+            "generated": {
+              "primitive_records": 1128
+            },
+            "screened": {},
+            "compacted": {},
+            "executed": {
+              "semilocal_geometry_points": 1179648,
+              "partition_grid_pair_visits": 2661287016
+            },
+            "capacity": {
+              "fixed_capacity": 32,
+              "resident_capacity": 4096,
+              "page_capacity": 4096,
+              "primitive_record_page_budget": 16000000,
+              "ordered_quartets": 43486543872,
+              "exchange_ordered_quartets": 21743271936,
+              "phased_becke_bytes": 20857664
+            },
+            "observed": {
+              "native_primitive_records": 1128,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 24170,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 2304,
+              "becke_pair_state_evaluations": 1330642944,
+              "phased_becke_batches": 2304
+            }
+          }
+        },
+        "moved-warm": {
+          "baseline": {
+            "raw_seconds": [
+              5.512689359486103,
+              5.524045761674643,
+              5.546413756906986,
+              5.516653377562761,
+              5.5344552882015705
+            ],
+            "median_seconds": 5.524045761674643,
+            "relative_mad": 0.001884402659939632
+          },
+          "candidate": {
+            "raw_seconds": [
+              5.346791233867407,
+              5.422725923359394,
+              5.303632844239473,
+              5.301179330796003,
+              5.321095161139965
+            ],
+            "median_seconds": 5.321095161139965,
+            "relative_mad": 0.003742806648038793
+          },
+          "relative_improvement": 0.03673948574842223,
+          "noise_floor": 0.02,
+          "significant": true,
+          "work_counts": {
+            "generated": {
+              "primitive_records": 1128
+            },
+            "screened": {},
+            "compacted": {},
+            "executed": {
+              "semilocal_geometry_points": 1179648,
+              "partition_grid_pair_visits": 2661287016
+            },
+            "capacity": {
+              "fixed_capacity": 32,
+              "resident_capacity": 4096,
+              "page_capacity": 4096,
+              "primitive_record_page_budget": 16000000,
+              "ordered_quartets": 43486543872,
+              "exchange_ordered_quartets": 21743271936,
+              "phased_becke_bytes": 20857664
+            },
+            "observed": {
+              "native_primitive_records": 1128,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 24170,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 2304,
+              "becke_pair_state_evaluations": 1330642944,
+              "phased_becke_batches": 2304
+            }
+          }
+        }
+      }
+    },
+    "96": {
+      "status": "pass",
+      "record_sha256": "f179296fedf06194ec0ebeed679ce3890af424ba4e9489894baea6a4db9a938c",
+      "reference_sha256": "b0961774cc1a4e2a729d205a3952c6d2ec94e6593d5ead98226e3ac982fe8d9e",
+      "complete_calls": 46,
+      "cross_owner_identical_blobs": {
+        "warm": false,
+        "moved-warm": false
+      },
+      "energy_error_max_eh": 1.0459189070388675e-11,
+      "force_error_max_eh_per_bohr": 2.950273358948152e-11,
+      "phases": {
+        "warm": {
+          "baseline": {
+            "raw_seconds": [
+              17.062031365931034,
+              17.05706997960806,
+              17.1205167286098,
+              17.051253583282232,
+              17.07092848420143
+            ],
+            "median_seconds": 17.062031365931034,
+            "relative_mad": 0.0005214571512371436
+          },
+          "candidate": {
+            "raw_seconds": [
+              16.07039850577712,
+              16.01510601118207,
+              16.04500012472272,
+              16.064888525754213,
+              16.01951451972127
+            ],
+            "median_seconds": 16.04500012472272,
+            "relative_mad": 0.0015829467657819864
+          },
+          "relative_improvement": 0.05960786376463312,
+          "noise_floor": 0.02,
+          "significant": true,
+          "work_counts": {
+            "generated": {
+              "primitive_records": 4560
+            },
+            "screened": {},
+            "compacted": {},
+            "executed": {
+              "semilocal_geometry_points": 2359296,
+              "partition_grid_pair_visits": 21516784080
+            },
+            "capacity": {
+              "fixed_capacity": 32,
+              "resident_capacity": 4096,
+              "page_capacity": 4096,
+              "primitive_record_page_budget": 16000000,
+              "ordered_quartets": 695784701952,
+              "exchange_ordered_quartets": 347892350976,
+              "phased_becke_bytes": 79474304
+            },
+            "observed": {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 50642,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 4608,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 4608
+            }
+          }
+        },
+        "moved-warm": {
+          "baseline": {
+            "raw_seconds": [
+              17.0242755189538,
+              17.08309880271554,
+              17.046683248132467,
+              17.03580352663994,
+              17.056350369006395
+            ],
+            "median_seconds": 17.046683248132467,
+            "relative_mad": 0.0006382309880557459
+          },
+          "candidate": {
+            "raw_seconds": [
+              16.00952224060893,
+              16.003370314836502,
+              16.03440736606717,
+              15.978027489036322,
+              16.01319384947419
+            ],
+            "median_seconds": 16.00952224060893,
+            "relative_mad": 0.00038426666829718714
+          },
+          "relative_improvement": 0.06084239335163111,
+          "noise_floor": 0.02,
+          "significant": true,
+          "work_counts": {
+            "generated": {
+              "primitive_records": 4560
+            },
+            "screened": {},
+            "compacted": {},
+            "executed": {
+              "semilocal_geometry_points": 2359296,
+              "partition_grid_pair_visits": 21516784080
+            },
+            "capacity": {
+              "fixed_capacity": 32,
+              "resident_capacity": 4096,
+              "page_capacity": 4096,
+              "primitive_record_page_budget": 16000000,
+              "ordered_quartets": 695784701952,
+              "exchange_ordered_quartets": 347892350976,
+              "phased_becke_bytes": 79474304
+            },
+            "observed": {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 50642,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 4608,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 4608
+            }
+          }
+        }
+      }
+    }
+  }
+}

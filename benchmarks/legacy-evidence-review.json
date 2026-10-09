@@ -1,5 +1,10 @@
 {
   "families": {
+    "pbe0-implicit-class-force-20261010": {
+      "owner": "explicit composed PBE0 Hcore and class-major force endpoints",
+      "reason": "All 46 complete 96-atom construction/setup/prime/sample calls retain full independent numerical outputs, semantic work, resources, owner seed identities and five interleaved timings per side/phase. Lossless gzip only; no full logs, binaries, timing retries, default-promotion waiver or storage-budget increase.",
+      "review_document": "benchmarks/results/pbe0-implicit-class-force-20261010/README.md"
+    },
     "pbe0-cuda-schedule-20261006": {
       "owner": "ordinary CUDA force schedule qualification",
       "reason": "Two separately authenticated frozen-source populations retain exact complete endpoint vectors, matched warm work, independent references, source/binary/cache/sanitizer receipts and rejected experiments. Each lossless bundle stays below 1 MiB and the complete publication below the unchanged 2 MiB review budget; no binaries, profiler traces, external archive or policy exception is introduced.",
@@ -641,6 +646,14 @@
       "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f",
       "classification": "required-compact-accepted-evidence",
       "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
+    },
+    {
+      "path": "benchmarks/results/pbe0-implicit-class-force-20261010/paired-96.json.gz",
+      "family": "pbe0-implicit-class-force-20261010",
+      "bytes": 153936,
+      "sha256": "02d860f90dbeecfc85ca708df03edcea64ea60881280506f8badeb29c727f428",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched clean endpoint and all-call scientific/work records; composed explicit selection only, with differing cross-owner seeds and no cold/default/peak-memory claim."
     },
     {
       "path": "benchmarks/results/pbe0-resident-tiles-20261003/campaign.json.xz",

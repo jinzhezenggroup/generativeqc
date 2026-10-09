@@ -1,0 +1,26 @@
+{
+  "endpoint_timing_gate": "gain > max(0.02, 2 * (baseline_relative_MAD + candidate_relative_MAD)) at every size/phase",
+  "energy_gate_eh": 1e-08,
+  "force_gate_eh_per_bohr": 1e-07,
+  "physical_residual_gate": 1e-10,
+  "complete_calls_per_size": 46,
+  "timed_samples_per_side_per_phase": 5,
+  "independent_libcint_cases": 6,
+  "focused_current_master_integration_union": 16,
+  "original_integration_missing_package_failures": 2,
+  "exact_rechecks_passed": 2,
+  "memcheck_errors": 0,
+  "racecheck_errors": 0,
+  "racecheck_warnings": 0,
+  "observed_class_launches_per_sanitizer": 3,
+  "host_followup_cases": 4,
+  "device_default_and_explicit_followup_cases": 4,
+  "shared_formal_promotion_envelope": {
+    "status": "not-run",
+    "reason": "no actual isolated compile-cost/peak-memory budget measurements; no unsupported global default-promotion claim"
+  },
+  "unrelated_master_updates": [
+    "#2167 post-HF DF admission",
+    "#2173 DF CCSD expanded replay"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_order_seven_force.hpp",
+  "role": "runtime",
+  "subsystem": "runtime",
+  "reason": "Host launch ABI for the class-major force consumer, borrowing same-plan topology and force-owner buffers without allocation or numerical definitions.",
+  "regions": []
+}
