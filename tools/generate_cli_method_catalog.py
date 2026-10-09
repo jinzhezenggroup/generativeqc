@@ -139,8 +139,8 @@ def _row(identifier: str, spin: str) -> Row:
     method = resolve_method(identifier, spin=spin)
     plan = compile_ks_execution_plan(method)
     cpu, cuda, domain, reason = _admit(plan)
-    components = ()
-    exchange = ()
+    components: tuple[tuple[str, float], ...] = ()
+    exchange: tuple[tuple[int, float, float], ...] = ()
     if cpu or cuda:
         components = tuple(
             (name, float(coefficient))
