@@ -55,9 +55,7 @@ def _scf_xc_points(
     """Evaluate the exact native semilocal SCF point model."""
     if type(functional) is bool:
         functional = int(functional)
-    automatic = (
-        type(functional) is int and functional >= AUTOMATIC_FUNCTIONAL_CODE_BASE
-    )
+    automatic = type(functional) is int and functional >= AUTOMATIC_FUNCTIONAL_CODE_BASE
     if type(functional) is not int or (
         not automatic and functional not in SEMILOCAL_FAMILY_CODES
     ):
