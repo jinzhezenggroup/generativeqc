@@ -1216,6 +1216,21 @@ jobs:
             tests/python/test_hessian_reference.py
             tests/python/test_hessian_hvp.py
             tests/python/test_ecp_halogen_dft.py
+            # PR #2163 hit the routine cap twice. These compiler/native probes
+            # accounted for ~898 worker-seconds in run 37954793838. Transfer
+            # whole files to loadfile without changing unrelated core parity.
+            tests/python/test_native_contraction_binding.py
+            tests/python/test_rccsd_arena_liveness.py
+            tests/python/test_cc_cuda_scalar_reduction_codegen.py
+            tests/python/test_rccsd_response_admission.py
+            tests/python/test_rccsd_iteration_reuse.py
+            tests/python/test_stationary_cuda_lowering.py
+            tests/python/test_rccsdt_native_triples_response_owner.py
+            tests/python/test_becke_normalize_cooperative.py
+            tests/python/test_rccsd_numeric_capacity.py
+            tests/python/test_stationary_aot_generation.py
+            tests/python/test_cc_shared_iteration_driver.py
+            tests/python/test_rccsd_codegen_no_numpy.py
           )
           case "${{ matrix.shard }}" in
             core-a|core-b)
@@ -1338,6 +1353,18 @@ jobs:
                 tests/python/test_df_cc_native_codegen.py
                 tests/python/test_xc_retirement.py
                 tests/python/test_stationary_cooperative_kernel_host.py
+                tests/python/test_native_contraction_binding.py
+                tests/python/test_rccsd_arena_liveness.py
+                tests/python/test_cc_cuda_scalar_reduction_codegen.py
+                tests/python/test_rccsd_response_admission.py
+                tests/python/test_rccsd_iteration_reuse.py
+                tests/python/test_stationary_cuda_lowering.py
+                tests/python/test_rccsdt_native_triples_response_owner.py
+                tests/python/test_becke_normalize_cooperative.py
+                tests/python/test_rccsd_numeric_capacity.py
+                tests/python/test_stationary_aot_generation.py
+                tests/python/test_cc_shared_iteration_driver.py
+                tests/python/test_rccsd_codegen_no_numpy.py
               )
               ;;
             *)
