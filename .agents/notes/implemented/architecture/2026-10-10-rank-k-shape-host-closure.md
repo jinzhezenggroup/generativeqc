@@ -53,9 +53,11 @@ compilation. Ambient compiler/include/library overrides remain rejected.
 ## Evidence and scope
 
 Mutation/missing-input tests cover CUDA and staged host manifests. Shape tests
-require distinct request/scientific identities for `3x5` and `17x9`. The final
-device run must regenerate the actual host closure and pass the complete H100
-matrix before its receipts replace earlier evidence.
+require distinct request/scientific identities for `3x5` and `17x9`. qz Job
+`i1877-rankk-host-1010y2` generated a 3,666-role GCC closure; Job
+`i1877-rankk-h100-1010z2` regenerated the same manifest, compiled exact commit
+`c89ead5cd7b76ffe06bfb43cb66114e94ca386df`, and passed the complete H100 matrix
+with distinct identities for every weighted/shape family.
 
 ## Revisit when
 
