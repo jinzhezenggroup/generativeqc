@@ -171,9 +171,9 @@ class CudaSymmetricRankK final {
                      const runtime::NativeLoweringRequest& update_request,
                      const std::array<runtime::NativeLoweringCandidate, N>& update_candidates,
                      std::string_view update_target, std::string_view update_compilation,
-                     std::size_t n, std::size_t k, std::size_t batches, RankKOrder order,
-                     cudaStream_t stream, std::size_t provider_budget,
-                     bool library_qualified = false)
+                     std::size_t compiled_n, std::size_t compiled_k, std::size_t n, std::size_t k,
+                     std::size_t batches, RankKOrder order, cudaStream_t stream,
+                     std::size_t provider_budget, bool library_qualified = false)
       : n_(n), k_(k), batches_(batches), order_(order) {
     static_assert(N == 2);
     static_assert(sizeof(CudaSymmetricRankK) + 2 * sizeof(overwrite_candidates) + 8192 <=
@@ -181,7 +181,7 @@ class CudaSymmetricRankK final {
 #if !defined(GENERATIVEQC_TEST_HOOKS)
     if (library_qualified) throw std::invalid_argument("rank-k library qualification is test-only");
 #endif
-    const bool row_request =
+    const bool small_row_request =
         (overwrite_request.identity ==
              rank_k_generated::rank_k_density_row_overwrite_request.identity &&
          update_request.identity == rank_k_generated::rank_k_density_row_update_request.identity) ||
@@ -189,7 +189,16 @@ class CudaSymmetricRankK final {
              rank_k_generated::rank_k_weighted_density_row_overwrite_request.identity &&
          update_request.identity ==
              rank_k_generated::rank_k_weighted_density_row_update_request.identity);
-    const bool column_request =
+    const bool large_row_request =
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_density_n17_k9_row_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_density_n17_k9_row_update_request.identity) ||
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_weighted_density_n17_k9_row_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_weighted_density_n17_k9_row_update_request.identity);
+    const bool small_column_request =
         (overwrite_request.identity ==
              rank_k_generated::rank_k_density_column_overwrite_request.identity &&
          update_request.identity ==
@@ -198,9 +207,24 @@ class CudaSymmetricRankK final {
              rank_k_generated::rank_k_weighted_density_column_overwrite_request.identity &&
          update_request.identity ==
              rank_k_generated::rank_k_weighted_density_column_update_request.identity);
+    const bool large_column_request =
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_density_n17_k9_column_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_density_n17_k9_column_update_request.identity) ||
+        (overwrite_request.identity ==
+             rank_k_generated::rank_k_weighted_density_n17_k9_column_overwrite_request.identity &&
+         update_request.identity ==
+             rank_k_generated::rank_k_weighted_density_n17_k9_column_update_request.identity);
+    const bool row_request = small_row_request || large_row_request;
+    const bool column_request = small_column_request || large_column_request;
+    const bool large_request = large_row_request || large_column_request;
+    const bool large_shape = compiled_n == 17 && compiled_k == 9;
     if ((order != RankKOrder::RowMajor && order != RankKOrder::ColumnMajor) ||
-        row_request == column_request || row_request != (order == RankKOrder::RowMajor))
-      throw std::invalid_argument("rank-k physical order does not match the compiled request");
+        row_request == column_request || row_request != (order == RankKOrder::RowMajor) ||
+        (!large_shape && !(compiled_n == 3 && compiled_k == 5)) || large_request != large_shape ||
+        compiled_n != n || compiled_k != k)
+      throw std::invalid_argument("rank-k runtime shape/order differs from the compiled request");
     const auto valid = [](const auto& request, const auto& candidates, std::size_t inputs) {
       return request.dtype == runtime::PrecisionDtype::Fp64 &&
              request.accumulation_dtype == runtime::PrecisionDtype::Fp64 &&

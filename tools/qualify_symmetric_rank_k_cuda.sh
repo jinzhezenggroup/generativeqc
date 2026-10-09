@@ -17,7 +17,8 @@ cd "$repo_root"
 
 # These overrides can introduce files outside the fixed recipe's inventory.
 for variable in NVCC_PREPEND_FLAGS NVCC_APPEND_FLAGS CPATH C_INCLUDE_PATH \
-                CPLUS_INCLUDE_PATH LIBRARY_PATH COMPILER_PATH GCC_EXEC_PREFIX; do
+                CPLUS_INCLUDE_PATH LIBRARY_PATH COMPILER_PATH GCC_EXEC_PREFIX \
+                GCC_COMPARE_DEBUG DEPENDENCIES_OUTPUT SUNPRO_DEPENDENCIES LD_PRELOAD; do
   if [[ -n "${!variable:-}" ]]; then
     echo "$variable is unsupported by the fixed rank-k qualification recipe" >&2
     exit 2
@@ -44,7 +45,8 @@ fi
 snapshot_root=$(dirname "$repo_root")
 if [[ ! -f "$snapshot_root/source-commit.txt" ]] ||
    [[ ! -f "$snapshot_root/source-identity.sha256" ]] ||
-   [[ ! -f "$snapshot_root/generated.sha256" ]]; then
+   [[ ! -f "$snapshot_root/generated.sha256" ]] ||
+   [[ ! -f "$snapshot_root/host-toolchain-manifest.json" ]]; then
   echo "rank-k CUDA qualification requires CPU-prepared source receipts" >&2
   exit 2
 fi
@@ -104,6 +106,13 @@ if ! sha256sum -c "$snapshot_root/generated.sha256" \
   echo "rank-k generated header mismatch" >&2
   exit 2
 fi
+"$python_exe" -I -S tools/generate_rank_k_host_toolchain_manifest.py \
+  --compiler "$host_exe" --output "$output_dir/host-toolchain-manifest.json"
+if ! cmp "$snapshot_root/host-toolchain-manifest.json" \
+     "$output_dir/host-toolchain-manifest.json"; then
+  echo "rank-k host compiler closure differs from the staged manifest" >&2
+  exit 2
+fi
 export SCCACHE_DIR="$snapshot_root/cache"
 export PATH="$toolkit_root/bin:$PATH"
 echo "source_commit=$actual_commit" | tee "$output_dir/provenance.txt"
@@ -111,7 +120,8 @@ sha256sum "$snapshot_root/source-identity.sha256" >> "$output_dir/provenance.txt
 sha256sum "$snapshot_root/generated.sha256" >> "$output_dir/provenance.txt"
 "$nvcc_exe" --version | tee -a "$output_dir/provenance.txt"
 sha256sum "${toolchain_files[@]}" >> "$output_dir/provenance.txt"
-sha256sum "$host_exe" "$python_exe" >> "$output_dir/provenance.txt"
+sha256sum "$host_exe" "$output_dir/host-toolchain-manifest.json" \
+  "$python_exe" >> "$output_dir/provenance.txt"
 nvidia-smi --query-gpu=name,compute_cap,driver_version --format=csv,noheader |
   tee -a "$output_dir/provenance.txt"
 "$cache_exe" --show-stats > "$output_dir/sccache-before.txt"
@@ -120,6 +130,7 @@ cp "$snapshot_root/generated/generated_symmetric_rank_k.cuh" \
   "$output_dir/generated/generated_symmetric_rank_k.cuh"
 "$python_exe" -I -S tools/generate_symmetric_rank_k_cuda.py \
   --toolkit-root "$toolkit_root" --host-compiler "$host_exe" \
+  --host-toolchain-manifest "$output_dir/host-toolchain-manifest.json" \
   --output "$output_dir/generated/verified_symmetric_rank_k.cuh"
 if ! cmp "$output_dir/generated/generated_symmetric_rank_k.cuh" \
      "$output_dir/generated/verified_symmetric_rank_k.cuh"; then

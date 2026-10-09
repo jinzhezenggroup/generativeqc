@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -42,11 +43,79 @@ _TOOLCHAIN_FILES = (
 )
 
 
-def compiler_identity(root: Path, toolkit_root: Path, host_compiler: Path) -> str:
+def _host_toolchain_identity(host_compiler: Path, manifest: Path) -> dict:
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    if data.get("schema") != "generativeqc.rank-k-host-toolchain.v1":
+        raise ValueError("unsupported rank-k host-toolchain manifest")
+    entries = data.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("rank-k host-toolchain manifest has no entries")
+    normalized = []
+    roles = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"role", "sha256"}:
+            raise ValueError("invalid rank-k host-toolchain entry")
+        role, digest = entry["role"], entry["sha256"]
+        if (
+            not isinstance(role, str)
+            or not role
+            or role in roles
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError("invalid rank-k host-toolchain role or digest")
+        roles.add(role)
+        normalized.append({"role": role, "sha256": digest})
+    required = {
+        "program:driver",
+        "program:cc1plus",
+        "program:as",
+        "program:collect2",
+        "program:ld",
+        "config:gcc-specs",
+        "config:ld-default-script",
+        "link-input:libstdc++.so",
+        "link-input:libgcc.a",
+        "link-input:crtbeginS.o",
+    }
+    if not required.issubset(roles) or not any(
+        role.startswith("header:") for role in roles
+    ):
+        raise ValueError("incomplete rank-k host-toolchain manifest")
+    compiler_digest = file_hash(host_compiler)
+    if data.get("compiler_sha256") != compiler_digest:
+        raise ValueError(
+            "rank-k host-toolchain manifest names different compiler bytes"
+        )
+    target, version = data.get("target"), data.get("version")
+    if (
+        not isinstance(target, str)
+        or not target
+        or not isinstance(version, str)
+        or not version
+    ):
+        raise ValueError("rank-k host-toolchain target/version is missing")
+    return {
+        "schema": data["schema"],
+        "compiler_sha256": compiler_digest,
+        "target": target,
+        "version": version,
+        "entries": sorted(normalized, key=lambda entry: entry["role"]),
+    }
+
+
+def compiler_identity(
+    root: Path,
+    toolkit_root: Path,
+    host_compiler: Path,
+    host_toolchain_manifest: Path,
+) -> str:
     """Bind inventoried inputs for the fixed recipe; not a hermetic build proof."""
     root = root.resolve()
     toolkit_root = toolkit_root.resolve()
     host_compiler = host_compiler.resolve()
+    host_toolchain_manifest = host_toolchain_manifest.resolve()
     manifest = root / "cmake/GenerativeQCSourceIdentity.json"
     toolchain = {}
     for relative in _TOOLCHAIN_FILES:
@@ -61,7 +130,7 @@ def compiler_identity(root: Path, toolkit_root: Path, host_compiler: Path) -> st
     }
     if not headers:
         raise FileNotFoundError("missing rank-k toolkit headers")
-    toolchain["host_compiler"] = file_hash(host_compiler)
+    toolchain["host"] = _host_toolchain_identity(host_compiler, host_toolchain_manifest)
     environment = {}
     for name in (
         "NVCC_PREPEND_FLAGS",
@@ -72,6 +141,10 @@ def compiler_identity(root: Path, toolkit_root: Path, host_compiler: Path) -> st
         "LIBRARY_PATH",
         "COMPILER_PATH",
         "GCC_EXEC_PREFIX",
+        "GCC_COMPARE_DEBUG",
+        "DEPENDENCIES_OUTPUT",
+        "SUNPRO_DEPENDENCIES",
+        "LD_PRELOAD",
     ):
         if os.environ.get(name, ""):
             raise ValueError(
@@ -155,19 +228,30 @@ def render(source: str) -> str:
         ("density", density_program),
         ("weighted_density", weighted_density_program),
     ):
-        program = builder(1, 3, spin_count=2, orbital_count=5)
-        for suffix, order in (("row", "row-major"), ("column", "column-major")):
-            for update in ("overwrite", "update"):
-                bodies.append(
-                    emit_symmetric_rank_k_portfolio(
-                        program,
-                        name,
-                        source,
-                        name=f"rank_k_{name}_{suffix}_{update}",
-                        order=order,
-                        update=update,
+        for n, k, shape_suffix in ((3, 5, ""), (17, 9, "_n17_k9")):
+            program = builder(1, n, spin_count=2, orbital_count=k)
+            for suffix, order in (
+                ("row", "row-major"),
+                ("column", "column-major"),
+            ):
+                for update in ("overwrite", "update"):
+                    portfolio_name = f"rank_k_{name}{shape_suffix}_{suffix}_{update}"
+                    bodies.append(
+                        emit_symmetric_rank_k_portfolio(
+                            program,
+                            name,
+                            source,
+                            name=portfolio_name,
+                            order=order,
+                            update=update,
+                        )
                     )
-                )
+                    bodies.append(
+                        f"inline constexpr std::size_t {portfolio_name}_n = {n};"
+                    )
+                    bodies.append(
+                        f"inline constexpr std::size_t {portfolio_name}_k = {k};"
+                    )
     bodies.append("}  // namespace generativeqc::tensor::rank_k_generated")
     return "\n".join(bodies) + "\n"
 
@@ -177,10 +261,18 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--toolkit-root", type=Path, required=True)
     parser.add_argument("--host-compiler", type=Path, required=True)
+    parser.add_argument("--host-toolchain-manifest", type=Path, required=True)
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
-        render(compiler_identity(ROOT, args.toolkit_root, args.host_compiler)),
+        render(
+            compiler_identity(
+                ROOT,
+                args.toolkit_root,
+                args.host_compiler,
+                args.host_toolchain_manifest,
+            )
+        ),
         encoding="utf-8",
     )
 

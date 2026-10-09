@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -197,6 +199,32 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
         path.write_text(relative)
     host_compiler = tmp_path / "host-compiler"
     host_compiler.write_text("qualified host compiler bytes")
+    host_digest = hashlib.sha256(host_compiler.read_bytes()).hexdigest()
+    roles = (
+        "program:driver",
+        "program:cc1plus",
+        "program:as",
+        "program:collect2",
+        "program:ld",
+        "config:gcc-specs",
+        "config:ld-default-script",
+        "link-input:libstdc++.so",
+        "link-input:libgcc.a",
+        "link-input:crtbeginS.o",
+        "header:0:fixture.hpp",
+    )
+    host_manifest = tmp_path / "host-toolchain.json"
+    host_manifest.write_text(
+        json.dumps(
+            {
+                "schema": "generativeqc.rank-k-host-toolchain.v1",
+                "compiler_sha256": host_digest,
+                "target": "x86_64-linux-gnu",
+                "version": "11.4.0",
+                "entries": [{"role": role, "sha256": host_digest} for role in roles],
+            }
+        )
+    )
     output = tmp_path / "generated.cuh"
 
     def generate() -> bytes:
@@ -210,6 +238,8 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
                 str(toolkit),
                 "--host-compiler",
                 str(host_compiler),
+                "--host-toolchain-manifest",
+                str(host_manifest),
             ],
             cwd=tmp_path,
             env=environment,
@@ -225,6 +255,19 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
     assert b"rank_k_alpha_beta_update" in before
     (toolkit / "bin/nvcc").write_text("changed compiler bytes")
     assert generate() != before
+
+
+def test_executed_shapes_have_distinct_bound_requests() -> None:
+    small = symmetric_rank_k_request(
+        density_program(1, 3, spin_count=2, orbital_count=5), "density"
+    )
+    large = symmetric_rank_k_request(
+        density_program(1, 17, spin_count=2, orbital_count=9), "density"
+    )
+    assert small.scientific_identity != large.scientific_identity
+    assert small.identity != large.identity
+    assert small.operands[0].shape == (3, 5)
+    assert large.operands[0].shape == (17, 9)
 
 
 def test_rank_k_rejects_mixed_precision() -> None:

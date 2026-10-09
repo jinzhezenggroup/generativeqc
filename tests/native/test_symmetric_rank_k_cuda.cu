@@ -65,61 +65,129 @@ static std::size_t matrix_index(std::size_t batch, std::size_t row, std::size_t 
 }
 
 static const std::array<generativeqc::runtime::NativeLoweringCandidate, 2>& candidates(
-    bool weighted, RankKOrder order, bool overwrite) {
+    bool weighted, RankKOrder order, bool overwrite, std::size_t n, std::size_t k) {
+  const bool large = n == 17 && k == 9;
+  if (!large && !(n == 3 && k == 5))
+    throw std::invalid_argument("rank-k qualification shape has no emitted request");
   if (weighted)
     return order == RankKOrder::RowMajor
-               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_candidates
-                            : metadata::rank_k_weighted_density_row_update_candidates)
-               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_candidates
-                            : metadata::rank_k_weighted_density_column_update_candidates);
+               ? (overwrite
+                      ? (large ? metadata::rank_k_weighted_density_n17_k9_row_overwrite_candidates
+                               : metadata::rank_k_weighted_density_row_overwrite_candidates)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_row_update_candidates
+                               : metadata::rank_k_weighted_density_row_update_candidates))
+               : (overwrite
+                      ? (large
+                             ? metadata::rank_k_weighted_density_n17_k9_column_overwrite_candidates
+                             : metadata::rank_k_weighted_density_column_overwrite_candidates)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_column_update_candidates
+                               : metadata::rank_k_weighted_density_column_update_candidates));
   return order == RankKOrder::RowMajor
-             ? (overwrite ? metadata::rank_k_density_row_overwrite_candidates
-                          : metadata::rank_k_density_row_update_candidates)
-             : (overwrite ? metadata::rank_k_density_column_overwrite_candidates
-                          : metadata::rank_k_density_column_update_candidates);
+             ? (overwrite ? (large ? metadata::rank_k_density_n17_k9_row_overwrite_candidates
+                                   : metadata::rank_k_density_row_overwrite_candidates)
+                          : (large ? metadata::rank_k_density_n17_k9_row_update_candidates
+                                   : metadata::rank_k_density_row_update_candidates))
+             : (overwrite ? (large ? metadata::rank_k_density_n17_k9_column_overwrite_candidates
+                                   : metadata::rank_k_density_column_overwrite_candidates)
+                          : (large ? metadata::rank_k_density_n17_k9_column_update_candidates
+                                   : metadata::rank_k_density_column_update_candidates));
 }
 
 static const generativeqc::runtime::NativeLoweringRequest& request(bool weighted, RankKOrder order,
-                                                                   bool overwrite) {
+                                                                   bool overwrite, std::size_t n,
+                                                                   std::size_t k) {
+  const bool large = n == 17 && k == 9;
+  if (!large && !(n == 3 && k == 5))
+    throw std::invalid_argument("rank-k qualification shape has no emitted request");
   if (weighted)
     return order == RankKOrder::RowMajor
-               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_request
-                            : metadata::rank_k_weighted_density_row_update_request)
-               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_request
-                            : metadata::rank_k_weighted_density_column_update_request);
+               ? (overwrite
+                      ? (large ? metadata::rank_k_weighted_density_n17_k9_row_overwrite_request
+                               : metadata::rank_k_weighted_density_row_overwrite_request)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_row_update_request
+                               : metadata::rank_k_weighted_density_row_update_request))
+               : (overwrite
+                      ? (large ? metadata::rank_k_weighted_density_n17_k9_column_overwrite_request
+                               : metadata::rank_k_weighted_density_column_overwrite_request)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_column_update_request
+                               : metadata::rank_k_weighted_density_column_update_request));
   return order == RankKOrder::RowMajor
-             ? (overwrite ? metadata::rank_k_density_row_overwrite_request
-                          : metadata::rank_k_density_row_update_request)
-             : (overwrite ? metadata::rank_k_density_column_overwrite_request
-                          : metadata::rank_k_density_column_update_request);
+             ? (overwrite ? (large ? metadata::rank_k_density_n17_k9_row_overwrite_request
+                                   : metadata::rank_k_density_row_overwrite_request)
+                          : (large ? metadata::rank_k_density_n17_k9_row_update_request
+                                   : metadata::rank_k_density_row_update_request))
+             : (overwrite ? (large ? metadata::rank_k_density_n17_k9_column_overwrite_request
+                                   : metadata::rank_k_density_column_overwrite_request)
+                          : (large ? metadata::rank_k_density_n17_k9_column_update_request
+                                   : metadata::rank_k_density_column_update_request));
 }
 
-static std::string_view target(bool weighted, RankKOrder order, bool overwrite) {
+static std::string_view target(bool weighted, RankKOrder order, bool overwrite, std::size_t n,
+                               std::size_t k) {
+  const bool large = n == 17 && k == 9;
+  if (!large && !(n == 3 && k == 5))
+    throw std::invalid_argument("rank-k qualification shape has no emitted request");
   if (weighted)
     return order == RankKOrder::RowMajor
-               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_target
-                            : metadata::rank_k_weighted_density_row_update_target)
-               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_target
-                            : metadata::rank_k_weighted_density_column_update_target);
+               ? (overwrite ? (large ? metadata::rank_k_weighted_density_n17_k9_row_overwrite_target
+                                     : metadata::rank_k_weighted_density_row_overwrite_target)
+                            : (large ? metadata::rank_k_weighted_density_n17_k9_row_update_target
+                                     : metadata::rank_k_weighted_density_row_update_target))
+               : (overwrite
+                      ? (large ? metadata::rank_k_weighted_density_n17_k9_column_overwrite_target
+                               : metadata::rank_k_weighted_density_column_overwrite_target)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_column_update_target
+                               : metadata::rank_k_weighted_density_column_update_target));
   return order == RankKOrder::RowMajor
-             ? (overwrite ? metadata::rank_k_density_row_overwrite_target
-                          : metadata::rank_k_density_row_update_target)
-             : (overwrite ? metadata::rank_k_density_column_overwrite_target
-                          : metadata::rank_k_density_column_update_target);
+             ? (overwrite ? (large ? metadata::rank_k_density_n17_k9_row_overwrite_target
+                                   : metadata::rank_k_density_row_overwrite_target)
+                          : (large ? metadata::rank_k_density_n17_k9_row_update_target
+                                   : metadata::rank_k_density_row_update_target))
+             : (overwrite ? (large ? metadata::rank_k_density_n17_k9_column_overwrite_target
+                                   : metadata::rank_k_density_column_overwrite_target)
+                          : (large ? metadata::rank_k_density_n17_k9_column_update_target
+                                   : metadata::rank_k_density_column_update_target));
 }
 
-static std::string_view compilation(bool weighted, RankKOrder order, bool overwrite) {
+static std::string_view compilation(bool weighted, RankKOrder order, bool overwrite, std::size_t n,
+                                    std::size_t k) {
+  const bool large = n == 17 && k == 9;
+  if (!large && !(n == 3 && k == 5))
+    throw std::invalid_argument("rank-k qualification shape has no emitted request");
   if (weighted)
     return order == RankKOrder::RowMajor
-               ? (overwrite ? metadata::rank_k_weighted_density_row_overwrite_compilation
-                            : metadata::rank_k_weighted_density_row_update_compilation)
-               : (overwrite ? metadata::rank_k_weighted_density_column_overwrite_compilation
-                            : metadata::rank_k_weighted_density_column_update_compilation);
+               ? (overwrite
+                      ? (large ? metadata::rank_k_weighted_density_n17_k9_row_overwrite_compilation
+                               : metadata::rank_k_weighted_density_row_overwrite_compilation)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_row_update_compilation
+                               : metadata::rank_k_weighted_density_row_update_compilation))
+               : (overwrite
+                      ? (large
+                             ? metadata::rank_k_weighted_density_n17_k9_column_overwrite_compilation
+                             : metadata::rank_k_weighted_density_column_overwrite_compilation)
+                      : (large ? metadata::rank_k_weighted_density_n17_k9_column_update_compilation
+                               : metadata::rank_k_weighted_density_column_update_compilation));
   return order == RankKOrder::RowMajor
-             ? (overwrite ? metadata::rank_k_density_row_overwrite_compilation
-                          : metadata::rank_k_density_row_update_compilation)
-             : (overwrite ? metadata::rank_k_density_column_overwrite_compilation
-                          : metadata::rank_k_density_column_update_compilation);
+             ? (overwrite ? (large ? metadata::rank_k_density_n17_k9_row_overwrite_compilation
+                                   : metadata::rank_k_density_row_overwrite_compilation)
+                          : (large ? metadata::rank_k_density_n17_k9_row_update_compilation
+                                   : metadata::rank_k_density_row_update_compilation))
+             : (overwrite ? (large ? metadata::rank_k_density_n17_k9_column_overwrite_compilation
+                                   : metadata::rank_k_density_column_overwrite_compilation)
+                          : (large ? metadata::rank_k_density_n17_k9_column_update_compilation
+                                   : metadata::rank_k_density_column_update_compilation));
+}
+
+static std::size_t compiled_n(std::size_t n, std::size_t k) {
+  if (n == 17 && k == 9) return metadata::rank_k_density_n17_k9_row_update_n;
+  if (n == 3 && k == 5) return metadata::rank_k_density_row_update_n;
+  throw std::invalid_argument("rank-k qualification shape has no emitted request");
+}
+
+static std::size_t compiled_k(std::size_t n, std::size_t k) {
+  if (n == 17 && k == 9) return metadata::rank_k_density_n17_k9_row_update_k;
+  if (n == 3 && k == 5) return metadata::rank_k_density_row_update_k;
+  throw std::invalid_argument("rank-k qualification shape has no emitted request");
 }
 
 static void verify(const std::vector<double>& result, const std::vector<double>& baseline,
@@ -195,11 +263,12 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
     bool rejected_overflow = false;
     try {
       CudaSymmetricRankK overflow(
-          request(weighted, order, true), candidates(weighted, order, true),
-          target(weighted, order, true), compilation(weighted, order, true),
-          request(weighted, order, false), candidates(weighted, order, false),
-          target(weighted, order, false), compilation(weighted, order, false),
-          std::numeric_limits<std::size_t>::max(), 2, 2, order, stream, 0);
+          request(weighted, order, true, n, k), candidates(weighted, order, true, n, k),
+          target(weighted, order, true, n, k), compilation(weighted, order, true, n, k),
+          request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
+          target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
+          compiled_n(n, k), compiled_k(n, k), std::numeric_limits<std::size_t>::max(), 2, 2, order,
+          stream, 0);
     } catch (const std::length_error&) {
       rejected_overflow = true;
     }
@@ -208,10 +277,11 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
   bool rejected_order = false;
   try {
     CudaSymmetricRankK wrong(
-        request(weighted, order, true), candidates(weighted, order, true),
-        target(weighted, order, true), compilation(weighted, order, true),
-        request(weighted, order, false), candidates(weighted, order, false),
-        target(weighted, order, false), compilation(weighted, order, false), n, k, batches,
+        request(weighted, order, true, n, k), candidates(weighted, order, true, n, k),
+        target(weighted, order, true, n, k), compilation(weighted, order, true, n, k),
+        request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
+        target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
+        compiled_n(n, k), compiled_k(n, k), n, k, batches,
         order == RankKOrder::RowMajor ? RankKOrder::ColumnMajor : RankKOrder::RowMajor, stream, 0);
   } catch (const std::invalid_argument&) {
     rejected_order = true;
@@ -220,21 +290,36 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
   if (n == 3 && !weighted && !want_library && order == RankKOrder::RowMajor) {
     bool rejected_pair = false;
     try {
-      CudaSymmetricRankK mismatched(request(false, order, true), candidates(false, order, true),
-                                    target(false, order, true), compilation(false, order, true),
-                                    request(true, order, false), candidates(true, order, false),
-                                    target(true, order, false), compilation(true, order, false), n,
-                                    k, batches, order, stream, 0);
+      CudaSymmetricRankK mismatched(
+          request(false, order, true, n, k), candidates(false, order, true, n, k),
+          target(false, order, true, n, k), compilation(false, order, true, n, k),
+          request(true, order, false, n, k), candidates(true, order, false, n, k),
+          target(true, order, false, n, k), compilation(true, order, false, n, k), compiled_n(n, k),
+          compiled_k(n, k), n, k, batches, order, stream, 0);
     } catch (const std::invalid_argument&) {
       rejected_pair = true;
     }
     if (!rejected_pair) throw std::runtime_error("rank-k paired different scientific roots");
 
-    CudaSymmetricRankK bounded(request(weighted, order, true), candidates(weighted, order, true),
-                               target(weighted, order, true), compilation(weighted, order, true),
-                               request(weighted, order, false), candidates(weighted, order, false),
-                               target(weighted, order, false), compilation(weighted, order, false),
-                               n, k, batches, order, stream, 0, true);
+    bool rejected_shape = false;
+    try {
+      CudaSymmetricRankK mismatched_shape(
+          request(weighted, order, true, n, k), candidates(weighted, order, true, n, k),
+          target(weighted, order, true, n, k), compilation(weighted, order, true, n, k),
+          request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
+          target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
+          compiled_n(n, k), compiled_k(n, k), 17, 9, batches, order, stream, 0);
+    } catch (const std::invalid_argument&) {
+      rejected_shape = true;
+    }
+    if (!rejected_shape) throw std::runtime_error("rank-k accepted wrong request shape");
+
+    CudaSymmetricRankK bounded(
+        request(weighted, order, true, n, k), candidates(weighted, order, true, n, k),
+        target(weighted, order, true, n, k), compilation(weighted, order, true, n, k),
+        request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
+        target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
+        compiled_n(n, k), compiled_k(n, k), n, k, batches, order, stream, 0, true);
     if (bounded.diagnostic().selected.provider != "generated.cuda" ||
         bounded.diagnostic().library_rejection.find("allowance") == std::string_view::npos)
       throw std::runtime_error("rank-k resource miss did not retain generated fallback");
@@ -251,12 +336,13 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
     verify(result, baseline, coefficients, weights, n, k, batches, order, alpha, beta);
   }
   {
-    CudaSymmetricRankK binding(request(weighted, order, true), candidates(weighted, order, true),
-                               target(weighted, order, true), compilation(weighted, order, true),
-                               request(weighted, order, false), candidates(weighted, order, false),
-                               target(weighted, order, false), compilation(weighted, order, false),
-                               n, k, batches, order, stream, want_library ? 256ULL << 20 : 0,
-                               want_library);
+    CudaSymmetricRankK binding(
+        request(weighted, order, true, n, k), candidates(weighted, order, true, n, k),
+        target(weighted, order, true, n, k), compilation(weighted, order, true, n, k),
+        request(weighted, order, false, n, k), candidates(weighted, order, false, n, k),
+        target(weighted, order, false, n, k), compilation(weighted, order, false, n, k),
+        compiled_n(n, k), compiled_k(n, k), n, k, batches, order, stream,
+        want_library ? 256ULL << 20 : 0, want_library);
     const auto& diagnostic = binding.diagnostic();
     if ((diagnostic.selected.provider == "cublas") != want_library)
       throw std::runtime_error("rank-k selected wrong executable provider");
@@ -435,7 +521,7 @@ static void run_case(std::size_t n, std::size_t k, std::size_t batches, RankKOrd
               << ",\"provider_version\":" << diagnostic.provider_version
               << ",\"runtime_version\":" << diagnostic.runtime_version
               << ",\"scientific_identity\":\""
-              << request(weighted, order, false).scientific_identity << "\"}" << std::endl;
+              << request(weighted, order, false, n, k).scientific_identity << "\"}" << std::endl;
   }
   check(cudaStreamDestroy(stream));
 }
