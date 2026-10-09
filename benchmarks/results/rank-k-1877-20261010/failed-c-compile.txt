@@ -1,0 +1,5 @@
+/inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/repo/src/tensor/cuda_symmetric_rank_k.cuh(76): error: identifier "CUDART_NAN" is undefined
+        return CUDART_NAN;
+               ^
+
+1 error detected in the compilation of "/inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/repo/tests/native/test_symmetric_rank_k_cuda.cu".

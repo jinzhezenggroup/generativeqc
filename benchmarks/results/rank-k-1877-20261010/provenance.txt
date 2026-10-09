@@ -1,0 +1,14 @@
+source_commit=41f920b512e25dc6da8c08130de9bbda15e71cbe
+7ffba5b2314afe369ff071edfb039e8bcf1c2805d91c8a7d68dda83d6a88b4e7  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/source-identity.sha256
+45a573663fdba315971cef491a310b5ecbc89e6cb95f813abf04e256434f2b79  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/generated.sha256
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+df9974db233a0b7a6c6d59c0e5d74e011566104098bcb3553495ff1b95bdeaf6  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/tooling/cuda-12.9/bin/nvcc
+983b0e9283855979f42cebfd80d43f9b6e786eb84f03f7570bf941c4d3a3c461  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/tooling/cuda-12.9/bin/ptxas
+5757ab5839fb4f203ca47ecb336110d10f4a5606b1e097f195fbca89774569e2  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/tooling/cuda-12.9/lib64/libcublas.so.12
+2c9006a75c74b3bea2dc7ae2ec38ab038b0e45ea02cb4b717a915e8a5796acb1  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/tooling/cuda-12.9/lib64/libcublasLt.so.12
+256e6409e4f06f618e1fb53d4844a6b81cdded1013afa8ade40c22f99eb133b7  /inspire/ssd/project/chemicalreaction/czxs25220150/issue-1877-rankk-1010/tooling/cuda-12.9/lib64/libcudart.so.12
+NVIDIA H100 80GB HBM3, 9.0, 570.124.06
