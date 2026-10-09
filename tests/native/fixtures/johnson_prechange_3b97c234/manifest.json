@@ -21,7 +21,9 @@
     },
     "consumer.cpp": {
       "path": "tests/native/test_ordered_history_consumers.cpp",
-      "sha256": "c80a515462df6e257479d3c0a1fe1c50aea37e6e1413296061163bb2d045ca09"
+      "sha256": "2ab010dd5490fbcfcc0625c0830e626f493a4f7e98e4c443e77e191413dc6d40",
+      "original_sha256": "c80a515462df6e257479d3c0a1fe1c50aea37e6e1413296061163bb2d045ca09",
+      "extraction": "Only the test consumer's aligned allocation/free pair and required include were adjusted for CodeQL; frozen SCC scientific source, mathematics and generated artifacts are unchanged."
     }
   },
   "generated": {
