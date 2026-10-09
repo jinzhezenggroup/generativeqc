@@ -43,14 +43,27 @@ def test_complete_geometry_inventory(
     path.write_bytes(payload)
     # Update both storage envelopes: the changed samples must get past hash
     # binding before the semantic inventory check can reject the mutation.
-    validation_path = tmp_path / "validation.json"
-    validation = json.loads(validation_path.read_text())
+    manifest_path = tmp_path / "publication.json"
+    manifest = json.loads(manifest_path.read_text())
+    member = next(
+        member for member in manifest["files"] if member["role"] == "evidence"
+    )
+    validation_path = tmp_path / member["path"]
+    raw_validation = validation_path.read_bytes()
+    validation = json.loads(
+        gzip.decompress(raw_validation)
+        if validation_path.suffix == ".gz"
+        else raw_validation
+    )
     for attachment in validation["attachments"]:
         if attachment["path"] == name:
             attachment["sha256"] = hashlib.sha256(payload).hexdigest()
-    validation_path.write_text(json.dumps(validation) + "\n")
-    manifest_path = tmp_path / "publication.json"
-    manifest = json.loads(manifest_path.read_text())
+    validation_payload = (json.dumps(validation) + "\n").encode()
+    validation_path.write_bytes(
+        gzip.compress(validation_payload, mtime=0)
+        if validation_path.suffix == ".gz"
+        else validation_payload
+    )
     for member in manifest["files"]:
         content = (tmp_path / member["path"]).read_bytes()
         member.update(bytes=len(content), sha256=hashlib.sha256(content).hexdigest())

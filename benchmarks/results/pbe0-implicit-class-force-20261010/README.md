@@ -90,12 +90,28 @@ snapshots are retained, but are not substituted for those measurements.
 `qualification.json` therefore marks the shared formal default-promotion
 envelope **not run**. These data support only the declared composed endpoint.
 
+`unsigned-portability.patch.gz` is a second **untimed** followup. It uses
+unsigned comparisons for physical pair orientation instead of provider-dependent
+signed-only `max/min` overloads; casting their narrowed results is not safe
+above INT32_MAX. Actual-source compiled probes include the UINT32_MAX boundary.
+The focused CI-repair set executes 512 host cases. Slurm 6930 separately builds
+the repaired tree through the existing verified ccache and executes one
+independent libcint Separate/Combined/replay case without skips; the retained
+qualification-only observer proves three class-kernel launches. Its library is
+`3a606d0ec5cd1267935327672c45a5bf7a15f1d10a8626e221502f529623c9d8`.
+The first reconfiguration attempt (Slurm 6929) fails before compilation because
+the copied CMake configuration retains its old checkout path; that failure is
+retained, not relabelled as a numerical failure or successful first build.
+All 31 original archives remain byte-identical. No timing population or sanitizer
+matrix is repeated for this expression-only portability repair.
+
 ## Reproduction and retention
 
 - `paired-{48,96}.json.gz`: all construction/setup/prime/sample outputs and work.
 - `reference-{48,96}.json.gz`: unchanged independent references and full protocol.
 - `summary.json`, `provenance.json`, `qualification.json`: exact medians and scope.
-- `measured-source.patch.gz`, `explicit-default.patch.gz`: separate source deltas.
+- `measured-source.patch.gz`, `explicit-default.patch.gz`: original source deltas.
+- `unsigned-portability.patch.gz`: subsequent, separately qualified portability fix.
 - `paired-force7.py.gz`, `paired-ao-endpoint.py.gz`: exact driver and owner adapter.
 - `verify-{formal,seeds,diagnostic}.py.gz`: independent acceptance checks.
 - `diagnostic-*.json.gz`: independent mechanism checks/class census and TSV data.
@@ -114,6 +130,10 @@ qualification. Place the exact owner adapter in `evidence/bulk-point-v7/`,
 the driver in `evidence/force7-class-master-v1/`, and references at their
 `reference-{48,96}-retained-perf5.json` names. Apply the default-preservation
 patch only in a separate followup tree; do not overwrite the measured binary.
+For the repaired native source, apply the unsigned-portability patch after the
+default-preservation patch. This three-delta reconstruction is checked against
+the current CUDA/CMake source bytes; the timed source and library stay pinned
+to their original identities.
 
 All real GPU work must use a finite compatible allocation and preserve its
 device visibility, for example:

@@ -22,5 +22,12 @@
   "unrelated_master_updates": [
     "#2167 post-HF DF admission",
     "#2173 DF CCSD expanded replay"
-  ]
+  ],
+  "unsigned_portability_followup": {
+    "focused_host_cases": 512,
+    "independent_libcint_cases": 1,
+    "observed_class_launches": 3,
+    "timing": "not-repeated",
+    "sanitizers": "not-repeated; expression-only portability repair leaves NVIDIA arithmetic and layout unchanged"
+  }
 }

@@ -90,5 +90,12 @@
   "followup_scope": "only preserve the unset prepared-Hcore default; explicit measured schedules and all kernel algebra are unchanged; followup is not retimed",
   "peak_memory_measurement": "not measured; raw records retain resource bounds and construction free-device snapshots",
   "isolated_compile_cost_measurement": "not measured; actual cache receipts and build logs are retained",
-  "raw_seed_location": ".artifacts/force7-class-stage/evidence/current-formal/ and n1:/data/jzzeng/qc-next-hotspot-20261009-125a4e33f/evidence/force7-class-master-v1/formal/"
+  "raw_seed_location": ".artifacts/force7-class-stage/evidence/current-formal/ and n1:/data/jzzeng/qc-next-hotspot-20261009-125a4e33f/evidence/force7-class-master-v1/formal/",
+  "unsigned_portability_followup": {
+    "patch_sha256": "261336538a543a697ec606b834758487bb6018d8013f13fc61acf668b9322e58",
+    "library_sha256": "3a606d0ec5cd1267935327672c45a5bf7a15f1d10a8626e221502f529623c9d8",
+    "scope": "untimed unsigned-provider portability repair; no scientific algebra, layout, screening or endpoint timing change",
+    "slurm_job": "job=6930 visibility=0",
+    "finite_limit": "00:12:00"
+  }
 }

@@ -184,5 +184,23 @@
     "uncompressed_sha256": "16fa671c8385220ad0f70c8cf451e7dd1cb60ef82c7e6c904d79cd023c08f597",
     "compressed_bytes": 1959,
     "uncompressed_bytes": 6190
+  },
+  "unsigned-portability.patch.gz": {
+    "sha256": "6f12a62b4a942f0765936896f9781fd22cf4ed787ccc36dd807758fad61cc5c8",
+    "uncompressed_sha256": "261336538a543a697ec606b834758487bb6018d8013f13fc61acf668b9322e58",
+    "compressed_bytes": 532,
+    "uncompressed_bytes": 1124
+  },
+  "qualify-unsigned-repair.sh.gz": {
+    "sha256": "fe2773c6df2aa1996bd08fb2d7c55a536bc59839241547a92dd4c5f086732e13",
+    "uncompressed_sha256": "e0e3a4289244bdbe8435efbd5fda3c325cceab57bb1f28168c750d6cc2dccab3",
+    "compressed_bytes": 1438,
+    "uncompressed_bytes": 3223
+  },
+  "qualification-receipts-unsigned-portability.json.gz": {
+    "sha256": "066e7940e9afd4afd4c614ad6786127e493b599c2cc4fd1093d18336e0275c24",
+    "uncompressed_sha256": "151f6b36a78a67d20051b0804c988ffd00b405839aa712192ec0edad65f07bc6",
+    "compressed_bytes": 2066,
+    "uncompressed_bytes": 5571
   }
 }
