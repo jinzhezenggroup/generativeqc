@@ -10,18 +10,24 @@ jobs:
   report:
     name: Source work inventory (advisory)
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Inventory source work without a findings gate
+      - name: Inventory sources and reject certified rank-two matrix-chain regressions
         run: |
           mkdir -p .artifacts
           python3 tools/audit_native_work.py --format json > .artifacts/work-audit.json
           python3 tools/audit_native_work.py --summary-only
-      - name: Compare source-bound DF producer work against PR base (advisory)
-        continue-on-error: true
+          python3 tools/audit_structured_materialization.py \
+            --output .artifacts/native-structured-materialization.json
+          python3 tools/audit_native_complexity.py --format json \
+            > .artifacts/native-complexity.json
+          # Already-supported exact rank-2 matrix-chain regressions are a
+          # blocking source regression; other high-order findings stay advisory.
+          python3 tools/audit_native_complexity.py --fail-on-matrix-chain --summary-only
+      - name: Ratchet comparable DF producer work (unknown stays advisory)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -30,11 +36,15 @@ jobs:
             echo "::warning::Unable to fetch base commit; producer-work report will be INCOMPLETE"
           python3 tools/ratchet_producer_schedule.py \
             --base-sha "${BASE_SHA}" \
-            --output .artifacts/producer-work-ratchet.json
+            --output .artifacts/producer-work-ratchet.json \
+            --fail-on-work-growth
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
         with:
           name: source-work-audit
           path: |
             .artifacts/work-audit.json
             .artifacts/producer-work-ratchet.json
+            .artifacts/native-structured-materialization.json
+            .artifacts/native-complexity.json
           retention-days: 14

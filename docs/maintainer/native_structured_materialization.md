@@ -84,14 +84,31 @@ CLI/API; common work-audit and TensorIR integration remain follow-up scope under
 [#1631](https://github.com/jinzhezenggroup/generativeqc/issues/1631).
 
 In current MP2 source, dense `initial_orbital_weights` and the corresponding
-canonical dense APIs coexist with separate streamed force producers and
-`FactorizedTwoElectronWeights`. Aggregate type/constructor semantics, qualified
-checked arithmetic, and later response/derivative consumers are outside this
-closed subset. Those candidates remain unknown without representation advice.
-Do not interpret their presence as proof of a current production `N^4` defect,
-or infer a hard native oracle size gate from an oracle comment. The historical
-[#1574](https://github.com/jinzhezenggroup/generativeqc/issues/1574) production
-description is not the current execution contract.
+canonical dense APIs coexist with streamed/factorized owners. The scanner
+reports the rank-four `result.two_electron.assign(fourth_power(n), 0.0)` as
+**unknown**, not as a certified sparse tensor, because this is an aggregate
+member with several exact sectors and later mutation. No automatic N^4
+representation rewrite is authorized.
+
+The full PR source-audit JSON now includes an additive
+`production_boundaries` array. For
+`src/posthf/mp2_gradient.cpp`, the `mp2-representation-boundary.v1`
+census binds the actual source SHA-256 and checks eight specific, same-file
+free-function and source-expression anchors: checked extent helpers, canonical
+N^4 allocation and caller, streamed Fock-weight storage/caller, factorized
+Lagrangian ownership, and the RI reverse consumer. `SOURCE_VISIBLE` means
+**only** that those source paths coexist in the scanned revision.
+`INCOMPLETE` makes changed or missing anchors explicit. Neither status
+proves the selected public endpoint, consumer ABI/lifetime, complete
+scientific write support, or runtime allocation bytes. The linked #1574
+implementation remains a separate performance decision.
+
+CI publishes `native-structured-materialization.json` and
+`native-complexity.json` beside the existing work audit and DF ratchet.
+Existing exact rank-2 matrix-chain findings use the strict
+`audit_native_complexity.py --fail-on-matrix-chain` rule; **other**
+high-rank/materialization candidates are advisory. No numerical sparsification,
+source filename exemption, or synthetic performance claim is introduced.
 
 The tool reports source evidence only: no runtime allocated bytes, endpoint
 speedup, scientific validation, ABI migration or zero-allocation guarantee.

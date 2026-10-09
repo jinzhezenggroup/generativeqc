@@ -626,6 +626,107 @@ def audit_native(source: str, path: str = "<memory>") -> list[dict[str, Any]]:
     return sorted(findings, key=lambda f: (f["line"], f["buffer"]))
 
 
+MP2_REPRESENTATION_SOURCE = "src/posthf/mp2_gradient.cpp"
+_MP2_BOUNDARY_ANCHORS = (
+    (
+        "checked-square-helper",
+        "square",
+        r"\breturn\s+posthf::checked_mul\s*\(\s*value\s*,\s*value\s*\)\s*;",
+    ),
+    (
+        "rank-four-extent-helper",
+        "fourth_power",
+        r"\breturn\s+square\s*\(\s*square\s*\(\s*value\s*\)\s*\)\s*;",
+    ),
+    (
+        "dense-canonical-RHS-allocation",
+        "initial_orbital_weights",
+        r"\bresult\.two_electron\.assign\s*\(\s*fourth_power\s*\(\s*n\s*\)\s*,\s*0\.0\s*\)",
+    ),
+    (
+        "canonical-RHS-caller",
+        "canonical_orbital_rhs",
+        r"\binitial_orbital_weights\s*\(\s*adjoint\s*\)",
+    ),
+    (
+        "streamed-RHS-factor-owner",
+        "initial_orbital_weights_streamed",
+        r"\bresult\.fock_weights\.assign\s*\(\s*square\s*\(\s*n\s*\)\s*,\s*0\.0\s*\)",
+    ),
+    (
+        "streamed-RHS-caller",
+        "canonical_orbital_rhs_streamed",
+        r"\binitial_orbital_weights_streamed\s*\(\s*adjoint\s*\)",
+    ),
+    (
+        "factorized-Lagrangian-owner",
+        "canonical_lagrangian_weights_streamed",
+        r"\bresult\.two_electron_factors\.correlation_iajb\s*=\s*std::move\s*\(\s*adjoint\.integrals_iajb\s*\)",
+    ),
+    (
+        "RI-reverse-factorized-consumer",
+        "density_fitted_lagrangian_weights",
+        r"\bconst\s+auto&\s+factors\s*=\s*weights\.two_electron_factors\b",
+    ),
+)
+
+
+def audit_mp2_representation_boundary(
+    source: str, path: str = MP2_REPRESENTATION_SOURCE
+) -> dict[str, Any]:
+    """Locate canonical N^4 and factorized MP2 source *roles*, not zero support.
+
+    The exact canonical writer has correlated and Fock-derived sectors, so
+    a sparse-write certificate is NOT inferred from these function names.
+    Source-level callers also cannot certify current public endpoint routing.
+    """
+    clean = _mask_comments_and_literals(source)
+    parsed = re.sub(r"(?m)^[ \t]*#.*", lambda m: " " * len(m[0]), clean)
+    functions: dict[str, list[Any]] = {}
+    for function in _functions(parsed):
+        functions.setdefault(function.name, []).append(function)
+    evidence = []
+    missing = []
+    for role, name, expression in _MP2_BOUNDARY_ANCHORS:
+        matches = functions.get(name, [])
+        if len(matches) != 1:
+            missing.append(f"{role}: unique free-function owner unavailable")
+            continue
+        owner = matches[0]
+        found = re.search(expression, parsed[owner.body : owner.end])
+        if found is None:
+            missing.append(f"{role}: source anchor unavailable")
+            continue
+        offset = owner.body + found.start()
+        evidence.append(
+            {
+                "role": role,
+                "function": name,
+                "line": clean.count("\n", 0, offset) + 1,
+                "source_expression": " ".join(
+                    clean[offset : owner.body + found.end()].split()
+                ),
+            }
+        )
+    return {
+        "schema": "generativeqc.mp2-representation-boundary.v1",
+        "path": path,
+        "source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "status": "SOURCE_VISIBLE" if not missing else "INCOMPLETE",
+        "dense_candidate": "canonical initial_orbital_weights: fourth_power(n)",
+        "alternative": "streamed fock_weights + correlation_iajb owner",
+        "observed_source_roles": evidence,
+        "missing_roles": missing,
+        "exact_write_support_proven": False,
+        "runtime_endpoint_selection_proven": False,
+        "consumer_abi_verified": False,
+        "disposition": (
+            "Canonical dense and streamed factorized source candidates are distinct. "
+            "Review selected endpoint and consumers before recommending a representation rewrite."
+        ),
+    }
+
+
 def audit_tree(
     root: Path, paths: tuple[str, ...] = ("src", "include")
 ) -> dict[str, Any]:
@@ -633,6 +734,7 @@ def audit_tree(
     root = root.resolve()
     sources: dict[str, str] = {}
     findings = []
+    production_boundaries: list[dict[str, Any]] = []
     candidates: set[Path] = set()
     resolved_selections: set[str] = set()
     alias_topology_unverified = False
@@ -662,6 +764,10 @@ def audit_tree(
         data = source.read_bytes()
         sources[relative] = hashlib.sha256(data).hexdigest()
         findings.extend(audit_native(data.decode("utf-8", errors="replace"), relative))
+        if relative == MP2_REPRESENTATION_SOURCE:
+            production_boundaries.append(
+                audit_mp2_representation_boundary(data.decode("utf-8"), relative)
+            )
 
     def git(*args: str) -> str | None:
         try:
@@ -737,6 +843,7 @@ def audit_tree(
             "No runtime bytes, timings, speedup, production role or dense-oracle size gate is inferred.",
         ],
         "findings": findings,
+        "production_boundaries": production_boundaries,
     }
 
 

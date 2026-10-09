@@ -73,11 +73,15 @@ suffix so identical sites are not collapsed; line-only motion remains stable.
 Comparison reports added/removed/unchanged semantic sites, not measured work
 ratios. Moving code into another function intentionally changes its identity.
 
-CI publishes the full JSON artifact. Findings do not fail CI and are not added
-to the strict native matrix-chain gate. The ordinary Python test shards execute
-the positive/negative scanner regression suite. Before introducing a hard gate,
-qualify a named endpoint, scientific/resource identity, path role and independent
-semantic counter. Setup, final publication, compatibility and oracle paths must
+CI publishes the full source inventory and independent native structured
+materialization/complexity reports. Generic work-audit findings remain advisory.
+Only two **separately qualified source-level rules** are blocking: known
+rank-2 matrix-chain scalar regressions and comparable increases in DF producer
+schedule work under the same scientific/resource identities. Changed imports
+or unavailable source evidence remain visibly `INCOMPLETE`, not PASS. The
+ordinary Python test shards execute the positive/negative scanner regression
+suite. Before adding another hard gate, qualify a named endpoint,
+scientific/resource identity, path role and independent semantic counter. Setup, final publication, compatibility and oracle paths must
 remain distinguishable rather than silently exempted by filename.
 
 For a candidate, inspect the source and callers, state the explicit input and

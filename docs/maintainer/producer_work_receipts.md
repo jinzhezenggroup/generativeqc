@@ -83,5 +83,28 @@ JSONL trace with `trace --trace-id <id> --tile-kind streamed_rows` and supply
 resource identities, dependency and execution identities, and the reviewed
 build digest. The output is diagnostic submission evidence only.
 
+## Comparable-source CI ratchet
+
+The PR work-audit workflow runs `tools/ratchet_producer_schedule.py` with
+`--fail-on-work-growth`, matching the immutable PR base source to the current
+candidate under the same five frozen DF production schedule shapes:
+
+```sh
+python3 tools/ratchet_producer_schedule.py --base-sha "$BASE_SHA" \
+  --output .artifacts/producer-work-ratchet.json --fail-on-work-growth
+```
+
+- A complete, source-bound, same-domain increase in producer elements **or**
+  callback count is a CI failure. This flags a **work regression requiring
+  review**, not a proven scientific bug or permission to change memory budgets.
+- Changed imported dependencies, changed producer-work analyzer bytes, unavailable base objects, unsupported shapes
+  or missing receipts retain explicit `INCOMPLETE` JSON status and a warning;
+  this scoped CI mode does not block on unknown observations or relabel them
+  `PASS`. The default CLI still fails closed for both `FAIL` and
+  `INCOMPLETE` unless `--fail-on-work-growth` is selected.
+- Counts are static schedule visits, not completed GPU execution, measured
+  bytes, throughput, or reusable-dependency proof. The uploaded artifact records
+  both source identities and each shape's baseline/candidate evidence.
+
 This slice does not modify native scheduling, install a new counter system,
 claim GPU execution, or complete issue #1628's runtime/scientific gates.
