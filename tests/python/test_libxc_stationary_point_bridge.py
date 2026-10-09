@@ -99,7 +99,7 @@ def test_imported_point_bridge_keeps_unsupported_requests_closed() -> None:
 
     with pytest.raises(ValueError, match="exact ingredients"):
         _scf_xc_points(library, gga, rho, gradient)
-    with pytest.raises(ValueError, match=r"requires tau\\[2,n\\]"):
+    with pytest.raises(ValueError, match=r"requires tau\[2,n\]"):
         _scf_xc_points(
             library,
             mgga,
