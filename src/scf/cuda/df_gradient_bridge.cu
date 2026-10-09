@@ -1644,6 +1644,10 @@ generativeqc_status execute_cuda_df_hf_gradient(
       const std::string_view algebra = algebra_control ? algebra_control : "blas";
       if (algebra != "scalar" && algebra != "blas")
         throw std::invalid_argument("unknown DF response algebra (use scalar or blas)");
+      const char* coulomb_control = std::getenv("GENERATIVEQC_DF_COULOMB_RESPONSE");
+      const std::string_view coulomb_policy = coulomb_control ? coulomb_control : "auto";
+      if (coulomb_policy != "auto" && coulomb_policy != "panels")
+        throw std::invalid_argument("unknown DF Coulomb response (use auto or panels)");
       if (borrowed && (algebra != "blas" || serial_dot || gradient_copies != 1))
         throw std::invalid_argument(
             "resident JK scratch requires BLAS response without serial/scatter probes");
@@ -2013,7 +2017,8 @@ generativeqc_status execute_cuda_df_hf_gradient(
           packed_pairs ? std::span<const std::int64_t>(shell_x->offsets)
                        : std::span<const std::int64_t>{},
           packed_block_rows, read_fitted, single_fitted_tensor,
-          owned_occupied ? &owned_buffers : nullptr));
+          owned_occupied ? &owned_buffers : nullptr,
+          coulomb_policy == "auto" ? whitened : nullptr));
       if (gradient_copies > 1) {
         runtime::cuda_trace::TraceRegion reduction("gradient_probe_shard_reduction", arena.stream);
         // Each column is already a complete contracted atom gradient, not an

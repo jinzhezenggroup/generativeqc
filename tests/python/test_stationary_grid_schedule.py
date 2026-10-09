@@ -100,6 +100,51 @@ def test_optional_csr_cannot_consume_the_entire_remaining_device_budget() -> Non
     assert runtime._stationary_device_ao_map_reserve(layout, 64 << 20, 512 << 20) == 0
 
 
+def test_known_fitted_provider_admits_concurrent_geometry() -> None:
+    """The independent DF scratch contract must not serialize grid geometry."""
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_fitted_integral_reserve,
+    )
+
+    source = SimpleNamespace(
+        density_fitted=True,
+        stationary_integral_device_reserve=stationary_fitted_integral_reserve,
+    )
+    basis = SimpleNamespace(
+        natom=96,
+        nao=768,
+        nprimitive=704,
+        numeric_bytes=2608 * 96,
+        packed=SimpleNamespace(size=3 * 96 + 44 * 32 + 128 * 96),
+    )
+    layout = runtime._plan_stationary_cuda_tile(
+        SimpleNamespace(_source=source),
+        basis,
+        plan=SimpleNamespace(spin_blocks=1),
+        target=cuda_target_info("sm_120"),
+        needs_first=True,
+        tile_points=256,
+        primitive_tile=4096,
+        integral_terms=32,
+        source_names=tuple(range(8)),
+        ecp=False,
+        max_device_bytes=512 << 20,
+        max_host_bytes=256 << 20,
+        max_ecp_pair_samples=100_000_000,
+    )
+    assert layout.native_geometry_reserve == stationary_fitted_integral_reserve(
+        atoms=96, aos=768, primitives=704
+    )
+    assert layout.source_resources.geometry_lanes == 256
+    assert layout.source_resources.phased_becke_bytes > 0
+    assert (
+        layout.grid_plan.peak_bytes
+        + layout.source_resources.allocation_bytes
+        + layout.native_geometry_reserve
+        <= 512 << 20
+    )
+
+
 def test_optional_csr_uses_only_space_above_provider_reserve() -> None:
     layout = SimpleNamespace(
         grid_plan=SimpleNamespace(peak_bytes=400 << 20),

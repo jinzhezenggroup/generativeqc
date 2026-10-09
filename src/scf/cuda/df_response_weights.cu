@@ -325,6 +325,83 @@ static cudaError_t contract_full_rank_response(
  * The reader counts repeated fitted projections and any source regeneration.
  * A complete fitted tensor permits direct reads and one metric GEMM per panel.
  */
+/** J-only adjoints depend on one potential per density, not all inverse-applied
+ * AO factors. From retained B and X=M^-1/2, p=X*(B:D), bar_A=c*D*p and
+ * bar_M=-c*p*p^T/2 use the same compiler-owned response kernels as the general
+ * path. Preserve the metric gauge, folded-pair convention and stream lifetime;
+ * all storage borrows the ordinary bounded response workspace.
+ */
+static cudaError_t contract_retained_coulomb_response(
+    std::size_t basis_count, std::size_t auxiliary_count,
+    std::span<const DensityFittingDensityResponse> terms, const double* densities,
+    const CudaDfWhitenedTensorView& forward, std::size_t tile, double* workspace,
+    cudaStream_t stream, cublasHandle_t blas,
+    const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>&
+        consume) {
+  const auto matrix_elements = basis_count * basis_count;
+  const auto metric_elements = auxiliary_count * auxiliary_count;
+  auto* metric_weights = workspace + metric_elements;
+  auto* folded_density = workspace + 4 * metric_elements;
+  auto* charges = folded_density + 3 * matrix_elements;
+  auto* potentials = charges + terms.size() * auxiliary_count;
+  auto* weights = potentials + terms.size() * auxiliary_count;
+  auto error = cudaMemsetAsync(metric_weights, 0, metric_elements * sizeof(double), stream);
+  if (error != cudaSuccess) return error;
+  const auto checked = [](cublasStatus_t status) {
+    if (status != CUBLAS_STATUS_SUCCESS) throw CudaDfResponseBlasFailure{status};
+  };
+  {
+    runtime::cuda_trace::TraceRegion charge("retained_coulomb_charge_and_potential", stream);
+    for (std::size_t term = 0; term < terms.size(); ++term) {
+      if (terms[term].coulomb_coefficient == 0) continue;
+      const auto* density = densities + term * matrix_elements;
+      if (forward.packed_pairs) {
+        cuda_df::launch_pack_df_density(stream, basis_count, density, folded_density);
+        error = cudaGetLastError();
+        if (error != cudaSuccess) return error;
+        density = folded_density;
+      }
+      checked(generated::df_rhf_retained_charge_contract(
+          blas, static_cast<int>(forward.pair_count), static_cast<int>(auxiliary_count),
+          forward.data, density, charges + term * auxiliary_count));
+      checked(generated::df_rhf_retained_charge_contract(
+          blas, static_cast<int>(auxiliary_count), static_cast<int>(auxiliary_count),
+          forward.metric.inverse_square_root, charges + term * auxiliary_count,
+          potentials + term * auxiliary_count));
+      coulomb_metric_kernel<<<blocks(metric_elements), threads, 0, stream>>>(
+          auxiliary_count, -terms[term].coulomb_coefficient, potentials + term * auxiliary_count,
+          metric_weights);
+      runtime::cuda_trace::trace_counter("response_retained_coulomb_factor_passes", 1);
+      runtime::cuda_trace::trace_counter("response_retained_coulomb_charge_elements",
+                                         forward.pair_count * auxiliary_count);
+      runtime::cuda_trace::trace_counter("response_retained_coulomb_root_elements",
+                                         metric_elements);
+      runtime::cuda_trace::trace_counter("response_retained_coulomb_outer_elements",
+                                         metric_elements);
+    }
+  }
+  for (std::size_t begin = 0; begin < auxiliary_count; begin += tile) {
+    const auto count = std::min(tile, auxiliary_count - begin);
+    error = cudaMemsetAsync(weights, 0, count * matrix_elements * sizeof(double), stream);
+    if (error != cudaSuccess) return error;
+    for (std::size_t term = 0; term < terms.size(); ++term) {
+      if (terms[term].coulomb_coefficient == 0) continue;
+      coulomb_weights_kernel<<<blocks(count * matrix_elements), threads, 0, stream>>>(
+          matrix_elements, auxiliary_count, begin, count, terms[term].coulomb_coefficient,
+          densities + term * matrix_elements, potentials + term * auxiliary_count, weights);
+    }
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    consume(0, {begin, matrix_elements, 1, auxiliary_count}, count * matrix_elements, weights);
+    runtime::cuda_trace::trace_counter("response_auxiliary_blocks", 1);
+  }
+  error = cudaGetLastError();
+  if (error != cudaSuccess) return error;
+  consume(1, {}, metric_elements, metric_weights);
+  runtime::cuda_trace::trace_counter("response_retained_coulomb_completed", 1);
+  return cudaSuccess;
+}
+
 static cudaError_t contract_full_rank_panels(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
     const double* densities, std::size_t tile, double* workspace, cudaStream_t stream,
@@ -1263,7 +1340,15 @@ cudaError_t contract_cuda_df_response_weights(
     const CudaDfResponseBuffers* borrowed, std::span<const double> raw_host, bool packed_pairs,
     std::span<const std::int64_t> auxiliary_shell_offsets, std::size_t packed_block_rows,
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted,
-    bool single_fitted_tensor, const CudaDfResponseBuffers* streamed_occupied) {
+    bool single_fitted_tensor, const CudaDfResponseBuffers* streamed_occupied,
+    const CudaDfWhitenedTensorView* retained_coulomb) {
+  if (retained_coulomb && !borrowed && !streamed_occupied && !single_fitted_tensor &&
+      !packed_pairs && metric.full_rank && blas_products && !serial_metric_dot &&
+      std::all_of(terms.begin(), terms.end(),
+                  [](const auto& term) { return term.exchange_coefficient == 0; })) {
+    return contract_retained_coulomb_response(n, a, terms, densities, *retained_coulomb, tile,
+                                              workspace, stream, blas, consume);
+  }
   if (streamed_occupied) {
     if (!metric.full_rank || borrowed || read_fitted || packed_pairs || single_fitted_tensor ||
         !read_values || !streamed_occupied->occupied_response)

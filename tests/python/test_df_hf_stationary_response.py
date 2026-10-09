@@ -12,6 +12,7 @@ from generativeqc_compiler.method import DensityFittingRHFResponsePlan
 from generativeqc_compiler.method.df_hf_response_contract import CONTRACT_IDENTITY
 from generativeqc_compiler.method.df_hf_response_cuda import (
     df_rhf_charge_gemm_kind,
+    df_rhf_retained_charge_gemm_kind,
     emit_df_hf_response_contract,
     emit_df_hf_response_cuda,
 )
@@ -229,6 +230,9 @@ def test_production_native_lowering_is_bound_to_stationary_plan() -> None:
     assert df_rhf_charge_gemm_kind() == "direct-NT"
     assert "charge-contraction: tij,pij->tp" in cuda
     assert "tensorir-charge-lowering: direct-NT" in cuda
+    assert df_rhf_retained_charge_gemm_kind() == "direct-NN"
+    assert "tensorir-retained-charge-lowering: direct-NN" in cuda
+    assert "df_rhf_retained_charge_contract" in cuda
     assert "df_rhf_charge_contract" in cuda
     assert "df_rhf_potential_from_rooted_projection" in cuda
     assert "rooted[q * stride + i * diagonal_stride]" in cuda

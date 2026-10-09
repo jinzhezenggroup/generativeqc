@@ -370,3 +370,19 @@ def stationary_native_pair_reserve(*, atoms: int, aos: int, primitives: int) -> 
         2 * (58 * aos + 52 * atoms + 16 * primitives + 4 * aos * (aos + 1) + 32)
         + 48 * atoms
     )
+
+
+def stationary_fitted_integral_reserve(*, atoms: int, aos: int, primitives: int) -> int:
+    """Bound the v1 DF snapshot provider's additional stationary allocation.
+
+    DF response scratch belongs to the independent DF resource contract. This
+    consumer owns paired one-electron metadata, optional dense D/W uploads and
+    compact four-source publication. The paired host-staging envelope also
+    bounds its device topology; add both full FP64 matrices even when resident
+    weights avoid those uploads. Never use this bound for an unknown provider.
+    """
+    return (
+        stationary_native_pair_reserve(atoms=atoms, aos=aos, primitives=primitives)
+        + 16 * aos * aos
+        + 192 * atoms
+    )

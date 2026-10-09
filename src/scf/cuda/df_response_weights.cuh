@@ -69,6 +69,11 @@ std::size_t cuda_df_response_workspace_elements(std::size_t n, std::size_t a, st
  * spin projections in one pass. Its raw buffer holds one AO matrix, staging
  * holds sum(rank^2)*a, and exchange holds max(max(rank^2)*a,tile*n*n).
  * It requires full rank and excludes borrowed tensors and fitted-panel reads.
+ * retained_coulomb is an owner-verified immutable B view for J-only terms.
+ * Full-rank BLAS response may contract B with each density once, apply the
+ * metric root to those vectors, and emit the existing A/M adjoints directly.
+ * It reuses the ordinary charged workspace; other ranks, terms and diagnostic
+ * algebra retain their existing explicit bounded paths.
  */
 cudaError_t contract_cuda_df_response_weights(
     std::size_t n, std::size_t a, std::span<const DensityFittingDensityResponse> terms,
@@ -80,7 +85,8 @@ cudaError_t contract_cuda_df_response_weights(
     bool packed_pairs = false, std::span<const std::int64_t> auxiliary_shell_offsets = {},
     std::size_t packed_block_rows = 256,
     const std::function<void(std::size_t, std::size_t, double*)>& read_fitted = {},
-    bool single_fitted_tensor = false, const CudaDfResponseBuffers* streamed_occupied = nullptr);
+    bool single_fitted_tensor = false, const CudaDfResponseBuffers* streamed_occupied = nullptr,
+    const CudaDfWhitenedTensorView* retained_coulomb = nullptr);
 
 }  // namespace generativeqc::scf
 #endif
