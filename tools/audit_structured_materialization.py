@@ -46,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
 from generativeqc_compiler.common import materialization
 
+_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
 _ID = r"[A-Za-z_]\w*"
 _INTEGER = r"(?:std::size_t|size_t|int|unsigned(?:\s+long)?)"
 _VECTOR = re.compile(rf"std::vector\s*<\s*(?:double|float)\s*>\s+({_ID})\s*\(")

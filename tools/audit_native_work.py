@@ -32,6 +32,8 @@ except ModuleNotFoundError:
         _skip_space,
     )
 
+_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
 _IDENT = r"[A-Za-z_]\w*"
 _CALL = re.compile(rf"\b({_IDENT}(?:::{_IDENT})*)\s*\(")
 _SCALAR = r"(?:double|float|int|unsigned|long|bool|std::size_t|size_t)"

@@ -306,6 +306,66 @@ TensorIR symbolic complexity remains the proof-carrying path for legal contracti
 reassociation; native findings are review prompts for code that still sits outside
 that IR.
 
+### Review high-rank materialization candidates
+
+The `Source work inventory (advisory)` job also enforces a bounded candidate-review
+gate. Its name retains the wider advisory audit scope; the materialization review
+step fails if a finding lacks a current source-bound disposition. Run:
+
+```bash
+python3 tools/ratchet_native_materialization.py --base-sha "$BASE_SHA" \
+  --output .artifacts/native-materialization-review.json --fail-on-unreviewed
+```
+
+`BASE_SHA` must be the full immutable PR base commit, available in the local Git
+object database. The tool extracts its `src/` and `include/` bytes without
+executing baseline code, then scans both trees with the same current analyzers.
+Missing source, baseline, malformed evidence or changed imported analyzer code
+produces `INCOMPLETE`, which fails the enforcing command. It never silently
+substitutes an empty baseline. The first adoption needs no older disposition
+manifest; the actual baseline source census remains mandatory.
+
+The receipt retains full baseline/candidate inventories, raw source and analyzer
+hashes, counts, and separate added, removed, changed and unchanged identities.
+Equal totals cannot hide replacements. A removed lexical finding is evidence of a
+scanner delta, not proof of end-to-end retirement or numerical parity. CI uploads
+the receipt with the existing `source-work-audit` artifact even on failure.
+
+Review entries live in `manifests/native_materialization_dispositions.json`.
+Each current site needs an owner, disposition, reason, producer, consumers,
+residency, lifetime, resource owner, open evidence gaps and matching source
+bindings. Produce the current anchors and source identities with:
+
+```bash
+python3 tools/ratchet_native_materialization.py --inventory-only \
+  --output .artifacts/materialization-candidates.json
+```
+
+Inspect the changed producer/consumer code before updating a record. The site
+identity uses path, function signature, target, loop variables and occurrence;
+line numbers are display anchors. Context bindings cover entire declared source
+files. For ordinary non-preprocessed source, comments and line shifts preserve
+identity while code/literal changes require renewed bindings. Files containing
+preprocessing spellings (including `#`, `%:` or `??=`), raw/line-spliced literals,
+or line-sensitive builtins such as `__LINE__` conservatively bind exact source
+bytes. Textual edits to those files, including comments and line shifts, require
+renewed bindings. This avoids claiming preprocessing equivalence from a bounded
+lexer. Remove records for removed sites: stale or unmatched
+identities, duplicated records, and stale producer/consumer bindings fail review.
+A scanner false positive must be fixed in the classifier, not exempted here.
+
+Producer/consumer symbols are reviewer-declared links, not verified call edges or
+ABI certificates. Source bindings do not claim transitive or whole-program
+coverage. Whole-file changes can conservatively require review of unaffected
+sites. All six current MP2 entries remain `retained-pending-evidence`: bounded
+storage, a dense callback span, or a factorized alternative does not prove that
+fusion is unsafe or slower. The dense first stage has a source-known production
+RCCSD(T) caller in `src/cc/rccsdt_force.cpp`; its retention gap concerns safe and
+profitable replacement, not whether that call exists. The gate enforces review bookkeeping only; issue
+#1626 remains open for independent numerical, work/resource and complete-endpoint
+performance evidence. Historical RCCSD(T) retirements are discussed in the
+[decision note](../../.agents/notes/implemented/performance/2026-10-09-materialization-candidate-review.md).
+
 ## Prefer source-driven reuse
 
 Expensive source work should normally be produced once and consumed by multiple
