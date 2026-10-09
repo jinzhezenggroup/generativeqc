@@ -793,10 +793,14 @@ def rks_hessian(
     matrix = np.empty((coordinates, coordinates), dtype=np.float64)
     cache_path = Path(cache)
     blocks: list[dict[str, typing.Any]] = []
+    # Every HVP block consumes its detached direction seeds synchronously and
+    # publishes a copied result, allowing one fixed maximum-block workspace.
+    directions_workspace = np.zeros((block_size, coordinates), dtype=np.float64)
     started = time.perf_counter()
     for begin in range(0, coordinates, block_size):
         end = min(coordinates, begin + block_size)
-        directions = np.zeros((end - begin, coordinates), dtype=np.float64)
+        directions = directions_workspace[: end - begin]
+        directions.fill(0.0)
         for local, column in enumerate(range(begin, end)):
             directions[local, column] = 1.0
         result = rks_hvp_many(
@@ -825,6 +829,9 @@ def rks_hessian(
         )
         del result, directions
 
+    # The output budget admits matrix + one full-size publication/symmetry
+    # temporary, not an extra retained directions panel at that boundary.
+    del directions_workspace
     operator.validate_current()
     if not np.isfinite(matrix).all():
         raise FloatingPointError("nonfinite RKS Hessian; no result published")

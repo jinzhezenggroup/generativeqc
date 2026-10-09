@@ -646,6 +646,12 @@ def _vjp_einsum(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndar
             for contribution in _einsum_vjp_reference(node, values, bar)
         ]
     contributions = []
+    # Only the largest operand's all-ones storage is needed. Every einsum
+    # consumes its shaped prefix synchronously, and a view changes no values.
+    # Keeping a single FP64/declared-dtype buffer avoids N backing allocations
+    # for high-arity contractions with varied operand shapes.
+    max_ones = max((math.prod(item.spec.shape) for item in node.inputs), default=0)
+    ones_storage = np.ones(max_ones, dtype=node.spec.dtype)
     for differentiated, operand_labels in enumerate(labels):
         arguments = [bar, output]
         for operand, (value, label) in enumerate(zip(values, labels)):
@@ -653,7 +659,8 @@ def _vjp_einsum(node: Node, values: typing.Any, bar: typing.Any) -> list[np.ndar
                 arguments.extend((value, list(label)))
         # A ones operand carries the requested output labels.  It contributes
         # no numerical factor but makes summed labels legal einsum outputs.
-        ones = np.ones(node.inputs[differentiated].spec.shape, dtype=node.spec.dtype)
+        shape = node.inputs[differentiated].spec.shape
+        ones = ones_storage[: math.prod(shape)].reshape(shape)
         arguments.extend((ones, list(operand_labels)))
         contributions.append(
             np.einsum(*arguments, list(operand_labels), optimize=False) * coefficient

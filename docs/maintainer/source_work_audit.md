@@ -72,6 +72,14 @@ user-defined allocator semantics and unparsed scopes can be missed. The audit
 does not prove scalar-call hoisting or loop-invariance. It is incomplete by design and must not be interpreted as a zero-allocation or
 zero-transfer guarantee when no finding is returned.
 
+## Reviewed hot-loop findings
+
+The [#1630 CPU allocation disposition](hot_loop_allocation_disposition.md)
+records the complete frozen 32-site Python inventory, the eligible reuse
+changes, and eight necessary per-owner/empty-output allocation sites. This
+review does not suppress any of the static findings or replace runtime
+allocation journals.
+
 ## Receipts and review
 
 The JSON records the source commit/tree, scanned-source digest, scanner digest,

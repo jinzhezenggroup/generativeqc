@@ -972,8 +972,13 @@ class ContractionProgram:
         lookup = {axis: i for i, axis in enumerate(jet_indices(self.contract.ao_order))}
         d = density if self.spec.spin == "polarized" else density.sum(axis=0)[None]
         pullback = np.zeros((len(domain), *jets.shape[1:]))
+        # Every spin consumes these jet contractions synchronously. A single
+        # owned panel avoids restacking separately allocated products on each
+        # spin without changing the FP64 per-jet GEMM definition.
+        work = np.empty((len(domain), *jets.shape[1:]), dtype=np.float64)
         for spin in range(len(d)):
-            work = np.stack([jets[j] @ d[spin] for j in range(len(domain))])
+            for jet_index in range(len(domain)):
+                np.matmul(jets[jet_index], d[spin], out=work[jet_index])
             weighted = {"rho": weights * coefficients["rho"][spin]}
             if order:
                 weighted["gradient"] = weights[:, None] * coefficients["gradient"][spin]
@@ -985,9 +990,11 @@ class ContractionProgram:
             pullback += jet_pullback.evaluate(weighted, work)
         centers = np.zeros((natom, 3))
         points = np.zeros((jets.shape[1], 3))
+        # The directional AO panel is consumed by the current Cartesian
+        # component before advancing to the next axis.
+        panel = np.zeros(jets.shape[1:])
         for k in range(3):
-            # Retain only one point-by-AO directional panel at a time.
-            panel = np.zeros(jets.shape[1:])
+            panel.fill(0.0)
             for j, axis in enumerate(domain):
                 shifted = list(axis)
                 shifted[k] += 1
