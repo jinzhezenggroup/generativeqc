@@ -1830,26 +1830,32 @@ def test_low_order_production_rys2_cuda_compiles_when_nvcc_is_configured(
         assert_rtx5090_resources(result.stdout + result.stderr, resource_limits)
 
 
-def test_high_component_fock_oracle_block_covers_every_component() -> None:
+@pytest.mark.parametrize(
+    ("name", "oracle_block_threads"), (("dppp", 192), ("ddds", 224))
+)
+def test_high_component_fock_oracle_block_covers_every_component(
+    name: str, oracle_block_threads: int
+) -> None:
     """Do not truncate the independent oracle for subgroup candidates."""
 
+    spec = FUSED_SHELL_SPEC_BY_NAME[name]
+    # Production tuning may change pair orientation, storage, or loop policy.
+    # The regression needs a candidate block too small for one lane per component.
     trial = next(
-        trial
-        for trial in supported_schedule_trials(
-            FUSED_SHELL_SPEC_BY_NAME["dppp"],
-            KernelConsumer.FOCK,
-            target=TEST_CUDA_TARGET,
-        )
-        if trial.schedule.kind == ScheduleKind.SUBGROUP_TASKS
-        and trial.schedule.block_threads == 128
-        and trial.schedule.tasks_per_warp == 4
-        and trial.schedule.pair_orientation == PairOrientation.SWAPPED
-        and trial.schedule.pair_storage == PairStorage.MATERIALIZED
-        and trial.schedule.unroll_pair_terms
-        and trial.schedule.minimum_blocks_per_sm == 0
+        (
+            trial
+            for trial in supported_schedule_trials(
+                spec, KernelConsumer.FOCK, target=TEST_CUDA_TARGET
+            )
+            if trial.schedule.kind == ScheduleKind.SUBGROUP_TASKS
+            and trial.schedule.block_threads < spec.component_count
+        ),
+        None,
     )
+    assert trial is not None, f"missing high-component Fock subgroup trial for {name}"
+    assert trial.schedule.block_threads < spec.component_count <= oracle_block_threads
     source = emit_shell_class_benchmark_cuda(
-        FUSED_SHELL_SPEC_BY_NAME["dppp"],
+        spec,
         task_count=1,
         primitive_count=1,
         warmups=0,
@@ -1860,8 +1866,8 @@ def test_high_component_fock_oracle_block_covers_every_component() -> None:
         target=TEST_CUDA_TARGET,
     )
     baseline = source.split("/** Per-component Fock baseline", maxsplit=1)[1]
-    assert "__launch_bounds__(192)" in baseline
-    assert "<<<kTaskCount,\n        192>>>" in baseline
+    assert f"__launch_bounds__({oracle_block_threads})" in baseline
+    assert f"<<<kTaskCount,\n        {oracle_block_threads}>>>" in baseline
 
 
 def test_fock_benchmark_runs_when_nvcc_is_configured(tmp_path: Path) -> None:

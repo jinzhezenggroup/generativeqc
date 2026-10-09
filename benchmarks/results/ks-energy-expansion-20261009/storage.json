@@ -1,0 +1,38 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "purpose": "Preserve every original receipt and diagnosis byte under the unchanged tracked-evidence size policy; compression does not alter scientific acceptance.",
+  "files": [
+    {
+      "stored_path": "receipts.json.xz",
+      "stored_bytes": 49428,
+      "stored_sha256": "849ed0f79b7264008c112369d499771095370b60c026598bad7bae06588724f1",
+      "decoded_path": "receipts.json",
+      "decoded_bytes": 1271970,
+      "decoded_sha256": "2703ef3fe757664d065a5c2ced0ff09aa7fc42c0620daf9b9761de97e78f4fcb"
+    },
+    {
+      "stored_path": "diagnosis.json.xz",
+      "stored_bytes": 11008,
+      "stored_sha256": "9bc3e6577d5fe94d652b7968102c2f7db97489a120066c67361ad7b8b011ac07",
+      "decoded_path": "diagnosis.json",
+      "decoded_bytes": 190064,
+      "decoded_sha256": "3dd423a83e376ebb046254ca82b2df2cf3cd18502d5c25104febf747ab7b3499"
+    },
+    {
+      "stored_path": "negative-populations.json.xz",
+      "stored_bytes": 10940,
+      "stored_sha256": "9893b6615d5dc890df4fba3c46403e31d4017024efede363d5026838daff3dcc",
+      "decoded_path": "negative-populations.json",
+      "decoded_bytes": 100636,
+      "decoded_sha256": "7bd5cec03db697e09f0f9bbfff3d67391a2ec47753b57aea6749befc0bb0fac1"
+    },
+    {
+      "stored_path": "summary.json.xz",
+      "stored_bytes": 5084,
+      "stored_sha256": "74c0a833b7774a36318b5a02e59daa14f40003ba9ca8a1933a9ab49583569132",
+      "decoded_path": "summary.json",
+      "decoded_bytes": 27602,
+      "decoded_sha256": "74980f5eb886cc4712ae66c7a27ee0feaf6379f7a89c853dea37a044a08f347a"
+    }
+  ]
+}

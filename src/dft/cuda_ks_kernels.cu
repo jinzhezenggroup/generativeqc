@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "dft/cuda_ks_kernels.hpp"
+#include "dft/energy_change.hpp"
 
 namespace generativeqc::dft::cuda_ks_detail {
 namespace {
@@ -131,6 +132,16 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
   result.one_electron = total.energy[0] + total.correction[0];
   result.hartree = total.energy[1] + total.correction[1];
   result.exact_exchange = total.energy[2] + total.correction[2];
+  // Do not round the individual traces before summing the electronic energy.
+  // Their low words can decide a strict energy gate even at stationary density.
+  for (unsigned term = 0; term < 3; ++term) {
+    accumulate_diagnostic_trace(total.energy[term], result.electronic_energy,
+                                result.electronic_energy_correction);
+    accumulate_diagnostic_trace(total.correction[term], result.electronic_energy,
+                                result.electronic_energy_correction);
+  }
+  accumulate_diagnostic_trace(result.xc, result.electronic_energy,
+                              result.electronic_energy_correction);
   result.maximum_residual = total.maximum_residual;
   for (unsigned spin = 0; spin < spins; ++spin) {
     const double error2 = total.error2[spin], change2 = total.change2[spin];
@@ -174,7 +185,9 @@ __global__ void advance_kernel(std::size_t matrix, unsigned spins, double nuclea
     const auto iteration = control->iterations + 1U;
     const double energy = nuclear_repulsion + current->one_electron + current->hartree +
                           current->exact_exchange + current->xc;
-    const double change = fabs(energy - control->previous_energy);
+    const double change = detail::electronic_energy_change(
+        current->electronic_energy, current->electronic_energy_correction, control->previous_energy,
+        control->previous_energy_correction);
     current->energy_change = change;
     control->iterations = iteration;
     bool failed = current->failure != 0 || !isfinite(energy);
@@ -194,7 +207,8 @@ __global__ void advance_kernel(std::size_t matrix, unsigned spins, double nuclea
       control->active = (!converged && iteration < max_iterations) ? 1 : 0;
       copy_density = control->active;
       publish_warm = control->converged && warm_updates;
-      control->previous_energy = energy;
+      control->previous_energy = current->electronic_energy;
+      control->previous_energy_correction = current->electronic_energy_correction;
     }
     *enabled = static_cast<std::uint8_t>(control->active != 0);
     spin_enabled[0] = static_cast<std::uint8_t>(control->active != 0 && occupied_alpha > 0);

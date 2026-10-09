@@ -6,6 +6,7 @@ remaining template preserves byte-identical generated CUDA and ABI layouts."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ..capabilities import CAPABILITY_K_BLOCK_FOCK, CAPABILITY_MIXED_FOCK
@@ -40,6 +41,7 @@ from .common import (
 )
 from .fock import _emit_shell_class_fock_cuda, _emit_shell_class_mixed_fock_cuda
 from .fock_component import emit_rys_value_support_cuda
+from .fock_rys_task import emit_rys_task_support_cuda
 from .force_packed import (
     _emit_packed_force_consumer_cuda,
     _emit_scalar_thread_force_consumer_cuda,
@@ -1251,8 +1253,10 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
                 target=plan.kernel.target,
             )
         )
-        source = source[:begin] + emit_rys_value_support_cuda(
-            spec, plan.kernel.integral
+        source = source[:begin] + (
+            emit_rys_task_support_cuda(value_plan)
+            if value_plan.schedule.kind == ScheduleKind.PACKED_TASKS
+            else emit_rys_value_support_cuda(spec, plan.kernel.integral)
         )
         source += _emit_shell_class_fock_cuda(
             spec,
@@ -1372,6 +1376,9 @@ __device__ __forceinline__ void generated_dppp_shell_class_force_task("""
                 target=plan.kernel.target,
             )
             fock_schedule = fock_plan.schedule
+            if plan.schedule.mixed_pair_products_fp64:
+                fock_schedule = replace(fock_schedule, mixed_pair_products_fp64=True)
+                fock_plan = _specialize_fock_plan(plan, schedule=fock_schedule)
         else:
             fock_plan = _specialize_fock_plan(plan)
 

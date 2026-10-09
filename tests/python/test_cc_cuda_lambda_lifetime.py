@@ -108,11 +108,13 @@ struct LambdaDiagnostic {
   std::size_t df_auxiliary_batch_size{1},df_auxiliary_batches{};
   std::size_t df_gemm_calls{},df_gemm_summands{},df_packing_output_bytes{};
   std::size_t df_provider_allowance_bytes{};
+  std::size_t df_available_device_bytes{},df_device_limit_bytes{};
   bool df_core_reuse{};
   std::size_t df_core_reuse_bytes{},df_core_reuse_preparations{},df_core_reuse_actions{};
   const char* core_reuse_plan_hash{};
   bool df_audit_matrix_gemm{};
   std::size_t df_audit_arena_bytes{};
+  bool df_primal_matrix_gemm{};
   const char* audit_schedule_hash{};
   const char *shared_program_hash{},*independent_program_hash{};
 };

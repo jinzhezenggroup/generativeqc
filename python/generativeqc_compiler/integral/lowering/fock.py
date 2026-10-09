@@ -21,6 +21,7 @@ from .common import (
 )
 from .fock_accumulation import emit_generated_shell_fock_accumulation
 from .fock_component import _emit_rys_component_lane_fock_consumer_cuda
+from .fock_rys_task import emit_rys_task_fock_cuda
 from .fock_tiled import (
     _emit_packed_fock_consumer_cuda,
     _emit_subgroup_fock_consumer_cuda,
@@ -569,7 +570,13 @@ __device__ __forceinline__ void generated_dppp_shell_class_fock_task("""
         worker_begin = source.find(worker_marker)
         if worker_begin < 0:
             raise RuntimeError("generated Fock task marker changed unexpectedly")
-        source = source[:worker_begin] + _emit_packed_fock_consumer_cuda(
+        packed_emitter = (
+            emit_rys_task_fock_cuda
+            if plan.kernel.integral.recurrence.startswith("rys")
+            and plan.kernel.integral.derivative is None
+            else _emit_packed_fock_consumer_cuda
+        )
+        source = source[:worker_begin] + packed_emitter(
             spec,
             plan,
             minimum_blocks_per_sm,
@@ -819,7 +826,11 @@ __device__ __forceinline__ void generated_dppp_make_mixed_primitive_geometry(
         source,
     )
     source = source.replace("  double value = 0.0;", "  float value = 0.0F;")
-    source = source.replace("      const double sign =", "      const float sign =")
+    # Preserve explicitly qualified wide coefficient products when a pair-cache
+    # schedule changes the sign declaration's indentation. Otherwise retain the
+    # existing mixed lowering for all other production and custom schedules.
+    if not plan.schedule.mixed_pair_products_fp64:
+        source = source.replace("      const double sign =", "      const float sign =")
     source = source.replace("? 1.0 : -1.0;", "? 1.0F : -1.0F;")
     source = source.replace(
         "__device__ __forceinline__ double generated_dppp_mixed_component_value",

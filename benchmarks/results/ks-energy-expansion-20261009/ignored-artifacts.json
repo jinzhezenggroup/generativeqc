@@ -1,0 +1,30 @@
+{
+  "schema": "ks-energy-expansion-artifacts.v1",
+  "artifacts": [
+    {
+      "path": "/data/jzzeng/qc-ks-energy-expansion-20261009/.artifacts/performance/evidence/raw-observations.tar.gz",
+      "bytes": 821118,
+      "sha256": "51eb141e38e73ee73e4d4a656a02eca4b848027157192c68be7cdd0eaec9b0a4"
+    },
+    {
+      "path": "/data/jzzeng/qc-ks-energy-expansion-20261009/.artifacts/performance/evidence/reproduce.tar.gz",
+      "bytes": 19822292,
+      "sha256": "0d363d5e67a0003287a7fde0c3c5a4926f93de05391c65106630a5c019be88d7"
+    }
+  ],
+  "frozen_binary": {
+    "host": "n4",
+    "path": "/data/jzzeng/qc-ks-energy-expansion-20261009/frozen/libgenerativeqc.so",
+    "sha256": "5c9ac43c8c3edf32e1cb85fc8ee872a84a3794277b70019f26aec903265fcba0"
+  },
+  "unformatted_frozen_binary": {
+    "host": "n4",
+    "path": "/data/jzzeng/qc-ks-energy-expansion-20261009/frozen-unformatted/libgenerativeqc.so",
+    "sha256": "1a7a52129c92d83a451bfadc07e08c2e79d6b29722d9114fbaa52602caed08cf"
+  },
+  "baseline_binary": {
+    "host": "n4",
+    "path": "/data/jzzeng/qc-k-selector-task-work-20261009/source/build/cuda-release-sm120/libgenerativeqc.so",
+    "sha256": "1426e40973b32359dca90d0cfa106eb62d1052eddb07af50ce12c4b86f079376"
+  }
+}

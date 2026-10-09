@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING, cast
 
@@ -269,6 +269,9 @@ def _schedule_from_payload(payload: object) -> ScheduleIR:
                 )
             ),
             unroll_pair_terms=bool(payload.get("unroll_pair_terms", True)),
+            mixed_pair_products_fp64=cast(
+                "bool", payload.get("mixed_pair_products_fp64", False)
+            ),
             minimum_blocks_per_sm=int(payload.get("minimum_blocks_per_sm", 0)),
             maximum_registers=int(payload.get("maximum_registers", 0)),
         )
@@ -453,6 +456,10 @@ def _selections_from_rows(
                     integral=fock_integral,
                     target=target,
                 ).schedule
+                if schedule.mixed_pair_products_fp64:
+                    fock_schedule = replace(
+                        fock_schedule, mixed_pair_products_fp64=True
+                    )
             else:
                 fock_schedule = None
         else:

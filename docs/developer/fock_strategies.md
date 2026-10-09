@@ -69,7 +69,13 @@ The generated raw exact-K owner freezes
 `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=incumbent|fill|primitive|work` at preparation.
 Unset and empty select `work` by default. Explicit `fill` restores the previous
 bounded cross-chunk schedule; `incumbent` retains per-original-chunk execution
-for rollback and comparisons. `fill` holds
+for rollback and comparisons. The prepared `DirectExchangeSelection` freezes
+this axis together with the K lowering masks, so topology and launcher selection
+cannot disagree after later environment changes. With both controls unset,
+the qualified [Rys-task preference](direct_rys_tasks.md) takes priority for its
+covered classes with its own Work companion; incumbent work kernels handle the
+remaining eligible classes.
+`fill` holds
 accepted identities and contribution bounds across chunks in a bounded 2W
 arena, consumes full W-task batches, and flushes the final partial batch.
 Experimental `primitive` additionally stably groups the admitted lookahead
@@ -85,11 +91,14 @@ promise a work-ratio bound for arbitrarily long custom contractions.
 Each queue has a 2W arena. New candidate chunks are scanned only while every
 queue has fewer than W pending tasks. Full expensive bins drain first; partial
 bins accumulate across original chunks and flush independently at the row tail.
-Storage is bounded by 16W identities/bounds per CTA, not by the quartet domain.
+Storage is bounded by 16W identities/bounds per independently queued group,
+not by the quartet domain. Task-parallel Rys uses four independent warp groups
+with W=32 and 24,736 bytes of shared queue storage per CTA.
 Separate class-specialized work kernels keep this storage out of the incumbent,
 fill and primitive kernels. Whole-CTA, native and unsupported classes retain
 their existing workers. This includes high-angular generated classes, not only
-`psss`/`psps`; explicit Rys/block alternatives are not duplicated or changed.
+`psss`/`psps`. Task-parallel Rys has a separate Work companion sharing its
+quartet arithmetic; explicit component-Rys/block alternatives are unchanged.
 Unknown values fail at preparation. Change the setting before creating a new
 owner, not while replaying an existing one.
 
@@ -99,8 +108,15 @@ existing selection. Recurrence selection remains independent. Screening scans
 the original Schwarz-ordered stream once; grouping never resorts unscreened
 inputs. Matrix semantics, precision policy, thresholds and nonsymmetric/spin
 contracts do not change, and no quartet-domain allocation is introduced.
-Explicit `rys` or `block` Fock lowerings retain their own workers; the queue
-control applies only to classes using the incumbent generated lowering.
+Rys-task retains its value producer and selects its warp-private Work companion
+for that schedule. Component-Rys and restricted-only block lowerings retain
+their own workers; incumbent work dispatch applies where no alternative is
+selected. UHF cannot use restricted block contraction and follows the
+frozen work/incumbent fallback instead. `fill` alone does not disable the
+automatic Rys-task preference; restoring the pre-promotion generated defaults
+requires both `GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent` and
+`GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill`. Set the latter to `incumbent` for
+per-original-chunk execution instead. Neither rollback changes J or forces.
 
 Primitive-work buckets are the default; `primitive` remains opt-in. Compare
 fixed-density matrices/work counts and complete cold/warm/moved energy-plus-force
@@ -113,7 +129,10 @@ The [work-bucket decision](../../.agents/notes/implemented/performance/2026-10-0
 records resource and qualification limits; the
 [work-default decision](../../.agents/notes/implemented/performance/2026-10-09-direct-k-work-default.md)
 records the accepted default and explicit fill rollback without claiming a stable
-cold speedup from unmatched SCF trajectories. For a complete PBE0 cold Nsight trace,
+cold speedup from unmatched SCF trajectories. The
+[task Work decision](../../.agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md)
+records composition, independent warp ownership and joint qualification.
+For a complete PBE0 cold Nsight trace,
 `benchmarks/pbe0_k_work_profile.py --trace trace.sqlite --endpoint cold.json --output classes.json`
 validates paired J-then-K class passes, includes native `dddd`, and reports K time
 separately from J and force work. Trace sums are intrusive device diagnostics,

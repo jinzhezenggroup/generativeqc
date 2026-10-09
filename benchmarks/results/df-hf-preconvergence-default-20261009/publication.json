@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 43494,
-      "path": "evidence.json",
+      "bytes": 3519,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "a31002afe7d26a9f148332ed2239e3579d9b17ddeb47481216776313ac8082da"
+      "sha256": "cb654c2ab52678cda389e73f14108be36959763a8db33387de1657efa02f9de4"
     },
     {
       "bytes": 1871,
@@ -77,6 +77,12 @@
       "role": "source-patch",
       "bytes": 3503,
       "sha256": "d34e854e913596a86d5d589a6ea913ffbe294801c88df5b6bea4d816aab855fc"
+    },
+    {
+      "path": "storage.json",
+      "role": "reproduction",
+      "bytes": 869,
+      "sha256": "033f1b4d577a5ceb2f7557a0311ecc6067899d451dcfae8b0f8ec8f195be9709"
     }
   ],
   "reproduction": {

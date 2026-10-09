@@ -82,7 +82,8 @@ const Stage primal_prepare = GQC_STAGE(staged_primal_prepare),
             primal_auxiliary = GQC_STAGE(staged_primal_auxiliary),
             core_stage = GQC_STAGE(staged_core), auxiliary_stage = GQC_STAGE(staged_auxiliary),
             prepare_stage = GQC_STAGE(staged_prepare), factor_stage = GQC_STAGE(staged_factors),
-            audit_core = GQC_STAGE(audit_core), audit_auxiliary = GQC_STAGE(audit_auxiliary);
+            audit_core = GQC_STAGE(audit_core), audit_auxiliary = GQC_STAGE(audit_auxiliary),
+            primal_virtual = GQC_STAGE(primal_virtual);
 using Runner = generated::DeviceParameterOutput (*)(generated_response::CudaState&);
 using StagedRunner = generated::DeviceParameterOutput (*)(generated_response::StagedCudaState&);
 struct Parameter {
@@ -187,6 +188,17 @@ struct DFLambdaActions::Impl {
       host_bytes = checked_add(host_bytes, bytes(outputs));
     }
     const auto fallback_cursor = cursor;
+    std::size_t available_device_bytes = 0, total_device_bytes = 0;
+    {
+      std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+      cuda_check(cudaMemGetInfo(&available_device_bytes, &total_device_bytes));
+    }
+    const auto device_limit = std::min(available_device_bytes, options.df_max_device_bytes);
+    metrics.df_available_device_bytes = available_device_bytes;
+    metrics.df_device_limit_bytes = device_limit;
+    const auto device_fits = [&](std::size_t candidate, std::size_t allowance) {
+      return checked_add(candidate, allowance) <= device_limit;
+    };
     std::size_t staged_arena = arena, tau_offset = 0, tau_seed_offset = 0;
     std::array<std::size_t, 6> cut_offsets{}, seed_offsets{};
     cut_sizes = {vv, n2, n2, n2, n2, n1};
@@ -220,7 +232,8 @@ struct DFLambdaActions::Impl {
         cut_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
         seed_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
       }
-      if (after < before && checked_add(host_bytes, candidate) <= options.max_bytes) {
+      if (after < before && checked_add(host_bytes, candidate) <= options.max_bytes &&
+          device_fits(candidate, 0)) {
         metrics.df_auxiliary_reduction = true;
         cursor = candidate;
       }
@@ -242,6 +255,7 @@ struct DFLambdaActions::Impl {
       metrics.df_core_reuse_bytes = 0;
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
+      metrics.df_primal_matrix_gemm = false;
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
       metrics.df_auxiliary_reduction = scalar_reduction;
@@ -270,8 +284,10 @@ struct DFLambdaActions::Impl {
         const auto matrix_arena = reserve(candidate, bytes(matrix_scratch));
         const auto descriptor_bytes =
             generated_response::contraction_host_bytes(q % batch ? 2 : 1, with_parameters);
-        if (fits && checked_add(checked_add(checked_add(host_bytes, descriptor_bytes), candidate),
-                                kProviderAllowance) <= options.max_bytes) {
+        if (fits &&
+            checked_add(checked_add(checked_add(host_bytes, descriptor_bytes), candidate),
+                        kProviderAllowance) <= options.max_bytes &&
+            device_fits(candidate, kProviderAllowance)) {
           binding_host_bytes = descriptor_bytes;
           metrics.df_matrix_gemm = true;
           metrics.df_auxiliary_batch_size = batch;
@@ -286,6 +302,7 @@ struct DFLambdaActions::Impl {
     auto drop_audit = [&] {
       metrics.df_audit_matrix_gemm = false;
       metrics.df_audit_arena_bytes = 0;
+      metrics.df_primal_matrix_gemm = false;
       cursor = operator_cursor;
       binding_host_bytes = operator_binding_host_bytes;
       capacity();
@@ -293,20 +310,31 @@ struct DFLambdaActions::Impl {
     if (metrics.df_matrix_gemm && options.df_audit_matrix_gemm) {
       const auto batch = metrics.df_auxiliary_batch_size;
       if (audit_core.fit(o, v, 1) && audit_auxiliary.fit(o, v, batch)) {
-        auto candidate = cursor;
-        const auto arena_bytes = bytes(
+        const auto audit_bytes = bytes(
             std::max(audit_core.matrix_arena(o, v, 1), audit_auxiliary.matrix_arena(o, v, batch)));
-        const auto offset = reserve(candidate, arena_bytes);
         const auto descriptors =
             generated_response::audit_contraction_host_bytes(q % batch ? 2 : 1);
-        if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
-                        checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
-            options.max_bytes) {
-          metrics.df_audit_matrix_gemm = true;
-          metrics.df_audit_arena_bytes = arena_bytes;
-          cursor = candidate;
-          audit_offset = offset;
-          binding_host_bytes = checked_add(binding_host_bytes, descriptors);
+        const bool replay_fit = options.df_primal_matrix_gemm && primal_virtual.fit(o, v, batch);
+        // Fresh replay and the later independent audit have disjoint lifetimes.
+        // Replay storage refusal must not refuse the existing matrix audit.
+        for (const bool replay : {replay_fit, false}) {
+          auto candidate = cursor;
+          const auto arena_bytes =
+              replay ? std::max(audit_bytes, bytes(primal_virtual.matrix_arena(o, v, batch)))
+                     : audit_bytes;
+          const auto offset = reserve(candidate, arena_bytes);
+          if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
+                          checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
+                  options.max_bytes &&
+              device_fits(candidate, metrics.df_provider_allowance_bytes)) {
+            metrics.df_audit_matrix_gemm = true;
+            metrics.df_audit_arena_bytes = arena_bytes;
+            metrics.df_primal_matrix_gemm = replay;
+            cursor = candidate;
+            audit_offset = offset;
+            binding_host_bytes = checked_add(binding_host_bytes, descriptors);
+            break;
+          }
         }
       }
     }
@@ -325,7 +353,8 @@ struct DFLambdaActions::Impl {
       const auto descriptors = generated_response::core_reuse_contraction_host_bytes();
       if (checked_add(checked_add(checked_add(host_bytes, binding_host_bytes), descriptors),
                       checked_add(candidate, metrics.df_provider_allowance_bytes)) <=
-          options.max_bytes) {
+              options.max_bytes &&
+          device_fits(candidate, metrics.df_provider_allowance_bytes)) {
         metrics.df_core_reuse = true;
         metrics.df_core_reuse_bytes = retained_bytes;
         core_reuse_offset = offset;
@@ -336,6 +365,8 @@ struct DFLambdaActions::Impl {
     capacity();
     if (metrics.numeric_capacity_bytes > options.max_bytes)
       throw std::length_error("DF Lambda complete numeric storage exceeds budget");
+    if (metrics.owned_device_bytes > device_limit)
+      throw std::length_error("DF Lambda mandatory device storage exceeds available memory");
     parameters_admitted = with_parameters;
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
     if (metrics.df_matrix_gemm && !storage.contractions.prepare(storage.stream)) scalar_plan();
@@ -430,7 +461,8 @@ struct DFLambdaActions::Impl {
         staged.audit_arena = at(audit_offset);
         generated_response::prepare_audit_contractions(
             staged, storage.contractions, metrics.df_auxiliary_batch_size,
-            q % metrics.df_auxiliary_batch_size, metrics.df_gemm_calls, metrics.df_gemm_summands);
+            q % metrics.df_auxiliary_batch_size, metrics.df_primal_matrix_gemm,
+            metrics.df_gemm_calls, metrics.df_gemm_summands);
         metrics.audit_schedule_hash = generated_response::audit_matrix_operator_hash;
       }
       if (metrics.df_core_reuse) {
@@ -625,12 +657,23 @@ void DFLambdaActions::replay(double& energy, std::vector<double>& r1, std::vecto
   s.clear_error();
   cuda_check(cudaMemsetAsync(s.sum1, 0, bytes(s.n1), s.storage.stream));
   cuda_check(cudaMemsetAsync(s.sum2, 0, bytes(s.n2), s.storage.stream));
-  for (std::size_t Q = 0; Q < s.q; ++Q) {
-    s.select(Q);
-    const auto out = generated_virtual::run_virtual_accumulate_cuda(s.auxiliary);
-    s.add(out.singles, out.doubles);
-    s.record(generated_response::virtual_virtual_contraction_terms,
-             generated_virtual::virtual_cuda_operation_count);
+  for (std::size_t Q = 0; Q < s.q;) {
+    if (s.metrics.df_primal_matrix_gemm) {
+      const auto batch = std::min(s.metrics.df_auxiliary_batch_size, s.q - Q);
+      s.select(Q, batch);
+      const auto out = generated_response::run_primal_virtual_cuda(s.staged);
+      generated_response::accumulate_primal_virtual_cuda(s.staged, out, s.sum2, s.sum1);
+      ++s.metrics.df_generated_kernels;
+      s.record_stage(primal_virtual);
+      Q += batch;
+    } else {
+      s.select(Q);
+      const auto out = generated_virtual::run_virtual_accumulate_cuda(s.auxiliary);
+      s.add(out.singles, out.doubles);
+      s.record(generated_response::virtual_virtual_contraction_terms,
+               generated_virtual::virtual_cuda_operation_count);
+      ++Q;
+    }
   }
   const auto out = generated_core::run_replay_cuda(s.state);
   s.record(generated_response::replay_contraction_terms, generated_core::replay_operation_count);

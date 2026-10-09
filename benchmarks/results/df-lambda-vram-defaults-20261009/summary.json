@@ -1,0 +1,194 @@
+{
+  "schema": "generativeqc.df-lambda-batch.ablation.v1",
+  "slurm_job_id": "2780",
+  "cuda_visible_devices": "0",
+  "gpu": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "frozen_sha256": {
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/build/endpoint": "0e12fa5ce7ee4c2578b764b5f319b0d3bd9d55dc050e97b681059d82befb296d",
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "b35fde13be7beaa6bba28b3d119a0835d4967cc501e10d1ce948c5c0b463ad97",
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/df_lambda_batch_ablation.py": "9ad5b4f29cedeca95e9bd65064d9847222b45d300f2d1b6c4bfe8dc6b1033b54",
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/df_lambda_core_reuse_ablation.py": "410c5c738ab9ef2f69ff66a034dc541739f64961714fdf06505569ae23919273",
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+    "/data/jzzeng/qc-lambda-adaptive-default-20261009/source/benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29"
+  },
+  "screen_only": false,
+  "instrumented": false,
+  "performance_promotion": false,
+  "summary": {
+    "b8": {
+      "native_seconds": {
+        "median": 531.8976653990001,
+        "minimum": 518.302791026,
+        "maximum": 545.492539772
+      },
+      "reference_seconds": {
+        "median": 132.413548741,
+        "minimum": 128.814828884,
+        "maximum": 136.012268598
+      },
+      "source_seconds": {
+        "median": 3.6342545289999997,
+        "minimum": 3.592191743,
+        "maximum": 3.676317315
+      },
+      "ccsd_seconds": {
+        "median": 101.0403514935,
+        "minimum": 99.827817881,
+        "maximum": 102.252885106
+      },
+      "triples_seconds": {
+        "median": 39.949767455,
+        "minimum": 39.36281151,
+        "maximum": 40.5367234
+      },
+      "lambda_seconds": {
+        "median": 122.672803748,
+        "minimum": 120.88862515,
+        "maximum": 124.456982346
+      },
+      "source_response_seconds": {
+        "median": 3.821690357,
+        "minimum": 3.787310633,
+        "maximum": 3.856070081
+      },
+      "orbital_seconds": {
+        "median": 128.3651643915,
+        "minimum": 122.029119474,
+        "maximum": 134.701209309
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 45986.0,
+        "minimum": 45986,
+        "maximum": 45986
+      },
+      "lambda_work": {
+        "median": 38135799179463.0,
+        "minimum": 38135799179463,
+        "maximum": 38135799179463
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1881569130992.0,
+        "minimum": 1881569130992,
+        "maximum": 1881569130992
+      },
+      "lambda_capacity": {
+        "median": 10082032819.0,
+        "minimum": 10082032819,
+        "maximum": 10082032819
+      }
+    },
+    "b32_p1": {
+      "native_seconds": {
+        "median": 473.1733470315,
+        "minimum": 472.73919943,
+        "maximum": 473.607494633
+      },
+      "reference_seconds": {
+        "median": 129.28870947899998,
+        "minimum": 129.250055466,
+        "maximum": 129.327363492
+      },
+      "source_seconds": {
+        "median": 3.643803706,
+        "minimum": 3.62783855,
+        "maximum": 3.659768862
+      },
+      "ccsd_seconds": {
+        "median": 99.9039420215,
+        "minimum": 99.891860066,
+        "maximum": 99.916023977
+      },
+      "triples_seconds": {
+        "median": 39.409167298,
+        "minimum": 39.402305476,
+        "maximum": 39.41602912
+      },
+      "lambda_seconds": {
+        "median": 74.5920019605,
+        "minimum": 74.572917318,
+        "maximum": 74.611086603
+      },
+      "source_response_seconds": {
+        "median": 3.8075763074999998,
+        "minimum": 3.799665045,
+        "maximum": 3.81548757
+      },
+      "orbital_seconds": {
+        "median": 122.528060382,
+        "minimum": 122.124371297,
+        "maximum": 122.931749467
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 14307.0,
+        "minimum": 14307,
+        "maximum": 14307
+      },
+      "lambda_work": {
+        "median": 37901303184171.0,
+        "minimum": 37901303184171,
+        "maximum": 37901303184171
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1862138223520.0,
+        "minimum": 1862138223520,
+        "maximum": 1862138223520
+      },
+      "lambda_capacity": {
+        "median": 20701823865.0,
+        "minimum": 20701823865,
+        "maximum": 20701823865
+      }
+    }
+  },
+  "source": {
+    "revision": "cdb2131a47aaeb003bbc85fc76cf172848b8044b",
+    "dirty": true,
+    "measured_archive_tree": "c5067fa42ca627b20750814eced745e3632e0f22",
+    "measured_archive_sha256": "5f880d6f66c8261e5ce1829dba8f7357ce49d5847b7c877c4accc48fffdd26d9",
+    "reconstruction": "measured-source.patch.gz",
+    "patch_excludes": "Documentation, Agent Notes and historical evidence; production source, compiler generator, endpoint drivers and validation fixtures are included.",
+    "production_and_drivers_match_compiled_archive": true,
+    "post_compile_test_only_finalization": {
+      "path": "tests/python/test_cc_cuda_lambda_lifetime.py",
+      "reason": "The conventional host lifetime mock gains the two forwarded diagnostic fields. Production/compiler/native-GPU/driver bytes are unchanged from the compiled and measured archive.",
+      "diff_sha256": "9b2a828cdc4df9436f4d98b162efe3a0752b4073bf5c331bbadf4bea6d300173"
+    }
+  },
+  "qualification": {
+    "gpu_job": 2779,
+    "gpu_tests_passed": 102,
+    "memcheck_cases_passed": 17,
+    "memcheck_errors": 0,
+    "host_evidence_tests_passed": 210,
+    "compiler_modules": 504,
+    "compiler_dependency_errors": 0,
+    "cuda_ownership_files": 338,
+    "provider_inventory_files": 20,
+    "materialization_new_findings": 0
+  },
+  "descriptive_saving_percent": {
+    "native_seconds": 11.040529445348923,
+    "lambda_seconds": 39.19434489022502
+  }
+}

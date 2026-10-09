@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..k_block import packed_restricted_k_block_eligible
+from ..k_block import (
+    PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES,
+    packed_restricted_k_block_eligible,
+)
 from .common import _emitted_component_names, _generic_task_component_setup
 
 if TYPE_CHECKING:
@@ -20,6 +23,8 @@ def _packed_restricted_k_block(
     spec: ShellClassSpec,
     task_component_setup: str,
     component_names: tuple[str, str, str, str],
+    *,
+    maximum_doubles: int = PACKED_RESTRICTED_K_BLOCK_MAX_DOUBLES,
 ) -> tuple[str, str]:
     """Emit one bounded restricted raw-K block contraction for packed workers.
 
@@ -48,7 +53,7 @@ def _packed_restricted_k_block(
     for _, _, rows, columns in blocks:
         offsets.append(total)
         total += rows * columns
-    if not packed_restricted_k_block_eligible(spec):
+    if not packed_restricted_k_block_eligible(spec, maximum_doubles=maximum_doubles):
         return "", ""
 
     first, second, third, fourth = component_names
@@ -157,6 +162,7 @@ def _emit_packed_fock_consumer_cuda(
     minimum_blocks_per_sm: int,
     *,
     k_block: bool = False,
+    lane_private: bool = False,
 ) -> str:
     """Emit packed low-order Fock kernels using the shared value recurrence."""
 
@@ -164,10 +170,19 @@ def _emit_packed_fock_consumer_cuda(
         "shared.task", "task"
     )
     component_names = _emitted_component_names(spec)
+    task_width = plan.schedule.tasks_per_block
+    lane_storage_declaration = (
+        "GeneratedDpppPackedFockLaneStorage lane_storage;"
+        if lane_private
+        else f"__shared__ GeneratedDpppPackedFockLaneStorage lane_storage[{task_width}];"
+    )
+    lane_storage_reference = (
+        "lane_storage" if lane_private else "lane_storage[threadIdx.x]"
+    )
     kernel_qualifier = (
         f"__maxnreg__({plan.schedule.maximum_registers})"
         if plan.schedule.maximum_registers
-        else f"__launch_bounds__(32, {minimum_blocks_per_sm})"
+        else f"__launch_bounds__({task_width}, {minimum_blocks_per_sm})"
     )
     exchange_block_storage, exchange_block_body = (
         _packed_restricted_k_block(spec, task_component_setup, component_names)
@@ -278,14 +293,14 @@ void generated_dppp_shell_class_fock_rhf_kernel(
     const double* density,
     double* fock,
     std::size_t task_count) {{
-  __shared__ GeneratedDpppPackedFockLaneStorage lane_storage[32];
+  {lane_storage_declaration}
   const std::size_t task_index =
-      static_cast<std::size_t>(blockIdx.x) * 32U + threadIdx.x;
+      static_cast<std::size_t>(blockIdx.x) * {task_width}U + threadIdx.x;
   if (task_index >= task_count) return;
   generated_dppp_packed_fock_lane<false>(
       tasks, primitive_pairs, primitive_pair_offsets, ao_coefficients,
       atom_positions, screening_tolerance, schwarz_bounds, density, fock,
-      task_index, lane_storage[threadIdx.x]);
+      task_index, {lane_storage_reference});
 }}
 
 extern "C" __global__ {kernel_qualifier}
@@ -300,14 +315,14 @@ void generated_dppp_shell_class_fock_uhf_kernel(
     const double* density,
     double* fock,
     std::size_t task_count) {{
-  __shared__ GeneratedDpppPackedFockLaneStorage lane_storage[32];
+  {lane_storage_declaration}
   const std::size_t task_index =
-      static_cast<std::size_t>(blockIdx.x) * 32U + threadIdx.x;
+      static_cast<std::size_t>(blockIdx.x) * {task_width}U + threadIdx.x;
   if (task_index >= task_count) return;
   generated_dppp_packed_fock_lane<true>(
       tasks, primitive_pairs, primitive_pair_offsets, ao_coefficients,
       atom_positions, screening_tolerance, schwarz_bounds, density, fock,
-      task_index, lane_storage[threadIdx.x]);
+      task_index, {lane_storage_reference});
 }}
 
 template <bool Unrestricted>
@@ -325,9 +340,9 @@ __device__ __forceinline__ void generated_dppp_packed_fock_persistent(
     const std::uint32_t* task_count,
     std::uint32_t* task_head) {{
   __shared__ std::uint32_t task_base;
-  __shared__ GeneratedDpppPackedFockLaneStorage lane_storage[32];
+  {lane_storage_declaration}
   while (true) {{
-    if (threadIdx.x == 0U) task_base = atomicAdd(task_head, 32U);
+    if (threadIdx.x == 0U) task_base = atomicAdd(task_head, {task_width}U);
     __syncthreads();
     if (task_base >= *task_count) return;
     const std::uint32_t task_index = task_base + threadIdx.x;
@@ -336,7 +351,7 @@ __device__ __forceinline__ void generated_dppp_packed_fock_persistent(
           tasks, primitive_pairs, primitive_pair_offsets, ao_coefficients,
           atom_positions, screening_tolerance, schwarz_bounds, density, fock,
           static_cast<std::size_t>(*task_offset + task_index),
-          lane_storage[threadIdx.x]);
+          {lane_storage_reference});
     }}
     __syncthreads();
   }}

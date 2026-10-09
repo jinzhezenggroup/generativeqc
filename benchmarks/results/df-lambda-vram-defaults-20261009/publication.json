@@ -1,0 +1,83 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "cdb2131a47aaeb003bbc85fc76cf172848b8044b",
+    "dirty": true
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Four clean and two separate instrumented complete endpoints pass unchanged independent gates with 21 Lambda iterations/22 actions; not shared performance promotion."
+  },
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node2",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=8",
+      "--time=01:10:00",
+      "python",
+      "benchmarks/df_lambda_batch_ablation.py",
+      "--endpoint",
+      "build/endpoint",
+      "--library",
+      "build-cuda/libgenerativeqc.so",
+      "--input",
+      "benchmarks/results/rccsd-diis-ring-1900/ethane230.input",
+      "--oracle",
+      "benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json",
+      "--finite-differences",
+      "benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json",
+      "--output",
+      ".artifacts/lambda-vram-defaults/reproduction-clean",
+      "--batch-limits",
+      "8",
+      "32",
+      "--default-candidate",
+      "--repetitions",
+      "2"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 8401,
+      "sha256": "6c3c1446b22d62ddb6625220b1f0a674a40c0ecbaa94dd38cc7ab0a140f5b9c4"
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "bytes": 6714,
+      "sha256": "d872cb5b85337d37624aa947594dd76bf07827e51f0c545c1d460f8ea5d0b14b"
+    },
+    {
+      "path": "samples.json.gz",
+      "role": "samples",
+      "bytes": 5238,
+      "sha256": "24c681f596c6c7ef1aa83b4e0d585c20b5866739c5c612d86951e8146bdb69d3"
+    },
+    {
+      "path": "profile-summary.json.gz",
+      "role": "summary",
+      "bytes": 1353,
+      "sha256": "dce86e344609201cf6e1004b0dc9a875dff3f77d2edb8728dbbe2a667c841cfb"
+    },
+    {
+      "path": "validation.json",
+      "role": "evidence",
+      "bytes": 11638,
+      "sha256": "d1613d3ef8fa424c2445f53993c5b6a8b849359d33b3c8d4099097d419e2a642"
+    },
+    {
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "bytes": 15468,
+      "sha256": "624ce6fbe0c8b129d46419bb8b7bec4b9abb4c505df6ed786488f03faf8ee7dd"
+    }
+  ],
+  "archives": []
+}

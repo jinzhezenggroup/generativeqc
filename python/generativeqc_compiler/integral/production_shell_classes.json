@@ -73,7 +73,7 @@
             "component_tile": 162,
             "tasks_per_warp": 4,
             "shared_coulomb": true,
-            "pair_orientation": "swapped",
+            "pair_orientation": "canonical",
             "pair_storage": "materialized",
             "unroll_pair_terms": true
           }
@@ -291,9 +291,10 @@
             "component_tile": 216,
             "tasks_per_warp": 2,
             "shared_coulomb": true,
-            "pair_orientation": "swapped",
-            "pair_storage": "recomputed",
+            "pair_orientation": "canonical",
+            "pair_storage": "materialized",
             "unroll_pair_terms": false,
+            "mixed_pair_products_fp64": true,
             "minimum_blocks_per_sm": 2
           }
         },

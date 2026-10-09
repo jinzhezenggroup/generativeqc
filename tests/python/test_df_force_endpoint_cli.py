@@ -70,9 +70,28 @@ def test_reference_tolerance_rejects_invalid_or_looser_values(
 
 
 def test_reference_tolerance_rejects_extra_arguments(endpoint_binary: str) -> None:
-    completed = invoke(endpoint_binary, "auto", "1", "0", "1", "0", "0", "extra")
+    completed = invoke(endpoint_binary, "auto", "1", "0", "1", "0", "0", "0", "extra")
     assert completed.returncode != 0
     assert "usage: df-force-endpoint" in completed.stderr
+
+
+@pytest.mark.parametrize("selector", ["0", "1"])
+def test_lambda_primal_matrix_selector_accepts_explicit_values(
+    endpoint_binary: str, selector: str
+) -> None:
+    """The trailing replay selector must be parsed before molecular work."""
+    completed = invoke(endpoint_binary, "auto", "0", "1", "30", "1", "1", selector)
+    assert completed.returncode != 0
+    assert "invalid molecular probe dimensions" in completed.stderr
+
+
+@pytest.mark.parametrize("selector", ["", "2", "true", "1x"])
+def test_lambda_primal_matrix_selector_rejects_invalid_values(
+    endpoint_binary: str, selector: str
+) -> None:
+    completed = invoke(endpoint_binary, "auto", "0", "1", "30", "1", "1", selector)
+    assert completed.returncode != 0
+    assert "invalid endpoint selector" in completed.stderr
 
 
 @pytest.mark.parametrize("interval", ["1", "7", "30"])
