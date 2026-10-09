@@ -1300,9 +1300,10 @@ DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std:
   }
 }
 
-DfResolvedBudget resolve_method_owned_df_resident_budget(
-    const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux,
-    std::size_t restricted_rank, std::size_t source_device_bytes) {
+DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget& budget,
+                                                         std::size_t nbf, std::size_t naux,
+                                                         std::size_t restricted_rank,
+                                                         std::size_t source_device_bytes) {
   if (!budget.feasible || !budget.live_resource || budget.requested_bytes ||
       !budget.response_bytes || !restricted_rank || restricted_rank > nbf)
     return budget;
@@ -1315,15 +1316,15 @@ DfResolvedBudget resolve_method_owned_df_resident_budget(
   // the resulting cap, including optional diagnostic allocations.
   const auto response_floor = df_budget_ceiling(
       64.0L * 1024 * 1024 + 2.0L * source_device_bytes +
-      sizeof(double) * (4.0L * auxiliary_count * auxiliary_count +
-                        69.0L * basis_count * basis_count + 2.0L * auxiliary_count +
-                        2.0L * auxiliary_count * occupied_rank * occupied_rank));
+      sizeof(double) *
+          (4.0L * auxiliary_count * auxiliary_count + 69.0L * basis_count * basis_count +
+           2.0L * auxiliary_count + 2.0L * auxiliary_count * occupied_rank * occupied_rank));
   const auto response = std::max(response_floor, budget.total_bytes / 5);
   if (response >= budget.response_bytes || response >= budget.total_bytes) return budget;
   const auto value = budget.total_bytes - response;
   try {
     (void)plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
-                                           source_device_bytes, 0, false);
+                                            source_device_bytes, 0, false);
   } catch (const DensityFittingBudgetError&) {
     return budget;
   }

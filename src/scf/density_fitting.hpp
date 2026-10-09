@@ -324,8 +324,8 @@ class DensityFittingBudgetError : public std::invalid_argument {
  * Preserve a bounded occupied-response workspace and at least 20% for response;
  * return the original split if the native packed planner still cannot fit. */
 [[nodiscard]] DfResolvedBudget resolve_method_owned_df_resident_budget(
-    const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux,
-    std::size_t restricted_rank, std::size_t source_device_bytes);
+    const DfResolvedBudget& budget, std::size_t nbf, std::size_t naux, std::size_t restricted_rank,
+    std::size_t source_device_bytes);
 
 /** Additional lazy SCF DIIS capacity, conservatively covering joined-spin UHF.
  * Add this to fixed_device_bytes before choosing K panels, and to native

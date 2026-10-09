@@ -237,10 +237,9 @@ struct PreparedFockPlan::Impl {
       // Retained force capability does not require exporting every H'/S'
       // matrix before an energy-only solve. The stationary CUDA consumer uses
       // geometry and final D/W; only its bounded host fallback needs these.
-      const bool export_derivatives = derivatives &&
-                                      !(has_df && !has_exact &&
-                                        strategy.spec.derivative_order == 0 &&
-                                        retained_fitted_derivative_order != 0);
+      const bool export_derivatives =
+          derivatives && !(has_df && !has_exact && strategy.spec.derivative_order == 0 &&
+                           retained_fitted_derivative_order != 0);
       checked(build_cuda_one_electron_integrals(device, system, cartesian, detail,
                                                 export_derivatives, export_derivatives),
               detail);
@@ -304,17 +303,17 @@ struct PreparedFockPlan::Impl {
         // Packed-raw is not an admitted borrowed-response consumer and does
         // not have the same optional-U budget fallback. Keep its old capacity.
         const auto request = diagnostic.variant.df_pair_storage_request;
-        const auto packed_rank = request == DfPairStorageRequest::SymmetricLower ? 0 : reserved_rank;
-        auto tiles = plan_requested_density_fitting_tiles(request, 1, n, a, n, packed_rank,
-                                                          plan_budget, fixed, true, 0,
-                                                          reserved_rank != 0);
+        const auto packed_rank =
+            request == DfPairStorageRequest::SymmetricLower ? 0 : reserved_rank;
+        auto tiles = plan_requested_density_fitting_tiles(
+            request, 1, n, a, n, packed_rank, plan_budget, fixed, true, 0, reserved_rank != 0);
         const bool needs_occupied_capacity =
             tiles.value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
             tiles.value_storage.rank_capacity < reserved_rank;
         if (request == DfPairStorageRequest::Automatic && reserved_rank &&
             (!tiles.stores_full_three_center || needs_occupied_capacity)) {
-          const auto resident = resolve_method_owned_df_resident_budget(
-              resolved, n, a, reserved_rank, fixed);
+          const auto resident =
+              resolve_method_owned_df_resident_budget(resolved, n, a, reserved_rank, fixed);
           if (resident != resolved) {
             const auto promoted = plan_requested_density_fitting_tiles(
                 request, 1, n, a, n, packed_rank, resident.value_bytes, fixed, true, 0, true);
@@ -357,7 +356,8 @@ struct PreparedFockPlan::Impl {
       runtime::df_progress::number("resolved_response_budget_bytes", resolved.response_bytes);
       runtime::df_progress::number("observed_free_device_bytes", resolved.observed_free_bytes);
       runtime::df_progress::number("value_peak_bytes", tiles.peak_workspace_bytes);
-      runtime::df_progress::number("value_storage", static_cast<unsigned>(tiles.value_storage.pairs));
+      runtime::df_progress::number("value_storage",
+                                   static_cast<unsigned>(tiles.value_storage.pairs));
       budget_trace.finish();
       data.value_storage = tiles.value_storage.pairs;
       diagnostic.variant.df_pair_storage = data.value_storage;
@@ -425,8 +425,8 @@ void PreparedFockPlan::ensure_one_electron_derivatives() const {
   runtime::df_progress::Scope export_trace("deferred_one_electron_derivatives");
   integrals::IntegralData cartesian;
   std::string detail;
-  checked(build_cuda_one_electron_integrals(impl_->device_id, impl_->orbital, cartesian,
-                                            detail, true, true),
+  checked(build_cuda_one_electron_integrals(impl_->device_id, impl_->orbital, cartesian, detail,
+                                            true, true),
           detail);
   auto derivatives = integrals::transform_integrals(cartesian, impl_->orbital);
   if (derivatives.nbf != one.nbf || derivatives.ncoord != coordinates ||
