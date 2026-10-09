@@ -1,0 +1,29 @@
+{
+  "policy": "Full run bundles remain ignored local artifacts; no Release or external host is used.",
+  "retained_local_directory": "/data/jzzeng/qc-k-selector-task-work-20261009/benchmarks/results/unified-k-work-20261009",
+  "archives": {
+    "diagnostics.tar.gz": {
+      "sha256": "74ab2195d84753b356282ca404ef9b13f6fdf045a0ef3ebe9c84c44846c1f1d3",
+      "bytes": 6591
+    },
+    "observations.tar.gz": {
+      "sha256": "9d89441dacb97b8f9dd0cc06ab3d4d4414e3a865cb50199ef87d15c096c18460",
+      "bytes": 219519
+    },
+    "prior-union-negative-evidence.tar.gz": {
+      "sha256": "737732aff00542fb0fb99f41dd777b799b20e4eb30d403f4303451fcd3322f54",
+      "bytes": 2516695
+    },
+    "reproduce.tar.gz": {
+      "sha256": "36598906114d4501c8aae647cd54094e8cf93b29e6e9382acb2e0f65c51f272d",
+      "bytes": 11413277
+    },
+    "validation.tar.gz": {
+      "sha256": "5a64324b2d6e04c7eb62c0023a55fc5e35d1e102b61ecf211102408d9b1f1d91",
+      "bytes": 12808
+    }
+  },
+  "source_base": "6acb3e70e3031b4a7ef44ef77df551b354e34e59",
+  "source_identity": "cb788b62c65e98f375f29a3fbbf35cf58c61a0c329461d4667a51c7794d6eb7e",
+  "local_capsule_source_reconstruction_gate": true
+}
