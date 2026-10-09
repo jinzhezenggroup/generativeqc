@@ -96,6 +96,11 @@ function(generativeqc_add_gfn2_runtime target)
     if(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
       target_compile_definitions(generativeqc_gfn2_cuda PRIVATE
         GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS=1)
+      # The parent target compiles gfn2_runtime_bridge.cpp, whose execution
+      # header includes the layout-bearing density workspace. Keep that TU's
+      # opt-in artifact ABI identical to the whole-archived CUDA target.
+      target_compile_definitions(${target} PRIVATE
+        GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS=1)
     endif()
     set(GENERATIVEQC_GFN2_ELECTRONIC_CUDA_HEADER
         "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_electronic_native.cuh")

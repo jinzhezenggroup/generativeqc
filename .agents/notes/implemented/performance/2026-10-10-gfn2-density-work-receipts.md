@@ -23,6 +23,12 @@ into a separate CUDA artifact. The default build retains its original density
 workspace ABI and kernel path. The internal cache must enable readback before
 preparing a topology; otherwise no receipt arena is attached.
 
+The opt-in definition is private to both the GFN2 CUDA archive and the parent
+GenerativeQC target. The parent compiles the runtime bridge through an execution
+header that includes the layout-bearing density workspace, so every translation
+unit whole-linked into the diagnostic artifact must see the same expanded
+workspace definition. The default-off target receives neither definition.
+
 One instrumented CTA record identifies system, spin channel, matrix tile,
 orbital count and triangular pair count. Counters advance only at executed
 pair/orbital/check/publication statements. In particular, `plain_visits` counts

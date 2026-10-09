@@ -19,6 +19,18 @@ ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "src/xtb/native/src"
 
 
+def test_density_diagnostic_define_covers_parent_layout_consumer() -> None:
+    """Keep the opt-in workspace ABI identical across the combined library."""
+    cmake = (ROOT / "cmake/GenerativeQCGfn2Runtime.cmake").read_text()
+    diagnostic = cmake.split("if(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)", 1)[
+        1
+    ].split("endif()", 1)[0]
+    define = "GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS=1"
+    assert "target_compile_definitions(generativeqc_gfn2_cuda PRIVATE" in diagnostic
+    assert "target_compile_definitions(${target} PRIVATE" in diagnostic
+    assert diagnostic.count(define) == 2
+
+
 def _block(source: str, marker: str, start: int = 0) -> str:
     begin = source.index(marker, start)
     opening = source.index("{", begin)
