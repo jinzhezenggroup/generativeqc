@@ -77,6 +77,12 @@ def test_roundtrip_identity_is_strict_and_control_semantics_are_hashed() -> None
     replayed = SolverRegion.from_payload(payload)
     assert replayed == item
     assert replayed.identity == item.identity
+    # Retirement must not invalidate existing scalar schema-v1 artifacts.
+    assert payload["completion"] == {"mode": "scalar", "active_mask": None}
+    assert (
+        item.identity
+        == "8aaddba979c201f4e008b9bd7145acb108e581ae343f3e0de5b06ee8ffc8bff5"
+    )
 
     assert replace(item, max_steps=13).identity != item.identity
     assert (
@@ -185,13 +191,24 @@ def test_checkpoint_and_completion_boundaries_are_explicit() -> None:
         )
     with pytest.raises(ValueError, match="active mask"):
         RegionCompletion("scalar", "mask")
-    with pytest.raises(ValueError, match="non-output"):
-        replace(item, completion=RegionCompletion("per_item_mask", "trial"))
     with pytest.raises(TypeError, match="bool"):
         RegionCheckpoint("bad", "exit", ("next_state",), 1)
 
 
-def test_per_item_completion_uses_an_explicit_body_output_mask() -> None:
+@pytest.mark.parametrize("mode", ["per_item_mask", "unknown"])
+@pytest.mark.parametrize("active_mask", [None, "active"])
+def test_non_scalar_completion_is_rejected_on_construction_and_replay(
+    mode: str, active_mask: str | None
+) -> None:
+    with pytest.raises(ValueError, match="only scalar"):
+        RegionCompletion(mode, active_mask)
+    payload = region().to_payload()
+    payload["completion"] = {"mode": mode, "active_mask": active_mask}
+    with pytest.raises(ValueError, match="only scalar"):
+        SolverRegion.from_payload(payload)
+
+
+def test_retired_mask_output_cannot_implicitly_acquire_a_region_role() -> None:
     item = region()
     masked_body = replace(
         item.body,
@@ -205,13 +222,21 @@ def test_per_item_completion_uses_an_explicit_body_output_mask() -> None:
         ),
         outputs=(*item.body.outputs, "active"),
     )
-    masked = replace(
-        item,
-        body=masked_body,
-        completion=RegionCompletion("per_item_mask", "active"),
-    )
-    assert masked.completion.active_mask == "active"
-    assert SolverRegion.from_payload(masked.to_payload()) == masked
+    with pytest.raises(ValueError, match="explicit region role"):
+        replace(item, body=masked_body)
+    # Reject even the fully formed old mask payload; never replay it as scalar.
+    payload = item.to_payload()
+    payload["body"] = masked_body.to_payload()
+    payload["completion"] = {"mode": "per_item_mask", "active_mask": "active"}
+    with pytest.raises(ValueError, match="only scalar"):
+        SolverRegion.from_payload(payload)
+
+
+def test_scalar_completion_replay_rejects_a_nonnull_reserved_mask() -> None:
+    payload = region().to_payload()
+    payload["completion"]["active_mask"] = "next_state"
+    with pytest.raises(ValueError, match="cannot bind an active mask"):
+        SolverRegion.from_payload(payload)
 
 
 @pytest.mark.parametrize("max_steps", [0, -1, True, 1.5])

@@ -216,6 +216,63 @@ def test_prepared_ccsd_exposes_bounded_region_without_changing_policy() -> None:
     assert replayed_region.identity == region.identity
 
 
+def test_scalar_region_failure_isolated_from_accepted_warm_state(
+    monkeypatch: typing.Any,
+) -> None:
+    s, p, meta, _ = fixture_problem()
+    accepted = solve(s, p)
+    assert accepted.converged
+    warm = (accepted.t1.copy(), accepted.t2.copy())
+    limited = solve(
+        s,
+        p,
+        t1=warm[0] + 0.01,
+        t2=warm[1] + 0.01,
+        options=SolverOptions(max_iterations=1),
+    )
+    assert limited.status == "not_converged" and not limited.converged
+    assert [row["iteration"] for row in limited.history] == [0, 1]
+    assert limited.provenance["solver_region_max_steps"] == 2
+
+    original = PreparedCCSD.evaluate
+    calls = 0
+
+    def fail_trial(
+        self: typing.Any, *args: typing.Any, **kwargs: typing.Any
+    ) -> typing.Any:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise FloatingPointError("per-solve trial failure")
+        return original(self, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PreparedCCSD, "evaluate", fail_trial)
+        failed = solve(s, p, t1=accepted.t1, t2=accepted.t2)
+    assert failed.status == "nonfinite" and not failed.converged
+    assert len(failed.history) == 1
+    for published, last_finite, initial in zip(
+        (accepted.t1, accepted.t2), (failed.t1, failed.t2), warm
+    ):
+        np.testing.assert_array_equal(published, initial)
+        np.testing.assert_array_equal(last_finite, initial)
+        assert not np.shares_memory(published, last_finite)
+        assert not published.flags.writeable and not last_finite.flags.writeable
+
+    recovered = solve(s, p, t1=accepted.t1, t2=accepted.t2)
+    assert recovered.converged
+    assert abs(recovered.total_energy - meta["total_energy"]) <= 1e-8
+    for result in (accepted, limited, failed, recovered):
+        payload = result.provenance["solver_region_payload"]
+        assert payload["completion"] == {"mode": "scalar", "active_mask": None}
+        replayed = SolverRegion.from_payload(payload)
+        assert replayed.identity == result.provenance["solver_region_identity"]
+        assert len(result.history) <= replayed.max_steps
+        checkpoints = {item.name: item.boundary for item in replayed.checkpoints}
+        assert checkpoints["accepted_state"] == "success"
+        assert checkpoints["failure_state"] == "failure"
+
+
 def test_prepared_ccsd_rejects_ks_reference() -> None:
     s, p, _meta, _ = fixture_problem()
     ks = replace(
