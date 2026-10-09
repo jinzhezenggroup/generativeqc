@@ -14,14 +14,14 @@ MOLECULE = Path(sys.argv.pop(1)).resolve()
 
 
 class NativeDftDfCliTests(unittest.TestCase):
-    def call(self, *flags: str) -> subprocess.CompletedProcess[str]:
+    def call_named(self, method: str, *flags: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
                 str(CLI),
                 "run",
                 str(MOLECULE),
                 "--method",
-                "pbe-rks",
+                method,
                 "--basis",
                 "sto-3g",
                 "--units",
@@ -33,6 +33,52 @@ class NativeDftDfCliTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
+
+    def call(self, *flags: str) -> subprocess.CompletedProcess[str]:
+        return self.call_named("pbe-rks", *flags)
+
+    def test_explicit_pbe0_rks_energy_and_fail_closed_force(self) -> None:
+        # The reference is the independently qualified native C++ H2/STO-3G
+        # PBE0 energy in test_cpp_batch.cpp at +/-0.7 Bohr, not PBE energy.
+        result = self.call_named("PBE0-RKS", "--backend", "cpu")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["method"], "pbe0-rks")
+        self.assertEqual(data["backend"], "cpu_reference")
+        self.assertAlmostEqual(data["energy_hartree"], -1.1543107969377155, delta=1e-6)
+        self.assertNotIn("forces_hartree_per_bohr", data)
+
+        explicit_grid = self.call_named(
+            "pbe0-rks",
+            "--backend",
+            "cpu",
+            "--pbe0-radial-points",
+            "64",
+            "--pbe0-polar-points",
+            "12",
+            "--pbe0-azimuth-points",
+            "24",
+        )
+        self.assertEqual(explicit_grid.returncode, 0, explicit_grid.stderr)
+        self.assertAlmostEqual(
+            json.loads(explicit_grid.stdout)["energy_hartree"],
+            data["energy_hartree"],
+            delta=1e-9,
+        )
+        for method, extra, message in (
+            ("pbe0-rks", ("--forces",), "DFT forces are not exposed"),
+            (
+                "pbe-rks",
+                ("--pbe0-radial-points", "64"),
+                "only valid with --method pbe0-rks",
+            ),
+            ("pbe0-uks", (), "native run method must be"),
+        ):
+            with self.subTest(method=method, extra=extra):
+                rejected = self.call_named(method, *extra)
+                self.assertEqual(rejected.returncode, 2, rejected.stderr)
+                self.assertEqual(rejected.stdout, "")
+                self.assertIn(message, rejected.stderr)
 
     def test_cpu_df_pbe_energy_and_metadata(self) -> None:
         flags = (

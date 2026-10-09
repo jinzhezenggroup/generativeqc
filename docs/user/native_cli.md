@@ -137,7 +137,32 @@ generativeqc run molecule.xyz \
 ```
 
 With no explicit auxiliary basis, the orbital basis remains the fitting basis.
-Choose a scientifically appropriate auxiliary basis for production. The
+Choose a scientifically appropriate auxiliary basis for production.
+
+### Explicit Python-free PBE0 RKS energy
+
+The compiler-owned `pbe0-rks` composition is **not** a native method ABI ID.
+The CLI constructs the same explicitly qualified `KsComposition` graph as the
+installed C++ SDK PBE0 example, using the PBE-RKS carrier: PBE correlation,
+0.75 PBE exchange, and 0.25 full-range exact exchange.
+
+```bash
+generativeqc run molecule.xyz --method pbe0-rks --basis sto-3g \\
+  --backend cpu --units bohr \\
+  --pbe0-radial-points 64 --pbe0-polar-points 12 --pbe0-azimuth-points 24 --json
+```
+
+The default grid is the small **reference** grid used in the SDK example
+(version 1, 64 radial by 12 polar by 24 azimuth points per atom); it is not
+a promise of production grid convergence. The three positive-integer
+`--pbe0-*-points` options allow grid convergence studies on the explicit
+PBE0 route, and are rejected on other methods rather than silently ignored.
+The native `methods` catalog intentionally remains a list of ABI identities,
+not a list of all compiler-owned scientific compositions. This slice supports
+PBE0 **RKS energy only**: PBE0 UKS, native DFT analytic forces and broader
+compiler-method name discovery remain future qualification work.
+
+The
 native method adapter validates method/backend/basis combinations and
 rejects unsupported requests rather than silently running direct J/K.
 

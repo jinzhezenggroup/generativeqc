@@ -27,6 +27,7 @@
 
 #include "cli/native_basis.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "generativeqc/ks.hpp"
 #include "methods/generated_method_manifest.hpp"
 
 #ifndef GENERATIVEQC_CLI_VERSION
@@ -59,6 +60,9 @@ struct RunOptions {
   bool auxiliary_basis_explicit{false};
   bool representation_explicit{false};
   bool density_fitting_explicit{false};
+  bool explicit_pbe0_rks{false};
+  bool pbe0_grid_explicit{false};
+  generativeqc::KsGrid pbe0_grid{};
   bool forces{false};
   bool json{false};
 };
@@ -206,7 +210,7 @@ void print_usage(std::ostream& out) {
          "  generativeqc profile install|export|diagnose ...  # reserved; Python frontend owns it\n"
          "  generativeqc autotune ...    # tuning remains in the Python frontend\n\n"
          "Native run options:\n"
-         "  --method NAME            gfn2-xtb, rhf/uhf, or a native manifest DFT method\n"
+         "  --method NAME            gfn2-xtb, rhf/uhf, pbe0-rks, or a native manifest DFT method\n"
          "  --basis NAME             Bundled Gaussian basis (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
          "  --density-fitting none|cpu|cuda|auto  HF/DFT fitting policy (default: "
@@ -217,6 +221,9 @@ void print_usage(std::ostream& out) {
          "  --charge N               Molecular charge (default: 0)\n"
          "  --multiplicity N         Spin multiplicity (default: 1)\n"
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
+         "  --pbe0-radial-points N   Radial count for explicit pbe0-rks reference grid\n"
+         "  --pbe0-polar-points N    Polar count for explicit pbe0-rks reference grid\n"
+         "  --pbe0-azimuth-points N  Azimuth count for explicit pbe0-rks reference grid\n"
          "  --forces                 Request analytic forces\n"
          "  --json                   Emit machine-readable output\n";
 }
@@ -346,7 +353,12 @@ RunOptions parse_run(int argc, char** argv) {
 
     if (option == "--method") {
       const std::string selected = lower(std::string(value()));
-      if (selected == "gfn2-xtb" || selected == "gfn2") {
+      options.explicit_pbe0_rks = selected == "pbe0-rks";
+      if (options.explicit_pbe0_rks) {
+        // Compiler-owned PBE0 has no native ABI ID; use the qualified PBE-RKS carrier.
+        options.method_name = "pbe0-rks";
+        options.method = GENERATIVEQC_METHOD_PBE_RKS;
+      } else if (selected == "gfn2-xtb" || selected == "gfn2") {
         options.method_name = "gfn2-xtb";
         options.method = GENERATIVEQC_METHOD_GFN2_XTB;
       } else if (selected == "rhf") {
@@ -362,7 +374,7 @@ RunOptions parse_run(int argc, char** argv) {
         options.method = entry->method;
       } else {
         throw UsageError(
-            "native run method must be gfn2-xtb, rhf, uhf, or a listed native DFT method");
+            "native run method must be gfn2-xtb, rhf, uhf, pbe0-rks, or a listed native DFT method");
       }
     } else if (option == "--basis") {
       options.basis_name = lower(std::string(value()));
@@ -418,6 +430,15 @@ RunOptions parse_run(int argc, char** argv) {
         options.input_angstrom = false;
       else
         throw UsageError("--units must be angstrom or bohr");
+    } else if (option == "--pbe0-radial-points") {
+      options.pbe0_grid.radial_points = parse_positive_u32(value(), "PBE0 radial points");
+      options.pbe0_grid_explicit = true;
+    } else if (option == "--pbe0-polar-points") {
+      options.pbe0_grid.angular_polar = parse_positive_u32(value(), "PBE0 polar points");
+      options.pbe0_grid_explicit = true;
+    } else if (option == "--pbe0-azimuth-points") {
+      options.pbe0_grid.angular_azimuth = parse_positive_u32(value(), "PBE0 azimuth points");
+      options.pbe0_grid_explicit = true;
     } else if (option == "--forces") {
       options.forces = true;
     } else if (option == "--json") {
@@ -433,6 +454,8 @@ RunOptions parse_run(int argc, char** argv) {
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
+  if (options.pbe0_grid_explicit && !options.explicit_pbe0_rks)
+    throw UsageError("PBE0 grid controls are only valid with --method pbe0-rks");
   if (is_dft(options) && options.forces)
     throw UsageError("native CLI DFT forces are not exposed by this command yet");
   return options;
@@ -501,7 +524,18 @@ int run(const RunOptions& options) {
 
   const generativeqc_method_descriptor method =
       method_descriptor(options, auxiliary_basis ? &*auxiliary_basis : nullptr);
-  generativeqc::Calculation calculation(context, system, method);
+  generativeqc::Calculation calculation = [&]() -> generativeqc::Calculation {
+    if (!options.explicit_pbe0_rks) return {context, system, method};
+    // Same explicit PBE0 scientific graph and SCF domain as the installed C++ SDK example.
+    // Only the carrier is a native ABI ID; PBE0 itself is not a manifest method.
+    generativeqc::KsComposition pbe0(GENERATIVEQC_METHOD_PBE_RKS,
+                                     "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
+    pbe0.set_grid(options.pbe0_grid)
+        .add_semilocal("GGA_C_PBE", 1.0)
+        .add_semilocal("GGA_X_PBE", 0.75)
+        .add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
+    return pbe0.prepare(context, system, method);
+  }();
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   const auto result = calculation.execute(requested);
