@@ -13,9 +13,9 @@
 #include "dft/xc.hpp"
 #include "dft/xc_point.hpp"
 #include "dft/xc_point_response.hpp"
-#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "integrals/ecp.hpp"
 #include "integrals/ecp_cuda.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "methods/dft_method.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_xc.hpp"
@@ -857,12 +857,14 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
                                                    std::size_t value_count) {
   constexpr std::size_t stride = 11;
   const auto automatic = generativeqc::dft::generated::automatic_libxc_entry(functional);
-  const auto* family = automatic ? nullptr : generativeqc::dft::semilocal_family_metadata_from_code(functional);
+  const auto* family =
+      automatic ? nullptr : generativeqc::dft::semilocal_family_metadata_from_code(functional);
   const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
+  const bool scaling_qualified =
+      family && generativeqc::dft::cuda_xc_capability_qualified(
+                    family->cuda_fast_paths.component_scaling);
   if (!std::isfinite(exchange_scale) || !std::isfinite(correlation_scale) || exchange_scale < 0 ||
-      correlation_scale < 0 || (!family && !automatic) ||
-      (scaled && (!family || !generativeqc::dft::cuda_xc_capability_qualified(
-                                  family->cuda_fast_paths.component_scaling))) ||
+      correlation_scale < 0 || (!family && !automatic) || (scaled && !scaling_qualified) ||
       !rho || !gradient || !tau || !values || point_count == 0 ||
       point_count > std::numeric_limits<std::size_t>::max() / stride ||
       value_count != stride * point_count)
