@@ -40,6 +40,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: native-api-contracts
+        name: Check public native contracts and reference
+        entry: python3 tools/check_native_api_contracts.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: compiler-structure
         name: Check scientific compiler dependency directions
         entry: python3 tools/check_compiler_structure.py
@@ -102,7 +108,7 @@ repos:
       # Ruff D100-D107 also checks the discovered public facade modules.
       # A newly published API is checked without a manual file allowlist.
       - id: ruff
-        name: Check published API documentation (Ruff D1xx)
+        name: Check public Python contracts and Ruff D1xx
         entry: python tools/check_public_api_docstrings.py --ruff ruff
         pass_filenames: false
         always_run: true

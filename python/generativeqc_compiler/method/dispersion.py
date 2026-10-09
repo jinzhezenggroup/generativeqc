@@ -46,6 +46,11 @@ class D3Spec:
     atm_switch_width: float = 0.0
 
     def __post_init__(self) -> None:
+        """Normalize finite parameters and validate the declared D3 variant.
+
+        Cutoffs and switch widths are in Bohr. Raise TypeError for non-real
+        parameters, or ValueError for invalid cutoffs, damping/version
+        combinations or table digests. Zero-damping plus ATM is not admitted."""
         if self.damping not in {"bj", "zero"}:
             raise ValueError("unsupported D3 damping variant")
         for field in (
@@ -123,6 +128,10 @@ class D3Spec:
     def to_payload(self) -> typing.Any:
         # Preserve the established two-body BJ identity byte-for-byte in the
         # semantic payload. New capability fields exist only for new variants.
+        """Return a fresh canonical payload for this damping and ATM variant.
+
+        The two-body BJ representation retains its established identity;
+        variant-specific fields are included only when they define that model."""
         if self.damping == "bj" and self.s9 == 0:
             return {
                 "s6": self.s6,
@@ -142,6 +151,7 @@ class D3Spec:
 
     @property
     def identity(self) -> typing.Any:
+        """Return the SHA-256 identity of the canonical parameter payload."""
         return canonical_hash(self.to_payload())
 
 

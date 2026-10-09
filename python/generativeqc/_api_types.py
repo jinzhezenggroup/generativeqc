@@ -69,7 +69,12 @@ class Shell:
 
 @dataclass(frozen=True)
 class CorrelationResult:
-    """Canonical post-HF components and completed phase diagnostics."""
+    """Canonical post-HF components and completed phase diagnostics.
+
+    Energy components and denominators use Hartree; byte/count fields and
+    millisecond timings follow their names. These are completed-phase
+    observations, not a separate accuracy certificate. See
+    :ref:`python-results-values` and :ref:`python-results-ownership`."""
 
     reference_energy: float
     opposite_spin_energy: float
@@ -153,7 +158,14 @@ class CcPerformanceResult:
 
 @dataclass(frozen=True)
 class Result:
-    """Single-system output with separate convergence and stationarity measures."""
+    """Single-system output with separate convergence and stationarity measures.
+
+    Energy is Hartree and optional ``forces`` has shape ``(natoms, 3)`` in
+    Hartree/Bohr, with force equal to minus the nuclear energy gradient.
+    Single-point failures raise instead of returning this record. Published
+    arrays outlive the native calculation; frozen fields do not recursively
+    freeze contained arrays or mappings. See :ref:`python-results-values`
+    and :ref:`python-results-ownership`."""
 
     energy: float
     forces: np.ndarray | None

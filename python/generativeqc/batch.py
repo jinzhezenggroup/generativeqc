@@ -94,7 +94,12 @@ class BatchItemResult:
 
 @dataclass(frozen=True)
 class BatchResult:
-    """Input-ordered results for a ragged batch; forces are never padded."""
+    """Input-ordered results for a ragged batch; forces are never padded.
+
+    ``energies`` is a fresh float64 vector in Hartree with NaN for failed
+    items. Check status before using an item's raw scalar diagnostics.
+    ``raise_for_failures`` raises RuntimeError with item indices and details.
+    See :ref:`python-results-values` and :ref:`python-results-ownership`."""
 
     items: tuple[BatchItemResult, ...]
 
@@ -134,7 +139,11 @@ class PreparedBatch:
     may update per-system warm-start densities. Use separate plans for
     concurrent callers. Warm-start updates can be frozen after an initial
     execution when reproducible replays from one fixed dm0 are required.
-    """
+
+    Coordinates are in Bohr; energies and forces use Hartree and Hartree/Bohr.
+    Use context-managed lifetime or explicit ``close``. Result arrays outlive
+    the plan. See :ref:`python-batch-values`, :ref:`python-batch-errors`,
+    :ref:`python-batch-ownership` and :ref:`python-batch-backends`."""
 
     @property
     def capabilities(self) -> MethodCapabilities:
@@ -1003,7 +1012,14 @@ class PreparedBatch:
         other owners retain their conservative force capacity allowance.
         Generated force failures retain the original exception type and detail
         in the failed item's ``status_message``, including in strict mode.
-        """
+
+        Coordinates use Bohr. This call is synchronous and must not race another
+        operation on this plan. ``strict=False`` preserves input-ordered item
+        statuses; failed-item forces are None and their scalar energy is not a
+        usable result. ``strict=True`` raises after any failed item, without
+        rolling back successful neighbors' warm-state updates. Whole-call and
+        diagnostic-query errors raise in either mode. Result storage outlives
+        the plan. See :ref:`python-batch-errors`."""
         self._ensure_open()
         from .initial_guess import read_initial_guess_diagnostic
 

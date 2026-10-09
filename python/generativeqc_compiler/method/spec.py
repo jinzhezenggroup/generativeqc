@@ -95,6 +95,11 @@ class MethodSpec:
     gcp: GCPSpec | None = None
 
     def __post_init__(self) -> None:
+        """Validate immutable exact-rational composition and correction bindings.
+
+        Raise UnsupportedMethod for invalid components, version or composition,
+        and TypeError for incorrectly typed correction or basis records.
+        Validation establishes representability, not backend executability."""
         if not isinstance(self.identifier, str) or not self.identifier.strip():
             raise UnsupportedMethod("method requires a non-empty identifier")
         if self.version != METHOD_CATALOG_VERSION:
@@ -165,6 +170,7 @@ class MethodSpec:
             raise UnsupportedMethod("method composition cannot be empty")
 
     def to_payload(self) -> typing.Any:
+        """Return a fresh manifest payload with exact rational coefficients."""
         return {
             "identifier": self.identifier,
             "version": self.version,
@@ -367,6 +373,11 @@ class MethodIR:
     version: str = METHOD_IR_VERSION
 
     def __post_init__(self) -> None:
+        """Validate canonical primitive order, spin and explicit basis bindings.
+
+        Raise UnsupportedMethod for noncanonical or incompatible composition,
+        and TypeError for an invalid basis record. Named R2SCAN-3c composition
+        must retain its defining components; backend admission is separate."""
         if not isinstance(self.identifier, str) or not self.identifier.strip():
             raise UnsupportedMethod("MethodIR requires a non-empty identifier")
         if self.spin not in _SPINS:
@@ -437,6 +448,7 @@ class MethodIR:
 
     @property
     def reference(self) -> typing.Any:
+        """Return unrestricted for polarized spin, otherwise restricted."""
         return "unrestricted" if self.spin == "polarized" else "restricted"
 
     @property
@@ -480,6 +492,10 @@ class MethodIR:
 
     @property
     def requirements(self) -> typing.Any:
+        """Return fresh ordered ingredient/operator requirements for admission.
+
+        This is a mathematical dependency description, not a support claim
+        for any runtime backend. An explicit basis contributes its payload."""
         ingredients = set()
         operators = []
         for primitive in self.primitives:
@@ -518,6 +534,7 @@ class MethodIR:
         return result
 
     def semantic_payload(self) -> typing.Any:
+        """Return canonical mathematical content, excluding the manifest name."""
         return {
             "version": self.version,
             "spin": self.spin,
@@ -529,6 +546,7 @@ class MethodIR:
         }
 
     def to_payload(self) -> typing.Any:
+        """Return a fresh provenance payload including identifier and requirements."""
         return {
             "identifier": self.identifier,
             **self.semantic_payload(),
@@ -538,10 +556,12 @@ class MethodIR:
 
     @property
     def identity(self) -> typing.Any:
+        """Hash mathematical content independently of descriptive manifest aliases."""
         return canonical_hash(self.semantic_payload())
 
     @property
     def manifest_identity(self) -> typing.Any:
+        """Hash the full provenance payload including the descriptive identifier."""
         return canonical_hash(self.to_payload())
 
 
