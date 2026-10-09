@@ -8,7 +8,6 @@ Actual device projection/response is covered by the public CUDA endpoint test.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,10 +28,9 @@ def definition(source: str, signature: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def reservation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def reservation_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: object
+) -> Path:
     directory = tmp_path_factory.mktemp("ks-projection-reservation")
     subprocess.run(
         [
@@ -105,7 +103,15 @@ struct Capture::Impl {
 DensityFittingTilePlan plan_values_for(FockOccupiedProjectionReservation reservation,
     DfPairStorage storage, std::size_t n, std::size_t a, std::size_t plan_budget) {
   const auto reserved_rank = reservation.restricted_rank;
-  struct { DfPairStorage value_storage; } data{storage};
+  FockPreparationDiagnostic diagnostic;
+  diagnostic.variant.df_pair_storage_request =
+      storage == DfPairStorage::Dense ? DfPairStorageRequest::Dense :
+      storage == DfPairStorage::SymmetricLower ? DfPairStorageRequest::SymmetricLower :
+      DfPairStorageRequest::SymmetricLowerSingle;
+  // These probes supply an explicit value allowance. Automatic rebalancing
+  // has separate live-resource coverage in test_df_preparation_budget.py.
+  DfResolvedBudget resolved;
+  resolved.requested_bytes = resolved.total_bytes = resolved.value_bytes = plan_budget;
 """
     unit += definition(prepared, "      const auto plan_values =") + ";\n"
     unit += "return plan_values(n,a,0); }\n"
@@ -288,23 +294,20 @@ int main(int argc, char** argv) {
 """
     source, executable = directory / "probe.cpp", directory / "probe"
     source.write_text(unit)
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-O0",
             "-ffunction-sections",
             "-fdata-sections",
-            "-Wl,--gc-sections",
             f"-I{ROOT}",
             f"-I{ROOT / 'include'}",
             f"-I{ROOT / 'src'}",
             f"-I{directory}",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
+        link_args=("-Wl,--gc-sections",),
     )
     return executable
 

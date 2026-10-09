@@ -62,7 +62,9 @@ def test_retained_df_forces_defer_coordinate_matrices_until_host_fallback() -> N
     """Energy preparation must not eagerly export a future force fallback."""
     prepared = (ROOT / "src/scf/fock_prepared.cpp").read_text()
     method = (ROOT / "src/methods/dft_method.cpp").read_text()
-    assert "const bool export_derivatives = derivatives &&" in prepared
+    assert "const bool export_derivatives = derivatives &&" in " ".join(
+        prepared.split()
+    )
     assert "strategy.spec.derivative_order == 0" in prepared
     assert 'Scope export_trace("deferred_one_electron_derivatives")' in prepared
     begin = method.index("    if (!resident_one_electron) {")
