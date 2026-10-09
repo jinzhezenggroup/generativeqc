@@ -400,6 +400,39 @@ retain this identity. A source hash alone cannot distinguish builds with differe
 compiled kernel coverage; see the
 [binary provenance decision](../../.agents/notes/implemented/compatibility/2026-09-17-benchmark-binary-provenance.md).
 
+### SCF residual and stopping-rule interpretation
+
+The batch comparator's schema v3 records `convergence_policy` explicitly.
+Equal numeric tolerances or reported SCF iteration counts do not establish
+equivalent stopping rules or equal Fock work. GPU4PySCF also evaluates an
+initial potential before its counted cycles. Compare complete endpoints and
+independently gated energies/forces; retain stock reference DIIS unchanged.
+An explicitly requested `--reference-full-fock` suppresses both incremental
+potential inputs, including on RKS backends that still reuse `vhf_last` when
+`direct_scf=False`. Density fitting's own `direct_scf=False` policy alone does
+not assert that an explicit full-Fock override was requested.
+
+Convergence payloads with `residual_schema_version=2` distinguish GPU4PySCF's
+`density_frobenius` from `density_rms`. RMS divides the backend norm by the
+square root of all density-matrix entries, including spin blocks, using shape
+metadata only. An unavailable shape yields null RMS, never an assumed size.
+`orbital_gradient_norm` remains the backend's unnormalized global norm and is
+not the native AO commutator RMS. Callback values describe the last reported
+cycle, not an additional final physical audit. First-cycle energy change uses
+the backend's preceding energy when available; a cold default guess is not
+labeled as a warm density seed.
+
+Historical payloads lacking the residual version marker retain their original
+meaning: GPU4PySCF `density_rms` stored an unnormalized Frobenius norm. Do not
+silently rewrite archived measurements. Summary readers accept v2 and v3
+artifacts, preserve their residual fields and retain the new policy metadata.
+
+Both cold and warm reference energy-plus-force timers include returning the
+forces from device to host, matching native `execute()`'s public-output
+boundary. JSON/list serialization remains outside timing on both engines.
+
+### General acceptance gates
+
 Numerical acceptance uses the maximum error across every measured repeat pair.
 Matching iteration counts only classifies timing; it cannot exclude inaccurate
 samples from the energy or force gate. Energy-only runs retain absent force

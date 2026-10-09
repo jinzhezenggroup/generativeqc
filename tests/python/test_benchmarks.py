@@ -214,6 +214,23 @@ def test_auxiliary_override_requires_df_before_gpu_import(
         _batch_comparison_module().main()
 
 
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--energy-tolerance", "nan"),
+        ("--density-tolerance", "inf"),
+        ("--reference-gradient-tolerance", "nan"),
+        ("--screening-tolerance", "inf"),
+    ],
+)
+def test_nonfinite_scf_tolerances_reject_before_gpu_import(
+    monkeypatch: typing.Any, option: str, value: str
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["benchmark", option, value])
+    with pytest.raises(ValueError, match="positive and finite"):
+        _batch_comparison_module().main()
+
+
 def _aot_shell_gate_module() -> typing.Any:
     """Load the AOT endpoint helpers without importing a GPU backend."""
 
@@ -1179,6 +1196,7 @@ def test_batch_comparison_uses_exact_abba_counts_and_iteration_matching() -> Non
         [sample(4.0, (2, 2)), sample(4.2, (2, 2)), sample(5.0, (4, 2))],
     )
     assert matched["iteration_branch"] == [2, 2]
+    assert matched["equal_work_verified"] is False
     assert matched["generativeqc_median_seconds"] == pytest.approx(2.1)
     assert matched["gpu4pyscf_median_seconds"] == pytest.approx(4.1)
     assert matched["speedup"] == pytest.approx(4.1 / 2.1)
@@ -1187,19 +1205,95 @@ def test_batch_comparison_uses_exact_abba_counts_and_iteration_matching() -> Non
 def test_gpu_cycle_tracker_retains_explicit_final_residuals() -> None:
     comparison = _batch_comparison_module()
     tracker = comparison.GpuCycleTracker()
-    tracker({"cycle": 0, "e_tot": -10.0, "norm_ddm": 0.2})
+    tracker({"cycle": 0, "e_tot": -10.0, "norm_ddm": 0.2, "dm": np.eye(2)})
     tracker(
         {
             "cycle": 1,
             "e_tot": -10.25,
             "norm_ddm": 1.0e-7,
             "norm_gorb": 2.0e-8,
+            "dm": np.eye(2),
         }
     )
     assert tracker.iterations == 2
     assert tracker.energy_change_hartree == pytest.approx(0.25)
-    assert tracker.density_rms == pytest.approx(1.0e-7)
+    assert tracker.density_frobenius == pytest.approx(1.0e-7)
+    assert tracker.density_rms == pytest.approx(5.0e-8)
+    assert tracker.density_matrix_elements == 4
     assert tracker.orbital_gradient_norm == pytest.approx(2.0e-8)
+
+
+@pytest.mark.parametrize("shape", [(3, 3), (2, 3, 3)])
+@pytest.mark.parametrize("density_key", ["dm", "dm_last"])
+def test_gpu_density_rms_uses_shape_metadata_without_device_reads(
+    shape: tuple, density_key: str
+) -> None:
+    """Restricted and spin-block norms normalize every backend matrix entry."""
+    comparison = _batch_comparison_module()
+
+    class DeviceDensity:
+        def __array__(self) -> None:
+            pytest.fail("diagnostic normalization attempted a device array read")
+
+    density = DeviceDensity()
+    density.shape = shape
+    tracker = comparison.GpuCycleTracker()
+    tracker({"cycle": 0, "norm_ddm": 0.6, density_key: density})
+    assert tracker.density_matrix_elements == np.prod(shape)
+    assert tracker.density_rms == pytest.approx(0.6 / np.sqrt(np.prod(shape)))
+
+
+def test_gpu_density_rms_is_unknown_without_matrix_shape() -> None:
+    tracker = _batch_comparison_module().GpuCycleTracker()
+    tracker({"cycle": 0, "norm_ddm": 0.2})
+    assert tracker.density_frobenius == 0.2
+    assert tracker.density_rms is None
+    assert tracker.density_matrix_elements is None
+
+
+def test_gpu_tracker_records_first_cycle_change_from_backend_energy() -> None:
+    tracker = _batch_comparison_module().GpuCycleTracker()
+    tracker({"cycle": 0, "e_tot": -10.25, "last_hf_e": -10.0})
+    assert tracker.energy_change_hartree == 0.25
+    tracker({"cycle": 1, "e_tot": -10.5, "last_hf_e": -10.4, "de": -0.05})
+    assert tracker.energy_change_hartree == 0.05
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_gpu_tracker_does_not_serialize_nonfinite_residuals(value: float) -> None:
+    tracker = _batch_comparison_module().GpuCycleTracker()
+    tracker({"cycle": 0, "norm_ddm": value, "norm_gorb": value, "dm": np.eye(2)})
+    assert tracker.density_frobenius is None
+    assert tracker.density_rms is None
+    assert tracker.orbital_gradient_norm is None
+
+
+def test_gpu_convergence_payload_labels_cold_seed_and_norms() -> None:
+    comparison = _batch_comparison_module()
+    tracker = comparison.GpuCycleTracker()
+    tracker({"cycle": 0, "norm_ddm": 0.2, "dm": np.eye(2)})
+    engine = SimpleNamespace(converged=True, cycles=1)
+    payload = comparison.gpu_convergence_payload(
+        [engine], [tracker], warm_start_used=False
+    )[0]
+    assert payload["residual_schema_version"] == 2
+    assert payload["warm_start"]["used"] is False
+    assert payload["final_residuals"]["density_rms"] == 0.1
+    assert payload["final_residuals"]["density_frobenius"] == 0.2
+
+
+def test_convergence_policy_does_not_claim_equivalent_stopping_or_modified_diis() -> (
+    None
+):
+    comparison = _batch_comparison_module()
+    policy = comparison.convergence_policy_payload(
+        energy_tolerance=1e-12, density_tolerance=1e-10, gradient_tolerance=1e-10
+    )
+    assert policy["same_stopping_rule"] is False
+    assert policy["equal_work_verified"] is False
+    assert policy["reference_diis"] == "stock, unmodified"
+    assert policy["gpu4pyscf"]["density_is_stopping_gate"] is False
+    assert policy["generativeqc"]["density_tolerance"] == 1e-10
 
 
 @pytest.mark.parametrize("last_branch_matches", [False, True])
@@ -1298,8 +1392,48 @@ def test_gpu_energy_sample_never_calls_gradient() -> None:
     assert result["energies_hartree"] == [-1.0]
 
 
+def test_gpu_force_transfer_is_inside_complete_endpoint_timer(
+    monkeypatch: typing.Any,
+) -> None:
+    """A fast kernel cannot hide its device-to-host public-output latency."""
+    comparison = _batch_comparison_module()
+    clock = [0.0]
+    monkeypatch.setattr(comparison.time, "perf_counter", lambda: clock[0])
+
+    def kernel(dm0: typing.Any) -> float:
+        clock[0] += 1.0
+        return -1.0
+
+    def gradient() -> np.ndarray:
+        clock[0] += 2.0
+        return np.ones((1, 3))
+
+    def download(values: np.ndarray) -> np.ndarray:
+        clock[0] += 3.0
+        return values
+
+    engine = SimpleNamespace(
+        kernel=kernel,
+        nuc_grad_method=lambda: SimpleNamespace(kernel=gradient),
+        converged=True,
+        cycles=1,
+    )
+    cupy = SimpleNamespace(
+        asnumpy=download,
+        cuda=SimpleNamespace(
+            Stream=SimpleNamespace(null=SimpleNamespace(synchronize=lambda: None))
+        ),
+    )
+    result = comparison._gpu_sample([engine], [np.eye(2)], cupy, 0)
+    assert result["seconds"] == 6.0
+    assert result["component_seconds"] == {"scf": 1.0, "force": 5.0}
+    assert result["forces_hartree_per_bohr"] == [[[-1.0, -1.0, -1.0]]]
+
+
+@pytest.mark.parametrize("schema_version", [2, 3])
 def test_results_summary_selects_latest_clean_five_repeat_artifacts(
     tmp_path: typing.Any,
+    schema_version: int,
 ) -> None:
     summary = _results_summary_module()
     readme = tmp_path / "README.md"
@@ -1312,7 +1446,7 @@ def test_results_summary_selects_latest_clean_five_repeat_artifacts(
         summary.PARITY_CASES.items()
     ):
         payload = {
-            "schema_version": 2,
+            "schema_version": schema_version,
             "benchmark": "compare_gpu4pyscf_batch",
             "environment": {
                 "timestamp_utc": f"2026-08-27T00:00:0{index}+00:00",

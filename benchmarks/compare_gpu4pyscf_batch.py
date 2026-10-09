@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import statistics
 import time
 import typing
@@ -167,6 +168,7 @@ def convergence_payload(result: typing.Any) -> list[dict[str, object]]:
         {
             "converged": item.converged,
             "iterations": item.iterations,
+            "residual_schema_version": 2,
             "basis_metadata": getattr(item, "basis_metadata", None),
             # Retain the schema-v1 flat fields for readers that have not yet
             # adopted the explicit residual/warm-start groups.
@@ -177,6 +179,8 @@ def convergence_payload(result: typing.Any) -> list[dict[str, object]]:
             "final_residuals": {
                 "energy_change_hartree": item.energy_change,
                 "density_rms": item.density_rms,
+                "density_frobenius": None,
+                "physical_residual_rms": getattr(item, "physical_residual_rms", None),
                 "orbital_gradient_norm": None,
             },
             "warm_start": {
@@ -201,6 +205,8 @@ class GpuCycleTracker:
         self.iterations = 0
         self.energy_change_hartree: float | None = None
         self.density_rms: float | None = None
+        self.density_frobenius: float | None = None
+        self.density_matrix_elements: int | None = None
         self.orbital_gradient_norm: float | None = None
         self._previous_energy: float | None = None
 
@@ -209,9 +215,29 @@ class GpuCycleTracker:
         if value is None:
             return None
         try:
-            return float(value)
+            converted = float(value)
+            return converted if math.isfinite(converted) else None
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _density_elements(environment: dict[str, Any]) -> int | None:
+        """Read shape metadata only; never copy or reduce a device density.
+
+        The backend's Frobenius norm includes all spin blocks, so RMS divides
+        by the square root of every matrix entry, not just the AO dimension.
+        Missing shapes remain unknown rather than guessing a normalization.
+        """
+        density = environment.get("dm")
+        if density is None:
+            density = environment.get("dm_last")
+        try:
+            shape = tuple(int(size) for size in getattr(density, "shape", ()))
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if len(shape) < 2 or any(size <= 0 for size in shape):
+            return None
+        return math.prod(shape)
 
     def __call__(self, environment: dict[str, Any]) -> None:
         """Record the latest explicitly reported SCF cycle and residuals."""
@@ -224,19 +250,31 @@ class GpuCycleTracker:
 
         energy = self._optional_float(environment.get("e_tot"))
         reported_change = self._optional_float(environment.get("de"))
+        previous_energy = self._optional_float(environment.get("last_hf_e"))
         if reported_change is not None:
             self.energy_change_hartree = abs(reported_change)
+        elif energy is not None and previous_energy is not None:
+            self.energy_change_hartree = abs(energy - previous_energy)
         elif energy is not None and self._previous_energy is not None:
             self.energy_change_hartree = abs(energy - self._previous_energy)
         if energy is not None:
             self._previous_energy = energy
 
-        self.density_rms = self._optional_float(environment.get("norm_ddm"))
+        self.density_frobenius = self._optional_float(environment.get("norm_ddm"))
+        self.density_matrix_elements = self._density_elements(environment)
+        self.density_rms = (
+            self.density_frobenius / math.sqrt(self.density_matrix_elements)
+            if self.density_frobenius is not None and self.density_matrix_elements
+            else None
+        )
         self.orbital_gradient_norm = self._optional_float(environment.get("norm_gorb"))
 
 
 def gpu_convergence_payload(
-    engines: Sequence[Any], trackers: Sequence[GpuCycleTracker]
+    engines: Sequence[Any],
+    trackers: Sequence[GpuCycleTracker],
+    *,
+    warm_start_used: bool = True,
 ) -> list[dict[str, object]]:
     """Serialize per-system GPU4PySCF diagnostics for one batch sample."""
 
@@ -252,18 +290,51 @@ def gpu_convergence_payload(
             {
                 "converged": bool(engine.converged),
                 "iterations": iterations,
+                "residual_schema_version": 2,
                 "final_residuals": {
                     "energy_change_hartree": tracker.energy_change_hartree,
                     "density_rms": tracker.density_rms,
+                    "density_frobenius": tracker.density_frobenius,
+                    "density_matrix_elements": tracker.density_matrix_elements,
+                    "physical_residual_rms": None,
                     "orbital_gradient_norm": tracker.orbital_gradient_norm,
                 },
                 "warm_start": {
-                    "used": True,
+                    "used": warm_start_used,
                     "fallback": False,
                 },
             }
         )
     return payload
+
+
+def convergence_policy_payload(
+    *, energy_tolerance: float, density_tolerance: float, gradient_tolerance: float
+) -> dict[str, Any]:
+    """Describe non-equivalent stopping rules without changing either solver."""
+    return {
+        "same_stopping_rule": False,
+        "equal_work_verified": False,
+        "reference_diis": "stock, unmodified",
+        "interpretation": (
+            "complete endpoint latencies under engine-native stopping rules; "
+            "matching reported iteration counts does not establish equal Fock work"
+        ),
+        "generativeqc": {
+            "energy_tolerance_hartree": energy_tolerance,
+            "density_tolerance": density_tolerance,
+            "density_metric": "matrix RMS; KS per-spin gates are method-dependent",
+            "physical_residual_metric": "method-dependent, distinct from orbital gradient",
+        },
+        "gpu4pyscf": {
+            "energy_tolerance_hartree": energy_tolerance,
+            "orbital_gradient_tolerance": gradient_tolerance,
+            "orbital_gradient_metric": "unnormalized global orbital-gradient norm",
+            "density_metric": "Frobenius norm, also reported as RMS when shape is known",
+            "density_is_stopping_gate": False,
+            "residual_source": "last SCF callback, not an independent final-state audit",
+        },
+    }
 
 
 def interleaved_engine_order(repeats: int) -> tuple[str, ...]:
@@ -326,6 +397,7 @@ def iteration_matched_summary(
     gpu_median = statistics.median(gpu_seconds)
     return {
         "iteration_branch": list(branch),
+        "equal_work_verified": False,
         "generativeqc_sample_count": len(generativeqc_seconds),
         "gpu4pyscf_sample_count": len(gpu_seconds),
         "generativeqc_median_seconds": generativeqc_median,
@@ -535,11 +607,14 @@ def _gpu_sample(
         ]
         cupy_module.cuda.Stream.null.synchronize()
         scf_seconds = time.perf_counter() - scf_start
-    gradients, force_seconds = None, None
+    host_forces, force_seconds = None, None
     if compute_forces:
         with nvtx_range(cupy_module, "gpu4pyscf/warm/force"):
             force_start = time.perf_counter()
             gradients = [engine.nuc_grad_method().kernel() for engine in engines]
+            # Native execute() already returns host forces. Include the same
+            # public-output transfer in the reference's complete endpoint.
+            host_forces = [cupy_module.asnumpy(-gradient) for gradient in gradients]
             cupy_module.cuda.Stream.null.synchronize()
             force_seconds = time.perf_counter() - force_start
     elapsed = time.perf_counter() - total_start
@@ -554,10 +629,8 @@ def _gpu_sample(
         "convergence": gpu_convergence_payload(engines, trackers),
         "energies_hartree": [float(energy) for energy in energies],
         "forces_hartree_per_bohr": None
-        if gradients is None
-        else np.stack(
-            [cupy_module.asnumpy(-gradient) for gradient in gradients]
-        ).tolist(),
+        if host_forces is None
+        else np.stack(host_forces).tolist(),
     }
 
 
@@ -578,6 +651,27 @@ def _configure_reference_scf(
     # GPU4PySCF DF builds the full density and its gradient explicitly rejects
     # direct_scf. Do not overwrite density_fit's policy with direct-HF defaults.
     engine.direct_scf = not (full_fock or density_fitting)
+    original = getattr(
+        engine.get_veff, "_generativeqc_original_get_veff", engine.get_veff
+    )
+    if full_fock:
+        # RKS can reuse vhf_last even with direct_scf=False. Clearing both
+        # incremental inputs makes the explicitly requested full-Fock policy
+        # independent of that backend-specific switch.
+        def full_veff(
+            mol: Any = None,
+            dm: Any = None,
+            dm_last: Any = None,
+            vhf_last: Any = None,
+            hermi: int = 1,
+        ) -> Any:
+            """Keep all physical work in the reference, without delta accumulation."""
+            return original(mol=mol, dm=dm, hermi=hermi)
+
+        full_veff._generativeqc_original_get_veff = original
+        engine.get_veff = full_veff
+    elif hasattr(engine.get_veff, "_generativeqc_original_get_veff"):
+        engine.get_veff = original
 
 
 def main() -> None:
@@ -676,13 +770,16 @@ def main() -> None:
         raise ValueError("--batch, --repeats, and --max-iterations must be positive")
     if args.density_fitting_memory_budget_bytes < 0:
         raise ValueError("--density-fitting-memory-budget-bytes must be non-negative")
-    if (
-        args.energy_tolerance <= 0.0
-        or args.density_tolerance <= 0.0
-        or args.reference_gradient_tolerance <= 0.0
-        or args.screening_tolerance <= 0.0
+    if not all(
+        math.isfinite(value) and value > 0.0
+        for value in (
+            args.energy_tolerance,
+            args.density_tolerance,
+            args.reference_gradient_tolerance,
+            args.screening_tolerance,
+        )
     ):
-        raise ValueError("SCF tolerances must be positive")
+        raise ValueError("SCF tolerances must be positive and finite")
     if args.minimum_speedup is not None and args.minimum_speedup <= 0.0:
         raise ValueError("--minimum-speedup must be positive")
     if (
@@ -850,14 +947,18 @@ def main() -> None:
         for engine, tracker in zip(gpu_objects, gpu_cold_trackers, strict=True):
             engine.callback = tracker
         gpu_cold_energies = [engine.kernel() for engine in gpu_objects]
-        gpu_cold_gradients = (
+        gpu_cold_forces = (
             None
             if not compute_forces
-            else [engine.nuc_grad_method().kernel() for engine in gpu_objects]
+            else [
+                cp.asnumpy(-engine.nuc_grad_method().kernel()) for engine in gpu_objects
+            ]
         )
         cp.cuda.Stream.null.synchronize()
         gpu_cold = time.perf_counter() - start
-        gpu_cold_convergence = gpu_convergence_payload(gpu_objects, gpu_cold_trackers)
+        gpu_cold_convergence = gpu_convergence_payload(
+            gpu_objects, gpu_cold_trackers, warm_start_used=False
+        )
         progress("gpu4pyscf_cold", seconds=gpu_cold, convergence=gpu_cold_convergence)
         gpu_warm_densities = [engine.make_rdm1().copy() for engine in gpu_objects]
 
@@ -997,13 +1098,19 @@ def main() -> None:
         branch = ",".join(str(value) for value in matched["iteration_branch"])
         print(f"iteration-matched speedup: {matched_speedup:.2f}x (branch {branch})")
     print("warning: GPU4PySCF is measured through its single-system interface")
+    print("warning: matching reported SCF iterations does not establish equal work")
 
     if args.output:
         final_generativeqc = generativeqc_samples[-1]
         final_gpu = gpu_samples[-1]
         payload = {
-            "schema_version": 2,
+            "schema_version": 3,
             "benchmark": "compare_gpu4pyscf_batch",
+            "convergence_policy": convergence_policy_payload(
+                energy_tolerance=args.energy_tolerance,
+                density_tolerance=args.density_tolerance,
+                gradient_tolerance=args.reference_gradient_tolerance,
+            ),
             "native_build": native_build,
             "environment": environment_metadata(
                 distributions={
@@ -1041,6 +1148,7 @@ def main() -> None:
                 "energy_tolerance": args.energy_tolerance,
                 "density_tolerance": args.density_tolerance,
                 "reference_gradient_tolerance": args.reference_gradient_tolerance,
+                "reference_full_fock_requested": args.reference_full_fock,
                 "reference_incremental_fock": bool(gpu_objects[0].direct_scf),
                 "max_iterations": args.max_iterations,
                 "generativeqc_screening_tolerance": args.screening_tolerance,
@@ -1137,10 +1245,8 @@ def main() -> None:
                     float(energy) for energy in gpu_cold_energies
                 ],
                 "cold_forces_hartree_per_bohr": None
-                if gpu_cold_gradients is None
-                else np.stack(
-                    [cp.asnumpy(-gradient) for gradient in gpu_cold_gradients]
-                ).tolist(),
+                if gpu_cold_forces is None
+                else np.stack(gpu_cold_forces).tolist(),
                 "cold_convergence": gpu_cold_convergence,
                 "warm_samples": gpu_samples,
                 "warm_seconds": gpu_warm,

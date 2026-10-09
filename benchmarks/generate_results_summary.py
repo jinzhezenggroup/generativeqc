@@ -40,7 +40,7 @@ def _is_direct_density_fitting_artifact(payload: dict[str, Any]) -> bool:
 def accepted_parity_artifacts(
     paths: Iterable[Path],
 ) -> dict[tuple[int, int], tuple[Path, dict[str, Any]]]:
-    """Select the newest clean five-repeat schema-v2 artifact per gate point."""
+    """Select clean five-repeat v2/v3 artifacts without reinterpreting residuals."""
 
     selected: dict[tuple[int, int], tuple[Path, dict[str, Any]]] = {}
     for path in paths:
@@ -51,7 +51,7 @@ def accepted_parity_artifacts(
         workload = payload.get("workload", {})
         key = (workload.get("ao_count"), workload.get("batch_size"))
         if (
-            payload.get("schema_version") != 2
+            payload.get("schema_version") not in (2, 3)
             or payload.get("benchmark") != "compare_gpu4pyscf_batch"
             or key not in PARITY_CASES
             or workload.get("case") != PARITY_CASES[key]
