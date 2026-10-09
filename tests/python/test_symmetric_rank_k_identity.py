@@ -185,6 +185,8 @@ def test_qualifier_verifies_staged_identity_before_compilation() -> None:
     assert '--host-compiler "$host_exe"' in script[verify:compare]
     assert "exit 2" in script[compare:compile_command]
     assert script.count('"-ccbin=$host_exe"') == 2
+    assert "BASH_REMATCH[2] < 16" in script
+    assert "0.1[7-9]" not in script
 
 
 def test_qualifier_rejects_ambient_response_file_before_tool_probes(

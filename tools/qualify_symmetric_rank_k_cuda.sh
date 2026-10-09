@@ -59,8 +59,8 @@ if [[ ! -x "$cache_exe" ]]; then
 fi
 cache_version=$($cache_exe --version)
 echo "$cache_version"
-if [[ "$cache_version" != sccache\ 0.16.* ]] && [[ "$cache_version" != sccache\ 0.1[7-9].* ]] &&
-   [[ "$cache_version" != sccache\ [1-9]* ]]; then
+if [[ ! "$cache_version" =~ ^sccache[[:space:]]+([0-9]+)\.([0-9]+)\.([0-9]+) ]] ||
+   (( BASH_REMATCH[1] == 0 && BASH_REMATCH[2] < 16 )); then
   echo "sccache 0.16.0 or newer is required" >&2
   exit 2
 fi
