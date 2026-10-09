@@ -332,6 +332,26 @@ def _discover_response_options(root: Path) -> dict[str, str]:
     return result
 
 
+def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
+    """Keep the density-only default's qualified domain and finite work cap explicit."""
+    relative = Path("src/methods/df_hf_guess.cpp")
+    source = _read(root / relative)
+    required = (
+        'std::getenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS")',
+        'value != "direct" && value != "auto"',
+        "functions < 200 || functions > 400",
+        "system.charge != 0",
+        "options.max_iterations = 32",
+        "options.energy_tolerance = 1e-4",
+        "options.density_tolerance = 1e-4",
+        "options.export_physical_reference = false",
+        "512ULL << 20",
+    )
+    if any(fragment not in source for fragment in required):
+        raise ValueError("DF-RHF preconvergence default or admission domain drifted")
+    return {"initial-guess:df-rhf-preconvergence-auto": relative.as_posix()}
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -346,6 +366,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
         _discover_response_options(root),
+        _discover_df_rhf_preconvergence(root),
     ):
         overlap = set(result) & set(discovered)
         if overlap:

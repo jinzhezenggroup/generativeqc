@@ -22,6 +22,7 @@
       "src/cc/solver.hpp",
       "src/dft/cuda_ks.cpp",
       "src/hf/rhf_frame_response.hpp",
+      "src/methods/df_hf_guess.cpp",
       "src/scf/cuda/direct_jk.cpp",
       "src/scf/cuda/direct_md_j.hpp",
       "src/scf/fock_build.hpp",
@@ -30,6 +31,27 @@
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
   "entries": [
+    {
+      "id": "initial-guess.df-rhf-preconvergence",
+      "classification": "already-default",
+      "controls": [
+        "initial-guess:df-rhf-preconvergence-auto"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/methods/df_hf_guess.cpp",
+        "src/methods/df_hf_guess_basis.hpp",
+        "src/methods/df_ccsdt_force.cu"
+      ],
+      "rationale": "The native DF-CCSD(T) owner may preconverge a detached density with a separately bundled H/C JK-fit basis, only for neutral spherical through-f 200–400 AO cold references. The accepted RHF reference, Hamiltonian and complete analytic response remain unscreened FP64 Direct. Preliminary work is finite and included in reference/endpoint timing; unsupported topology, tight budgets and refused guesses retain Direct. Explicit or warm density seeds take precedence.",
+      "revisit_condition": "Expand the topology/resource domain only with independent reference/force gates and paired complete endpoint evidence, including a larger planner case. Never interpret this policy as promotion of a fitted accepted reference or DF-HF gradients.",
+      "evidence": [
+        "docs/developer/df_hf_preconvergence.md",
+        ".agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md",
+        "tests/python/test_df_hf_guess_policy.py",
+        "tests/python/test_df_hf_preconvergence.py"
+      ]
+    },
     {
       "id": "scf.incremental-direct-jk",
       "classification": "needs-qualification",

@@ -80,6 +80,7 @@ namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace hf { struct RHFFrameResponseOptions; }
 namespace methods::detail {
+struct DFCCSDTReferenceExperiment;
 struct DFCCSDTResult {
   bool primal, forces, lambda;
   hf::RHFFrameResponseOptions frame;
@@ -444,7 +445,7 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
         "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis,"
-        "external_reservation_bytes}; }\n"
+        "external_reservation_bytes,initial_density,warm_start_fallback}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
@@ -467,6 +468,8 @@ struct RccsdNativeState {
   const core::System* auxiliary;
   bool packed;
   std::size_t reserved;
+  const std::vector<double>* seed;
+  bool* seed_fallback;
 };
 struct DFPhysicalResponseComparison { std::size_t output_bytes; };
 std::size_t checked_add(std::size_t left, std::size_t right) { return left + right; }
@@ -479,6 +482,9 @@ int probe() {
   core::System system, auxiliary;
   generativeqc_method_descriptor descriptor;
   RccsdNativeState* replay_state=nullptr;
+  struct ReferenceExperiment { bool seed_fallback{}; };
+  ReferenceExperiment experiment;
+  const std::vector<double> seed{1.,2.,3.};
   const std::size_t recycle_bytes=123;
   DFPhysicalResponseComparison comparison{576};
   for(auto* physical_replay : {static_cast<DFPhysicalResponseComparison*>(nullptr), &comparison})
@@ -487,13 +493,20 @@ int probe() {
   for(bool forces : {false,true})
   for(bool df_matrix_gemm : {false,true})
   for(std::size_t ccsd_batch_limit : {1,3,8}) {
+  for(bool seeded : {false,true}) {
+    const auto* reference_seed=seeded ? &seed : nullptr;
+    auto* reference_experiment=seeded ? &experiment : nullptr;
+    const std::size_t seed_bytes=seeded ? seed.capacity()*sizeof(double) : 0;
 """
         + call
         + r"""
     if(state.reference_plan || state.batch!=ccsd_batch_limit ||
        state.derived!=derived_denominators || state.retained!=forces ||
        state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary || state.packed!=packed_diis ||
-       state.reserved!=recycle_bytes+(physical_replay ? physical_replay->output_bytes : 0)) return 1;
+       state.reserved!=seed_bytes+recycle_bytes+(physical_replay ? physical_replay->output_bytes : 0) ||
+       state.seed!=reference_seed ||
+       state.seed_fallback!=(seeded ? &experiment.seed_fallback : nullptr)) return 1;
+  }
   }
   const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
   if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||

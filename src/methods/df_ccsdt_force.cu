@@ -109,7 +109,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     DFPhysicalResponseComparison* physical_replay = nullptr,
     bool fused_triples_scalar_response = false, runtime::PrecisionDirective admitted_triples_w = {},
     std::size_t lambda_true_residual_interval = 1, bool lambda_core_reuse = true,
-    bool lambda_audit_matrix = true) {
+    bool lambda_audit_matrix = true, DFCCSDTReferenceExperiment* reference_experiment = nullptr) {
   const auto started = Clock::now();
   if (!lambda_true_residual_interval)
     throw std::invalid_argument("Lambda true residual interval must be positive");
@@ -126,17 +126,28 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
   const auto recycle_bytes = frame_options.recycling ? frame_options.recycling->storage_bytes() : 0;
+  const auto* reference_seed =
+      reference_experiment ? reference_experiment->initial_density : nullptr;
+  const auto seed_bytes =
+      reference_seed ? checked_mul(reference_seed->capacity(), sizeof(double)) : 0;
   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
   // in every phase, then let the response owner rebind/release it explicitly.
   auto state =
       replay_state
           ? std::move(*replay_state)
           : run_rccsd_native_state(
-                execution, system, descriptor, nullptr, nullptr, nullptr,
-                checked_add(recycle_bytes, physical_replay ? physical_replay->output_bytes : 0),
+                execution, system, descriptor, nullptr, reference_seed,
+                reference_experiment ? &reference_experiment->seed_fallback : nullptr,
+                checked_add(seed_bytes,
+                            checked_add(recycle_bytes,
+                                        physical_replay ? physical_replay->output_bytes : 0)),
                 &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit, derived_denominators,
                 packed_diis);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
+  if (reference_experiment) {
+    reference_experiment->reference = state.reference;
+    reference_experiment->work = state.reference_work;
+  }
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;
   result.reference_energy_change = state.reference_energy_change;
@@ -661,20 +672,46 @@ DFCCSDTResult run_df_ccsdt_native(
     const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
     bool parallel_gap_reduction, bool request_triples_gap_cotangents,
     bool fused_triples_scalar_response, runtime::PrecisionDirective admitted_triples_w,
-    std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix) {
+    std::size_t lambda_true_residual_interval, bool lambda_core_reuse, bool lambda_audit_matrix,
+    DFCCSDTReferenceExperiment* reference_experiment) {
+  if (reference_experiment && reference_experiment->reference)
+    throw std::invalid_argument("clear the previous experiment reference before reuse");
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
+  DFCCSDTReferenceExperiment local_reference;
+  auto* const diagnostic = reference_experiment ? reference_experiment : &local_reference;
+  auto guess =
+      prepare_df_hf_guess(system, auxiliary, descriptor, recycling ? recycling->storage_bytes() : 0,
+                          execution.cuda_requested() ? execution.device_id() : -1,
+                          !diagnostic->disable_preconvergence && !diagnostic->initial_density);
+  const auto* const borrowed_seed = diagnostic->initial_density;
+  if (!guess.density.empty()) diagnostic->initial_density = &guess.density;
+  struct RestoreSeed {
+    DFCCSDTReferenceExperiment* diagnostic;
+    const std::vector<double>* seed;
+    ~RestoreSeed() { diagnostic->initial_density = seed; }
+  } restore_seed{diagnostic, borrowed_seed};
+  const auto finish = [&](DFCCSDTResult result) {
+    result.primal.reference_seconds += guess.seconds;
+    result.total_seconds = elapsed(started);
+    guess.density = std::vector<double>{};
+    result.reference_guess = std::move(guess);
+    return result;
+  };
   const auto attempt = [&] {
+    diagnostic->reference.reset();
+    diagnostic->work = {};
+    diagnostic->seed_fallback = false;
     return run_df_ccsdt_native_attempt(
         execution, system, auxiliary, descriptor, forces, with_triples, df_auxiliary_reduction,
         df_matrix_gemm, lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit, frame_options,
         derived_denominators, packed_diis, parallel_gap_reduction, request_triples_gap_cotangents,
         nullptr, 0, 0, nullptr, nullptr, fused_triples_scalar_response, admitted_triples_w,
-        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix);
+        lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix, diagnostic);
   };
   try {
-    return attempt();
+    return finish(attempt());
   } catch (const MethodError& error) {
     if (!had_retained_cache || !recycling->storage_bytes() ||
         error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
@@ -692,6 +729,6 @@ DFCCSDTResult run_df_ccsdt_native(
   auto result = attempt();
   result.recycling_discarded_primal_attempt = true;
   result.total_seconds = elapsed(started);
-  return result;
+  return finish(std::move(result));
 }
 }  // namespace generativeqc::methods::detail

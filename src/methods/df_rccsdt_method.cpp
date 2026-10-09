@@ -65,8 +65,8 @@ class DfRccsdtPrepared final : public PreparedCalculation {
         system_(std::move(system)),
         auxiliary_(std::move(auxiliary)),
         descriptor_(descriptor) {
-    // Keep the RHF reference conventional. The auxiliary is passed separately
-    // as the correlation-only DF Hamiltonian source.
+    // The accepted reference stays conventional; the native owner may prepare
+    // a density-only JK-fit guess. This auxiliary remains correlation-only.
     descriptor_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.density_fitting_memory_budget_bytes = 0;
