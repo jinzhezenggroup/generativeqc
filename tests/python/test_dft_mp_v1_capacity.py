@@ -301,11 +301,20 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "becke_primitive_policy_sha256": (
             "099ccef7e0204d3627bb8ad4f5f8b9181bf6eab28203241dd137df812d157387"
         ),
+        "becke_zero_seed_policy_sha256": (
+            "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
+        ),
+        "metric_delta_sha256": (
+            "fb08b91ffdb5c3075aad6a2b02dca2092fe6d24f3cc992e5564dae19d2043e6c"
+        ),
+        "metrics_sha256": (
+            "4f7265bac664ae2c08440866e1aa577f585968ef919a848bab483f9b190fb529"
+        ),
         "ordinary_tile_resources_sha256": (
             "58be748f2b084ab282c1294e9bb6e07ee55b4f6514b108f195adca9dd7cc0a2e"
         ),
         "initializer_sha256": (
-            "10fe94e2b32797d78df4f61cdab6aa303977a2e54e15eac7484f3d2301c1e3c2"
+            "9257425e1f04c46f88ace0f9dc13a0bc9368e43840230856133f42b36f7eee86"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -353,16 +362,28 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
         ),
         "native_owner_sha256": (
-            "0294d09bae3f61bbb78a7159e7229da7387cee4392395a9dc5fa63967598e38a"
+            "452baac0eade9180c23d37a2fef846f07979e172c52ab4dd223fcc6ea74d4a5c"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
         ),
         "native_create_sha256": (
-            "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
+            "6f53897b29a59fadd01d991eb1b9e8bd8dffec88cadb6ce52ecf2ad529e613c4"
         ),
         "native_reset_sha256": (
-            "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
+            "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
+        ),
+        "native_geometry_reset_sha256": (
+            "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
+        ),
+        "native_phased_becke_input_sha256": (
+            "82ce3a72f5c936129f9ca82d2db03690288026aa3f2c4ff050de0c0014ad4558"
+        ),
+        "native_becke_zero_seed_configuration_sha256": (
+            "cbdd375e3c81bb1a6473186ca5fc9b190bae96c7b96bf8ccad651955a6f295aa"
+        ),
+        "native_becke_zero_seed_metrics_sha256": (
+            "5972d3b6096fc8c4c42ec152d084b7da8fd98d3902b34c1f8544e411680c743e"
         ),
         "native_tasks_sha256": (
             "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -3408,3 +3429,213 @@ def test_normalized_adjoint_admission_entry_point_fails_closed(tmp_path: Path) -
         RuntimeError, match="native_becke_normalized_adjoint_sha256 contract changed"
     ):
         qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "marker,old,new,gate",
+    [
+        (
+            "def _resolve_becke_zero_seed_policy(",
+            "return None",
+            "return True",
+            "becke_zero_seed_policy_sha256",
+        ),
+        (
+            "def _resolve_becke_zero_seed_policy(",
+            'if mode not in {"off", "on"}:',
+            'if mode not in {"off", "on", "auto"}:',
+            "becke_zero_seed_policy_sha256",
+        ),
+        (
+            "class _CudaSources:",
+            "zero_seed = _resolve_becke_zero_seed_policy()",
+            "zero_seed = True",
+            "initializer page",
+        ),
+        (
+            "class _CudaSources:",
+            "if configure_zero is None:",
+            "if False:",
+            "initializer page",
+        ),
+        (
+            "class _CudaSources:",
+            "self.handle, int(zero_seed)",
+            "self.handle, 1",
+            "initializer page",
+        ),
+        (
+            "    def metrics(self)",
+            "if zero_metrics(self.handle, zero_values, 2):",
+            "if False:",
+            "metrics page",
+        ),
+        (
+            "    def metrics(self)",
+            'metrics["becke_pair_primal_visits"] - elided_pairs',
+            'metrics["becke_pair_primal_visits"]',
+            "metrics page",
+        ),
+        (
+            "def _metric_delta(",
+            '        "becke_zero_seed_points",\n',
+            "",
+            "metric_delta_sha256",
+        ),
+    ],
+)
+def test_zero_seed_python_contract_fails_closed(
+    tmp_path: Path, marker: str, old: str, new: str, gate: str
+) -> None:
+    """Bind legacy opt-out, explicit ABI checks and per-call evaluated work."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    position = source.index(old, source.index(marker))
+    (tmp_path / "python/generativeqc/_stationary_cuda.py").write_text(
+        source[:position] + new + source[position + len(old) :]
+    )
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "marker,old,new,gate",
+    [
+        (
+            "struct Owner {",
+            "becke_zero_seed_requested = true",
+            "becke_zero_seed_requested = false",
+            "native_owner_sha256",
+        ),
+        (
+            "int stationary_create(",
+            "reinterpret_cast<unsigned char*>(p->context.error) + 8",
+            "reinterpret_cast<unsigned char*>(p->context.error) + 256",
+            "native_create_sha256",
+        ),
+        (
+            "int stationary_create(",
+            "p->becke_zero_seed_points, 0, sizeof(unsigned long long)",
+            "p->becke_zero_seed_points, 0, 0",
+            "native_create_sha256",
+        ),
+        (
+            "int stationary_reset(",
+            "p->geometry_tolerance = tolerance;",
+            "p->geometry_tolerance = 1e-12;",
+            "native_reset_sha256",
+        ),
+        (
+            "int stationary_geometry_reset(",
+            "p->geometry_tolerance = tolerance;",
+            "p->geometry_tolerance = 1e-12;",
+            "native_geometry_reset_sha256",
+        ),
+        (
+            "PhasedBeckeInput phased_input(",
+            "owner.becke_primitive && owner.becke_primitive_mode == 2",
+            "owner.becke_primitive_mode != 0",
+            "native_phased_becke_input_sha256",
+        ),
+        (
+            "PhasedBeckeInput phased_input(",
+            "owner.geometry_tolerance >= 1e-12",
+            "owner.geometry_tolerance >= 0",
+            "native_phased_becke_input_sha256",
+        ),
+        (
+            "PhasedBeckeInput phased_input(",
+            "owner.becke_zero_seed_requested &&",
+            "true &&",
+            "native_phased_becke_input_sha256",
+        ),
+        (
+            "int stationary_configure_becke_zero_seed_v1(",
+            "owner->topology_ready || owner->becke_zero_seed_configured",
+            "false",
+            "native_becke_zero_seed_configuration_sha256",
+        ),
+        (
+            "int stationary_configure_becke_zero_seed_v1(",
+            "(enabled != 0 && enabled != 1)",
+            "false",
+            "native_becke_zero_seed_configuration_sha256",
+        ),
+        (
+            "int stationary_configure_becke_zero_seed_v1(",
+            "owner->becke_zero_seed_requested = enabled;",
+            "owner->becke_zero_seed_requested = true;",
+            "native_becke_zero_seed_configuration_sha256",
+        ),
+        (
+            "int stationary_becke_zero_seed_metrics_v1(",
+            "drain_geometry(*owner);",
+            "",
+            "native_becke_zero_seed_metrics_sha256",
+        ),
+        (
+            "int stationary_becke_zero_seed_metrics_v1(",
+            "cuda_check(cudaStreamSynchronize(owner->context.stream));",
+            "",
+            "native_becke_zero_seed_metrics_sha256",
+        ),
+        (
+            "int stationary_becke_zero_seed_metrics_v1(",
+            "owner->downloads += sizeof(uint64_t);",
+            "owner->downloads += 0;",
+            "native_becke_zero_seed_metrics_sha256",
+        ),
+        (
+            "int stationary_becke_zero_seed_metrics_v1(",
+            "++owner->d2h_calls;",
+            "",
+            "native_becke_zero_seed_metrics_sha256",
+        ),
+        (
+            "int stationary_becke_zero_seed_metrics_v1(",
+            "++owner->synchronizations;",
+            "",
+            "native_becke_zero_seed_metrics_sha256",
+        ),
+    ],
+)
+def test_zero_seed_native_contract_fails_closed(
+    tmp_path: Path, marker: str, old: str, new: str, gate: str
+) -> None:
+    """Keep elision inside its admitted mode, existing control storage and lifetime."""
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    qualify_capacity._source_limits(tmp_path)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    source = target.read_text()
+    position = source.index(old, source.index(marker))
+    target.write_text(source[:position] + new + source[position + len(old) :])
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize("atoms", [24, 96])
+def test_zero_seed_override_preserves_dense_capacity(
+    monkeypatch: pytest.MonkeyPatch, atoms: int
+) -> None:
+    """Removed evaluated pairs do not free a retained panel or a launch domain."""
+    basis = SimpleNamespace(
+        natom=atoms,
+        nao=8 * atoms,
+        nprimitive=16 * atoms,
+        numeric_bytes=10_000,
+        packed=SimpleNamespace(size=1000),
+    )
+    monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "normalized-adjoints")
+    results = []
+    for mode in ("off", "on"):
+        monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_ZERO_SEED", mode)
+        limits = qualify_capacity._source_limits(ROOT)
+        results.append(
+            qualify_capacity._method_resources(
+                basis, atom_count=atoms, functional=0, spin="unpolarized", limits=limits
+            )
+        )
+    assert results[0] == results[1]

@@ -312,8 +312,15 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 )
 # Both primitive modes share the admitted phase storage. Bind constructor-only
 # mode selection, legacy-artifact fallback, and boolean resource reservation.
+# The zero-seed override configures an existing owner without adding capacity.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "10fe94e2b32797d78df4f61cdab6aa303977a2e54e15eac7484f3d2301c1e3c2"
+    "9257425e1f04c46f88ace0f9dc13a0bc9368e43840230856133f42b36f7eee86"
+)
+STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
+    "4f7265bac664ae2c08440866e1aa577f585968ef919a848bab483f9b190fb529"
+)
+STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
+    "fb08b91ffdb5c3075aad6a2b02dca2092fe6d24f3cc992e5564dae19d2043e6c"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -378,6 +385,9 @@ PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
 BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256 = (
     "099ccef7e0204d3627bb8ad4f5f8b9181bf6eab28203241dd137df812d157387"
 )
+BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256 = (
+    "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
+)
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
@@ -396,16 +406,31 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "0294d09bae3f61bbb78a7159e7229da7387cee4392395a9dc5fa63967598e38a"
+    "452baac0eade9180c23d37a2fef846f07979e172c52ab4dd223fcc6ea74d4a5c"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
-    "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
+    "6f53897b29a59fadd01d991eb1b9e8bd8dffec88cadb6ce52ecf2ad529e613c4"
 )
 NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
+    "75ad38454b7abccd9238e78df282e9bca3786a7c8f00356e306b0c2224936ca9"
+)
+# Elision preserves dense reservation/launch bounds. Bind its first-derivative
+# admission, both tolerance-refresh paths, immutable controls and charged D2H
+# observation independently of the unchanged allocation formula.
+NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256 = (
+    "d8fd99aa2161eadf748163713ecb63efe13085355b04cd0d2c10df93c5dab74d"
+)
+NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256 = (
+    "82ce3a72f5c936129f9ca82d2db03690288026aa3f2c4ff050de0c0014ad4558"
+)
+NATIVE_BECKE_ZERO_SEED_CONFIGURATION_CONTRACT_SHA256 = (
+    "cbdd375e3c81bb1a6473186ca5fc9b190bae96c7b96bf8ccad651955a6f295aa"
+)
+NATIVE_BECKE_ZERO_SEED_METRICS_CONTRACT_SHA256 = (
+    "5972d3b6096fc8c4c42ec152d084b7da8fd98d3902b34c1f8544e411680c743e"
 )
 NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
     "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -1024,6 +1049,27 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         != BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256
     ):
         raise RuntimeError("stationary CUDA Becke primitive policy contract changed")
+    zero_seed_helpers = {
+        "becke_zero_seed_policy_sha256": (
+            "_resolve_becke_zero_seed_policy",
+            BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256,
+        ),
+        "metric_delta_sha256": (
+            "_metric_delta",
+            STATIONARY_METRIC_DELTA_CONTRACT_SHA256,
+        ),
+    }
+    for label, (name, expected_digest) in zero_seed_helpers.items():
+        helpers = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
+        if (
+            len(helpers) != 1
+            or _source_node_sha256(source, helpers[0]) != expected_digest
+        ):
+            raise RuntimeError(f"stationary CUDA {label} contract changed")
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     resource_owners = [
         node
@@ -1052,6 +1098,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "__init__",
             STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256,
         ),
+        "metrics": ("_CudaSources", "metrics", STATIONARY_PAGE_METRICS_CONTRACT_SHA256),
         "flush": ("_CudaSources", "flush", STATIONARY_PAGE_FLUSH_CONTRACT_SHA256),
         "bulk": (
             "_CudaSources",
@@ -1107,6 +1154,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "ordinary_tile_layout_sha256": STATIONARY_TILE_LAYOUT_CONTRACT_SHA256,
         "phased_becke_policy_sha256": PHASED_BECKE_POLICY_CONTRACT_SHA256,
         "becke_primitive_policy_sha256": BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256,
+        **{label: digest for label, (_, digest) in zero_seed_helpers.items()},
     }
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
@@ -1155,6 +1203,22 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_reset_sha256": (
             "int stationary_reset(",
             NATIVE_STATIONARY_RESET_CONTRACT_SHA256,
+        ),
+        "native_geometry_reset_sha256": (
+            "int stationary_geometry_reset(",
+            NATIVE_STATIONARY_GEOMETRY_RESET_CONTRACT_SHA256,
+        ),
+        "native_phased_becke_input_sha256": (
+            "PhasedBeckeInput phased_input(",
+            NATIVE_PHASED_BECKE_INPUT_CONTRACT_SHA256,
+        ),
+        "native_becke_zero_seed_configuration_sha256": (
+            "int stationary_configure_becke_zero_seed_v1(",
+            NATIVE_BECKE_ZERO_SEED_CONFIGURATION_CONTRACT_SHA256,
+        ),
+        "native_becke_zero_seed_metrics_sha256": (
+            "int stationary_becke_zero_seed_metrics_v1(",
+            NATIVE_BECKE_ZERO_SEED_METRICS_CONTRACT_SHA256,
         ),
         "native_tasks_sha256": (
             "int stationary_tasks(",
