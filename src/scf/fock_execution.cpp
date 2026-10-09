@@ -5,11 +5,19 @@
 
 namespace generativeqc::scf {
 
+void reject_cuda_df_preliminary_guess(const ScfOptions& options) {
+  if (options.preliminary_guess)
+    throw std::invalid_argument(
+        "explicit preliminary initial guesses are unsupported by CUDA DF resident SCF");
+}
+
 ResolvedFockBuild fock_strategy_for_execution(const ScfOptions& options) {
   if (!options.resolved_fock_build)
     throw std::invalid_argument("Fock execution requires a resolved strategy");
   auto strategy = *options.resolved_fock_build;
   validate_resolved_fock_build(strategy);
+  if (strategy.schedule == FockSchedule::CudaDfResident)
+    reject_cuda_df_preliminary_guess(options);
   if (strategy.screening_tolerance != options.screening_tolerance ||
       (options.compute_forces && strategy.spec.derivative_order != 1) ||
       (strategy.metric_relative_threshold != 0.0 &&
@@ -65,7 +73,7 @@ ScfResult run_fock_strategy(const core::System& system, const core::System* auxi
   // Retain the established resident/streamed CUDA HF solver and its fused
   // Fock/force schedules. Backend choice never authorizes a fitted Hamiltonian.
   const bool unrestricted = strategy.spec.spin == FockSpin::Unrestricted;
-  if (strategy.legacy_density_fitting) {
+  if (strategy.schedule == FockSchedule::CudaDfResident) {
     const auto& source = auxiliary ? *auxiliary : system;
     return unrestricted ? run_uhf_density_fitting_cuda(system, source, options, device_id,
                                                        initial_density, overlap_cache)

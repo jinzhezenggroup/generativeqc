@@ -538,10 +538,38 @@ void verify_preflight_and_approximation_identity() {
   }
   const auto fitted = resolve_fock_build(
       make_hf_fock_spec(FockSpin::Restricted, FockApproximation::DensityFitted), FockBackend::Cuda);
-  require(fitted.legacy_density_fitting &&
+  require(fitted.schedule == FockSchedule::CudaDfResident &&
               fitted.spec.coulomb.approximation == FockApproximation::DensityFitted &&
               fitted.spec.exchange.approximation == FockApproximation::DensityFitted,
           "resolved fitted provider lost approximation identity");
+  const auto cpu_fitted = resolve_fock_build(
+      make_hf_fock_spec(FockSpin::Restricted, FockApproximation::DensityFitted), FockBackend::Cpu);
+  require(cpu_fitted.schedule == FockSchedule::CpuIndependent,
+          "CPU DF-HF retained a CUDA-specific SCF schedule");
+  const auto cuda_uhf_fitted = resolve_fock_build(
+      make_hf_fock_spec(FockSpin::Unrestricted, FockApproximation::DensityFitted), FockBackend::Cuda);
+  require(cuda_uhf_fitted.schedule == FockSchedule::CudaDfResident,
+          "CUDA DF-UHF lost its resident SCF schedule");
+
+  ScfOptions guess_controls;
+  guess_controls.resolved_fock_build = fitted;
+  guess_controls.preliminary_guess.emplace();
+  require_rejected([&] { (void)fock_strategy_for_execution(guess_controls); },
+                   "CUDA DF-HF accepted a silently ignored explicit initial guess");
+  require_rejected([&] { reject_cuda_df_preliminary_guess(guess_controls); },
+                   "direct CUDA DF entry accepted an explicit initial guess");
+  guess_controls.compute_forces = false;
+  require_rejected([&] { (void)fock_strategy_for_execution(guess_controls); },
+                   "energy-only CUDA DF-HF accepted an explicit initial guess");
+  guess_controls.preliminary_guess.reset();
+  require(fock_strategy_for_execution(guess_controls).schedule == FockSchedule::CudaDfResident,
+          "energy-only CUDA DF-HF lost its existing execution schedule");
+
+  guess_controls.resolved_fock_build = exact;
+  guess_controls.compute_forces = true;
+  guess_controls.preliminary_guess.emplace();
+  (void)fock_strategy_for_execution(guess_controls);
+
   require_rejected([&] { (void)build_exact_direct_jk(fitted, 2, eri_fixture(), density); },
                    "exact provider consumed a fitted energy strategy");
   require_rejected(
@@ -639,7 +667,7 @@ void verify_cosx_provider_semantics() {
 
   const auto resolved = resolve_fock_build(spec, FockBackend::Cuda, 1.0e-12, 1.0e-10);
   require(resolved.spec == spec && resolved.schedule == FockSchedule::CudaIndependent &&
-              resolved.metric_relative_threshold == 1.0e-10 && !resolved.legacy_density_fitting,
+              resolved.metric_relative_threshold == 1.0e-10,
           "RI-J/COSX-K semantics were not preserved by resolution");
 
   const auto& registration =

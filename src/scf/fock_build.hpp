@@ -18,7 +18,8 @@ enum class FockBackend { Cpu, Cuda };
 enum class FockSchedule {
   CpuReference,
   CudaFused,
-  LegacyDensityFitting,
+  /** Standard CUDA DF-HF, preferring the resident device SCF and its qualified retry. */
+  CudaDfResident,
   CpuIndependent,
   /** Host SCF control with independently bound CUDA integral consumers. */
   CudaIndependent
@@ -122,7 +123,6 @@ struct ResolvedFockBuild {
   FockSchedule schedule{FockSchedule::CpuReference};
   double screening_tolerance{1.0e-12};
   double metric_relative_threshold{};
-  bool legacy_density_fitting{};
   FockPrecision precision{FockPrecision::Float64};
   bool operator==(const ResolvedFockBuild&) const = default;
 };
