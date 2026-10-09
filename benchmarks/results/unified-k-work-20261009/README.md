@@ -60,6 +60,11 @@ exact 5/3 populations and gains in both mean and median against both standalone
 policies. The existing single-axis benchmark comparator still rejects unmatched
 task schedules. This small population is not statistical significance or a
 universal-workload performance claim.
+`final-receipts.json` supplies the curated, reviewable numerical fixture with
+all Cold and holdout times, work counts, energies and full force vectors;
+`initial-union-receipts.json` retains the rejected union's numerical observations.
+Full run bundles remain ignored local artifacts under the repository's storage
+policy, with exact retained locations, sizes and checksums in `ignored-artifacts.json`.
 
 The independent reference is an E/F accuracy oracle, not a backend timing or
 equal-residual stopping-policy comparison. Historical reference diagnostics
@@ -159,6 +164,9 @@ The original independent Cold references remain pinned in
 GPU4PySCF reference is retained separately with its generator and full force vector.
 The input capsule retains the exact used density/exchange arrays; unused Coulomb
 and moved-K arrays remain in ignored original inputs rather than inflating Git.
+
+Full archives are deliberately not reintroduced into Git or uploaded to a Release.
+The curated fixtures and source-identified summary are the reviewed Git evidence.
 
 See the [decision note](../../../.agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md)
 for invariants, discarded approaches and revisit conditions. No release, release
