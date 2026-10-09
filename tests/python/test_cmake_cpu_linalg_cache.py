@@ -17,7 +17,7 @@ def _make_openblas_provider(path: Path, *, version: str, local_threads: bool) ->
         "if(NOT TARGET OpenBLAS::OpenBLAS)\n"
         "  add_library(OpenBLAS::OpenBLAS INTERFACE IMPORTED)\n"
         "endif()\n"
-        'set(OpenBLAS_LIBRARIES OpenBLAS::OpenBLAS)\n'
+        "set(OpenBLAS_LIBRARIES OpenBLAS::OpenBLAS)\n"
         'set(OpenBLAS_INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/include")\n'
     )
     (includes / "cblas.h").write_text(
