@@ -120,9 +120,7 @@ struct Arena {
   unsigned char* raw;
   unsigned char* data;
   explicit Arena(std::size_t n)
-      : size(n),
-        raw(static_cast<unsigned char*>(allocation(n + 128, 64))),
-        data(raw + 64) {
+      : size(n), raw(static_cast<unsigned char*>(allocation(n + 128, 64))), data(raw + 64) {
     std::memset(raw, 0xA7, n + 128);
   }
   ~Arena() { std::free(raw); }
@@ -407,8 +405,7 @@ struct Fixture {
             double h = 0;
             for (int k = 0; k < n; ++k)
               h += lq[i * n + k] * lq[j * n + k] * (-1.0 + 1.5 * k + .2 * system + .3 * spin);
-            hamiltonians[matrix_offsets[system] + spin * stride * stride +
-                         i * stride + j] = h;
+            hamiltonians[matrix_offsets[system] + spin * stride * stride + i * stride + j] = h;
           }
         }
     }
