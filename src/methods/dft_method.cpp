@@ -1876,6 +1876,60 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  /** The native single-system and batch entry points must consume identical
+   * token-qualified stationary derivative sources and one complete force sink.
+   * This is intentionally not a second batch-specific DFT force equation. */
+  void add_prepared_native_forces(Result& result) {
+    if (!supports_native_pbe_force())
+      throw MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "native DFT analytic forces are unqualified for this prepared context (#2151)");
+    if (!result.convergence.converged) return;
+    dft::CudaKsFinalStateToken token;
+    dft::VerifiedKsFinalState frame;
+    std::string detail;
+    auto status = final_state_token(token, detail);
+    if (status == GENERATIVEQC_STATUS_SUCCESS)
+      status = read_final_state(token, true, frame, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw MethodError(status, detail.empty() ? "native DFT final state unavailable" : detail);
+
+    std::vector<double> integrals;
+    std::array<std::uint64_t, 9> work{};
+    // Bound compact source publication separately from the prepared DF
+    // metric and response providers, which enforce their own budgets.
+    constexpr std::size_t kSourcePublicationBytes = 64ull * 1024ull * 1024ull;
+    status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
+                                        kSourcePublicationBytes, work, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
+
+    const auto xc = dft::stationary_pbe_xc_derivative(
+        basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
+        options_.semilocal_correlation_scale);
+    const std::size_t ncoord = 3 * system_.atoms.size();
+    if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
+      throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
+                        "native DFT stationary-force source shape mismatch");
+    std::vector<double> gradient = xc.gradient;
+    for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
+      for (std::size_t source = 0; source < 4; ++source)
+        gradient[coordinate] += integrals[source * ncoord + coordinate];
+    molecule::add_nuclear_repulsion_gradient(system_, gradient);
+    dft::CudaKsFinalStateToken current;
+    status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS || current != token)
+      throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                        "native DFT final-state force token changed");
+    result.forces.resize(ncoord);
+    for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
+      if (!std::isfinite(gradient[coordinate]))
+        throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                          "nonfinite complete native DFT nuclear gradient");
+      result.forces[coordinate] = -gradient[coordinate];
+    }
+  }
+
   Result execute(bool compute_forces) override {
     invalidate_final_state();
     if (compute_forces && !supports_native_pbe_force()) {
@@ -1889,52 +1943,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                             "; this prepared native DFT force context is unqualified (#2151)");
     }
     auto result = adapt_result(run(nullptr, true, true), backend_);
-    if (compute_forces && result.convergence.converged) {
-      dft::CudaKsFinalStateToken token;
-      dft::VerifiedKsFinalState frame;
-      std::string detail;
-      auto status = final_state_token(token, detail);
-      if (status == GENERATIVEQC_STATUS_SUCCESS)
-        status = read_final_state(token, true, frame, detail);
-      if (status != GENERATIVEQC_STATUS_SUCCESS)
-        throw MethodError(status, detail.empty() ? "native DFT final state unavailable" : detail);
-
-      std::vector<double> integrals;
-      std::array<std::uint64_t, 9> work{};
-      // Bound compact source publication separately from the prepared DF
-      // metric and response providers, which enforce their own budgets.
-      constexpr std::size_t kSourcePublicationBytes = 64ull * 1024ull * 1024ull;
-      status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
-                                          kSourcePublicationBytes, work, detail);
-      if (status != GENERATIVEQC_STATUS_SUCCESS)
-        throw MethodError(status,
-                          detail.empty() ? "native DFT integral force unavailable" : detail);
-
-      const auto xc = dft::stationary_pbe_xc_derivative(
-          basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
-          options_.semilocal_correlation_scale);
-      const std::size_t ncoord = 3 * system_.atoms.size();
-      if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
-        throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
-                          "native DFT stationary-force source shape mismatch");
-      std::vector<double> gradient = xc.gradient;
-      for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
-        for (std::size_t source = 0; source < 4; ++source)
-          gradient[coordinate] += integrals[source * ncoord + coordinate];
-      molecule::add_nuclear_repulsion_gradient(system_, gradient);
-      dft::CudaKsFinalStateToken current;
-      status = final_state_token(current, detail);
-      if (status != GENERATIVEQC_STATUS_SUCCESS || current != token)
-        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                          "native DFT final-state force token changed");
-      result.forces.resize(ncoord);
-      for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
-        if (!std::isfinite(gradient[coordinate]))
-          throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
-                            "nonfinite complete native DFT nuclear gradient");
-        result.forces[coordinate] = -gradient[coordinate];
-      }
-    }
+    if (compute_forces) add_prepared_native_forces(result);
     apply_d4(result);
     return result;
   }
@@ -2287,6 +2296,7 @@ class KsPreparedBatch final : public PreparedBatch {
     for (std::size_t i = 0; i < size(); ++i) {
       runtime::CpuRetainedCapacity neighbors(host_numeric_capacity());
       items_[i].plan = make_plan(systems_[i]);
+      items_[i].prepared_properties = items_[i].plan->supported_properties();
     }
   }
 
@@ -2300,9 +2310,15 @@ class KsPreparedBatch final : public PreparedBatch {
   std::vector<BatchItemResult> execute(const Coordinates& coordinates,
                                        bool compute_forces) override {
     invalidate_result();
-    if (compute_forces)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "KS nuclear gradients are tracked separately in issue #163");
+    // A native force request is admitted only when *every* prepared item has
+    // the source-complete CPU DF-PBE/PBE0 owner. Mixed or missing contexts must
+    // not quietly receive an energy-only result with an unfilled force buffer.
+    if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
+          return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
+        }))
+      throw MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "KS batch analytic forces require individually qualified prepared contexts (#2151)");
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("KS batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());
@@ -2364,6 +2380,8 @@ class KsPreparedBatch final : public PreparedBatch {
       if (preliminary_requested[i] && !native.preliminary_guess.requested_kind)
         native.preliminary_guess = preliminary_diagnostics[i];
       result.calculation = adapt_result(std::move(native), backend_);
+      if (compute_forces && result.calculation.convergence.converged)
+        items_[i].plan->add_prepared_native_forces(result.calculation);
       items_[i].plan->apply_d4(result.calculation);
       const auto& calculation = result.calculation;
       result.status = calculation.convergence.converged ? GENERATIVEQC_STATUS_SUCCESS
@@ -2725,6 +2743,10 @@ class KsPreparedBatch final : public PreparedBatch {
   }
 
   struct Item {
+    // Admission belongs to the immutable prepared model/basis/backend, not a
+    // replaceable geometry owner. A failed rebuild must not revoke it and
+    // prevent the next force replay from reconstructing this item's plan.
+    generativeqc_property_flags prepared_properties{};
     std::unique_ptr<KsPreparedCalculation> plan;
     // Density is materialized only for explicit output, import, or rebuilding
     // an owner. Empty density with resident_warm=true is a valid lazy snapshot.
