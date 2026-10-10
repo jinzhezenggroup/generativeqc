@@ -38,6 +38,18 @@ def _assert_native_owner_layout(
     assert b"".join(lines) == current
 
 
+def _reviewed_native_owner(qualified: bytes, identity: dict) -> bytes:
+    """Recover the exact historical reviewed snapshot, not today's newer owner."""
+    lines = qualified.splitlines(keepends=True)
+    for entry in identity["native_owner_layout_delta"]["edits"]:
+        index = entry["line"] - 1
+        assert lines[index] == entry["before"].encode()
+        lines[index] = entry["after"].encode()
+    current = b"".join(lines)
+    _assert_native_owner_layout(qualified, current, identity)
+    return current
+
+
 def test_publication_retains_hash_bound_inputs_sources_and_unpooled_scope() -> None:
     manifest = json.loads((BUNDLE / "publication.json").read_text())
     files = {
@@ -84,14 +96,12 @@ def test_publication_retains_hash_bound_inputs_sources_and_unpooled_scope() -> N
             ).hexdigest()
             == expected
         )
-    owner = ROOT / "src/cc/df_triples_cuda.cu"
     qualified_owner = restored["qualified-source/src/cc/df_triples_cuda.cu"]
-    current_owner = owner.read_bytes()
     reconstruction = evidence["source_reconstruction"]
     assert reconstruction["production_objects_recompiled"] == 2
     identity = reconstruction["master_source_assessment"]
     assert not identity["native_owner_byte_identical_to_qualified"]
-    _assert_native_owner_layout(qualified_owner, current_owner, identity)
+    _reviewed_native_owner(qualified_owner, identity)
     assert (
         identity["native_owner_layout_delta"]["qualified_sha256"]
         == build["source_sha256"]["source/src/cc/df_triples_cuda.cu"]
@@ -222,7 +232,7 @@ def test_native_layout_binding_rejects_unrecorded_drift(mutation: str) -> None:
     receipt = receipts["qualified-source/src/cc/df_triples_cuda.cu"]
     assert receipt["encoding"] == "utf-8"
     qualified = receipt["data"].encode()
-    current = (ROOT / "src/cc/df_triples_cuda.cu").read_bytes()
+    current = _reviewed_native_owner(qualified, identity)
     _assert_native_owner_layout(qualified, current, identity)
     altered = {
         "extra-indent": b" " + current,

@@ -333,6 +333,20 @@ visits `T v^3` points. Standard triples retain seventh-order leading work.
 Diagnostics separately report panel/moment GEMMs, epilogue/reduction kernels,
 transfers, and admitted/observed storage; summands are not hardware FLOPs.
 
+Strict FP64 energy execution with exactly three panel slots visits the occupied
+triangle in a bounded serpentine order, sharing lower-index rows between
+adjacent tiles in the original LRU. Every energy is stored at its original
+canonical index `i(i+1)(i+2)/6 + j(j+1)/2 + k`; the final energy reduction order
+is unchanged even though production visits are reordered. The helper uses
+constant host storage and `O(T)` visits, not a sorted/materialized host tile
+list. Non-FP64 and one/two-panel execution retain the original traversal;
+force/response traversal is unchanged. `P` always reports actual panel builds,
+not occupied-tile or W counts. This schedule adds no buffers or provider.
+
+`tests/python/test_df_triples_traversal.py` executes the actual helper and checks
+tile coverage, canonical addressing and the bounded LRU. The default-promotion
+inventory audits the FP64/three-panel guard and canonical reduction binding.
+
 `tests/python/test_df_triples_distinct_moments.py` checks actual emitted remapped
 loads with poisoned duplicate slots and the independent original energy. This
 execution-only default adds no public option, numeric scratch or production
