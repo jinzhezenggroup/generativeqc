@@ -10,6 +10,9 @@
 #include "api/ks_snapshot.hpp"
 #include "generativeqc/generativeqc.h"
 
+extern "C" generativeqc_status generativeqc_ks_batch_supported_properties_v1(
+    const generativeqc_batch* batch, std::uint32_t index, generativeqc_property_flags* output);
+
 namespace {
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -252,6 +255,21 @@ void test_prepared_cpu_df_pbe_batch_forces() {
               batch != nullptr,
           "failed to prepare CPU DF-PBE native batch for forces");
 
+  generativeqc_property_flags prepared_properties = 0;
+  require(generativeqc_ks_batch_supported_properties_v1(batch, 0, &prepared_properties) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              (prepared_properties & GENERATIVEQC_PROPERTY_FORCES),
+          "native prepared CPU DF-PBE batch did not expose its real force capability");
+  require(generativeqc_ks_batch_supported_properties_v1(batch, 1, &prepared_properties) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              (prepared_properties & GENERATIVEQC_PROPERTY_FORCES),
+          "second prepared native DF-PBE item unexpectedly lacks analytic forces");
+  const auto before_invalid = prepared_properties;
+  require(generativeqc_ks_batch_supported_properties_v1(batch, 2, &prepared_properties) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              prepared_properties == before_invalid,
+          "invalid prepared native property query wrote to output");
+
   std::array<double, 6> first{}, second{};
   std::array<generativeqc_batch_item_result_descriptor, 2> outputs{};
   const auto reset_outputs = [&] {
@@ -343,6 +361,11 @@ void test_prepared_cpu_df_pbe_batch_forces() {
                   GENERATIVEQC_STATUS_SUCCESS &&
               batch != nullptr,
           "CPU Direct DFT batch negative-control preparation failed");
+  prepared_properties = 0;
+  require(generativeqc_ks_batch_supported_properties_v1(batch, 0, &prepared_properties) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              !(prepared_properties & GENERATIVEQC_PROPERTY_FORCES),
+          "CPU Direct prepared item incorrectly claimed a force owner");
   reset_outputs();
   first.fill(1111.);
   second.fill(2222.);
