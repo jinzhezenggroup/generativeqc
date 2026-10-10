@@ -67,8 +67,8 @@ void stationary_pbe_xc_nuclear_finite_difference() {
     for (double exchange_scale : {1.0, 0.75}) {
       const generativeqc::dft::AoBasis basis(reference);
       const generativeqc::dft::MolecularGrid grid(reference, grid_spec);
-      const auto response = generativeqc::dft::stationary_pbe_xc_derivative(
-          basis, grid, blocks, 17, exchange_scale);
+      const auto response =
+          generativeqc::dft::stationary_pbe_xc_derivative(basis, grid, blocks, 17, exchange_scale);
       const auto energy = [&](const generativeqc::core::System& system) {
         const generativeqc::dft::AoBasis displaced_basis(system);
         const generativeqc::dft::MolecularGrid displaced_grid(system, grid_spec);
@@ -93,8 +93,7 @@ void stationary_pbe_xc_nuclear_finite_difference() {
           plus.atoms[atom].position[axis] += step;
           minus.atoms[atom].position[axis] -= step;
           const double fd = (energy(plus) - energy(minus)) / (2.0 * step);
-          if (!std::isfinite(fd) ||
-              std::abs(fd - response.gradient[3 * atom + axis]) > 4e-5)
+          if (!std::isfinite(fd) || std::abs(fd - response.gradient[3 * atom + axis]) > 4e-5)
             throw std::runtime_error(
                 "stationary PBE XC AO/grid/Becke nuclear finite difference mismatch");
         }

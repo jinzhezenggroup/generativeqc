@@ -582,8 +582,7 @@ int run(const RunOptions& options) {
   }();
   // A method-family name alone never qualifies analytic forces. The exact
   // prepared model, DF provider, backend and geometry own force admission.
-  if (options.forces &&
-      !(calculation.supported_properties() & GENERATIVEQC_PROPERTY_FORCES))
+  if (options.forces && !(calculation.supported_properties() & GENERATIVEQC_PROPERTY_FORCES))
     throw UsageError(is_dft(options)
                          ? "native CLI DFT forces are not exposed for this prepared context"
                          : "analytic forces are unavailable for this prepared context");

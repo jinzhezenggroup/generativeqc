@@ -287,9 +287,8 @@ struct PbeStationaryXcDerivative {
 };
 PbeStationaryXcDerivative stationary_pbe_xc_derivative(
     const AoBasis& basis, const MolecularGrid& grid,
-    const std::vector<std::vector<double>>& density,
-    std::size_t tile_points, double exchange_scale = 1.0,
-    double correlation_scale = 1.0);
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    double exchange_scale = 1.0, double correlation_scale = 1.0);
 
 }  // namespace generativeqc::dft
 

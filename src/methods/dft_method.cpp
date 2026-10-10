@@ -905,18 +905,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return false;
     const auto& spec = fock_.strategy().spec;
     const auto fitted = [](const scf::FockTermSpec& term) {
-      return !term.present ||
-             (term.approximation == scf::FockApproximation::DensityFitted &&
-              term.op == scf::FockOperator::FullRange);
+      return !term.present || (term.approximation == scf::FockApproximation::DensityFitted &&
+                               term.op == scf::FockOperator::FullRange);
     };
-    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 ||
-        !fitted(spec.coulomb) || !fitted(spec.exchange) ||
-        options_.semilocal_correlation_scale != 1.0)
+    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !fitted(spec.coulomb) ||
+        !fitted(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
       return false;
     const bool pbe = !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 =
-        spec.exchange.present && spec.exchange.coefficient == -0.125 &&
-        options_.semilocal_exchange_scale == 0.75;
+    const bool pbe0 = spec.exchange.present && spec.exchange.coefficient == -0.125 &&
+                      options_.semilocal_exchange_scale == 0.75;
     return pbe || pbe0;
   }
 
@@ -1703,11 +1700,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
       status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
                                           kSourcePublicationBytes, work, detail);
       if (status != GENERATIVEQC_STATUS_SUCCESS)
-        throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
+        throw MethodError(status,
+                          detail.empty() ? "native DFT integral force unavailable" : detail);
 
       const auto xc = dft::stationary_pbe_xc_derivative(
-          basis_, grid_, frame.density, options_.xc_tile_points,
-          options_.semilocal_exchange_scale, options_.semilocal_correlation_scale);
+          basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
+          options_.semilocal_correlation_scale);
       const std::size_t ncoord = 3 * system_.atoms.size();
       if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
         throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,

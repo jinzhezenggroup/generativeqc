@@ -25,8 +25,8 @@ struct Environment {
                                                           GENERATIVEQC_BACKEND_CPU_REFERENCE};
     require(generativeqc_context_create(&context_options, &context) == GENERATIVEQC_STATUS_SUCCESS,
             "failed to create native CPU context");
-    const std::array<generativeqc_atom, 2> atoms{{{1, 0.0, 0.0, -0.7},
-                                               {1, 0.0, 0.0, 0.7 + displacement}}};
+    const std::array<generativeqc_atom, 2> atoms{
+        {{1, 0.0, 0.0, -0.7}, {1, 0.0, 0.0, 0.7 + displacement}}};
     const std::array<generativeqc_primitive, 6> primitives{{
         {3.425250914, 0.1543289673},
         {0.6239137298, 0.5353281423},
@@ -167,9 +167,8 @@ void test_prepared_cpu_df_pbe_analytic_forces() {
   Environment environment;
   environment.prepare(GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE);
   generativeqc_property_flags available{};
-  require(generativeqc_calculation_get_supported_properties_v1(environment.calculation,
-                                                              &available) ==
-              GENERATIVEQC_STATUS_SUCCESS &&
+  require(generativeqc_calculation_get_supported_properties_v1(
+              environment.calculation, &available) == GENERATIVEQC_STATUS_SUCCESS &&
               (available & GENERATIVEQC_PROPERTY_FORCES),
           "CPU DF-PBE prepared force capability is missing");
   std::array<double, 6> forces;
@@ -196,16 +195,14 @@ void test_prepared_cpu_df_pbe_analytic_forces() {
   Environment positive(step), negative(-step);
   positive.prepare(GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE);
   negative.prepare(GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE);
-  const double fd =
-      -(positive.execute_energy() - negative.execute_energy()) / (2.0 * step);
+  const double fd = -(positive.execute_energy() - negative.execute_energy()) / (2.0 * step);
   require(std::isfinite(fd) && std::abs(fd - forces[5]) < 2e-3,
           "native CPU DF-PBE force disagrees with reconverged finite difference");
 
   environment.prepare(GENERATIVEQC_DENSITY_FITTING_NONE);
   available = 0;
-  require(generativeqc_calculation_get_supported_properties_v1(environment.calculation,
-                                                              &available) ==
-                  GENERATIVEQC_STATUS_SUCCESS &&
+  require(generativeqc_calculation_get_supported_properties_v1(
+              environment.calculation, &available) == GENERATIVEQC_STATUS_SUCCESS &&
               !(available & GENERATIVEQC_PROPERTY_FORCES),
           "CPU Direct must not claim unqualified native DFT forces");
   forces.fill(1234.0);
