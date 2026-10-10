@@ -51,6 +51,26 @@ Host policy tests execute production selection across size/spin/method/precision
 boundaries, strict parser values and both explicit selectors. Host staging probes
 retain both-spin/repeated-lease coverage for both selection outcomes.
 
+The later clean-source default promotion bundle is
+`benchmarks/results/ks-resident-final-validation-default-20261011/`. Native source
+`5a9b107ca8b9a654d45d3dc15fac45e962323f3b` compares forced `0` against a genuinely
+unset candidate in the same binary. Complete 48-atom warm/moved reductions are
+2.378%/3.216%; complete 96-atom reductions are 6.084%/6.397%. All four robust
+assessments and all 40 independent numerical/work/checkpoint/lease checks pass.
+Maximum E/F errors are 6.593837e-12 / 2.470735e-11 at 48 atoms and
+8.185452e-12 / 3.745027e-11 at 96 atoms. These are scoped warm/moved complete
+endpoints, not cold-SCF or broad formal performance/production envelopes.
+
+Job 7271 completed 48 but timed out during 96 after 17 retained samples; its
+erroneous zero EXIT-trap receipt is overridden by the retained scheduler timeout
+and srun exit 143. Those partial samples are not pooled or qualified. Job 7276
+reran only 96 with a 20-minute limit and completed all 20 samples plus final
+checkpoints with zero exit. The completed 48 cohort was not rerun.
+
+Master `20baf5826a76661de7ed0ea7f06dfefb41574f2a` was inspected at publication;
+automatic merge-tree is clean. No unrelated commit triggers blanket retesting,
+and source-only compatibility inspection is not a measurement of latest master.
+
 ## Rejected first admission probe
 
 GPU job 7266 used source `4628029dd` and native library SHA256
