@@ -204,9 +204,7 @@ def test_qualified_rys_task_preference_must_be_compiled() -> None:
         preferred_rys_task_candidates(invalid)
 
 
-@pytest.mark.parametrize(
-    "invalid", (["psps", "psps"], ["psps", 10], "psps")
-)
+@pytest.mark.parametrize("invalid", (["psps", "psps"], ["psps", 10], "psps"))
 def test_qualified_rys_task_preference_manifest_validation(
     invalid: object, tmp_path: Path
 ) -> None:
