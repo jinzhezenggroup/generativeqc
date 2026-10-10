@@ -44,6 +44,54 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 
 
 @pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/scf/cuda/reference_eri_policy.hpp", "!value ||", "false ||"),
+        ("src/scf/cuda/reference_eri_policy.hpp", "if (!cold_reference)", "if (false)"),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "maximum_angular != 3",
+            "maximum_angular > 3",
+        ),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "direct_nbf < 128",
+            "direct_nbf < 64",
+        ),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "maximum_iterations < 8",
+            "maximum_iterations < 4",
+        ),
+        (
+            "src/scf/cuda/rhf_resident_values.cpp",
+            "budget, 8ULL << 30",
+            "budget, 16ULL << 30",
+        ),
+        (
+            "src/scf/cuda/rhf_resident_values.cpp",
+            "device_overhead, 256ULL << 20",
+            "device_overhead, 0",
+        ),
+    ],
+)
+def test_rhf_phase_value_default_domain_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Widening automatic construction needs renewed endpoint qualification."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "RHF phase-value auto default or admission domain drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
     "before,after",
     [
         ("guess.work_amortization_ratio < 1.0", "guess.work_amortization_ratio < 0.1"),
@@ -357,6 +405,27 @@ def test_scientific_model_and_projection_choices_remain_explicit() -> None:
     assert (
         entries["cc-option:packed_diis"]["classification"]
         == "guarded-promotion-candidate"
+    )
+
+
+def test_cc_input_residual_registration_records_scoped_automatic_use() -> None:
+    """An internal false initializer must not hide the qualified automatic owner."""
+    entry = next(
+        item
+        for item in _payload()["entries"]
+        if "cc-option:diis_input_residual" in item["controls"]
+    )
+    assert entry["classification"] == "already-default"
+    assert {
+        "src/cc/solver.hpp",
+        "src/cc/solver.cpp",
+        "src/cc/cuda_solver.cu",
+        "src/methods/rccsd_method.cpp",
+        "src/methods/df_ccsdt_force.cu",
+    } <= set(entry["sources"])
+    assert (
+        "benchmarks/results/df-cc-input-residual-20261010/publication.json"
+        in entry["evidence"]
     )
 
 

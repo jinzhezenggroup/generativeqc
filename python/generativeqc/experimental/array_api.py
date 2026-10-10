@@ -728,16 +728,16 @@ def asarray(
         if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
             raise TypeError("mixed bool/real host values are unsupported")
     target = None if dtype is None else _data_dtype_name(dtype)
-    if source_array is not None:
+    if not source_kinds:
+        source_is_bool = target == "bool" if target is not None else False
+    elif source_array is not None:
         source_is_bool = (
             source_kinds == frozenset(("bool",))
             if source_array.dtype.hasobject
             else source_array.dtype.name == "bool"
         )
-    elif source_kinds:
-        source_is_bool = source_kinds == frozenset(("bool",))
     else:
-        source_is_bool = target == "bool" if target is not None else False
+        source_is_bool = source_kinds == frozenset(("bool",))
     if target is not None and (target == "bool") != source_is_bool:
         raise TypeError("cross-kind bool/real input conversion is unsupported")
     source = value if source_array is None else source_array

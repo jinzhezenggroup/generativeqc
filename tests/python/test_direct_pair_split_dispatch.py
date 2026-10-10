@@ -19,9 +19,12 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
     """Exercise every admission guard, both source layouts and all failed steps."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
     cooperative_source = (ROOT / "src/scf/cuda/direct_order_seven_force.cu").read_text()
+    class_source = (ROOT / "src/scf/cuda/direct_force_class_domains.cu").read_text()
     definitions = "\n".join(
         _definition(
-            cooperative_source
+            class_source
+            if marker == "cudaError_t launch_direct_force_class_domains("
+            else cooperative_source
             if marker == "cudaError_t launch_direct_order_seven_force("
             else source,
             marker,
@@ -30,15 +33,18 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
             "bool materialized_pair_derivative_available(",
             "bool cooperative_pair_derivative_available(",
             "cudaError_t launch_direct_order_seven_force(",
+            "cudaError_t launch_direct_force_class_domains(",
             "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(",
         )
     )
     production, launches = re.subn(r"<<<([^<>]+)>>>\s*\(", r"(\1, ", definitions)
-    assert launches == 4
+    assert launches == 6
     probe = tmp_path / "split.cpp"
     probe.write_text(PREFIX + production + DRIVER)
     executable = native_cxx.build_executable(
-        [probe], tmp_path / "split", compile_args=["-std=c++20", "-O0"]
+        [probe],
+        tmp_path / "split",
+        compile_args=["-std=c++20", "-O0", f"-I{ROOT / 'src'}"],
     )
     result = subprocess.run([executable], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
@@ -51,6 +57,10 @@ PREFIX = r"""
 #include <cstdint>
 #include <tuple>
 #include <vector>
+#define __host__
+#define __device__
+#include "scf/cuda/direct_force_class_pages.cuh"
+using namespace generativeqc::scf::cuda_execution;
 enum cudaError_t { cudaSuccess, cudaErrorUnknown };
 using cudaStream_t = unsigned;
 struct dim3 {
@@ -150,6 +160,33 @@ void direct_order_seven_force_kernel(
   last_error = record({Launch,7,false,false,256,bytes,true});
   cursor = 999;
 }
+template<bool Unrestricted, DirectForceOutputMode Mode, DirectForceClassDomain Domain>
+void direct_force_class_domain_kernel(
+    dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
+    const GeneratedShellPairStream* force_topology, double screening, const double* shell,
+    const ShellPairDensityBounds* shell_density, const std::uint64_t* enabled_pointer,
+    std::uint64_t enabled_mask, const std::uint32_t* state, const double* schwarz_pointer,
+    const double* density_pointer, const std::uint8_t* active_pointer, double* output_pointer,
+    unsigned long long* cursor_pointer, DeviceShellClassProfileEntry* profile_pointer,
+    double j_coefficient, double k_coefficient) {
+  constexpr bool cooperative = Domain == DirectForceClassDomain::Cooperative;
+  constexpr bool materialized = Domain == DirectForceClassDomain::Materialized;
+  constexpr unsigned width = cooperative || materialized ? 256U : 128U;
+  constexpr int order = Domain == DirectForceClassDomain::LowOrder ? 0
+      : Domain == DirectForceClassDomain::WeightedFour ? 4
+      : Domain == DirectForceClassDomain::WeightedFive ? 5 : cooperative ? 6 : 8;
+  assert(Unrestricted == expected_spin && expected_purpose == DirectScreeningPurpose::Force);
+  assert((Mode == DirectForceOutputMode::Separate) == expected_separate);
+  assert(batch == expected_batch && grid == dim3{7} && block == dim3{width} && stream == stream_id);
+  assert(force_topology == expected_topology && force_topology != nullptr);
+  assert(screening == tolerance && shell == &shell_bounds && shell_density == &density_bounds);
+  assert(enabled_pointer == &mask_pointer && enabled_mask == mask && state == &class_state);
+  assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
+  assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
+  assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
+  last_error = record({Launch,order,materialized,materialized,width,bytes,cooperative});
+  cursor = 999;
+}
 template<bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
          int AngularOrder = -1, int Radial = -1, bool PairDerivatives = false,
          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false>
@@ -208,10 +245,19 @@ int main() {
                     !expected_batch.direct_coulomb_reachable && !expected_batch.direct_hermite_convolution;
                 const bool split = pair && purpose == DirectScreeningPurpose::Force && maximum == 2 && block == dim3{256};
                 const bool cooperative = split && expected_batch.direct_pair_cooperative_derivatives && expected_topology;
+                const bool class_domains = pair && purpose == DirectScreeningPurpose::Force && maximum == 3 &&
+                    expected_batch.direct_pair_cooperative_derivatives && expected_topology && block == dim3{256};
                 const auto workspace = pair ? std::max(requested_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence)) : requested_bytes;
                 const auto cooperative_workspace = std::max(requested_bytes, sizeof(CooperativeDirectPairDerivativeRecurrence));
                 std::vector<Event> expected;
-                if (cooperative)
+                if (class_domains)
+                  expected = {{Launch,-4,false,false,128,requested_bytes},{Peek},
+                              {Reset},{Launch,0,false,false,128,requested_bytes},{Peek},
+                              {Reset},{Launch,4,false,false,128,requested_bytes},{Peek},
+                              {Reset},{Launch,5,false,false,128,requested_bytes},{Peek},
+                              {Reset},{Launch,6,false,false,256,cooperative_workspace,true},{Peek},
+                              {Reset},{Launch,8,true,true,256,workspace},{Peek}};
+                else if (cooperative)
                   expected = {{Launch,-3,false,false,128,requested_bytes},{Peek},{Reset},
                               {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
                               {Launch,8,true,true,256,workspace},{Peek}};

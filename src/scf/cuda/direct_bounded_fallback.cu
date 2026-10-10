@@ -14,6 +14,7 @@
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
+#include "scf/cuda/direct_force_class_domains.hpp"
 #include "scf/cuda/direct_force_execution.cuh"
 #include "scf/cuda/direct_force_order4_sources.cuh"
 #include "scf/cuda/direct_force_order5_sources.cuh"
@@ -64,6 +65,13 @@ __host__ __device__ bool bounded_direct_angular_owner(const DeviceBatch& batch,
                                                       std::size_t second_pair) {
   if constexpr (AngularOrder == -1) {
     return true;
+  } else if constexpr (AngularOrder == -4) {
+    // A class-major consumer owns every s/p/d quartet, not every order <= 8.
+    // f-containing quartets of any total order retain this exact fallback.
+    return batch.shell_angular[batch.shell_pair_first[first_pair]] > 2U ||
+           batch.shell_angular[batch.shell_pair_second[first_pair]] > 2U ||
+           batch.shell_angular[batch.shell_pair_first[second_pair]] > 2U ||
+           batch.shell_angular[batch.shell_pair_second[second_pair]] > 2U;
   } else {
     const unsigned order = batch.shell_angular[batch.shell_pair_first[first_pair]] +
                            batch.shell_angular[batch.shell_pair_second[first_pair]] +
@@ -303,45 +311,47 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                   : batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
                         batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
           if constexpr (Force) {
-            if ((radial_operator == DirectRangeOperator::FullSources ||
-                 radial_operator == DirectRangeOperator::Full) &&
-                angular_order == 5U) {
-              const unsigned shell_class = direct_quartet_shell_class_device(
-                  batch.shell_angular[first_shell], batch.shell_angular[second_shell],
-                  batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
-              if (weighted_order5_source_class(shell_class)) {
-                if (radial_operator == DirectRangeOperator::FullSources)
-                  contract_two_electron_force_order5_sources<Unrestricted>(
-                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
-                      active, output, coulomb_coefficient, exchange_coefficient);
-                else
-                  contract_two_electron_force_order5_sources<Unrestricted,
-                                                             DirectForceOutputMode::Combined>(
-                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
-                      active, output, coulomb_coefficient, exchange_coefficient);
+            if constexpr (FixedAngularOrder != -4) {
+              if ((radial_operator == DirectRangeOperator::FullSources ||
+                   radial_operator == DirectRangeOperator::Full) &&
+                  angular_order == 5U) {
+                const unsigned shell_class = direct_quartet_shell_class_device(
+                    batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                    batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+                if (weighted_order5_source_class(shell_class)) {
+                  if (radial_operator == DirectRangeOperator::FullSources)
+                    contract_two_electron_force_order5_sources<Unrestricted>(
+                        shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                        active, output, coulomb_coefficient, exchange_coefficient);
+                  else
+                    contract_two_electron_force_order5_sources<Unrestricted,
+                                                               DirectForceOutputMode::Combined>(
+                        shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                        active, output, coulomb_coefficient, exchange_coefficient);
+                }
+                // f-containing order-five classes still belong to the warp fallback.
+                continue;
               }
-              // f-containing order-five classes still belong to the warp fallback.
-              continue;
-            }
-            if ((radial_operator == DirectRangeOperator::FullSources ||
-                 radial_operator == DirectRangeOperator::Full) &&
-                angular_order == 4U) {
-              const unsigned shell_class = direct_quartet_shell_class_device(
-                  batch.shell_angular[first_shell], batch.shell_angular[second_shell],
-                  batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
-              if (weighted_order4_source_class(shell_class)) {
-                if (radial_operator == DirectRangeOperator::FullSources)
-                  contract_two_electron_force_order4_sources<Unrestricted>(
-                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
-                      active, output, coulomb_coefficient, exchange_coefficient);
-                else
-                  contract_two_electron_force_order4_sources<Unrestricted,
-                                                             DirectForceOutputMode::Combined>(
-                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
-                      active, output, coulomb_coefficient, exchange_coefficient);
+              if ((radial_operator == DirectRangeOperator::FullSources ||
+                   radial_operator == DirectRangeOperator::Full) &&
+                  angular_order == 4U) {
+                const unsigned shell_class = direct_quartet_shell_class_device(
+                    batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                    batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+                if (weighted_order4_source_class(shell_class)) {
+                  if (radial_operator == DirectRangeOperator::FullSources)
+                    contract_two_electron_force_order4_sources<Unrestricted>(
+                        shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                        active, output, coulomb_coefficient, exchange_coefficient);
+                  else
+                    contract_two_electron_force_order4_sources<Unrestricted,
+                                                               DirectForceOutputMode::Combined>(
+                        shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                        active, output, coulomb_coefficient, exchange_coefficient);
+                }
+                // Uncovered order-four classes are consumed by the warp fallback.
+                continue;
               }
-              // Uncovered order-four classes are consumed by the warp fallback.
-              continue;
             }
             if (radial_operator == DirectRangeOperator::Long && angular_order <= 3U) {
               const unsigned shell_class = direct_quartet_shell_class_device(
@@ -735,6 +745,28 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
   };
   auto select = [&]<bool Unrestricted, DirectScreeningPurpose Purpose>() {
     if constexpr (Purpose == DirectScreeningPurpose::Force) {
+      // A mixed f basis is eligible only with this plan's coherent topology
+      // and both unchanged resident derivative algebras. Per-class ownership
+      // proves the s/p/d domain; the old whole-basis guard remains untouched.
+      if (batch.direct_maximum_shell_angular == 3U && force_topology != nullptr &&
+          batch.direct_pair_cooperative_derivatives &&
+          materialized_pair_derivative_available(batch) && block.x == kBoundedDirectThreads &&
+          block.y == 1U && block.z == 1U) {
+        bounded_direct_shell_quartet_kernel<Unrestricted, Purpose, true, -4>
+            <<<grid, kBoundedDirectForceThreads, shared_bytes, stream>>>(
+                batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+                shell_pair_order, shell_pair_block_bounds, system_density_bounds,
+                enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
+                density, active, output, global_cursor, profile, coulomb_coefficient,
+                exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain);
+        const auto error = cudaPeekAtLastError();
+        if (error != cudaSuccess) return error;
+        return launch_direct_force_class_domains(
+            Unrestricted, grid, shared_bytes, stream, batch, force_topology, screening_tolerance,
+            shell_pair_bounds, shell_pair_density_bounds, enabled_mask_pointer, enabled_mask,
+            bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+            profile, coulomb_coefficient, exchange_coefficient, separate_sources);
+      }
       if (batch.direct_maximum_shell_angular == 2U &&
           materialized_pair_derivative_available(batch) && block.x == kBoundedDirectThreads &&
           block.y == 1U && block.z == 1U)

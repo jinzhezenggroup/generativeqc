@@ -1738,6 +1738,17 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
  */
 GENERATIVEQC_API void generativeqc_calculation_destroy(generativeqc_calculation* calculation);
 
+/** @native-contract generativeqc_calculation_get_supported_properties_v1
+ * @behavior Query context-qualified energy/force properties of an immutable prepared calculation.
+ * @inputs A live prepared calculation and non-NULL output pointer; no SCF inputs are needed.
+ * @outputs Returns admitted property flags for the exact system, method, backend and provider.
+ * @lifetime The output is copied; callers own its value and keep the context alive.
+ * @errors INVALID_ARGUMENT for NULL inputs; any failure leaves output unchanged.
+ * @execution Synchronous no-work query; serialize against execution and owner destruction.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_supported_properties_v1(
+    const generativeqc_calculation* calculation, generativeqc_property_flags* properties);
+
 /**
  * Execute synchronously. To request forces, the caller owns result->forces and
  * provides at least 3 * atom_count doubles. A NULL pointer with force_count=0

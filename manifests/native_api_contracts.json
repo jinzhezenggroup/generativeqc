@@ -368,6 +368,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_calculation_get_supported_properties_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "5c8bea1ab16be9b58a9ca0c846ada78ce5039869eb674360a7a0da5f4ca97e78",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_calculation_execute": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -1600,6 +1615,21 @@
         "execution",
         "inputs",
         "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::Calculation::supported_properties": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "c5b0cb5e9d546469ecf56024c572c0b7f351ecc00aca9f419af41bf6a4a194b3",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
       ],
       "fields": [],
       "field_declarations": []

@@ -219,10 +219,10 @@
     "src/scf/cuda/direct_jk_kernels.cu": {
       "classification": "infrastructure",
       "contract": "#934",
-      "reason": "CUB scan/sort builds screened integral task queues and block queue offsets. This bounded scheduling exception does not classify scientific tensor reductions as infrastructure.",
+      "reason": "CUB scan/sort builds screened integral task queues, block queue offsets and indexed canonical shell-pair order from immutable Schwarz maxima. This bounded scheduling exception does not classify scientific tensor reductions as infrastructure.",
       "references": {
         "cub::DeviceScan": 2,
-        "cub::DeviceSegmentedRadixSort": 2
+        "cub::DeviceSegmentedRadixSort": 3
       }
     },
     "src/scf/cuda/direct_queue_scan.cu": {
@@ -365,6 +365,14 @@
         "cutensorGetVersion": 1
       }
     },
+    "src/tensor/cuda_symmetric_rank_k.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/symmetric_rank_k.py",
+      "reason": "Shared prepared signed rank-k executor consumes canonical TensorIR requests and owns bounded generated/cuBLAS execution, provider lifetime and finite symmetric publication; library admission remains qualification-only.",
+      "references": {
+        "cublasDgemm": 2
+      }
+    },
     "src/tensor/cuda_cublaslt.cuh": {
       "classification": "provider",
       "contract": "src/tensor/native_matrix_view.hpp",
@@ -458,8 +466,9 @@
     "src/tensor/cuda_square_linalg.hpp": {
       "classification": "provider",
       "contract": "src/solver/generalized_eigen.hpp",
-      "reason": "Borrowed square FP64 column-major GEMM and lower-triangular solve lowering for shared generalized-eigen phases; stream, handle modes, workspace and numerical admission remain with the owner.",
+      "reason": "Borrowed square-padded FP64 column-major products and lower-triangular solves for shared generalized-eigen and final-state phases; rank, transposes and leading dimensions remain explicit, while stream, handle modes, workspace and numerical admission remain with the owner.",
       "references": {
+        "cublasDgemm": 1,
         "cublasDgemmStridedBatched": 1,
         "cublasDtrsmBatched": 1
       }

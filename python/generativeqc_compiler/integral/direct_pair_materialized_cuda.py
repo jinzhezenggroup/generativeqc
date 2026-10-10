@@ -71,7 +71,10 @@ __device__ inline void contract_materialized_direct_pair_fock(
     MaterializedDirectPairRecurrence<AngularOrder>& shared,
     MaterializedDirectPairWork* work = nullptr, bool coulomb_only = false,
     bool exchange_only = false, double* checked_components = nullptr,
-    bool hf_exchange = false) {
+    bool hf_exchange = false,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0, double* separate_coulomb = nullptr, double* separate_exchange = nullptr,
+    std::uint64_t* canonical_work = nullptr) {
   if (task.first_pair >= batch.total_shell_pairs || task.second_pair >= batch.total_shell_pairs)
     return;
   const auto first_pair = task.first_pair, second_pair = task.second_pair;
@@ -139,8 +142,12 @@ __device__ inline void contract_materialized_direct_pair_fock(
         shared.coefficients[2] = batch.primitive_coefficients[c];
         shared.coefficients[3] = batch.primitive_coefficients[d];
         const auto p = shared.first.exponent_sum, q = shared.second.exponent_sum;
-        fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
-                                  shared.second.product_center, shared.coulomb);
+        if (range == generativeqc::integrals::CoulombRange::Full)
+          fill_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
+                                    shared.second.product_center, shared.coulomb);
+        else if (!fill_range_coulomb<AngularOrder>(p * q / (p + q), shared.first.product_center,
+                    shared.second.product_center, range, omega, shared.coulomb))
+          shared.coulomb.at(0, 0, 0, 0) = NAN;
         if (work) {
           atomicAdd(&work->ket_preparations, 1ULL);
           atomicAdd(&work->coulomb_preparations, 1ULL);
@@ -173,9 +180,25 @@ __device__ inline void contract_materialized_direct_pair_fock(
     // Qualification may inspect each final component without affecting the
     // production storage contract, where this borrowed address is null.
     if (checked_components) checked_components[ordinal] = value[slot];
-    if (value[slot] != 0.0)
-      accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density, fock,
-          i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
+    if (value[slot] != 0.0) {
+      // A canonical consumer publishes independent positive J/K sources, not
+      // HF's weighted Fock matrix. Both retain the authoritative orbit scatter.
+      if (separate_coulomb || separate_exchange) {
+        if (separate_coulomb)
+          accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
+              separate_coulomb, i[slot], j[slot], k[slot], l[slot], value[slot], true, false);
+        if (separate_exchange)
+          accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density,
+              separate_exchange, i[slot], j[slot], k[slot], l[slot], value[slot], false, true);
+      } else {
+        accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density, fock,
+            i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
+      }
+    }
+    if (canonical_work) {
+      atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work), 1ULL);
+      atomicAdd(reinterpret_cast<unsigned long long*>(canonical_work + 1), 1ULL);
+    }
     if (work) atomicAdd(&work->published_components, 1ULL);
   }
 }

@@ -1,6 +1,36 @@
 # Prepared Direct primitive-pair recurrence
 
-The internal qualification switch
+## Automatic canonical J/K values
+
+Canonical Cartesian Direct sources automatically reuse the prepared primitive-pair
+cache for total-angular-order-five shell quartets, including spherical public
+projections. This route is independent of the legacy HF value switch below:
+neither an unset switch nor `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=0`
+disables its admission. It applies by source capability, not by method, basis
+name, molecule size, or a WB97M-V-specific selector.
+
+Shell-pair maxima of the original AO Schwarz bounds provide conservative keys.
+Angular/system sorting and bounded row prefixes skip rejected shell quartets;
+each remaining component still uses the original AO predicate. The column-major
+view borrowed by the generated HF helper is a bit-preserving transpose of the
+canonical row-major bounds, not a recomputed bound or a symmetry assumption.
+Full J/K, J-only, and standalone full/SR/LR K publish separate positive sources
+through the existing compiler-owned recurrence and orbit scatter.
+
+Admission borrows an existing immutable geometry cache and charges the complete
+index, sort/scan workspace and bounds view to the provider budget, including the
+preparation peak. Missing storage, allocation failure, or index capacity keeps
+the incumbent canonical consumer. Execution allocates nothing and does not
+reread environment controls. Other angular orders, fixed screening,
+compensation, resident-ERI replay, combined full-J/range-K and paired RSH actions
+retain their existing consumers. Forces and mixed precision are unchanged.
+
+The [default-admission decision](../../.agents/notes/implemented/performance/2026-10-10-automatic-canonical-pair-reuse.md)
+records qualification and the intentionally retained fallbacks.
+
+## Legacy HF and dddd qualification
+
+The internal HF/dddd qualification switch
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=1` is frozen when a CUDA Direct
 batch/provider is prepared. It selects strict FP64 full-range value consumers
 that share cached primitive-pair geometry, Hermite preparation and a Coulomb

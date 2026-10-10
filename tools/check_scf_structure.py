@@ -446,6 +446,8 @@ CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
 CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
 CUDA_MODULES["cuda_direct_order_seven_pages"] = ("direct_order_seven_pages.cuh",)
 CUDA_ALLOWED["cuda_direct_order_seven_pages"] = ()
+CUDA_MODULES["cuda_direct_force_class_pages"] = ("direct_force_class_pages.cuh",)
+CUDA_ALLOWED["cuda_direct_force_class_pages"] = ()
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -482,6 +484,7 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "scf/cuda/direct_task_encoding.cuh",
         "scf/cuda/direct_page_screening.cuh",
         "scf/cuda/direct_order_seven_pages.cuh",
+        "scf/cuda/direct_force_class_pages.cuh",
         "scf/cuda/direct_queue_profile.cuh",
         "scf/cuda/matrix_index.cuh",
         "scf/cuda/device_timer.cuh",
@@ -496,6 +499,7 @@ CUDA_MODULES["cuda_direct_consumers"] = (
     "direct_bounded_dddd.cu",
     "direct_bounded_exact_force.cu",
     "direct_order_seven_force.cu",
+    "direct_force_class_domains.cu",
     "direct_bounded_fallback.cu",
     "direct_angular_force.cu",
     "direct_jk_kernels.cu",
@@ -520,6 +524,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_bounded_dddd.hpp",
     "direct_bounded_exact_force.hpp",
     "direct_order_seven_force.hpp",
+    "direct_force_class_domains.hpp",
     "direct_bounded_fallback.hpp",
     "direct_angular_force.hpp",
     "weighted_eri_kernels.hpp",
@@ -563,6 +568,21 @@ CUDA_ALLOWED["cuda_hf_graph"] = (
     "runtime/residency_observer.hpp",
     "scf/cuda/rhf_graph.",
     "scf/types.hpp",
+)
+# A phase-local exact source borrows public Direct/assembly capabilities and
+# owns local graphs; it must not acquire bucket state or recurrence internals.
+CUDA_MODULES["cuda_rhf_resident_values"] = ("rhf_resident_values",)
+CUDA_ALLOWED["cuda_rhf_resident_values"] = (
+    "molecule/basis.hpp",
+    "posthf/capacity.hpp",
+    "runtime/df_progress_trace.hpp",
+    "runtime/resource_cuda.cuh",
+    "scf/cuda/df_scf_kernels.hpp",
+    "scf/cuda/reference_eri_policy.hpp",
+    "scf/cuda/rhf_graph.hpp",
+    "scf/cuda/rhf_resident_values.",
+    "scf/cuda/runtime_support.hpp",
+    "scf/cuda_direct_jk_device.hpp",
 )
 # The remaining host driver owns direct-HF numerical launch order, not bucket
 # admission/lifetime or CUDA Graph handles. Keep recurrence and kernel
@@ -622,6 +642,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/resources.hpp",
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/rhf_policy.hpp",
+    "scf/cuda/rhf_resident_values.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",

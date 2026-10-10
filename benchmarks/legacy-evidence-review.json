@@ -1,5 +1,10 @@
 {
   "families": {
+    "ks-resident-final-validation-20261010": {
+      "owner": "opt-in resident KS final-state products and complete restricted PBE0 endpoints",
+      "reason": "Lossless compact records retain both separate frozen cohorts, all 80 timed E/F records, numerical/work/seed/lease gates, historical below-gate and failed attempts, independent references and source/scheduler/cache receipts. No broad default promotion, external archive, GPU rerun or storage-budget increase.",
+      "review_document": "benchmarks/results/ks-resident-final-validation-20261010/README.md"
+    },
     "pbe0-restricted-point-default-20261010": {
       "owner": "producer-bound restricted PBE0 complete default-route qualification",
       "reason": "Lossless compact source-frozen 48/96 original endpoint records retain setup, priming, all 40 measured E/F vectors, actual dispatch and semantic work, immutable seed identities and independent references. No profiler arrays, binaries, peak-memory invention, external archive or storage-budget increase.",
@@ -205,12 +210,20 @@
   },
   "files": [
     {
-      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
-      "family": "pbe0-restricted-point-default-20261010",
-      "bytes": 214312,
-      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
+      "bytes": 227600,
       "classification": "required-compact-accepted-evidence",
-      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff"
+    },
+    {
+      "bytes": 381579,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
+      "role": "endpoint-or-numerical-samples",
+      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c"
     },
     {
       "bytes": 145857,
@@ -363,14 +376,6 @@
       "path": "benchmarks/results/density-candidates/inputs/water_tzvp.npz",
       "role": "reference-input",
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
-    },
-    {
-      "path": "benchmarks/results/df-final-occupied-endpoint-20260926/receipt.json",
-      "family": "df-final-occupied-endpoint-20260926",
-      "bytes": 324689,
-      "sha256": "709b72edc673227844ed7ad0a38fe8c572e1d0ebbe39dadf36005fbf95e5d88a",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Independent final-K/root ablations and all diagnostic counters, reconstructed losslessly from split companions."
     },
     {
       "path": "benchmarks/results/df-one-step-warm-20260926/references.json",
@@ -659,6 +664,14 @@
       "sha256": "1d6dd690d29a8174c0eb0769c6f914b222dd7046e777a73e6ae3d4243b84bc48",
       "classification": "required-compact-accepted-evidence",
       "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
+    },
+    {
+      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
+      "family": "pbe0-restricted-point-default-20261010",
+      "bytes": 214312,
+      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
     },
     {
       "bytes": 382561,

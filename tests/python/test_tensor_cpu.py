@@ -85,7 +85,12 @@ def test_reductions_einsums_and_detached_outputs(
     other = native(
         Program(dict(program.outputs), provenance={"different_plan": True}), tmp_path
     )
-    assert executor.identity != other.identity
+    # Descriptive provenance shares exact prepared code and its verified binary.
+    assert executor.identity == other.identity
+    assert executor.artifact.library == other.artifact.library
+    reused = other.execute({"a": av, "b": bv})
+    for name in result:
+        np.testing.assert_array_equal(reused[name], result[name])
 
 
 def test_two_tensor_programs_share_one_native_runtime_bundle(

@@ -24,6 +24,7 @@ For the rationale and pinned historical receipts, see the
 | HF stationary gradient assembly | `src/scf/gradient/hf_gradient.*` | Consumes provider derivative contributions; does not own or mutate an SCF solver |
 | Direct CUDA public plan and cache lifetime | `src/scf/cuda/rhf_bucket.*` | Topology/options identity, admission, invalidation, retry, diagnostics and warm cache |
 | Direct CUDA Graph lifetime | `src/scf/cuda/rhf_graph.*` | Capture, instantiate/upload, replay and teardown |
+| Optional exact-reference value lease | `src/scf/cuda/rhf_resident_values.*` | One-call admission, common Direct provider borrowing, local graphs and retirement before correlation |
 | Coupled direct CUDA execution | `src/scf/cuda_rhf.cpp` and bounded `src/scf/cuda/direct_*` owners | Host launch/dataflow orchestration is separate from scientific device kernels |
 | CUDA generic numeric services | `src/scf/cuda/eigensolver.*`, `src/solver/cuda/symmetric_eigen_handles.*` and `src/scf/cuda/resources.*` | Solver/library/stream/workspace lifetime; borrowers retain their method-specific policies |
 | CUDA density fitting | `src/scf/cuda/df_plan*`, `df_source*`, `df_jk*`, `df_rhf_scf.*`, `df_uhf_scf.*` | Separate source preparation, plan lifetime, J/K, response and persistent iteration |
@@ -69,6 +70,51 @@ rather than a claim that every file passes that target.
 
 ## Direct CUDA execution and density-fitting scope
 
+### Optional phase-local exact RHF values
+
+Unset or `GENERATIVEQC_RHF_RESIDENT_VALUES=auto` selects a bounded automatic
+execution schedule for a single unscreened, restricted, strict-FP64
+physical-reference export. `0` disables it; `1` explicitly requests the
+resident schedule subject to capability and resource admission. Other values
+are rejected. Automatic routing admits only a fresh reference bucket, an
+f-containing domain with uncovered generic Fock work, at least 128 Cartesian
+AOs and an iteration limit of at least eight. Known warm/reused buckets,
+smaller sources and fully generated/lower-angular routes retain their existing
+schedule without rebuilding a phase source or recapturing ordinary graphs.
+Ordinary HF/UHF, mixed/incremental Fock schedules and shell-work diagnostics do
+not silently acquire this lease. Small references (fewer than 64 public AOs),
+iteration limits below four and incompatible canonical domains retain fallback.
+The automatic policy is a conservative cold/domain heuristic, not a universal
+profitability model or a promise of eight actual iterations. A supplied seed
+in a fresh bucket is not assumed to be an already converged reference.
+
+The common Direct provider builds immutable full-range canonical values once
+and applies its existing compensated FP64 J/K consumer for each physical Fock
+build. Shared RHF assembly applies `h + J - K/2`; SCF/DIIS, exact final Fock,
+reference reconstruction and physical/canonical acceptance gates are unchanged.
+No fitted reference, CPU integral oracle or molecule-specific dispatch is added.
+
+Admission first charges the complete mandatory reference peak, conservative
+provider device/host preparation, Cartesian compensation, two public raw
+matrices and diagnostics. Optional values have an 8-GiB ceiling and must also
+fit available device memory with a 256-MiB runtime reserve. Resource/capability
+refusals retain the already admitted exact evaluator; driver/numerical failures
+propagate instead of masquerading as pressure. Preparation finite-audits values
+before publication. A completed action must report zero recurrence evaluations
+and a canonical census matching the source inventory before reference export.
+
+The lease borrows the RHF stream and owns separate iteration graphs. Every
+admitted call recaptures those graphs, including changed/restored geometry when
+explicitly forced. Refusal uses ordinary bucket graphs, capturing them lazily
+if an earlier resident-only call never created them.
+All exits drain work, retire graphs, then release source values and scratch;
+the borrowed stream is never destroyed. No optional values survive into
+CC/Lambda or appear in retained-bucket capacity. The physical reference's
+numeric capacity includes the transient phase peak. Progress scopes distinguish
+submitted/built source work, completed Fock actions, refused admission and the
+mandatory versus complete phase capacity; graph-capture callbacks are not
+counted as completed actions.
+
 The direct path separates a method-facing bucket (identity and cache),
 a Graph owner (capture and teardown), generic runtime allocations/libraries,
 and reusable scientific launch owners. The bucket supports the existing
@@ -76,6 +122,32 @@ topology/options admission, cached state and retry behavior; the driver retains
 the coupled numerical launch sequence. The separately built angular-force
 kernel has its own device-link constraints: do not change standalone versus
 relocatable compilation without checking the real NVCC build graph and endpoint.
+
+Full-range nuclear derivatives can partition a mixed f basis by the borrowed
+class-major topology: the 21 s/p/d quartet classes use separate low-order,
+weighted order-four/five, cooperative order-six/seven and materialized dddd
+consumers. Every f-containing class remains with the bounded generic recurrence,
+including low-total-order f classes. Admission requires both resident derivative
+schedules, compatible recurrence modes, the same plan's topology and the original
+256-lane launch contract. Missing preconditions retain the complete mixed owner;
+the existing whole-basis s/p/d schedule is unchanged. Class pages preserve the
+physical pair orientation, original screening and generated-class ownership,
+without new resident storage or another full-domain traversal. This changes
+execution partitioning, not derivative algebra or the number of physical passes.
+
+CUDA KS final-state export keeps the shared physical/canonical acceptance policy
+and orbital-energy weighted-density expression. The optional
+`GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION=1` route computes validation products
+from authenticated resident D/F/C/energies with borrowed matrix-library resources
+and the shared tensor primitive. It reuses four phase-local iteration matrices
+and an arena-charged bounded reduction packet array; it does not upload detached
+host matrices or allocate another dense arena/handle. The default is `0`; other
+values are errors. Small or unavailable-library owners, and repeated exports
+with a published stationary-weight lease, retain reference validation without
+recycling leased storage. An admitted provider failure is explicit, not a silent
+reference retry. See the
+[resident final-validation decision](../../.agents/notes/implemented/performance/2026-10-10-ks-resident-final-validation.md)
+for layout, lifetime and qualification rationale.
 
 CUDA DF is not a single interchangeable `cuda_rhf` execution mode.
 Raw/metric source setup, bounded J/K contraction, source-backed derivatives,

@@ -506,7 +506,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     }
   }
   std::vector<RhfBucketItem> outputs =
-      execute_hf_cuda_bucket_driver(**plan, candidate, options, device_id, unrestricted,
+      execute_hf_cuda_bucket_driver(**plan, candidate, systems, options, device_id, unrestricted,
                                     shell_class_profiling, inactive_eigensolver_profiling);
   const bool retry_without_cublas = !(*plan)->initialized && (*plan)->retry_without_cublas;
   if (!(*plan)->initialized) {
@@ -524,8 +524,9 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
       return outputs;
     }
     (*plan)->cublas_enabled = false;
-    outputs = execute_hf_cuda_bucket_driver(**plan, candidate, options, device_id, unrestricted,
-                                            shell_class_profiling, inactive_eigensolver_profiling);
+    outputs =
+        execute_hf_cuda_bucket_driver(**plan, candidate, systems, options, device_id, unrestricted,
+                                      shell_class_profiling, inactive_eigensolver_profiling);
     for (auto& output : outputs) ++output.scf.precision.execution_retries;
     if (!(*plan)->initialized) {
       delete *plan;

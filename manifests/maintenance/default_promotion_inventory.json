@@ -26,6 +26,8 @@
       "src/scf/cuda/direct_jk.cpp",
       "src/scf/cuda/direct_md_j.hpp",
       "src/scf/cuda/direct_fock_lowering.hpp",
+      "src/scf/cuda/reference_eri_policy.hpp",
+      "src/scf/cuda/rhf_resident_values.cpp",
       "python/generativeqc_compiler/integral/production_rys_tasks.py",
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
@@ -34,6 +36,29 @@
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
   "entries": [
+    {
+      "id": "scf.phase-local-exact-reference-values",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/scf/cuda/reference_eri_policy.hpp",
+        "src/scf/cuda/rhf_resident_values.cpp",
+        "src/scf/cuda_rhf.cpp"
+      ],
+      "rationale": "Unset/auto conservatively selects a phase-local exact FP64 source only for fresh single restricted unscreened physical-reference buckets with uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs and an iteration limit of at least eight. The static domain heuristic is not an observed reuse count or a universal profitability model. Complete numeric admission, an 8-GiB value ceiling and a 256-MiB free-device reserve retain exact fallback. Local graphs and values retire before correlation; refused/warm calls reuse ordinary bucket graphs. Explicit 0 restores the original schedule and 1 requests values without bypassing scientific/resource gates.",
+      "revisit_condition": "Broaden the cold/domain heuristic only with new source-matched complete E+F comparisons and independent gates, including quickly converged fresh seeds and generated/lower-angular schedules. Preserve final physical Fock/census audits, compensated FP64 arithmetic and bounded lifetime; do not pool retained opt-in measurements with new default-auto qualification.",
+      "evidence": [
+        "docs/developer/scf_module_boundaries.md",
+        ".agents/notes/implemented/performance/2026-10-10-rhf-phase-values-auto.md",
+        "benchmarks/results/rhf-phase-values-auto-20261010/README.md",
+        "tests/python/test_rhf_reference_cache_policy.py",
+        "tests/python/test_rhf_resident_values_lifetime.py",
+        "tests/python/test_rhf_phase_resident_values_cuda.py"
+      ]
+    },
     {
       "id": "initial-guess.df-rhf-preconvergence",
       "classification": "already-default",
@@ -773,6 +798,32 @@
         "issue:#926",
         "issue:#1598",
         "note:.agents/notes/implemented/architecture/2026-10-06-shared-iteration-invariants.md"
+      ]
+    },
+    {
+      "id": "cc.diis-input-residual",
+      "classification": "already-default",
+      "controls": [
+        "cc-option:diis_input_residual"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/cc/solver.hpp",
+        "src/cc/solver.cpp",
+        "src/cc/cuda_solver.cu",
+        "src/methods/rccsd_method.cpp",
+        "src/methods/df_ccsdt_force.cu"
+      ],
+      "rationale": "The internal option defaults to false, while the native production owner automatically enables incoming-residual weighted Anderson mixing only for CUDA DF energies without retained DF response. History pairs outgoing damped Jacobi maps with incoming physical residuals using fixed validated shifted denominators. This changes the nonlinear trajectory and avoids separate trial equation evaluations; every observed state and the independent expanded physical replay remain fresh. CPU, conventional, force/Lambda/response and no-DIIS contracts remain unchanged. Independent algebraic gates and scoped complete molecular endpoints qualify this consumer, without a universal convergence, speedup, force or process-RSS claim.",
+      "revisit_condition": "Broaden the automatic consumer domain only after independent molecular and response gates plus complete endpoint evidence; revisit the fixed weighted-error rationale if preconditioning or damping changes within a solve, or if a qualified case shows unacceptable convergence behavior.",
+      "evidence": [
+        "pr:#2211",
+        "docs/developer/rccsd_gpu.md",
+        ".agents/notes/implemented/numerics/2026-10-10-df-cc-input-residual-mixing.md",
+        "benchmarks/results/df-cc-input-residual-20261010/publication.json",
+        "tests/python/test_df_cc_native_solver.py"
       ]
     },
     {

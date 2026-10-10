@@ -267,6 +267,26 @@ def test_host_array_like_copy_false_probes_without_copying() -> None:
     assert actual is source.storage
 
 
+def test_empty_object_array_like_uses_explicit_boolean_kind() -> None:
+    class EmptyObjectArrayLike:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __array__(
+            self, dtype: object = None, copy: builtins.bool | None = None
+        ) -> np.ndarray:
+            assert dtype is None
+            assert copy is None
+            self.calls += 1
+            return np.asarray([], dtype=object)
+
+    source = EmptyObjectArrayLike()
+    actual = xp.asarray(source, dtype=xp.bool)
+    assert source.calls == 1
+    assert actual.dtype == xp.bool
+    assert actual.shape == (0,)
+
+
 @pytest.mark.parametrize("value,shape", (([], (0,)), ([[]], (1, 0))))
 def test_empty_host_container_uses_explicit_boolean_kind(
     value: object, shape: tuple[int, ...]

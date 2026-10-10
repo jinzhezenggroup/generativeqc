@@ -386,6 +386,21 @@ class Calculation {
         handle_(std::exchange(other.handle_, nullptr)),
         atom_count_(other.atom_count_),
         capabilities_(other.capabilities_) {}
+  /** @native-contract generativeqc::Calculation::supported_properties
+   * @behavior Query the exact prepared method/backend/system property contract.
+   * @inputs The live Calculation owner; no execution is requested.
+   * @outputs Returns context-qualified energy/force property bits by value.
+   * @lifetime The returned flags are independent of the owner; the native handle
+   * remains borrowed by this wrapper during the call.
+   * @errors Throws Error if the native context query fails.
+   * @execution Synchronous, Python-free; serialize against execute/destruction.
+   */
+  [[nodiscard]] generativeqc_property_flags supported_properties() const {
+    generativeqc_property_flags properties{};
+    check(generativeqc_calculation_get_supported_properties_v1(handle_, &properties));
+    return properties;
+  }
+
   /** @native-contract generativeqc::Calculation::execute
    * @behavior Run a prepared method and return a value result.
    * @inputs properties defaults to ENERGY; nonzero supported flag combinations are required.
@@ -404,7 +419,7 @@ class Calculation {
    */
   CalculationResult execute(generativeqc_property_flags properties = GENERATIVEQC_PROPERTY_ENERGY) {
     CalculationResult result;
-    if (!properties || (properties & ~capabilities_.supported_properties))
+    if (!properties || (properties & ~supported_properties()))
       throw Error(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "requested method property is unsupported");
     if (properties & GENERATIVEQC_PROPERTY_FORCES) result.forces.emplace(atom_count_ * 3);
     generativeqc_result_descriptor output{

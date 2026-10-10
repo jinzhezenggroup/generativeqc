@@ -229,11 +229,9 @@ inline bool compatible_hf_bucket_options(const CudaRhfBucketPlan& plan,
 }
 
 /** Internal direct-HF numerical driver consumed by the bucket lifecycle owner. */
-std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan,
-                                                         const cuda_execution::HostBatch& host,
-                                                         const ScfOptions& options, int device_id,
-                                                         bool unrestricted,
-                                                         bool shell_class_profiling,
-                                                         bool inactive_eigensolver_profiling);
+std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
+    CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
+    const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
+    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling);
 
 }  // namespace generativeqc::scf
