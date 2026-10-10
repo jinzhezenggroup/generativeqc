@@ -711,14 +711,6 @@
       "sha256": "af85685a1e73345ce5baa046faf84a86f1be88c473eb07cbb4d6b9b4d2fcdffd"
     },
     {
-      "bytes": 169698,
-      "classification": "required-compact-accepted-evidence",
-      "family": "tensor-resource-scheduler-508",
-      "path": "benchmarks/results/tensor-resource-scheduler-508/qualification.json",
-      "role": "decision-or-audit-record",
-      "sha256": "39414917b758b0c50da615b231fb4736c2b95fd5d43b2c05e95ce69a40dc71aa"
-    },
-    {
       "bytes": 177463,
       "classification": "required-compact-accepted-evidence",
       "family": "weighted-eri-144",
