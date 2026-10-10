@@ -3,6 +3,14 @@
 Status: implemented
 Date: 2026-10-10
 
+Evidence recovery update (2026-10-10): the follow-up
+`2026-10-10-df-cc-energy-auto-q32.md` retains a new complete-endpoint observation.
+To stay below the unchanged aggregate cap, this campaign's eight original
+evidence files remain in existing merged commit
+`f81640c8cd7531be60c1d9a4d2323e90934e1d1c`; their original sizes/SHA-256 and
+verified restore command are in the campaign's `snapshot.manifest.json` and
+recovery README. The historical reasoning and measured scope below are unchanged.
+
 Retain the one-sided factorization after exact proof, focused native qualification
 and four fresh matched energy-only endpoints pass. This is scoped numerical and
 timing evidence, not formal/global performance or force/Lambda/response promotion.

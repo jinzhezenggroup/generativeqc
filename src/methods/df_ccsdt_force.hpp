@@ -94,12 +94,16 @@ struct DFCCSDTResult {
  * Lambda defaults request batch 32 and original-graph matrix fresh replay.
  * Complete host/device budgets and currently free VRAM admit actual storage;
  * smaller batches and the original scalar replay remain bounded fallbacks.
+ * ccsd_batch_limit=0 selects the endpoint default: 32 for energy-only calls,
+ * eight for forces. Positive limits remain explicit overrides. The solver
+ * admits the actual tile under its existing full budget and dimension checks;
+ * this does not change standalone CCSD or any response precision policy.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
     const generativeqc_method_descriptor&, bool forces = true, bool with_triples = true,
     bool df_auxiliary_reduction = true, bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
-    std::size_t lambda_batch_limit = 32, std::size_t ccsd_batch_limit = 8,
+    std::size_t lambda_batch_limit = 32, std::size_t ccsd_batch_limit = 0,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
     bool packed_diis = false, bool parallel_gap_reduction = true,
     bool request_triples_gap_cotangents = false, bool fused_triples_scalar_response = false,
