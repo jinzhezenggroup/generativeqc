@@ -303,7 +303,7 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
       if constexpr (CountWork) {
         if (threadIdx.x % group_threads == 0)
           roots += static_cast<unsigned long long>(md.pairs[task.bra].primitive_end -
-                                                  md.pairs[task.bra].primitive_begin) *
+                                                   md.pairs[task.bra].primitive_begin) *
                    (md.pairs[task.ket].primitive_end - md.pairs[task.ket].primitive_begin);
       }
     }

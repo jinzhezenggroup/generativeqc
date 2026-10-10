@@ -1273,8 +1273,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     if (md_coulomb) {
       ++plan->md_j_calls;
       if (plan->md_j.work_counts)
-        direct_jk_check(cudaMemsetAsync(plan->md_j.work_counts, 0, sizeof(MdJWorkCounts),
-                                       plan->stream));
+        direct_jk_check(
+            cudaMemsetAsync(plan->md_j.work_counts, 0, sizeof(MdJWorkCounts), plan->stream));
       direct_jk_check(cudaMemsetAsync(coulomb, 0, bytes, plan->stream));
       launch_md_j_density_bounds(plan->stream, plan->batch, plan->md_j, 0,
                                  plan->diagnostic.batch_size, unrestricted, density, beta);
@@ -1297,10 +1297,10 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                        "MD_J_WORK fock=%zu bra=%u ket=%u uniform_roots=%llu "
                        "uniform_directions=%llu uniform_summands=%llu "
                        "residual_candidates=%llu residual_tasks=%llu residual_roots=%llu\n",
-                       plan->md_j_calls, angular / 5, angular % 5,
-                       counts.uniform_roots[angular], counts.uniform_directions[angular],
-                       counts.uniform_summands[angular], counts.residual_candidates[angular],
-                       counts.residual_tasks[angular], counts.residual_roots[angular]);
+                       plan->md_j_calls, angular / 5, angular % 5, counts.uniform_roots[angular],
+                       counts.uniform_directions[angular], counts.uniform_summands[angular],
+                       counts.residual_candidates[angular], counts.residual_tasks[angular],
+                       counts.residual_roots[angular]);
       }
     }
     if (dispatch.generated_coulomb) {

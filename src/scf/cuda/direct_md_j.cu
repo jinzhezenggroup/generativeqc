@@ -1,12 +1,12 @@
 #include <cmath>
 
+#include "generated_md_j_reciprocal.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
 #include "scf/cuda/coulomb_auxiliary.cuh"
 #include "scf/cuda/direct_md_j.hpp"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/hermite_recurrence.cuh"
 #include "scf/cuda/md_hermite_index.cuh"
-#include "generated_md_j_reciprocal.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 namespace {
@@ -276,11 +276,13 @@ void launch_potential(cudaStream_t stream, MdJView md, std::size_t begin, std::s
   const auto count = md.class_offsets[Angular + 1] - md.class_offsets[Angular];
   if (!count || md.class_offsets[KetAngular] == md.class_offsets[KetAngular + 1]) return;
   if (md.work_counts)
-    md_j_potential<Angular, KetAngular, true><<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(
-        md, md.class_offsets[Angular], begin, end, screening);
+    md_j_potential<Angular, KetAngular, true>
+        <<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(md, md.class_offsets[Angular],
+                                                                  begin, end, screening);
   else
-    md_j_potential<Angular, KetAngular, false><<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(
-        md, md.class_offsets[Angular], begin, end, screening);
+    md_j_potential<Angular, KetAngular, false>
+        <<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(md, md.class_offsets[Angular],
+                                                                  begin, end, screening);
 }
 
 template <unsigned Angular>

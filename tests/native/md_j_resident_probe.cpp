@@ -25,19 +25,19 @@ struct ResidentProbe {
 
   ResidentProbe(const generativeqc::core::System& system, bool unrestricted, bool exchange,
                 double screening, std::size_t budget)
-      : source(system, nullptr,
-               generativeqc::scf::resolve_fock_build(
-                   specification(unrestricted, exchange), generativeqc::scf::FockBackend::Cuda,
-                   screening),
-               0, budget),
+      : source(
+            system, nullptr,
+            generativeqc::scf::resolve_fock_build(specification(unrestricted, exchange),
+                                                  generativeqc::scf::FockBackend::Cuda, screening),
+            0, budget),
         binding(generativeqc::scf::prepared_cuda_fock_binding(source)) {
     if (!binding) throw std::runtime_error("resident Fock binding is unavailable");
   }
 
   static generativeqc::scf::FockBuildSpec specification(bool unrestricted, bool exchange) {
-    auto spec = generativeqc::scf::make_hf_fock_spec(
-        unrestricted ? generativeqc::scf::FockSpin::Unrestricted
-                     : generativeqc::scf::FockSpin::Restricted);
+    auto spec = generativeqc::scf::make_hf_fock_spec(unrestricted
+                                                         ? generativeqc::scf::FockSpin::Unrestricted
+                                                         : generativeqc::scf::FockSpin::Restricted);
     spec.derivative_order = 0;
     spec.exchange.present = exchange;
     return spec;
@@ -49,14 +49,14 @@ struct ResidentProbe {
     if (finished) (void)cudaEventDestroy(finished);
   }
 };
-}
+}  // namespace
 
 /** Construct from a caller-owned native system, retained until probe teardown. */
 extern "C" void* md_j_probe_create(const generativeqc_system* system, int unrestricted,
-                                    int exchange, double screening, std::size_t budget) {
+                                   int exchange, double screening, std::size_t budget) {
   try {
-    auto probe = std::make_unique<ResidentProbe>(system->data, unrestricted, exchange, screening,
-                                                budget);
+    auto probe =
+        std::make_unique<ResidentProbe>(system->data, unrestricted, exchange, screening, budget);
     require_cuda(cudaEventCreate(&probe->started));
     require_cuda(cudaEventCreate(&probe->finished));
     last_error.clear();
@@ -71,8 +71,8 @@ extern "C" void* md_j_probe_create(const generativeqc_system* system, int unrest
  * owner's stream. Event time excludes Python copies and native preparation.
  */
 extern "C" int md_j_probe_execute(void* handle, const double* density, const double* beta,
-                                    std::size_t elements, double* coulomb, double* alpha_exchange,
-                                    double* beta_exchange, int* numerical_error, double* seconds) {
+                                  std::size_t elements, double* coulomb, double* alpha_exchange,
+                                  double* beta_exchange, int* numerical_error, double* seconds) {
   try {
     auto& probe = *static_cast<ResidentProbe*>(handle);
     require_cuda(cudaEventRecord(probe.started, probe.binding.stream));
