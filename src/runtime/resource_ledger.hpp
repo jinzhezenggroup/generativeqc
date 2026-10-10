@@ -3,11 +3,39 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace generativeqc::runtime {
+
+struct DeviceAllocationEvent {
+  std::uint64_t kind{};
+  std::uint64_t generation{};
+  std::uint64_t bytes{};
+};
+
+/** Opt-in, finite event storage owned independently of an observation handle.
+ * The registry mutex serializes snapshots, records and capture shutdown. Slot
+ * exhaustion invalidates coverage rather than allocating in a replay path. */
+struct DeviceAllocationJournal {
+  std::vector<DeviceAllocationEvent> initial;
+  std::vector<DeviceAllocationEvent> events;
+  std::size_t limit{};
+  std::uint64_t dropped{};
+  bool recording{true};
+
+  void record(std::uint64_t kind, std::uint64_t generation, std::size_t bytes) noexcept {
+    if (!recording) return;
+    if (events.size() == limit) {
+      if (dropped != std::numeric_limits<std::uint64_t>::max()) ++dropped;
+      return;
+    }
+    events.push_back({kind, generation, bytes});
+  }
+};
 
 /** Numeric device allocations owned by one prepared resource request.
  *
@@ -24,6 +52,11 @@ struct DeviceResourceLedger {
   std::size_t allocations{};
   std::size_t rejected{};
   bool active{};
+  /** Successful owned requests in the current binding, independent of frees.
+   * Overflow invalidates v2 observations, never changes allocation policy. */
+  std::uint64_t requested_bytes{};
+  bool requested_bytes_overflow{};
+  std::shared_ptr<DeviceAllocationJournal> journal;
 };
 
 struct DeviceAllocationOwner {
