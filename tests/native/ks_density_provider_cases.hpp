@@ -55,7 +55,8 @@ void ks_density_provider_cases() {
       const auto geometry_seed = moved_seed;
       for (unsigned route = 0; route != 7; ++route) {
         // 0=unqualified, 1=qualified, 2=device budget, 3=host budget,
-        // 4=unavailable, 5=local maps, 6=actual numeric-ledger exhaustion.
+        // 4=unavailable, 5=local-map request under the public ledger,
+        // 6=actual numeric-ledger exhaustion.
         require(::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", route == 5 ? "1" : "0", 1) == 0,
                 "select density-provider AO domain");
         dft::CudaXcPreparationBudget budget{128ULL << 20, 16U << 10};
@@ -76,7 +77,11 @@ void ks_density_provider_cases() {
             xc_density_provider_for_test(false, false);
             const auto* selected = plan.density_provider_diagnostic();
             require((selected != nullptr) == (route != 3), "host reservation was not enforced");
-            require((selected && selected->candidate.provider == "cublas") == (route == 1),
+            // The public ledger does not reserve optional AO maps. Route 5
+            // remains dense despite its explicit request, so the qualified
+            // dense provider has the same admission and charge as route 1.
+            const bool expect_library = route == 1 || route == 5;
+            require((selected && selected->candidate.provider == "cublas") == expect_library,
                     "PBE0 density provider admission route");
             if (selected) {
               require(
@@ -84,7 +89,8 @@ void ks_density_provider_cases() {
                       selected->matrix_bytes + selected->provider_allowance <= budget.device_bytes,
                   "prepared resources exceeded caller reservation");
               const auto expected =
-                  route == 1 ? (restricted ? 1U : 2U) * basis.nao * basis.nao * sizeof(double) : 0;
+                  expect_library ? (restricted ? 1U : 2U) * basis.nao * basis.nao * sizeof(double)
+                                 : 0;
               require(selected->matrix_bytes == expected, "density matrix cache charge");
             }
             require(ledger->live ==
@@ -95,6 +101,10 @@ void ks_density_provider_cases() {
             const auto cold_done = std::chrono::steady_clock::now();
             const auto warm = plan.run();
             const auto warm_done = std::chrono::steady_clock::now();
+            if (route == 5)
+              require(!cold.dft_diagnostic.cuda_ao_selection.selected &&
+                          !warm.dft_diagnostic.cuda_ao_selection.selected,
+                      "public ledger unexpectedly admitted optional AO maps");
             require(cold.converged && warm.converged &&
                         std::abs(cold.energy - reference.energy) < 1e-9 &&
                         std::abs(warm.energy - reference.energy) < 1e-9 &&
