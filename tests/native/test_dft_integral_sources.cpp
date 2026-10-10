@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 #include "api/ks_snapshot.hpp"
 #include "generativeqc/generativeqc.h"
