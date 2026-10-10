@@ -79,6 +79,38 @@ The source-matched consumer and whole-library source-base distinction is explici
 in the bundle. Already merged metric-GEMV evidence is compressed byte-identically
 to make room; no unmerged receipt, sample, cap or Release is altered.
 
+## Focused HF integration on 2026-10-11
+
+Master `b3a0eb2cf` includes #2171's consumed Coulomb recurrence and HF device-facts
+changes. A recorded dependency closure rebuilds 15 objects plus the native direct
+archive/device link in both immutable matched arms. All changed Coulomb consumers
+resolve the new shadow header. Borrowed objects remain checksum-identical; the
+unrelated whole-library source base stays pinned. Passed CC action and solver
+matrices are reused, not rerun merely because master advanced.
+
+The separate candidate-then-control pair is 50.694488268 to 49.642211560 seconds,
+2.08% shorter; CCSD is 26.004639344 to 24.916362449 and fresh replay is
+9.163923085 to 8.081005699 seconds. Both arms retain 19 observations/evaluations,
+all original independent gates and exact compiler-derived work predictions.
+Device capacity is unchanged; host bindings add 113476 bytes and this pair's
+measured process peak RSS adds 761856 bytes. Do not pool it with earlier pairs.
+Control/candidate library hashes are
+`de621a44d1347541da67eb4ed854028d75d6fe6c4b81edd4e34caf5c0c0610bd` /
+`99727b70933cb47d8ad024ee1d8a67a03255a2b2c337e91ec8c56e8423a630db`.
+
+Retain two pre-endpoint build failures: the unfiltered command parser selected
+nvcc's device link instead of the host library link, then the heavy bounded
+fallback compilation exceeded 900 seconds. The corrected parser also rebuilds
+the native archive's device link; a finite 40-minute Slurm job reuses ccache and
+completes the build/pair. Neither failed build is a numerical result.
+
+While building, master advances to `4ac8d4517` (#2215). Its masked HF matrix
+products and numeric workspace change the reference consumer, not this PR's CC,
+native GEMM provider or compiler graph. Retain the frozen b3a0eb2cf pair honestly:
+it is not current-master HF qualification. Do not repeat the successful CC
+matrices or infer a latest-reference endpoint gain from that snapshot. Full raw
+receipts and explicit scope remain in the bundle's separate HF integration file.
+
 ## Revisit when
 
 Broaden the consumer or allow new scratch only after independent numerical and

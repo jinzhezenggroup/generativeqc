@@ -32,3 +32,26 @@ match every modified production file. Generation needs compiler dependencies
 only, not a GPU/runtime/oracle. Run GPU work through finite srun on node2 with
 main/gpu:pro6000:1, assigned visibility intact, and reuse ccache. Benchmark
 outputs belong in fresh ignored directories, never in this retained bundle.
+
+## Focused HF integration, 2026-10-11
+
+Master `b3a0eb2cf` includes #2171, which changes the consumed HF reference phase.
+Rebuild its 15 affected objects, native archive and device link in both matched
+arms; reuse already passed CC action/solver matrices instead of repeating them.
+This pair is separate: control 50.694488268 to candidate 49.642211560 seconds
+(2.08% shorter), replay 9.163923085 to 8.081005699 seconds. Both arms retain
+19 observations/evaluations and the original independent gates and exact work
+predictions. Device bytes remain unchanged; host bindings still add 113476
+bytes. This pair's measured process peak RSS adds 761856 bytes.
+
+`hf-integration-receipts.json.xz` losslessly retains the source overlay, commands,
+borrowed hashes, dependency receipts, failed builds and complete pair outputs.
+The whole-library baseline remains pinned, not a rebuild of unrelated master
+modules. The initial link-selection assertion and later 900-second compiler
+timeout run no numerical endpoint; a finite 40-minute Slurm job completes the
+incremental build and pair using ccache.
+
+Later master `4ac8d4517` (#2215) changes masked HF matrix products and reference
+resource layout, not the CC/codegen/native GEMM-provider sources. This evidence
+does not qualify that later HF route or predict its complete endpoint timing.
+No original sample is overwritten or pooled, and no broad test matrix is rerun.
