@@ -130,11 +130,24 @@ struct Owner {
 };
 scf::ScfResult solve(Owner& owner, const core::System& system, const scf::ScfOptions& options,
                      bool expected_reuse=false, const std::vector<double>* seed=nullptr) {
+  static unsigned invocation=0;
+  ++invocation;
   auto rows=scf::run_rhf_cuda_bucket_cached(&owner.plan,{system},options,{seed},0);
-  require(rows.size()==1 && rows[0].status==GENERATIVEQC_STATUS_SUCCESS,
-          "CUDA reference endpoint failed");
-  require(rows[0].execution_plan_reused==expected_reuse,
-          "CUDA reference execution-plan reuse diagnostic");
+  require(rows.size()==1, "CUDA reference result count");
+  if (rows[0].status!=GENERATIVEQC_STATUS_SUCCESS) {
+    unsigned angular_max=0;
+    for (const auto& shell:system.shells)
+      angular_max=std::max(angular_max,shell.angular_momentum);
+    throw std::runtime_error("CUDA reference endpoint failed: status="+
+        std::to_string(rows[0].status)+" invocation="+std::to_string(invocation)+
+        " angular_max="+std::to_string(angular_max)+
+        " iterations="+std::to_string(rows[0].scf.iterations)+
+        " density_rms="+std::to_string(rows[0].scf.density_rms));
+  }
+  if (rows[0].execution_plan_reused!=expected_reuse)
+    throw std::runtime_error("CUDA reference execution-plan reuse diagnostic: invocation="+
+        std::to_string(invocation)+" expected="+std::to_string(expected_reuse)+
+        " actual="+std::to_string(rows[0].execution_plan_reused));
   require(rows[0].scf.converged && rows[0].scf.reference, "missing physical reference");
   require(rows[0].scf.reference->numeric_capacity_bytes<=options.reference_memory_budget_bytes,
           "reference exceeded complete budget");
@@ -200,8 +213,8 @@ int main(int argc,char** argv) {
 
   auto displaced=system;
   displaced.atoms[1].position[2]+=0.01;
-  require(molecule::validate_and_normalize(displaced,detail)==GENERATIVEQC_STATUS_SUCCESS,
-          "qualification changed-geometry normalization");
+  // The basis is already normalized. Coordinate-only replay must preserve its
+  // primitive coefficients; normalizing again changes the basis identity.
   const auto displaced_expected=scf::run_rhf(displaced,qualification);
   const auto changed_reuse=solve(reusable,displaced,qualification,true);
   compare(changed_reuse,displaced_expected);
@@ -239,8 +252,6 @@ int main(int argc,char** argv) {
     compare(solve(retained,system,options,false),expected);
     compare(solve(retained,system,options,true),expected);
     auto moved=system;moved.atoms[1].position[2]+=0.01;
-    require(molecule::validate_and_normalize(moved,detail)==GENERATIVEQC_STATUS_SUCCESS,
-            "retained changed geometry");
     compare(solve(retained,moved,options,true),scf::run_rhf(moved,options));
   }
   for (std::size_t budget : {minimum+resident-1, minimum+resident}) {
@@ -259,9 +270,18 @@ int main(int argc,char** argv) {
   }
   {
     Owner rejected;options.reference_memory_budget_bytes=minimum-1;bool refused=false;
-    try { (void)solve(rejected,system,options); }
-    catch(const std::length_error&) { refused=true; }
-    require(refused,"minimum-minus-one was admitted");
+    // Pre-submission capacity checks may throw; submission failures return an
+    // OOM item. Neither form may publish physical or initialized executable state.
+    try {
+      const auto rows=scf::run_rhf_cuda_bucket_cached(&rejected.plan,{system},options,{nullptr},0);
+      require(rows.size()==1 && rows[0].status==GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+              "minimum-minus-one was admitted");
+      require(!rows[0].scf.converged && !rows[0].scf.reference,
+              "rejected reference published partial state");
+      refused=true;
+    } catch(const std::length_error&) { refused=true; }
+    require(refused && (!rejected.plan || !rejected.plan->initialized),
+            "rejected reference published executable state");
   }
   // Inject device pressure through the real numeric ledger, without exhausting
   // a shared GPU or overriding scheduler-provided visibility.
@@ -279,7 +299,6 @@ int main(int argc,char** argv) {
   // Changed coordinates must rebuild integrals; a second solve also exercises
   // teardown/recreation after an optional allocation failure.
   system.atoms[1].position[2]+=0.01;
-  require(molecule::validate_and_normalize(system,detail)==GENERATIVEQC_STATUS_SUCCESS,"changed geometry");
   Owner changed;compare(solve(changed,system,options),scf::run_rhf(system,options));
   // d/f references use bounded exact quartets, including the public/Cartesian
   // transform for small spherical systems below ordinary HF's cache threshold.
