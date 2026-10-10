@@ -1,5 +1,10 @@
 {
   "families": {
+    "pbe0-restricted-point-default-20261010": {
+      "owner": "producer-bound restricted PBE0 complete default-route qualification",
+      "reason": "Lossless compact source-frozen 48/96 original endpoint records retain setup, priming, all 40 measured E/F vectors, actual dispatch and semantic work, immutable seed identities and independent references. No profiler arrays, binaries, peak-memory invention, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/pbe0-restricted-point-default-20261010/README.md"
+    },
     "pbe0-implicit-class-force-20261010": {
       "owner": "explicit composed PBE0 Hcore and class-major force endpoints",
       "reason": "All 46 complete 96-atom construction/setup/prime/sample calls retain full independent numerical outputs, semantic work, resources, owner seed identities and five interleaved timings per side/phase. Lossless gzip only; no full logs, binaries, timing retries, default-promotion waiver or storage-budget increase.",
@@ -199,6 +204,14 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
+      "family": "pbe0-restricted-point-default-20261010",
+      "bytes": 214312,
+      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -422,22 +435,6 @@
       "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
       "role": "source-provenance",
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
-    },
-    {
-      "bytes": 391121,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "544255203a137fa646e65b0304ccecf820ba8b56ac1511c8b8a8c651007a4e05"
-    },
-    {
-      "bytes": 577110,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/isolated.json",
-      "role": "scientific-record",
-      "sha256": "8fc91a883b9fe2ca723f84cc6a1b9a49bb30f45902e0d9a8bcebe1d9cde6f18a"
     },
     {
       "bytes": 162452,

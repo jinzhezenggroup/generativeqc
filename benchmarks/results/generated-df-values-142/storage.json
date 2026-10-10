@@ -1,0 +1,23 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "storage_source_revision": "4444d0376bb133f7981f44a263e2e409bfbfdd27",
+  "purpose": "Lossless transport only; all original measured fields and raw JSON bytes remain unchanged. No scientific requalification is asserted.",
+  "files": [
+    {
+      "original_path": "benchmarks/results/generated-df-values-142/endpoints.json",
+      "original_bytes": 391121,
+      "original_sha256": "544255203a137fa646e65b0304ccecf820ba8b56ac1511c8b8a8c651007a4e05",
+      "stored_path": "benchmarks/results/generated-df-values-142/endpoints.json.gz",
+      "stored_bytes": 36223,
+      "stored_sha256": "bac806c56e0912ea4fd7d9eb3e40c4a3d3c4a790ee9656beeaddb4a895d6374b"
+    },
+    {
+      "original_path": "benchmarks/results/generated-df-values-142/isolated.json",
+      "original_bytes": 577110,
+      "original_sha256": "8fc91a883b9fe2ca723f84cc6a1b9a49bb30f45902e0d9a8bcebe1d9cde6f18a",
+      "stored_path": "benchmarks/results/generated-df-values-142/isolated.json.gz",
+      "stored_bytes": 66298,
+      "stored_sha256": "0d3484febb8b5fc5d0161f8fbc37366e9e590f103f3e60700af2c79cb37e3dd5"
+    }
+  ]
+}

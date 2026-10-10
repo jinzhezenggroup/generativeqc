@@ -2,27 +2,50 @@
 
 import json
 import statistics
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
-from tools.restore_retained_evidence import _records
+from tools.restore_retained_evidence import _records, restore_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = ROOT / "benchmarks/results/df-cc-energy-q32-default-20261010"
 PREVIOUS = ROOT / "benchmarks/results/df-cc-ladder-dressing-factorization-20261010"
 
 
-def test_auto_tile_publication_keeps_all_independent_gates() -> None:
+@pytest.fixture(scope="module")
+def campaign(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Keep original scientific checks when the pinned local Git history exists."""
+    if (BUNDLE / "publication.json").exists():
+        return BUNDLE
+    manifest = BUNDLE / "snapshot.manifest.json"
+    revision = _records(manifest)[0]["revision"]
+    available = subprocess.run(
+        ["git", "cat-file", "-e", revision + "^{commit}"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if available.returncode:
+        pytest.skip("historical scientific records require the pinned Git object")
+    output = tmp_path_factory.mktemp("q32-evidence") / "snapshot"
+    restore_snapshot(output, manifest=manifest)
+    return output / BUNDLE.relative_to(ROOT)
+
+
+def test_auto_tile_publication_keeps_all_independent_gates(campaign: Path) -> None:
     """Numerical acceptance must not quietly become global performance proof."""
-    publication = json.loads((BUNDLE / "publication.json").read_text())
+    publication = json.loads((campaign / "publication.json").read_text())
     files = {
-        entry["path"]: (BUNDLE / entry["path"]).read_bytes()
+        entry["path"]: (campaign / entry["path"]).read_bytes()
         for entry in publication["files"]
     }
     validate_publication(publication, files)
     assert publication["decision"]["scope"] == "numerical"
-    evidence = load_publication_record(BUNDLE, role="evidence")
+    evidence = load_publication_record(campaign, role="evidence")
     assert evidence["performance"]["status"] == "not-run"
     assert evidence["stages"]["production"]["status"] == "not-run"
     assert (
@@ -37,9 +60,11 @@ def test_auto_tile_publication_keeps_all_independent_gates() -> None:
         assert gate["passed"] and gate["shape"] == [8]
 
 
-def test_auto_tile_matched_samples_keep_semantic_work_and_energy_bits() -> None:
+def test_auto_tile_matched_samples_keep_semantic_work_and_energy_bits(
+    campaign: Path,
+) -> None:
     """All original records survive compaction; pilots never enter ABBA medians."""
-    samples = load_publication_record(BUNDLE, role="samples")
+    samples = load_publication_record(campaign, role="samples")
     matched = samples["matched"]
     assert [sample["variant"] for sample in matched] == [
         "base",
@@ -52,7 +77,7 @@ def test_auto_tile_matched_samples_keep_semantic_work_and_energy_bits() -> None:
         1,
         1,
     ]
-    summary = load_publication_record(BUNDLE, role="evidence")[
+    summary = load_publication_record(campaign, role="evidence")[
         "observed_endpoint_summary"
     ]
     baseline = matched[0]["record"]
@@ -82,6 +107,23 @@ def test_auto_tile_matched_samples_keep_semantic_work_and_energy_bits() -> None:
     assert deltas["ccsd_gemm_calls"] == -29070
     assert deltas["ccsd_contraction_terms"] == deltas["ccsd_gemm_summands"] == 0
     assert deltas["ccsd_capacity"] == 4368386504
+
+
+def test_auto_tile_campaign_has_complete_merged_git_recovery() -> None:
+    """Source distributions verify identities without requiring historical blobs."""
+    entries = _records(BUNDLE / "snapshot.manifest.json")
+    assert len(entries) == 6 and sum(entry["bytes"] for entry in entries) == 19127
+    assert {entry["revision"] for entry in entries} == {
+        "9f67e7806e3151454530baf0ee66ae8808d826f0"
+    }
+    assert {Path(entry["path"]).name for entry in entries} == {
+        "README.md",
+        "measured-source.patch.gz",
+        "publication.json",
+        "recipes.json.gz",
+        "samples.json.gz",
+        "validation.json.gz",
+    }
 
 
 def test_previous_campaign_has_a_complete_existing_git_recovery_inventory() -> None:

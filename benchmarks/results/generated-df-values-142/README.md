@@ -7,6 +7,17 @@ source selects a primitive-reduction warp per output; the bulk compatibility
 builder retains one thread per output. Explicit reference, auxiliary, and
 component controls remain available for comparisons.
 
+## Lossless storage
+
+`endpoints.json.gz` and `isolated.json.gz` retain the exact original JSON bytes
+with deterministic gzip transport. `storage.json` records both stored and
+decoded lengths/SHA-256 identities against existing master history. Decode with
+`gzip.decompress(path.read_bytes())` before parsing, or use `gzip -dc` into an
+ignored scratch directory. No sample, measurement, gate or history is removed;
+the original scientific qualification below is unchanged. This transport
+compaction leaves room for new endpoint evidence inside the unchanged aggregate
+repository budget, without a Release or external archive.
+
 ## Environment and artifact identity
 
 Measurements used an NVIDIA GeForce RTX 5090 through Slurm's `main` partition,

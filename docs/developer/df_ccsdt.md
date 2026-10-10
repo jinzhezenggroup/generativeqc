@@ -83,6 +83,18 @@ residual, and fresh expanded-equation acceptance policy as conventional RCCSD.
 Its independent expanded recheck also uses the factorized corrections, so an
 optimized-path agreement alone cannot certify convergence.
 
+The native FP64 matrix solver may own a 4-MiB cuBLAS workspace when its admitted
+auxiliary tile has more than eight slices. This storage is charged to the active
+allocation ledger and shares the existing conservative 96-MiB provider allowance;
+the allowance is not a measurement of complete physical peak memory. Q8, one-Q,
+conventional, and other zero-request contraction callers retain zero workspace.
+Preparation keeps pedantic math and never allocates during iteration or capture.
+Workspace OOM or excess observed provider growth first drops this optional storage.
+Numeric-arena OOM likewise retries the same plan without workspace before giving
+up pair storage, expanded replay, tiles, or the matrix provider. Releasing workspace
+drains its stream and invalidates earlier prepared binding generations. Larger
+explicit force tiles do not inherit energy-only timing qualification.
+
 The first Slice-C endpoint now evaluates standard canonical (T) directly from
 the same retained `B_ov`/`B_vv` data model. For
 `vvov[a,b,i,f] = sum_Q B_ov[Q,i,a] B_vv[Q,f,b]`, W1 reduces Q directly

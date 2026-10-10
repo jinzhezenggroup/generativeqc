@@ -1,0 +1,59 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "99ebd196df529bdd45107af44b86b7879d3bb69f",
+    "dirty": false
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Independent complete default-route E/F gates pass; four scoped timing gates also pass, without claiming resource-complete or latest-master promotion."
+  },
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=16",
+      "--time=00:35:00",
+      "bash",
+      "run-master-endpoints.sh"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 3823,
+      "sha256": "b1f2ec0ee98281a25faffc60f605297a599f324b78ecc174470103c7a4742de6"
+    },
+    {
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "bytes": 45190,
+      "sha256": "f4ebc62d587ffea24706f1d50501200af025d694450e336473356bf87f5fc246"
+    },
+    {
+      "path": "recipes.json.gz",
+      "role": "reproduction",
+      "bytes": 16499,
+      "sha256": "032e3db0a279cd47ec3d8b0985b8f5d1836896016721b0f23d0894cd86ed9ce3"
+    },
+    {
+      "path": "samples.json.gz",
+      "role": "samples",
+      "bytes": 214312,
+      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c"
+    },
+    {
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "bytes": 9260,
+      "sha256": "0bea6d42676cf728599596b16a3f95e70325186bc4552dda3b0467473689ee9a"
+    }
+  ],
+  "archives": []
+}

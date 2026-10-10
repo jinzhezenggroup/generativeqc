@@ -105,6 +105,16 @@ void blas_check(int s){
   if(s)throw DeviceRuntimeError("injected BLAS runtime failure");
 }
 }
+// The extracted context now drains optional storage under its device scope.
+namespace generativeqc::runtime {
+struct CudaDeviceScope {
+  int previous;
+  template<class Check> CudaDeviceScope(int selected,Check check) {
+    check(cudaGetDevice(&previous)); check(cudaSetDevice(selected));
+  }
+  ~CudaDeviceScope() { (void)cudaSetDevice(previous); }
+};
+}
 namespace generativeqc::tensor {
 std::size_t contraction_product(std::size_t a,std::size_t b){
   if(a && b>std::numeric_limits<std::size_t>::max()/a)throw std::overflow_error("product");

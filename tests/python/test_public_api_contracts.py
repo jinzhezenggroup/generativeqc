@@ -430,8 +430,9 @@ class PublicContractTests(unittest.TestCase):
     def test_explicit_constant_type_dtype_categories(self) -> None:
         self.exported(
             "import numpy as np\nVERSION = 1\nExact = int | str\n"
-            'float32 = np.dtype("float32")',
-            ("VERSION", "Exact", "float32"),
+            'float32 = np.dtype("float32")\n'
+            'bool_ = np.dtype("bool")',
+            ("VERSION", "Exact", "float32", "bool_"),
         )
         _, declarations, failures = checker.public_declarations(self.package)
         self.assertFalse(failures)

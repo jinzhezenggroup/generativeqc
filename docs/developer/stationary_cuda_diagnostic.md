@@ -366,6 +366,14 @@ also requires precomputed phased storage, sufficient atom scratch and no
 external seed. Legacy artifacts, unproven producers and bounded nonphased
 plans retain the general point evaluator; the v1 task-view ABI is unchanged.
 
+Clean-source qualification at `99ebd196d`, aligned to master `4444d0376`, is
+retained in
+[`pbe0-restricted-point-default-20261010`](../../benchmarks/results/pbe0-restricted-point-default-20261010/README.md).
+It covers same-binary off versus unset/default complete warm and moved-warm
+energy-plus-force endpoints, with actual route/work counts and independent
+accuracy gates. It does not qualify cold/reconvergence, later master changes,
+UKS/HVP, or resource-complete global performance promotion.
+
 Force-work diagnostics expose `pbe0_restricted_point_capable`,
 `restricted_point_requested`, `restricted_point_batches`,
 `restricted_point_count`, `general_point_batches` and `general_point_count`.

@@ -1,6 +1,6 @@
 # Decision: default to producer-proven restricted PBE0 force points
 
-Status: implemented in the worktree; master-aligned endpoint qualification pending
+Status: implemented; clean source 99ebd196d default-route endpoint qualification passes
 Date: 2026-10-10
 
 ## Decision
@@ -45,11 +45,56 @@ under the unchanged strict gate, binding, launch-failure, ABI and fallbacks.
 No failing general PBE/PBE0 oracle row is removed. General PBE/UKS/HVP numerical
 qualification is not implied.
 
-Build authenticated native/grid/PBE0 AOT artifacts with the verified compiler
-cache, then require actual default-route restricted counts and small matched
-off/on 48/96 complete endpoint measurements before publication. Retain 1e-8 Eh
-and 1e-7 Eh/Bohr independent gates, host return and actual work counts. Unrelated
+CPU-only Slurm 7098 builds authenticated native/grid/PBE0 AOT artifacts from a
+clean Git archive of `99ebd196df529bdd45107af44b86b7879d3bb69f`, with verified
+ccache 4.5.1 launchers and unchanged full-source manifests. Slurm 7106 completes
+same-binary explicit-off versus unset/default-on endpoints on RTX 5090, with
+five interleaved samples per arm/geometry. This source is aligned to master
+`4444d0376`, not subsequent `4b330ff3d` or its new MD-J source reuse.
+
+| Atoms | Replay | Off median (s) | Default median (s) | Reduction |
+| --- | --- | ---: | ---: | ---: |
+| 48 | warm | 5.532675 | 5.271843 | 4.714% |
+| 48 | moved-warm | 5.559617 | 5.323170 | 4.253% |
+| 96 | warm | 16.203113 | 15.665374 | 3.319% |
+| 96 | moved-warm | 16.166703 | 15.627425 | 3.336% |
+
+All four independently recomputed comparisons pass >2% and robust-noise gates.
+Every measured call includes complete synchronized E+F/host return and performs
+one SCF iteration/Fock build. Actual default restricted work is 2304 batches /
+1,179,648 points at 48 atoms and 4608 / 2,359,296 at 96; zero general points
+execute in those admitted default calls. Semantic SCF AO/force work matches.
+All setup, priming and measured calls satisfy unchanged independent 1e-8 Eh
+and 1e-7 Eh/Bohr gates; maximum errors are 1.0914e-11 and 3.7541e-11 respectively.
+Each arm's seed is immutable, but cross-arm seeds are not bit-identical (maximum
+density difference 1.2661e-11); coordinates match exactly.
+
+The native/AOT/manifest hashes are respectively
+`db17efc99ef6fc73a557b5b39be7091417a32ebf6f9b21fa278f4ca69f54c212`,
+`6842f8f5dd37d5c71353faf975b2a1b420b9c628db682b1332a349a960a8ab0a`, and
+`abe179c2bb252ef5cea7e06607f85f880427468a18d61e76cb96032228ad1f9a`.
+The source archive hash is
+`c0e7b52134b157765f0ffd469935a5ea66fcf403605ff3b31784f95636aec190`.
+Within that official module, the general/bound point kernels use 254/148
+registers and 96/0 stack bytes; these are static resources, not timing evidence.
+
+Compact source reconstruction, original samples/references, independent error
+checks, receipts and recipes are retained in
+`benchmarks/results/pbe0-restricted-point-default-20261010/`. Its envelope accepts
+numerical qualification and separately retains the passing scoped timing gates.
+Resource-complete schema promotion is not asserted because global peak memory
+and complete build duration were not measured; free-device snapshots are not
+substituted. Raw NPZ seeds and binaries remain ignored. No cold/reconvergence,
+GPU4PySCF-relative or latest-master acceleration claim is implied. Unrelated
 master commits do not justify repeating older GPU matrices.
+
+At the submission boundary, integrate master `4b330ff3d`, including its existing
+lossless evidence compaction to remain inside the unchanged 64-MiB checkout
+budget. The restricted header, native geometry owner and ordinary/compiler
+stationary consumers remain byte-identical to the measured `99ebd196d` source.
+The merged MD-J work is separate upstream SCF code; timings remain attributed
+only to the frozen source. No additional GPU matrix is run for the CC/tensor
+updates. The new compact-evidence/reference-reader/retention CPU checks pass.
 
 ## Revisit when
 

@@ -19,7 +19,8 @@ void rejected(F&& call) {
 
 template <class T>
 void check(char ta, char tb, std::size_t batch, bool padded = false,
-           ContractionAlgorithm algorithm = ContractionAlgorithm::PedanticBlas) {
+           ContractionAlgorithm algorithm = ContractionAlgorithm::PedanticBlas,
+           std::size_t workspace_bytes = 0) {
   constexpr std::size_t m = 3, n = 5, k = 7;
   constexpr auto dtype = std::is_same_v<T, double> ? PrecisionDtype::Fp64 : PrecisionDtype::Fp32;
   constexpr std::string_view identity =
@@ -87,7 +88,7 @@ void check(char ta, char tb, std::size_t batch, bool padded = false,
   CudaContractionContext context;
   if (algorithm == ContractionAlgorithm::GeneratedOrdered)
     context.prepare_generated(stream);
-  else if (!context.prepare(stream))
+  else if (!context.prepare(stream, workspace_bytes))
     throw std::runtime_error("provider preparation failed");
   PreparedContractions bindings;
 #if !GENERATIVEQC_HAS_CUTLASS
@@ -161,6 +162,10 @@ void check(char ta, char tb, std::size_t batch, bool padded = false,
   cuda_check(cudaStreamSynchronize(stream));
   if (status != 7)
     throw std::runtime_error("provider audit overwrote the first arithmetic failure");
+  if (workspace_bytes) {
+    if (!context.release_workspace()) throw std::runtime_error("owned workspace was lost");
+    rejected(run);
+  }
   context.reset();
   rejected(run);
   cuda_check(cudaFree(error));
@@ -172,6 +177,10 @@ void check(char ta, char tb, std::size_t batch, bool padded = false,
 
 int main() {
   try {
+    check<double>('N', 'T', 1, false, ContractionAlgorithm::PedanticBlas,
+                  CudaContractionContext::kOptionalWorkspaceBytes);
+    check<double>('N', 'N', 2, false, ContractionAlgorithm::PedanticBlas,
+                  CudaContractionContext::kOptionalWorkspaceBytes);
     for (auto a : {'N', 'T'})
       for (auto b : {'N', 'T'})
         for (std::size_t batches : {1, 2}) {

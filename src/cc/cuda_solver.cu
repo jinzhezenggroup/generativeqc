@@ -376,7 +376,13 @@ struct Owner {
         cuda_check(cudaEventCreate(&trial_begin));
         cuda_check(cudaEventCreate(&trial_end));
       }
-      if ((conventional_prepared || plan.matrix_gemm) && !contractions.prepare(stream))
+      // The existing provider allowance covers the optional workspace. Ordinary
+      // Q8/one-Q and conventional callers keep their zero-workspace contract.
+      const auto workspace_bytes = plan.matrix_gemm && plan.auxiliary_batch_size > 8
+                                       ? tensor::CudaContractionContext::kOptionalWorkspaceBytes
+                                       : 0;
+      if ((conventional_prepared || plan.matrix_gemm) &&
+          !contractions.prepare(stream, workspace_bytes))
         scalar_plan();
       auto allocate_numeric = [&]() {
         auto code = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
@@ -405,6 +411,11 @@ struct Owner {
         return code;
       };
       auto allocation = allocate_numeric();
+      if (allocation == cudaErrorMemoryAllocation && contractions.workspace_bytes()) {
+        (void)cudaGetLastError();
+        contractions.release_workspace();
+        allocation = allocate_numeric();
+      }
       if (allocation == cudaErrorMemoryAllocation && pairs_enabled) {
         (void)cudaGetLastError();
         pairs_enabled = false;
