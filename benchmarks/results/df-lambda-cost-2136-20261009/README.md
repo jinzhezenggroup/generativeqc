@@ -157,7 +157,7 @@ srun --partition=main --nodelist=node2 --gres=gpu:pro6000:1 --nodes=1 --ntasks=1
 ```
 
 Match captured compiler/Python dependencies and keep assigned Slurm visibility.
-`samples.json` stores identical endpoint metadata once: merge
+`samples.json.gz` losslessly stores identical endpoint metadata once: decompress and merge
 `shared_endpoint_fields` with each observation's `endpoint`. Use the shared
 publication reader for plain/gzip members.
 

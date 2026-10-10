@@ -19,10 +19,13 @@ from generativeqc_compiler.cc.df_lambda_matrix import matrix_program
 from generativeqc_compiler.cc.df_lambda_reduction import (
     build_df_lambda_reduction_programs,
 )
+from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.tensor.iteration_reuse import (
     IterationReusePlan,
     analyze_iteration_reuse,
+    invariant_frontier,
 )
+from generativeqc_compiler.tensor.program import node_hashes
 
 from tools.generate_df_ccsd_core import programs as core_programs
 from tools.generate_df_ccsd_hoisted import contraction_query
@@ -116,6 +119,25 @@ def core_reuse_plan() -> IterationReusePlan:
             for node in program.live_nodes
             if node.op == "input" and not node.attrs["name"].startswith("bar_")
         ),
+    )
+
+
+@cache
+def core_reuse_frontier() -> tuple:
+    """Persist only the exact immutable-to-dynamic boundary of the core graph."""
+    return invariant_frontier(matrix_programs()["staged_core"], core_reuse_plan())
+
+
+@cache
+def core_reuse_identity() -> str:
+    """Distinguish frontier/scratch storage from the former whole-graph arena."""
+    hashes = node_hashes(matrix_programs()["staged_core"].live_nodes)
+    return canonical_hash(
+        {
+            "dependency_proof": core_reuse_plan().identity,
+            "frontier": [hashes[node] for node in core_reuse_frontier()],
+            "storage": "disjoint persistent frontier and borrowed owner scratch v1",
+        }
     )
 
 
@@ -247,12 +269,21 @@ def header() -> str:
     )
     program = matrix_programs()["staged_core"]
     reuse = core_reuse_plan()
+    frontier = core_reuse_frontier()
     lines += [
-        f'inline constexpr const char* staged_core_reuse_hash="{reuse.identity}";',
+        f'inline constexpr const char* staged_core_reuse_hash="{core_reuse_identity()}";',
+        f'inline constexpr const char* staged_core_reuse_proof_hash="{reuse.identity}";',
         _required_function(
             program,
             "staged_core_reuse_arena_elements",
-            retained_nodes=reuse.invariant_nodes,
+            retained_nodes=frontier,
+            storage_slice=slice(len(frontier)),
+        ),
+        _required_function(
+            program,
+            "staged_core_reuse_scratch_arena_elements",
+            retained_nodes=frontier,
+            storage_slice=slice(len(frontier), None),
         ),
     ]
     for phase, nodes in (
@@ -432,12 +463,14 @@ def cuda_source() -> str:
                 output_fields=tuple(program.outputs),
                 reset_error=False,
                 prepared_contractions=f"s.core_reuse_{phase}_contractions",
-                arena_field="core_reuse_arena",
+                arena_field="response_arena",
                 batch_dim=True,
                 kernel_prefix="staged_core_matrix",
                 emit_kernels=False,
                 reuse_plan=core_reuse_plan(),
                 reuse_phase=phase,
+                reuse_storage_nodes=core_reuse_frontier(),
+                retained_arena_field="core_reuse_arena",
             ),
             f"{kind} run_{prefix}_cuda(StagedCudaState& state) {{ "
             + ("" if phase == "prepare" else "return ")

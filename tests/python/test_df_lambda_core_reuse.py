@@ -102,7 +102,8 @@ def test_generated_phases_use_distinct_retained_storage_and_descriptors() -> Non
         body = generated.split(
             f"run_staged_core_reuse_{phase}(StagedCudaState& s){{", 1
         )[1].split("\n}", 1)[0]
-        assert "auto* arena=s.core_reuse_arena;" in body
+        assert "auto* arena=s.response_arena;" in body
+        assert "auto* retained_arena=s.core_reuse_arena;" in body
         assert body.count("<<<") + body.count(".execute(") == len(nodes)
         assert f"s.core_reuse_{phase}_contractions.execute(" in body
 
