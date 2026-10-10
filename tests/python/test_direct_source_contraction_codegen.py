@@ -84,5 +84,22 @@ def test_materialized_canonical_sources_reuse_range_and_scatter_owners() -> None
 def test_materialized_recurrence_retains_qualified_order_bounds() -> None:
     """Multi-packet canonical reuse retains the established scientific owner."""
     source = emit_direct_source_contraction_header()
-    assert "AngularOrder >= 5 && AngularOrder <= kMaximumCoulombOrder" in source
+    assert "AngularOrder >= 3 && AngularOrder <= kMaximumCoulombOrder" in source
     assert "sizeof(MaterializedDirectPairRecurrence<12>) <= (48U << 10)" in source
+
+
+def test_small_canonical_ctas_preserve_packet_offsets_and_slot_coverage() -> None:
+    """Smaller owners change slot stride, never the legacy 256-component tile."""
+    source = emit_direct_source_contraction_header()
+    assert "canonical_materialized_component_lanes" in source
+    assert "canonical_materialized_component_slots" in source
+    assert "unsigned ComponentLanes = detail::kDirectQuartetTileSize" in source
+    assert source.count("slot * ComponentLanes + threadIdx.x") == 2
+    assert source.count("std::size_t(task.tile) * detail::kDirectQuartetTileSize") == 2
+    assert "__syncthreads_or(any_admitted)" in source
+    native = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text(encoding="utf-8")
+    assert "canonical_materialized_component_lanes(angular_order)" in native
+    assert "canonical_materialized_component_slots(AngularOrder)" in native
+    assert "std::min(first_count, maximum_blocks)" in native
+    assert "std::min(second_count, maximum_blocks)" in native
+    assert "std::min(dense_upper_bound, maximum_blocks)" in native

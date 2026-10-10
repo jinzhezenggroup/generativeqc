@@ -170,13 +170,10 @@ __global__ void shared_components(
   __shared__ MaterializedDirectPairRecurrence<Order> shared;
   // Match complete-domain production ownership through order nine, including
   // the maximum fddd domain. Higher orders retain independent qualification.
-  constexpr unsigned whole_slots = Order <= 5   ? 1
-                                   : Order == 6 ? 2
-                                   : Order == 7 ? 3
-                                   : Order == 8 ? 6
-                                   : Order == 9 ? 9
-                                                : 40;
-  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1>(
+  constexpr unsigned whole_slots = Order <= 9 ? canonical_materialized_component_slots(Order) : 40;
+  constexpr unsigned lanes =
+      WholeShell && Order <= 9 ? canonical_materialized_component_lanes(Order) : 256;
+  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1, lanes>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
       channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
 }
@@ -258,6 +255,8 @@ void qualify(
     bool same_pair, bool coincident, double threshold,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   constexpr auto order = A + B + C + D;
+  constexpr unsigned lanes =
+      WholeShell && order <= 9 ? canonical_materialized_component_lanes(order) : 256;
   Fixture fixture({D, C, B, A}, Unrestricted, coincident);
   const auto n = std::size_t(fixture.batch.direct_nbf), matrix = n * n;
   const unsigned first_pair = 8, second_pair = same_pair ? 8 : 1;
@@ -282,7 +281,7 @@ void qualify(
     work.clear();
     materialized.clear();
     fock.clear();
-    shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), 256>>>(
+    shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), lanes>>>(
         fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data,
         channel, work.data, materialized.data, range);
     check(cudaGetLastError());
@@ -341,7 +340,7 @@ void qualify(
   active.clear();
   work.clear();
   fock.clear();
-  shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), 256>>>(
+  shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), lanes>>>(
       fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data, 0,
       work.data, materialized.data);
   check(cudaGetLastError());
@@ -600,6 +599,28 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold,
     throw std::runtime_error("zero-density materialized derivative prepared recurrence");
 }
 
+/** Small CTAs must cover complete domains, including slot tails and empty work. */
+void qualify_low_canonical_orders() {
+  for (auto range :
+       {generativeqc::integrals::CoulombRange::Full, generativeqc::integrals::CoulombRange::Short,
+        generativeqc::integrals::CoulombRange::Long}) {
+    qualify<3, 0, 0, 0, false, true>(false, false, 0.0, range);
+    qualify<2, 1, 0, 0, true, true>(false, true, 0.8, range);
+    qualify<1, 1, 1, 0, false, true>(false, false, 0.0, range);
+    qualify<3, 1, 0, 0, true, true>(false, false, 0.8, range);
+    qualify<2, 2, 0, 0, false, true>(false, true, 0.0, range);
+    qualify<2, 1, 1, 0, true, true>(false, false, 0.8, range);
+    qualify<1, 1, 1, 1, true, true>(true, true, 0.8, range);
+    qualify<1, 1, 1, 1, false, true>(false, false, 0.0, range);
+    qualify<3, 2, 0, 0, false, true>(false, false, 0.0, range);
+    qualify<3, 1, 1, 0, true, true>(false, true, 0.8, range);
+    qualify<2, 2, 1, 0, true, true>(false, false, 0.8, range);
+    qualify<2, 1, 1, 1, false, true>(false, false, 0.0, range);
+    qualify<2, 1, 1, 1, true, true>(false, true, 2.0, range);
+  }
+  std::cout << "canonical order-three/four/five production lanes and exact work PASS\n";
+}
+
 /** Qualify the production six/nine-slot bounds, not the legacy forty-slot CTA. */
 void qualify_high_canonical_orders() {
   for (auto range :
@@ -621,6 +642,10 @@ void qualify_high_canonical_orders() {
 
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--canonical-low-orders") == 0) {
+      qualify_low_canonical_orders();
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--canonical-high-orders") == 0) {
       qualify_high_canonical_orders();
       return 0;
@@ -680,6 +705,7 @@ int main(int argc, char** argv) {
       qualify<2, 2, 2, 1, true, true>(false, false, 0.0, range);
       qualify<3, 2, 1, 1, false, true>(false, false, 0.8, range);
     }
+    qualify_low_canonical_orders();
     qualify_high_canonical_orders();
     qualify<2, 1, 1, 1, false>(false, false, 0.0);
     qualify<2, 1, 1, 1, true>(false, true, 0.8);
