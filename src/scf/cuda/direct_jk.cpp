@@ -15,6 +15,7 @@
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
+#include "scf/cuda/df_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -849,6 +850,124 @@ generativeqc_status create_cuda_direct_jk_plan(
             *plan, true, detail, [&] { plan->canonical_range_exchange = scratch(range_bytes); },
             [&] { plan->canonical_range_exchange = nullptr; });
     }
+    const auto prepare_materialized_values = [&] {
+      auto* materialized_owner = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                                          : plan->generated_coulomb.get();
+      const bool has_order_five = std::any_of(
+          plan->canonical_pair_offsets.begin(), plan->canonical_pair_offsets.end(),
+          [](const auto& offsets) {
+            for (unsigned second = 0; second < 3; ++second) {
+              const unsigned first = 5 - second;
+              if (offsets[first + 1] > offsets[first] && offsets[second + 1] > offsets[second])
+                return true;
+            }
+            return false;
+          });
+      if (plan->canonical_cartesian && plan->canonical_pair_order && materialized_owner &&
+          has_order_five && materialized_owner->batch.shell_primitive_pairs &&
+          host.shell_pair_first.size() <=
+              static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        // Automatically reuse an already charged immutable cache. This indexed
+        // canonical consumer is independent of the legacy dense HF opt-in.
+        // Never prepare a second geometry owner merely to admit this route.
+        const auto retained_bytes = plan->device_bytes;
+        direct_jk_optional_storage(
+            *plan, true, detail,
+            [&] {
+              std::vector<std::int32_t> order;
+              std::vector<int> segments;
+              plan->materialized_pair_offsets.resize(systems.size());
+              std::size_t largest = 0;
+              for (std::size_t item = 0; item < systems.size(); ++item) {
+                auto& offsets = plan->materialized_pair_offsets[item];
+                for (unsigned angular = 0; angular < 7; ++angular) {
+                  offsets[angular] = order.size();
+                  segments.push_back(static_cast<int>(order.size()));
+                  for (auto pair = host.system_shell_pair_offsets[item];
+                       pair < host.system_shell_pair_offsets[item + 1]; ++pair)
+                    if (host.shell_angular[host.shell_pair_first[pair]] +
+                            host.shell_angular[host.shell_pair_second[pair]] ==
+                        angular)
+                      order.push_back(static_cast<std::int32_t>(pair));
+                  largest = std::max(largest, order.size() - offsets[angular]);
+                }
+                offsets[7] = order.size();
+              }
+              segments.push_back(static_cast<int>(order.size()));
+              span_host_preparation_bytes += sizeof(order) + runtime::vector_bytes(order) +
+                                             sizeof(segments) + runtime::vector_bytes(segments);
+              std::size_t workspace_bytes = 0;
+              direct_jk_check(canonical_pair_workspace(static_cast<int>(order.size()),
+                                                       static_cast<int>(systems.size() * 7),
+                                                       static_cast<int>(largest), workspace_bytes));
+              const auto key_bytes = direct_jk_product(order.size(), sizeof(double));
+              const auto order_bytes = direct_jk_product(order.size(), sizeof(std::int32_t));
+              const auto row_bytes = direct_jk_product(order.size(), 3 * sizeof(std::uint64_t));
+              const auto offset_bytes = direct_jk_product(segments.size(), sizeof(int));
+              const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
+              const auto matrix = direct_jk_product(dimension, dimension);
+              const auto bound_bytes =
+                  direct_jk_product(direct_jk_product(matrix, systems.size()), sizeof(double));
+              const auto bytes = runtime::size_add(
+                  runtime::size_add(runtime::size_add(row_bytes, workspace_bytes), bound_bytes),
+                  runtime::size_add(offset_bytes, direct_jk_product(key_bytes + order_bytes, 2)));
+              const auto owner_bytes =
+                  through_f ? (plan->generated_exchange ? plan->generated_exchange->device_bytes
+                                                        : materialized_owner->device_bytes)
+                            : 0;
+              const auto available = budget - plan->device_bytes;
+              if (owner_bytes > available || bytes > available - owner_bytes) return;
+              DirectJkDownloadFence fence{plan->stream};
+              const auto* input_order =
+                  static_cast<const std::int32_t*>(upload(order.data(), order_bytes));
+              const auto* device_segments =
+                  static_cast<const int*>(upload(segments.data(), offset_bytes));
+              auto* sorted_order = reinterpret_cast<std::int32_t*>(scratch(order_bytes));
+              auto* input_keys = scratch(key_bytes);
+              auto* sorted_keys = scratch(key_bytes);
+              auto* prefix = reinterpret_cast<std::uint64_t*>(scratch(row_bytes));
+              auto* workspace = scratch(workspace_bytes);
+              auto* materialized_bounds = scratch(bound_bytes);
+              // Canonical bounds are row-major; the shared HF consumer's gate
+              // is column-major. A bit-preserving geometry-time transpose keeps
+              // threshold-boundary decisions exact even when separately computed
+              // (ij|ij) and (ji|ji) bounds are not bitwise symmetric.
+              for (std::size_t item = 0; item < systems.size(); ++item)
+                cuda_df::launch_transpose_density_kernel(
+                    static_cast<unsigned>((matrix + 127) / 128), 128, 0, plan->stream, dimension,
+                    plan->canonical_bounds + item * matrix, materialized_bounds + item * matrix);
+              direct_jk_check(cudaGetLastError());
+              direct_jk_check(prepare_materialized_pair_order(
+                  plan->stream, materialized_owner->batch, plan->canonical_bounds,
+                  static_cast<int>(order.size()), static_cast<int>(systems.size() * 7),
+                  device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
+                  workspace_bytes));
+              for (const auto& offsets : plan->materialized_pair_offsets)
+                for (unsigned second = 0; second < 3; ++second) {
+                  const unsigned first = 5 - second;
+                  direct_jk_check(prepare_canonical_pair_rows(
+                      plan->stream, sorted_keys, offsets[first],
+                      offsets[first + 1] - offsets[first], offsets[second],
+                      offsets[second + 1] - offsets[second], false, screening_tolerance,
+                      prefix + second * order.size() + offsets[first], workspace, workspace_bytes));
+                }
+              fence.complete();
+              plan->materialized_batch = materialized_owner->batch;
+              plan->materialized_pair_order = sorted_order;
+              plan->materialized_row_prefix = prefix;
+              plan->materialized_bounds = materialized_bounds;
+              plan->materialized_device_bytes = plan->device_bytes - retained_bytes;
+            },
+            [&] {
+              plan->materialized_batch = {};
+              plan->materialized_pair_order = nullptr;
+              plan->materialized_row_prefix = nullptr;
+              plan->materialized_bounds = nullptr;
+              plan->materialized_device_bytes = 0;
+              plan->materialized_pair_offsets.clear();
+            });
+      }
+    };
     MdJHost md_host;
     bool md_ready = false;
     try {
@@ -900,13 +1019,17 @@ generativeqc_status create_cuda_direct_jk_plan(
           },
           [&] { plan->md_j = {}; });
     }
+    // Keep incumbent MD-J storage ahead of optional canonical component reuse.
+    // Tight SPD budgets must not trade their established J source for this K route.
+    prepare_materialized_values();
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();
     info.nbf = host.nbf;
     info.coordinates_per_item = coordinates;
     info.device_bytes = plan->device_bytes;
     info.host_bytes = sizeof(*plan) + plan->allocations.capacity() * sizeof(void*) +
-                      runtime::vector_capacities(plan->canonical_pair_offsets);
+                      runtime::vector_capacities(plan->canonical_pair_offsets) +
+                      runtime::vector_capacities(plan->materialized_pair_offsets);
     // HostBatch may reserve direct-HF queue metadata while reusing the common packer.
     // Include those temporary capacities even though this provider uploads only AO data.
     info.host_preparation_bytes =
@@ -1342,7 +1465,31 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->resident_values + value_offset, plan->canonical_density,
                   plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction);
-            else
+            else if (first + second == 5 && plan->materialized_pair_order && !correction &&
+                     !fixed &&
+                     (!dispatch.canonical_coulomb || !dispatch.canonical_exchange ||
+                      spec.exchange.op == FockOperator::FullRange)) {
+              // Order five needs at most 162 Cartesian components, so the
+              // complete shell quartet fits one 256-lane recurrence packet.
+              // Fixed-density screening, compensation and resident-value
+              // layouts retain their established component-wise fallbacks.
+              const auto& shells = plan->materialized_pair_offsets[item];
+              const auto pairs = plan->materialized_pair_offsets.back()[7];
+              launch_materialized_canonical_jk_kernel(
+                  plan->stream, plan->materialized_batch,
+                  {plan->materialized_pair_order,
+                   plan->materialized_row_prefix + second * pairs + shells[first]},
+                  shells[first], shells[first + 1] - shells[first], shells[second],
+                  shells[second + 1] - shells[second], unrestricted,
+                  dispatch.canonical_exchange ? direct_exchange_range(spec.exchange)
+                                              : DirectCoulombRange::Full,
+                  dispatch.canonical_exchange ? spec.exchange.omega : 0.0,
+                  plan->screening_tolerance, plan->materialized_bounds, plan->canonical_density,
+                  plan->canonical_active,
+                  dispatch.canonical_coulomb ? plan->canonical_coulomb : nullptr,
+                  dispatch.canonical_exchange ? plan->canonical_exchange : nullptr,
+                  census ? census : plan->canonical_work_count);
+            } else
               launch_canonical_jk_kernel(
                   plan->stream, plan->canonical_batch, plan->canonical_cartesian,
                   static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,

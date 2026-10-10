@@ -399,7 +399,7 @@ def test_canonical_screening_fixture_preserves_default_and_opt_in_coverage() -> 
     source = _source("tests/native/test_cuda_fock_provider.cpp")
 
     def body(name: str) -> str:
-        begin = source.index(f"void {name}() {{")
+        begin = source.index(f"void {name}(")
         return source[begin : source.index("\n}\n", begin)]
 
     screened = body("canonical_screened_values")

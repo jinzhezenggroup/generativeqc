@@ -212,7 +212,8 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
         _definition(source, "template <class Prepare, class Restore>"),
     ]
     start = source.index("    MdJHost md_host;")
-    end = source.index("    auto& info =", start)
+    # Isolate incumbent MD admission from the later optional materialized owner.
+    end = source.index("    prepare_materialized_values();", start)
     driver = MD_DRIVER.replace("MD_PREPARATION", source[start:end])
     cpp, binary = tmp_path / "md.cpp", tmp_path / "md"
     cpp.write_text(stubs + "\n".join(definitions) + driver)

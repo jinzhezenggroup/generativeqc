@@ -67,3 +67,15 @@ def test_source_contraction_generation_is_registered() -> None:
     assert "GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER" in generated
     assert "generate_direct_source_contraction.py" in generated
     assert cuda.count("GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER") == 2
+
+
+def test_materialized_canonical_sources_reuse_range_and_scatter_owners() -> None:
+    """Separate canonical sources must not inherit the HF exchange sign."""
+    source = emit_direct_source_contraction_header()
+    assert "double* separate_coulomb = nullptr" in source
+    assert "double* separate_exchange = nullptr" in source
+    assert "fill_range_coulomb<AngularOrder>" in source
+    assert "shared.second.product_center, range, omega, shared.coulomb" in source
+    assert "value[slot], true, false" in source
+    assert "value[slot], false, true" in source
+    assert "range, omega, shared.coulomb" in source

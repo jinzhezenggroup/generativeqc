@@ -1,0 +1,1628 @@
+{
+  "schema": "generativeqc.canonical-pair-default-qualification.v1",
+  "base": "15e052d800085c61373937ed9c81c06cc6ca3548",
+  "date": "2026-10-10",
+  "default_promoted": true,
+  "legacy_hf_materialization_promoted": false,
+  "source_scope": "automatic indexed canonical total-angular-order-five values",
+  "raw_artifacts": "/data/jzzeng/wb97m-canonical-default-20261010-15e052d80",
+  "complete_96_atom_endpoint": null,
+  "independent_12_atom_gate": null,
+  "independent_12_atom_gate_reason": "unchanged stock reference did not converge in 100 iterations",
+  "library_sha256": {
+    "scalar": "9d8ca1634e4f14e03590291273d27b7d1c5ec3ccd34e7aad03c11352e3f837bd",
+    "automatic": "483a6123090ddb6974552793ac0397fbc377f61f01e1ef886516432b2a6c05fd"
+  },
+  "tested_source_sha256": {
+    "cmake/GenerativeQCTests.cmake": "b6afe83eefceb31377402000081ac7cb7490559a18b62fa7eff7f8bf17223bca",
+    "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py": "a2033a2d3752efae4adee04e4a00fa90f96027f54625f4731ee24d17e25bae45",
+    "src/scf/cuda/direct_jk.cpp": "84294b6660616380fc210eb23f5581f6d0ba4dc8c408651fa0837019aae0e036",
+    "src/scf/cuda/direct_jk_kernels.cu": "75a15137002b2708a8e07b79c3280432c20e62d5d3a446cafde6e7d30875a38b",
+    "src/scf/cuda/direct_jk_kernels.hpp": "a806823f8cc42f62c1ff38f7ab20624de471fd4f6099db81c254faf20c93ae96",
+    "src/scf/cuda/direct_jk_plan.hpp": "a8f5766dbca1497433b104406433eae1a8c10ce46203aa67044f20740fa2d008",
+    "tests/native/test_cuda_fock_provider.cpp": "3ba3b1e14190a286b6aa0e21625db99ad496fe2a1ebc639f06a3e21e997dd390",
+    "tests/native/test_direct_pair_materialized.cu": "1f92efbcce226b307e3c51e588f69c715943d39e8c3625a6ffe30e8fc94f6ea9",
+    "tests/python/test_direct_source_contraction_codegen.py": "aee9df0a8df012c819fe28a22a4ea80d7d5eb8266bbb21d87cf49dd09a1a099e"
+  },
+  "source_input_sha256": "a153f246af3a0de403762853aed2306c734ad77ca88bd29b8527ce799757f6bf  /data/jzzeng/wb97m-canonical-default-20261010-15e052d80/input/master.tar\nd8b68eb83e7eeeee6f09db9f59561c26b1c5b5fec5ecae077806e8695160e366  /data/jzzeng/wb97m-canonical-default-20261010-15e052d80/input/candidate.patch",
+  "protocol": {
+    "case": "water-3",
+    "atoms": 3,
+    "aos": 58,
+    "method": "WB97M-V/RKS",
+    "basis": "def2-TZVPD",
+    "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+    "representation": "spherical",
+    "geometries_bohr": [
+      [
+        [
+          "O",
+          [
+            -5.68695864870603,
+            -9.653477530875584,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.934741636687752,
+            -11.0488257295427,
+            -2.8921348693023314
+          ]
+        ],
+        [
+          "H",
+          [
+            -4.339681395600782,
+            -10.03509801091492,
+            -3.923524987977727
+          ]
+        ]
+      ],
+      [
+        [
+          "O",
+          [
+            -5.68695864870603,
+            -9.653477530875584,
+            -2.7688817211501036
+          ]
+        ],
+        [
+          "H",
+          [
+            -6.934741636687752,
+            -11.0488257295427,
+            -2.8911348693023315
+          ]
+        ],
+        [
+          "H",
+          [
+            -4.339681395600782,
+            -10.03509801091492,
+            -3.923524987977727
+          ]
+        ]
+      ]
+    ],
+    "grid": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "properties": [
+      "energy",
+      "forces"
+    ],
+    "force_return": "host_array_in_timed_endpoint",
+    "density_fitting": false,
+    "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+    "nonlocal_density_threshold": 1e-08,
+    "reference_nonlocal_weight_threshold": 1e-14,
+    "repeats": 1,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "reference_gradient_tolerance": 1e-10,
+    "screening_tolerance": 1e-12,
+    "reference_direct_scf_tolerance": 1e-14,
+    "reference_fock_policy": "incremental",
+    "max_iterations": 100,
+    "energy_gate": 1e-08,
+    "force_gate": 1e-07,
+    "cold_definition": "preparation plus first synchronized energy/force endpoint",
+    "warm_definition": "1 fixed engine-local post-cold/post-move density replays",
+    "threads": {
+      "OMP_NUM_THREADS": "8",
+      "OPENBLAS_NUM_THREADS": "8",
+      "MKL_NUM_THREADS": "8"
+    }
+  },
+  "gpu": {
+    "backend": "cuda",
+    "device_id": 0,
+    "name": "NVIDIA GeForce RTX 5090",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "total_global_memory_bytes": 33668988928,
+    "multiprocessor_count": 170,
+    "clock_rate_khz": 2550000,
+    "driver_version": 13000,
+    "runtime_version": 12090,
+    "nvidia_smi": {
+      "performance_state": "P0",
+      "power_draw_watts": 85.17,
+      "power_limit_watts": 600.0,
+      "sm_clock_mhz": 2940.0,
+      "memory_clock_mhz": 14001.0,
+      "temperature_celsius": 31.0,
+      "sampling_point": "after benchmark measurements"
+    }
+  },
+  "environment": {
+    "timestamp_utc": "2026-10-10T09:47:39.057019+00:00",
+    "git": {
+      "commit": null,
+      "dirty": null,
+      "pending_generated_benchmark_artifacts": null
+    },
+    "host": {
+      "node": "node1",
+      "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    },
+    "python": {
+      "version": "3.13.9",
+      "executable": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+    },
+    "packages": {
+      "gpu4pyscf": "1.8.1",
+      "pyscf": "2.14.0",
+      "cupy": "13.6.0"
+    },
+    "runtime": {
+      "generativeqc_library": "/data/jzzeng/wb97m-canonical-default-20261010-15e052d80/baseline-source/build/cuda-release-sm120/libgenerativeqc.so",
+      "cuda_visible_devices": "0"
+    },
+    "toolchain": {
+      "nvcc": {
+        "path": "/group/software/cuda-12.9.1/bin/nvcc",
+        "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      },
+      "ptxas": {
+        "path": "/group/software/cuda-12.9.1/bin/ptxas",
+        "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      },
+      "cuobjdump": {
+        "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+        "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+      },
+      "host_cxx": {
+        "path": "/usr/bin/c++",
+        "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+      }
+    },
+    "accelerator": null
+  },
+  "basis_sha256": "b765184b9a25e4b27a33d1225c90c634d494da0d1f19fd84526ffc298477477e",
+  "slurm_job_id": "7116",
+  "cuda_visible_devices": "0",
+  "first_use_3_atom": {
+    "scalar": {
+      "complete_seconds": 28.836172811686993,
+      "prepare_seconds": 0.7959952391684055,
+      "scf_and_publication_seconds": 8.59678091108799,
+      "force_seconds": 19.443396661430597,
+      "iterations": 15,
+      "fock_builds": 15,
+      "energy": -76.43242658175295,
+      "forces": [
+        [
+          -0.020461240494207944,
+          -0.01657729874491176,
+          0.002275739339889782
+        ],
+        [
+          0.02202245746826148,
+          0.02021873200980928,
+          -0.0008330325332435995
+        ],
+        [
+          -0.0015612169739294135,
+          -0.0036414332649761794,
+          -0.001442706806508376
+        ]
+      ],
+      "energy_error": 8.256506589532364e-12,
+      "force_error": 1.7970958055002484e-11,
+      "gate": true,
+      "native_scf_ao_work": {
+        "requested": 1,
+        "selected": 1,
+        "tiles": 288,
+        "empty_tiles": 32,
+        "min_active": 0,
+        "max_active": 58,
+        "active_sum": 13368,
+        "discovery_ao_jet_values": 17104896,
+        "point_ao_visits": 3422208,
+        "point_ao_square_sum": 189753856,
+        "dense_point_ao_square_sum": 248020992,
+        "discovery_d2h_bytes": 67968,
+        "reserved_device_bytes": 1145560,
+        "host_peak_bytes": 138480,
+        "xc_evaluations": 15,
+        "cutoff": 1e-16,
+        "discovery_seconds": 0.060403661
+      },
+      "native_force_work": {
+        "source_route": "composite-component-seconds",
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": {
+          "generated": {},
+          "screened": {},
+          "compacted": {},
+          "executed": {},
+          "capacity": {
+            "nonlocal_dense_pair_capacity": 5435817984
+          },
+          "observed": {
+            "partition_pair_visits_scheduled": 884736,
+            "ao_collocation_point_visits_scheduled": 73728,
+            "nonlocal_geometry_point_visits_scheduled": 147456
+          }
+        },
+        "traffic": {
+          "one_electron_h2d_bytes": 0,
+          "one_electron_d2h_bytes": 144,
+          "final_state_export_d2h_bytes": 0,
+          "snapshot_export_d2h_bytes": 81204,
+          "final_state_export_synchronizations": 0,
+          "snapshot_export_synchronizations": 1
+        },
+        "becke_work_counters": {
+          "semilocal": {
+            "becke_pair_state_evaluations": 221184,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          },
+          "nonlocal": {
+            "becke_pair_state_evaluations": 221184,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          }
+        }
+      },
+      "file": "first-use-3-scalar.json"
+    },
+    "automatic": {
+      "complete_seconds": 28.93059441819787,
+      "prepare_seconds": 0.7484180480241776,
+      "scf_and_publication_seconds": 8.478410631418228,
+      "force_seconds": 19.703765738755465,
+      "iterations": 15,
+      "fock_builds": 15,
+      "energy": -76.43242658175305,
+      "forces": [
+        [
+          -0.020461240495080246,
+          -0.016577298745221736,
+          0.002275739340359628
+        ],
+        [
+          0.022022457468193313,
+          0.020218732010096385,
+          -0.0008330325328132909
+        ],
+        [
+          -0.0015612169730396808,
+          -0.003641433264922611,
+          -0.0014427068074007732
+        ]
+      ],
+      "energy_error": 8.355982572538778e-12,
+      "force_error": 1.8280932323477828e-11,
+      "gate": true,
+      "native_scf_ao_work": {
+        "requested": 1,
+        "selected": 1,
+        "tiles": 288,
+        "empty_tiles": 32,
+        "min_active": 0,
+        "max_active": 58,
+        "active_sum": 13368,
+        "discovery_ao_jet_values": 17104896,
+        "point_ao_visits": 3422208,
+        "point_ao_square_sum": 189753856,
+        "dense_point_ao_square_sum": 248020992,
+        "discovery_d2h_bytes": 67968,
+        "reserved_device_bytes": 1145560,
+        "host_peak_bytes": 138480,
+        "xc_evaluations": 15,
+        "cutoff": 1e-16,
+        "discovery_seconds": 0.057896684
+      },
+      "native_force_work": {
+        "source_route": "composite-component-seconds",
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": {
+          "generated": {},
+          "screened": {},
+          "compacted": {},
+          "executed": {},
+          "capacity": {
+            "nonlocal_dense_pair_capacity": 5435817984
+          },
+          "observed": {
+            "partition_pair_visits_scheduled": 884736,
+            "ao_collocation_point_visits_scheduled": 73728,
+            "nonlocal_geometry_point_visits_scheduled": 147456
+          }
+        },
+        "traffic": {
+          "one_electron_h2d_bytes": 0,
+          "one_electron_d2h_bytes": 144,
+          "final_state_export_d2h_bytes": 0,
+          "snapshot_export_d2h_bytes": 81204,
+          "final_state_export_synchronizations": 0,
+          "snapshot_export_synchronizations": 1
+        },
+        "becke_work_counters": {
+          "semilocal": {
+            "becke_pair_state_evaluations": 221184,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          },
+          "nonlocal": {
+            "becke_pair_state_evaluations": 221184,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          }
+        }
+      },
+      "file": "first-use-3-automatic.json"
+    }
+  },
+  "complete_3_atom_samples": {
+    "scalar": [
+      {
+        "complete_seconds": 12.67981243506074,
+        "prepare_seconds": 0.7925536967813969,
+        "scf_and_publication_seconds": 8.605194795876741,
+        "force_seconds": 3.2820639424026012,
+        "iterations": 15,
+        "fock_builds": 15,
+        "energy": -76.43242658175305,
+        "forces": [
+          [
+            -0.02046124049490522,
+            -0.016577298745100055,
+            0.002275739340104943
+          ],
+          [
+            0.022022457468044765,
+            0.020218732010033547,
+            -0.0008330325333495148
+          ],
+          [
+            -0.0015612169730101488,
+            -0.003641433265013705,
+            -0.0014427068065849813
+          ]
+        ],
+        "energy_error": 8.355982572538778e-12,
+        "force_error": 1.815925187997891e-11,
+        "gate": true,
+        "native_scf_ao_work": {
+          "requested": 1,
+          "selected": 1,
+          "tiles": 288,
+          "empty_tiles": 32,
+          "min_active": 0,
+          "max_active": 58,
+          "active_sum": 13368,
+          "discovery_ao_jet_values": 17104896,
+          "point_ao_visits": 3422208,
+          "point_ao_square_sum": 189753856,
+          "dense_point_ao_square_sum": 248020992,
+          "discovery_d2h_bytes": 67968,
+          "reserved_device_bytes": 1145560,
+          "host_peak_bytes": 138480,
+          "xc_evaluations": 15,
+          "cutoff": 1e-16,
+          "discovery_seconds": 0.061132822
+        },
+        "native_force_work": {
+          "source_route": "composite-component-seconds",
+          "work_count_schema": "generativeqc.dft-work-counts.v1",
+          "work_counts": {
+            "generated": {},
+            "screened": {},
+            "compacted": {},
+            "executed": {},
+            "capacity": {
+              "nonlocal_dense_pair_capacity": 5435817984
+            },
+            "observed": {
+              "partition_pair_visits_scheduled": 884736,
+              "ao_collocation_point_visits_scheduled": 73728,
+              "nonlocal_geometry_point_visits_scheduled": 147456
+            }
+          },
+          "traffic": {
+            "one_electron_h2d_bytes": 0,
+            "one_electron_d2h_bytes": 144,
+            "final_state_export_d2h_bytes": 0,
+            "snapshot_export_d2h_bytes": 81204,
+            "final_state_export_synchronizations": 0,
+            "snapshot_export_synchronizations": 1
+          },
+          "becke_work_counters": {
+            "semilocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            },
+            "nonlocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            }
+          }
+        },
+        "file": "cold-3-1-scalar.json"
+      },
+      {
+        "complete_seconds": 12.749600905925035,
+        "prepare_seconds": 0.8439040966331959,
+        "scf_and_publication_seconds": 8.610875859856606,
+        "force_seconds": 3.294820949435234,
+        "iterations": 15,
+        "fock_builds": 15,
+        "energy": -76.43242658175303,
+        "forces": [
+          [
+            -0.02046124049425907,
+            -0.01657729874464442,
+            0.0022757393401615644
+          ],
+          [
+            0.022022457467137713,
+            0.020218732009231744,
+            -0.0008330325331830923
+          ],
+          [
+            -0.001561216972771895,
+            -0.003641433264624183,
+            -0.0014427068067963678
+          ]
+        ],
+        "energy_error": 8.341771717823576e-12,
+        "force_error": 1.7703616350672746e-11,
+        "gate": true,
+        "native_scf_ao_work": {
+          "requested": 1,
+          "selected": 1,
+          "tiles": 288,
+          "empty_tiles": 32,
+          "min_active": 0,
+          "max_active": 58,
+          "active_sum": 13368,
+          "discovery_ao_jet_values": 17104896,
+          "point_ao_visits": 3422208,
+          "point_ao_square_sum": 189753856,
+          "dense_point_ao_square_sum": 248020992,
+          "discovery_d2h_bytes": 67968,
+          "reserved_device_bytes": 1145560,
+          "host_peak_bytes": 138480,
+          "xc_evaluations": 15,
+          "cutoff": 1e-16,
+          "discovery_seconds": 0.058393083
+        },
+        "native_force_work": {
+          "source_route": "composite-component-seconds",
+          "work_count_schema": "generativeqc.dft-work-counts.v1",
+          "work_counts": {
+            "generated": {},
+            "screened": {},
+            "compacted": {},
+            "executed": {},
+            "capacity": {
+              "nonlocal_dense_pair_capacity": 5435817984
+            },
+            "observed": {
+              "partition_pair_visits_scheduled": 884736,
+              "ao_collocation_point_visits_scheduled": 73728,
+              "nonlocal_geometry_point_visits_scheduled": 147456
+            }
+          },
+          "traffic": {
+            "one_electron_h2d_bytes": 0,
+            "one_electron_d2h_bytes": 144,
+            "final_state_export_d2h_bytes": 0,
+            "snapshot_export_d2h_bytes": 81204,
+            "final_state_export_synchronizations": 0,
+            "snapshot_export_synchronizations": 1
+          },
+          "becke_work_counters": {
+            "semilocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            },
+            "nonlocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            }
+          }
+        },
+        "file": "cold-3-2-scalar.json"
+      },
+      {
+        "complete_seconds": 12.834702227264643,
+        "prepare_seconds": 0.7902440130710602,
+        "scf_and_publication_seconds": 8.608114425092936,
+        "force_seconds": 3.436343789100647,
+        "iterations": 15,
+        "fock_builds": 15,
+        "energy": -76.43242658175298,
+        "forces": [
+          [
+            -0.020461240493730215,
+            -0.016577298743885915,
+            0.0022757393402030868
+          ],
+          [
+            0.022022457467236523,
+            0.020218732008542073,
+            -0.0008330325335286076
+          ],
+          [
+            -0.0015612169734553483,
+            -0.003641433264728988,
+            -0.00144270680655878
+          ]
+        ],
+        "energy_error": 8.284928298962768e-12,
+        "force_error": 1.694511198024884e-11,
+        "gate": true,
+        "native_scf_ao_work": {
+          "requested": 1,
+          "selected": 1,
+          "tiles": 288,
+          "empty_tiles": 32,
+          "min_active": 0,
+          "max_active": 58,
+          "active_sum": 13368,
+          "discovery_ao_jet_values": 17104896,
+          "point_ao_visits": 3422208,
+          "point_ao_square_sum": 189753856,
+          "dense_point_ao_square_sum": 248020992,
+          "discovery_d2h_bytes": 67968,
+          "reserved_device_bytes": 1145560,
+          "host_peak_bytes": 138480,
+          "xc_evaluations": 15,
+          "cutoff": 1e-16,
+          "discovery_seconds": 0.058466256
+        },
+        "native_force_work": {
+          "source_route": "composite-component-seconds",
+          "work_count_schema": "generativeqc.dft-work-counts.v1",
+          "work_counts": {
+            "generated": {},
+            "screened": {},
+            "compacted": {},
+            "executed": {},
+            "capacity": {
+              "nonlocal_dense_pair_capacity": 5435817984
+            },
+            "observed": {
+              "partition_pair_visits_scheduled": 884736,
+              "ao_collocation_point_visits_scheduled": 73728,
+              "nonlocal_geometry_point_visits_scheduled": 147456
+            }
+          },
+          "traffic": {
+            "one_electron_h2d_bytes": 0,
+            "one_electron_d2h_bytes": 144,
+            "final_state_export_d2h_bytes": 0,
+            "snapshot_export_d2h_bytes": 81204,
+            "final_state_export_synchronizations": 0,
+            "snapshot_export_synchronizations": 1
+          },
+          "becke_work_counters": {
+            "semilocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            },
+            "nonlocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            }
+          }
+        },
+        "file": "cold-3-3-scalar.json"
+      }
+    ],
+    "automatic": [
+      {
+        "complete_seconds": 12.48402651771903,
+        "prepare_seconds": 0.7211913913488388,
+        "scf_and_publication_seconds": 8.476892493665218,
+        "force_seconds": 3.285942632704973,
+        "iterations": 15,
+        "fock_builds": 15,
+        "energy": -76.43242658175303,
+        "forces": [
+          [
+            -0.020461240494817345,
+            -0.016577298744801183,
+            0.0022757393404650994
+          ],
+          [
+            0.022022457467899548,
+            0.02021873200976554,
+            -0.0008330325330951627
+          ],
+          [
+            -0.0015612169730165881,
+            -0.0036414332650060444,
+            -0.0014427068072266902
+          ]
+        ],
+        "energy_error": 8.341771717823576e-12,
+        "force_error": 1.7860379841749818e-11,
+        "gate": true,
+        "native_scf_ao_work": {
+          "requested": 1,
+          "selected": 1,
+          "tiles": 288,
+          "empty_tiles": 32,
+          "min_active": 0,
+          "max_active": 58,
+          "active_sum": 13368,
+          "discovery_ao_jet_values": 17104896,
+          "point_ao_visits": 3422208,
+          "point_ao_square_sum": 189753856,
+          "dense_point_ao_square_sum": 248020992,
+          "discovery_d2h_bytes": 67968,
+          "reserved_device_bytes": 1145560,
+          "host_peak_bytes": 138480,
+          "xc_evaluations": 15,
+          "cutoff": 1e-16,
+          "discovery_seconds": 0.057183144
+        },
+        "native_force_work": {
+          "source_route": "composite-component-seconds",
+          "work_count_schema": "generativeqc.dft-work-counts.v1",
+          "work_counts": {
+            "generated": {},
+            "screened": {},
+            "compacted": {},
+            "executed": {},
+            "capacity": {
+              "nonlocal_dense_pair_capacity": 5435817984
+            },
+            "observed": {
+              "partition_pair_visits_scheduled": 884736,
+              "ao_collocation_point_visits_scheduled": 73728,
+              "nonlocal_geometry_point_visits_scheduled": 147456
+            }
+          },
+          "traffic": {
+            "one_electron_h2d_bytes": 0,
+            "one_electron_d2h_bytes": 144,
+            "final_state_export_d2h_bytes": 0,
+            "snapshot_export_d2h_bytes": 81204,
+            "final_state_export_synchronizations": 0,
+            "snapshot_export_synchronizations": 1
+          },
+          "becke_work_counters": {
+            "semilocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            },
+            "nonlocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            }
+          }
+        },
+        "file": "cold-3-1-automatic.json"
+      },
+      {
+        "complete_seconds": 12.50806213542819,
+        "prepare_seconds": 0.7446044497191906,
+        "scf_and_publication_seconds": 8.485548183321953,
+        "force_seconds": 3.277909502387047,
+        "iterations": 15,
+        "fock_builds": 15,
+        "energy": -76.43242658175298,
+        "forces": [
+          [
+            -0.02046124049366116,
+            -0.016577298744067992,
+            0.002275739340100502
+          ],
+          [
+            0.022022457467322898,
+            0.020218732008724594,
+            -0.0008330325335639266
+          ],
+          [
+            -0.0015612169735921277,
+            -0.003641433264768401,
+            -0.001442706806369376
+          ]
+        ],
+        "energy_error": 8.284928298962768e-12,
+        "force_error": 1.7127188556287365e-11,
+        "gate": true,
+        "native_scf_ao_work": {
+          "requested": 1,
+          "selected": 1,
+          "tiles": 288,
+          "empty_tiles": 32,
+          "min_active": 0,
+          "max_active": 58,
+          "active_sum": 13368,
+          "discovery_ao_jet_values": 17104896,
+          "point_ao_visits": 3422208,
+          "point_ao_square_sum": 189753856,
+          "dense_point_ao_square_sum": 248020992,
+          "discovery_d2h_bytes": 67968,
+          "reserved_device_bytes": 1145560,
+          "host_peak_bytes": 138480,
+          "xc_evaluations": 15,
+          "cutoff": 1e-16,
+          "discovery_seconds": 0.058629502
+        },
+        "native_force_work": {
+          "source_route": "composite-component-seconds",
+          "work_count_schema": "generativeqc.dft-work-counts.v1",
+          "work_counts": {
+            "generated": {},
+            "screened": {},
+            "compacted": {},
+            "executed": {},
+            "capacity": {
+              "nonlocal_dense_pair_capacity": 5435817984
+            },
+            "observed": {
+              "partition_pair_visits_scheduled": 884736,
+              "ao_collocation_point_visits_scheduled": 73728,
+              "nonlocal_geometry_point_visits_scheduled": 147456
+            }
+          },
+          "traffic": {
+            "one_electron_h2d_bytes": 0,
+            "one_electron_d2h_bytes": 144,
+            "final_state_export_d2h_bytes": 0,
+            "snapshot_export_d2h_bytes": 81204,
+            "final_state_export_synchronizations": 0,
+            "snapshot_export_synchronizations": 1
+          },
+          "becke_work_counters": {
+            "semilocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            },
+            "nonlocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            }
+          }
+        },
+        "file": "cold-3-2-automatic.json"
+      },
+      {
+        "complete_seconds": 12.509554371237755,
+        "prepare_seconds": 0.708322212100029,
+        "scf_and_publication_seconds": 8.477028090506792,
+        "force_seconds": 3.3242040686309338,
+        "iterations": 15,
+        "fock_builds": 15,
+        "energy": -76.43242658175303,
+        "forces": [
+          [
+            -0.020461240494951682,
+            -0.016577298745417135,
+            0.002275739340140026
+          ],
+          [
+            0.0220224574679857,
+            0.02021873200964519,
+            -0.0008330325330550975
+          ],
+          [
+            -0.0015612169729051217,
+            -0.003641433264294669,
+            -0.0014427068069455817
+          ]
+        ],
+        "energy_error": 8.341771717823576e-12,
+        "force_error": 1.8476331575811855e-11,
+        "gate": true,
+        "native_scf_ao_work": {
+          "requested": 1,
+          "selected": 1,
+          "tiles": 288,
+          "empty_tiles": 32,
+          "min_active": 0,
+          "max_active": 58,
+          "active_sum": 13368,
+          "discovery_ao_jet_values": 17104896,
+          "point_ao_visits": 3422208,
+          "point_ao_square_sum": 189753856,
+          "dense_point_ao_square_sum": 248020992,
+          "discovery_d2h_bytes": 67968,
+          "reserved_device_bytes": 1145560,
+          "host_peak_bytes": 138480,
+          "xc_evaluations": 15,
+          "cutoff": 1e-16,
+          "discovery_seconds": 0.055989595
+        },
+        "native_force_work": {
+          "source_route": "composite-component-seconds",
+          "work_count_schema": "generativeqc.dft-work-counts.v1",
+          "work_counts": {
+            "generated": {},
+            "screened": {},
+            "compacted": {},
+            "executed": {},
+            "capacity": {
+              "nonlocal_dense_pair_capacity": 5435817984
+            },
+            "observed": {
+              "partition_pair_visits_scheduled": 884736,
+              "ao_collocation_point_visits_scheduled": 73728,
+              "nonlocal_geometry_point_visits_scheduled": 147456
+            }
+          },
+          "traffic": {
+            "one_electron_h2d_bytes": 0,
+            "one_electron_d2h_bytes": 144,
+            "final_state_export_d2h_bytes": 0,
+            "snapshot_export_d2h_bytes": 81204,
+            "final_state_export_synchronizations": 0,
+            "snapshot_export_synchronizations": 1
+          },
+          "becke_work_counters": {
+            "semilocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            },
+            "nonlocal": {
+              "becke_pair_state_evaluations": 221184,
+              "becke_zero_seed_points": 0,
+              "phased_becke_batches": 0,
+              "becke_primitive_batches": 0,
+              "becke_primitive_reverse_pair_visits": 0,
+              "becke_phase_batches": 0,
+              "becke_phase_points": 0,
+              "becke_distance_atom_entries": 0,
+              "becke_pair_primal_visits": 0,
+              "becke_log_incident_visits": 0,
+              "becke_normalization_atom_entries": 0,
+              "becke_reverse_pair_visits": 0,
+              "becke_gather_incident_visits": 0,
+              "becke_motion_atom_entries": 0,
+              "becke_phase_launches": 0,
+              "becke_profile_batches": 0,
+              "becke_profile_event_records": 0,
+              "becke_profile_synchronizations": 0,
+              "becke_primal_evaluated_pair_visits": 0,
+              "becke_reverse_evaluated_pair_visits": 0,
+              "becke_gather_evaluated_incident_visits": 0
+            }
+          }
+        },
+        "file": "cold-3-3-automatic.json"
+      }
+    ]
+  },
+  "complete_3_atom_median_seconds": {
+    "scalar": 12.749600905925035,
+    "automatic": 12.50806213542819
+  },
+  "complete_3_atom_reduction_percent": 1.894481029477535,
+  "complete_12_atom_matched_pair": {
+    "scalar": {
+      "complete_seconds": 582.2018671557307,
+      "prepare_seconds": 1.0014215782284737,
+      "scf_and_publication_seconds": 542.6147341430187,
+      "force_seconds": 38.58571143448353,
+      "iterations": 21,
+      "fock_builds": 21,
+      "energy": -305.75672741928,
+      "forces": [
+        [
+          -0.0069885634308377576,
+          -0.004580211855487626,
+          -0.0005529113773188876
+        ],
+        [
+          0.013413285084690751,
+          0.010767526608657318,
+          0.0004203541207080663
+        ],
+        [
+          -0.0014954253353742786,
+          -0.0015288642674622932,
+          4.758887631139963e-05
+        ],
+        [
+          -0.007597255395006108,
+          0.0052864717500282765,
+          -0.00367036821728961
+        ],
+        [
+          -0.0010087220302312239,
+          0.0001573389165647754,
+          0.00031881706193415127
+        ],
+        [
+          0.011463276335123007,
+          -0.011335861783795864,
+          0.0025343318092413414
+        ],
+        [
+          -0.00021123241008069726,
+          0.01066124601593943,
+          -0.009225828545962322
+        ],
+        [
+          0.0007980315201516763,
+          0.0010969824853841459,
+          0.009590014830064497
+        ],
+        [
+          -0.00440678619166146,
+          -0.0060712920103624946,
+          -0.001118704786728375
+        ],
+        [
+          -0.014677920888107487,
+          0.002247648637834221,
+          -0.0028690283840635544
+        ],
+        [
+          0.001992924496446044,
+          0.00047693511126589705,
+          0.004744185304298654
+        ],
+        [
+          0.008718388245526842,
+          -0.007177919606844663,
+          -0.00021845069000414608
+        ]
+      ],
+      "native_scf_ao_work": {
+        "requested": 1,
+        "selected": 1,
+        "tiles": 1152,
+        "empty_tiles": 120,
+        "min_active": 0,
+        "max_active": 229,
+        "active_sum": 176207,
+        "discovery_ao_jet_values": 273678336,
+        "point_ao_visits": 45108992,
+        "point_ao_square_sum": 8101125376,
+        "dense_point_ao_square_sum": 15873343488,
+        "discovery_d2h_bytes": 1073664,
+        "reserved_device_bytes": 6428800,
+        "host_peak_bytes": 2157480,
+        "xc_evaluations": 21,
+        "cutoff": 1e-16,
+        "discovery_seconds": 0.119570645
+      },
+      "native_force_work": {
+        "source_route": "composite-component-seconds",
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": {
+          "generated": {},
+          "screened": {},
+          "compacted": {},
+          "executed": {},
+          "capacity": {
+            "nonlocal_dense_pair_capacity": 86973087744
+          },
+          "observed": {
+            "partition_pair_visits_scheduled": 77856768,
+            "ao_collocation_point_visits_scheduled": 294912,
+            "nonlocal_geometry_point_visits_scheduled": 589824
+          }
+        },
+        "traffic": {
+          "one_electron_h2d_bytes": 0,
+          "one_electron_d2h_bytes": 576,
+          "final_state_export_d2h_bytes": 0,
+          "snapshot_export_d2h_bytes": 1293636,
+          "final_state_export_synchronizations": 0,
+          "snapshot_export_synchronizations": 1
+        },
+        "becke_work_counters": {
+          "semilocal": {
+            "becke_pair_state_evaluations": 19464192,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          },
+          "nonlocal": {
+            "becke_pair_state_evaluations": 19464192,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          }
+        }
+      },
+      "file": "cold-12-scalar.json"
+    },
+    "automatic": {
+      "complete_seconds": 531.607554897666,
+      "prepare_seconds": 0.9304433390498161,
+      "scf_and_publication_seconds": 491.5968554802239,
+      "force_seconds": 39.08025607839227,
+      "iterations": 21,
+      "fock_builds": 21,
+      "energy": -305.7567274192799,
+      "forces": [
+        [
+          -0.006988563434915385,
+          -0.004580211880762519,
+          -0.0005529113864347346
+        ],
+        [
+          0.0134132850742682,
+          0.01076752664008529,
+          0.00042035413886049033
+        ],
+        [
+          -0.0014954253127821282,
+          -0.0015288642769252792,
+          4.758885497002652e-05
+        ],
+        [
+          -0.007597255401930347,
+          0.005286471748895405,
+          -0.003670368203296359
+        ],
+        [
+          -0.001008722033407794,
+          0.00015733892821323536,
+          0.0003188170567647308
+        ],
+        [
+          0.011463276331645345,
+          -0.011335861783987045,
+          0.0025343317960506706
+        ],
+        [
+          -0.0002112323906082736,
+          0.010661246004709746,
+          -0.009225828538589997
+        ],
+        [
+          0.0007980315154603179,
+          0.001096982484832476,
+          0.009590014823228188
+        ],
+        [
+          -0.004406786197625134,
+          -0.006071292006989193,
+          -0.0011187047840113262
+        ],
+        [
+          -0.014677920883378937,
+          0.0022476486275868623,
+          -0.0028690283317294174
+        ],
+        [
+          0.001992924502906404,
+          0.00047693510742097267,
+          0.00474418526575171
+        ],
+        [
+          0.008718388230469998,
+          -0.007177919591425441,
+          -0.00021845069011450224
+        ]
+      ],
+      "native_scf_ao_work": {
+        "requested": 1,
+        "selected": 1,
+        "tiles": 1152,
+        "empty_tiles": 120,
+        "min_active": 0,
+        "max_active": 229,
+        "active_sum": 176207,
+        "discovery_ao_jet_values": 273678336,
+        "point_ao_visits": 45108992,
+        "point_ao_square_sum": 8101125376,
+        "dense_point_ao_square_sum": 15873343488,
+        "discovery_d2h_bytes": 1073664,
+        "reserved_device_bytes": 6428800,
+        "host_peak_bytes": 2157480,
+        "xc_evaluations": 21,
+        "cutoff": 1e-16,
+        "discovery_seconds": 0.120292328
+      },
+      "native_force_work": {
+        "source_route": "composite-component-seconds",
+        "work_count_schema": "generativeqc.dft-work-counts.v1",
+        "work_counts": {
+          "generated": {},
+          "screened": {},
+          "compacted": {},
+          "executed": {},
+          "capacity": {
+            "nonlocal_dense_pair_capacity": 86973087744
+          },
+          "observed": {
+            "partition_pair_visits_scheduled": 77856768,
+            "ao_collocation_point_visits_scheduled": 294912,
+            "nonlocal_geometry_point_visits_scheduled": 589824
+          }
+        },
+        "traffic": {
+          "one_electron_h2d_bytes": 0,
+          "one_electron_d2h_bytes": 576,
+          "final_state_export_d2h_bytes": 0,
+          "snapshot_export_d2h_bytes": 1293636,
+          "final_state_export_synchronizations": 0,
+          "snapshot_export_synchronizations": 1
+        },
+        "becke_work_counters": {
+          "semilocal": {
+            "becke_pair_state_evaluations": 19464192,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          },
+          "nonlocal": {
+            "becke_pair_state_evaluations": 19464192,
+            "becke_zero_seed_points": 0,
+            "phased_becke_batches": 0,
+            "becke_primitive_batches": 0,
+            "becke_primitive_reverse_pair_visits": 0,
+            "becke_phase_batches": 0,
+            "becke_phase_points": 0,
+            "becke_distance_atom_entries": 0,
+            "becke_pair_primal_visits": 0,
+            "becke_log_incident_visits": 0,
+            "becke_normalization_atom_entries": 0,
+            "becke_reverse_pair_visits": 0,
+            "becke_gather_incident_visits": 0,
+            "becke_motion_atom_entries": 0,
+            "becke_phase_launches": 0,
+            "becke_profile_batches": 0,
+            "becke_profile_event_records": 0,
+            "becke_profile_synchronizations": 0,
+            "becke_primal_evaluated_pair_visits": 0,
+            "becke_reverse_evaluated_pair_visits": 0,
+            "becke_gather_evaluated_incident_visits": 0
+          }
+        }
+      },
+      "file": "cold-12-automatic.json"
+    }
+  },
+  "complete_12_atom_native_consistency": {
+    "independent_oracle": false,
+    "energy_difference_eh": 1.1368683772161603e-13,
+    "force_max_difference_eh_per_bohr": 5.233413702399048e-11,
+    "complete_reduction_percent": 8.690166609261574
+  },
+  "persistent_cta_sanitizers": {
+    "memcheck": [
+      "========= ERROR SUMMARY: 0 errors"
+    ],
+    "initcheck": [
+      "========= ERROR SUMMARY: 0 errors"
+    ],
+    "synccheck": [
+      "========= ERROR SUMMARY: 0 errors"
+    ],
+    "racecheck": [
+      "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+    ]
+  },
+  "pair_orders_5_through_12_qualification": "full-range recurrence passed; canonical order-five full/SR/LR sources separately passed native gates",
+  "python_qualification": {
+    "passed": 128,
+    "skipped": 1,
+    "subtests_passed": 54
+  },
+  "compiler_structure": {
+    "modules": 510,
+    "dependency_errors": 0
+  },
+  "handwritten_cuda_loc_delta": {
+    "scientific": 20,
+    "runtime": 69,
+    "removed": 0
+  },
+  "default_launch_trace": {
+    "materialized_launches": 90,
+    "legacy_hf_selector_present": false,
+    "physical_endpoint_gate": true,
+    "not_clean_timing": true
+  },
+  "existing_master_census_issue": {
+    "baseline_status": "BASELINE CANONICAL SUITE FAIL: see unmodified log",
+    "same_assertion_reproduced": true,
+    "isolated_owner_native_gates": "Test project /data/jzzeng/wb97m-canonical-default-20261010-15e052d80/source/build/cuda-release-sm120\n    Start 114: generativeqc_cuda_fock_canonical_tests\n1/4 Test #114: generativeqc_cuda_fock_canonical_tests .......   Passed   44.38 sec\n    Start 115: generativeqc_cuda_fock_materialized_tests\n2/4 Test #115: generativeqc_cuda_fock_materialized_tests ....   Passed   50.87 sec\n    Start 116: generativeqc_cuda_generated_j_budget_tests\n3/4 Test #116: generativeqc_cuda_generated_j_budget_tests ...   Passed    1.30 sec\n    Start 117: generativeqc_cuda_lr_domain_tests\n4/4 Test #117: generativeqc_cuda_lr_domain_tests ............   Passed    1.31 sec\n\n100% tests passed, 0 tests failed out of 4\n\nTotal Test time (real) =  97.86 sec\n"
+  },
+  "raw_sha256": {
+    "baseline-build.log": "2bcda00e32174bf9fadf429d034c2a74d76ce59e89a608a8e8949730b9d8025a",
+    "baseline-canonical-status.txt": "1203e2f1dc305e711ac91a70f3fb3ed359a360e4970c973050172258987a4402",
+    "baseline-configure.log": "20becd7f437bc2b707b49627879785fc40053f77a58c31f2e7e2bc563b9f00e9",
+    "baseline-library.sha256": "da172a4d28ce394129615e50d96f3f8541cb46ba5546464ea6797397f0b5c08b",
+    "baseline-unmodified-canonical.log": "2030ab720fe4d0766660d92bbe20f0673b74fa75d5b4bae3dbbc12b6341642ec",
+    "build.log": "0504d8b07841ec106f82eef3dacdd81b386aef9552a6171212eb59e8a8f4b8a0",
+    "ccache-after.txt": "bd9ac082e042cdf16c5fb445e84ebd3a35f826b73db4e7f5e0c4ebe15d875423",
+    "ccache-before.txt": "460e4c56c947f3711dcadf17553f0c7e015efe2564a34e80b354607880199828",
+    "ccache-version.txt": "9c3008378530cbe9a300ccd0d037e839ac82210a5303bf17d06d315be562c10b",
+    "cold-12-automatic.json": "c7e8902047d7f4382b3d499eb74882819f4a73934ab50ced385737f9dfbf7f6f",
+    "cold-12-automatic.log": "bc8428e11800fd00e16ec0584db12e33c9fc87afff707a4a4692d8cd15fc3a5d",
+    "cold-12-scalar.json": "fe3fafb550a32f52737630a7abebcedc60bc5b40d1fd96758b8d6c4efd19c2f2",
+    "cold-12-scalar.log": "09b13a6dbf0e27750153261c2ebc25ef81c4679cba2daf6d731b5c571f418a97",
+    "cold-3-1-automatic.json": "123900e78c8347f2b558c45d5a345546f6c11055279ba5ff902d96ad0b053572",
+    "cold-3-1-automatic.log": "c38a1da653e0ccbba524457e5b9586e9a194160abdb03482832fb6d4684eb790",
+    "cold-3-1-scalar.json": "e7494dc747a2b1e98c93845355338e424e546e075e56879921281832cd553236",
+    "cold-3-1-scalar.log": "4030d7ec2d361cbea0cf1cbad4217be0e2d605a2fe72664218d408e87cd6aadc",
+    "cold-3-2-automatic.json": "f7d9a562073340b7df366760d4fd4c234ead5fbdcc40517df2d3c6187a32c54e",
+    "cold-3-2-automatic.log": "46a075a36249e2b6dc21ad177321bd15f8a745564016a8bb15a6e3ad2d0a087b",
+    "cold-3-2-scalar.json": "2e9e1b3456c12581f3105a62ced8d1c6dc71350743786596054d0fb778c61778",
+    "cold-3-2-scalar.log": "10ec1a99a0c007709e1610395dd21006670071b629ebd3c4128d3a1cbfd5c691",
+    "cold-3-3-automatic.json": "6084a9b58a4ff86fc82783b04f6fa9c23ad128cc74ad96f26556b7eee75f53ea",
+    "cold-3-3-automatic.log": "adee2ffdac6e7f31fea6bcfa143f3232dce08a19de6a277849beba61e6c5056a",
+    "cold-3-3-scalar.json": "21283ec67b36e45fb76a6df2c0284fc8ee6fbbefa29854d8637d07410c79b67c",
+    "cold-3-3-scalar.log": "474371969e83c2ae65a6e0e8acbbdb998fbe02d1a38940aff64470ce088aa78d",
+    "compiler-commands.txt": "05a156247eda6dbfce575626b8b154eb71f6092c7129e406401c7e78ea058536",
+    "configure.log": "363c824606c5eac224dceee2e8c85893dcc7c6b2be76064f930cd13b1ecdbc8a",
+    "default-native-gates-without-mdj.log": "428517097da36aa4290ff430aa3ec2fe5e4861857eaac8886e87fc3a6cb09cda",
+    "default-sanitizer-initcheck.log": "c055918cf224323621aa508c26da7799c589557dd45c177beab2168ed16b3b20",
+    "default-sanitizer-memcheck.log": "778df736fce170ac341f048a4a6d926402c3a513734932f988e3aa9524782643",
+    "default-sanitizer-racecheck.log": "6dcbb8564874934bd5dc80544449d5bbcd16150529010d860e3e8d02499a5bcc",
+    "default-sanitizer-synccheck.log": "eba99be634828bfa0362a66562d25c45914f87812f2f15400be81e397da059b1",
+    "first-use-3-automatic.json": "b7b9fa500269e116872e1dae362cf2229791fbfcbb21280b6467372eef972f7e",
+    "first-use-3-automatic.log": "c931916bacba5291b8f5513939344b07fec5aecef7c6233e2dd5b3d5b0b2ba50",
+    "first-use-3-scalar.json": "55cb30461a0079ac3d98426c08683745f66ad2277ce78b539198a117ec021855",
+    "first-use-3-scalar.log": "76170cd1ca06e5326ad2496ad6587c0a1dcac364296686b9a5ac31ff775c3535",
+    "library.sha256": "3d800fdec499b5153bdf7d52673084e77a2c666e24917dda1779b3d2f950bae8",
+    "native-gates.log": "aba6b185dd533ccbbc000cd5cb09ac9cb391bc557d4d559dc9b530d32e95236f",
+    "pair-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pair-qualification.log": "558d1a97f403757f6eda02ef3d1edbea9ab8b65ff31c8201b471ab3e1e4a7c49",
+    "python-gates.log": "f3f66aead3bb0bc62a38e73a3e705ea30c0b2998abd94444974922accdfbc71d",
+    "qualification-cache-after.txt": "77accf2cb7706e1b87200fc1eafa70635f12a3dace694013d616b54cb0c981b6",
+    "qualification-cache-before.txt": "bd9ac082e042cdf16c5fb445e84ebd3a35f826b73db4e7f5e0c4ebe15d875423",
+    "qualification-cache-version.txt": "9c3008378530cbe9a300ccd0d037e839ac82210a5303bf17d06d315be562c10b",
+    "source-input.sha256": "223b0bfa499d2afbaabcef8c457b9a7698dca84d515b24ecc8dd46146fac3886",
+    "trace-3-automatic.json": "2422613fbacd8e5d8d900db745a825f5fcb0e091484a8d153f0a9954992d1c49",
+    "trace-3-automatic.log": "d10aec4098d49c9e5459e6860112b9984e1ab0dc04c9c7ae6836eaf15061f7ea"
+  }
+}

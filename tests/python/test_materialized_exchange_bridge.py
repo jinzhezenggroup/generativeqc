@@ -112,10 +112,15 @@ struct MaterializedDirectPairWork {
   unsigned long long bra_preparations{}, ket_preparations{}, coulomb_preparations{};
   unsigned long long component_contractions{}, published_components{};
 };
+struct CoulombState {
+  double value{};
+  double& at(unsigned, unsigned, unsigned, unsigned) { return value; }
+};
 template<unsigned Order> struct MaterializedDirectPairRecurrence {
   PrimitivePairData first, second;
   double coefficients[4];
-  int bra[3]{}, ket[3]{}, coulomb{};
+  int bra[3]{}, ket[3]{};
+  CoulombState coulomb{};
 };
 std::array<std::size_t, 4> quartet;
 unsigned expected_mode, screening_calls, fallback_calls;
@@ -132,9 +137,15 @@ template<class T> T atom_position(DeviceBatch, int, int) { return 0; }
 int direct_ao_angular(DeviceBatch, std::size_t) { return 0; }
 void prepare_materialized_direct_pair(const PrimitivePairData&, unsigned, unsigned,
     double, double, int (&)[3]) {}
-template<unsigned Order> void fill_coulomb(double, double, double, int&) {}
+template<unsigned Order> void fill_coulomb(double, double, double, CoulombState&) {}
+template<unsigned Order> bool fill_range_coulomb(double, double, double,
+    generativeqc::integrals::CoulombRange, double, CoulombState&) {
+  assert(false && "full-range bridge must not request a range recurrence");
+  return false;
+}
 template<unsigned Order> double consume_cartesian_coulomb(
-    double, double, int, int, int, int, const int (&)[3], const int (&)[3], int) {
+    double, double, int, int, int, int, const int (&)[3], const int (&)[3],
+    const CoulombState&) {
   return 0.75;
 }
 """
