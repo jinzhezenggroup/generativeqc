@@ -44,6 +44,54 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 
 
 @pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/scf/cuda/reference_eri_policy.hpp", "!value ||", "false ||"),
+        ("src/scf/cuda/reference_eri_policy.hpp", "if (!cold_reference)", "if (false)"),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "maximum_angular != 3",
+            "maximum_angular > 3",
+        ),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "direct_nbf < 128",
+            "direct_nbf < 64",
+        ),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "maximum_iterations < 8",
+            "maximum_iterations < 4",
+        ),
+        (
+            "src/scf/cuda/rhf_resident_values.cpp",
+            "budget, 8ULL << 30",
+            "budget, 16ULL << 30",
+        ),
+        (
+            "src/scf/cuda/rhf_resident_values.cpp",
+            "device_overhead, 256ULL << 20",
+            "device_overhead, 0",
+        ),
+    ],
+)
+def test_rhf_phase_value_default_domain_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Widening automatic construction needs renewed endpoint qualification."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "RHF phase-value auto default or admission domain drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
     "before,after",
     [
         ("guess.work_amortization_ratio < 1.0", "guess.work_amortization_ratio < 0.1"),
