@@ -1,0 +1,63 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent numerical, class ownership, bounded routing and memcheck gates pass; complete timings are descriptive, not global/formal promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 5122,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "82879d5a787bdbd675325b6cb92b4317bf3785c7ecc4ea9ee716641e91c35aea"
+    },
+    {
+      "bytes": 2418,
+      "path": "build.sh",
+      "role": "reproduction",
+      "sha256": "fcc3574cb6a80ef58b52bef223cc7df7fe9dadf72d09e1e5797757009cd1c9de"
+    },
+    {
+      "bytes": 15089,
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "d5c388d7d738f7dc5e1ac6fd8ddd27cfab1f37c68c8598b45030f38155f0233c"
+    },
+    {
+      "bytes": 2143,
+      "path": "run-abba.sh",
+      "role": "reproduction",
+      "sha256": "bea2ea8f493af1cae27cb5870f5b575aa630df4f11553ac99d0bd40ab2bf0ea0"
+    },
+    {
+      "bytes": 2856,
+      "path": "run-qualification.sh",
+      "role": "reproduction",
+      "sha256": "a81bdfadd5221c98fc080e784225df71cddebe2b95b57c8be7dab8c3db486590"
+    },
+    {
+      "bytes": 90343,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "cb8eb998b3583bc0364c7276fae123d276f61fb434751c24e1d6ae27f22be9bc"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:35:00",
+      "bash",
+      "run-abba.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "e55dcd2b2ec4acd52d9f45d3f9fa2ebf709d6d7d"
+  }
+}

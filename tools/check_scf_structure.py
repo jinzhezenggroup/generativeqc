@@ -446,6 +446,8 @@ CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
 CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
 CUDA_MODULES["cuda_direct_order_seven_pages"] = ("direct_order_seven_pages.cuh",)
 CUDA_ALLOWED["cuda_direct_order_seven_pages"] = ()
+CUDA_MODULES["cuda_direct_force_class_pages"] = ("direct_force_class_pages.cuh",)
+CUDA_ALLOWED["cuda_direct_force_class_pages"] = ()
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -482,6 +484,7 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "scf/cuda/direct_task_encoding.cuh",
         "scf/cuda/direct_page_screening.cuh",
         "scf/cuda/direct_order_seven_pages.cuh",
+        "scf/cuda/direct_force_class_pages.cuh",
         "scf/cuda/direct_queue_profile.cuh",
         "scf/cuda/matrix_index.cuh",
         "scf/cuda/device_timer.cuh",
@@ -496,6 +499,7 @@ CUDA_MODULES["cuda_direct_consumers"] = (
     "direct_bounded_dddd.cu",
     "direct_bounded_exact_force.cu",
     "direct_order_seven_force.cu",
+    "direct_force_class_domains.cu",
     "direct_bounded_fallback.cu",
     "direct_angular_force.cu",
     "direct_jk_kernels.cu",
@@ -520,6 +524,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_bounded_dddd.hpp",
     "direct_bounded_exact_force.hpp",
     "direct_order_seven_force.hpp",
+    "direct_force_class_domains.hpp",
     "direct_bounded_fallback.hpp",
     "direct_angular_force.hpp",
     "weighted_eri_kernels.hpp",
