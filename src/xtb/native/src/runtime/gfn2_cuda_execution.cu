@@ -58,6 +58,7 @@
 #include "runtime/molecular_request.hpp"
 #include "runtime/nvidia_host_api.h"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
+#include "generated_gfn2_electronic_native.cuh"
 
 namespace generativeqc::xtb::detail {
 namespace {
@@ -1842,6 +1843,11 @@ struct Gfn2CudaExecutionCache::Impl {
     DeviceArena iteration_arena;
     DeviceArena mixer_receipt_arena;
     std::int64_t mixer_receipt_capacity = 0;
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+    DeviceArena density_receipt_arena;
+    std::int64_t density_receipt_capacity = 0;
+    std::uint32_t density_grid_tiles = 0;
+#endif
     DeviceArena eigensolver_setup_arena;
     PinnedArena provider_host_workspace;
     PinnedArena numerical_host_staging_arena;
@@ -5196,6 +5202,43 @@ struct Gfn2CudaExecutionCache::Impl {
       sink.receipts = reinterpret_cast<Gfn2SccMixerDeviceReceipt*>(base + sizeof(std::uint64_t));
       sink.receipt_capacity = candidate->mixer_receipt_capacity;
     }
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+    if (density_diagnostics_enabled) {
+      const auto batch_size = candidate->host.basis.batch_size;
+      const auto iterations = candidate->host.key.maximum_iterations;
+      constexpr std::size_t kMaximumReceiptBytes = 64u * 1024u * 1024u;
+      const auto tiles = generativeqc::xtb::generated::gfn2_electronic_matrix_tiles(
+          candidate->plan_seed.density_batch.total_matrix_elements, batch_size);
+      const auto maximum_records =
+          (kMaximumReceiptBytes - sizeof(std::uint64_t)) /
+          sizeof(Gfn2DensityDeviceReceipt);
+      if (batch_size <= 0 || iterations <= 0 || tiles == 0 ||
+          static_cast<std::uint64_t>(batch_size) > maximum_records / (2u * tiles) ||
+          static_cast<std::uint64_t>(batch_size) * (2u * tiles) >
+              maximum_records / (static_cast<std::uint64_t>(iterations) + 2u)) {
+        error = "CUDA density diagnostic receipt capacity exceeds its 64 MiB bound";
+        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
+      }
+      candidate->density_grid_tiles = tiles;
+      candidate->density_receipt_capacity =
+          batch_size * (2 * static_cast<std::int64_t>(tiles)) *
+          (static_cast<std::int64_t>(iterations) + 2);
+      const std::size_t bytes = sizeof(std::uint64_t) +
+          static_cast<std::size_t>(candidate->density_receipt_capacity) *
+              sizeof(Gfn2DensityDeviceReceipt);
+      cuda_status = candidate->density_receipt_arena.allocate(bytes);
+      if (cuda_status != cudaSuccess) {
+        error = cuda_error_message("CUDA density diagnostic allocation", cuda_status);
+        return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
+      }
+      auto* const base = static_cast<std::byte*>(candidate->density_receipt_arena.get());
+      auto& sink = candidate->scc_binding.workspace.density_workspace;
+      sink.diagnostic_receipt_count = reinterpret_cast<std::uint64_t*>(base);
+      sink.diagnostic_receipts =
+          reinterpret_cast<Gfn2DensityDeviceReceipt*>(base + sizeof(std::uint64_t));
+      sink.diagnostic_receipt_capacity = candidate->density_receipt_capacity;
+    }
+#endif
 
     status = build_energy_force_bindings(*candidate, error);
     if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
@@ -5788,6 +5831,13 @@ struct Gfn2CudaExecutionCache::Impl {
         capture_bounded_scc ? launch_gfn2_restricted_scc_loop_cuda(
                                   current.scc_binding, inference.epoch_consumer, execution_stream)
                             : current.scc_loop.launch(execution_stream);
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+    if (density_diagnostics_enabled) {
+      density_graph_family_for_call =
+          capture_bounded_scc ? 0u : static_cast<std::uint32_t>(loop.execution_mode);
+      density_graph_submitted_for_call = loop.submitted_graphs != 0u;
+    }
+#endif
     if (!loop.success()) {
       std::ostringstream message;
       message << "CUDA SCC loop submission failed: mode="
@@ -5947,6 +5997,20 @@ struct Gfn2CudaExecutionCache::Impl {
       mixer_receipts_reset_for_call = true;
       mixer_receipt_plan_token_for_call = current.host.plan_token;
     }
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+    if (density_diagnostics_enabled) {
+      cuda_status = cudaMemsetAsync(
+          current.scc_binding.workspace.density_workspace.diagnostic_receipt_count, 0,
+          sizeof(std::uint64_t), stream);
+      if (cuda_status != cudaSuccess) {
+        error = cuda_error_message("CUDA density diagnostic reset", cuda_status);
+        return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+      }
+      current.submitted = true;
+      density_receipts_reset_for_call = true;
+      density_receipt_plan_token_for_call = current.host.plan_token;
+    }
+#endif
 
     /*
      * Public admission requires FRESH SCC. Invalidate every old checkpoint
@@ -6469,6 +6533,58 @@ struct Gfn2CudaExecutionCache::Impl {
     return true;
   }
 
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  bool copy_density_diagnostics_locked(const Prepared& current,
+                                        Gfn2CudaDensityDiagnosticSnapshot& snapshot,
+                                        std::string& error) const {
+    const cudaError_t completion = cudaStreamSynchronize(stream);
+    if (completion != cudaSuccess) {
+      error = cuda_error_message("CUDA density diagnostic endpoint completion", completion);
+      return false;
+    }
+    const auto& sink = current.scc_binding.workspace.density_workspace;
+    std::uint64_t attempted = 0u;
+    cudaError_t status = cudaMemcpy(&attempted, sink.diagnostic_receipt_count,
+                                    sizeof(attempted), cudaMemcpyDeviceToHost);
+    if (status != cudaSuccess) {
+      error = cuda_error_message("CUDA density diagnostic count read", status);
+      return false;
+    }
+    Gfn2CudaDensityDiagnosticSnapshot candidate{};
+    candidate.call_id = density_call_id;
+    candidate.plan_token = current.host.plan_token;
+    candidate.attempted_receipts = attempted;
+    candidate.receipt_capacity = static_cast<std::uint64_t>(current.density_receipt_capacity);
+    candidate.arena_bytes = current.density_receipt_arena.bytes();
+    candidate.device_id = device_id;
+    candidate.batch_size = current.host.basis.batch_size;
+    candidate.maximum_iterations = current.host.key.maximum_iterations;
+    candidate.grid_tiles = current.density_grid_tiles;
+    candidate.graph_family = density_graph_family_for_call;
+    candidate.graph_submitted = density_graph_submitted_for_call;
+    candidate.endpoint_completed = density_endpoint_completed_for_call;
+    const auto retained = std::min(attempted, candidate.receipt_capacity);
+    try {
+      candidate.receipts.resize(static_cast<std::size_t>(retained));
+    } catch (const std::bad_alloc&) {
+      error = "CUDA density diagnostic host receipt allocation failed";
+      return false;
+    }
+    if (retained != 0u) {
+      status = cudaMemcpy(candidate.receipts.data(), sink.diagnostic_receipts,
+                          static_cast<std::size_t>(retained) *
+                              sizeof(Gfn2DensityDeviceReceipt), cudaMemcpyDeviceToHost);
+      if (status != cudaSuccess) {
+        error = cuda_error_message("CUDA density diagnostic receipt read", status);
+        return false;
+      }
+    }
+    snapshot = std::move(candidate);
+    error.clear();
+    return true;
+  }
+#endif
+
   std::int32_t device_id = -1;
   cudaStream_t stream = nullptr;
   Gfn2CudaTopologyStaging topology_staging;
@@ -6488,6 +6604,18 @@ struct Gfn2CudaExecutionCache::Impl {
   Gfn2CudaMixerDiagnosticSnapshot failed_mixer_snapshot;
   bool failed_mixer_snapshot_attempted = false;
   bool failed_mixer_snapshot_valid = false;
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  bool density_diagnostics_enabled = false;
+  bool density_receipts_reset_for_call = false;
+  bool density_graph_submitted_for_call = false;
+  bool density_endpoint_completed_for_call = false;
+  std::uint32_t density_graph_family_for_call = 0u;
+  std::uint64_t density_call_id = 0u;
+  std::uint64_t density_receipt_plan_token_for_call = 0u;
+  Gfn2CudaDensityDiagnosticSnapshot failed_density_snapshot;
+  bool failed_density_snapshot_attempted = false;
+  bool failed_density_snapshot_valid = false;
+#endif
   std::unique_ptr<Prepared> prepared;
   mutable std::mutex mutex;
 };
@@ -6542,6 +6670,61 @@ bool Gfn2CudaExecutionCache::read_mixer_diagnostics(
   return true;
 }
 
+bool Gfn2CudaExecutionCache::enable_density_diagnostics() noexcept {
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->prepared != nullptr) return false;
+  impl_->density_diagnostics_enabled = true;
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool Gfn2CudaExecutionCache::read_density_diagnostics(
+    Gfn2CudaDensityDiagnosticSnapshot& snapshot, std::string& error) const {
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  if (impl_ == nullptr) {
+    error = "CUDA GFN2 execution cache has no implementation";
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->failed_density_snapshot_attempted) {
+    if (!impl_->failed_density_snapshot_valid) {
+      error = "CUDA density failed-call diagnostic snapshot was unavailable";
+      return false;
+    }
+    snapshot = impl_->failed_density_snapshot;
+    error.clear();
+    return true;
+  }
+  const auto* const prepared = impl_->prepared.get();
+  if (!impl_->density_diagnostics_enabled || !impl_->density_receipts_reset_for_call ||
+      prepared == nullptr || prepared->density_receipt_capacity <= 0 ||
+      prepared->host.plan_token != impl_->density_receipt_plan_token_for_call) {
+    error = "CUDA density diagnostics have no completed call-owned receipt buffer";
+    return false;
+  }
+  ScopedCudaDevice device(impl_->device_id, error);
+  if (!device.ok()) return false;
+  Gfn2CudaDensityDiagnosticSnapshot candidate{};
+  if (!impl_->copy_density_diagnostics_locked(*prepared, candidate, error)) return false;
+  std::string restore_error;
+  if (device.restore(restore_error) != GENERATIVEQC_XTB_STATUS_SUCCESS) {
+    error = std::move(restore_error);
+    return false;
+  }
+  snapshot = std::move(candidate);
+  error.clear();
+  return true;
+#else
+  (void)snapshot;
+  error = "CUDA density diagnostics were not compiled into this artifact";
+  return false;
+#endif
+}
+
 generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCache& cache,
                                                       const generativeqc_xtb_batch_t& batch,
                                                       const generativeqc_xtb_compute_options_t& options,
@@ -6564,6 +6747,19 @@ generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCac
     implementation.failed_mixer_snapshot_attempted = false;
     implementation.failed_mixer_snapshot_valid = false;
   }
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  if (implementation.density_diagnostics_enabled) {
+    ++implementation.density_call_id;
+    implementation.density_receipts_reset_for_call = false;
+    implementation.density_graph_submitted_for_call = false;
+    implementation.density_endpoint_completed_for_call = false;
+    implementation.density_graph_family_for_call = 0u;
+    implementation.density_receipt_plan_token_for_call = 0u;
+    implementation.failed_density_snapshot = {};
+    implementation.failed_density_snapshot_attempted = false;
+    implementation.failed_density_snapshot_valid = false;
+  }
+#endif
   const auto contract_status = validate_molecular_request(batch, options, error);
   if (contract_status != GENERATIVEQC_XTB_STATUS_SUCCESS) return contract_status;
 
@@ -6671,6 +6867,21 @@ generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCac
           implementation.failed_mixer_snapshot_valid = false;
         }
       }
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+      if (candidate != nullptr && implementation.density_diagnostics_enabled &&
+          implementation.density_receipts_reset_for_call &&
+          implementation.density_receipt_plan_token_for_call == working->host.plan_token) {
+        implementation.failed_density_snapshot_attempted = true;
+        try {
+          std::string diagnostic_error;
+          implementation.failed_density_snapshot_valid =
+              implementation.copy_density_diagnostics_locked(
+                  *working, implementation.failed_density_snapshot, diagnostic_error);
+        } catch (...) {
+          implementation.failed_density_snapshot_valid = false;
+        }
+      }
+#endif
       return settled;
     };
 
@@ -6767,7 +6978,14 @@ generativeqc_xtb_status_t execute_restricted_gfn2_cuda_impl(Gfn2CudaExecutionCac
     implementation.mixer_endpoint_completed_for_call =
         transaction_status == GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
-  return finish(transaction_status);
+  const auto final_status = finish(transaction_status);
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  if (implementation.density_diagnostics_enabled) {
+    implementation.density_endpoint_completed_for_call =
+        final_status == GENERATIVEQC_XTB_STATUS_SUCCESS;
+  }
+#endif
+  return final_status;
 }
 
 generativeqc_xtb_status_t execute_restricted_gfn2_cuda(Gfn2CudaExecutionCache& cache,
