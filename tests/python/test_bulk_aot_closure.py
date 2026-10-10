@@ -407,7 +407,9 @@ def test_real_gcc_terminal_backslash_decoys_fail_closed(
         elif position == "wrapped":
             (root / "foo ").write_text("/* wrapped decoy */\n", encoding="utf-8")
         else:
-            (root / "foo").write_text("/* final-continuation decoy */\n", encoding="utf-8")
+            (root / "foo").write_text(
+                "/* final-continuation decoy */\n", encoding="utf-8"
+            )
         source = root / "point.c"
         includes = ['#include "foo\\"\n', '#include "z.h"\n']
         if position == "final":
