@@ -16,6 +16,7 @@ Stationary problems, implicit differentiation, first/second derivatives, native 
 ../stationary_cuda_diagnostic
 ../implicit_response
 ../response
+../uhf_stability
 ../hessian
 ../dft_hessian
 ```
