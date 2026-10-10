@@ -147,16 +147,17 @@ int main() {
     pbe0_descriptor.energy_tolerance = 1.0e-12;
     pbe0_descriptor.density_tolerance = 1.0e-10;
     // The builder is destroyed as soon as native preparation succeeds.
-    // The returned Calculation must own the full KS snapshot independently.
-    auto prepared = [&]() {
+    // Both fitted and Direct calculations must own identical full KS graphs.
+    const auto prepare_pbe0 = [&](const generativeqc_method_descriptor& descriptor) {
       generativeqc::KsComposition pbe0(GENERATIVEQC_METHOD_PBE_RKS,
                                        "semilocal-scaled-v1/pbe-spin-c2-1e-18", 1);
       pbe0.set_grid({1, 64, 12, 24, 3, 1.0e-12, 256})
           .add_semilocal("GGA_C_PBE", 1.0)
           .add_semilocal("GGA_X_PBE", 0.75)
           .add_exact_exchange(GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25);
-      return pbe0.prepare(context, h2, pbe0_descriptor);
-    }();
+      return pbe0.prepare(context, h2, descriptor);
+    };
+    auto prepared = prepare_pbe0(pbe0_descriptor);
     const auto pbe0_energy = prepared.execute();
     require(std::isfinite(pbe0_energy.energy) &&
                 std::abs(pbe0_energy.energy - (-1.1543107969377155)) < 1.0e-6,
@@ -170,6 +171,25 @@ int main() {
       require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
               "C++ DFT force request did not fail closed");
     }
+    // Only a prepared CPU DF-RKS PBE0 context can advertise these forces.
+    // This tests SDK parity with the compiler MethodIR CLI selector, which
+    // exercises complete reconverged-displacement force differences in CTest.
+    pbe0_descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+    auto fitted_pbe0 = prepare_pbe0(pbe0_descriptor);
+    require((fitted_pbe0.supported_properties() &
+             (GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES)) ==
+                (GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES),
+            "C++ CPU DF-PBE0 context did not advertise analytic forces");
+    const auto pbe0_forces =
+        fitted_pbe0.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+    require(
+        pbe0_forces.forces && pbe0_forces.forces->size() == 6 && std::isfinite(pbe0_forces.energy),
+        "C++ CPU DF-PBE0 failed complete E+F publication");
+    for (double force : *pbe0_forces.forces)
+      require(std::isfinite(force), "C++ CPU DF-PBE0 returned nonfinite analytic force");
+    for (std::size_t axis = 0; axis < 3; ++axis)
+      require(std::abs((*pbe0_forces.forces)[axis] + (*pbe0_forces.forces)[3 + axis]) < 2e-5,
+              "C++ CPU DF-PBE0 force violates translation invariance");
     std::cout << "C++ ragged batch and explicit KS API: PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
