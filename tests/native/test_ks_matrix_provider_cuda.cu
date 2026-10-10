@@ -156,8 +156,10 @@ void run_case(const std::filesystem::path& folder, int id, int n, int batch, int
   }
   std::cout << "{\"kind\":\"case\",\"id\":" << id << ",\"status\":" << status
             << ",\"device_ms_reset_and_product_two_runs\":" << milliseconds
-            << ",\"semantic_products\":" << 2 * batch * spins
-            << ",\"library_submissions_per_execution\":" << (library ? (ordinary ? 1 : spins) : 0)
+            << ",\"requested_matrix_products\":" << 2 * batch * spins
+            << ",\"nominal_library_submissions_per_execution\":"
+            << (library ? (ordinary ? 1 : spins) : 0)
+            << ",\"vendor_submission_count_observed\":false"
             << ",\"owner_retained_bytes\":" << owner.retained_bytes() << "}\n";
   std::cout.flush();
 }

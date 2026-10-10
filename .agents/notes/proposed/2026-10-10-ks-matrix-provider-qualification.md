@@ -76,6 +76,39 @@ Do not duplicate production arithmetic in a host probe, use a production formula
 as its own oracle, silently ignore masked cases, weaken gates to obtain PASS,
 change selection defaults, or borrow another issue's running instance.
 
+## Device evidence, 2026-10-10
+
+The complete standalone driver at clean source
+`f6f9279f6d06909563abeef0b7b0ae767bd7fbc1` ran on a real H100 80GB HBM3
+(sm_90), CUDA toolkit/runtime 12.9, driver API 12.8 and GCC 11.4, with verified
+sccache 0.16.0. NumPy reported a 63-bit long-double mantissa. All 2,880 cases
+returned observations and both executions were assessed: all 1,440 native cases
+and 360 all-active library cases passed; all 1,080 mixed/inactive/failed-mask
+library cases failed because inactive outputs lost their sentinel. This held
+with and without Graph replay. The receipt correctly remains NOT_QUALIFIED.
+The five owner admission/allocation/memory-query/capture/reset probes passed.
+
+The successful driver process and its actually loaded library maps were retained.
+Build identity SHA-256:
+`a94c666685bb47b7fd9323bdb6fb0614f8327415487e15da9d4d55a85a93151f`;
+driver SHA-256:
+`b9e93b9dedf930719bb1f48193741e80b502cfd68ecdcf67fd89a752ceea35bc`;
+raw device JSONL SHA-256:
+`7c754d95fe43ff7dcf0f7590e6412b08ee5005ef6941c40c608fea0492ad5a11`.
+These hashes bind this historical run; they do not identify later tool builds.
+The submission counts in that run were calculated from requested shapes,
+not observed vendor-call counters. New receipts label them as nominal/requested
+and explicitly report that vendor submission counts were not observed.
+
+The independent PySCF 2.14.0 / Libxc 7.0.0 cold RKS probe confirmed 96 AO,
+energy -152.75863503292015 hartree and physical residual RMS 4.73e-12.
+This single probe does not establish force acceptance, UKS acceptance, matched
+provider endpoints, complete-SCF work counts or profitability. H100's current
+shell-profile/force support and the missing paired-provider diagnostic seam
+leave complete endpoint qualification INCOMPLETE. The shared primitive failure
+does not alone prove an incorrect public KS endpoint; its runtime remediation
+belongs to a separately coordinated production owner.
+
 ## Revisit when
 
 Independent device and endpoint evidence is available, the shared adapter changes,
