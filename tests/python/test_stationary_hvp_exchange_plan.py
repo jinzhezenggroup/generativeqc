@@ -159,3 +159,20 @@ def test_custom_fraction_is_composed_and_zero_exchange_is_absent(
 def test_unsupported_second_order_primitives_remain_fail_closed(name: str) -> None:
     with pytest.raises(UnsupportedMethod, match="second-order rule|ingredients"):
         StationaryHVPPlan(resolve_method(name), StationaryMeanField(SCF_POINT_MODEL))
+
+
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+def test_exchange_only_graph_fails_closed_before_publishing_hvp_plan(spin: str) -> None:
+    method = resolve_method(
+        MethodSpec(
+            "exchange-only-hvp",
+            (("LDA_X", Fraction(1)), ("LDA_X", Fraction(-1))),
+            exact_exchange=Fraction(1, 2),
+        ),
+        spin=spin,
+    )
+    assert tuple(primitive.kind for primitive in method.primitives) == (
+        "exact_exchange",
+    )
+    with pytest.raises(UnsupportedMethod, match="semilocal XC primitive"):
+        StationaryHVPPlan(method, StationaryMeanField(SCF_POINT_MODEL))

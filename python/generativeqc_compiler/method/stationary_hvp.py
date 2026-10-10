@@ -294,6 +294,10 @@ class StationaryHVPPlan:
             raise UnsupportedMethod(
                 "stationary HVP first slice requires an all-electron Hamiltonian"
             )
+        # Integral lowering reuses the semilocal stationary-gradient envelope.
+        # An exchange-only graph cannot publish an executable source plan yet.
+        if self.semilocal is None:
+            raise UnsupportedMethod("stationary HVP requires a semilocal XC primitive")
 
         rules = tuple(
             _primitive_hvp_rule(primitive) for primitive in self.method.primitives
