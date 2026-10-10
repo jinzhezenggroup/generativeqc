@@ -69,6 +69,21 @@ int cublasSetMathMode(cublasHandle_t,int) { return 0; }
 int cublasSetWorkspace(cublasHandle_t,void*,std::size_t) { return 0; }
 int cublasGetVersion(cublasHandle_t,int* p) { *p=120900; return 0; }
 int cudaRuntimeGetVersion(int* p) { *p=12090; return 0; }
+// Keep the extracted provider on the same injected CUDA APIs, including
+// optional-storage bookkeeping and the scoped release device.
+namespace generativeqc::runtime {
+int resource_cuda_malloc(void** pointer,std::size_t bytes,bool* host_oom) {
+  *host_oom=false; return cudaMalloc(pointer,bytes);
+}
+int resource_cuda_free(void* pointer) { return cudaFree(pointer); }
+struct CudaDeviceScope {
+  int previous;
+  template<class Check> CudaDeviceScope(int selected,Check check) {
+    check(cudaGetDevice(&previous)); check(cudaSetDevice(selected));
+  }
+  ~CudaDeviceScope() { (void)cudaSetDevice(previous); }
+};
+}
 namespace generativeqc_tensor {
 using ::cuda_check;
 using ::blas_check;
