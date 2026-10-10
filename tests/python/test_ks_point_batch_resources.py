@@ -72,6 +72,7 @@ def native_probe(
 ) -> Any:
     folder = tmp_path_factory.mktemp("ks-point-budget")
     (folder / "cuda_runtime_api.h").write_text(CUDA_STUB)
+    (folder / "cublas_v2.h").write_text("#pragma once\nusing cublasHandle_t = void*;\n")
     (folder / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     ks = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
@@ -102,6 +103,7 @@ def native_probe(
 #define __host__
 #define __device__
 #include "scf/cuda/direct_md_j.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/direct_task_layout.hpp"
@@ -134,6 +136,7 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
     source += r"""
 namespace generativeqc::dft {
 namespace q = generativeqc::generated::quadrature;
+using scf::cuda_execution::MatrixLibraryOwner;
 using runtime::size_add;
 using runtime::size_mul;
 constexpr unsigned kCudaKsChunkCapacity=2, kSmallEigensolverLimit=16;

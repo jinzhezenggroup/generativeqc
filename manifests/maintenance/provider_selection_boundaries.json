@@ -161,9 +161,9 @@
     "src/scf/cuda_rhf.cpp": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "RHF prepared execution still branches on a named cuBLAS selector; migrate selection below scientific/runtime policy.",
+      "reason": "RHF prepared execution still branches on a named cuBLAS selector; migrate selection below scientific/runtime policy. Two references pass the already-resolved route into charged masked-output arena reservation and borrowing; they do not introduce another provider decision.",
       "selectors": {
-        "use_cublas": 12,
+        "use_cublas": 14,
         "use_cusolver": 4
       }
     }

@@ -546,6 +546,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;
   }
+  const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spin_batch_size, batch_size,
+                                                       spin_batch_size};
+  const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
+      cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
+  const bool use_cublas = plan.cublas_enabled && small_hf_profitability.use_cublas;
   const std::size_t total_atoms = host.atomic_numbers.size();
   const std::size_t total_shells = host.shell_atoms.size();
   const std::size_t total_shell_pairs = host.shell_pair_first.size();
@@ -897,7 +902,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             requested_transformed_direct, shell_class_profiling, inactive_eigensolver_profiling,
             bounded_fock_class_timing, requested_bounded_direct_streaming,
             requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
-            requested_incremental_diis_gram)) {
+            requested_incremental_diis_gram, use_cublas)) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1145,11 +1150,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   plan.resident_warm_positions.clear();
   plan.resident_warm_density.clear();
   plan.resident_previous_energy.clear();
-  const cuda_policy::SmallHfWorkload small_hf_workload{nbf, spin_batch_size, batch_size,
-                                                       spin_batch_size};
-  const cuda_policy::SmallHfProfitabilityPolicy small_hf_profitability =
-      cuda_policy::resolve_small_hf_profitability(direct_target, small_hf_workload);
-  const bool use_cublas = plan.cublas_enabled && small_hf_profitability.use_cublas;
   std::size_t reference_base_bytes = 0;
   const std::size_t reference_provider_allowance =
       (use_cublas ? 96ULL << 20 : 0) + (use_cusolver ? 96ULL << 20 : 0);
@@ -1479,6 +1479,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto nuclear_repulsion = arena_pointer<double>(resources.arena_, layout.nuclear_repulsion);
   auto orthogonalizer = arena_pointer<double>(resources.arena_, layout.orthogonalizer);
   auto temporary = arena_pointer<double>(resources.arena_, layout.temporary);
+  auto masked_matrix_output =
+      use_cublas ? arena_pointer<double>(resources.arena_, layout.masked_matrix_output) : nullptr;
   auto eigensystem = arena_pointer<double>(resources.arena_, layout.eigensystem);
   auto coefficients = arena_pointer<double>(resources.arena_, layout.coefficients);
   auto eigenvalues = arena_pointer<double>(resources.arena_, layout.eigenvalues);
@@ -2065,9 +2067,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   const auto multiply_matrices = [&](const double* left, bool transpose_left, const double* right,
                                      double* output, double scale = 1.0) {
-    const generativeqc_status product_status = launch_matrix_product(
-        resources.matrix_view(), static_cast<int>(batch_size), static_cast<int>(nbf), left,
-        transpose_left, right, active, output, use_cublas, scale);
+    const generativeqc_status product_status =
+        launch_matrix_product(resources.matrix_view(masked_matrix_output, spin_matrix_elements),
+                              static_cast<int>(batch_size), static_cast<int>(nbf), left,
+                              transpose_left, right, active, output, use_cublas, scale);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
@@ -2077,8 +2080,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                           bool transpose_left, const double* right,
                                           bool right_is_spin, double* output) {
     const generativeqc_status product_status = launch_spin_matrix_product(
-        resources.matrix_view(), static_cast<int>(batch_size), 2, static_cast<int>(nbf), left,
-        left_is_spin, transpose_left, right, right_is_spin, active, output, use_cublas);
+        resources.matrix_view(masked_matrix_output, spin_matrix_elements),
+        static_cast<int>(batch_size), 2, static_cast<int>(nbf), left, left_is_spin, transpose_left,
+        right, right_is_spin, active, output, use_cublas);
     if (use_cublas && product_status != GENERATIVEQC_STATUS_SUCCESS) {
       plan.retry_without_cublas = true;
     }
