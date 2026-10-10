@@ -593,6 +593,26 @@
       ]
     },
     {
+      "id": "dft.resident-final-validation",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:ks-device-final-validation-auto"
+      ],
+      "owner_issues": [1598, 2220],
+      "sources": [
+        "src/dft/cuda_ks.cpp",
+        "src/dft/cuda_ks_final_validation_policy.hpp"
+      ],
+      "rationale": "Unset selects resident final-state products only for full-precision exact-direct PBE0/RKS with at least 384 AOs. Four source-matched submission warm/moved complete E/F comparisons at 384/768 AOs pass robust timing gates and independent numerical gates. The adapter removes two redundant full-AO products per canonical nonempty spin, keeps bounded charged packets and existing dense exports, and retains handle/published-lease admission. Explicit zero is an opt-out; explicit one does not expand the qualified automatic scope. Original numerical-only publication and historical below-gate samples are retained unchanged.",
+      "revisit_condition": "Extend automatic admission only with independent complete endpoints for small owners, UKS, fitted providers or other functional compositions. Revisit the algorithm-informed size boundary if larger owners reveal a genuine resource/schedule cliff. Do not relabel the original frozen publication or infer measured gains on other architectures.",
+      "evidence": [
+        "pr:#2220",
+        "note:.agents/notes/implemented/performance/2026-10-11-default-pbe0-resident-final-validation.md",
+        "docs:docs/user/ks_options.md",
+        "benchmarks:benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz"
+      ]
+    },
+    {
       "id": "dft.xc-compact-batches",
       "classification": "already-default",
       "controls": [

@@ -3,6 +3,10 @@
 Status: implemented opt-in; default reference route unchanged, no broad performance promotion
 Date: 2026-10-10
 
+The original default-off decision is superseded by the
+[bounded PBE0 automatic-selection decision](2026-10-11-default-pbe0-resident-final-validation.md).
+The source-matched observations and publication scope below remain historical.
+
 ## Problem and evidence
 
 The source-level GPU4PySCF comparison inspects upstream commit

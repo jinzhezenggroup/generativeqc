@@ -13,6 +13,7 @@
 #include <tuple>
 #include <type_traits>
 
+#include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
@@ -57,13 +58,6 @@ namespace {
 using namespace scf::cuda_execution;
 constexpr unsigned kMaximumFinalCorrections = 4;
 constexpr unsigned kCudaKsChunkCapacity = 2;
-
-bool device_final_validation_requested() {
-  const auto* setting = std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION");
-  if (!setting || std::strcmp(setting, "0") == 0) return false;
-  if (std::strcmp(setting, "1") == 0) return true;
-  throw std::invalid_argument("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION requires 0 or 1");
-}
 
 constexpr bool curated_cuda_ks_functional(std::uint32_t functional) noexcept {
   const auto* metadata = semilocal_family_metadata_from_code(functional);
@@ -2262,7 +2256,16 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
-    const bool device_validation = device_final_validation_requested() &&
+    const bool direct_pbe0 = is_semilocal_family(functional, SemilocalFamily::Pbe) &&
+                             has_exchange && exchange_coefficient == 0.25 &&
+                             options.semilocal_exchange_scale == 0.75 &&
+                             options.semilocal_correlation_scale == 1.0 && !fitted_coulomb &&
+                             !fitted_exchange && !has_range_correction && !nonlocal_correlation;
+    const bool default_device_validation = device_final_validation_default_eligible(
+        n, spins, direct_pbe0, !precision_schedule.any_lower_precision());
+    const bool device_validation = device_final_validation_requested(
+                                       std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
+                                       default_device_validation) &&
                                    final_validation_partial && matrix_products.library_enabled() &&
                                    !final_stationary_weights_ready;
     // A previously published W/total-D lease stays valid for this token. A

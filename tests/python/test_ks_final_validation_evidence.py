@@ -25,8 +25,8 @@ def evidence() -> dict:
     return load_publication_record(BUNDLE)
 
 
-def test_publication_keeps_exact_source_and_no_default_promotion() -> None:
-    """Scoped numerical acceptance cannot turn into broad KS qualification."""
+def test_original_publication_keeps_its_exact_source_and_numerical_scope() -> None:
+    """A later policy edit must not relabel source-frozen historical evidence."""
     publication = json.loads((BUNDLE / "publication.json").read_text())
     files = {
         entry["path"]: (BUNDLE / entry["path"]).read_bytes()

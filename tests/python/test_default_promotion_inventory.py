@@ -144,6 +144,44 @@ def test_native_xc_batch_defaults_are_audited(
     )
 
 
+@pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/dft/cuda_ks_final_validation_policy.hpp", "aos >= 384", "aos >= 17"),
+        ("src/dft/cuda_ks_final_validation_policy.hpp", "spins == 1", "spins <= 2"),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "if (!setting) return default_eligible;",
+            "if (!setting) return true;",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "has_exchange && exchange_coefficient == 0.25",
+            "has_exchange && exchange_coefficient == 0.5",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "!final_stationary_weights_ready;",
+            "true;",
+        ),
+    ],
+)
+def test_native_ks_final_validation_default_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Default promotion must not silently expand the measured scope or leases."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "KS final-validation default" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_fixture_copies_registered_sources_outside_the_audited_scope(
     tmp_path: Path,
 ) -> None:

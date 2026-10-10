@@ -217,6 +217,42 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
+    """Keep default selection separate from explicit experimental admission."""
+    relative = Path("src/dft/cuda_ks.cpp")
+    source = re.sub(r"\s+", " ", _read(root / relative))
+    policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
+    if not re.search(
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        policy,
+    ) or any(
+        fragment not in policy
+        for fragment in (
+            "if (!setting) return default_eligible;",
+            'std::strcmp(setting, "0") == 0) return false;',
+            'std::strcmp(setting, "1") == 0) return true;',
+            "throw std::invalid_argument",
+        )
+    ):
+        raise ValueError("KS final-validation default scope or opt-out drifted")
+    if any(
+        fragment not in source
+        for fragment in (
+            "is_semilocal_family(functional, SemilocalFamily::Pbe)",
+            "has_exchange && exchange_coefficient == 0.25",
+            "options.semilocal_exchange_scale == 0.75",
+            "options.semilocal_correlation_scale == 1.0 && !fitted_coulomb",
+            "!fitted_exchange && !has_range_correction && !nonlocal_correlation",
+            "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
+            "final_validation_partial && matrix_products.library_enabled()",
+            "!final_stationary_weights_ready;",
+        )
+    ):
+        raise ValueError("KS final-validation default owner or resource guard drifted")
+    return {"dft-policy:ks-device-final-validation-auto": relative.as_posix()}
+
+
 def _discover_md_j_default(root: Path) -> dict[str, str]:
     """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
     relative = Path("src/scf/cuda/direct_jk.cpp")
@@ -454,6 +490,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
+        _discover_ks_final_validation_default(root),
         _discover_md_j_default(root),
         _discover_rys_task_default(root),
         _discover_direct_k_work_default(root),
