@@ -2098,6 +2098,12 @@ class KsPreparedBatch final : public PreparedBatch {
 
   std::size_t size() const noexcept override { return systems_.size(); }
 
+  std::optional<generativeqc_property_flags> supported_properties(
+      std::size_t index) const noexcept override {
+    if (index >= items_.size() || !items_[index].plan) return std::nullopt;
+    return items_[index].plan->supported_properties();
+  }
+
   void invalidate_result() override {
     for (auto& item : items_)
       if (item.plan) item.plan->invalidate_final_state();
