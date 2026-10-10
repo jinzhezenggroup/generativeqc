@@ -115,3 +115,16 @@ python tools/restore_retained_evidence.py benchmarks/results/issue308-device-dii
 
 Archive restoration is only needed for historical raw-run inspection. New runs
 keep full logs, profiles and retries outside Git.
+
+## Lossless summary storage
+
+`summary.json.gz` retains the complete historical `summary.json` byte for byte.
+`summary-retention.json` pins both hashes, sizes, and the original Git blob.
+This storage-only compaction preserves every sample and numerical conclusion;
+it does not increase the repository evidence allowance or publish an archive.
+Restore into an ignored local directory for historical inspection:
+
+```bash
+mkdir -p .artifacts/issue308-device-diis
+gzip -dc benchmarks/results/issue308-device-diis/summary.json.gz > .artifacts/issue308-device-diis/summary.json
+```
