@@ -129,7 +129,7 @@ def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist()
     seen: list[int] = []
 
     def qualified(
-        owner: object, index: int, output: object
+        _owner: object, index: int, output: object
     ) -> int:
         seen.append(index)
         value = _native.PROPERTY_ENERGY | _native.PROPERTY_FORCES
@@ -163,7 +163,7 @@ def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist()
     holder._library.generativeqc_ks_batch_supported_properties_v1 = second_unqualified
     assert not PreparedBatch._native_dft_force_eligible(holder)
 
-    def unavailable(owner: object, index: int, output: object) -> int:
+    def unavailable(_owner: object, _index: int, _output: object) -> int:
         return _native.STATUS_NOT_IMPLEMENTED
 
     holder._library.generativeqc_ks_batch_supported_properties_v1 = unavailable
@@ -193,7 +193,7 @@ def test_cpu_df_pbe_python_api_consumes_qualified_native_batch_forces(
         ):
             pytest.skip("current native prepared batch force query is not installed")
 
-        def forbidden_python_force(*args: typing.Any, **kwargs: typing.Any) -> None:
+        def forbidden_python_force(*_args: typing.Any, **_kwargs: typing.Any) -> None:
             pytest.fail("CPU DF-PBE fell back to the Python stationary force driver")
 
         monkeypatch.setattr(native_batch, "_public_dft_cpu_force", forbidden_python_force)
