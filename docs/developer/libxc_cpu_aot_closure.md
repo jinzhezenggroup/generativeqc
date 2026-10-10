@@ -8,7 +8,8 @@ an object nor invokes a compiler during import or ordinary runtime execution.
 The supported driver is the ELF executable resolved by `/usr/bin/gcc` on Linux,
 with a native x86_64 or aarch64 Linux target matching the host. The supported
 ordered flags are `-std=c99`, `-O0` through `-O3`, `-fPIC`, and joined `-I` options
-with existing absolute directories. Collection adds `-Werror=date-time` to the
+with existing absolute directories. Collection adds `-Werror=date-time` and a
+deterministic `-frandom-seed` derived from the unsalted closure payload to the
 returned recipe. All child processes use the exact `CPU_ENVIRONMENT` mapping;
 compiler/include/loader overrides from the caller's environment are not inherited.
 Other drivers, wrappers, plugins, response files, languages, targets/sysroots and
@@ -22,7 +23,8 @@ parses its fixed-target make rule, hashes each resolved file, repeats dependency
 discovery, and rechecks source, compiler, header and manifest bytes. Path parsing
 preserves ordinary literal backslashes and decodes GNU make's odd backslash runs
 before whitespace; ambiguous trailing-backslash names fail closed. It binds the
-exact source/ABI emission identity, source bytes and physical path, ordered flags,
+exact source/ABI emission identity, source bytes and physical path, working
+directory, ordered flags,
 compiler path/bytes/version, native target, resolved downstream programs,
 preprocessor output (including non-including `__has_include` branches), emitted
 specs and controlled environment into the existing `CacheClosure` identity.
@@ -57,15 +59,19 @@ Earlier failures return no closure. Neither state has a reusable key.
 
 1. Under the immutable snapshot, collect a reusable closure before compilation.
 2. Compile the exact file using the returned recipe flags and identified driver,
-   under `CPU_ENVIRONMENT`, through a verified compiler-cache launcher and the
+   in the recipe's `working_directory` under `CPU_ENVIRONMENT`, through a
+   verified compiler-cache launcher and the
    finite compiler-process owner.
 3. Collect again under the same snapshot. Require both reusable keys to match
-   before calling `bulk_aot_store.store_artifact` with the new object.
+before calling `bulk_aot_store.store_artifact` with the new object.
 4. Before a later lookup, collect a fresh closure from the current snapshot and
    pass it to `bulk_aot_store.lookup_artifact`.
 
 The physical source path deliberately affects identity because `__FILE__` and
-quoted include resolution can affect object semantics. Registration aliases
+quoted include resolution can affect object semantics. The working directory
+also affects assembler directives such as relative `.incbin` inputs, even when
+the complete manifest covers every possible input file. It must remain unchanged
+through collection and compilation. Registration aliases
 emitting the same source/ABI at that same path retain distinct import provenance
 and share executable identity. Changed headers, toolchain/configuration bytes,
 source or ordered flags produce a different key or an explicit rejection.
@@ -75,6 +81,16 @@ probe recipe did not observe the dependencies used to generate it. The collector
 does not alter that probe's diagnostic contract or the existing cache/store
 schema. Production packaging, catalog-wide economics and CUDA numerical/resource
 qualification remain separate work under #1123.
+
+The compiler cache is a separate identity layer: a store miss does not prove it
+returned fresh object bytes. The recipe's deterministic seed transports the
+observed dependency identity into the GCC command, including manifest-covered
+opaque assembler inputs, configuration and downstream toolchain files that
+`-M`/`-E` or a compiler cache may not otherwise enumerate. Use the complete
+returned flags, and do not enable options that ignore the seed or weaken cache
+correctness. The producer must include all opaque inputs in its complete
+manifest and verify the selected launcher honors this command identity;
+unsupported cache behavior cannot justify publishing a reusable object.
 
 ## Verification
 

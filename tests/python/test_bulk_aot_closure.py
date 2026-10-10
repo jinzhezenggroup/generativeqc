@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from generativeqc_compiler.common import compiler_process
+from generativeqc_compiler.common import compiler_cache, compiler_process
 from generativeqc_compiler.common.compiler_cache import run_cached_compiler
 from generativeqc_compiler.common.compiler_process import CompileResult, run_compiler
 from generativeqc_compiler.common.provenance import file_hash
@@ -335,6 +335,24 @@ def real_gcc(tmp_path: Path) -> tuple[str, collector.CpuToolchainManifest]:
     )
 
 
+def compile_controlled(
+    command: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> CompileResult:
+    # Verify the incoming absolute launcher before restricting compiler PATH.
+    # Cache execution provenance is not part of scientific/build identity.
+    launcher = compiler_cache.resolve_compiler_cache(60)
+    with monkeypatch.context() as clean:
+        clean.setattr(
+            compiler_cache, "resolve_compiler_cache", lambda timeout: launcher
+        )
+        for key in tuple(os.environ):
+            clean.delenv(key)
+        for key, value in collector.CPU_ENVIRONMENT.items():
+            clean.setenv(key, value)
+        return run_cached_compiler(command, 60, label="real CPU closure integration")
+
+
 def test_real_gcc_identity_headers_and_store(
     tmp_path: Path,
     real_gcc: tuple,
@@ -388,18 +406,10 @@ def test_real_gcc_identity_headers_and_store(
     assert dep.returncode == 0 and "\\\n" in dep.stdout
     assert set(collector.parse_gcc_dependencies(dep.stdout)) == names | {str(source)}
     obj = root / "point.o"
-    # The shared verified cache/process owner handles the actual compile, with
-    # exactly the collector's environment (no ambient compiler overrides).
-    with monkeypatch.context() as clean:
-        for key in tuple(os.environ):
-            clean.delenv(key)
-        for key, value in collector.CPU_ENVIRONMENT.items():
-            clean.setenv(key, value)
-        compiled = run_cached_compiler(
-            [compiler, *first.recipe["flags"], "-c", str(source), "-o", str(obj)],
-            60,
-            label="real CPU closure integration",
-        )
+    compiled = compile_controlled(
+        [compiler, *first.recipe["flags"], "-c", str(source), "-o", str(obj)],
+        monkeypatch,
+    )
     assert compiled.returncode == 0 and not compiled.timed_out, compiled.stderr
     assert obj.is_file()
     after = collect()
@@ -565,3 +575,111 @@ def test_time_macros_are_unsupported(fake_gcc: tuple) -> None:
     )
     assert result.reasons == ("unsupported-time-macro",)
     assert result.closure is None
+
+
+def test_working_directory_mutation_fails_closed(
+    fake_gcc: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item, source, manifest = fake_gcc
+    original = collector.run_compiler
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        result = original(command, timeout, **kwargs)
+        if "-E" in command:
+            monkeypatch.chdir(source.parent)
+        return result
+
+    monkeypatch.setattr(collector, "run_compiler", run)
+    result = collector.collect_cpu_closure(item, source, toolchain=manifest)
+    assert result.reasons == ("working-directory-changed",)
+    assert result.closure is not None and result.closure.cache_key is None
+
+
+def test_real_working_directory_changes_object_and_key(
+    tmp_path: Path,
+    real_gcc: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_gcc
+    text = '__asm__(".pushsection .rodata\\n.incbin \\"payload.bin\\"\\n.popsection");\nint point(void) { return 0; }\n'
+    source = tmp_path / "point.c"
+    source.write_text(text, encoding="utf-8")
+    payloads = []
+    for name, value in (("left", b"AAAA"), ("right", b"BBBB")):
+        folder = tmp_path / name
+        folder.mkdir()
+        payload = folder / "payload.bin"
+        payload.write_bytes(value)
+        payloads.append(payload)
+    # The same complete manifest covers both possible immutable assembler inputs.
+    # Only cwd chooses the one consumed; file-set hashing alone cannot bind it.
+    manifest = replace(
+        manifest, files=(*manifest.files, *(dependency(p) for p in payloads))
+    )
+    keys = []
+    objects = []
+    store = tmp_path / "store"
+    for payload in payloads:
+        monkeypatch.chdir(payload.parent)
+        before = collector.collect_cpu_closure(
+            variant(text), source, compiler=compiler, toolchain=manifest
+        )
+        assert (
+            not before.reasons
+            and before.closure is not None
+            and before.recipe is not None
+        )
+        assert before.closure.reusable
+        assert before.recipe["working_directory"] == str(payload.parent)
+        obj = payload.parent / "point.o"
+        built = compile_controlled(
+            [compiler, *before.recipe["flags"], "-c", str(source), "-o", str(obj)],
+            monkeypatch,
+        )
+        assert built.returncode == 0 and not built.timed_out, built.stderr
+        after = collector.collect_cpu_closure(
+            variant(text), source, compiler=compiler, toolchain=manifest
+        )
+        assert not after.reasons and after.closure is not None
+        assert before.closure.cache_key == after.closure.cache_key
+        keys.append(after.closure.cache_key)
+        objects.append(file_hash(obj))
+        assert bulk_aot_store.lookup_artifact(store, after.closure).status == "miss"
+        stored = bulk_aot_store.store_artifact(store, after.closure, obj)
+        assert stored.status == "hit" and stored.object_sha256 == objects[-1]
+    assert keys[0] != keys[1]
+    assert objects[0] != objects[1]
+    # Change an opaque assembler input in the SAME working directory. GCC -M/-E
+    # cannot see its contents; the returned closure salt must invalidate the
+    # compiler cache too, and must deliver new object bytes, not merely a miss
+    # in bulk_aot_store followed by a stale compiler-cache hit.
+    payload = payloads[-1]
+    payload.write_bytes(b"CCCC")
+    refreshed = replace(
+        manifest, files=tuple(dependency(Path(d.identity)) for d in manifest.files)
+    )
+    before = collector.collect_cpu_closure(
+        variant(text), source, compiler=compiler, toolchain=refreshed
+    )
+    assert (
+        not before.reasons and before.closure is not None and before.recipe is not None
+    )
+    assert before.closure.cache_key != keys[-1]
+    changed_obj = payload.parent / "changed.o"
+    built = compile_controlled(
+        [compiler, *before.recipe["flags"], "-c", str(source), "-o", str(changed_obj)],
+        monkeypatch,
+    )
+    assert built.returncode == 0 and not built.timed_out, built.stderr
+    after = collector.collect_cpu_closure(
+        variant(text), source, compiler=compiler, toolchain=refreshed
+    )
+    assert not after.reasons and after.closure is not None
+    assert before.closure.cache_key == after.closure.cache_key
+    assert file_hash(changed_obj) != objects[-1]
+    assert b"CCCC" in changed_obj.read_bytes()
+    assert b"BBBB" in (payload.parent / "point.o").read_bytes()
+    assert bulk_aot_store.lookup_artifact(store, after.closure).status == "miss"
+    stored = bulk_aot_store.store_artifact(store, after.closure, changed_obj)
+    assert stored.object_sha256 == file_hash(changed_obj)

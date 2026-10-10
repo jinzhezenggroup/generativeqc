@@ -170,7 +170,8 @@ def collect_cpu_closure(
     include resolution make it part of object identity. Time macros are errors.
 
     The caller must hold the asserted immutable snapshot through compilation and
-    collection, use precisely the returned flags/compiler/environment, and check
+    collection, use the returned flags/compiler/environment/working directory,
+    and check
     matching reusable keys before/after compiling an object. A previously built
     ``compile_probe`` object cannot be retroactively qualified by this function.
     Nothing here compiles, stores, loads, or activates an object at import/runtime.
@@ -196,6 +197,7 @@ def collect_cpu_closure(
     if source.suffix != ".c":
         return CpuClosureResult(None, None, ("unsupported-source-language",))
     deadline = time.monotonic() + timeout
+    working_directory = str(Path.cwd())
     recipe = None
     headers: tuple[CacheDependency, ...] = ()
     dependencies: tuple[CacheDependency, ...] = ()
@@ -213,7 +215,12 @@ def collect_cpu_closure(
             )
         return CpuClosureResult(closure, recipe, (reason,), headers)
 
+    def check_working_directory() -> None:
+        if str(Path.cwd()) != working_directory:
+            raise ValueError("working-directory-changed")
+
     def query(arguments: list[str]) -> str:
+        check_working_directory()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError
@@ -223,6 +230,7 @@ def collect_cpu_closure(
             label="CPU AOT closure",
             environment=dict(CPU_ENVIRONMENT),
         )
+        check_working_directory()
         if result.timed_out:
             raise TimeoutError
         if result.returncode:
@@ -281,6 +289,7 @@ def collect_cpu_closure(
             "translation_unit_sha256": variant.source_sha256,
             "compiler": {"executable_sha256": executable_hash, "version": version},
             "flags": list(effective_flags),
+            "working_directory": working_directory,
         }
         snapshot(manifest.files)
         required = {str(path)}
@@ -349,6 +358,7 @@ def collect_cpu_closure(
                         "schema": SCHEMA,
                         "compiler": str(path),
                         "source": str(source),
+                        "working_directory": working_directory,
                         "environment": CPU_ENVIRONMENT,
                         "target": target,
                         "specs": specs,
@@ -388,10 +398,24 @@ def collect_cpu_closure(
         ):
             return failure("source-or-compiler-changed")
         reasons = []
+        check_working_directory()
         if not manifest.complete:
             reasons.append("toolchain-manifest-incomplete")
         if not required <= observed:
             reasons.append("downstream-toolchain-not-covered")
+        closure = closure_from_probe_recipe(
+            recipe,
+            backend="cpu",
+            target=target,
+            dependencies=dependencies,
+            complete=not reasons,
+        )
+        # A compiler cache may not enumerate cc1/config/opaque assembler inputs.
+        # Transport the observed closure identity into a real GCC compile option
+        # so those changes invalidate its command identity as well as our store.
+        # Hash the unsalted payload once; the final key includes the returned flag
+        # without any self-reference. Partial observations remain non-reusable.
+        recipe["flags"].append("-frandom-seed=" + canonical_hash(closure.to_payload()))
         closure = closure_from_probe_recipe(
             recipe,
             backend="cpu",

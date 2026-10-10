@@ -16,8 +16,9 @@ configuration and negative include dependencies.
 Add a separate, explicit Linux system-GCC C collector. Use real `-M` output,
 including system headers; parse escaped paths and continuations conservatively;
 hash observed inputs and repeat discovery/checks under one deadline. Preserve
-source physical path, ordered flags, native target, specs, actual preprocessor
-output and a scrubbed compiler environment as executable-build inputs. Binding
+source physical path, working directory, ordered flags, native target, specs,
+actual preprocessor output and a scrubbed compiler environment as executable-build
+inputs. Binding
 preprocessor output also covers non-including `__has_include` branches absent from
 the depfile. Require an explicit caller-owned complete
 toolchain snapshot covering the unenumerated inputs; default to incomplete.
@@ -52,6 +53,16 @@ Object publication requires an immutable snapshot and matching fresh collection
 keys before/after a cached compilation using the identified recipe/environment.
 Two observations cannot prove absence of an ABA mutation; snapshot ownership is
 the explicit producer trust boundary, not an inferred collector guarantee.
+The inherited working directory must be part of identity and must stay fixed:
+an assembler `.incbin` can select different manifest-covered relative files
+without changing source, headers or preprocessor output. A complete input-file
+set alone does not bind that selection context.
+Compiler-cache identity is also separate from the persistent store key. Return
+a deterministic GCC `-frandom-seed` from the unsalted observed closure payload so
+manifest/configuration/opaque assembler changes enter the actual compile command
+identity. The final closure includes that flag without self-reference. A launcher
+must honor it without sloppiness; a cache miss at one layer never proves a fresh
+object at another. The producer's complete manifest still owns all opaque inputs.
 
 ## Evidence
 
@@ -59,8 +70,11 @@ the explicit producer trust boundary, not an inferred collector guarantee.
 missing-file, mutation, deadline and completeness controls. Linux integration
 requires real GCC, emitted nested/system header paths, independently checked file
 hashes, a verified cached object compile and existing-store reuse/invalidation.
-It also injects a mutation after a real second dependency scan. Windows-local
-execution skips real Linux compilation; source-matched repository CI is required
+It also injects a mutation after a real second dependency scan.
+The assembler-input regression compares object digests and embedded payload bytes
+after both a cwd change and an opaque input change within the same cwd, using the
+verified finite compiler-cache path rather than merely checking closure/store keys.
+Windows-local execution skips real Linux compilation; source-matched repository CI is required
 before claiming that gate passes. The existing cache/store tests and compiler
 structure checker protect the handoff without changing those implementations.
 
