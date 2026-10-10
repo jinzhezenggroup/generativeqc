@@ -7,7 +7,9 @@ from pathlib import Path
 
 
 def test_device_diis_summary_restores_its_hash_bound_original() -> None:
-    root = Path(__file__).resolve().parents[2] / "benchmarks/results/issue308-device-diis"
+    root = (
+        Path(__file__).resolve().parents[2] / "benchmarks/results/issue308-device-diis"
+    )
     manifest = json.loads((root / "summary-retention.json").read_text())
     compressed = (root / manifest["archive"]).read_bytes()
     original = gzip.decompress(compressed)

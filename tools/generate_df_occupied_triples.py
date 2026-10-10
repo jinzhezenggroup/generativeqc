@@ -1072,6 +1072,21 @@ def header() -> str:
         "inline constexpr unsigned permutations[6][3]={"
         + ",".join("{" + ",".join(map(str, p)) + "}" for p in PERMUTATIONS)
         + "};",
+        "/** Alias only equal physical occupied tuples; retain every projected energy contribution. */",
+        "struct MomentSourceMap { unsigned index[6]{0,1,2,3,4,5}; };",
+        "inline MomentSourceMap occupied_moment_sources(std::size_t occupied_first,",
+        "  std::size_t occupied_second,std::size_t occupied_third) {",
+        "  const std::size_t occupied[3]={occupied_first,occupied_second,occupied_third};",
+        "  MomentSourceMap sources;",
+        "  for (unsigned source=0;source<6;++source)",
+        "    for (unsigned candidate=0;candidate<source;++candidate) {",
+        "      bool equal=true;",
+        "      for (unsigned axis=0;axis<3;++axis)",
+        "        equal=equal && occupied[permutations[source][axis]]==occupied[permutations[candidate][axis]];",
+        "      if (equal) { sources.index[source]=candidate; break; }",
+        "    }",
+        "  return sources;",
+        "}",
         "struct Inputs { const double *bov{},*bvv{},*ovoo{},*ovov{},*fov{},*t1{},*t2{},*eps_o{},*eps_v{}; };",
         "template<class Gemm> void build_panel(std::size_t o,std::size_t v,std::size_t q,",
         "  std::size_t i,const Inputs& in,double* output,Gemm&& gemm) {",
@@ -1155,6 +1170,10 @@ namespace generativeqc::cc::triples::generated_df {
 void energy_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
                  double degeneracy,double threshold,const Inputs& in,const double* moments,
                  unsigned blocks,double* partials,int* error,cudaStream_t stream);
+void energy_distinct_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
+                         double degeneracy,double threshold,const Inputs& in,const double* moments,
+                         const MomentSourceMap& sources,unsigned blocks,double* partials,
+                         int* error,cudaStream_t stream);
 void response_w_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
                      double degeneracy,double threshold,const Inputs& in,const double* moments,
                      unsigned blocks,double* output,int* error,cudaStream_t stream);
@@ -1177,16 +1196,21 @@ void resolvent_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std:
 """
 
 
-def cuda_source() -> str:
+def _energy_tile_kernel(name: str, *, remapped: bool = False) -> str:
+    """Emit the same six projected terms, optionally aliasing equal W seeds.
+
+    The map changes only occupied-source addresses. Virtual permutations,
+    denominator multiplicities and finite checks remain in the original algebra.
+    Response kernels retain independent cotangents and never use this map.
+    """
     scalar, v_scalar = energy_scalar_program(), v_scalar_program()
     bindings = {"denominator": "denominator"}
     lines = [
-        '#include "generated_df_occupied_triples_cuda.cuh"',
-        '#include "tensor/cuda_runtime.cuh"',
-        "namespace generativeqc::cc::triples::generated_df {",
-        "__global__ void tile_kernel(std::size_t o,std::size_t v,std::size_t i,",
+        f"__global__ void {name}(std::size_t o,std::size_t v,std::size_t i,",
         "  std::size_t j,std::size_t k,double degeneracy,double threshold,Inputs in,",
-        "  const double* moments,double* partials,int* error) {",
+        "  const double* moments,MomentSourceMap sources,double* partials,int* error) {"
+        if remapped
+        else "  const double* moments,double* partials,int* error) {",
         "  const auto v3=v*v*v; const std::size_t occupied[3]={i,j,k};",
         "  double accumulated=0.0;",
         "  for (std::size_t flat=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;",
@@ -1219,7 +1243,8 @@ def cuda_source() -> str:
         bindings[v_name] = v_name
         for vir in _LABELS:
             x, y, z = ("abc"[axis] for axis in VP[vir])
-            bindings[f"w_{occ}_{vir}"] = f"moments[{index}*v3+({x}*v+{y})*v+{z}]"
+            source = f"sources.index[{index}]" if remapped else str(index)
+            bindings[f"w_{occ}_{vir}"] = f"moments[{source}*v3+({x}*v+{y})*v+{z}]"
     lines += [
         "    double value=0.0;",
         "    " + _call(scalar, "energy_element", bindings, "value"),
@@ -1231,10 +1256,27 @@ def cuda_source() -> str:
         "    __syncthreads(); }",
         "  if (threadIdx.x==0) partials[blockIdx.x]=generativeqc_tensor::finite(sums[0],error,2);",
         "}",
+    ]
+    return "\n".join(lines)
+
+
+def cuda_source() -> str:
+    lines = [
+        '#include "generated_df_occupied_triples_cuda.cuh"',
+        '#include "tensor/cuda_runtime.cuh"',
+        "namespace generativeqc::cc::triples::generated_df {",
+        _energy_tile_kernel("tile_kernel"),
+        _energy_tile_kernel("distinct_tile_kernel", remapped=True),
         "void energy_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,",
         "  double degeneracy,double threshold,const Inputs& in,const double* moments,",
         "  unsigned blocks,double* partials,int* error,cudaStream_t stream) {",
         "  tile_kernel<<<blocks,256,0,stream>>>(o,v,i,j,k,degeneracy,threshold,in,moments,partials,error);",
+        "  generativeqc_tensor::cuda_check(cudaGetLastError());",
+        "}",
+        "void energy_distinct_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,",
+        "  double degeneracy,double threshold,const Inputs& in,const double* moments,",
+        "  const MomentSourceMap& sources,unsigned blocks,double* partials,int* error,cudaStream_t stream) {",
+        "  distinct_tile_kernel<<<blocks,256,0,stream>>>(o,v,i,j,k,degeneracy,threshold,in,moments,sources,partials,error);",
         "  generativeqc_tensor::cuda_check(cudaGetLastError());",
         "}",
         response_cuda_source(),

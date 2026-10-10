@@ -34,6 +34,7 @@ AUDITED_PREFIXES = (
     "public-model:",
     "initial-guess:",
     "cc-option:",
+    "cc-execution:",
     "response-option:",
 )
 
@@ -362,6 +363,33 @@ def _discover_cc_options(root: Path) -> dict[str, str]:
     return {f"cc-option:{name}": relative.as_posix() for name in names}
 
 
+def _discover_cc_execution(root: Path) -> dict[str, str]:
+    """Audit the energy-only source alias default without inventing a user flag."""
+    relative = Path("src/cc/df_triples_cuda.cu")
+    source = _read(root / relative)
+    energy_start = source.find("DFCudaResult evaluate_df_cuda(")
+    response_start = source.find("static DFCudaResponseResult pullback_df_cuda_impl(")
+    if energy_start < 0 or response_start <= energy_start:
+        raise ValueError("missing audited DF triples energy/response boundary")
+    body = re.sub(
+        r"//[^\n]*|/\*.*?\*/", " ", source[energy_start:response_start], flags=re.DOTALL
+    )
+    body = re.sub(r"\s+", "", body)
+    required = (
+        "constbooldistinct_moments=result.w_contraction_storage_bits==64&&result.w_contraction_compute_bits==64&&result.w_contraction_accumulation_bits==64;",
+        "constboolalias_tile=distinct_moments&&(i==j||j==k);",
+        "constautosources=alias_tile?generated_df::occupied_moment_sources(i,j,k):generated_df::MomentSourceMap{};",
+        "if(sources.index[permutation]!=permutation)continue;",
+        "if(alias_tile)generated_df::energy_distinct_tile(o,v,i,j,k,degeneracy,threshold,in,moments,sources,p.blocks,partials,context.error,context.stream);elsegenerated_df::energy_tile(o,v,i,j,k,degeneracy,threshold,in,moments,p.blocks,partials,context.error,context.stream);",
+    )
+    if any(body.count(fragment) != 1 for fragment in required) or any(
+        fragment in source[response_start:]
+        for fragment in ("MomentSourceMap", "energy_distinct_tile")
+    ):
+        raise ValueError("DF triples distinct-moment FP64 energy admission drifted")
+    return {"cc-execution:df-triples-distinct-moments": relative.as_posix()}
+
+
 def _discover_response_options(root: Path) -> dict[str, str]:
     relative = Path("src/hf/rhf_frame_response.hpp")
     source = _read(root / relative)
@@ -459,6 +487,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_direct_k_work_default(root),
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
+        _discover_cc_execution(root),
         _discover_response_options(root),
         _discover_df_rhf_preconvergence(root),
         _discover_rhf_phase_values_default(root),

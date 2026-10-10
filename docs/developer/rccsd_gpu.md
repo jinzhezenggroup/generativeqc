@@ -225,6 +225,16 @@ No precision, equation, history storage, resource admission or CPU-oracle work
 is introduced; `diis_size=0` retains the same Jacobi-only path. The legacy
 trial-residual path remains available through the internal option.
 
+### Distinct occupied moments for DF triples energies
+
+The native DF `(T)` energy owner automatically reuses equal physical occupied W
+seeds only for actual FP64 storage/compute/accumulation. Force/response and
+non-FP64 execution retain full independent materialization. The scientific,
+work-count, finite-check and bounded-fallback contracts are owned by
+[Internal native DF triples energy](df_ccsdt.md#internal-native-df-triples-energy).
+The default-promotion inventory audits this execution policy separately from
+SolverOptions; it adds no public option.
+
 ### Bounded batches for independent physical replay
 
 `SolverOptions::df_replay_auxiliary_batch` defaults to false for internal
