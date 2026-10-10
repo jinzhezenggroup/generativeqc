@@ -56,13 +56,22 @@ All **124** retained native complete endpoints, including diagnostic/cold/moved 
 
 ## Provenance and reproduction
 
-Native source base: `013675d52d3b2857fc425c96c9a3bf7a3883ce21` plus [measured-source.patch](measured-source.patch). Measured native library SHA-256: `edad6753260ad527708dac3a43d0c371bcf025ec3256b98ffbba803cea5b4c89`. The patch pins the dirty measured checkout; subsequent evidence/documentation does not change those native bytes. [receipt.json](receipt.json) retains every clean/diagnostic sample, aggregate work counts, all gates and raw-artifact hashes. [independent-reference.json](independent-reference.json) preserves independent energy/force arrays and complete geometry/settings identity. Raw traces remain ignored local artifacts, without external publication.
+Native source base: `013675d52d3b2857fc425c96c9a3bf7a3883ce21` plus [measured-source.patch](measured-source.patch). Measured native library SHA-256: `edad6753260ad527708dac3a43d0c371bcf025ec3256b98ffbba803cea5b4c89`. The patch pins the dirty measured checkout; subsequent evidence/documentation does not change those native bytes. [receipt.json.gz](receipt.json.gz) retains every clean/diagnostic sample, aggregate work counts, all gates and raw-artifact hashes. [independent-reference.json](independent-reference.json) preserves independent energy/force arrays and complete geometry/settings identity. Raw traces remain ignored local artifacts, without external publication.
 
 Slurm jobs: 11796 independent references, 11797 regression matrix, 11798 baseline reproduction / memcheck / smoke, 11799 large endpoints. CUDA 12.9.1; package versions and the loaded library's actual kernel profile are in the JSON records.
 
 The receipt and independent-reference records contain all workload observations
 inline. They reconstruct identically to the earlier split companions, which are
 recoverable from commit `b2e57efe9af86bcaf08936c5a2ca287942658a27`.
+
+The receipt uses deterministic gzip storage (level 9, zero timestamp): 16,870
+stored bytes preserve all 324,689 original JSON bytes. The decoded SHA-256 is
+`709b72edc673227844ed7ad0a38fe8c572e1d0ebbe39dadf36005fbf95e5d88a`.
+Read it with `gzip -dc receipt.json.gz` or the shared
+`tools.generativeqc_validation.record.load_record` reader. Compression changes
+only storage; measured source, observations, precision and claim limits remain
+unchanged. The independent references and measured-source patch stay in this
+bundle.
 
 Build the measured source or this PR with a Python environment containing the compiler dependencies, PySCF, GPU4PySCF and CuPy:
 

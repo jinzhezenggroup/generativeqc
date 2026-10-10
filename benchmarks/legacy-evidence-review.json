@@ -365,14 +365,6 @@
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
     },
     {
-      "path": "benchmarks/results/df-final-occupied-endpoint-20260926/receipt.json",
-      "family": "df-final-occupied-endpoint-20260926",
-      "bytes": 324689,
-      "sha256": "709b72edc673227844ed7ad0a38fe8c572e1d0ebbe39dadf36005fbf95e5d88a",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Independent final-K/root ablations and all diagnostic counters, reconstructed losslessly from split companions."
-    },
-    {
       "path": "benchmarks/results/df-one-step-warm-20260926/references.json",
       "family": "df-one-step-warm-20260926",
       "bytes": 229005,
