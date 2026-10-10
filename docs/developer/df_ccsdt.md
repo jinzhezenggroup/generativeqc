@@ -210,6 +210,26 @@ Packing deduplicates one common contraction, saving `nocc*nvir*nvir` scalar
 summands per replay Q slice; diagnostics count this exact change, all replay
 matrix calls and explicit layout-copy traffic.
 
+The optional `SolverOptions::df_occupied_pairs` primal schedule folds only the
+virtual ladder's free occupied spectators. Its compiler proves simultaneous
+pair reflection and exact polynomial equivalence before factoring one dressing:
+with `D = t1.T @ B_ov`, the original
+`B_vv tau B_vv.T - D tau B_vv.T - B_vv tau D.T` becomes
+`(B_vv-D) tau B_vv.T - B_vv tau D.T`. Bounded binary reassociation precedes
+packing; all other cuts, independent expanded replay and `(T)` remain unchanged.
+Unsupported compiler inventories retain the original graph.
+
+Native admission audits each amplitude state and retains the original tau.
+In addition to the existing projection-error margin, the factored schedule
+requires input magnitudes at most `2^128` and summed dimensions at most `2^16`.
+Geometry bounds reuse the existing conservative row-L1 audit; tau and T1 maxima
+reuse values read by projection. This protects the new dressing's intermediate
+range, not its rounding or convergence. Refusal selects the original unpaired
+action without clearing physical sticky errors. Projection metadata allocation
+and readback are charged through its actual size; expanded physical replay and
+independent numerical qualification remain required. This primal schedule does
+not by itself qualify force, Lambda or response behavior.
+
 One generated kernel accumulates all six primal cuts per tile. For each output
 element it starts from the retained sum and adds each Q contribution in the
 original ascending order, checking every addition. It does not form a tile
