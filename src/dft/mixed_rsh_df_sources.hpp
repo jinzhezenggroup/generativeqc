@@ -6,6 +6,7 @@
 #include <limits>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "generativeqc/generativeqc.h"
