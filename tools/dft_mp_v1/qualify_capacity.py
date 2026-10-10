@@ -313,14 +313,17 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 # Both primitive modes share the admitted phase storage. Bind constructor-only
 # mode selection, legacy-artifact fallback, and boolean resource reservation.
 # The zero-seed override configures an existing owner without adding capacity.
+# Producer-bound restricted points add optional ABI binding and execution counters;
+# they borrow admitted phased scratch without changing any allocation equation.
+# Keep whole-owner fingerprints so these controls and metric deltas fail closed.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "9257425e1f04c46f88ace0f9dc13a0bc9368e43840230856133f42b36f7eee86"
+    "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
 )
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "4f7265bac664ae2c08440866e1aa577f585968ef919a848bab483f9b190fb529"
+    "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
-    "fb08b91ffdb5c3075aad6a2b02dca2092fe6d24f3cc992e5564dae19d2043e6c"
+    "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -410,7 +413,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "452baac0eade9180c23d37a2fef846f07979e172c52ab4dd223fcc6ea74d4a5c"
+    "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -463,7 +466,7 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "e02f5be7f21d9505421efdde2e0b24a9b0a24b2c5b10d7b81c1c2cab0d682bc8"
+    "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
@@ -513,8 +516,9 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
 )
+# The restricted-point request joins schedule identity without changing AO reserves.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"
+    "8c0ffff5e9d0a6052556611b0df6066e4090163a12f137dcfe9c30f963e7e4a2"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "

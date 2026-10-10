@@ -447,16 +447,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
         ),
         "metric_delta_sha256": (
-            "fb08b91ffdb5c3075aad6a2b02dca2092fe6d24f3cc992e5564dae19d2043e6c"
+            "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
         ),
         "metrics_sha256": (
-            "4f7265bac664ae2c08440866e1aa577f585968ef919a848bab483f9b190fb529"
+            "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
         ),
         "ordinary_tile_resources_sha256": (
             "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
         ),
         "initializer_sha256": (
-            "9257425e1f04c46f88ace0f9dc13a0bc9368e43840230856133f42b36f7eee86"
+            "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -504,7 +504,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
         ),
         "native_owner_sha256": (
-            "452baac0eade9180c23d37a2fef846f07979e172c52ab4dd223fcc6ea74d4a5c"
+            "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -546,7 +546,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "e02f5be7f21d9505421efdde2e0b24a9b0a24b2c5b10d7b81c1c2cab0d682bc8"
+            "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -2065,6 +2065,23 @@ def test_prepared_request_cannot_drop_the_resident_ao_policy(
     assert old in source
     target.write_text(
         source.replace(old, f'"{field}": {replacement},', 1), encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="AO request contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
+
+
+def test_prepared_request_cannot_drop_the_restricted_point_policy(
+    tmp_path: Path,
+) -> None:
+    relative = "python/generativeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    qualify_capacity._prepared_aot_route_contract(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text(encoding="utf-8")
+    old = '"pbe0_restricted_point": _resolve_restricted_point_policy(),'
+    assert source.count(old) == 1
+    target.write_text(
+        source.replace(old, '"pbe0_restricted_point": True,', 1), encoding="utf-8"
     )
     with pytest.raises(RuntimeError, match="AO request contract changed"):
         qualify_capacity._prepared_aot_route_contract(tmp_path)
@@ -3799,6 +3816,80 @@ def test_zero_seed_native_contract_fails_closed(
     )
     qualify_capacity._source_limits(tmp_path)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    source = target.read_text()
+    position = source.index(old, source.index(marker))
+    target.write_text(source[:position] + new + source[position + len(old) :])
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "counter",
+    (
+        "restricted_point_batches",
+        "restricted_point_count",
+        "general_point_batches",
+        "general_point_count",
+    ),
+)
+def test_restricted_point_metric_deltas_remain_source_bound(
+    tmp_path: Path, counter: str
+) -> None:
+    """Refreshing reviewed hashes must not admit cumulative work as per-call work."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    old = f'        "{counter}",\n'
+    position = source.index(old, source.index("def _metric_delta("))
+    (tmp_path / "python/generativeqc/_stationary_cuda.py").write_text(
+        source[:position] + source[position + len(old) :]
+    )
+    with pytest.raises(RuntimeError, match="metric_delta_sha256 contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "relative,marker,old,new,gate",
+    [
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "class _CudaSources:",
+            "self.restricted_point_requested = _resolve_restricted_point_policy(",
+            "self.restricted_point_requested = bool(",
+            "initializer page",
+        ),
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "    def metrics(self)",
+            "if point_metrics(self.handle, point_values, 5):",
+            "if False:",
+            "metrics page",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_geometry(",
+            "restricted_point && stationary_pbe0_restricted_point_capable && !external",
+            "restricted_point",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_geometry(",
+            "owner.phased_storage &&\n      na >=",
+            "owner.phased_storage ||\n      na >=",
+            "native_launch_geometry_sha256",
+        ),
+    ],
+)
+def test_restricted_point_capacity_controls_remain_source_bound(
+    tmp_path: Path, relative: str, marker: str, old: str, new: str, gate: str
+) -> None:
+    """Retain policy, telemetry, capability/seed and existing-scratch admission."""
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    qualify_capacity._source_limits(tmp_path)
+    target = tmp_path / relative
     source = target.read_text()
     position = source.index(old, source.index(marker))
     target.write_text(source[:position] + new + source[position + len(old) :])
