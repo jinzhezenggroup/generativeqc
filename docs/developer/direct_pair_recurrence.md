@@ -3,7 +3,7 @@
 ## Automatic canonical J/K values
 
 Canonical Cartesian Direct sources automatically reuse the prepared primitive-pair
-cache for total-angular-order-five shell quartets, including spherical public
+cache for total-angular-order-five-through-seven shell quartets, including spherical public
 projections. This route is independent of the legacy HF value switch below:
 neither an unset switch nor `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES=0`
 disables its admission. It applies by source capability, not by method, basis
@@ -17,8 +17,15 @@ canonical row-major bounds, not a recomputed bound or a symmetry assumption.
 Full J/K, J-only, and standalone full/SR/LR K publish separate positive sources
 through the existing compiler-owned recurrence and orbit scatter.
 
+One CTA owns the complete admitted component domain: order five
+uses one 256-lane packet, order six uses two register slots per lane, and order
+seven uses three. These bounds cover every s/p/d/f shell composition, including
+partial tails and repeated physical shell pairs. Equal angular buckets retain
+their symmetry-unique sorted triangle. All slots share one primitive recurrence;
+inactive lanes still participate in publication and retirement barriers.
+
 Admission borrows an existing immutable geometry cache and charges the complete
-index, sort/scan workspace and bounds view to the provider budget, including the
+index, four row-prefix planes, sort/scan workspace and bounds view to the provider budget, including the
 preparation peak. Missing storage, allocation failure, or index capacity keeps
 the incumbent canonical consumer. Execution allocates nothing and does not
 reread environment controls. Other angular orders, fixed screening,
@@ -27,6 +34,8 @@ retain their existing consumers. Forces and mixed precision are unchanged.
 
 The [default-admission decision](../../.agents/notes/implemented/performance/2026-10-10-automatic-canonical-pair-reuse.md)
 records qualification and the intentionally retained fallbacks.
+The [multi-packet decision](../../.agents/notes/implemented/performance/2026-10-10-bounded-canonical-multi-packet-reuse.md)
+records the extended ownership bounds and excluded lower-order schedule.
 
 ## Legacy HF and dddd qualification
 

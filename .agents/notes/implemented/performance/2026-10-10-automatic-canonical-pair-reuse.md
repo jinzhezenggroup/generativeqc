@@ -95,6 +95,11 @@ remain explicit, rather than substituting a native self-comparison as an oracle.
 
 ## Next route
 
+The [bounded multi-packet decision](2026-10-10-bounded-canonical-multi-packet-reuse.md)
+extends this admission's angular domain to orders six/seven while retaining its
+original invariants and fallbacks; the order-five measurements here remain
+historical evidence of this specific source revision.
+
 First qualify shared full/LR materialized recurrence with independent positive
 source matrices and unchanged masks. Then consider orders six/seven with
 explicit multi-packet ownership, recurrence/work counters and register/resource

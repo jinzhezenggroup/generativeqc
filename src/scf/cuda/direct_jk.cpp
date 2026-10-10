@@ -858,18 +858,19 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
     const auto prepare_materialized_values = [&] {
       auto* materialized_owner = plan->generated_exchange ? plan->generated_exchange->shared.get()
                                                           : plan->generated_coulomb.get();
-      const bool has_order_five = std::any_of(
+      const bool has_materialized_order = std::any_of(
           plan->canonical_pair_offsets.begin(), plan->canonical_pair_offsets.end(),
           [](const auto& offsets) {
-            for (unsigned second = 0; second < 3; ++second) {
-              const unsigned first = 5 - second;
-              if (offsets[first + 1] > offsets[first] && offsets[second + 1] > offsets[second])
-                return true;
-            }
+            for (unsigned order = 5; order <= 7; ++order)
+              for (unsigned second = order > 6 ? order - 6 : 0; second <= order / 2; ++second) {
+                const unsigned first = order - second;
+                if (offsets[first + 1] > offsets[first] && offsets[second + 1] > offsets[second])
+                  return true;
+              }
             return false;
           });
       if (plan->canonical_cartesian && plan->canonical_pair_order && materialized_owner &&
-          has_order_five && materialized_owner->batch.shell_primitive_pairs &&
+          has_materialized_order && materialized_owner->batch.shell_primitive_pairs &&
           host.shell_pair_first.size() <=
               static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         // Automatically reuse an already charged immutable cache. This indexed
@@ -907,7 +908,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                                                        static_cast<int>(largest), workspace_bytes));
               const auto key_bytes = direct_jk_product(order.size(), sizeof(double));
               const auto order_bytes = direct_jk_product(order.size(), sizeof(std::int32_t));
-              const auto row_bytes = direct_jk_product(order.size(), 3 * sizeof(std::uint64_t));
+              const auto row_bytes = direct_jk_product(order.size(), 4 * sizeof(std::uint64_t));
               const auto offset_bytes = direct_jk_product(segments.size(), sizeof(int));
               const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
               const auto matrix = direct_jk_product(dimension, dimension);
@@ -947,15 +948,21 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   static_cast<int>(order.size()), static_cast<int>(systems.size() * 7),
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
+              // Orders five through seven share four bounded prefix
+              // planes: a (first, second) angular block has exactly one order.
+              // Equal angular buckets own only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
-                for (unsigned second = 0; second < 3; ++second) {
-                  const unsigned first = 5 - second;
-                  direct_jk_check(prepare_canonical_pair_rows(
-                      plan->stream, sorted_keys, offsets[first],
-                      offsets[first + 1] - offsets[first], offsets[second],
-                      offsets[second + 1] - offsets[second], false, screening_tolerance,
-                      prefix + second * order.size() + offsets[first], workspace, workspace_bytes));
-                }
+                for (unsigned angular_order = 5; angular_order <= 7; ++angular_order)
+                  for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
+                       second <= angular_order / 2; ++second) {
+                    const unsigned first = angular_order - second;
+                    direct_jk_check(prepare_canonical_pair_rows(
+                        plan->stream, sorted_keys, offsets[first],
+                        offsets[first + 1] - offsets[first], offsets[second],
+                        offsets[second + 1] - offsets[second], first == second, screening_tolerance,
+                        prefix + second * order.size() + offsets[first], workspace,
+                        workspace_bytes));
+                  }
               fence.complete();
               plan->materialized_batch = materialized_owner->batch;
               plan->materialized_pair_order = sorted_order;
@@ -1492,18 +1499,18 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->resident_values + value_offset, plan->canonical_density,
                   plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction);
-            else if (first + second == 5 && plan->materialized_pair_order && !correction &&
-                     !fixed &&
+            else if (first + second >= 5 && first + second <= 7 && plan->materialized_pair_order &&
+                     !correction && !fixed &&
                      (!dispatch.canonical_coulomb || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {
-              // Order five needs at most 162 Cartesian components, so the
-              // complete shell quartet fits one 256-lane recurrence packet.
+              // Orders five through seven need at most 162/324/648
+              // components: every lane owns up to three complete packets.
               // Fixed-density screening, compensation and resident-value
               // layouts retain their established component-wise fallbacks.
               const auto& shells = plan->materialized_pair_offsets[item];
               const auto pairs = plan->materialized_pair_offsets.back()[7];
               launch_materialized_canonical_jk_kernel(
-                  plan->stream, plan->materialized_batch,
+                  plan->stream, plan->materialized_batch, first + second,
                   {plan->materialized_pair_order,
                    plan->materialized_row_prefix + second * pairs + shells[first]},
                   shells[first], shells[first + 1] - shells[first], shells[second],

@@ -757,7 +757,7 @@ void spd_optional_allocation_fallback() {
   constexpr std::size_t budget = 64U << 20;
   using Plan = std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)>;
   std::vector<std::size_t> limits;
-  std::size_t canonical_begin{}, rows_begin{}, metadata_begin{};
+  std::size_t canonical_begin{}, rows_begin{}, metadata_begin{}, metadata_end{};
   {
     LedgerScope scope(budget);
     CudaDirectJkPlan* raw{};
@@ -775,6 +775,7 @@ void spd_optional_allocation_fallback() {
       if (pointer == plan->canonical_batch.shell_direct_ao_offsets) canonical_begin = index;
       if (pointer == plan->canonical_exchange) rows_begin = index + 1U;
       if (pointer == plan->batch.shell_ao_offsets) metadata_begin = index;
+      if (pointer == plan->batch.shell_pair_second) metadata_end = index + 1U;
       std::lock_guard<std::mutex> lock(runtime::device_resource_mutex);
       const auto found = runtime::device_allocation_owners.find(plan->allocations[index]);
       require(found != runtime::device_allocation_owners.end(), "unregistered provider allocation");
@@ -782,8 +783,8 @@ void spd_optional_allocation_fallback() {
       limits.push_back(prefix - 1U);
     }
     require(canonical_begin && canonical_begin < rows_begin && rows_begin < metadata_begin &&
-                metadata_begin < limits.size() && prefix == diagnostic.device_bytes &&
-                prefix == scope.ledger->live,
+                metadata_begin < metadata_end && metadata_end <= limits.size() &&
+                prefix == diagnostic.device_bytes && prefix == scope.ledger->live,
             "provider allocation inventory does not match its retained charge");
     plan.reset();
     require(scope.ledger->live == 0, "baseline provider leaked tracked device storage");
@@ -819,10 +820,16 @@ void spd_optional_allocation_fallback() {
       require(!plan->canonical_cartesian && !plan->canonical_transform &&
                   !plan->canonical_density && plan->canonical_pair_offsets.empty(),
               "failed canonical source retained stale availability metadata");
-    if (index >= metadata_begin)
-      require(!plan->batch.shell_ao_offsets && !plan->batch.shell_pair_first &&
-                  !plan->batch.shell_pair_second && !plan->batch.total_shell_pairs,
-              "failed derivative metadata retained dangling pointers");
+    if (index >= metadata_begin) {
+      // Later optional value indices may fail after derivative metadata is
+      // complete. Their rollback must preserve that independently owned lease.
+      const bool retained_metadata = index >= metadata_end;
+      require(bool(plan->batch.shell_ao_offsets) == retained_metadata &&
+                  bool(plan->batch.shell_pair_first) == retained_metadata &&
+                  bool(plan->batch.shell_pair_second) == retained_metadata &&
+                  bool(plan->batch.total_shell_pairs) == retained_metadata,
+              "optional failure left partial derivative metadata or discarded its owner");
+    }
     std::size_t op_index = 0;
     for (auto op : {FockOperator::FullRange, FockOperator::ShortRange, FockOperator::LongRange}) {
       auto spec = make_hf_fock_spec(FockSpin::Restricted);
@@ -1380,7 +1387,7 @@ std::vector<double> screened_cartesian_public_eri(const generativeqc::core::Syst
   return projected;
 }
 
-void canonical_screened_values(bool materialized = false) {
+void canonical_screened_values(bool materialized = false, bool mixed_orders = true) {
   for (double displacement : {0.0, 0.27}) {
     generativeqc::core::System system;
     system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7 + displacement}}};
@@ -1390,10 +1397,12 @@ void canonical_screened_values(bool materialized = false) {
                    ? unsetenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES")
                    : setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", "0", 1)) == 0,
               "cannot test automatic admission without the legacy HF opt-in");
-      // Exercise all three order-five pair-sum buckets, signed contractions,
-      // diffuse components and reconstruction at a displaced geometry.
-      system.shells.push_back({0, 1, {{0.7, 0.8}, {0.12, -0.2}}});
-      system.shells.push_back({1, 2, {{0.09, 1.0}}});
+      // Exercise every order-five-through-seven block, including equal-bucket
+      // triangles, packet tails, signed/diffuse contractions and moved geometry.
+      if (mixed_orders) {
+        system.shells.push_back({0, 1, {{0.7, 0.8}, {0.12, -0.2}}});
+        system.shells.push_back({1, 2, {{0.09, 1.0}}});
+      }
     }
     system.electron_count = 2;
     system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
@@ -2808,6 +2817,9 @@ int main(int argc, char** argv) {
     if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
                       std::string(argv[1]) == "--canonical-materialized-screened-only")) {
       canonical_screened_values(true);
+      // The s/f-only owner has order six but no order-five bucket.
+      // Admission must follow the complete supported domain, not its old seed.
+      canonical_screened_values(true, false);
       if (std::string(argv[1]) == "--canonical-materialized-only") canonical_value_provider();
       materialized_optional_budget_fallback();
       materialized_incumbent_md_budget();

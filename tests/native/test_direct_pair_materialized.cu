@@ -168,9 +168,10 @@ __global__ void shared_components(
     MaterializedDirectPairWork* work, double* values,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   __shared__ MaterializedDirectPairRecurrence<Order> shared;
-  // Forty register slots cover the largest through-f shell quartet. The DFT
-  // dddd production stream needs only six, retaining the same admission math.
-  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? 40 : 1>(
+  // Canonical orders six/seven use their production two/three-slot ownership;
+  // forty slots retain the independent whole-shell through-f qualification.
+  constexpr unsigned whole_slots = Order <= 5 ? 1 : Order == 6 ? 2 : Order == 7 ? 3 : 40;
+  contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
       channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
 }
@@ -642,6 +643,14 @@ int main(int argc, char** argv) {
       qualify<2, 2, 2, 2, false, true>(false, false, 2.0);
       std::cout << "pair-materialized shared lifecycle PASS\n";
       return 0;
+    }
+    for (auto range :
+         {generativeqc::integrals::CoulombRange::Full, generativeqc::integrals::CoulombRange::Short,
+          generativeqc::integrals::CoulombRange::Long}) {
+      qualify<2, 2, 1, 1, false, true>(false, false, 0.0, range);
+      qualify<3, 1, 1, 1, true, true>(false, true, 0.8, range);
+      qualify<2, 2, 2, 1, true, true>(false, false, 0.0, range);
+      qualify<3, 2, 1, 1, false, true>(false, false, 0.8, range);
     }
     qualify<2, 1, 1, 1, false>(false, false, 0.0);
     qualify<2, 1, 1, 1, true>(false, true, 0.8);

@@ -86,23 +86,29 @@ __global__ void materialized_pair_keys_kernel(DeviceBatch batch, const double* b
   }
 }
 
-template <bool Unrestricted>
+template <bool Unrestricted, unsigned AngularOrder>
 __global__ void materialized_canonical_jk_kernel(
     DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
     std::size_t second_begin, std::size_t second_count, generativeqc::integrals::CoulombRange range,
     double omega, double screening, const double* bounds, const double* density,
     const std::uint8_t* active, double* coulomb, double* exchange, std::uint64_t* work_census) {
-  __shared__ MaterializedDirectPairRecurrence<5> shared;
+  __shared__ MaterializedDirectPairRecurrence<AngularOrder> shared;
+  // With s/p/d/f shells, these are the exact maximum packet counts for each
+  // admitted total order. No component may be left for a second CTA owner.
+  static_assert(AngularOrder >= 5 && AngularOrder <= 7);
+  static_assert(kMaximumAngularMomentum == 3);
+  constexpr unsigned component_slots = AngularOrder <= 5 ? 1 : AngularOrder == 6 ? 2 : 3;
   const auto count = rows.prefix[first_count - 1];
   // Every lane visits the same task and participates in all publication and
   // retirement barriers. Only the helper's original AO predicate admits work.
   for (std::size_t work = blockIdx.x; work < count; work += gridDim.x) {
     std::size_t first{}, second{};
-    canonical_pair_indices(work, first_count, second_count, false, rows, first, second);
+    canonical_pair_indices(work, first_count, second_count, first_begin == second_begin, rows,
+                           first, second);
     const ActiveShellQuartetTile task{static_cast<std::uint32_t>(rows.order[first_begin + first]),
                                       static_cast<std::uint32_t>(rows.order[second_begin + second]),
                                       0};
-    contract_materialized_direct_pair_fock<Unrestricted, 5>(
+    contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, component_slots>(
         batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
         false, nullptr, false, range, omega, coulomb, exchange, work_census);
   }
@@ -820,21 +826,32 @@ cudaError_t prepare_materialized_pair_order(cudaStream_t stream, DeviceBatch bat
 }
 
 void launch_materialized_canonical_jk_kernel(
-    cudaStream_t stream, DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin,
-    std::size_t first_count, std::size_t second_begin, std::size_t second_count, bool unrestricted,
-    DirectCoulombRange range, double omega, double screening, const double* bounds,
-    const double* density, const std::uint8_t* active, double* coulomb, double* exchange,
-    std::uint64_t* work_count) {
+    cudaStream_t stream, DeviceBatch batch, unsigned angular_order, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool unrestricted, DirectCoulombRange range, double omega,
+    double screening, const double* bounds, const double* density, const std::uint8_t* active,
+    double* coulomb, double* exchange, std::uint64_t* work_count) {
   if (!first_count || !second_count) return;
   constexpr unsigned blocks = 4096, threads = detail::kDirectQuartetTileSize;
-  if (unrestricted)
-    materialized_canonical_jk_kernel<true><<<blocks, threads, 0, stream>>>(
-        batch, rows, first_begin, first_count, second_begin, second_count, integral_range(range),
-        omega, screening, bounds, density, active, coulomb, exchange, work_count);
-  else
-    materialized_canonical_jk_kernel<false><<<blocks, threads, 0, stream>>>(
-        batch, rows, first_begin, first_count, second_begin, second_count, integral_range(range),
-        omega, screening, bounds, density, active, coulomb, exchange, work_count);
+#define GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(order)                                       \
+  case order:                                                                                  \
+    if (unrestricted)                                                                          \
+      materialized_canonical_jk_kernel<true, order><<<blocks, threads, 0, stream>>>(           \
+          batch, rows, first_begin, first_count, second_begin, second_count,                   \
+          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
+          work_count);                                                                         \
+    else                                                                                       \
+      materialized_canonical_jk_kernel<false, order><<<blocks, threads, 0, stream>>>(          \
+          batch, rows, first_begin, first_count, second_begin, second_count,                   \
+          integral_range(range), omega, screening, bounds, density, active, coulomb, exchange, \
+          work_count);                                                                         \
+    break
+  switch (angular_order) {
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(5);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(6);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(7);
+  }
+#undef GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER
 }
 
 void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* values,
