@@ -217,18 +217,18 @@
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-sto3g-b3-0.json",
-      "sha256": "ea48903964cef7c857bc722781f88d754026bc33ea435689435a983e0dce8f41",
+      "path": "ragged-final-sto3g-b3-0.json.gz",
+      "sha256": "6b656887ba7e5fe78d63b1435504e368646ac5f82e771e0755daf5288832c051",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-sto3g-b3-1.json",
-      "sha256": "aa9b9d25c9a18fbccb303b9e4da6309bb091e227e0ec6647625cef5d6e8cb1d7",
+      "path": "ragged-final-sto3g-b3-1.json.gz",
+      "sha256": "6006974ab871b25305492240379974689ab924a40c40b16d19fd06d70619628a",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-sto3g-b3-2.json",
-      "sha256": "4de2e08450e8586b334efd412189fc5be3ebd27468ad0e2df138c7daec502532",
+      "path": "ragged-final-sto3g-b3-2.json.gz",
+      "sha256": "ca17f40bdc8ca9c2d596b28b7800058de272058e5109aee09e842a056dfcad1a",
       "kind": "complete-endpoint-samples"
     },
     {
@@ -247,18 +247,18 @@
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-svp-b3-0.json",
-      "sha256": "b7660af8a30a9e6d23f3da028d59ff1e8cad2ac88a6be6241d8d7565a11db30f",
+      "path": "ragged-final-svp-b3-0.json.gz",
+      "sha256": "1c640d9052971e444badb7fc02a63a967984e1fee5dcdf066ce2287f6411f8a1",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-svp-b3-1.json",
-      "sha256": "426b7ec30d36366b616880db32fdad05eec645eae595e8a10d5fba0eb50d4469",
+      "path": "ragged-final-svp-b3-1.json.gz",
+      "sha256": "1d85124cbcb8090d009fa8c34e160c68734fb5bad5de29e9cfca794e36c12cd7",
       "kind": "complete-endpoint-samples"
     },
     {
-      "path": "ragged-final-svp-b3-2.json",
-      "sha256": "64dd5f09ddf5806024cea3a72c5a0180c73879378a5ba669d0b5fd0bc0998a92",
+      "path": "ragged-final-svp-b3-2.json.gz",
+      "sha256": "7a5252afbf630f5312b8fb27285c3f0cf73bba28c3c8c4ab03d74050553be621",
       "kind": "complete-endpoint-samples"
     },
     {

@@ -155,8 +155,8 @@ nonsymmetric weights, normalized pairs, raw/fused derivatives, coincident
 centers, public spherical transforms, and three finite-difference step sizes.
 Only representative f shells are used here; the full f matrix belongs to #135.
 
-Run `tools/screen_weighted_eri.py` to compile the materialized and inline-single-use
-candidates. Both consume all runtime inputs and write all thirteen outputs.
+Run `tools/screen_weighted_eri.py --nvcc /path/to/nvcc --cuda-target sm_90 --output /tmp/weighted-screen` to compile the materialized and inline-single-use
+candidates. Choose a target supported by the local CUDA compiler. Both consume all runtime inputs and write all thirteen outputs.
 The native numerical driver is `tools/validate_weighted_eri.py`, paired with
 the manual CMake target `generativeqc_weighted_eri_probe`. It checks mixed output tiles,
 both execution routes, multiple upload capacities, raw unit weights, repeated

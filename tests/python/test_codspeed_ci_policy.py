@@ -84,3 +84,17 @@ def test_shared_pr_tier_preserves_master_collection_order(
         *[case.name for case in cases],
         "formaldehyde-rhf-def2-svp",
     ]
+
+
+def test_qualifier_authenticates_tested_merge_not_stale_payload_base() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    step = workflow.split("      - name: Qualify PR CodSpeed comparison\n", 1)[1]
+    step = step.split("      - name:", 1)[0]
+    assert "CODSPEED_MERGE_SHA: ${{ github.sha }}" in step
+    assert "CODSPEED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}" in step
+    assert "CODSPEED_BASE_REF: ${{ github.event.pull_request.base.ref }}" in step
+    assert '--merge-sha "$CODSPEED_MERGE_SHA"' in step
+    assert '--head-sha "$CODSPEED_HEAD_SHA"' in step
+    assert '--base-ref "$CODSPEED_BASE_REF"' in step
+    assert "github.event.pull_request.base.sha" not in step
+    assert "--base-sha" not in step

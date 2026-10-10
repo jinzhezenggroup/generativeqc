@@ -27,7 +27,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nvcc", required=True, type=Path)
     parser.add_argument("--cache", required=True, type=Path)
-    parser.add_argument("--architecture", default="sm_120")
+    parser.add_argument("--architecture", required=True)
     args = parser.parse_args()
 
     requests = (

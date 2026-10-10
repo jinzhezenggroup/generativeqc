@@ -87,12 +87,16 @@ core::ElectronicReferenceView electronic_reference(const VerifiedKsFinalState& s
                                                    const scf::reference::Matrix& overlap,
                                                    const scf::reference::Matrix& hcore);
 
+/** Preserve shared physical/canonical gates and KS component-energy ownership.
+ * An optional backend supplies only authenticated validation products; the
+ * shared policy still accepts/rejects, and orbital-energy W is unchanged. */
 bool validate_ks_final_state(const KsFinalStateIdentity& current,
                              const scf::reference::Matrix& overlap,
                              const scf::reference::Matrix& hcore, const KsPhysicalState& physical,
                              const KsFinalStateCandidate& candidate,
                              const scf::solver::FinalStateLimits& limits,
                              bool compute_weighted_density, VerifiedKsFinalState& output,
-                             std::string& detail);
+                             std::string& detail,
+                             const scf::solver::FinalStateOperations* operations = nullptr);
 
 }  // namespace generativeqc::dft

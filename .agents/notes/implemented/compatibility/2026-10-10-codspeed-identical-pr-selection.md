@@ -61,6 +61,36 @@ production implementation, numerical tolerance or retained raw receipt changes.
 Relevant PRs now pay for one additional existing small-grid sentinel when it was
 previously excluded. This CI repair itself makes no new performance claim.
 
+## Follow-through: authenticate the actually tested base
+
+The first repaired PR job, [114290059407](https://github.com/jinzhezenggroup/generativeqc/actions/runs/38078393147/job/114290059407),
+built synthetic merge `440e32daa956d864a73abde7f10994ca1b1cd3db`, whose first
+parent was then-current master `dec25f5922f8a63c56ecd9f6f89eb345595f3755` and
+second parent was PR head `5b583f52a291042f08db148a0e2d26c627731b70`. Its event
+base still supplied `2b68d10a9f43175d796500d7853ed90245f24315` to qualification.
+Seven intervening master commits included CPU preparation/layout changes, so
+comparing that tested merge to the stale base could not isolate the PR delta.
+The CPU fingerprint differed independently, and qualification correctly skipped
+all benchmark execution/upload. Job success was not performance clearance.
+
+The qualifier now derives the base only after matching checked-out HEAD to the
+event merge SHA, proving exactly two distinct valid parents, and matching the
+second parent to the expected PR head. The first parent is then the sole SHA
+used for authenticated master-artifact lookup and receipt validation. Require
+the target branch to be `master`; stacked targets, malformed identities,
+unrelated/head-only/shallow checkouts and unproven ancestry remain advisory and
+cannot upload. Never fall back to the payload's stale base or the latest branch
+tip, which may have moved beyond the actually tested merge.
+
+Small local Git-history tests model master advancing beyond a stale payload,
+and negative tests cover malformed/swapped/unrelated parents and non-master
+targets. Existing schema-v2, exact selector, source and CPU/runtime requirements
+remain unchanged. Missing actual-base receipts or a different runner fingerprint
+still prevent comparison; neither condition warrants relaxing those requirements
+or blindly rerunning. The final CodSpeed analysis must also identify the intended
+baseline before it can resolve the earlier regression. This fix changes no
+benchmark endpoint, production source, raw receipt or measured result.
+
 ## References
 
 - [PR #2232 report](https://github.com/jinzhezenggroup/generativeqc/pull/2232#issuecomment-6100855187)

@@ -69,6 +69,9 @@ def source_hash() -> typing.Any:
 def main() -> typing.Any:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cuda", action="store_true")
+    parser.add_argument(
+        "--cuda-target", help="explicit CUDA target architecture (e.g. sm_90)"
+    )
     parser.add_argument("--generated-df", action="store_true")
     parser.add_argument(
         "--nvcc", type=Path, default=Path("/group/software/cuda-12.9.1/bin/nvcc")
@@ -83,6 +86,8 @@ def main() -> typing.Any:
         choices=["h2", "water", "lih"],
     )
     args = parser.parse_args()
+    if args.cuda and not args.cuda_target:
+        parser.error("--cuda requires --cuda-target")
     if args.samples < 5:
         parser.error("at least five interleaved samples are required")
     if (args.cuda or args.generated_df) and not os.environ.get("SLURM_JOB_ID"):
@@ -100,7 +105,8 @@ def main() -> typing.Any:
     )
     artifact = (
         compile_cuda(
-            CudaCompilerAdapter(args.nvcc, cuda_target_info("sm_120")), args.cache
+            CudaCompilerAdapter(args.nvcc, cuda_target_info(args.cuda_target)),
+            args.cache,
         )
         if args.cuda
         else None

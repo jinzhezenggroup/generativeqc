@@ -218,6 +218,45 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
+    """Keep default selection separate from explicit experimental admission."""
+    relative = Path("src/dft/cuda_ks.cpp")
+    source = re.sub(r"\s+", " ", _read(root / relative))
+    policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
+    if not re.search(
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        policy,
+    ) or any(
+        fragment not in policy
+        for fragment in (
+            "fock_exchange_coefficient == -0.125",
+            "semilocal_exchange_scale == 0.75",
+            "semilocal_correlation_scale == 1.0",
+            "if (!setting) return default_eligible;",
+            'std::strcmp(setting, "0") == 0) return false;',
+            'std::strcmp(setting, "1") == 0) return true;',
+            "throw std::invalid_argument",
+        )
+    ):
+        raise ValueError("KS final-validation default scope or opt-out drifted")
+    if any(
+        fragment not in source
+        for fragment in (
+            "pbe0_rks_final_validation_composition(",
+            "is_semilocal_family(functional, SemilocalFamily::Pbe)",
+            "options.semilocal_exchange_scale, options.semilocal_correlation_scale",
+            "has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction",
+            "!nonlocal_correlation;",
+            "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
+            "final_validation_partial && matrix_products.library_enabled()",
+            "!final_stationary_weights_ready;",
+        )
+    ):
+        raise ValueError("KS final-validation default owner or resource guard drifted")
+    return {"dft-policy:ks-device-final-validation-auto": relative.as_posix()}
+
+
 def _discover_md_j_default(root: Path) -> dict[str, str]:
     """Keep the admitted domain, optional cap and diagnostic opt-out reviewable."""
     relative = Path("src/scf/cuda/direct_jk.cpp")
@@ -240,7 +279,7 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
 
 
 def _discover_rys_task_default(root: Path) -> dict[str, str]:
-    """Require renewed qualification when the target/class guard is broadened."""
+    """Guard shared Rys classes, target capabilities and portable fallback."""
     preference_relative = Path(
         "python/generativeqc_compiler/integral/production_rys_tasks.py"
     )
@@ -250,8 +289,10 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
         preferred is None
         or ast.literal_eval(preferred.group(1))
         != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
-        or 'profile.target.architecture != "sm_120" or profile.profile != "sm_120"'
-        not in preference
+        or "if profile.portable:" not in preference
+        or "schedule_candidates(integral, profile.target)" not in preference
+        or "if schedule is None:" not in preference
+        or 'profile.target.architecture != "sm_120"' in preference
     ):
         raise ValueError("Rys-task default target/class admission drifted")
     lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
@@ -482,6 +523,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
+        _discover_ks_final_validation_default(root),
         _discover_md_j_default(root),
         _discover_rys_task_default(root),
         _discover_direct_k_work_default(root),

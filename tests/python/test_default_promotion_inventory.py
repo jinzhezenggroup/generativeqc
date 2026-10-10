@@ -145,6 +145,44 @@ def test_native_xc_batch_defaults_are_audited(
 
 
 @pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/dft/cuda_ks_final_validation_policy.hpp", "aos >= 384", "aos >= 17"),
+        ("src/dft/cuda_ks_final_validation_policy.hpp", "spins == 1", "spins <= 2"),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "if (!setting) return default_eligible;",
+            "if (!setting) return true;",
+        ),
+        (
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "fock_exchange_coefficient == -0.125",
+            "fock_exchange_coefficient == -0.25",
+        ),
+        (
+            "src/dft/cuda_ks.cpp",
+            "!final_stationary_weights_ready;",
+            "true;",
+        ),
+    ],
+)
+def test_native_ks_final_validation_default_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Default promotion must not silently expand the measured scope or leases."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "KS final-validation default" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
     "before,after",
     [
         (
@@ -190,21 +228,26 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
 @pytest.mark.parametrize(
     "before,after",
     [
+        ("if profile.portable:", "if False:"),
         (
-            'profile.target.architecture != "sm_120"',
-            'profile.target.architecture != "sm_90"',
+            "schedule_candidates(integral, profile.target)",
+            "schedule_candidates(integral, fallback_target)",
         ),
-        ('profile.profile != "sm_120"', 'profile.profile != "portable_cuda"'),
+        ("if schedule is None:", "if False:"),
+        (
+            "if profile.portable:",
+            'if profile.target.architecture != "sm_120" or profile.portable:',
+        ),
         (
             '"dpps", "dspp"}',
             '"dpps", "dspp", "ssss"}',
         ),
     ],
 )
-def test_rys_task_default_admission_requires_renewed_qualification(
+def test_rys_task_default_capability_admission_is_audited(
     tmp_path: Path, before: str, after: str
 ) -> None:
-    """Preference must not expand beyond the independently measured domain."""
+    """Retain shared classes, actual-target scheduling and portable fallback."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "python/generativeqc_compiler/integral/production_rys_tasks.py"

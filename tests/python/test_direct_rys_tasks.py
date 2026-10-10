@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.k_block import (
@@ -166,24 +167,34 @@ def test_legacy_single_profile_registry_retains_zero_preference() -> None:
 
 
 @pytest.mark.parametrize("architecture", ("sm_120", "sm_90", "sm_80"))
-def test_only_qualified_profile_prefers_the_selected_classes(architecture: str) -> None:
-    """Capability is not performance qualification on a different target."""
-    profile = resolve_production_profile(MANIFEST, architecture, "portable_cuda")
-    assert preferred_rys_task_candidates(profile) == ()
-    if architecture == "sm_120":
-        assert {item.spec.name for item in preferred_rys_task_candidates(PROFILE)} == {
-            "psps",
-            "ppps",
-            "dsss",
-            "dpss",
-            "dsps",
-            "ddss",
-            "dsds",
-            "dpps",
-            "dspp",
-        }
-    source = emit_multi_registry_source((profile,))
-    assert "UINT64_C(0), UINT64_C(0)" in source
+def test_compiled_target_reuses_rys_k_preference(architecture: str) -> None:
+    """Mathematical coverage is shared; only a compiled target enables dispatch."""
+    portable = resolve_production_profile(MANIFEST, architecture, "portable_cuda")
+    assert preferred_rys_task_candidates(portable) == ()
+    assert "UINT64_C(0), UINT64_C(0)" in emit_multi_registry_source((portable,))
+
+    # Simulate a separately compiled target without needing a GPU. Schedule
+    # candidates must still meet that architecture's declared resource limits.
+    compiled = replace(
+        PROFILE,
+        target=cuda_target_info(architecture),
+        profile=architecture,
+        selections=tuple(
+            replace(item, architecture=architecture, profile=architecture)
+            for item in PROFILE.selections
+        ),
+    )
+    assert {item.spec.name for item in preferred_rys_task_candidates(compiled)} == {
+        "psps",
+        "ppps",
+        "dsss",
+        "dpss",
+        "dsps",
+        "ddss",
+        "dsds",
+        "dpps",
+        "dspp",
+    }
 
 
 def test_larger_local_contraction_does_not_expand_old_block_candidates() -> None:
