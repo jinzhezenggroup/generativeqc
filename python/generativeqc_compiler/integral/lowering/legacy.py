@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from generativeqc_compiler.common.cuda_target import CudaTargetInfo
+from typing import TYPE_CHECKING
 
 from ..cuda_schedule import (
     ScheduleIR,
@@ -18,6 +18,9 @@ from ..shell_spec import (
 from .common import _specialize_dppp_identifiers
 from .dispatch import emit_shell_class_fused_cuda
 from .force_resident import _emit_ppps_resident_bra_rys3_force_consumer_cuda
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 
 
 def emit_ppps_resident_bra_rys3_cuda(
