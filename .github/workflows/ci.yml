@@ -1375,10 +1375,25 @@ jobs:
               exit 2
               ;;
           esac
+          diagnostic_args=()
+          if [[ "${{ matrix.shard }}" == "core-b" ]]; then
+            ccache --version
+            ccache cc -std=c11 -fPIC -O2 -Wall -Wextra -Werror \
+              -c tools/native_fault_record.c -o "$RUNNER_TEMP/native-fault-record.o"
+            ccache cc -shared "$RUNNER_TEMP/native-fault-record.o" \
+              -o "$RUNNER_TEMP/libnative-fault-record.so"
+            .venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q
+            diagnostic_args+=(
+              -p tools.pytest_native_diagnostics
+              --native-diagnostics-dir="$PWD/.artifacts/native-diagnostics"
+              --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
+            )
+          fi
           .venv/bin/python -m pytest "${test_targets[@]}" -q \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
+            "${diagnostic_args[@]}" \
             "${extra_args[@]}"
       - name: Save native Python probes
         if: github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-hit != 'true'
