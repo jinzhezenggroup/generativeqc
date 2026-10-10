@@ -96,6 +96,17 @@ range-separated, ECP, nonlocal and correction-bearing contexts remain
 unqualified for native DFT forces, even when Python has a separately
 supported DFT-force path.
 
+For Python `PreparedBatch.execute(properties=("energy", "forces"))`,
+the frontend now first queries each member's private native prepared-property
+record (`generativeqc_ks_batch_supported_properties_v1`). If all members
+qualify, it executes through `generativeqc_batch_execute` and copies the
+native force buffers; no Python stationary gradient is run for that request.
+Unsupported members and older native binaries retain their separately
+qualified Python stationary-force path. A failed native capability query other
+than explicit `NOT_IMPLEMENTED` is an error, not permission to fall back.
+Capability is evaluated after the existing Python model/warm-state identity
+checks and does not bypass resource budgets.
+
 The CPU PBE0 force qualification must still satisfy the independent
 reconverged finite-difference acceptance in #2151/#2222. A native
 force-capability flag is not evidence of an independently validated
