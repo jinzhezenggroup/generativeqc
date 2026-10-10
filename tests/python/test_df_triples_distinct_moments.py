@@ -32,9 +32,10 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(scope="module")
 def emitted_probe(tmp_path_factory: pytest.TempPathFactory) -> Any:
     """Run actual emitted load/finite logic with one host lane, not CUDA timing."""
-    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    compiler = shutil.which("c++")
+    cache = shutil.which("sccache") or shutil.which("ccache")
     if not compiler or not cache:
-        pytest.skip("C++ compiler and ccache required")
+        pytest.skip("C++ compiler and sccache or ccache required")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
     directory = tmp_path_factory.mktemp("distinct-occupied-moments")
     generated = cuda_source()
@@ -282,3 +283,48 @@ def test_forces_keep_full_response_materialization() -> None:
         in endpoint
     )
     assert "} else {\n      result.triples = cc::triples::evaluate_df_cuda(" in endpoint
+
+
+@pytest.mark.parametrize(
+    "available,expected",
+    [
+        (("c++", "sccache", "ccache"), "sccache"),
+        (("c++", "sccache"), "sccache"),
+        (("c++", "ccache"), "ccache"),
+        (("c++",), None),
+        (("sccache", "ccache"), None),
+        ((), None),
+    ],
+)
+def test_emitted_probe_selects_supported_cache_before_generation(
+    available: tuple[str, ...],
+    expected: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    commands = []
+
+    def run(command: list[str], **kwargs: Any) -> None:
+        commands.append(command)
+        assert command == [f"/tools/{expected}", "--version"]
+        assert kwargs == {"check": True, "capture_output": True}
+
+    class GenerationReached(Exception):
+        pass
+
+    def generate() -> str:
+        raise GenerationReached
+
+    monkeypatch.setattr(
+        shutil, "which", lambda name: f"/tools/{name}" if name in available else None
+    )
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setitem(globals(), "cuda_source", generate)
+    if expected is None:
+        with pytest.raises(pytest.skip.Exception, match="sccache or ccache required"):
+            emitted_probe.__wrapped__(tmp_path_factory)
+        assert not commands
+    else:
+        with pytest.raises(GenerationReached):
+            emitted_probe.__wrapped__(tmp_path_factory)
+        assert commands == [[f"/tools/{expected}", "--version"]]
