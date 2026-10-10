@@ -116,7 +116,10 @@ static void fault_handler(int sig, siginfo_t* info, void* context) {
   if (!found) pos = append_text(out, pos, " module=unresolved", 32);
   out[pos++] = '\n';
   /* One small best-effort write: no malloc, stdio, loader calls or unwinder. */
-  if (record_fd >= 0) (void)write(record_fd, out, pos);
+  if (record_fd >= 0) {
+    const ssize_t written = write(record_fd, out, pos);
+    (void)written; /* Partial/error writes stay best-effort; never retry in this handler. */
+  }
   const struct sigaction* previous = sig == SIGSEGV ? &previous_segv : &previous_abrt;
   sigset_t one;
   sigemptyset(&one);

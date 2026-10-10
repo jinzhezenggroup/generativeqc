@@ -35,6 +35,8 @@ def helper(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
             "-std=c11",
             "-fPIC",
             "-O2",
+            "-U_FORTIFY_SOURCE",
+            "-D_FORTIFY_SOURCE=3",
             "-Wall",
             "-Wextra",
             "-Werror",
@@ -405,3 +407,37 @@ def test_interpolated_python_step_respects_github_expression_budget() -> None:
         + len("format('')")
     )
     assert upper_bound <= 21000
+
+
+@pytest.mark.parametrize("compiler_name", ["gcc", "clang"])
+@pytest.mark.parametrize("fortify", [2, 3])
+def test_helper_compiles_with_fortified_libc(
+    tmp_path: Path, compiler_name: str, fortify: int
+) -> None:
+    compiler = shutil.which(compiler_name)
+    if compiler is None:
+        pytest.skip(f"Optional {compiler_name} compiler is not installed")
+    launcher = shutil.which("ccache")
+    assert launcher, "A verified compiler cache is required"
+    subprocess.run([launcher, "--version"], check=True, capture_output=True)
+    subprocess.run(
+        [
+            launcher,
+            compiler,
+            "-std=c11",
+            "-fPIC",
+            "-O2",
+            "-U_FORTIFY_SOURCE",
+            f"-D_FORTIFY_SOURCE={fortify}",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-c",
+            str(ROOT / "tools/native_fault_record.c"),
+            "-o",
+            str(tmp_path / "record.o"),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
