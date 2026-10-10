@@ -1380,11 +1380,21 @@ std::vector<double> screened_cartesian_public_eri(const generativeqc::core::Syst
   return projected;
 }
 
-void canonical_screened_values() {
+void canonical_screened_values(bool materialized = false) {
   for (double displacement : {0.0, 0.27}) {
     generativeqc::core::System system;
     system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7 + displacement}}};
     system.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, 3, {{0.5, 1.0}}}};
+    if (materialized) {
+      require((displacement == 0.0
+                   ? unsetenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES")
+                   : setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", "0", 1)) == 0,
+              "cannot test automatic admission without the legacy HF opt-in");
+      // Exercise all three order-five pair-sum buckets, signed contractions,
+      // diffuse components and reconstruction at a displaced geometry.
+      system.shells.push_back({0, 1, {{0.7, 0.8}, {0.12, -0.2}}});
+      system.shells.push_back({1, 2, {{0.09, 1.0}}});
+    }
     system.electron_count = 2;
     system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
     std::string detail;
@@ -1418,6 +1428,23 @@ void canonical_screened_values() {
                   plan->generated_exchange->shared &&
                   !plan->generated_exchange->shared->value_capability,
               "screened canonical fallback and competing through-f shell owner were not prepared");
+      if (materialized)
+        require(plan->materialized_pair_order && plan->materialized_row_prefix &&
+                    plan->materialized_bounds && plan->materialized_batch.shell_primitive_pairs &&
+                    diagnostic.device_bytes <= 32U << 20,
+                "default indexed canonical lease was not admitted within budget");
+      if (materialized) {
+        const auto count = static_cast<std::size_t>(plan->canonical_batch.nbf);
+        std::vector<double> row_major(count * count), column_major(count * count);
+        check(cudaMemcpy(row_major.data(), plan->canonical_bounds,
+                         row_major.size() * sizeof(double), cudaMemcpyDeviceToHost));
+        check(cudaMemcpy(column_major.data(), plan->materialized_bounds,
+                         column_major.size() * sizeof(double), cudaMemcpyDeviceToHost));
+        for (std::size_t row = 0; row < count; ++row)
+          for (std::size_t column = 0; column < count; ++column)
+            require(row_major[row * count + column] == column_major[row + count * column],
+                    "canonical-to-HF Schwarz layout changed a bound");
+      }
       // This oracle screens Cartesian AO pairs before public projection. The
       // opt-in shell provider applies a different shell+density predicate.
       // Select only this fixture's canonical fallback; canonical_value_provider
@@ -1471,6 +1498,17 @@ void canonical_screened_values() {
           require(work[0] == admitted &&
                       work[1] == admitted * (operation == FockOperator::FullRange ? 1U : 2U),
                   "screened canonical source still visited rejected quartets");
+          if (materialized) {
+            auto exchange_only = spec;
+            exchange_only.coulomb.present = false;
+            direct_device(plan.get(), exchange_only, alpha,
+                          spin == FockSpin::Unrestricted ? beta : std::vector<double>{}, {}, ka,
+                          kb);
+            check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                             cudaMemcpyDeviceToHost));
+            require(work[0] == admitted && work[1] == admitted,
+                    "single-range materialized source changed canonical work");
+          }
           const auto check_joint = [&] {
             if (!plan->canonical_range_exchange || operation == FockOperator::FullRange) return;
             const auto full_ka = reference_exchange_from_eri(screened_full, dimension, alpha);
@@ -1494,6 +1532,117 @@ void canonical_screened_values() {
     }
   }
   std::cout << "CUDA screened full/SR/LR matrices and work gates PASS\n";
+}
+
+/** The shell index cannot displace an incumbent geometry/cache owner. */
+void materialized_optional_budget_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger;
+    std::shared_ptr<runtime::DeviceResourceLedger> previous;
+    explicit LedgerScope(std::size_t limit)
+        : ledger(std::make_shared<runtime::DeviceResourceLedger>()),
+          previous(runtime::active_device_resource_ledger) {
+      ledger->limit = limit;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {
+      {0, 0, {{0.8, 1.0}}}, {1, 1, {{0.7, 1.0}}}, {0, 2, {{0.3, 1.0}}}, {1, 3, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(dimension * dimension, 0.1 / dimension);
+  const auto eri = generativeqc::integrals::build_integrals(system, false).eri;
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  const auto reference = build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0),
+                                               dimension, eri, density, {});
+  const auto exchange = reference_exchange_from_eri(eri, dimension, density);
+  constexpr std::size_t budget = 64U << 20;
+  std::size_t constrained_budget = budget;
+  for (unsigned policy : {0U, 1U, 2U}) {
+    const bool constrained = policy != 0;
+    const auto provider_budget = policy == 1 ? constrained_budget : budget;
+    LedgerScope scope(policy == 2 ? constrained_budget : budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, provider_budget, &raw, diagnostic,
+                                       detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->generated_exchange && plan->canonical_row_prefix &&
+                bool(plan->materialized_pair_order) == !constrained &&
+                diagnostic.device_bytes <= provider_budget &&
+                diagnostic.device_bytes == scope.ledger->live,
+            "optional shell index displaced the canonical or immutable cache owner");
+    if (!constrained) {
+      require(plan->materialized_device_bytes > 0, "shell index storage was not charged");
+      constrained_budget = diagnostic.device_bytes - plan->materialized_device_bytes;
+    }
+    if (policy == 2)
+      require(scope.ledger->rejected > 0,
+              "optional shell index did not exercise allocation failure");
+    scope.ledger->limit = budget;
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, exchange, {});
+    plan.reset();
+    require(scope.ledger->live == 0, "optional shell-index preparation leaked device storage");
+  }
+  std::cout << "CUDA materialized shell-index budget/allocation fallback PASS\n";
+}
+
+/** Optional range-K reuse must not evict the previously admitted SPD MD-J source. */
+void materialized_incumbent_md_budget() {
+  const auto* previous = std::getenv("GENERATIVEQC_DISABLE_MD_J");
+  const bool was_set = previous != nullptr;
+  const std::string saved = previous ? previous : "";
+  require(setenv("GENERATIVEQC_DISABLE_MD_J", "0", 1) == 0,
+          "cannot exercise incumbent MD-J admission");
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 1, {{0.7, 1.0}}}, {0, 2, {{0.3, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(dimension * dimension, 0.1 / dimension);
+  const auto eri = generativeqc::integrals::build_integrals(system, false).eri;
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  const auto reference = build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0),
+                                               dimension, eri, density, {});
+  const auto exchange = reference_exchange_from_eri(eri, dimension, density);
+  std::size_t budget = 64U << 20;
+  for (bool constrained : {false, true}) {
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->md_j.minimum_bounds && bool(plan->materialized_pair_order) == !constrained &&
+                diagnostic.device_bytes <= budget,
+            "optional canonical reuse displaced incumbent MD-J storage");
+    if (!constrained) budget = diagnostic.device_bytes - plan->materialized_device_bytes;
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, exchange, {});
+  }
+  if (was_set)
+    setenv("GENERATIVEQC_DISABLE_MD_J", saved.c_str(), 1);
+  else
+    unsetenv("GENERATIVEQC_DISABLE_MD_J");
+  std::cout << "CUDA automatic canonical reuse preserves incumbent MD-J budget PASS\n";
 }
 
 /** Deny only the final optional range matrix through the real resource ledger.
@@ -2647,6 +2796,18 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
+                      std::string(argv[1]) == "--canonical-materialized-screened-only")) {
+      canonical_screened_values(true);
+      if (std::string(argv[1]) == "--canonical-materialized-only") canonical_value_provider();
+      materialized_optional_budget_fallback();
+      materialized_incumbent_md_budget();
+      if (std::string(argv[1]) == "--canonical-materialized-only")
+        spd_optional_allocation_fallback();
+      std::cout
+          << "CUDA indexed materialized J/K, SR/LR, screening, projection and fallback PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--generated-j-budget-only") {
       generated_coulomb_budget();
       return 0;
