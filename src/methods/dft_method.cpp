@@ -19,6 +19,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
+#include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
 #include "dft/xc.hpp"
@@ -936,6 +937,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
                                                          grid_.weights(), grid_.owners(), warm_));
     if (range_correction_)
       bytes = runtime::add_capacity(bytes, range_correction_->cpu_observation_capacity());
+#if GENERATIVEQC_HAS_CUDA
+    if (range_derivative_correction_)
+      bytes =
+          runtime::add_capacity(bytes, range_derivative_correction_->cpu_observation_capacity());
+#endif
     if (cpu_physical_)
       for (const auto* matrices : {&cpu_physical_->density, &cpu_physical_->fock})
         for (const auto& matrix : *matrices)
@@ -1233,13 +1239,19 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const dft::CudaKsFinalStateToken& expected,
       const std::vector<scf::reference::Matrix>& density,
       const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
-      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+      bool allow_mixed_rsh_primary = false,
+      std::optional<std::size_t> one_electron_device_maximum_bytes = std::nullopt) {
     output.clear();
     work = {};
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
-        !system_.ecp_terms.empty() || execution_plan_.range_exchange ||
-        execution_plan_.nonlocal_correlation) {
-      detail = "density-fitted stationary derivatives require all-electron full-range KS";
+        !system_.ecp_terms.empty() ||
+        ((execution_plan_.range_exchange || execution_plan_.nonlocal_correlation) &&
+         !allow_mixed_rsh_primary) ||
+        (allow_mixed_rsh_primary &&
+         (!execution_plan_.range_exchange || backend_ != GENERATIVEQC_BACKEND_CUDA))) {
+      detail =
+          "density-fitted stationary derivatives require qualified all-electron full-range primary";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const auto& strategy = fock_.strategy();
@@ -1298,7 +1310,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
           return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
         const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
-            resident_weights.device_id, system_, {}, {}, 0, maximum_bytes, hcore, pulay, detail,
+            resident_weights.device_id, system_, {}, {}, 0,
+            one_electron_device_maximum_bytes.value_or(maximum_bytes), hcore, pulay, detail,
             &one_electron, resident_weights.density, resident_weights.weighted_density);
         if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
           resident_one_electron = true;
@@ -1521,6 +1534,190 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  /** Private source-only bridge for a mixed full-range DF primary and an
+   * independent exact LR correction.  Public mixed-DF forces remain excluded
+   * until complete meta-GGA/VV10/moving-grid and independent E/F qualification.
+   *
+   * The first-derivative LR source is prepared on demand: energy-only solves
+   * never pay its angular workspace or compilation costs. */
+  generativeqc_status cuda_mixed_rsh_df_integral_gradient(
+      const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+      const std::vector<scf::reference::Matrix>* cached_density,
+      const std::vector<scf::reference::Matrix>* cached_weighted_density) {
+#if GENERATIVEQC_HAS_CUDA
+    output.clear();
+    work = {};
+    if (!cuda_ || !range_strategy_ || !range_correction_ ||
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CUDA ||
+        options_.precision_mode != GENERATIVEQC_PRECISION_FP64 || !execution_plan_.range_exchange ||
+        !system_.ecp_terms.empty() || !range_correction_->matches_system(system_) ||
+        range_correction_->strategy() != *range_strategy_) {
+      detail = "mixed RSH-DF stationary sources require live strict-FP64 CUDA providers";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto& primary = fock_.strategy();
+    const auto& p = primary.spec;
+    const auto& correction = *range_strategy_;
+    const auto& c = correction.spec;
+    const double spin_factor = p.spin == scf::FockSpin::Restricted ? -0.5 : -1.0;
+    const double full_coefficient = p.exchange.present ? p.exchange.coefficient : 0.0;
+    const bool matched =
+        primary.backend == scf::FockBackend::Cuda && correction.backend == scf::FockBackend::Cuda &&
+        primary.screening_tolerance == correction.screening_tolerance && p.spin == c.spin &&
+        p.derivative_order == 0 && c.derivative_order == 0 && p.coulomb.present &&
+        p.coulomb.coefficient == 1.0 && p.coulomb.op == scf::FockOperator::FullRange &&
+        p.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        (!p.exchange.present ||
+         (p.exchange.op == scf::FockOperator::FullRange &&
+          p.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
+        !c.coulomb.present && c.exchange.present &&
+        c.exchange.approximation == scf::FockApproximation::Exact &&
+        c.exchange.op == scf::FockOperator::LongRange &&
+        c.exchange.omega == execution_plan_.range_omega && c.exchange.omega > 0.0 &&
+        full_coefficient == spin_factor * execution_plan_.short_range_exchange &&
+        c.exchange.coefficient == spin_factor * (execution_plan_.long_range_exchange -
+                                                 execution_plan_.short_range_exchange) &&
+        std::isfinite(full_coefficient) && std::isfinite(c.exchange.coefficient) &&
+        c.exchange.coefficient != 0.0 &&
+        expected.identity.model.spins == (p.spin == scf::FockSpin::Restricted ? 1U : 2U);
+    if (!matched) {
+      detail = "mixed RSH-DF primary/LR correction have incompatible resolved Fock identities";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto nc = 3 * system_.atoms.size();
+    // Four primary rows, one LR row and five result rows can coexist.
+    if (!maximum_bytes || nc > maximum_bytes / (10U * sizeof(double))) {
+      detail = "mixed RSH-DF compact source publication exceeds its host budget";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+    if ((cached_density == nullptr) != (cached_weighted_density == nullptr)) {
+      detail = "mixed RSH-DF cached D/W must be provided together";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    dft::VerifiedKsFinalState exported;
+    if (!cached_density) {
+      const auto status = read_final_state(expected, true, exported, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      cached_density = &exported.density;
+      cached_weighted_density = &exported.weighted_density;
+    }
+    dft::CudaKsResidentDensityBinding resident;
+    auto status = cuda_->resident_final_density(expected, resident, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto nbf = fock_.diagnostic().nbf;
+    if (!resident || resident.device_id != expected.identity.model.device ||
+        resident.matrix_elements != nbf * nbf || resident.spins != expected.identity.model.spins ||
+        !resident.stream) {
+      detail = "mixed RSH-DF resident density disagrees with the live KS token";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+
+    // The independent value-side range owner remains untouched; the
+    // derivative-only lease is a separate, lazy provider with identical
+    // operator/omega/spin/geometry and a charged direct-workspace budget.
+    // This derivative owner was not paid for by the energy-only SCF plan.
+    // Charge it on every call, including reuse, before creating any storage;
+    // maximum_bytes independently bounds compact host and additional device use.
+    const auto derivative_device_bytes =
+        range_derivative_correction_ ? range_derivative_correction_->diagnostic().device_bytes
+                                     : ks_provider_bytes(system_, backend_, 1U);
+    std::size_t primary_device_bytes{};
+    status = dft::mixed_rsh_df_primary_device_allowance(maximum_bytes, derivative_device_bytes,
+                                                        primary_device_bytes, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (!range_derivative_correction_) {
+      try {
+        range_derivative_correction_ = std::make_unique<scf::PreparedFockPlan>(
+            system_, nullptr, *range_strategy_, resident.device_id, derivative_device_bytes, 1U);
+      } catch (const std::bad_alloc&) {
+        detail = "mixed RSH-DF LR derivative source exceeded its provider budget";
+        return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      } catch (const std::exception& error) {
+        detail = error.what();
+        return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      }
+    }
+    const auto lr_binding =
+        scf::prepared_cuda_direct_derivative_binding(*range_derivative_correction_);
+    if (!lr_binding || lr_binding.device_id != resident.device_id || lr_binding.nbf != nbf ||
+        range_derivative_correction_->strategy() != correction ||
+        !range_derivative_correction_->matches_system(system_) ||
+        lr_binding.retained_device_bytes > derivative_device_bytes) {
+      detail = "mixed RSH-DF independent LR source lacks a matching first-order lease";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+
+    std::vector<double> fitted_four;
+    status = density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
+                                              fitted_four, maximum_bytes, work, detail, true,
+                                              primary_device_bytes);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+
+    // The KS final D is produced on its own stream. The isolated LR gradient
+    // kernel must wait on that exact producer before dereferencing resident D.
+    // An event records the dependency without a host/device-wide synchronize.
+    auto cuda_status = cudaSetDevice(resident.device_id);
+    if (cuda_status != cudaSuccess) {
+      detail = std::string("mixed RSH-DF device selection: ") + cudaGetErrorString(cuda_status);
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    cudaEvent_t density_ready{};
+    cuda_status = cudaEventCreateWithFlags(&density_ready, cudaEventDisableTiming);
+    if (cuda_status != cudaSuccess) {
+      detail = std::string("mixed RSH-DF density event: ") + cudaGetErrorString(cuda_status);
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    const auto producer = static_cast<cudaStream_t>(resident.stream);
+    const auto recorded = cudaEventRecord(density_ready, producer);
+    const auto waited = recorded == cudaSuccess
+                            ? cudaStreamWaitEvent(lr_binding.stream, density_ready, 0)
+                            : recorded;
+    (void)cudaEventDestroy(density_ready);
+    if (waited != cudaSuccess) {
+      detail = std::string("mixed RSH-DF LR density dependency: ") + cudaGetErrorString(waited);
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+
+    std::vector<double> direct_lr;
+    status = scf::execute_prepared_cuda_direct_long_range_derivatives_device(
+        *range_derivative_correction_, resident.alpha, resident.beta, resident.matrix_elements,
+        direct_lr, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    status = dft::compose_mixed_rsh_df_integral_sources(
+        fitted_four, direct_lr, nc, full_coefficient, c.exchange.coefficient, output, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    // Slot 2 is the mixed bridge's additional-device peak: its lazy LR
+    // owner coexists with one-electron staging. DF J/K response resources
+    // remain outside this deliberately partial nine-slot resource scope.
+    if (work[2] > maximum_bytes || lr_binding.retained_device_bytes > maximum_bytes - work[2]) {
+      output.clear();
+      detail = "mixed RSH-DF additional derivative storage exceeds its device budget";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+    // Slot 0 remains the primary SCF-owned bytes; do not double-charge LR.
+    work[2] += lr_binding.retained_device_bytes;
+    work[3] = std::max<std::uint64_t>(work[3], 10U * nc * sizeof(double));
+    dft::CudaKsFinalStateToken current;
+    status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS || current != expected) {
+      output.clear();
+      detail = "mixed RSH-DF final-state source token changed during response";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    return GENERATIVEQC_STATUS_SUCCESS;
+#else
+    (void)expected;
+    (void)output;
+    (void)maximum_bytes;
+    (void)work;
+    (void)cached_density;
+    (void)cached_weighted_density;
+    detail = "mixed RSH-DF stationary sources require CUDA";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+
   generativeqc_status cuda_integral_gradient(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
@@ -1530,6 +1727,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
+    if (fitted && execution_plan_.range_exchange && !combined_two_electron)
+      return cuda_mixed_rsh_df_integral_gradient(expected, output, maximum_bytes, work, detail,
+                                                 cached_density, cached_weighted_density);
     if (fitted && ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
       detail =
           "CUDA density-fitted stationary derivatives require the qualified semilocal DF-J domain";
@@ -2021,6 +2221,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
   scf::PreparedFockPlan fock_;
   std::optional<scf::ResolvedFockBuild> range_strategy_;
   std::unique_ptr<scf::PreparedFockPlan> range_correction_;
+#if GENERATIVEQC_HAS_CUDA
+  std::unique_ptr<scf::PreparedFockPlan> range_derivative_correction_;
+#endif
   dft::AoBasis basis_;
   dft::MolecularGrid grid_;
   std::vector<double> warm_;

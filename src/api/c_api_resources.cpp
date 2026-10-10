@@ -13,6 +13,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/preliminary_guess.hpp"
 
 #if GENERATIVEQC_HAS_CUDA
 #include "dft/cuda_ks.hpp"
@@ -454,6 +455,23 @@ int generativeqc_resource_df_source_bytes_v1(std::size_t batch, std::size_t atom
         batch, atoms, shells, cartesian_aos, primitives, transforms);
     return 0;
   } catch (const std::overflow_error&) {
+    return 1;
+  }
+}
+
+/** Private additive shape query for the exact native MINAO preparation bound.
+ * Output is transactional; this does not construct a system, SCF or GPU state.
+ * Old binaries simply lack the symbol and retain legacy Python planning. */
+int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
+                                                    const std::int32_t* atomic_numbers,
+                                                    std::size_t atom_count, std::uint64_t* output) {
+  if (!output) return 1;
+  try {
+    const auto value = generativeqc::scf::initial_guess::preliminary_minao_numeric_capacity(
+        target_aos, atomic_numbers, atom_count);
+    *output = value;
+    return 0;
+  } catch (const std::exception&) {
     return 1;
   }
 }

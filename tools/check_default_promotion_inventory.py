@@ -239,7 +239,7 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
 
 
 def _discover_rys_task_default(root: Path) -> dict[str, str]:
-    """Require renewed qualification when the target/class guard is broadened."""
+    """Guard shared Rys classes, target capabilities and portable fallback."""
     preference_relative = Path(
         "python/generativeqc_compiler/integral/production_rys_tasks.py"
     )
@@ -249,8 +249,10 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
         preferred is None
         or ast.literal_eval(preferred.group(1))
         != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
-        or 'profile.target.architecture != "sm_120" or profile.profile != "sm_120"'
-        not in preference
+        or "if profile.portable:" not in preference
+        or "schedule_candidates(integral, profile.target)" not in preference
+        or "if schedule is None:" not in preference
+        or 'profile.target.architecture != "sm_120"' in preference
     ):
         raise ValueError("Rys-task default target/class admission drifted")
     lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")

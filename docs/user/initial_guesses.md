@@ -148,3 +148,15 @@ MINAO construction and scientific admission, but backend-dependent preparation
 cost means the CUDA timing evidence is not a CPU speedup claim. HF/LDA remain
 explicit opt-ins. A three-stage HF → LDA → target pipeline is an experiment,
 not a supported production option.
+
+## Native resource-planner authority
+
+For installed libraries with `generativeqc_resource_minao_numeric_capacity_v1`,
+the Python MINAO planner queries the same C++ numeric-payload bound used by
+actual preparation. The query takes target AO count and atomic numbers and
+performs no SCF, integral evaluation or CUDA initialization. It rejects invalid
+atomic domains and numeric overflow without publishing a partial output.
+Retained target and source workspace remain separately charged by the global
+resource planner; the bound does **not** represent allocator overhead or process
+RSS. Older native libraries lacking this additive private query keep the
+previous conservative Python compatibility estimate.

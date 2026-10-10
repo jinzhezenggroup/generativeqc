@@ -76,6 +76,30 @@ Energies are Hartree and forces are Hartree/Bohr. Add `--json` for
 machine-readable output. Native CUDA SDK builds may select `--backend cuda`;
 unsupported build/device combinations fail closed.
 
+### SCF convergence controls
+
+The Python-free `run` command accepts explicit `--max-iterations`,
+`--energy-tolerance`, `--density-tolerance`, and `--screening-tolerance`
+overrides. They are passed directly to the existing native method descriptor;
+the scientific equations and default convergence policies do not change.
+Iteration counts must be positive integers and tolerances must be positive,
+finite numbers. Invalid values (including NaN, infinity, zero and trailing
+text) fail before a calculation is prepared. Integral screening applies to
+Gaussian HF/DFT methods, not GFN2-xTB.
+
+```bash
+generativeqc run molecule.xyz --method pbe0-rks --basis def2-svp \
+  --backend cpu --density-fitting cpu --forces \
+  --max-iterations 200 --energy-tolerance 1e-12 \
+  --density-tolerance 1e-10 --screening-tolerance 1e-14 --json
+```
+
+The unchanged defaults are 100 SCF iterations, energy tolerance `1e-12`
+Hartree for Gaussian methods (`1e-10` for GFN2-xTB), density tolerance
+`1e-10` for Gaussian methods (`1e-8` for GFN2-xTB), and screening
+tolerance `1e-14` for Gaussian methods. A larger iteration limit does not
+relax strict convergence or guarantee success.
+
 ## Run RHF/UHF with bundled Gaussian bases
 
 The native CLI can also expand the generated bundled basis catalog directly
@@ -205,7 +229,12 @@ generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
 
 The generated **PBE0-RKS** composition can use this route only when its
 prepared full-range exact-exchange **and** Coulomb terms both admit the same
-CPU density-fitted derivative provider. The installed C++ SDK queries the
+CPU density-fitted derivative provider. Its H2/STO-3G native CLI analytic
+force is independently checked against central differences of fully
+reconverged molecular energies at displaced geometries, while the C++ SDK
+test checks the exact prepared force-capability contract and translation
+invariance. These tests are a narrow admission gate, not evidence of general
+PBE0 gradients across bases, spins or backends. The installed C++ SDK queries the
 actual prepared context through
 `generativeqc_calculation_get_supported_properties_v1`; the generic method
 registry remains energy-only because it cannot promise forces for every

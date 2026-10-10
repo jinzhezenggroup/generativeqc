@@ -4,9 +4,9 @@
 
 namespace generativeqc::scf {
 
-/** Conservative schedule profile, not a correctness/capability declaration.
- * Existing device-metric, source, representation, state and allocation gates
- * remain with their owners. Unknown architectures retain the generic path.
+/** Conservative, architecture-independent work admission, not a correctness
+ * or performance claim. Device-metric, source, representation, state and
+ * allocation gates remain with their owners. Zero denotes an unprobed target.
  */
 struct DfDerivativeProfile {
   std::size_t minimum_public_weights;
@@ -15,11 +15,11 @@ struct DfDerivativeProfile {
 };
 
 constexpr DfDerivativeProfile df_derivative_profile(unsigned architecture) noexcept {
-  // Small molecular endpoints lose to shell-launch/metadata overhead. Retain
-  // headroom below the measured medium-size wins; these are work thresholds,
-  // not AO/rank pairs, molecule fingerprints or GPU marketing names.
-  return architecture == 120 ? DfDerivativeProfile{1U << 18, 1U << 22, 1U << 28}
-                             : DfDerivativeProfile{0, 0, 0};
+  // Small molecular endpoints lose to shell-launch/metadata overhead. Reuse
+  // conservative work thresholds on every known CUDA target; do not encode a
+  // GPU model or use a benchmark AO/rank tuple as a correctness gate.
+  return architecture != 0 ? DfDerivativeProfile{1U << 18, 1U << 22, 1U << 28}
+                           : DfDerivativeProfile{0, 0, 0};
 }
 
 /** Compare a*b*c with a positive bound without ever forming the product. */
@@ -51,12 +51,11 @@ constexpr bool df_signature_packets_preferred(std::size_t orbital_primitives,
 /** Promote folded packed occupied-response weights by general work and rank
  * features, never by a benchmark AO/rank tuple or GPU marketing name.
  *
- * The first sm_120 profile deliberately keeps the measured smaller-domain
- * dense/symmetric default: 2^28 lies above the 384^3 negative/default domain
- * and below the qualified 768^3 packed-response endpoint.  Rank admission is
- * expressed as an occupied fraction so nearby RHF shapes can reuse the same
- * policy.  Correctness, provenance, resident storage and one-term RHF gates
- * remain with the response owner; unknown architectures stay unpromoted.
+ * The conservative 2^28 work threshold keeps smaller-domain dense/symmetric
+ * layouts while admitting sufficiently large occupied-response candidates.
+ * Rank admission is expressed as an occupied fraction, not a benchmark tuple.
+ * This is candidate eligibility only: automatic packed-response promotion
+ * remains disabled until the separate response owner qualifies it.
  */
 constexpr bool df_packed_response_preferred(std::size_t nbf, std::size_t naux, std::size_t rank,
                                             unsigned architecture) noexcept {
