@@ -103,6 +103,17 @@ it does not suppress non-resource CUDA errors. Endpoint
 `lambda_available_device_bytes` and `lambda_device_limit_bytes` report the
 admission snapshot and ceiling, not observed peak memory.
 
+Immutable matrix-core preparation evaluates the complete proven invariant
+partition, but its exclusive owner-local arena retains only values read by
+dynamic operations or published outputs. Interior preparation values and
+dynamic temporaries borrow the ordinary matrix scratch between Q consumers.
+The generated transient query must fit that already-selected scratch before
+optional retention is admitted; retention does not enlarge mandatory scratch
+or reduce the selected Q batch. Its persistent frontier and both prepared
+descriptor subsets still obey the complete host/device ceilings. The storage
+identity distinguishes this layout from whole-graph retention without changing
+the dependency proof, owner epoch or adjoint equations.
+
 Benchmark argument twenty-five selects core reuse (`0`/`1`, default `1`).
 Argument twenty-six selects the matrix audit (`0`/`1`, default `1`), matching
 `LambdaOptions::df_audit_matrix_gemm` and the complete owner's trailing

@@ -51,6 +51,7 @@ from generativeqc_compiler.tensor.ir import (
 from generativeqc_compiler.tensor.iteration_reuse import (
     IterationReusePlan,
     analyze_iteration_reuse,
+    invariant_frontier,
 )
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_arena import (
@@ -959,8 +960,11 @@ def _required_function(
     *,
     batch_dim: bool = False,
     retained_nodes: tuple[typing.Any, ...] = (),
+    storage_slice: slice | None = None,
 ) -> str:
     pieces = _arena_plan(program, retained_nodes=retained_nodes).sizes
+    if storage_slice is not None:
+        pieces = pieces[storage_slice]
     # Emit sequential checked additions rather than an expression whose parser
     # nesting grows with the AD graph. Clang's default bracket limit is finite.
     body = "std::size_t required=0;"
@@ -1906,12 +1910,29 @@ def _cuda_program(
     parallel_scalar_reductions: bool = False,
     reuse_plan: IterationReusePlan | None = None,
     reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
+    reuse_storage_nodes: tuple[typing.Any, ...] | None = None,
+    retained_arena_field: str | None = None,
 ) -> str:
     names = _prepare_program(program)
     if (reuse_plan is None) != (reuse_phase is None):
         raise ValueError("reuse emission requires both a plan and phase")
-    retained = () if reuse_plan is None else reuse_plan.invariant_nodes
-    retained_ids = {id(node) for node in retained}
+    # Preparation still executes every proved invariant operation. The storage
+    # cut may retain only their boundary values, never redefine either phase.
+    invariant = () if reuse_plan is None else reuse_plan.invariant_nodes
+    invariant_ids = {id(node) for node in invariant}
+    retained = invariant if reuse_storage_nodes is None else reuse_storage_nodes
+    if (
+        reuse_storage_nodes is not None or retained_arena_field is not None
+    ) and reuse_plan is None:
+        raise ValueError("split retention storage requires a proven reuse plan")
+    if len(set(retained)) != len(retained) or not set(retained) <= set(invariant):
+        raise ValueError(
+            "retention storage must contain unique proven invariant values"
+        )
+    if reuse_storage_nodes is not None and not set(
+        invariant_frontier(program, reuse_plan)
+    ) <= set(retained):
+        raise ValueError("retention storage must preserve the invariant frontier")
     arena_plan = _arena_plan(program, retained_nodes=retained)
     if elide_native_copy_roundtrips and (
         reuse_plan is not None or not emit_kernels or kernel_prefix is not None
@@ -1982,8 +2003,23 @@ def _cuda_program(
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
         "  auto allocate=[&](std::size_t count)->double*{double* p=arena+cursor;cursor=checked_add(cursor,count);return p;};",
+        *(
+            [
+                f"  auto* retained_arena=s.{retained_arena_field};",
+                "  std::size_t retained_cursor=0;",
+                "  auto retain=[&](std::size_t count)->double*{double* pointer=retained_arena+retained_cursor;retained_cursor=checked_add(retained_cursor,count);return pointer;};",
+            ]
+            if retained_arena_field is not None
+            else []
+        ),
         *[
-            f"  double* slot{slot}=allocate({size});"
+            f"  double* slot{slot}="
+            + (
+                "retain"
+                if retained_arena_field is not None and slot < len(retained)
+                else "allocate"
+            )
+            + f"({size});"
             for slot, size in enumerate(arena_plan.sizes)
         ],
         *(
@@ -2009,7 +2045,7 @@ def _cuda_program(
             continue
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         if reuse_phase is not None and (
-            (id(node) in retained_ids) != (reuse_phase == "prepare")
+            (id(node) in invariant_ids) != (reuse_phase == "prepare")
         ):
             continue
         if number in elided_nodes:

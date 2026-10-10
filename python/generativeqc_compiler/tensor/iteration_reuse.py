@@ -43,6 +43,27 @@ class IterationReusePlan:
     identity: str
 
 
+def invariant_frontier(program: Program, plan: IterationReusePlan) -> tuple[Node, ...]:
+    """Return immutable values read by dynamic operations or published outputs.
+
+    All invariant operations still execute during preparation. Only values that
+    cross its boundary need persistent storage; interior preparation temporaries
+    can share the caller's existing scratch. This is a liveness cut over the
+    existing purity/dependency proof, not a new validity or mathematical proof.
+    """
+    operations = {node for node in program.live_nodes if node.op != "input"}
+    invariant = set(plan.invariant_nodes)
+    dynamic = set(plan.dynamic_nodes)
+    if invariant & dynamic or invariant | dynamic != operations:
+        raise ValueError(
+            "invariant frontier requires this program's complete reuse plan"
+        )
+    readers = set(program.outputs.values()) | {
+        source for node in plan.dynamic_nodes for source in node.inputs
+    }
+    return tuple(node for node in plan.invariant_nodes if node in readers)
+
+
 def analyze_iteration_reuse(
     program: Program,
     *,

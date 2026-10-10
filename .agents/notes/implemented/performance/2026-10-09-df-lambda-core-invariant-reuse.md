@@ -1,5 +1,10 @@
 # Decision: retain immutable FP64 Lambda core values within one solve owner
 
+The later storage-only refinement is documented in
+`2026-10-10-lambda-invariant-frontier.md` in this directory. It supersedes the
+whole-core retained arena without rewriting this historical qualification or
+changing the original dependency proof, adjoint equations and owner epoch.
+
 Status: implemented; matched clean and instrumented qualification complete
 Date: 2026-10-09
 
