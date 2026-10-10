@@ -45,17 +45,24 @@ The candidate and historical pre-change native forces differ by at most 6.436830
 
 Qualified source: `3430c0bb1071685f65072d9941a33e4f3e2d1e95`. Native source identity: `cb60b50bac01691a81ac6bd46919c840bdf1f609d5651e637adef31e7f01e9ca`. Frozen library SHA-256: `5b841ed1dfbfd34eaa73b20a1c4f28da4cf1d798bd8e502093679c9a1f7aaa06`. The exact measured patch and rebase identity record are retained under `reproduction/`.
 
+The 2026-10-10 storage-only compaction preserves the complete original summary
+bytes in `summary.json.gz`; `summary-retention.json` pins the compressed and
+restored hashes and the existing Git blob. Restoration was verified before
+removing the expanded copy. No samples, ordering, values or scientific gates
+change, and the aggregate evidence cap is unchanged. Read it with
+`gzip -dc benchmarks/results/issue206-metric-gemv/summary.json.gz`.
+
 `measurements/` retains every value in the 20 clean comparison records, including
 all raw timing samples, arrays, convergence and errors, plus independent input
 qualification. `direct-gate/` and `historical-prechange-direct/` retain the strict
 gate failures and controls. `reproduction/` retains the measured source patch,
 runner commands and identities. All JSON values and ordering match the original
-records; `summary.json` pins both original and selected file hashes.
+records; `summary.json.gz` pins both original and selected file hashes.
 
 The former 7.45 MB `evidence.zip` also contained routine test outputs and detailed
 profiler traces. It has been removed from this PR's current tree. An exact local
 copy remains under ignored `.artifacts/`; its historical Git identity and SHA-256
-are recorded in `summary.json`. Full-run inspection can recover it without
+are recorded in `summary.json.gz`. Full-run inspection can recover it without
 putting it back into the reviewed result directory:
 
 ```bash
