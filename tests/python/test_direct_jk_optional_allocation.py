@@ -3,8 +3,8 @@
 import subprocess
 from pathlib import Path
 
-from test_coulomb_optional_allocation import compile_cached_probe
 from _cpp_source_support import cpp_function_definition, cpp_record_definition
+from test_coulomb_optional_allocation import compile_cached_probe
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -200,7 +200,9 @@ def test_production_optional_rollback_preserves_owner_and_failure_classification
     definitions = [
         cpp_function_definition(source, "direct_jk_check"),
         cpp_record_definition(source, "DirectJkDownloadFence") + ";",
-        cpp_function_definition(source, "direct_jk_optional_storage", include_template=True),
+        cpp_function_definition(
+            source, "direct_jk_optional_storage", include_template=True
+        ),
     ]
     cpp, binary = tmp_path / "probe.cpp", tmp_path / "probe"
     cpp.write_text(STUBS + "\n".join(definitions) + DRIVER)

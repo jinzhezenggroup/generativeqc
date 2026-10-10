@@ -10,12 +10,12 @@ from typing import Any
 
 import pytest
 import test_ks_point_batch_resources as point_budget
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc import ResourceBudget, resources_ks
 from generativeqc.resources_native import NativeDeviceLedger
 from generativeqc_compiler.common.resources import plan_resources
 from test_coulomb_optional_allocation import compile_cached_probe
 from test_direct_jk_optional_allocation import STUBS
-from _cpp_source_support import cpp_function_definition, cpp_record_definition
 
 ROOT = Path(__file__).resolve().parents[2]
 native_probe = point_budget.native_probe
@@ -186,8 +186,7 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     # Reuse the existing failure/ownership runtime, adding the real MD layout.
     stubs = STUBS.replace(
         "struct CudaDirectJkPlan {",
-        MD_STUBS.split("struct HostBatch", 1)[0]
-        + "\nstruct CudaDirectJkPlan {",
+        MD_STUBS.split("struct HostBatch", 1)[0] + "\nstruct CudaDirectJkPlan {",
     ).replace(
         "std::size_t device_bytes = 0;",
         "std::size_t device_bytes = 0;\nMdJView md_j; int batch=0; double* bounds=nullptr;"
@@ -197,7 +196,9 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
         "struct HostBatch" + MD_STUBS.split("struct HostBatch", 1)[1],
         cpp_record_definition(source, "MdJHost") + ";",
         cpp_function_definition(source, "direct_jk_check"),
-        cpp_function_definition(source, "direct_jk_optional_storage", include_template=True),
+        cpp_function_definition(
+            source, "direct_jk_optional_storage", include_template=True
+        ),
     ]
     start = source.index("    MdJHost md_host;")
     end = source.index("    auto& info =", start)

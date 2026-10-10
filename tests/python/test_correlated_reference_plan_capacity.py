@@ -14,8 +14,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _eigen_handle_test_support import empty_eigen_owner_units
 from _cpp_source_support import cpp_function_declaration, cpp_record_definition
+from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -105,7 +105,8 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         + "namespace generativeqc::scf::reference_detail {\n"
         + capacity
         + "}\n"
-        + DRIVER.replace("@DRIVER_SIGNATURE@", driver_signature).replace("@PEAK@", peak)
+        + DRIVER.replace("@DRIVER_SIGNATURE@", driver_signature)
+        .replace("@PEAK@", peak)
         .replace("@SNAPSHOT@", snapshot)
         .replace("@DIIS_POLICY@", diis_policy)
         + MAIN.replace("@FILL@", fill)

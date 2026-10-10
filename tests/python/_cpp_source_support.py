@@ -90,7 +90,9 @@ def _closing(code: str, opening: int, left: str, right: str) -> int:
     raise ValueError(f"unclosed C++ {left!r} at {opening}")
 
 
-def _function_matches(source: str, name: str, *, declaration: bool) -> list[tuple[int, int]]:
+def _function_matches(
+    source: str, name: str, *, declaration: bool
+) -> list[tuple[int, int]]:
     code = _code_only(source)
     matches = []
     for match in re.finditer(r"\b" + re.escape(name) + r"\s*\(", code):
@@ -115,7 +117,9 @@ def _function_matches(source: str, name: str, *, declaration: bool) -> list[tupl
 
 def _unique(matches: list[tuple[int, int]], name: str) -> tuple[int, int]:
     if len(matches) != 1:
-        raise ValueError(f"expected one C++ contract for {name!r}, found {len(matches)}")
+        raise ValueError(
+            f"expected one C++ contract for {name!r}, found {len(matches)}"
+        )
     return matches[0]
 
 
@@ -133,13 +137,17 @@ def cpp_function_declaration(source: str, name: str) -> str:
     return result
 
 
-def cpp_function_definition(source: str, name: str, *, include_template: bool = False) -> str:
+def cpp_function_definition(
+    source: str, name: str, *, include_template: bool = False
+) -> str:
     """Extract exactly one named implementation for a CPU-executed CUDA shim.
 
     Signature whitespace/parameter changes are immaterial; body braces in
     comments, ordinary strings or C++ raw literals do not terminate the body.
     """
-    name_start, opening = _unique(_function_matches(source, name, declaration=False), name)
+    name_start, opening = _unique(
+        _function_matches(source, name, declaration=False), name
+    )
     code = _code_only(source)
     end = _closing(code, opening, "{", "}") + 1
     start = source.rfind("\n", 0, name_start) + 1

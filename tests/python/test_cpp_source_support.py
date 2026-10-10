@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from _cpp_source_support import (
     cpp_function_declaration,
     cpp_function_definition,
@@ -12,7 +11,7 @@ from _cpp_source_support import (
 
 
 def test_definition_ignores_comments_strings_and_raw_strings() -> None:
-    source = r'''
+    source = r"""
 // void target(int x) { /* wrong */ }
 const char *example = R"delim(void target() { ) }; } )delim";
 const char ch = '}';
@@ -22,7 +21,7 @@ inline int target(Value value) noexcept {
   /* } */ if (value > 0) { return 4; }
   return 2;
 }
-'''
+"""
     definition = cpp_function_definition(source, "target", include_template=True)
     assert definition.startswith("template <class Value>")
     assert definition.endswith("  return 2;\n}")
@@ -30,12 +29,12 @@ inline int target(Value value) noexcept {
 
 
 def test_declaration_adapts_to_added_parameters() -> None:
-    header = '''
+    header = """
 // int execute(...);
 std::vector<RhfBucketItem> execute(
     CudaRhfBucketPlan& plan, const std::vector<core::System>& systems,
     const ScfOptions& options);
-'''
+"""
     signature = cpp_function_declaration(header, "execute")
     assert signature.startswith("std::vector<RhfBucketItem> execute(")
     assert "const std::vector<core::System>& systems" in signature
