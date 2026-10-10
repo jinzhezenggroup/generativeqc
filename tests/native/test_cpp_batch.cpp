@@ -182,14 +182,13 @@ int main() {
             "C++ CPU DF-PBE0 context did not advertise analytic forces");
     const auto pbe0_forces =
         fitted_pbe0.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
-    require(pbe0_forces.forces && pbe0_forces.forces->size() == 6 &&
-                std::isfinite(pbe0_forces.energy),
-            "C++ CPU DF-PBE0 failed complete E+F publication");
+    require(
+        pbe0_forces.forces && pbe0_forces.forces->size() == 6 && std::isfinite(pbe0_forces.energy),
+        "C++ CPU DF-PBE0 failed complete E+F publication");
     for (double force : *pbe0_forces.forces)
       require(std::isfinite(force), "C++ CPU DF-PBE0 returned nonfinite analytic force");
     for (std::size_t axis = 0; axis < 3; ++axis)
-      require(std::abs((*pbe0_forces.forces)[axis] +
-                       (*pbe0_forces.forces)[3 + axis]) < 2e-5,
+      require(std::abs((*pbe0_forces.forces)[axis] + (*pbe0_forces.forces)[3 + axis]) < 2e-5,
               "C++ CPU DF-PBE0 force violates translation invariance");
     std::cout << "C++ ragged batch and explicit KS API: PASS\n";
     return EXIT_SUCCESS;

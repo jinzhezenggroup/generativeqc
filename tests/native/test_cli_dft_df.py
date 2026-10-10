@@ -221,7 +221,10 @@ class NativeDftDfCliTests(unittest.TestCase):
         force = data["forces_hartree_per_bohr"]
         self.assertEqual(len(force), 2)
         self.assertTrue(
-            all(len(vector) == 3 and all(math.isfinite(x) for x in vector) for vector in force)
+            all(
+                len(vector) == 3 and all(math.isfinite(x) for x in vector)
+                for vector in force
+            )
         )
         for axis in range(3):
             self.assertAlmostEqual(force[0][axis] + force[1][axis], 0.0, delta=2e-5)
@@ -230,7 +233,9 @@ class NativeDftDfCliTests(unittest.TestCase):
         original = MOLECULE.read_text(encoding="utf-8").splitlines()
         self.assertEqual(int(original[0]), 2)
         displaced_energies = []
-        with tempfile.TemporaryDirectory(prefix="generativeqc-pbe0-force-") as directory:
+        with tempfile.TemporaryDirectory(
+            prefix="generativeqc-pbe0-force-"
+        ) as directory:
             for sign, label in ((1.0, "plus"), (-1.0, "minus")):
                 lines = list(original)
                 atom = lines[3].split()
@@ -241,7 +246,9 @@ class NativeDftDfCliTests(unittest.TestCase):
                 geometry.write_text("\n".join(lines) + "\n", encoding="utf-8")
                 displaced = self.call_xyz(geometry, "pbe0-rks", *flags)
                 self.assertEqual(displaced.returncode, 0, displaced.stderr)
-                displaced_energies.append(json.loads(displaced.stdout)["energy_hartree"])
+                displaced_energies.append(
+                    json.loads(displaced.stdout)["energy_hartree"]
+                )
         fd_force = -(displaced_energies[0] - displaced_energies[1]) / (2 * step)
         self.assertTrue(math.isfinite(fd_force))
         self.assertAlmostEqual(force[1][2], fd_force, delta=2e-3)
