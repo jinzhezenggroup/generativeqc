@@ -60,6 +60,46 @@ CPU_PRIMITIVES = frozenset(
 )
 
 
+def _cpu_codegen_policy(program: Program) -> str:
+    """Fingerprint executable controls, not user-supplied descriptive provenance.
+
+    Diagnostic pass bisection and explicit precision provenance must remain
+    distinct even if two resulting CPU programs emit identical arithmetic.
+    Ordinary custom source notes must not force redundant CPU JIT compilation.
+    """
+    provenance = program.provenance
+    diagnostics = provenance.get("optimizer_diagnostics", {})
+    preparation = provenance.get("production_preparation", {})
+    if not isinstance(diagnostics, Mapping) or not isinstance(preparation, Mapping):
+        raise TypeError("invalid TensorIR compiler policy provenance")
+    return canonical_hash(
+        {
+            "schema": "generativeqc.tensor.cpu-codegen-policy.v1",
+            "disabled_passes": diagnostics.get("disabled_passes", []),
+            "stopped_after": diagnostics.get("stopped_after"),
+            "preserve_reduction_order": preparation.get(
+                "preserve_reduction_order", False
+            ),
+            "precision": {
+                key: value
+                for key, value in sorted(provenance.items())
+                if key.startswith("precision_")
+            },
+        }
+    )
+
+
+def _cpu_compilation_identity(program: Program, source: str) -> str:
+    """Bind a prepared logical DAG to its exact emitted CPU source."""
+    return canonical_hash(
+        {
+            "schema": "generativeqc.tensor.cpu-compilation.v2",
+            "logical_hash": program.logical_hash,
+            "source": source,
+        }
+    )
+
+
 def _scaled_bilinear_helper() -> str:
     """Emit the FP64 fused quotient used by TensorIR division VJPs."""
 
@@ -110,14 +150,39 @@ def emit_cpu(
     symbol: str = "tensor_cpu",
 ) -> typing.Any:
     """Prepare and emit one bounded CPU program without discovering a compiler."""
-    program = prepare_for_backend(program, "cpu")
-    return _emit_prepared_cpu(
+    _, source, resources, _ = describe_cpu_compilation(
         program,
         max_bytes=max_bytes,
         max_work=max_work,
         max_nodes=max_nodes,
         symbol=symbol,
     )
+    return source, resources
+
+
+def describe_cpu_compilation(
+    program: Program,
+    *,
+    max_bytes: int = 8 * 1024 * 1024,
+    max_work: int = 100_000_000,
+    max_nodes: int = 4096,
+    symbol: str = "tensor_cpu",
+) -> tuple[Program, str, dict[str, int], str]:
+    """Lower once and return the exact source, resources, and shared JIT identity.
+
+    This is a toolchain-free compiler query used by the public capability report
+    and the native CPU JIT owner. A caller's descriptive provenance is retained
+    on its Program but does not invalidate otherwise identical compiled code.
+    """
+    prepared = prepare_for_backend(program, "cpu")
+    source, resources = _emit_prepared_cpu(
+        prepared,
+        max_bytes=max_bytes,
+        max_work=max_work,
+        max_nodes=max_nodes,
+        symbol=symbol,
+    )
+    return prepared, source, resources, _cpu_compilation_identity(prepared, source)
 
 
 def _emit_prepared_cpu(
@@ -184,7 +249,7 @@ def _emit_prepared_cpu(
             if any(n.op == "scaled_bilinear" for n in nodes)
             else []
         ),
-        f"// TensorIR {program.logical_hash}; provenance {canonical_hash(program.provenance)}",
+        f"// TensorIR {program.logical_hash}; codegen-policy {_cpu_codegen_policy(program)}",
         f'extern "C" int {symbol}(const double* input, size_t ni, double* output, size_t no, size_t budget) noexcept {{',
         f"return generativeqc_tensor_cpu::run(input, ni, output, no, budget, {ni}ULL, {no}ULL, {arena}ULL, {required}ULL,",
         "[](const double* input, double* p) {",
@@ -372,8 +437,7 @@ class NativeTensorProgram:
         max_nodes: typing.Any = 4096,
         symbol: str = "tensor_cpu",
     ) -> None:
-        program = prepare_for_backend(program, "cpu")
-        source, self.resources = _emit_prepared_cpu(
+        program, source, self.resources, identity = describe_cpu_compilation(
             program,
             max_bytes=max_bytes,
             max_work=max_work,
@@ -386,9 +450,7 @@ class NativeTensorProgram:
             raise TypeError("native TensorIR requires a CPU compiler adapter")
         self.program, self.max_bytes = program, max_bytes
         self.inputs = tuple(n for n in program.live_nodes if n.op == "input")
-        self.identity = canonical_hash(
-            {"program": program.to_payload(), "source": source}
-        )
+        self.identity = identity
         cache = Path(cache)
         cache.mkdir(parents=True, exist_ok=True)
         path = cache / (self.identity + ".cpp")

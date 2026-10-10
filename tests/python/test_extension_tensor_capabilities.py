@@ -10,6 +10,7 @@ import pytest
 from generativeqc.extensions import tensor
 from generativeqc_compiler.common import cpp_adapter
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
 
 
 def _program() -> tensor.Program:
@@ -55,7 +56,11 @@ def test_compile_capabilities_reports_lowering_without_toolchain_activation(
     assert report["target"] == "cpu"
     assert report["mode"] == "jit"
     assert report["identity"] == canonical_hash(
-        {"program": program.to_payload(), "source": source}
+        {
+            "schema": "generativeqc.tensor.cpu-compilation.v2",
+            "logical_hash": prepare_for_backend(program, "cpu").logical_hash,
+            "source": source,
+        }
     )
     assert report["represented"] is True
     assert report["compilable"] is True
@@ -79,6 +84,52 @@ def test_compile_capability_identity_is_deterministic_and_semantic() -> None:
 
     assert first["identity"] == replay["identity"]
     assert first["identity"] != changed["identity"]
+
+
+
+def test_cpu_jit_identity_reuses_equivalent_custom_programs() -> None:
+    original = _program()
+    custom_a = tensor.Program(
+        original.outputs, provenance={"user_label": "first", "origin": {"run": 1}}
+    )
+    custom_b = tensor.Program(
+        original.outputs, provenance={"user_label": "second", "origin": {"run": 2}}
+    )
+
+    assert custom_a.logical_hash == custom_b.logical_hash
+    assert custom_a.to_payload() != custom_b.to_payload()
+    source_a, _ = tensor_cpu.emit_cpu(custom_a)
+    source_b, _ = tensor_cpu.emit_cpu(custom_b)
+    assert source_a == source_b
+    assert tensor.compile_capabilities(custom_a)["identity"] == (
+        tensor.compile_capabilities(custom_b)["identity"]
+    )
+
+
+def test_cpu_jit_identity_preserves_diagnostic_pass_selection() -> None:
+    original = _program()
+    diagnostic = tensor.optimize(original, stop_after="dead_nodes")
+
+    # A pass bisection must keep its own artifact identity even when the
+    # current small program happens not to be changed by either pass set.
+    assert diagnostic.logical_hash == original.logical_hash
+    assert tensor.compile_capabilities(original)["identity"] != (
+        tensor.compile_capabilities(diagnostic)["identity"]
+    )
+
+
+def test_cpu_jit_identity_keeps_precision_evidence_isolated() -> None:
+    original = _program()
+    first = tensor.Program(
+        original.outputs, provenance={"precision_source_equation": "source-A"}
+    )
+    second = tensor.Program(
+        original.outputs, provenance={"precision_source_equation": "source-B"}
+    )
+    assert first.logical_hash == second.logical_hash
+    assert tensor.compile_capabilities(first)["identity"] != (
+        tensor.compile_capabilities(second)["identity"]
+    )
 
 
 @pytest.mark.parametrize(

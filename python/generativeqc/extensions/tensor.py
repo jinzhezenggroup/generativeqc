@@ -190,11 +190,10 @@ def compile_capabilities(
     # probes an executable, starts a subprocess, or creates a cache artifact.
     # Use the production entry symbol so the reported identity is exactly the
     # identity NativeTensorProgram binds for the same compile request.
-    from generativeqc_compiler.common.provenance import canonical_hash
-    from generativeqc_compiler.tensor.cpu import emit_cpu
+    from generativeqc_compiler.tensor.cpu import describe_cpu_compilation
 
     try:
-        source, resources = emit_cpu(
+        _, _, resources, identity = describe_cpu_compilation(
             program,
             max_bytes=max_bytes,
             max_work=max_work,
@@ -206,9 +205,7 @@ def compile_capabilities(
         return report
     report["compilable"] = True
     report["lowering_validated"] = True
-    report["identity"] = canonical_hash(
-        {"program": program.to_payload(), "source": source}
-    )
+    report["identity"] = identity
     report["resources"] = copy.deepcopy(resources)
     return report
 

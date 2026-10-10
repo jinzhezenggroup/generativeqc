@@ -137,6 +137,17 @@ def test_explicit_cpu_jit_compiles_and_executes_real_program(tmp_path: Path) -> 
     replay = tensor.compile(program, compiler=compiler, cache=tmp_path)
     assert replay.identity == compiled.identity
     assert replay.artifact["library"] == artifact["library"]
+
+    # Identical user-defined mathematics share the validated binary even when
+    # callers attach different descriptive provenance to their programs.
+    custom = tensor.Program(
+        program.outputs, provenance={"user_defined_name": "my-custom-response"}
+    )
+    reused = tensor.compile(custom, compiler=compiler, cache=tmp_path)
+    assert reused.logical_hash == compiled.logical_hash
+    assert reused.identity == compiled.identity
+    assert reused.artifact["library"] == artifact["library"]
+    np.testing.assert_array_equal(reused.execute({"x": feed})["value"], feed)
     with pytest.raises(ValueError, match="invalid float64 tensor input"):
         compiled.execute({"x": feed.astype(np.float32)})
 
