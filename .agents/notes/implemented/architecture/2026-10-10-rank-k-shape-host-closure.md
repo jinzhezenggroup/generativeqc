@@ -23,9 +23,11 @@ qualification matrix, not a shape-polymorphic production contract.
 The fixed GCC 11 host closure is a staged manifest with path-independent roles
 and SHA-256 identities. It includes the driver, `cc1plus`, assembler,
 `collect2`, linker, their dynamic dependencies, every file under the compiler's
-reported C++ include search roots, resolved startup/library inputs, effective
-GCC specs and the linker's default script. The driver bytes named by the
-manifest must match the explicitly selected `-ccbin` executable.
+reported C++ include search roots, resolved startup/library inputs, the
+driver-reported `liblto_plugin.so` and `lto-wrapper` with their dynamic
+dependencies, effective GCC specs and the linker's default script. The driver
+bytes named by the manifest must match the explicitly selected `-ccbin`
+executable.
 
 CPU source staging reads that manifest without executing a compiler. GPU
 qualification regenerates it from the actual compiler, requires byte equality
@@ -59,9 +61,9 @@ directly compiled native harness is a separate fixed-recipe identity input.
 
 Mutation/missing-input tests cover CUDA and staged host manifests. Shape tests
 require distinct request/scientific identities for `3x5` and `17x9`. qz Job
-`i1877-rankk-host-1010y2` generated a 3,666-role GCC closure; Job
-`i1877-rankk-h100-1010z10` regenerated the same manifest from the final PATH,
-compiled exact commit `68de92cd32a356c1c05e41c3935cc206da77a7ea`, and passed the
+`i1877-rankk-host-1010z11h3` generated a 3,672-role GCC closure; Job
+`i1877-rankk-h100-1010z11` regenerated the same manifest from the final PATH,
+compiled exact commit `d8e5eaa9af430a6509ae635e50c6a736a1127817`, and passed the
 complete H100 matrix with distinct identities for every weighted/shape family.
 That source also binds the constructor to the request's exact flattened prefix
 count and includes the directly compiled native harness in compilation identity

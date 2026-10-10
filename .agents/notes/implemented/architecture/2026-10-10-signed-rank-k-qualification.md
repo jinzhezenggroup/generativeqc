@@ -108,16 +108,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `68de92cd32a356c1c05e41c3935cc206da77a7ea`, qz Job
-`i1877-rankk-h100-1010z10` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `d8e5eaa9af430a6509ae635e50c6a736a1127817`, qz Job
+`i1877-rankk-h100-1010z11` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,581 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 12.54–21.45 µs for the generated
-route and 25.58–35.78 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 13.26–21.42 µs for the generated
+route and 25.51–36.36 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -169,10 +169,15 @@ resolution with the final compilation PATH. Job `z9` source-matched the resultin
 `c2ab6a57e` tree. Upstream #2175 then changed the full source inventory without
 changing the qualified rank-k implementation blobs, so the branch merged
 `09bfb1d35` and Job `z10` regenerated the resulting compilation identities for
-exact tree `68de92cd3`. Job `z10` is the accepted run. Its generated header,
-object, binary and raw hashes are in the compact receipt. Later receipt-only
-commits may reuse `z10` only while all qualified implementation blobs and modes
-remain identical and latest-head review verifies that boundary.
+exact tree `68de92cd3`. A later review found that `collect2` dynamically loads the
+driver-reported `liblto_plugin.so`, which the v1 host closure did not hash. The
+v2 closure binds that plugin, `lto-wrapper`, and their dynamic dependencies;
+upstream through `82d44319d` was merged into the same candidate before final
+qualification. Job `z11` source-matched the resulting `d8e5eaa9a` tree and is the
+accepted run. Its generated header, object, binary and raw hashes are in the
+compact receipt. Later receipt-only commits may reuse `z11` only while all
+qualified implementation blobs and modes remain identical and latest-head
+review verifies that boundary.
 
 ## Revisit when
 
