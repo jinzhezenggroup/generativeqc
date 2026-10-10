@@ -108,16 +108,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `c2ab6a57ed43cb7bd8f7a877fe6f4e10926ef062`, qz Job
-`i1877-rankk-h100-1010z9` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `68de92cd32a356c1c05e41c3935cc206da77a7ea`, qz Job
+`i1877-rankk-h100-1010z10` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,581 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 13.02–21.32 µs for the generated
-route and 25.99–35.94 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 12.54–21.45 µs for the generated
+route and 25.58–35.78 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -166,10 +166,13 @@ latest master and Job `z8` source-matched that exact `c4b561f99` tree. Subsequen
 review bound the constructor to the exact request prefix, included the directly
 compiled harness in compilation identity schema v4, and aligned bare GCC child
 resolution with the final compilation PATH. Job `z9` source-matched the resulting
-`c2ab6a57e` tree and is the accepted run. Its generated header, object, binary
-and raw hashes are in the compact receipt. Later receipt-only commits may reuse
-`z9` only while all qualified implementation blobs and modes remain identical
-and latest-head review verifies that boundary.
+`c2ab6a57e` tree. Upstream #2175 then changed the full source inventory without
+changing the qualified rank-k implementation blobs, so the branch merged
+`09bfb1d35` and Job `z10` regenerated the resulting compilation identities for
+exact tree `68de92cd3`. Job `z10` is the accepted run. Its generated header,
+object, binary and raw hashes are in the compact receipt. Later receipt-only
+commits may reuse `z10` only while all qualified implementation blobs and modes
+remain identical and latest-head review verifies that boundary.
 
 ## Revisit when
 
