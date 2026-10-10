@@ -123,6 +123,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_tracked_allocator_tests tests/native/test_tracked_allocator.cpp
                      NO_GENERATIVEQC LIBRARIES Threads::Threads)
   generativeqc_native_test(generativeqc_fock_build_tests tests/native/test_fock_build.cpp)
+  generativeqc_native_test(generativeqc_mixed_rsh_df_sources_tests
+                       tests/native/test_mixed_rsh_df_sources.cpp)
   generativeqc_native_test(generativeqc_ecp_projector_tests tests/native/test_ecp_projector.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_ecp_capability_tests tests/native/test_ecp_capabilities.cpp)
   generativeqc_native_test(generativeqc_ecp_cpu_tests tests/native/test_ecp_cpu.cpp)
