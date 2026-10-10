@@ -60,6 +60,7 @@ class ResolvedProductionProfile:
     tuned: bool
     selections: tuple[KernelSelection, ...]
     cuda_toolkit: str
+    preferred_rys_task_fock_shell_classes: tuple[str, ...] = ()
 
     @property
     def portable(self) -> bool:
@@ -75,6 +76,26 @@ def _profile_kind(name: str, profile: dict[str, object]) -> str:
     if isinstance(configured, str):
         return configured
     return "portable" if name in ("portable", "portable_cuda") else "tuned"
+
+
+def _qualified_rys_task_classes(
+    profile: dict[str, object], *, tuned: bool
+) -> tuple[str, ...]:
+    """Read measured per-class K preferences; never transfer them to an unqualified GPU.
+
+    The compiler uses the same admission mechanism for every CUDA architecture.
+    Capability is determined by the generated candidate inventory, while the
+    preference comes only from the selected exact, tuned profile's evidence.
+    """
+
+    raw = profile.get("preferred_rys_task_fock_shell_classes", [])
+    if not isinstance(raw, list) or any(
+        not isinstance(name, str) or not name for name in raw
+    ):
+        raise TypeError("preferred Rys-task Fock classes must be a list of nonempty names")
+    if len(raw) != len(set(raw)):
+        raise ValueError("preferred Rys-task Fock classes contain duplicates")
+    return tuple(raw) if tuned else ()
 
 
 def _profile_compatible(
@@ -611,6 +632,9 @@ def resolve_production_profile(
         tuned=tuned,
         selections=selections,
         cuda_toolkit=toolkit,
+        preferred_rys_task_fock_shell_classes=_qualified_rys_task_classes(
+            profile_payload, tuned=tuned
+        ),
     )
 
 
