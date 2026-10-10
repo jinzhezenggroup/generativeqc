@@ -94,3 +94,18 @@ contracts. The map adds small host/kernel parameters but no numeric scratch.
 Revisit mixed precision, compact storage or response only with independent
 domain-specific gates and complete endpoint evidence. Requalify when consumed
 owner/generated artifacts change, not merely when unrelated master commits land.
+
+## Post-publication layout and master assessment
+
+PR #2232's format bot changed only three native continuation-line indentations
+in f70cf2f99. The exact measured source bytes and hashes remain immutable in the
+publication. The offline receipt test now permits only leading indentation
+differences when comparing today's native owner to those qualified bytes; it
+rejects raw strings and escaped newlines before that comparison, and does not
+normalize tokens, literals or line wrapping. This layout-only change needs no
+GPU rebuild, endpoint or matrix repetition.
+
+Master advanced to 2b68d10a9 (#2218, offline CPU XC AOT dependency closures).
+It changes no DF triples owner, generator or CC/scalar/tensor equation consumer.
+This is an impact assessment, not new CPU-XC numerical qualification. The prior
+measured source/library and current-master HF/force limits remain unchanged.

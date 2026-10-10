@@ -62,10 +62,15 @@ def test_publication_retains_hash_bound_inputs_sources_and_unpooled_scope() -> N
             == expected
         )
     owner = ROOT / "src/cc/df_triples_cuda.cu"
-    assert (
-        hashlib.sha256(owner.read_bytes()).hexdigest()
-        == build["source_sha256"]["source/src/cc/df_triples_cuda.cu"]
-    )
+    qualified_owner = restored["qualified-source/src/cc/df_triples_cuda.cu"].decode()
+    current_owner = owner.read_text()
+    assert 'R"' not in qualified_owner and 'R"' not in current_owner
+    assert "\\\n" not in qualified_owner and "\\\n" not in current_owner
+    # The format bot changes leading indentation only. Retain the exact measured
+    # bytes/hash above; do not silently allow token, literal or line-wrap drift.
+    assert [line.lstrip(" \t") for line in current_owner.splitlines()] == [
+        line.lstrip(" \t") for line in qualified_owner.splitlines()
+    ]
     reconstruction = evidence["source_reconstruction"]
     assert reconstruction["production_objects_recompiled"] == 2
     identity = reconstruction["master_source_assessment"]
