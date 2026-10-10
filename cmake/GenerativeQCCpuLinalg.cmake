@@ -67,68 +67,107 @@ function(generativeqc_configure_cpu_linalg target)
       set(_lapack_probe
           "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
     endif()
-    # Only invalidate the expensive try-compiles if their effective provider or
-    # toolchain inputs changed. An imported target can keep its name when its
-    # include paths, link libraries, or options change in the same build tree.
-    set(_generativeqc_openblas_probe_inputs
-        "libraries=${_provider_libraries}\nincludes=${_include_dirs}\n"
-        "scipy_prefix=${_scipy_prefix}\nlocal=${_thread_probe}\n"
-        "global=${_global_thread_probe}\nlapacke=${_lapack_probe}\n")
-    foreach(_variable IN ITEMS
-        GENERATIVEQC_CPU_LINALG_PROVIDER
-        OpenBLAS_DIR OpenBLAS_VERSION OpenBLAS_LIBRARIES OpenBLAS_INCLUDE_DIRS
-        GENERATIVEQC_OPENBLAS_VERSION GENERATIVEQC_OPENBLAS_LINK_LIBRARIES
-        GENERATIVEQC_OPENBLAS_LDFLAGS GENERATIVEQC_OPENBLAS_CFLAGS
-        GENERATIVEQC_SCIPY_OPENBLAS_VERSION GENERATIVEQC_SCIPY_OPENBLAS_LINK_LIBRARIES
-        GENERATIVEQC_SCIPY_OPENBLAS_LDFLAGS GENERATIVEQC_SCIPY_OPENBLAS_CFLAGS
-        CMAKE_CXX_COMPILER CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION
-        CMAKE_CXX_COMPILER_TARGET CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN
-        CMAKE_TOOLCHAIN_FILE CMAKE_SYSROOT CMAKE_BUILD_TYPE
-        CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
-        CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_MINSIZEREL
-        CMAKE_EXE_LINKER_FLAGS CMAKE_REQUIRED_FLAGS CMAKE_REQUIRED_DEFINITIONS
-        CMAKE_REQUIRED_LINK_OPTIONS CMAKE_REQUIRED_LINK_DIRECTORIES
-        CMAKE_TRY_COMPILE_TARGET_TYPE)
-      string(APPEND _generativeqc_openblas_probe_inputs
-             "${_variable}=${${_variable}}\n")
-    endforeach()
-    foreach(_library IN LISTS _provider_libraries)
-      if(TARGET "${_library}")
-        foreach(_property IN ITEMS
-            IMPORTED_LOCATION IMPORTED_IMPLIB INTERFACE_INCLUDE_DIRECTORIES
-            INTERFACE_COMPILE_OPTIONS INTERFACE_COMPILE_DEFINITIONS
-            INTERFACE_LINK_LIBRARIES INTERFACE_LINK_OPTIONS INTERFACE_LINK_DIRECTORIES)
-          get_target_property(_value "${_library}" "${_property}")
-          string(APPEND _generativeqc_openblas_probe_inputs
-                 "${_library}.${_property}=${_value}\n")
-        endforeach()
+    # Cached successes are hints only: validate their actual compile/link inputs
+    # together before reusing them. A dependency fingerprint cannot in general
+    # cover transitive target properties, new include files, or replaced archives.
+    # Cached failures are always re-probed, so newly available APIs are detected.
+    unset(GENERATIVEQC_OPENBLAS_PROBE_CACHE_KEY CACHE)
+    set(_capabilities LOCAL_THREADS GLOBAL_THREADS LAPACKE)
+    set(_probe_variables _thread_probe _global_thread_probe _lapack_probe)
+    set(_positive_capabilities "")
+    foreach(_capability IN LISTS _capabilities)
+      if(GENERATIVEQC_OPENBLAS_HAS_${_capability})
+        list(APPEND _positive_capabilities "${_capability}")
       endif()
     endforeach()
-    # A provider can be replaced in place without changing its CMake/package
-    # version. Include the probed header content in the cache identity.
-    foreach(_include_dir IN LISTS _include_dirs)
-      foreach(_header IN ITEMS cblas.h lapacke.h)
-        if(EXISTS "${_include_dir}/${_header}")
-          file(SHA256 "${_include_dir}/${_header}" _header_sha256)
-          string(APPEND _generativeqc_openblas_probe_inputs
-                 "${_include_dir}/${_header}=${_header_sha256}\n")
-        endif()
-      endforeach()
+    list(LENGTH _positive_capabilities _positive_count)
+    set(_batch_valid FALSE)
+    # Keep unusual project hooks/toolchains on CMake's ordinary check path.
+    # The batch hook must exclusively own the generated check project setup.
+    set(_batch_eligible TRUE)
+    foreach(_variable IN ITEMS CMAKE_TOOLCHAIN_FILE CMAKE_PROJECT_INCLUDE
+        CMAKE_PROJECT_INCLUDE_BEFORE CMAKE_PROJECT_TOP_LEVEL_INCLUDES
+        CMAKE_PROJECT_CMAKE_TRY_COMPILE_INCLUDE
+        CMAKE_PROJECT_CMAKE_TRY_COMPILE_INCLUDE_BEFORE
+        CMAKE_USER_MAKE_RULES_OVERRIDE CMAKE_USER_MAKE_RULES_OVERRIDE_CXX)
+      if(${_variable})
+        set(_batch_eligible FALSE)
+      endif()
     endforeach()
-    string(SHA256 _generativeqc_openblas_probe_key
-           "${_generativeqc_openblas_probe_inputs}")
-    if(NOT "${GENERATIVEQC_OPENBLAS_PROBE_CACHE_KEY}" STREQUAL
-           "${_generativeqc_openblas_probe_key}")
-      unset(GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS CACHE)
-      unset(GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS CACHE)
-      unset(GENERATIVEQC_OPENBLAS_HAS_LAPACKE CACHE)
+    if(NOT CMAKE_GENERATOR STREQUAL "Unix Makefiles"
+       AND NOT CMAKE_GENERATOR STREQUAL "Ninja"
+       AND NOT CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+      set(_batch_eligible FALSE)
     endif()
-    check_cxx_source_compiles("${_thread_probe}" GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS)
-    check_cxx_source_compiles("${_global_thread_probe}" GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS)
-    check_cxx_source_compiles("${_lapack_probe}" GENERATIVEQC_OPENBLAS_HAS_LAPACKE)
-    set(GENERATIVEQC_OPENBLAS_PROBE_CACHE_KEY
-        "${_generativeqc_openblas_probe_key}" CACHE INTERNAL
-        "Inputs to GenerativeQC's OpenBLAS capability checks" FORCE)
+    # Semicolon-containing required flags have version-dependent legacy parsing.
+    if(_positive_count GREATER 1 AND _batch_eligible
+       AND NOT CMAKE_REQUIRED_FLAGS MATCHES ";")
+      set(_probe_dir "${CMAKE_BINARY_DIR}/CMakeFiles/GenerativeQCOpenBLASProbe")
+      file(MAKE_DIRECTORY "${_probe_dir}")
+      foreach(_capability IN LISTS _positive_capabilities)
+        list(FIND _capabilities "${_capability}" _index)
+        list(GET _probe_variables ${_index} _probe_variable)
+        file(WRITE "${_probe_dir}/${_capability}.cpp" "${${_probe_variable}}\n")
+      endforeach()
+      list(GET _positive_capabilities 0 _first_capability)
+      set(_link_options "")
+      if(CMAKE_REQUIRED_LINK_OPTIONS)
+        set(_link_options LINK_OPTIONS ${CMAKE_REQUIRED_LINK_OPTIONS})
+      endif()
+      set(_link_directories "")
+      if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.31 AND CMAKE_REQUIRED_LINK_DIRECTORIES)
+        set(_link_directories
+            "-DLINK_DIRECTORIES:STRING=${CMAKE_REQUIRED_LINK_DIRECTORIES}")
+      endif()
+      if(NOT CMAKE_REQUIRED_QUIET)
+        message(CHECK_START "Validating cached OpenBLAS capabilities")
+      endif()
+      # Do not let retained native build outputs bypass any compilation/link.
+      # Compiler launchers may still safely reuse their content-addressed cache.
+      file(REMOVE_RECURSE "${_probe_dir}/build")
+      file(REMOVE "${_probe_dir}/validated.txt")
+      unset(_batch_result)
+      unset(_batch_result CACHE)
+      try_compile(_batch_result "${_probe_dir}/build"
+        SOURCES "${_probe_dir}/${_first_capability}.cpp"
+        COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+        ${_link_options}
+        LINK_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES}
+        CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${CMAKE_REQUIRED_FLAGS}"
+                    "-DINCLUDE_DIRECTORIES:STRING=${CMAKE_REQUIRED_INCLUDES}"
+                    ${_link_directories}
+                    "-DCMAKE_PROJECT_INCLUDE:FILEPATH=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/GenerativeQCOpenBLASProbeBatch.cmake"
+                    "-DGENERATIVEQC_OPENBLAS_BATCH_CAPABILITIES:STRING=${_positive_capabilities}"
+                    "-DGENERATIVEQC_OPENBLAS_BATCH_DIR:PATH=${_probe_dir}"
+        OUTPUT_VARIABLE _batch_output)
+      # A project/toolchain hook may intercept CMAKE_PROJECT_INCLUDE. Require
+      # proof that every independent target was attached before trusting it.
+      if(_batch_result AND EXISTS "${_probe_dir}/validated.txt")
+        file(READ "${_probe_dir}/validated.txt" _validated)
+        if(_validated STREQUAL _positive_capabilities)
+          set(_batch_valid TRUE)
+        endif()
+      endif()
+      if(NOT CMAKE_REQUIRED_QUIET)
+        if(_batch_valid)
+          message(CHECK_PASS "Success")
+        else()
+          message(CHECK_FAIL "Failed; re-probing individually")
+        endif()
+      endif()
+      # try_compile always runs; do not retain its own implementation result.
+      unset(_batch_result CACHE)
+    endif()
+    foreach(_capability IN LISTS _capabilities)
+      if(NOT _batch_valid OR NOT _capability IN_LIST _positive_capabilities)
+        list(FIND _capabilities "${_capability}" _index)
+        list(GET _probe_variables ${_index} _probe_variable)
+        unset(GENERATIVEQC_OPENBLAS_HAS_${_capability})
+        unset(GENERATIVEQC_OPENBLAS_HAS_${_capability} CACHE)
+        check_cxx_source_compiles("${${_probe_variable}}"
+          GENERATIVEQC_OPENBLAS_HAS_${_capability})
+      endif()
+    endforeach()
     unset(CMAKE_REQUIRED_INCLUDES)
     unset(CMAKE_REQUIRED_LIBRARIES)
 
