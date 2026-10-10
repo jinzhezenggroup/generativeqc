@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.common import compiler_process
 from generativeqc_compiler.common.compiler_cache import run_cached_compiler
 from generativeqc_compiler.common.compiler_process import CompileResult, run_compiler
 from generativeqc_compiler.common.provenance import file_hash
@@ -75,7 +76,10 @@ def test_import_does_not_probe(monkeypatch: pytest.MonkeyPatch) -> None:
     def forbidden(*args: Any, **kwargs: Any) -> None:
         pytest.fail("import must not execute a compiler")
 
-    monkeypatch.setattr(collector, "run_compiler", forbidden)
+    # Patch the imported owner, since reloading replaces a collector-local mock.
+    with monkeypatch.context() as patch:
+        patch.setattr(compiler_process, "run_compiler", forbidden)
+        importlib.reload(collector)
     importlib.reload(collector)
 
 
@@ -459,6 +463,41 @@ def test_real_compiler_timeout(tmp_path: Path, real_gcc: tuple) -> None:
     )
     assert result.reasons == ("collection-timed-out",)
     assert result.closure is None or result.closure.cache_key is None
+
+
+def test_real_gcc_blocked_include_times_out(
+    tmp_path: Path,
+    real_gcc: tuple,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiler, manifest = real_gcc
+    # GCC opens this include while preprocessing; no writer ever opens it.
+    # The existing process-group owner must kill the actual blocked compiler.
+    os.mkfifo(tmp_path / "blocked.h")
+    text = '#include "blocked.h"\nint point(void) { return 0; }\n'
+    source = tmp_path / "point.c"
+    source.write_text(text, encoding="utf-8")
+    original = collector.run_compiler
+    timed_out_commands = []
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        result = original(command, timeout, **kwargs)
+        if result.timed_out:
+            timed_out_commands.append(command)
+        return result
+
+    monkeypatch.setattr(collector, "run_compiler", run)
+    result = collector.collect_cpu_closure(
+        variant(text),
+        source,
+        compiler=compiler,
+        toolchain=manifest,
+        timeout=10,
+    )
+    assert any("-E" in command for command in timed_out_commands)
+    assert result.reasons == ("collection-timed-out",)
+    assert result.closure is not None and not result.closure.complete
+    assert result.closure.cache_key is None
 
 
 def test_real_header_mutation_during_collection(
