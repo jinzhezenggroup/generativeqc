@@ -98,18 +98,13 @@ def test_full_range_exchange_hvp_matches_independent_displaced_gradient(
                 rhs = float(right[s, t] + step * dr[s, t])
                 for q in range(coords):
                     result[q] += (
-                        factor
-                        * lhs
-                        * rhs
-                        * float(first[t, q] + step * second[t, q])
+                        factor * lhs * rhs * float(first[t, q] + step * second[t, q])
                     )
         return result
 
     errors = []
     for step in (1e-3, 2e-4, 4e-5):
-        ref = (independent_gradient(step) - independent_gradient(-step)) / (
-            2 * step
-        )
+        ref = (independent_gradient(step) - independent_gradient(-step)) / (2 * step)
         errors.append(float(np.max(np.abs(outputs["hvp"] - ref))))
     assert errors[-1] < 2e-7
     assert errors[-1] < errors[0] / 20
