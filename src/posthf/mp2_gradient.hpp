@@ -59,6 +59,30 @@ struct OrbitalRhs {
   std::vector<double> fock_weights;
 };
 
+/** Match the small complete-gradient integral oracle's 12-AO admission domain.
+ * This is a hard size policy for the dense legacy/oracle representation, not
+ * a restriction on the independently planned streamed production path. */
+inline constexpr std::size_t dense_orbital_oracle_maximum_orbitals = 12;
+inline constexpr std::size_t dense_orbital_oracle_default_budget_bytes = 1U << 20;
+
+/** Requested numeric payload owned by one dense oracle invocation.
+ * Caller-owned h/ERI/adjoint/Z inputs, object headers, allocator rounding and
+ * exception storage are excluded. Peak includes coexisting rotation-gradient
+ * buffers; retained bytes count only the returned result's numeric vectors. */
+struct DenseOrbitalOraclePlan {
+  std::size_t dense_weight_bytes{};
+  std::size_t retained_bytes{};
+  std::size_t peak_bytes{};
+  std::size_t budget_bytes{};
+};
+
+/** Check dimensions, the hard small-oracle size cap and numeric peak before
+ * allocating or evaluating data. Exact-budget acceptance is inclusive. */
+DenseOrbitalOraclePlan dense_orbital_rhs_plan(std::size_t orbitals, std::size_t occupied,
+                                              std::size_t budget_bytes);
+DenseOrbitalOraclePlan dense_lagrangian_weights_plan(std::size_t orbitals, std::size_t occupied,
+                                                     std::size_t budget_bytes);
+
 struct LagrangianWeights {
   std::size_t orbitals{};
   std::size_t occupied{};
@@ -113,6 +137,13 @@ EnergyAdjoint canonical_energy_adjoint(std::span<const double> integrals_iajb,
                                        std::size_t occupied, double denominator_threshold);
 OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<const double> eri_mo,
                                  const EnergyAdjoint& adjoint, double same_space_threshold);
+/** Dense small-only oracle with an explicit owned-payload budget. The original
+ * entry point retains its symbol and uses the default budget; neither entry
+ * silently substitutes a CPU/reference or streamed execution path. */
+OrbitalRhs canonical_orbital_rhs_with_budget(std::span<const double> hcore_mo,
+                                             std::span<const double> eri_mo,
+                                             const EnergyAdjoint& adjoint,
+                                             double same_space_threshold, std::size_t budget_bytes);
 OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference,
                                           std::span<const double> hcore_mo,
                                           const posthf::MOBlockProvider& provider,
@@ -123,6 +154,11 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
                                                const EnergyAdjoint& adjoint,
                                                std::span<const double> response,
                                                double same_space_threshold);
+/** Budget the full dense relaxed-weight invocation, including retained orbital
+ * RHS vectors while overlap and stationarity scratch coexist. */
+LagrangianWeights canonical_lagrangian_weights_with_budget(
+    std::span<const double> hcore_mo, std::span<const double> eri_mo, const EnergyAdjoint& adjoint,
+    std::span<const double> response, double same_space_threshold, std::size_t budget_bytes);
 LagrangianWeights canonical_lagrangian_weights_streamed(const hf::PhysicalReference& reference,
                                                         std::span<const double> hcore_mo,
                                                         const posthf::MOBlockProvider& provider,
