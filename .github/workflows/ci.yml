@@ -1471,8 +1471,9 @@ jobs:
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       NUMEXPR_NUM_THREADS: 1
-      # Master must cover every endpoint selectable by a PR at this source.
-      GENERATIVEQC_CODSPEED_EXTRA_CASES: ${{ github.event_name == 'push' && 'wb97mv' || '' }}
+      # PR and master must execute the same bounded five-case sequence. Extra
+      # preceding benchmarks can change allocator state despite cache resets.
+      GENERATIVEQC_CODSPEED_EXTRA_CASES: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'wb97mv' || '' }}
       GENERATIVEQC_CODSPEED_TIER: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && 'pr' || 'full' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1487,20 +1488,8 @@ jobs:
             git diff --name-only --no-renames \
               "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" --
           )"
-          # Maintenance manifests are audit/bookkeeping data and do not affect
-          # generated/runtime DFT paths. Keep them from promoting the expensive
-          # WB97M-V endpoint while preserving all other manifest-triggered coverage.
-          performance_changed_files="$(
-            grep -Ev '^manifests/maintenance/' <<<"$changed_files" || true
-          )"
-          extra_cases=""
-          if grep -Eq \
-            '^(benchmarks/test_cpu_codspeed\.py$|\.github/workflows/ci\.yml$|src/dft/|src/scf/|src/methods/|src/integrals/|include/generativeqc([./])|python/generativeqc/|python/generativeqc_compiler/(dft|xc)/|python/generativeqc_compiler/(method|integral)/|manifests/|upstream/libxc/|tools/(generate_xc|libxc))' \
-            <<<"$performance_changed_files"; then
-            extra_cases="wb97mv"
-          fi
-          echo "GENERATIVEQC_CODSPEED_EXTRA_CASES=${extra_cases}" >> "$GITHUB_ENV"
           # Skip only known non-performance files; unknown paths still run.
+          # Selection stays identical to master whenever this job executes.
           relevant_files="$(grep -Ev '^(docs/|\.agents/|tests/|manifests/maintenance/|README(\..*)?$|CHANGELOG(\..*)?$|.*\.md$|tools/render_python_api_doc\.py$)' <<<"$changed_files" || true)"
           if [[ -z "$relevant_files" ]]; then
             echo "GENERATIVEQC_CODSPEED_RUN=0" >> "$GITHUB_ENV"
@@ -1584,8 +1573,8 @@ jobs:
         with:
           # Hosted GitHub runners are noisy for wall-clock gating; simulation
           # provides the stable PR/scheduled regression signal without Macro Runner quota.
-          # PRs keep two always-on endpoints and can add a targeted advanced-DFT
-          # endpoint through GENERATIVEQC_CODSPEED_EXTRA_CASES.
+          # PR/master share RHF, PBE, WB97M-V, PBE-force and changed-geometry
+          # RHF, in that order. Scheduled/manual runs retain the full tier.
           mode: simulation
           run: .venv/bin/python -m pytest benchmarks/test_cpu_codspeed.py --codspeed -q
       - name: Record successful master CodSpeed baseline

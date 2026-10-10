@@ -21,6 +21,7 @@ from pathlib import Path
 _SCHEMA = "generativeqc.codspeed-cpu-baseline.v2"
 _SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 _REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+_PR_EXTRA_CASES = frozenset({"wb97mv"})
 
 
 def _command(*args: str) -> str:
@@ -77,7 +78,7 @@ def benchmark_selection() -> dict[str, object]:
     }
 
 
-def _selection_covers(recorded: object, requested: dict[str, object]) -> bool:
+def _selection_matches(recorded: object, requested: dict[str, object]) -> bool:
     if not isinstance(recorded, dict):
         return False
     digest = requested.get("source_sha256")
@@ -91,11 +92,19 @@ def _selection_covers(recorded: object, requested: dict[str, object]) -> bool:
         return False
     available = recorded.get("extra_cases")
     needed = requested.get("extra_cases")
-    if not isinstance(available, list) or not isinstance(needed, list):
-        return False
-    if not all(isinstance(item, str) for item in [*available, *needed]):
-        return False
-    return set(needed) <= set(available)
+    for extras in (available, needed):
+        if not isinstance(extras, list):
+            return False
+        if not all(
+            isinstance(item, str) and item in _PR_EXTRA_CASES for item in extras
+        ):
+            return False
+        if extras != sorted(set(extras)):
+            return False
+    # A superset baseline changes the preceding in-process allocation history.
+    # Instrumentation resets simulated caches, not allocator/application state.
+    # The unchanged benchmark source fixes execution order for equal selectors.
+    return available == needed
 
 
 def _baseline_name(sha: str) -> str:
@@ -163,8 +172,8 @@ def qualify(
     """Fail closed on an old schema, stale source, or different CPU/runtime."""
     if baseline.get("schema") != _SCHEMA or baseline.get("sha") != sha:
         return False, "baseline identity/schema mismatch"
-    if not _selection_covers(baseline.get("benchmark_selection"), selection):
-        return False, "baseline does not cover the requested benchmark source/selection"
+    if not _selection_matches(baseline.get("benchmark_selection"), selection):
+        return False, "baseline does not match the requested benchmark source/selection"
     recorded = baseline.get("environment")
     if not isinstance(recorded, dict):
         return False, "baseline environment missing"

@@ -49,7 +49,7 @@ def _receipt() -> dict[str, object]:
 
 
 def test_exact_environment_qualifies() -> None:
-    assert baseline.qualify(_receipt(), SHA, _environment(), _selection())[0]
+    assert baseline.qualify(_receipt(), SHA, _environment(), _selection("wb97mv"))[0]
 
 
 @pytest.mark.parametrize(
@@ -59,7 +59,7 @@ def test_exact_environment_qualifies() -> None:
 def test_environment_mismatch_is_not_comparable(key: str) -> None:
     altered = _environment()
     altered[key] = "different"
-    valid, reason = baseline.qualify(_receipt(), SHA, altered, _selection())
+    valid, reason = baseline.qualify(_receipt(), SHA, altered, _selection("wb97mv"))
     assert not valid
     assert key in reason
 
@@ -90,7 +90,7 @@ def test_unknown_cpu_and_bad_sha_rejected() -> None:
     current = _environment()
     current["cpu"] = {"vendor": "", "model": "", "flags": ""}
     assert not baseline.qualify(
-        {**_receipt(), "environment": current}, SHA, current, _selection()
+        {**_receipt(), "environment": current}, SHA, current, _selection("wb97mv")
     )[0]
     with pytest.raises(ValueError):
         baseline._baseline_name("bad-hash")
@@ -174,11 +174,46 @@ def test_unqualified_writes_neutral_outputs(
     assert "unqualified" in summary.read_text(encoding="utf-8")
 
 
-def test_master_covers_optional_pr_endpoint() -> None:
+def test_existing_v2_master_selection_still_qualifies() -> None:
     assert baseline.qualify(_receipt(), SHA, _environment(), _selection("wb97mv"))[0]
     receipt = _receipt()
     receipt["benchmark_selection"] = _selection()
     valid, reason = baseline.qualify(receipt, SHA, _environment(), _selection("wb97mv"))
+    assert not valid
+    assert "selection" in reason
+
+
+@pytest.mark.parametrize(
+    ("recorded", "requested"),
+    [((), ("wb97mv",)), (("wb97mv",), ())],
+)
+def test_selection_requires_identical_execution_history(
+    recorded: tuple[str, ...], requested: tuple[str, ...]
+) -> None:
+    receipt = {**_receipt(), "benchmark_selection": _selection(*recorded)}
+    valid, reason = baseline.qualify(
+        receipt, SHA, _environment(), _selection(*requested)
+    )
+    assert not valid
+    assert "selection" in reason
+
+
+@pytest.mark.parametrize(
+    "extras",
+    [
+        ["future"],
+        ["wb97mv", "future"],
+        [""],
+        [" wb97mv "],
+        ["wb97mv", "wb97mv"],
+        [None],
+        "wb97mv",
+    ],
+)
+def test_matching_unknown_or_malformed_extras_are_rejected(extras: object) -> None:
+    selection = {**_selection(), "extra_cases": extras}
+    receipt = {**_receipt(), "benchmark_selection": selection}
+    valid, reason = baseline.qualify(receipt, SHA, _environment(), selection)
     assert not valid
     assert "selection" in reason
 
