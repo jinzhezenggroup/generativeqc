@@ -86,7 +86,6 @@ def test_compile_capability_identity_is_deterministic_and_semantic() -> None:
     assert first["identity"] != changed["identity"]
 
 
-
 def test_cpu_jit_identity_reuses_equivalent_custom_programs() -> None:
     original = _program()
     custom_a = tensor.Program(
