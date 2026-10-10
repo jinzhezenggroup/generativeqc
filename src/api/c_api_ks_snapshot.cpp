@@ -75,6 +75,76 @@ generativeqc_status check_current(const generativeqc_batch& batch,
 }  // namespace
 
 extern "C" {
+/** Expose only stationary *integral sources* to a native single calculation.
+ * The verified current-state token and D/W are sourced from the same prepared
+ * SCF owner as the energy. No Python orchestrator, approximation switch, or
+ * partial user-buffer publication is permitted.
+ *
+ * Output blocks are +dE/dR for H', overlap/Pulay, J' and K'. Not a force:
+ * molecular XC, moving-grid/Becke and nuclear repulsion are absent. */
+generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
+    generativeqc_calculation* calculation, double* values, std::size_t count,
+    std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count) {
+  if (!calculation || !values || !work || work_count != 9 || !maximum_bytes)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  try {
+    const std::size_t atoms = calculation->plan->atom_count();
+    if (!atoms || atoms > std::numeric_limits<std::size_t>::max() / 12 ||
+        count != 12 * atoms)
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+
+    generativeqc::dft::CudaKsFinalStateToken token;
+    std::string detail;
+    auto status =
+        generativeqc::methods::detail::dft_final_state_token(*calculation->plan, token, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      if (!detail.empty()) calculation->context->last_detail = detail;
+      return status;
+    }
+
+    generativeqc::dft::VerifiedKsFinalState frame;
+    status = generativeqc::methods::detail::read_dft_final_state(
+        *calculation->plan, token, true, frame, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      if (!detail.empty()) calculation->context->last_detail = detail;
+      return status;
+    }
+
+    std::vector<double> candidate;
+    std::array<std::uint64_t, 9> usage{};
+    status = generativeqc::methods::detail::dft_prepared_integral_gradient_cached(
+        *calculation->plan, token, frame.density, frame.weighted_density, candidate,
+        maximum_bytes, usage, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      if (!detail.empty()) calculation->context->last_detail = detail;
+      return status;
+    }
+    if (candidate.size() != count ||
+        !std::all_of(candidate.begin(), candidate.end(),
+                     [](double value) { return std::isfinite(value); }))
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+
+    // Publication is transactional. Never leak partial H'/J'/K' on stale
+    // tokens, provider failures or a geometry/SCF owner replacement.
+    generativeqc::dft::CudaKsFinalStateToken current;
+    status =
+        generativeqc::methods::detail::dft_final_state_token(*calculation->plan, current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS || current != token) {
+      calculation->context->last_detail = detail.empty()
+                                             ? "native stationary integral source token is stale"
+                                             : detail;
+      return status == GENERATIVEQC_STATUS_SUCCESS ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
+                                                  : status;
+    }
+    std::copy(candidate.begin(), candidate.end(), values);
+    std::copy(usage.begin(), usage.end(), work);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&calculation->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch, std::size_t index,
                                                        generativeqc_ks_snapshot** output,
                                                        std::uint64_t* metadata,
