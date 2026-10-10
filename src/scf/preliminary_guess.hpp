@@ -19,6 +19,11 @@ void validate_preliminary_options(const PreliminaryOptions& options);
 /** Conservative numeric payload bound, not process RSS or allocator overhead. */
 std::size_t preliminary_numeric_capacity(const core::System& system,
                                          const PreliminaryOptions& options);
+/** Shape-only MINAO capacity query reusing the production numeric bound and
+ * native occupied-ANO records; does not allocate a target basis/SCF. */
+std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
+                                               const std::int32_t* atomic_numbers,
+                                               std::size_t atom_count);
 void validate_preliminary_target(const core::System& system, const ResolvedFockBuild& strategy,
                                  const ScfOptions& options);
 
