@@ -191,10 +191,33 @@ listed as unavailable instead of silently dropping operators or returning a
 partial energy. Newly generated MethodIR rows do not automatically gain
 native capability: preparation remains authoritative.
 
-**DFT analytic forces are not yet exposed by the native C++ calculation API
-or CLI.** All DFT `--forces` requests continue to fail closed even where the
-Python Calculator has a separately qualified stationary-force route.
-See [C++ SDK usage](native_cpp.md) and native force follow-up #2151.
+### Context-qualified native DFT analytic forces
+
+A narrow **CPU, density-fitted, all-electron RKS PBE** force path now composes
+the same prepared electronic state as the energy route with the native one-
+and two-electron response providers, generated XC point derivatives, the
+moving molecular grid/Becke partition derivative and nuclear repulsion:
+
+```bash
+generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
+  --backend cpu --density-fitting cpu --forces --json
+```
+
+The generated **PBE0-RKS** composition can use this route only when its
+prepared full-range exact-exchange **and** Coulomb terms both admit the same
+CPU density-fitted derivative provider. The installed C++ SDK queries the
+actual prepared context through
+`generativeqc_calculation_get_supported_properties_v1`; the generic method
+registry remains energy-only because it cannot promise forces for every
+backend, grid, spin or approximation. Use `Calculation::supported_properties()`
+rather than the global method manifest to test this narrow admission.
+
+This is not support for native CUDA DFT forces, CPU Direct DFT forces, UKS,
+r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
+requests reject before execution and do not return a partial derivative.
+Prepared DFT *batch* forces remain a separate qualification task under #2151.
+This slice requires complete independent numeric/CI acceptance before being
+considered production-qualified. See [C++ SDK usage](native_cpp.md).
 
 ## Manage local profile activation
 

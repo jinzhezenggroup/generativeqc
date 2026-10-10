@@ -57,6 +57,14 @@ void generativeqc_calculation_destroy(generativeqc_calculation* calculation) {
   delete calculation;
 }
 
+generativeqc_status generativeqc_calculation_get_supported_properties_v1(
+    const generativeqc_calculation* calculation, generativeqc_property_flags* properties) {
+  if (!calculation || !properties) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  *properties = calculation->plan->supported_properties();
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* calculation,
                                                      generativeqc_result_descriptor* output) {
   generativeqc::runtime::host_trace::Region trace("calculation_execute");

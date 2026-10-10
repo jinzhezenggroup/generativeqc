@@ -37,6 +37,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
+- [generativeqc_calculation_get_supported_properties_v1](#native-c-generativeqc-calculation-get-supported-properties-v1)
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
 - [generativeqc_calculation_get_scf_diagnostic](#native-c-generativeqc-calculation-get-scf-diagnostic)
 - [generativeqc_calculation_get_ks_diagnostic](#native-c-generativeqc-calculation-get-ks-diagnostic)
@@ -122,6 +123,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Calculation::Calculation-copy](#native-cpp-generativeqc-calculation-calculation-copy)
 - [generativeqc::Calculation::operator=-copy](#native-cpp-generativeqc-calculation-copy-assignment-copy)
 - [generativeqc::Calculation::Calculation-move](#native-cpp-generativeqc-calculation-calculation-move)
+- [generativeqc::Calculation::supported_properties](#native-cpp-generativeqc-calculation-supported-properties)
 - [generativeqc::Calculation::execute](#native-cpp-generativeqc-calculation-execute)
 - [generativeqc::BatchItemResult](#native-cpp-generativeqc-batchitemresult)
 - [generativeqc::DensityFittingMetricDiagnostic](#native-cpp-generativeqc-densityfittingmetricdiagnostic)
@@ -894,6 +896,27 @@ and invalidates the handle and all borrowed owner state.
 the handle contract.
 
 **Execution.** Synchronous release; serialize with every use of this handle and its context.
+
+(native-c-generativeqc-calculation-get-supported-properties-v1)=
+## generativeqc_calculation_get_supported_properties_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_supported_properties_v1 ( const generativeqc_calculation * calculation , generativeqc_property_flags * properties ) ;
+```
+
+**Behavior.** Query context-qualified energy/force properties of an immutable prepared calculation.
+
+**Inputs.** A live prepared calculation and non-NULL output pointer; no SCF inputs are needed.
+
+**Outputs.** Returns admitted property flags for the exact system, method, backend and provider.
+
+**Lifetime.** The output is copied; callers own its value and keep the context alive.
+
+**Errors.** INVALID_ARGUMENT for NULL inputs; any failure leaves output unchanged.
+
+**Execution.** Synchronous no-work query; serialize against execution and owner destruction.
 
 (native-c-generativeqc-calculation-execute)=
 ## generativeqc_calculation_execute
@@ -3246,6 +3269,28 @@ alive.
 
 **Execution.** Synchronous ownership transfer; moved-from operations other than destruction are
 outside the wrapper contract.
+
+(native-cpp-generativeqc-calculation-supported-properties)=
+## generativeqc::Calculation::supported_properties
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+[[ nodiscard ]] generativeqc_property_flags supported_properties ( ) const
+```
+
+**Behavior.** Query the exact prepared method/backend/system property contract.
+
+**Inputs.** The live Calculation owner; no execution is requested.
+
+**Outputs.** Returns context-qualified energy/force property bits by value.
+
+**Lifetime.** The returned flags are independent of the owner; the native handle
+remains borrowed by this wrapper during the call.
+
+**Errors.** Throws Error if the native context query fails.
+
+**Execution.** Synchronous, Python-free; serialize against execute/destruction.
 
 (native-cpp-generativeqc-calculation-execute)=
 ## generativeqc::Calculation::execute
