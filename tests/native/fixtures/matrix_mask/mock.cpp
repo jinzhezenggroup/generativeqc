@@ -10,6 +10,11 @@ namespace {
 std::vector<std::function<void()>> queue;
 int gemms{}, batched{}, copies{}, natives{}, fail_gemm{}, copy_error{}, synchronizations{};
 cudaStream_t expected_stream = reinterpret_cast<void*>(1);
+
+long long matrix_offset(int row, int col, int leading_dimension) {
+  // cuBLAS dimensions are int, but matrix offsets may exceed INT_MAX.
+  return static_cast<long long>(col) * leading_dimension + row;
+}
 }  // namespace
 
 cudaError_t cudaStreamIsCapturing(cudaStream_t, cudaStreamCaptureStatus* c) {
@@ -61,9 +66,10 @@ cublasStatus_t cublasDgemmStridedBatched(cublasHandle_t h, cublasOperation_t op,
         for (int row = 0; row < m; ++row) {
           double value = 0;
           for (int q = 0; q < k; ++q)
-            value += a[s * sa + (op == CUBLAS_OP_T ? q + row * lda : row + q * lda)] *
-                     b[s * sb + q + col * ldb];
-          c[s * sc + row + col * ldc] = av * value;
+            value += a[s * sa + (op == CUBLAS_OP_T ? matrix_offset(q, row, lda)
+                                                   : matrix_offset(row, q, lda))] *
+                     b[s * sb + matrix_offset(q, col, ldb)];
+          c[s * sc + matrix_offset(row, col, ldc)] = av * value;
         }
   });
   if (batch > 1) ++batched;
@@ -110,6 +116,9 @@ void launch_spin_matrix_product_kernel(dim3, dim3, std::size_t, cudaStream_t str
 }  // namespace generativeqc::scf::cuda_execution
 
 extern "C" {
+long long probe_matrix_offset(int row, int col, int leading_dimension) {
+  return matrix_offset(row, col, leading_dimension);
+}
 void probe_reset(int fail, int copy_failure) {
   queue.clear();
   gemms = batched = copies = natives = synchronizations = 0;

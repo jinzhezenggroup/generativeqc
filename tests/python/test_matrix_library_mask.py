@@ -79,7 +79,31 @@ void host_selected_copy(dim3 grid, dim3 block, int batch, int spins, int n,
     probe.probe_replay.argtypes = []
     probe.probe_stat.argtypes = [ctypes.c_int]
     probe.probe_stat.restype = ctypes.c_int
+    probe.probe_matrix_offset.argtypes = [ctypes.c_int] * 3
+    probe.probe_matrix_offset.restype = ctypes.c_longlong
     return probe
+
+
+@pytest.mark.parametrize(
+    "row,col,leading_dimension",
+    [
+        (0, 0, 1),
+        (2, 3, 7),
+        (0, 46340, 46341),
+        (0, 46341, 46342),
+        (32768, 32767, 65537),
+        (32769, 32767, 65537),
+        (2**31 - 2, 2**31 - 2, 2**31 - 1),
+    ],
+)
+def test_mock_matrix_offset_promotes_before_multiply_and_add(
+    adapter: ctypes.CDLL, row: int, col: int, leading_dimension: int
+) -> None:
+    # Exercise the exact helper used by all A/B/C offsets without allocating or
+    # dereferencing enormous matrices. Python integers are the independent oracle.
+    assert adapter.probe_matrix_offset(row, col, leading_dimension) == (
+        row + col * leading_dimension
+    )
 
 
 def _pointer(array: np.ndarray | None) -> int | None:
