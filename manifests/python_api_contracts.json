@@ -134,6 +134,7 @@
     "generativeqc.experimental.array_api.add": "generativeqc/experimental/array_api.py:add",
     "generativeqc.experimental.array_api.asarray": "generativeqc/experimental/array_api.py:asarray",
     "generativeqc.experimental.array_api.astype": "generativeqc/experimental/array_api.py:astype",
+    "generativeqc.experimental.array_api.bool": "generativeqc/experimental/array_api.py:bool",
     "generativeqc.experimental.array_api.broadcast_arrays": "generativeqc/experimental/array_api.py:broadcast_arrays",
     "generativeqc.experimental.array_api.broadcast_shapes": "generativeqc/experimental/array_api.py:broadcast_shapes",
     "generativeqc.experimental.array_api.broadcast_to": "generativeqc/experimental/array_api.py:broadcast_to",
@@ -143,6 +144,7 @@
     "generativeqc.experimental.array_api.divide": "generativeqc/experimental/array_api.py:divide",
     "generativeqc.experimental.array_api.dlpack_device": "generativeqc_compiler/array_api/interop.py:dlpack_device",
     "generativeqc.experimental.array_api.einsum": "generativeqc/experimental/array_api.py:einsum",
+    "generativeqc.experimental.array_api.equal": "generativeqc/experimental/array_api.py:equal",
     "generativeqc.experimental.array_api.exp": "generativeqc/experimental/array_api.py:exp",
     "generativeqc.experimental.array_api.expand_dims": "generativeqc/experimental/array_api.py:expand_dims",
     "generativeqc.experimental.array_api.finfo": "generativeqc/experimental/array_api.py:finfo",
@@ -151,9 +153,13 @@
     "generativeqc.experimental.array_api.float64": "generativeqc/experimental/array_api.py:float64",
     "generativeqc.experimental.array_api.full": "generativeqc/experimental/array_api.py:full",
     "generativeqc.experimental.array_api.full_like": "generativeqc/experimental/array_api.py:full_like",
+    "generativeqc.experimental.array_api.greater": "generativeqc/experimental/array_api.py:greater",
+    "generativeqc.experimental.array_api.greater_equal": "generativeqc/experimental/array_api.py:greater_equal",
     "generativeqc.experimental.array_api.import_dlpack": "generativeqc_compiler/array_api/interop.py:import_dlpack",
     "generativeqc.experimental.array_api.input_array": "generativeqc_compiler/array_api/trace.py:input_array",
     "generativeqc.experimental.array_api.isdtype": "generativeqc/experimental/array_api.py:isdtype",
+    "generativeqc.experimental.array_api.less": "generativeqc/experimental/array_api.py:less",
+    "generativeqc.experimental.array_api.less_equal": "generativeqc/experimental/array_api.py:less_equal",
     "generativeqc.experimental.array_api.log": "generativeqc/experimental/array_api.py:log",
     "generativeqc.experimental.array_api.matmul": "generativeqc/experimental/array_api.py:matmul",
     "generativeqc.experimental.array_api.matrix_transpose": "generativeqc/experimental/array_api.py:matrix_transpose",
@@ -161,6 +167,7 @@
     "generativeqc.experimental.array_api.moveaxis": "generativeqc/experimental/array_api.py:moveaxis",
     "generativeqc.experimental.array_api.multiply": "generativeqc/experimental/array_api.py:multiply",
     "generativeqc.experimental.array_api.negative": "generativeqc/experimental/array_api.py:negative",
+    "generativeqc.experimental.array_api.not_equal": "generativeqc/experimental/array_api.py:not_equal",
     "generativeqc.experimental.array_api.ones": "generativeqc/experimental/array_api.py:ones",
     "generativeqc.experimental.array_api.ones_like": "generativeqc/experimental/array_api.py:ones_like",
     "generativeqc.experimental.array_api.permute_dims": "generativeqc/experimental/array_api.py:permute_dims",
@@ -1764,6 +1771,13 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
+    "generativeqc/experimental/array_api.py:bool": {
+      "kind": "dtype",
+      "profile": "constant",
+      "facets": {
+        "behavior": "docs/reference/python_contracts.md#python-constants-behavior"
+      }
+    },
     "generativeqc/experimental/array_api.py:broadcast_arrays": {
       "kind": "function",
       "profile": "transformation",
@@ -1835,6 +1849,16 @@
       }
     },
     "generativeqc/experimental/array_api.py:einsum": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/array_api.py:equal": {
       "kind": "function",
       "profile": "transformation",
       "facets": {
@@ -1918,7 +1942,47 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
+    "generativeqc/experimental/array_api.py:greater": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/array_api.py:greater_equal": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
     "generativeqc/experimental/array_api.py:isdtype": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/array_api.py:less": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/array_api.py:less_equal": {
       "kind": "function",
       "profile": "transformation",
       "facets": {
@@ -1989,6 +2053,16 @@
       }
     },
     "generativeqc/experimental/array_api.py:negative": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc/experimental/array_api.py:not_equal": {
       "kind": "function",
       "profile": "transformation",
       "facets": {
@@ -4801,7 +4875,47 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
+    "generativeqc_compiler/array_api/array.py:VibeArray.__ge__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
     "generativeqc_compiler/array_api/array.py:VibeArray.__getitem__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc_compiler/array_api/array.py:VibeArray.__gt__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc_compiler/array_api/array.py:VibeArray.__le__": {
+      "kind": "function",
+      "profile": "transformation",
+      "facets": {
+        "behavior": "docstring",
+        "errors": "docs/reference/python_contracts.md#python-array-errors",
+        "ownership": "docs/reference/python_contracts.md#python-array-ownership",
+        "values": "docs/reference/python_contracts.md#python-array-values"
+      }
+    },
+    "generativeqc_compiler/array_api/array.py:VibeArray.__lt__": {
       "kind": "function",
       "profile": "transformation",
       "facets": {

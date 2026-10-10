@@ -51,21 +51,31 @@ API_VERSION = 1
 
 float32 = np.dtype("float32")
 float64 = np.dtype("float64")
+_HOST_CONTAINER_MAX_DEPTH = 64
+_HOST_CONTAINER_MAX_ITEMS = 1_000_000
 
 
-def _symbolic(*values: object) -> bool:
+def _symbolic(*values: object) -> builtins.bool:
     return any(isinstance(value, VibeArray) for value in values)
 
 
-def _check_host_values(value: object) -> None:
-    pending = [value]
+def _check_host_values(value: object) -> frozenset[str]:
+    """Reject hidden devices and classify bounded host leaves before coercion."""
+    pending = [(value, 0)]
     seen: set[int] = set()
+    kinds: set[str] = set()
+    inspected = 0
     while pending:
-        item = pending.pop()
+        item, depth = pending.pop()
+        inspected += 1
+        if inspected > _HOST_CONTAINER_MAX_ITEMS:
+            raise ValueError("host container inspection exceeds 1000000 items")
         if isinstance(item, np.ndarray):
             if not item.dtype.hasobject:
+                kinds.add("bool" if item.dtype == np.dtype("bool") else "real")
                 continue
             children = item.flat
+            child_count = item.size
         else:
             if callable(getattr(item, "__dlpack_device__", None)) or (
                 inspect.getattr_static(item, "__cuda_array_interface__", None)
@@ -76,19 +86,56 @@ def _check_host_values(value: object) -> None:
                     "use import_dlpack for an explicit handoff"
                 )
             if not isinstance(item, (list, tuple)):
+                if type(item) is builtins.bool or isinstance(item, np.bool_):
+                    kinds.add("bool")
+                elif type(item) in (int, float, complex, str, Fraction) or isinstance(
+                    item, np.generic
+                ):
+                    kinds.add("real")
+                else:
+                    kinds.add("unknown" if depth == 0 else "unknown-nested")
                 continue
             children = item
+            child_count = len(item)
         identity = id(item)
         if identity not in seen:
+            if child_count and depth >= _HOST_CONTAINER_MAX_DEPTH:
+                raise ValueError("host container nesting exceeds 64 levels")
+            if inspected + len(pending) + child_count > _HOST_CONTAINER_MAX_ITEMS:
+                raise ValueError("host container inspection exceeds 1000000 items")
             seen.add(identity)
-            pending.extend(children)
+            pending.extend((child, depth + 1) for child in children)
+    return frozenset(kinds)
 
 
-def _eager_array(value: object) -> np.ndarray:
+def _probe_array_like_without_copy(value: object) -> np.ndarray:
+    """Inspect one host array-like while preserving a strict no-copy request."""
+    protocol = getattr(value, "__array__", None)
+    if not callable(protocol):
+        return np.array(value, copy=False)
+    try:
+        array = protocol(None, copy=False)
+    except TypeError as error:
+        raise TypeError(
+            "copy=False array-like inputs require __array__ support for copy=False"
+        ) from error
+    if not isinstance(array, np.ndarray):
+        raise TypeError("__array__ must return a NumPy array")
+    return array
+
+
+def _eager_data_array(value: object) -> np.ndarray:
     # Reuse the public host boundary before NumPy can invoke foreign array hooks.
     array = asarray(value)
     assert isinstance(array, np.ndarray)
     return _finite_eager(array)
+
+
+def _eager_array(value: object) -> np.ndarray:
+    array = _eager_data_array(value)
+    if array.dtype not in (float32, float64):
+        raise TypeError("floating arithmetic requires real float32 or float64 arrays")
+    return array
 
 
 def _finite_eager(value: typing.Any) -> typing.Any:
@@ -113,7 +160,9 @@ def _eager_scalar(value: object, dtype: np.dtype, name: str) -> np.ndarray:
         return _finite_eager(np.asarray(float(factor), dtype=dtype))
 
 
-def _eager_operands(*values: object, scalars: bool = False) -> tuple[np.ndarray, ...]:
+def _eager_operands(
+    *values: object, scalars: builtins.bool = False
+) -> tuple[np.ndarray, ...]:
     arrays = tuple(
         None
         if scalars and type(value) in (int, float, str, Fraction)
@@ -170,6 +219,45 @@ def divide(x1: object, x2: object) -> typing.Any:
     if _symbolic(x1, x2):
         return _namespace.divide(x1, x2)
     return _eager_compute(np.divide, *_eager_operands(x1, x2, scalars=True))
+
+
+def _compare(op: str, x1: object, x2: object) -> typing.Any:
+    """Keep the finite-only reference boundary before forming bool results."""
+    if _symbolic(x1, x2):
+        return getattr(_namespace, op)(x1, x2)
+    if all(type(value) in (int, float, str, Fraction) for value in (x1, x2)):
+        raise TypeError(f"{op} requires at least one array operand")
+    return _eager_compute(getattr(np, op), *_eager_operands(x1, x2, scalars=True))
+
+
+def equal(x1: object, x2: object) -> typing.Any:
+    """Compare finite real operands elementwise for equality."""
+    return _compare("equal", x1, x2)
+
+
+def not_equal(x1: object, x2: object) -> typing.Any:
+    """Compare finite real operands elementwise for inequality."""
+    return _compare("not_equal", x1, x2)
+
+
+def greater(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is greater than its peer."""
+    return _compare("greater", x1, x2)
+
+
+def greater_equal(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is at least its peer."""
+    return _compare("greater_equal", x1, x2)
+
+
+def less(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is less than its peer."""
+    return _compare("less", x1, x2)
+
+
+def less_equal(x1: object, x2: object) -> typing.Any:
+    """Compare whether each finite real element is at most its peer."""
+    return _compare("less_equal", x1, x2)
 
 
 def negative(x: object) -> typing.Any:
@@ -251,7 +339,7 @@ def reshape(
         return _namespace.reshape(x, shape, indices=indices)
     if indices is not None:
         raise ValueError("explicit TensorIR indices require a symbolic array")
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     return np.reshape(array, _namespace._reshape_shape(shape, array.size))
 
 
@@ -272,7 +360,9 @@ def broadcast_to(
         raise ValueError(
             "explicit TensorIR broadcast metadata requires a symbolic array"
         )
-    return np.broadcast_to(_eager_array(x), _namespace._shape(shape, "broadcast_to"))
+    return np.broadcast_to(
+        _eager_data_array(x), _namespace._shape(shape, "broadcast_to")
+    )
 
 
 def broadcast_shapes(*shapes: tuple[int, ...]) -> tuple[int, ...]:
@@ -290,7 +380,7 @@ def broadcast_arrays(*arrays: object) -> tuple[typing.Any, ...]:
         return ()
     if any(isinstance(value, VibeArray) for value in arrays):
         return _namespace.broadcast_arrays(*arrays)
-    values = tuple(_eager_array(value) for value in arrays)
+    values = tuple(_eager_data_array(value) for value in arrays)
     return tuple(np.broadcast_arrays(*values))
 
 
@@ -298,7 +388,7 @@ def expand_dims(x: object, axis: int | tuple[int, ...]) -> typing.Any:
     """Insert singleton dimensions at unique signed axes in eager or generic symbolic arrays."""
     if isinstance(x, VibeArray):
         return _namespace.expand_dims(x, axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     _namespace._expand_shape(array.shape, axis)
     return np.expand_dims(array, axis)
 
@@ -307,7 +397,7 @@ def squeeze(x: object, axis: int | tuple[int, ...]) -> typing.Any:
     """Remove the specified singleton axes from an eager or generic symbolic array."""
     if isinstance(x, VibeArray):
         return _namespace.squeeze(x, axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     _namespace._squeezed_shape(array.shape, axis)
     return np.squeeze(array, axis=axis)
 
@@ -318,7 +408,7 @@ def moveaxis(
     """Move selected axes to matching destinations, preserving the order of the others."""
     if isinstance(x, VibeArray):
         return _namespace.moveaxis(x, source, destination)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     order = _namespace._moveaxis_order(array.ndim, source, destination)
     return np.transpose(array, order)
 
@@ -331,7 +421,7 @@ def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
     """
     if isinstance(x, VibeArray):
         return _namespace.flip(x, axis=axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     axes = (
         tuple(range(array.ndim))
         if axis is None
@@ -347,7 +437,7 @@ def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
     """
     if isinstance(x, VibeArray):
         return _namespace.slice(x, ranges)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     if not isinstance(ranges, tuple) or any(
         not isinstance(bounds, tuple)
         or len(bounds) != 2
@@ -369,7 +459,7 @@ def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
     """Gather a static tuple of in-range positions along the selected axis."""
     if isinstance(x, VibeArray):
         return _namespace.take(x, indices, axis=axis)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     normalized_axis = _namespace._axis(axis, array.ndim, "take")
     if not isinstance(indices, tuple) or any(
         type(index) is not int for index in indices
@@ -385,7 +475,7 @@ def sum(
     *,
     axis: int | tuple[int, ...] | None = None,
     dtype: object = None,
-    keepdims: bool = False,
+    keepdims: builtins.bool = False,
 ) -> typing.Any:
     """Reduce over selected axes without retaining reduced dimensions.
 
@@ -396,7 +486,7 @@ def sum(
     array = _eager_array(x)
     if dtype is not None:
         raise ValueError("frontend sum does not insert dtype conversions")
-    if type(keepdims) is not bool:
+    if type(keepdims) is not builtins.bool:
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "sum")
     return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
@@ -406,7 +496,7 @@ def mean(
     x: object,
     *,
     axis: int | tuple[int, ...] | None = None,
-    keepdims: bool = False,
+    keepdims: builtins.bool = False,
 ) -> typing.Any:
     """Average selected axes, optionally retaining singleton reduced dimensions.
 
@@ -415,7 +505,7 @@ def mean(
     if isinstance(x, VibeArray):
         return _namespace.mean(x, axis=axis, keepdims=keepdims)
     array = _eager_array(x)
-    if type(keepdims) is not bool:
+    if type(keepdims) is not builtins.bool:
         raise TypeError("keepdims must be a bool")
     axes = _namespace._reduction_axes(axis, array.ndim, "mean")
     count = 1
@@ -430,7 +520,7 @@ def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
     """Reorder the axes of a host or symbolic array."""
     if isinstance(x, VibeArray):
         return _namespace.permute_dims(x, axes)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     return np.transpose(array, _namespace._permutation(axes, array.ndim))
 
 
@@ -438,7 +528,7 @@ def matrix_transpose(x: object) -> typing.Any:
     """Swap the last two axes of a host or symbolic matrix-like array."""
     if isinstance(x, VibeArray):
         return _namespace.matrix_transpose(x)
-    array = _eager_array(x)
+    array = _eager_data_array(x)
     if array.ndim < 2:
         raise ValueError(
             "matrix_transpose requires an array with at least two dimensions"
@@ -494,15 +584,28 @@ def _dtype_name(dtype: object) -> str:
     return name
 
 
+def _data_dtype_name(dtype: object) -> str:
+    """Admit Boolean data without widening the existing real arithmetic helpers."""
+    try:
+        name = np.dtype(dtype).name
+    except TypeError as exc:
+        raise TypeError("dtype must describe bool, float32 or float64") from exc
+    if name not in ("bool", "float32", "float64"):
+        raise TypeError(
+            "experimental Array API supports bool and real float32/float64 data"
+        )
+    return name
+
+
 def _dtype_of(value: object) -> np.dtype:
-    """Read an admitted real dtype without converting external array objects."""
+    """Read an admitted data dtype without converting external array objects."""
     if isinstance(value, VibeArray):
-        return np.dtype(_dtype_name(value.dtype))
+        return np.dtype(_data_dtype_name(value.dtype))
     if isinstance(value, np.ndarray):
         _check_host_values(value)
-        return np.dtype(_dtype_name(value.dtype))
+        return np.dtype(_data_dtype_name(value.dtype))
     _check_host_values(value)
-    return np.dtype(_dtype_name(value))
+    return np.dtype(_data_dtype_name(value))
 
 
 def astype(
@@ -510,11 +613,11 @@ def astype(
     dtype: object,
     /,
     *,
-    copy: bool = True,
+    copy: builtins.bool = True,
     device: object = None,
 ) -> typing.Any:
     """Explicit float32/float64 conversion with no implicit device transfer."""
-    if type(copy) is not bool:
+    if type(copy) is not builtins.bool:
         raise TypeError("astype copy must be a bool")
     if device is not None:
         raise ValueError("astype currently supports device=None only")
@@ -527,18 +630,18 @@ def astype(
     return _eager_compute(np.array, array, dtype=np.dtype(target), copy=True)
 
 
-def can_cast(from_: object, to: object, /) -> bool:
-    """Check safe promotion within the admitted real floating-point dtype lattice."""
+def can_cast(from_: object, to: object, /) -> builtins.bool:
+    """Check Boolean identity or safe promotion in the real-float dtype lattice."""
     source, target = _dtype_of(from_), _dtype_of(to)
     return source == target or (source == float32 and target == float64)
 
 
 def finfo(type: object, /) -> np.finfo:
     """Describe IEEE machine limits for the admitted real floating-point dtypes."""
-    return np.finfo(_dtype_of(type))
+    return np.finfo(np.dtype(_dtype_name(_dtype_of(type))))
 
 
-def isdtype(dtype: object, kind: object) -> bool:
+def isdtype(dtype: object, kind: object) -> builtins.bool:
     """Inspect admitted dtypes using the standard dtype category vocabulary."""
     source = _dtype_of(dtype)
     categories = {
@@ -551,10 +654,12 @@ def isdtype(dtype: object, kind: object) -> bool:
         "numeric",
     }
 
-    def matches(value: object) -> bool:
+    def matches(value: object) -> builtins.bool:
         if isinstance(value, str):
             if value not in categories:
                 raise ValueError(f"unsupported dtype kind {value!r}")
+            if source == np.dtype("bool"):
+                return value == "bool"
             return value in ("real floating", "numeric")
         return source == _dtype_of(value)
 
@@ -564,14 +669,20 @@ def isdtype(dtype: object, kind: object) -> bool:
 
 
 def result_type(*arrays_and_dtypes: object) -> np.dtype:
-    """Infer the float32/float64 common dtype, treating Python scalars as weak."""
+    """Infer Boolean identity or a real-float common dtype with weak scalars."""
     dtypes: list[np.dtype] = []
+    weak_numeric = False
     for value in arrays_and_dtypes:
         if type(value) in (int, float):
+            weak_numeric = True
             continue
         dtypes.append(_dtype_of(value))
     if not dtypes:
         raise TypeError("result_type requires at least one array or dtype")
+    if np.dtype("bool") in dtypes:
+        if weak_numeric or any(dtype != np.dtype("bool") for dtype in dtypes):
+            raise TypeError("bool and real dtype promotion is unsupported")
+        return np.dtype("bool")
     return float64 if float64 in dtypes else float32
 
 
@@ -579,7 +690,7 @@ def asarray(
     value: object,
     *,
     dtype: object = None,
-    copy: bool | None = None,
+    copy: builtins.bool | None = None,
 ) -> typing.Any:
     """Convert a host value or preserve/cast one symbolic array.
 
@@ -592,27 +703,59 @@ def asarray(
     if isinstance(value, VibeArray):
         if dtype is None:
             return value
-        name = _dtype_name(dtype)
+        name = _data_dtype_name(dtype)
         if name == value.dtype:
             return value
+        if name == "bool" or value.dtype == "bool":
+            raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
         return VibeArray(_cast(value.node, name))
-    _check_host_values(value)
-    target = None if dtype is None else _dtype_name(dtype)
-    if copy is True:
-        array = np.array(value, dtype=target, copy=True)
-    elif copy is False:
-        array = np.array(value, dtype=target, copy=False)
+    source_kinds = _check_host_values(value)
+    if "unknown-nested" in source_kinds:
+        raise TypeError("nested host containers require scalar or NumPy array leaves")
+    if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
+        raise TypeError("mixed bool/real host values are unsupported")
+    source_array = (
+        (_probe_array_like_without_copy(value) if copy is False else np.asarray(value))
+        if source_kinds == frozenset(("unknown",))
+        else None
+    )
+    if source_array is not None and source_array.dtype.hasobject:
+        source_kinds = _check_host_values(source_array)
+        if "unknown-nested" in source_kinds:
+            raise TypeError(
+                "host array-like object data require scalar or NumPy array leaves"
+            )
+        if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
+            raise TypeError("mixed bool/real host values are unsupported")
+    target = None if dtype is None else _data_dtype_name(dtype)
+    if source_array is not None:
+        source_is_bool = (
+            source_kinds == frozenset(("bool",))
+            if source_array.dtype.hasobject
+            else source_array.dtype.name == "bool"
+        )
+    elif source_kinds:
+        source_is_bool = source_kinds == frozenset(("bool",))
     else:
-        array = np.asarray(value, dtype=target)
-    if array.dtype.name not in ("float32", "float64"):
+        source_is_bool = target == "bool" if target is not None else False
+    if target is not None and (target == "bool") != source_is_bool:
+        raise TypeError("cross-kind bool/real input conversion is unsupported")
+    source = value if source_array is None else source_array
+    if copy is True:
+        array = np.array(source, dtype=target, copy=True)
+    elif copy is False:
+        array = np.array(source, dtype=target, copy=False)
+    else:
+        array = np.asarray(source, dtype=target)
+    if array.dtype.name not in ("bool", "float32", "float64"):
         raise TypeError(
-            "experimental Array API runtime inputs must have float32 or float64 dtype"
+            "experimental Array API runtime inputs must have bool, float32 or float64 dtype"
         )
     return array
 
 
 def _creation_dtype(dtype: object) -> str:
-    return "float64" if dtype is None else _dtype_name(dtype)
+    return "float64" if dtype is None else _data_dtype_name(dtype)
 
 
 def _creation_device(device: object) -> None:
@@ -630,33 +773,49 @@ def full(
     dtype: object = None,
     device: object = None,
 ) -> typing.Any:
-    """Create a finite uniform array, or capture an exact TensorIR constant."""
+    """Create a uniform Boolean or finite real array with an exact constant."""
     _creation_device(device)
     target = _namespace._creation_shape(shape)
-    name = _creation_dtype(dtype)
-    if dtype is None and type(fill_value) in (bool, int):
+    name = (
+        "bool"
+        if dtype is None and type(fill_value) is builtins.bool
+        else _creation_dtype(dtype)
+    )
+    if dtype is None and type(fill_value) is int:
         raise TypeError(
-            "full with integer/bool fill_value requires an integer/bool dtype "
+            "full with an integer fill_value requires an integer dtype "
             "not supported by this preview; specify a floating dtype explicitly"
         )
-    factor = _namespace._generic_scalar(fill_value, "full fill value")
+    if name == "bool":
+        if type(fill_value) is not builtins.bool:
+            raise TypeError("bool full requires a bool fill value")
+        factor = fill_value
+    else:
+        factor = _namespace._generic_scalar(fill_value, "full fill value")
     if _active_capture():
         return _namespace.full(target, factor, dtype=name)
-    return _eager_compute(np.full, target, float(factor), dtype=np.dtype(name))
+    return _eager_compute(
+        np.full,
+        target,
+        factor if name == "bool" else float(factor),
+        dtype=np.dtype(name),
+    )
 
 
 def zeros(
     shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
 ) -> typing.Any:
-    """Create floating zeros on the CPU reference path or capture a symbolic constant."""
-    return full(shape, 0, dtype=_creation_dtype(dtype), device=device)
+    """Create real or Boolean zeros on the CPU reference path."""
+    name = _creation_dtype(dtype)
+    return full(shape, False if name == "bool" else 0, dtype=name, device=device)
 
 
 def ones(
     shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
 ) -> typing.Any:
-    """Create floating ones on the CPU reference path or capture a symbolic constant."""
-    return full(shape, 1, dtype=_creation_dtype(dtype), device=device)
+    """Create real or Boolean ones on the CPU reference path."""
+    name = _creation_dtype(dtype)
+    return full(shape, True if name == "bool" else 1, dtype=name, device=device)
 
 
 def full_like(
@@ -668,26 +827,55 @@ def full_like(
 ) -> typing.Any:
     """Create a uniform generic array inheriting the input's shape/dtype."""
     _creation_device(device)
-    factor = _namespace._generic_scalar(fill_value, "full_like fill value")
     if isinstance(x, VibeArray):
-        name = x.dtype if dtype is None else _dtype_name(dtype)
+        name = x.dtype if dtype is None else _data_dtype_name(dtype)
+        if name == "bool":
+            if type(fill_value) is not builtins.bool:
+                raise TypeError("bool full_like requires a bool fill value")
+            factor = fill_value
+        else:
+            factor = _namespace._generic_scalar(fill_value, "full_like fill value")
         return _namespace.full_like(x, factor, dtype=name)
-    array = _eager_array(x)
-    name = array.dtype.name if dtype is None else _dtype_name(dtype)
-    return _eager_compute(np.full_like, array, float(factor), dtype=np.dtype(name))
+    array = _finite_eager(asarray(x))
+    assert isinstance(array, np.ndarray)
+    name = array.dtype.name if dtype is None else _data_dtype_name(dtype)
+    if name == "bool":
+        if type(fill_value) is not builtins.bool:
+            raise TypeError("bool full_like requires a bool fill value")
+        factor = fill_value
+    else:
+        factor = _namespace._generic_scalar(fill_value, "full_like fill value")
+    return _eager_compute(
+        np.full_like,
+        array,
+        factor if name == "bool" else float(factor),
+        dtype=np.dtype(name),
+    )
+
+
+def _like_dtype(x: object, dtype: object) -> str:
+    if dtype is not None:
+        return _data_dtype_name(dtype)
+    if isinstance(x, VibeArray):
+        return x.dtype
+    return _data_dtype_name(asarray(x).dtype)
 
 
 def zeros_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
-    """Create floating zeros with the input shape and dtype unless dtype is specified."""
-    return full_like(x, 0, dtype=dtype, device=device)
+    """Create zeros with the input shape and dtype unless dtype is specified."""
+    _creation_device(device)
+    name = _like_dtype(x, dtype)
+    return full_like(x, False if name == "bool" else 0, dtype=name, device=device)
 
 
 def ones_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
-    """Create floating ones with the input shape and dtype unless dtype is specified."""
-    return full_like(x, 1, dtype=dtype, device=device)
+    """Create ones with the input shape and dtype unless dtype is specified."""
+    _creation_device(device)
+    name = _like_dtype(x, dtype)
+    return full_like(x, True if name == "bool" else 1, dtype=name, device=device)
 
 
-def _generic_spec(array: np.ndarray, *, differentiable: bool) -> TensorSpec:
+def _generic_spec(array: np.ndarray, *, differentiable: builtins.bool) -> TensorSpec:
     return TensorSpec(
         _namespace._generic_indices(tuple(int(extent) for extent in array.shape)),
         dtype=array.dtype.name,
@@ -858,10 +1046,14 @@ def capabilities() -> dict[str, object]:
             "compiled_call": "shape-dtype-specialized-tensorir-reference",
             "compiled_differentiability": "explicit-parameter-names",
             "namespace_dispatch": "numpy-eager-or-symbolic-tensorir",
-            "runtime_array": "numpy-host-float32-float64",
+            "runtime_array": "numpy-host-bool-float32-float64",
         }
     )
     return report
+
+
+# Keep the standard dtype object while using builtins.bool for Python type checks.
+bool = np.dtype("bool")
 
 
 __all__ = [
@@ -882,6 +1074,7 @@ __all__ = [
     "add",
     "asarray",
     "astype",
+    "bool",
     "broadcast_arrays",
     "broadcast_shapes",
     "broadcast_to",
@@ -891,6 +1084,7 @@ __all__ = [
     "divide",
     "dlpack_device",
     "einsum",
+    "equal",
     "exp",
     "expand_dims",
     "finfo",
@@ -899,9 +1093,13 @@ __all__ = [
     "float64",
     "full",
     "full_like",
+    "greater",
+    "greater_equal",
     "import_dlpack",
     "input_array",
     "isdtype",
+    "less",
+    "less_equal",
     "log",
     "matmul",
     "matrix_transpose",
@@ -909,6 +1107,7 @@ __all__ = [
     "moveaxis",
     "multiply",
     "negative",
+    "not_equal",
     "ones",
     "ones_like",
     "permute_dims",

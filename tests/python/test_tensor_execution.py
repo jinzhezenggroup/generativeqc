@@ -35,6 +35,7 @@ from generativeqc_compiler.tensor import (
     transpose,
 )
 from generativeqc_compiler.tensor.examples import example_cases
+from generativeqc_compiler.tensor.ir import BOOLEAN_VIEWS, COMPARISONS
 
 FP64 = GATES["integral_fp64"]
 
@@ -353,8 +354,20 @@ def test_cse_never_merges_different_spin_symmetry_or_parameter_roles() -> None:
     assert len(
         {Program({"value": node}).logical_hash for node in outputs.values()}
     ) == len(specs)
+
+
+def test_primitive_contracts_separate_real_ad_from_boolean_data() -> None:
+    real_ad_contracts = set(PRIMITIVES) - set(COMPARISONS)
+    assert set(BOOLEAN_VIEWS) <= real_ad_contracts
+    assert set(COMPARISONS).isdisjoint(BOOLEAN_VIEWS)
     assert all(
-        "real operands" in contract.differentiable_operands
-        for contract in PRIMITIVES.values()
+        "real operands" in PRIMITIVES[op].differentiable_operands
+        for op in real_ad_contracts
+    )
+    assert all(
+        PRIMITIVES[op].differentiable_operands
+        == "real floating operands only; Boolean result is non-differentiable"
+        and PRIMITIVES[op].accumulation == "no derivative through comparison"
+        for op in COMPARISONS
     )
     assert "scatter-add" in PRIMITIVES["gather"].accumulation

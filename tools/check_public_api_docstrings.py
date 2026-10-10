@@ -376,7 +376,7 @@ def _resolve_export(
             and value.func.attr == "dtype"
             and len(value.args) == 1
             and isinstance(value.args[0], ast.Constant)
-            and value.args[0].value in ("float32", "float64")
+            and value.args[0].value in ("bool", "float32", "float64")
             and not value.keywords
         ):
             numpy_binding = _binding(tree, value.func.value.id, node.lineno)

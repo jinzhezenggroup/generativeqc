@@ -1,4 +1,4 @@
-"""Symbolic equality must not choose Python branches during capture."""
+"""Symbolic comparisons create bool values without Python branch decisions."""
 
 import operator
 import typing
@@ -13,10 +13,8 @@ def _spec() -> TensorSpec:
 
 
 @pytest.mark.parametrize("comparison", [operator.eq, operator.ne])
-@pytest.mark.parametrize(
-    "case", ["different", "same", "rewrapped", "scalar", "reflected", "none"]
-)
-def test_unsupported_symbolic_comparisons_raise(
+@pytest.mark.parametrize("case", ["different", "same", "rewrapped"])
+def test_symbolic_comparisons_are_boolean_data(
     comparison: typing.Callable[[object, object], object], case: str
 ) -> None:
     x = input_array("x", _spec())
@@ -25,23 +23,30 @@ def test_unsupported_symbolic_comparisons_raise(
         "different": (x, y),
         "same": (x, x),
         "rewrapped": (x, VibeArray(x.node)),
-        "scalar": (x, 0),
-        "reflected": (0, x),
-        "none": (x, None),
     }
-    with pytest.raises(TypeError, match="symbolic VibeArray comparisons"):
-        comparison(*operands[case])
+    result = comparison(*operands[case])
+    assert isinstance(result, VibeArray)
+    assert result.dtype == "bool"
+    assert not result.node.spec.differentiable
 
 
 @pytest.mark.parametrize("comparison", [operator.eq, operator.ne])
-@pytest.mark.parametrize("scalar", [False, True])
+@pytest.mark.parametrize("other", [0, None])
+def test_scientific_scalar_comparison_requires_explicit_domain(
+    comparison: typing.Callable[[object, object], object], other: object
+) -> None:
+    with pytest.raises(TypeError, match="scientific domains"):
+        comparison(input_array("x", _spec()), other)
+
+
+@pytest.mark.parametrize("comparison", [operator.eq, operator.ne])
 def test_trace_rejects_comparison_driven_control_flow(
-    comparison: typing.Callable[[object, object], object], scalar: bool
+    comparison: typing.Callable[[object, object], object],
 ) -> None:
     def expression(x: VibeArray, y: VibeArray) -> VibeArray:
-        return x if comparison(x, 0 if scalar else y) else y
+        return x if comparison(x, y) else y
 
-    with pytest.raises(TypeError, match="symbolic VibeArray comparisons"):
+    with pytest.raises(TypeError, match="cannot drive Python control flow"):
         trace(expression, {"x": _spec(), "y": _spec()})
 
 

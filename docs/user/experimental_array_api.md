@@ -65,12 +65,14 @@ def shifted(x):
     return x + xp.ones_like(x) * xp.full(x.shape, 0.25, dtype=x.dtype)
 ```
 
-Outside capture, creation executes eagerly on NumPy/CPU. Only the existing
-`float32` and `float64` dtypes and `device=None` are admitted: an explicit
-device request never triggers a hidden host transfer. `full(shape, integer)`
-without an explicit floating dtype is rejected rather than silently claiming
-the standard's unsupported default integer dtype. Scientific AO/occupied/etc.
-arrays cannot be passed to `*_like` without their explicit TensorIR metadata.
+Outside capture, creation executes eagerly on NumPy/CPU. `bool`, `float32` and
+`float64` dtypes with `device=None` are admitted: an explicit device request never
+triggers a hidden host transfer. Boolean `full`/`full_like` require a Boolean fill
+value; `zeros` and `ones` produce false and true when `dtype=xp.bool` is explicit.
+`full(shape, integer)` without an explicit floating dtype is rejected rather than
+silently claiming the standard's unsupported default integer dtype. Scientific
+AO/occupied/etc. arrays cannot be passed to `*_like` without their explicit
+TensorIR metadata.
 
 The current preview supports ordinary shape broadcasting for generic arrays,
 `@`, `.T`, `.mT`, `matrix_transpose`, reshape with one inferred `-1`
@@ -82,12 +84,18 @@ strides), `None`/newaxis, and ellipsis. Common elementwise conveniences
 `broadcast_shapes`, `broadcast_arrays`, `expand_dims`, `squeeze`,
 `moveaxis` and `flip`. `expand_dims` accepts the 2025.12 multi-axis tuple
 form, and `permute_dims` accepts negative axes; all reuse existing TensorIR
-reshape, transpose, broadcast and gather semantics. Generic arrays accept finite Python
-float literals as ordinary scalar values, so expressions such as `x + 0.5`
-have eager/compiled parity. The compiler records the exact binary value of that
-Python float. Negative-zero float literals are rejected because exact rational
-constants cannot preserve their sign. Explicitly scientific arrays retain the
-stricter exact-scalar spelling rules.
+reshape, transpose, broadcast and gather semantics. Six elementwise comparisons
+(`equal`, `not_equal`, `greater`, `greater_equal`, `less`, `less_equal`, plus
+their Python operators) accept finite real operands and return genuine Boolean
+arrays. Generic comparison operands broadcast and promote within float32/float64;
+scientifically annotated operands must have identical domains. Boolean arrays
+support the shape/view operations listed above in both eager and captured paths,
+but remain excluded from floating arithmetic and reductions. Generic arrays accept
+finite Python float literals as ordinary scalar values, so expressions such as
+`x + 0.5` have eager/compiled parity. The compiler records the exact binary value
+of that Python float. Negative-zero float literals are rejected because exact
+rational constants cannot preserve their sign. Explicitly scientific arrays
+retain the stricter exact-scalar spelling rules.
 
 ## Scientific metadata remains explicit
 
@@ -114,7 +122,7 @@ shape/dtype semantics         AO/occ/vir/aux/spin semantics
 ## Current limits
 
 The eager namespace and reference compiled-call path currently accept CPU/NumPy
-`float32` and `float64` arrays. Shape functions require static integer
+`bool`, `float32` and `float64` arrays. Shape functions require static integer
 dimensions and axes. Captured `flip` builds explicit gather index maps and
 rejects reversed axes larger than 65,536 elements to avoid unbounded source
 materialization. Static creation is capture-aware but does not
@@ -127,20 +135,24 @@ external-device transfer remain unsupported. `xp.asarray` refuses to silently
 copy a foreign DLPack array to the host; use `import_dlpack` for the explicit
 same-device handoff. Every eager namespace operation checks this host boundary
 before NumPy dispatch, including nested host containers and foreign DLPack/CUDA
-array protocols. Exact scalar literals (`int`, `Fraction`, or rational
-strings) and finite Python floats are converted to the array operand dtype;
-mixed supported array dtypes promote according to the float32/float64 subset.
+array protocols. Before dtype inference, bounded host-container inspection rejects
+mixed Boolean/real leaves (up to 64 nesting levels and 1,000,000 inspected
+items), so NumPy cannot silently promote predicates into floating data. Exact
+scalar literals (`int`, `Fraction`, or rational strings) and finite Python floats
+are converted to the array operand dtype; mixed supported real array dtypes
+promote according to the float32/float64 subset.
 
 The dtype-introspection subset includes `astype` (explicit float32/float64
-cast), `can_cast` (promotion-safe), `finfo`, `isdtype`, and `result_type`
-(with weak Python numeric scalars). `astype(x, dtype, copy=False)` returns the
-same eager array if the dtype is unchanged; default `copy=True` produces a new
-host array. Symbolic `astype` lowers through the existing TensorIR cast,
+casts), `can_cast` (promotion-safe), `finfo`, `isdtype`, and `result_type`
+(with weak Python numeric scalars). Boolean identity queries are supported, but
+Boolean/real casts and promotion are not. `astype(x, dtype, copy=False)` returns
+the same eager array if the dtype is unchanged; default `copy=True` produces a
+new host array. Symbolic `astype` lowers through the existing TensorIR cast,
 rather than asserting a physical aliasing policy for generated native programs.
 Its `device` argument currently only accepts `None`.
-Integer/bool/complex dtypes, their promotion rules, IEEE non-finite values,
-and standardized discovery remain unsupported, so this is **not** standard
-conformance.
+Integer/complex dtypes, Boolean arithmetic, `where`, IEEE non-finite comparison
+semantics, and standardized discovery remain unsupported, so this is **not**
+standard conformance.
 
 Eager functions retain the bounded compiled contract: `sum` does not yet
 accept a `dtype` conversion; `mean` rejects reductions over zero elements
