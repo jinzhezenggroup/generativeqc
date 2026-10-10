@@ -132,6 +132,11 @@ One real-default final endpoint takes 138.42897410597652 seconds wall and
 42.69463147 seconds CCSD. Original independent gates and exact work/capacity
 counts pass; total energy bits match, (T) differs by -1.0408340855860843e-17.
 No successful ABBA or unrelated force/compiler campaign is repeated.
+The existing #1890 provider-selection inventory classifies one additional
+preparation-only matrix-admission read. It requests bounded workspace on the
+already admitted provider; it neither discovers a vendor nor adds a provider
+selector. The initial PR pre-commit count mismatch is corrected in that inventory
+and validated with its focused host tests, without another GPU campaign.
 
 The successor publication retains all ABBA/pilot records and the one final
 integration endpoint in `benchmarks/results/df-cc-blas-workspace-20261010/`.
