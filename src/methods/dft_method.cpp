@@ -1679,16 +1679,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
   Result execute(bool compute_forces) override {
     invalidate_final_state();
     if (compute_forces && !supports_native_pbe_force()) {
-      const char* issue = execution_plan_.automatic_program
-                              ? "#1122"
-                              : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
-                                    ? "#164"
-                                    : "#163";
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          std::string(semilocal_family_name(execution_plan_)) +
-              " KS nuclear gradients are tracked separately in issue " + issue +
-              "; this prepared native DFT force context is unqualified (#2151)");
+      const char* issue = execution_plan_.automatic_program ? "#1122"
+                          : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
+                              ? "#164"
+                              : "#163";
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        std::string(semilocal_family_name(execution_plan_)) +
+                            " KS nuclear gradients are tracked separately in issue " + issue +
+                            "; this prepared native DFT force context is unqualified (#2151)");
     }
     auto result = adapt_result(run(nullptr, true, true), backend_);
     if (compute_forces && result.convergence.converged) {

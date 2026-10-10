@@ -171,7 +171,11 @@ class NativeDftDfCliTests(unittest.TestCase):
                 1,
             ),
             (("--auxiliary-basis", "def2-svp"), "requires density fitting", 2),
-            (("--density-fitting", "none", "--forces"), "DFT forces are not exposed", 2),
+            (
+                ("--density-fitting", "none", "--forces"),
+                "DFT forces are not exposed",
+                2,
+            ),
         ):
             with self.subTest(flags=flags):
                 result = self.call(*flags)
