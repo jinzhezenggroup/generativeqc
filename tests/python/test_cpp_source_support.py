@@ -75,3 +75,55 @@ if (retain_resident /* guarded lease */) {
     assert block.endswith("\n}")
     with pytest.raises(ValueError, match="found 2"):
         cpp_if_block("if (ready) {} if (ready) {}", "ready")
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "if (target()) { return; }",
+        "if (ready && target()) { return; }",
+        "if (ready &&\n target()) { return; }",
+        "while (target()) { break; }",
+        "target();",
+        "return target();",
+        "auto value = target();",
+        "object.target();",
+        "ns::target();",
+    ],
+)
+def test_function_calls_are_not_contracts(call: str) -> None:
+    source = "void caller() {\n" + call + "\n}"
+    for extract in (cpp_function_definition, cpp_function_declaration):
+        with pytest.raises(ValueError, match="found 0"):
+            extract(source, "target")
+    definition = "bool target() noexcept { return true; }"
+    assert cpp_function_definition(definition + "\n" + source, "target") == definition
+    assert cpp_function_declaration("bool target() noexcept;\n" + source, "target") == (
+        "bool target() noexcept"
+    )
+
+
+def test_function_suffix_does_not_consume_enclosing_expression() -> None:
+    # Even a type-looking line prefix cannot turn an enclosing call into a
+    # definition by scanning forward until an unrelated opening brace.
+    with pytest.raises(ValueError, match="found 0"):
+        cpp_function_definition("bool target()) { return true; }", "target")
+    assert cpp_function_definition(
+        "bool target() noexcept(true) { return true; }", "target"
+    ) == ("bool target() noexcept(true) { return true; }")
+
+
+@pytest.mark.parametrize(
+    "use",
+    [
+        "void f(struct Target* p) { return; }",
+        "struct Target* p = [] { return nullptr; }();",
+        "struct Target* factory() { return nullptr; }",
+        "struct Target object {};",
+    ],
+)
+def test_elaborated_type_uses_are_not_record_definitions(use: str) -> None:
+    with pytest.raises(ValueError, match="found 0"):
+        cpp_record_definition(use, "Target")
+    definition = "struct Target final : public Base<int> { int value; }"
+    assert cpp_record_definition(use + "\n" + definition + ";", "Target") == definition

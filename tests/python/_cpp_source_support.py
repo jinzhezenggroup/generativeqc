@@ -96,22 +96,48 @@ def _function_matches(
     code = _code_only(source)
     matches = []
     for match in re.finditer(r"\b" + re.escape(name) + r"\s*\(", code):
+        # These probes support ordinary named functions with their return type
+        # on the name's line. A call (including a call inside an if condition)
+        # must not become a contract when its real definition is absent.
+        start = max(code.rfind(token, 0, match.start()) for token in "\n;{}") + 1
+        prefix = code[start : match.start()].strip()
+        prefix = re.sub(r"\b__launch_bounds__\s*\([^()]*\)", "", prefix).strip()
+        if (
+            not prefix
+            or prefix.endswith("::")
+            or re.search(
+                r"\b(?:return|co_return|if|else|while|for|switch|case|throw)\b", prefix
+            )
+            or re.fullmatch(r"[\w\s:<>,*&]+", prefix) is None
+            or re.search(r"[A-Za-z_]", prefix) is None
+        ):
+            continue
         opening = code.find("(", match.start(), match.end())
         closing = _closing(code, opening, "(", ")")
-        # A call in an enclosing if/return/expression is not a definition.
+        # Consume only supported function suffixes. In particular, a closing
+        # parenthesis belonging to an enclosing expression is never a suffix.
         boundary = closing + 1
-        while boundary < len(code) and code[boundary] not in ";{}":
-            if code[boundary] in ",=":
+        while boundary < len(code):
+            if code[boundary].isspace():
+                boundary += 1
+                continue
+            qualifier = re.match(
+                r"(?:noexcept|const|volatile|override|final)\b|&&?", code[boundary:]
+            )
+            if qualifier is None:
                 break
-            boundary += 1
+            boundary += qualifier.end()
+            if qualifier.group() == "noexcept":
+                while boundary < len(code) and code[boundary].isspace():
+                    boundary += 1
+                if boundary < len(code) and code[boundary] == "(":
+                    boundary = _closing(code, boundary, "(", ")") + 1
         if boundary >= len(code):
             continue
         marker = code[boundary]
         if marker != (";" if declaration else "{"):
             continue
-        if code[match.start() - 1 : match.start()] in (".", ">"):
-            continue
-        matches.append((match.start(), boundary))
+        matches.append((start, boundary))
     return matches
 
 
@@ -129,8 +155,7 @@ def cpp_function_declaration(source: str, name: str) -> str:
     The return type must share a line with the function name, as in our internal
     C++ headers. The declaration supplies a host test double's ABI directly.
     """
-    name_start, end = _unique(_function_matches(source, name, declaration=True), name)
-    start = source.rfind("\n", 0, name_start) + 1
+    start, end = _unique(_function_matches(source, name, declaration=True), name)
     result = source[start:end].strip()
     if not result or result.startswith("#"):
         raise ValueError(f"invalid declaration for {name!r}")
@@ -145,12 +170,9 @@ def cpp_function_definition(
     Signature whitespace/parameter changes are immaterial; body braces in
     comments, ordinary strings or C++ raw literals do not terminate the body.
     """
-    name_start, opening = _unique(
-        _function_matches(source, name, declaration=False), name
-    )
+    start, opening = _unique(_function_matches(source, name, declaration=False), name)
     code = _code_only(source)
     end = _closing(code, opening, "{", "}") + 1
-    start = source.rfind("\n", 0, name_start) + 1
     if include_template:
         template = list(re.finditer(r"\btemplate\s*<", code[:start]))
         if not template:
@@ -171,6 +193,15 @@ def cpp_record_definition(source: str, name: str) -> str:
         while begin < len(code) and code[begin] not in ";{":
             begin += 1
         if begin >= len(code) or code[begin] != "{":
+            continue
+        # An elaborated type in a parameter/variable declaration is not the
+        # record's definition, even if a function or lambda body follows it.
+        # Support only an optional final specifier and ordinary base classes.
+        suffix = code[match.end() : begin]
+        if (
+            re.fullmatch(r"\s*(?:final\b\s*)?(?::\s*[A-Za-z_][\w\s:<>,]*)?", suffix)
+            is None
+        ):
             continue
         found.append((match.start(), _closing(code, begin, "{", "}") + 1))
     start, end = _unique(found, name)
