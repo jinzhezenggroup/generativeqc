@@ -525,7 +525,7 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
           const std::array<std::size_t, 3> occupied{i, j, k};
           const bool alias_tile = distinct_moments && (i == j || j == k);
           const auto sources = alias_tile ? generated_df::occupied_moment_sources(i, j, k)
-                                         : generated_df::MomentSourceMap{};
+                                          : generated_df::MomentSourceMap{};
           // Group W seeds by their integral-panel index. A single-panel fallback
           // consumes every dependent GEMM before that storage is reused. All
           // producer/consumer work is ordered on Context's one owned stream.
@@ -549,8 +549,8 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
           const double degeneracy = i == k ? 6.0 : (i == j || j == k ? 2.0 : 1.0);
           if (alias_tile)
             generated_df::energy_distinct_tile(o, v, i, j, k, degeneracy, threshold, in, moments,
-                                              sources, p.blocks, partials, context.error,
-                                              context.stream);
+                                               sources, p.blocks, partials, context.error,
+                                               context.stream);
           else
             generated_df::energy_tile(o, v, i, j, k, degeneracy, threshold, in, moments, p.blocks,
                                       partials, context.error, context.stream);
