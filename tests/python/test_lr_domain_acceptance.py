@@ -14,6 +14,8 @@ from typing import Any, Self
 import numpy as np
 import pytest
 
+from benchmarks import _support
+
 
 @pytest.fixture
 def endpoint() -> ModuleType:
@@ -297,3 +299,78 @@ def test_existing_numerical_and_convergence_gates_still_reject(
     payload = json.loads(campaign.output.read_text())
     assert payload["status"] == "failed"
     assert len(payload["records"]) == 1
+
+
+@pytest.mark.parametrize("route", ["direct", "symlink", "traversal"])
+def test_cli_rejects_retained_output_before_input_or_native_work(
+    endpoint: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    route: str,
+) -> None:
+    monkeypatch.setattr(_support, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    retained = tmp_path / "benchmarks/results"
+    retained.mkdir(parents=True)
+    existing = retained / "existing.json"
+    existing.write_text("original reviewed evidence")
+    destination = existing
+    if route == "symlink":
+        alias = tmp_path / "retained-alias"
+        alias.symlink_to(retained, target_is_directory=True)
+        destination = alias / existing.name
+    elif route == "traversal":
+        destination = Path(".artifacts/../benchmarks/results/existing.json")
+    for variable in ("SLURM_JOB_ID", "CUDA_VISIBLE_DEVICES", "LD_PRELOAD"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "endpoints.py",
+            "--reference",
+            "missing-reference.json",
+            "--basis-file",
+            "missing-basis.json",
+            "--output",
+            str(destination),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        endpoint.main()
+    assert error.value.code == 2
+    message = capsys.readouterr().err
+    assert "argument --output:" in message and "raw_output_path" in message
+    assert existing.read_text() == "original reviewed evidence"
+    assert not (tmp_path / ".artifacts").exists()
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        ".artifacts/benchmarks/run.json",
+        "scratch/run.json",
+        "benchmarks/results-copy/run.json",
+    ],
+)
+def test_cli_preserves_scratch_output_and_complete_acceptance(
+    endpoint: ModuleType,
+    campaign: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    output: str,
+) -> None:
+    monkeypatch.setattr(_support, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    arguments = sys.argv.copy()
+    arguments[arguments.index("--output") + 1] = output
+    Path(arguments[arguments.index("--reference") + 1]).write_text(
+        json.dumps(campaign.reference)
+    )
+    monkeypatch.setattr(sys, "argv", arguments)
+    endpoint.main()
+    payload = json.loads(Path(output).read_text())
+    assert payload["status"] == "PASS"
+    assert len(campaign.calls) == len(payload["records"]) == 24
+    assert len(payload["independent_pairs"]) == 144

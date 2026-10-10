@@ -21,6 +21,7 @@ from generativeqc._stationary_composite_cuda import (
     PreparedCompositeStationaryCudaGradient,
 )
 
+from benchmarks._support import raw_output_path
 from benchmarks.compare_gpu4pyscf_batch import (
     load_comparison_basis,
     native_build_metadata,
@@ -102,7 +103,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--repeat-offset", type=int, default=0)
     parser.add_argument("--observe", action="store_true")
