@@ -215,7 +215,7 @@ def qualify(
     return True, "exact-master-base and runtime environment match"
 
 
-def _output(qualified: bool, reason: str) -> None:
+def _output(qualified: bool, reason: str, *, paired_diagnostic: bool = False) -> None:
     status = "qualified" if qualified else "unqualified"
     print(f"CodSpeed comparison {status}: {reason}")
     if not qualified:
@@ -223,6 +223,9 @@ def _output(qualified: bool, reason: str) -> None:
     if destination := os.environ.get("GITHUB_OUTPUT"):
         with Path(destination).open("a", encoding="utf-8") as handle:
             handle.write(f"qualified={'true' if qualified else 'false'}\n")
+            handle.write(
+                f"paired_diagnostic={'true' if paired_diagnostic else 'false'}\n"
+            )
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(summary).open("a", encoding="utf-8") as handle:
             handle.write(f"### CodSpeed CPU comparison: {status}\n\n{reason}\n\n")
@@ -254,6 +257,7 @@ def main() -> None:
             encoding="utf-8",
         )
         return
+    paired_diagnostic = False
     try:
         base_sha = tested_master_base(args.merge_sha, args.head_sha, args.base_ref)
         print(
@@ -263,6 +267,21 @@ def main() -> None:
         current = environment_fingerprint()
         baseline = _lookup_baseline(args.repo, base_sha)
         matched, reason = qualify(baseline, base_sha, current, benchmark_selection())
+        # Only an authenticated, identical-source/selector baseline with a
+        # CPU-only mismatch may trigger an artifact-only paired diagnostic.
+        # This never qualifies either arm for a CodSpeed/master upload.
+        paired_diagnostic = (
+            not matched
+            and reason == "different benchmark environments: cpu"
+            and all(
+                isinstance(cpu, dict)
+                and all(
+                    isinstance(cpu.get(key), str) and bool(cpu[key])
+                    for key in ("vendor", "model", "flags")
+                )
+                for cpu in (current.get("cpu"), baseline["environment"].get("cpu"))
+            )
+        )
     except (
         OSError,
         TypeError,
@@ -274,7 +293,7 @@ def main() -> None:
     ) as exc:
         matched = False
         reason = f"baseline qualification unavailable: {type(exc).__name__}"
-    _output(matched, reason)
+    _output(matched, reason, paired_diagnostic=paired_diagnostic)
 
 
 if __name__ == "__main__":

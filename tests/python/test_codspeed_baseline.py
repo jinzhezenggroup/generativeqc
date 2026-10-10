@@ -189,7 +189,10 @@ def test_unqualified_writes_neutral_outputs(
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     baseline._output(False, "different benchmark environments: cpu")
-    assert output.read_text(encoding="utf-8") == "qualified=false\n"
+    assert (
+        output.read_text(encoding="utf-8")
+        == "qualified=false\npaired_diagnostic=false\n"
+    )
     assert "unqualified" in summary.read_text(encoding="utf-8")
 
 
@@ -287,7 +290,7 @@ def test_lookup_failure_remains_advisory(
     monkeypatch.setattr(baseline, "environment_fingerprint", _environment)
     monkeypatch.setattr(baseline, "_lookup_baseline", unavailable)
     baseline.main()
-    assert output.read_text() == "qualified=false\n"
+    assert output.read_text() == "qualified=false\npaired_diagnostic=false\n"
 
 
 def test_record_includes_selection_receipt(
@@ -446,4 +449,50 @@ def test_invalid_checkout_does_not_lookup_receipt_or_upload(
     output = tmp_path / "output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     baseline.main()
-    assert output.read_text() == "qualified=false\n"
+    assert output.read_text() == "qualified=false\npaired_diagnostic=false\n"
+
+
+@pytest.mark.parametrize(
+    "mismatch,allowed",
+    [
+        ("cpu", True),
+        ("packages", False),
+        ("cpu-and-packages", False),
+        ("source", False),
+        ("selection", False),
+        ("missing-cpu", False),
+        ("identity", False),
+        ("none", False),
+    ],
+)
+def test_only_authenticated_cpu_only_mismatch_enables_artifact_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mismatch: str,
+    allowed: bool,
+) -> None:
+    receipt = _receipt()
+    current = _environment()
+    if mismatch in ("cpu", "cpu-and-packages"):
+        current["cpu"] = {**current["cpu"], "model": "another CPU"}
+    if mismatch in ("packages", "cpu-and-packages"):
+        current["packages"] = {"numpy": "changed"}
+    if mismatch == "missing-cpu":
+        current["cpu"] = {"vendor": "", "model": "", "flags": ""}
+    if mismatch == "source":
+        receipt["benchmark_selection"]["source_sha256"] = "b" * 64
+    if mismatch == "selection":
+        receipt["benchmark_selection"]["extra_cases"] = []
+    if mismatch == "identity":
+        receipt["sha"] = "d" * 40
+    monkeypatch.setattr(sys, "argv", _qualify_args())
+    monkeypatch.setattr(baseline, "tested_master_base", lambda *args: SHA)
+    monkeypatch.setattr(baseline, "environment_fingerprint", lambda: current)
+    monkeypatch.setattr(baseline, "benchmark_selection", lambda: _selection("wb97mv"))
+    monkeypatch.setattr(baseline, "_lookup_baseline", lambda *args: receipt)
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    baseline.main()
+    lines = output.read_text().splitlines()
+    assert f"paired_diagnostic={'true' if allowed else 'false'}" in lines
+    assert f"qualified={'true' if mismatch == 'none' else 'false'}" in lines

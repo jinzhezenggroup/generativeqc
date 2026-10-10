@@ -98,3 +98,40 @@ def test_qualifier_authenticates_tested_merge_not_stale_payload_base() -> None:
     assert '--base-ref "$CODSPEED_BASE_REF"' in step
     assert "github.event.pull_request.base.sha" not in step
     assert "--base-sha" not in step
+
+
+def test_paired_diagnostic_is_bounded_and_separate_from_qualified_upload() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    job = workflow.split("\n  cpu-benchmark:\n", 1)[1].split(
+        "\n  upload-coverage:\n", 1
+    )[0]
+    assert (
+        "timeout-minutes: ${{ github.event_name == 'pull_request' && 40 || 15 }}" in job
+    )
+
+    def step(name: str) -> str:
+        return job.split(f"      - name: {name}\n", 1)[1].split("      - name:", 1)[0]
+
+    normal = step("Run CPU CodSpeed endpoint suite")
+    assert "steps.baseline.outputs.qualified == 'true'" in normal
+    assert "CODSPEED_SKIP_UPLOAD" not in normal
+    setup = step("Set up pinned artifact-only CodSpeed diagnostic")
+    assert 'CODSPEED_SKIP_UPLOAD: "true"' in setup
+    assert 'runner-version: "5.0.1"' in setup
+    assert 'run: "true"' in setup and 'allow-empty: "true"' in setup
+    for name in (
+        "Set up pinned artifact-only CodSpeed diagnostic",
+        "Compare exact baseline and head on this runner",
+        "Preserve bounded same-runner diagnostic",
+    ):
+        assert "github.event_name == 'pull_request'" in step(name)
+        assert "steps.baseline.outputs.paired_diagnostic == 'true'" in step(name)
+    run = step("Compare exact baseline and head on this runner")
+    assert 'CODSPEED_SKIP_UPLOAD: "true"' in run
+    assert "tools/codspeed_pair.py" in run
+    upload = step("Preserve bounded same-runner diagnostic")
+    assert "if: always()" in upload and "retention-days: 7" in upload
+    assert "${{ runner.temp }}/codspeed-paired/artifact/" in upload
+    assert "codspeed-cpu-baseline-" not in upload
+    assert "contents: read" in job and "actions: read" in job
+    assert "id-token:" not in job and "contents: write" not in job

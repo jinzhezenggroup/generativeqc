@@ -91,6 +91,11 @@ or blindly rerunning. The final CodSpeed analysis must also identify the intende
 baseline before it can resolve the earlier regression. This fix changes no
 benchmark endpoint, production source, raw receipt or measured result.
 
+The later CPU-only mismatch is investigated through the separate
+[bounded same-runner diagnostic](2026-10-10-codspeed-same-runner-diagnostic.md).
+It preserves these qualification rules and cannot publish either PR-job arm as
+a master baseline or infer that the original performance gate passed.
+
 ## References
 
 - [PR #2232 report](https://github.com/jinzhezenggroup/generativeqc/pull/2232#issuecomment-6100855187)

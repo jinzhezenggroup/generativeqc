@@ -1460,10 +1460,9 @@ jobs:
       actions: read
       contents: read
     runs-on: ubuntu-24.04
-    # Leave enough headroom for a fully cold hosted-runner build before
-    # CodSpeed starts; performance checks should not become false negatives just
-    # because the ccache entry is missing.
-    timeout-minutes: 15
+    # PR CPU mismatches may use one bounded, no-upload ABBA diagnostic. Other
+    # events keep the single-suite budget; no retry loop is permitted.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 40 || 15 }}
     env:
       # Non-PR events have no selector step to initialize the setup guard.
       GENERATIVEQC_CODSPEED_RUN: "1"
@@ -1594,6 +1593,40 @@ jobs:
           path: codspeed-baseline/baseline.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Set up pinned artifact-only CodSpeed diagnostic
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true'
+        uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
+        env:
+          CODSPEED_SKIP_UPLOAD: "true"
+        with:
+          runner-version: "5.0.1"
+          mode: simulation
+          # Bootstrap instruments without wrapping/nesting the real runners.
+          run: "true"
+          allow-empty: "true"
+
+      - name: Compare exact baseline and head on this runner
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true'
+        env:
+          CODSPEED_SKIP_UPLOAD: "true"
+          CODSPEED_MERGE_SHA: ${{ github.sha }}
+          CODSPEED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CODSPEED_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          .venv/bin/python tools/codspeed_pair.py \
+            --merge-sha "$CODSPEED_MERGE_SHA" --head-sha "$CODSPEED_HEAD_SHA" \
+            --base-ref "$CODSPEED_BASE_REF" \
+            --output "$RUNNER_TEMP/codspeed-paired"
+
+      - name: Preserve bounded same-runner diagnostic
+        if: always() && github.event_name == 'pull_request' && steps.baseline.outputs.paired_diagnostic == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: codspeed-paired-diagnostic-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codspeed-paired/artifact/
+          if-no-files-found: error
+          retention-days: 7
 
   upload-coverage:
     timeout-minutes: 8
