@@ -670,8 +670,11 @@ def build_identity(folder: Path, compiler: Path, cuda: Path, cache: Path) -> dic
         )
         receipt["build_identity_sha256"] = sha256(folder / "build-identity.json")
         receipt["source_matched_identity_available"] = source_matched
-        if not source_matched:
-            receipt["status"] = "NOT_QUALIFIED"
+        receipt["status"] = (
+            "PASS"
+            if source_matched and receipt["arithmetic_status"] == "PASS"
+            else "NOT_QUALIFIED"
+        )
         write_json(receipt_path, receipt)
     return payload
 
@@ -790,7 +793,9 @@ def collect(folder: Path) -> dict:
     )
     receipt = {
         "schema": manifest["schema"],
-        "status": "PASS" if passed else "NOT_QUALIFIED",
+        "status": "NOT_QUALIFIED",
+        "arithmetic_status": "PASS" if passed else "FAIL_OR_INCOMPLETE",
+        "source_matched_identity_available": False,
         "complete_endpoint_qualified": False,
         "device": device,
         "owner_probes": probes,

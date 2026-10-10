@@ -57,10 +57,10 @@ if [[ $qualification_mode = build-only ]]; then
   exit 0
 fi
 nvidia-smi -q > "$qualification_build/nvidia-smi.txt"
-qualification_status=0
 "$qualification_python" "$qualification_root/benchmarks/ks_matrix_provider_qualification.py" \
-  run --output "$qualification_build/run" --driver "$qualification_build/matrix-qualification" || qualification_status=$?
+  run --output "$qualification_build/run" --driver "$qualification_build/matrix-qualification" || true
 "$qualification_python" "$qualification_root/benchmarks/ks_matrix_provider_qualification.py" \
   identity --output "$qualification_build" --compiler "$qualification_cxx" \
   --cuda "$qualification_cuda" --cache "$qualification_cache"
-exit "$qualification_status"
+"$qualification_python" -c 'import json,sys;sys.exit(0 if json.load(open(sys.argv[1]))["status"] == "PASS" else 1)' \
+  "$qualification_build/run/receipt.json"
