@@ -36,6 +36,7 @@ macro(generativeqc_configure_cuda_backend target)
     src/scf/cuda/direct_bounded_dddd.cu
     src/scf/cuda/direct_bounded_exact_force.cu
     src/scf/cuda/direct_order_seven_force.cu
+    src/scf/cuda/direct_force_class_domains.cu
     src/scf/cuda/direct_bounded_fallback.cu
   )
   # The resident angular-force kernels have launch-bound register ceilings.

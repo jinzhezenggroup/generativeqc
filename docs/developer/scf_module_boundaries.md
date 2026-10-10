@@ -123,6 +123,18 @@ the coupled numerical launch sequence. The separately built angular-force
 kernel has its own device-link constraints: do not change standalone versus
 relocatable compilation without checking the real NVCC build graph and endpoint.
 
+Full-range nuclear derivatives can partition a mixed f basis by the borrowed
+class-major topology: the 21 s/p/d quartet classes use separate low-order,
+weighted order-four/five, cooperative order-six/seven and materialized dddd
+consumers. Every f-containing class remains with the bounded generic recurrence,
+including low-total-order f classes. Admission requires both resident derivative
+schedules, compatible recurrence modes, the same plan's topology and the original
+256-lane launch contract. Missing preconditions retain the complete mixed owner;
+the existing whole-basis s/p/d schedule is unchanged. Class pages preserve the
+physical pair orientation, original screening and generated-class ownership,
+without new resident storage or another full-domain traversal. This changes
+execution partitioning, not derivative algebra or the number of physical passes.
+
 CUDA DF is not a single interchangeable `cuda_rhf` execution mode.
 Raw/metric source setup, bounded J/K contraction, source-backed derivatives,
 persistent solver state and final-state publication have distinct owners.

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_class_domains.hpp",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Mixed-basis class-domain launch contract; borrows existing topology, primitive cache, stream, output and cursor without owning scientific equations or new storage.",
+  "regions": []
+}

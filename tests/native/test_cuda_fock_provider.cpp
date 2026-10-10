@@ -2546,9 +2546,11 @@ void generated_coulomb_budget() {
   std::cout << "CUDA generated J shape-only density budget gates PASS\n";
 }
 
-void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
+void direct_providers(bool through_f_response, bool eri_tiles_only = false,
+                      bool mixed_force_domains = false) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      if (mixed_force_domains && angular != 3U) continue;
       // Noncoincident centers and unequal primitive/basis metadata distinguish
       // items with identical dimensions. Through-f values also test public AO
       // expansion ordering. The optional numerical tier adds d/f response
@@ -2559,6 +2561,12 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
       // Mixed p/d quartets exercise generated classes that s+d alone cannot
       // reach. Retain unequal contraction lengths and test both AO conventions.
       if (angular == 2) first.shells.push_back({0, 1, {{1.1, 0.6}, {0.3, 0.4}}});
+      if (mixed_force_domains) {
+        // A global f bound must not hide any of the 21 s/p/d subdomains.
+        first.shells.push_back({0, 1, {{1.1, 0.6}, {0.3, 0.4}}});
+        first.shells.push_back({1, 2, {{0.7, 1.0}}});
+        first.shells.push_back({0, 2, {{0.9, 1.0}}});
+      }
       first.electron_count = 2;
       first.basis_representation = representation;
       auto second = first;
@@ -2674,7 +2682,8 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
       for (bool uhf : {false, true})
         for (bool j : {false, true})
           for (bool k : {false, true}) {
-            const bool response = derivatives && (angular < 2 || (uhf && j && k));
+            const bool response =
+                derivatives && (mixed_force_domains || angular < 2 || (uhf && j && k));
             auto spec = make_hf_fock_spec(uhf ? FockSpin::Unrestricted : FockSpin::Restricted);
             spec.derivative_order = derivatives ? 1 : 0;
             spec.coulomb.present = j;
@@ -2806,6 +2815,13 @@ int main(int argc, char** argv) {
         spd_optional_allocation_fallback();
       std::cout
           << "CUDA indexed materialized J/K, SR/LR, screening, projection and fallback PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--mixed-force-domains-only") {
+      // Attach sanitizers before the expensive independent CPU ERI oracle.
+      check(cudaFree(nullptr));
+      direct_providers(true, false, true);
+      std::cout << "CUDA mixed s/p/d/f class-domain values, J'/K', spins and masks PASS\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--generated-j-budget-only") {
