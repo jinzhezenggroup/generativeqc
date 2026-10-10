@@ -4,7 +4,8 @@ The currently qualified `sm_120` profile records value-only `_rys_task` AOT
 preferences for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`,
 `dpps` and `dspp` Direct exchange classes in the **production manifest**.
 The compiler does not use a hard-coded architecture-name allowlist: each exact,
-tuned profile may declare its independently measured preferred classes. Other classes and profiles retain the incumbent
+tuned profile may declare its independently measured preferred classes.
+Other classes and profiles retain the incumbent
 recurrence with the independently selected queue schedule. Selection freezes at provider
 preparation; it does not reselect the old component-lane `rys` experiment,
 select Coulomb J, or select analytic derivatives. Set
