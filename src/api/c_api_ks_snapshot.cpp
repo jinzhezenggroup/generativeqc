@@ -90,8 +90,7 @@ generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
   std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
   try {
     const std::size_t atoms = calculation->plan->atom_count();
-    if (!atoms || atoms > std::numeric_limits<std::size_t>::max() / 12 ||
-        count != 12 * atoms)
+    if (!atoms || atoms > std::numeric_limits<std::size_t>::max() / 12 || count != 12 * atoms)
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
 
     generativeqc::dft::CudaKsFinalStateToken token;
@@ -104,8 +103,8 @@ generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
     }
 
     generativeqc::dft::VerifiedKsFinalState frame;
-    status = generativeqc::methods::detail::read_dft_final_state(
-        *calculation->plan, token, true, frame, detail);
+    status = generativeqc::methods::detail::read_dft_final_state(*calculation->plan, token, true,
+                                                                 frame, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       if (!detail.empty()) calculation->context->last_detail = detail;
       return status;
@@ -114,8 +113,8 @@ generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
     std::vector<double> candidate;
     std::array<std::uint64_t, 9> usage{};
     status = generativeqc::methods::detail::dft_prepared_integral_gradient_cached(
-        *calculation->plan, token, frame.density, frame.weighted_density, candidate,
-        maximum_bytes, usage, detail);
+        *calculation->plan, token, frame.density, frame.weighted_density, candidate, maximum_bytes,
+        usage, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       if (!detail.empty()) calculation->context->last_detail = detail;
       return status;
@@ -131,11 +130,9 @@ generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
     status =
         generativeqc::methods::detail::dft_final_state_token(*calculation->plan, current, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS || current != token) {
-      calculation->context->last_detail = detail.empty()
-                                             ? "native stationary integral source token is stale"
-                                             : detail;
-      return status == GENERATIVEQC_STATUS_SUCCESS ? GENERATIVEQC_STATUS_INVALID_ARGUMENT
-                                                  : status;
+      calculation->context->last_detail =
+          detail.empty() ? "native stationary integral source token is stale" : detail;
+      return status == GENERATIVEQC_STATUS_SUCCESS ? GENERATIVEQC_STATUS_INVALID_ARGUMENT : status;
     }
     std::copy(candidate.begin(), candidate.end(), values);
     std::copy(usage.begin(), usage.end(), work);

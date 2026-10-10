@@ -20,25 +20,32 @@ struct Environment {
   generativeqc_calculation* calculation{};
 
   Environment() {
-    const generativeqc_context_descriptor context_options{
-        sizeof(generativeqc_context_descriptor), GENERATIVEQC_ABI_VERSION, 0,
-        GENERATIVEQC_BACKEND_CPU_REFERENCE};
-    require(generativeqc_context_create(&context_options, &context) ==
-                GENERATIVEQC_STATUS_SUCCESS,
+    const generativeqc_context_descriptor context_options{sizeof(generativeqc_context_descriptor),
+                                                          GENERATIVEQC_ABI_VERSION, 0,
+                                                          GENERATIVEQC_BACKEND_CPU_REFERENCE};
+    require(generativeqc_context_create(&context_options, &context) == GENERATIVEQC_STATUS_SUCCESS,
             "failed to create native CPU context");
-    const std::array<generativeqc_atom, 2> atoms{{{1, 0.0, 0.0, -0.7},
-                                                  {1, 0.0, 0.0, 0.7}}};
+    const std::array<generativeqc_atom, 2> atoms{{{1, 0.0, 0.0, -0.7}, {1, 0.0, 0.0, 0.7}}};
     const std::array<generativeqc_primitive, 6> primitives{{
-        {3.425250914, 0.1543289673}, {0.6239137298, 0.5353281423},
-        {0.168855404, 0.4446345422}, {3.425250914, 0.1543289673},
-        {0.6239137298, 0.5353281423}, {0.168855404, 0.4446345422},
+        {3.425250914, 0.1543289673},
+        {0.6239137298, 0.5353281423},
+        {0.168855404, 0.4446345422},
+        {3.425250914, 0.1543289673},
+        {0.6239137298, 0.5353281423},
+        {0.168855404, 0.4446345422},
     }};
-    const std::array<generativeqc_shell, 2> shells{{{0, 0, 0, 3},
-                                                    {1, 0, 3, 3}}};
-    const generativeqc_system_descriptor system_options{
-        sizeof(generativeqc_system_descriptor), GENERATIVEQC_ABI_VERSION,
-        atoms.data(), 2, shells.data(), 2, primitives.data(), 6, 0, 1,
-        GENERATIVEQC_BASIS_CARTESIAN};
+    const std::array<generativeqc_shell, 2> shells{{{0, 0, 0, 3}, {1, 0, 3, 3}}};
+    const generativeqc_system_descriptor system_options{sizeof(generativeqc_system_descriptor),
+                                                        GENERATIVEQC_ABI_VERSION,
+                                                        atoms.data(),
+                                                        2,
+                                                        shells.data(),
+                                                        2,
+                                                        primitives.data(),
+                                                        6,
+                                                        0,
+                                                        1,
+                                                        GENERATIVEQC_BASIS_CARTESIAN};
     require(generativeqc_system_create(context, &system_options, &system) ==
                 GENERATIVEQC_STATUS_SUCCESS,
             "failed to create H2/STO-3G native system");
@@ -75,8 +82,7 @@ struct Environment {
     generativeqc_result_descriptor result{};
     result.struct_size = sizeof(result);
     result.abi_version = GENERATIVEQC_ABI_VERSION;
-    require(generativeqc_calculation_execute(calculation, &result) ==
-                GENERATIVEQC_STATUS_SUCCESS &&
+    require(generativeqc_calculation_execute(calculation, &result) == GENERATIVEQC_STATUS_SUCCESS &&
                 result.converged && std::isfinite(result.energy),
             "native PBE SCF did not converge before stationary source read");
   }
@@ -94,16 +100,14 @@ void test_single_prepared_stationary_sources() {
   sources.fill(1234.0);
   work.fill(4321);
 
-  auto read = [&](std::size_t size = kSourceCount,
-                  std::size_t budget = kBudget) {
-    return generativeqc_ks_calculation_integral_sources_v1(
-        environment.calculation, sources.data(), size, budget, work.data(), work.size());
+  auto read = [&](std::size_t size = kSourceCount, std::size_t budget = kBudget) {
+    return generativeqc_ks_calculation_integral_sources_v1(environment.calculation, sources.data(),
+                                                           size, budget, work.data(), work.size());
   };
 
   require(read() == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "native stationary source read accepted an unexecuted SCF frame");
-  require(std::all_of(sources.begin(), sources.end(),
-                      [](double x) { return x == 1234.0; }),
+  require(std::all_of(sources.begin(), sources.end(), [](double x) { return x == 1234.0; }),
           "failed stationary source preflight modified output");
 
   environment.execute_energy();
@@ -121,8 +125,7 @@ void test_single_prepared_stationary_sources() {
   require(std::any_of(sources.begin() + 12, sources.begin() + 18,
                       [](double x) { return std::abs(x) > 1.0e-9; }),
           "PBE DF Coulomb nuclear derivative is unexpectedly absent");
-  require(std::all_of(sources.begin() + 18, sources.end(),
-                      [](double x) { return x == 0.0; }),
+  require(std::all_of(sources.begin() + 18, sources.end(), [](double x) { return x == 0.0; }),
           "pure PBE fabricated a stationary exact-exchange derivative");
   const auto original = sources;
   require(read() == GENERATIVEQC_STATUS_SUCCESS,

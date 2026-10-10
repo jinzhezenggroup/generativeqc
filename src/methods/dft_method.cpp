@@ -1429,7 +1429,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
     if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE)
       return density_fitted_integral_gradient(expected, density, weighted_density, output,
-                                               maximum_bytes, work, detail);
+                                              maximum_bytes, work, detail);
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_)
       return cuda_integral_gradient(expected, output, maximum_bytes, work, detail, &density,
