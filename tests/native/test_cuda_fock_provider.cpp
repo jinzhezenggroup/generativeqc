@@ -17,6 +17,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_ledger.hpp"
+#include "runtime/resource_usage.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/rhf_policy.hpp"
@@ -61,6 +62,30 @@ struct DeviceMatrix {
               "independent device provider matrix differs from CPU");
   }
 };
+
+/** Force-only qualification must not require optional packaged value kernels.
+ * Prepare the public stationary consumer's bounded owner when value admission
+ * left it absent, retaining the original combined allowance and normalized basis.
+ */
+void ensure_bounded_force_owner(CudaDirectJkPlan& plan,
+                                const std::vector<generativeqc::core::System>& systems,
+                                double screening, std::size_t budget) {
+  using namespace generativeqc::scf::cuda_execution;
+  if (plan.generated_exchange) return;
+  HostBatch host;
+  require(pack_host_batch(systems, std::vector<const std::vector<double>*>(systems.size(), nullptr),
+                          host, true, false, true, ResidentPsssPolicy::Skip),
+          "cannot pack force-only owner");
+  require(budget > plan.diagnostic.device_bytes, "force-only owner has no optional allowance");
+  auto owner = prepare_generated_exchange(host, plan.batch, plan.stream, plan.device_id, screening,
+                                          budget - plan.diagnostic.device_bytes, true, true);
+  require(owner && owner->force_capability, "missing bounded derivative owner");
+  plan.diagnostic.device_bytes += owner->device_bytes;
+  plan.diagnostic.host_bytes +=
+      sizeof(GeneratedExchangePlan) + generativeqc::runtime::vector_bytes(owner->allocations);
+  plan.diagnostic.host_preparation_bytes += owner->host_preparation_bytes;
+  plan.generated_exchange = std::move(owner);
+}
 
 struct DeviceCounter {
   std::uint64_t* pointer{};
@@ -1957,6 +1982,7 @@ void range_exchange_derivatives() {
                   detail.c_str());
           std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> shell_plan(
               shell_raw, &destroy_cuda_direct_jk_plan);
+          ensure_bounded_force_owner(*shell_plan, {item == 0 ? first : second}, 0.0, 64U << 20);
           DeviceMatrix device_a(a), device_b(b);
           std::vector<double> shell;
           // Both schedules satisfy the same independent canonical/CPU oracle.
@@ -2040,6 +2066,7 @@ void shell_range_four_center_derivatives() {
       DeviceMatrix device_a(a), device_b(b);
       // f/d/p/s covers orders 10/11; f/f/s/s admits multi-center order-12
       // derivatives. Reuse each CPU derivative for both schedules.
+      ensure_bounded_force_owner(*plan, {system}, 0.0, 64U << 20);
       std::array<std::array<std::vector<double>, 2>, 2> scheduled, full_scheduled;
       for (unsigned schedule = 0; schedule < 2; ++schedule) {
         plan->generated_exchange->angular_force_opt_in = schedule != 0;
@@ -2235,7 +2262,7 @@ void bounded_schwarz_schedule_budget() {
   HostBatch host;
   require(pack_host_batch(systems, {nullptr, nullptr}, host, true, false, true),
           "cannot pack batch");
-  for (double screening : {0.0, 1e-12}) {
+  for (double screening : {0.0, 1e-12, 2.0}) {
     CudaDirectJkPlan* raw = nullptr;
     CudaDirectJkDiagnostic diagnostic;
     require(create_cuda_direct_jk_plan(0, systems, 1, screening, 64U << 20, &raw, diagnostic,
@@ -2243,9 +2270,13 @@ void bounded_schwarz_schedule_budget() {
             detail.c_str());
     std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
         raw, destroy_cuda_direct_jk_plan);
-    require(bool(plan->generated_exchange), "missing derivative owner");
+    ensure_bounded_force_owner(*plan, systems, screening, 64U << 20);
     auto& original = *plan->generated_exchange;
     require(original.bounded_block_domain.prefix, "missing indexed domain");
+    const bool empty_domain = screening == 2.0;
+    if (empty_domain)
+      require(original.bounded_block_domain.quartet_count == 0,
+              "empty-domain fixture retained a geometric product");
     const auto prefix_bytes =
         (original.bounded_block_domain.row_count + 1U) * sizeof(std::uint64_t);
     const auto full_budget = original.device_bytes;
@@ -2253,8 +2284,9 @@ void bounded_schwarz_schedule_budget() {
                      cudaMemcpyHostToDevice));
     std::vector<double> indexed_range;
     for (const auto budget : {full_budget, full_budget - 1U, full_budget - prefix_bytes}) {
-      auto owner = prepare_generated_exchange(host, original.shared->batch, plan->stream, 0,
-                                              screening, budget, true, false);
+      auto owner =
+          prepare_generated_exchange(host, original.shared->batch, plan->stream, 0, screening,
+                                     budget, true, !original.shared->value_capability);
       require(bool(owner), "tight prefix budget discarded admitted owner");
       const bool indexed = owner->bounded_block_domain.prefix != nullptr;
       require(indexed == (budget == full_budget), "incorrect prefix budget edge");
@@ -2270,7 +2302,7 @@ void bounded_schwarz_schedule_budget() {
       double error = 0;
       for (std::size_t index = 0; index < actual.size(); ++index) {
         require(std::isfinite(actual[index]), "nonfinite batch derivative");
-        error = std::max(error, std::abs(actual[index] - expected[index]));
+        error = std::max(error, std::abs(actual[index] - (empty_domain ? 0.0 : expected[index])));
       }
       require(error < 3e-10, "screened/budget batch derivative differs from CPU ERIs");
       unsigned long long cursor = 0;
@@ -2285,6 +2317,9 @@ void bounded_schwarz_schedule_budget() {
       check(execute_generated_rsh_energy_derivatives(*owner, false, plan->density, nullptr, 0.0,
                                                      0.0, -0.25, 0.3, range_actual));
       require(range_actual.size() == 6U * coordinates, "batch LR source shape changed");
+      if (empty_domain)
+        for (const auto value : range_actual)
+          require(value == 0.0, "empty LR domain published a contribution");
       check(cudaMemcpy(&cursor, owner->force_cursor, sizeof(cursor), cudaMemcpyDeviceToHost));
       require(cursor == products * pages + owner->shared->worker_blocks,
               "LR scheduler did not consume the retained indexed domain");
@@ -2667,6 +2702,13 @@ int main(int argc, char** argv) {
       shell_range_four_center_derivatives();
       canonical_order_two_derivatives();
       std::cout << "CUDA s/p/d/f SR/LR derivative gates PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--lr-domain-only") {
+      require(cuda_policy::bounded_schwarz_schedule_requested(),
+              "LR domain gate requires the retained indexed owner");
+      bounded_schwarz_schedule_budget();
+      std::cout << "CUDA indexed LR domain and allocation gates PASS\n";
       return 0;
     }
     require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--through-f-response"),
