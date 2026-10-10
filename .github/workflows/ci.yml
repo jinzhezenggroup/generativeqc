@@ -199,7 +199,9 @@ jobs:
   cpu:
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
-    timeout-minutes: 15
+    # Cold GCC coverage can spend 6.5 minutes compiling and 8 minutes in CTest.
+    # Leave room for lcov and artifacts without enlarging plain-build budgets.
+    timeout-minutes: ${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 20 || 15 }}
     strategy:
       fail-fast: false
       matrix:

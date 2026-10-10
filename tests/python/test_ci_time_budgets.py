@@ -7,6 +7,68 @@ from pathlib import Path
 import pytest
 
 
+def test_cpu_coverage_has_a_bounded_cold_build_budget() -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text().split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
+    )
+    header = section.split("\n    steps:\n", 1)[0]
+    match = re.search(
+        r"timeout-minutes: \$\{\{ matrix.compiler == 'gcc' && "
+        r"github.event_name != 'merge_group' && (\d+) \|\| (\d+) \}\}",
+        header,
+    )
+    assert match, "instrumented GCC needs time for cold build, tests, and coverage"
+    coverage, plain = map(int, match.groups())
+    assert (coverage, plain) == (20, 15)
+    assert "compiler: [gcc, clang]" in header
+    assert "fail-fast: false" in header
+    assert "continue-on-error:" not in header
+
+
+def test_cpu_budget_preserves_required_work_and_early_cache_save() -> None:
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text().split("\n  cpu:\n", 1)[1].split("\n  cuda-compile:\n", 1)[0]
+    )
+
+    def step(name: str) -> str:
+        return section.split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
+
+    assert "-DGENERATIVEQC_COMPILER_CACHE=ccache" in step("Configure")
+    for name, command in (
+        ("Build", "cmake --build build --parallel"),
+        ("Test", "ctest --test-dir build --output-on-failure"),
+    ):
+        block = step(name)
+        assert command in block
+        assert "if:" not in block
+        assert "continue-on-error:" not in block
+    assert (
+        section.index("name: Build")
+        < section.index("name: Save ccache immediately after build")
+        < section.index("name: Test")
+    )
+    save = step("Save ccache immediately after build")
+    assert "uses: actions/cache/save@" in save
+    assert "key: ${{ steps.cpu_ccache.outputs.cache-primary-key }}" in save
+    ownership = step("Generate current CUDA ownership report")
+    assert "if: matrix.compiler == 'gcc'" in ownership
+    assert "python3 tools/report_cuda_ownership.py --check" in ownership
+    assert "continue-on-error:" not in ownership
+    coverage = step("Collect C++ coverage")
+    assert (
+        "if: matrix.compiler == 'gcc' && github.event_name != 'merge_group'" in coverage
+    )
+    assert (
+        "lcov --capture --directory build --output-file coverage-cpp.info" in coverage
+    )
+    assert "continue-on-error:" not in coverage
+    report = step("Preserve C++ coverage for the upload-only job")
+    assert "name: coverage-report-cpp" in report
+    assert "path: coverage-cpp.info" in report
+
+
 @pytest.mark.parametrize(
     "filename, job, routine_minutes",
     [("ci.yml", "python", 30), ("cumetal-cuda.yml", "cuda-tests", 30)],
