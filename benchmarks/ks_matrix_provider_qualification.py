@@ -224,6 +224,7 @@ def endpoint_pilot(
     os.environ["GENERATIVEQC_CUDA_KS_REPLAY"] = "1" if graph else "0"
     from generativeqc import Calculator
     from generativeqc._ks_snapshot import NativeKsSnapshot
+    from generativeqc.autotune import source_identity
     from generativeqc.ks import KsOptions
     from generativeqc_compiler.dft import GridSpec
 
@@ -232,6 +233,8 @@ def endpoint_pilot(
     _, atoms, _ = endpoint_inputs(model)
     records = []
     library_hash = sha256(library)
+    calculator = None
+    expected_identity = source_identity(ROOT)
     started = time.perf_counter()
     try:
         calculator = Calculator(
@@ -247,6 +250,11 @@ def endpoint_pilot(
             density_tolerance=model["density_tolerance"],
             screening_tolerance=1e-14,
         )
+        if (
+            calculator._library.generativeqc_get_source_identity().decode()
+            != expected_identity
+        ):
+            raise ValueError("selected endpoint library does not match the source tree")
         with calculator.prepare_batch(
             [atoms], charges=[model["charge"]], multiplicities=[model["multiplicity"]]
         ) as plan:
@@ -288,6 +296,7 @@ def endpoint_pilot(
                     "actual_graph_replay_count": None,
                     "accepted": False,
                 }
+                records.append(row)
                 if result.succeeded:
                     snapshot = NativeKsSnapshot(plan, 0)
                     try:
@@ -345,7 +354,6 @@ def endpoint_pilot(
                         )
                     finally:
                         snapshot.close()
-                records.append(row)
                 write_json(
                     folder / "pilot.json",
                     {
@@ -371,7 +379,91 @@ def endpoint_pilot(
                 "failure": str(error),
             },
         )
+    finally:
+        receipt = json.loads((folder / "pilot.json").read_text())
+        try:
+            receipt["identity"] = endpoint_identity(
+                folder, library, calculator, expected_identity
+            )
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            subprocess.SubprocessError,
+        ) as error:
+            receipt["identity"] = {
+                "source_matched_identity_available": False,
+                "failure": str(error),
+            }
+        for row in receipt["rows"]:
+            if not receipt["identity"]["source_matched_identity_available"]:
+                row["numerical_accepted"] = False
+        write_json(folder / "pilot.json", receipt)
     return json.loads((folder / "pilot.json").read_text())
+
+
+def endpoint_identity(
+    folder: Path,
+    requested: Path,
+    calculator: object,
+    expected_source_identity: str,
+    *,
+    maps: Path = Path("/proc/self/maps"),
+) -> dict:
+    """Retain the selected library as well as Linux's actual process mappings."""
+    identity = {
+        "source_head": subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True
+        ).strip(),
+        "source_status": subprocess.check_output(
+            ["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
+            text=True,
+        ).strip(),
+        "tool_sha256": sha256(Path(__file__)),
+        "requested_library": str(requested.resolve()),
+        "requested_library_sha256": sha256(requested),
+        "selected_library": None,
+        "selected_library_sha256": None,
+        "selected_source_identity": None,
+        "expected_source_identity": expected_source_identity,
+        "selected_library_mapped": False,
+        "actual_maps_available": False,
+        "loaded_files": {},
+    }
+    if calculator is not None:
+        native = calculator._library
+        selected = Path(native._name).resolve()
+        identity.update(
+            selected_library=str(selected),
+            selected_library_sha256=sha256(selected),
+            selected_source_identity=native.generativeqc_get_source_identity().decode(),
+            profile_diagnostics=calculator.profile_diagnostics,
+        )
+    if maps.is_file():
+        saved = folder / "loaded-maps.txt"
+        saved.write_bytes(maps.read_bytes())
+        loaded = set()
+        for line in saved.read_text().splitlines():
+            fields = line.split(maxsplit=5)
+            if len(fields) == 6:
+                path = Path(fields[5])
+                if path.is_absolute() and path.is_file():
+                    loaded.add(path.resolve())
+        identity.update(
+            actual_maps_available=True,
+            loaded_maps_sha256=sha256(saved),
+            loaded_files={str(path): sha256(path) for path in sorted(loaded)},
+            selected_library_mapped=identity["selected_library"]
+            in {str(path) for path in loaded},
+        )
+    identity["source_matched_identity_available"] = bool(
+        not identity["source_status"]
+        and identity["selected_library_mapped"]
+        and identity["selected_source_identity"] == expected_source_identity
+    )
+    return identity
 
 
 def final_state_gates(metadata: tuple, values: np.ndarray, model: dict) -> dict:

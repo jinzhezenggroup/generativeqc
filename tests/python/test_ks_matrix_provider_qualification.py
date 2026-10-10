@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -199,3 +200,44 @@ def test_final_state_generation_mismatch_rejected() -> None:
     result = qualification.final_state_gates(metadata, values, model)
     assert not result["density_orbital_generation_match"]
     assert not result["accepted"]
+
+
+@pytest.mark.parametrize("mismatch", ["none", "source", "unmapped", "dirty"])
+def test_endpoint_identity_checks_selected_library_not_requested_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mismatch: str
+) -> None:
+    requested = tmp_path / "requested.so"
+    selected = tmp_path / "selected.so"
+    requested.write_bytes(b"requested library")
+    selected.write_bytes(b"actually selected library")
+    maps = tmp_path / "maps"
+    mapped = requested if mismatch == "unmapped" else selected
+    maps.write_text(f"1-2 r-xp 00000000 00:00 1 {mapped}\n")
+    native = SimpleNamespace(
+        _name=str(selected),
+        generativeqc_get_source_identity=lambda: (
+            b"wrong" if mismatch == "source" else b"expected"
+        ),
+    )
+    calculator = SimpleNamespace(
+        _library=native, profile_diagnostics={"source": "local"}
+    )
+    monkeypatch.setattr(
+        qualification.subprocess,
+        "check_output",
+        lambda args, **kwargs: (
+            "head\n"
+            if "rev-parse" in args
+            else " M tracked\n"
+            if mismatch == "dirty"
+            else ""
+        ),
+    )
+    identity = qualification.endpoint_identity(
+        tmp_path, requested, calculator, "expected", maps=maps
+    )
+    assert identity["selected_library"] == str(selected.resolve())
+    assert identity["selected_library_sha256"] == qualification.sha256(selected)
+    assert identity["selected_library_sha256"] != identity["requested_library_sha256"]
+    assert identity["source_matched_identity_available"] == (mismatch == "none")
+    assert (tmp_path / "loaded-maps.txt").read_bytes() == maps.read_bytes()

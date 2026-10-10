@@ -70,6 +70,14 @@ identity, fixed inputs and every raw result by SHA-256. No compile/RUNNING/smoke
 or tool PR merge closes #1873. Actual qualification and independent final-head
 review remain distinct from implementation, CI, and protected merge.
 
+Endpoint pilots record the requested and actually selected libraries separately,
+including their hashes, native source identity, profile diagnostics and Linux
+process mappings. A clean checkout, matching canonical source identity and a
+mapped selected library are prerequisites for numerical acceptance. A local
+profile may select another binary; a requested path hash alone cannot establish
+which binary executed. Retain a public endpoint row before reading its snapshot
+or oracle so a postprocessing failure cannot erase the endpoint observation.
+
 ## Rejected alternatives
 
 Do not duplicate production arithmetic in a host probe, use a production formula
