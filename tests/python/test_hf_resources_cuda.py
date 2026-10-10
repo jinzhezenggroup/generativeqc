@@ -62,6 +62,7 @@ def test_small_direct_cuda_global_budget_covers_all_ragged_caches(
             # The first execution of each property route owns a new native
             # layout; its immediate warm replay must allocate nothing.
             assert (ledger["allocations"] == 0) == (replay in (1, 3))
+            assert (ledger["requested_bytes"] == 0) == (replay in (1, 3))
             for actual, target in zip(result.items, expected, strict=True):
                 assert actual.energy == pytest.approx(target.energy, abs=1e-10)
                 if "forces" in properties:
