@@ -86,6 +86,11 @@ retain both merged/wrapped decoys and require no reusable key, while unambiguous
 terminal spaces/tabs must remain hashed and invalidate on header comment changes.
 This intentionally rejects otherwise valid paths with the same ambiguous spelling;
 loosening it requires an independent, non-depfile source of dependency identity.
+The separator before a continuation must itself be unescaped: GCC can emit a
+directory's escaped space/tab immediately before a literal backslash/newline.
+Removing that pathname sequence can resolve to an existing collapsed decoy and
+omit the actual header. Odd preceding escape runs now fail closed, with parser
+negative controls and real-GCC space/tab directory-decoy regressions.
 Windows-local execution skips real Linux compilation; source-matched repository CI is required
 before claiming that gate passes. The existing cache/store tests and compiler
 structure checker protect the handoff without changing those implementations.

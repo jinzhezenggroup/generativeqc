@@ -26,7 +26,8 @@ before whitespace. GCC can emit terminal filename backslashes indistinguishably
 from escaped spaces or line continuations. These ambiguous spellings fail closed,
 even when a merged decoy pathname exists: escaped whitespace followed by a slash
 or another unescaped whitespace, even backslash runs before whitespace, and
-continuations without a preceding separator are rejected. This also excludes
+continuations without a preceding unescaped separator are rejected. This also
+excludes
 otherwise valid filenames with the same ambiguous spelling. Unambiguous terminal
 spaces and tabs are preserved; compiler queries trim only CR/LF record terminators.
 It binds the

@@ -73,6 +73,12 @@ def test_parser(text: str, expected: tuple[str, ...]) -> None:
         "closure: /a\\  /b.h",
         "closure: /a\\\n /b.h\n",
         "closure: /a\\\n",
+        "closure: /dir\\ \\\n/header.h\n",
+        "closure: /dir\\\t\\\n/header.h\n",
+        "closure: /dir\\\\\\ \\\n/header.h\n",
+        "closure: /dir\\ \\\nmore/header.h\n",
+        "closure: /dir\\\t\\\nmore/header.h\n",
+        "closure: /dir\\\\\\ \\\nmore/header.h\n",
     ],
 )
 def test_unsupported_make_syntax(text: str) -> None:
@@ -438,6 +444,39 @@ def test_real_gcc_terminal_backslash_decoys_fail_closed(
             )
             assert result.reasons
             assert result.closure is not None and result.closure.cache_key is None
+
+
+@pytest.mark.parametrize("suffix", [" ", "\t"])
+def test_real_gcc_escaped_whitespace_false_continuation(
+    tmp_path: Path, real_gcc: tuple, suffix: str
+) -> None:
+    compiler, manifest = real_gcc
+    actual = tmp_path / ("input" + suffix + "\\\nbranch")
+    decoy = tmp_path / ("input" + suffix + "branch")
+    actual.mkdir()
+    decoy.mkdir()
+    header = actual / "header.h"
+    header.write_text("/* real newline-path header */\n", encoding="utf-8")
+    (decoy / "header.h").write_text("/* collapsed decoy */\n", encoding="utf-8")
+    source = tmp_path / "point.c"
+    text = '#include "header.h"\nint point(void) { return 0; }\n'
+    source.write_text(text, encoding="utf-8")
+    flags = ("-std=c99", "-O2", "-I" + str(actual))
+    emitted = run_compiler(
+        [compiler, *flags, "-M", "-MT", "closure", str(source)],
+        30,
+        label="escaped-whitespace GCC evidence",
+        environment=collector.CPU_ENVIRONMENT,
+    )
+    assert emitted.returncode == 0 and not emitted.timed_out, emitted.stderr
+    assert "\\" + suffix + "\\\nbranch" in emitted.stdout, repr(emitted.stdout)
+    for comment in ("first", "changed"):
+        header.write_text(f"/* {comment} real header */\n", encoding="utf-8")
+        result = collector.collect_cpu_closure(
+            variant(text), source, flags=flags, compiler=compiler, toolchain=manifest
+        )
+        assert result.reasons == ("ambiguous trailing dependency backslashes",)
+        assert result.closure is not None and result.closure.cache_key is None
 
 
 @pytest.mark.parametrize("suffix", [" ", "\t"])

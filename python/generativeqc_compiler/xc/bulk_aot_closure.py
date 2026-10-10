@@ -91,9 +91,16 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     dangling escapes fail closed, even if a misparsed decoy file exists.
     """
     # A filename's terminal backslash must not masquerade as a continuation.
-    # GCC inserts whitespace before genuine rule continuations.
+    # GCC inserts an unescaped separator before genuine rule continuations.
     for continuation in re.finditer(r"\\\r?\n", text):
-        if continuation.start() == 0 or text[continuation.start() - 1] not in " \t":
+        separator = continuation.start() - 1
+        if separator < 0 or text[separator] not in " \t":
+            raise ValueError("ambiguous trailing dependency backslashes")
+        escapes = 0
+        while separator > 0 and text[separator - 1] == "\\":
+            separator -= 1
+            escapes += 1
+        if escapes % 2:
             raise ValueError("ambiguous trailing dependency backslashes")
     text = re.sub(r"\\\r?\n", "", text)
     if not text.startswith("closure:"):
