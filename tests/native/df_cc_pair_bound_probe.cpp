@@ -47,6 +47,15 @@ int main() {
       std::cout << bound::within_residual_margin(bound::Power::of(exponent),
                                                  std::bit_cast<double>(bits))
                 << '\n';
+    } else if (operation == "factorization-range") {
+      int bov{}, bvv{};
+      std::size_t occupied{}, virtuals{};
+      bound::ProjectionMaxima maxima;
+      std::cin >> bov >> bvv >> occupied >> virtuals >> maxima.t1_magnitude_bits >>
+          maxima.tau_magnitude_bits >> maxima.refused;
+      std::cout << bound::within_factorization_range(maxima, bound::Power::of(bov),
+                                                     bound::Power::of(bvv), occupied, virtuals)
+                << '\n';
     } else if (operation == "coefficient") {
       std::array<bound::Power, folded::geometry_norms.size()> norms;
       for (auto& value : norms) {

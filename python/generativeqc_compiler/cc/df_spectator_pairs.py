@@ -26,14 +26,14 @@ from generativeqc_compiler.tensor.ir import (
     transpose,
 )
 
-from .df_hoist import _word
+from .df_hoist import _bounded, _word
 from .doubles import _expand
 
 LADDER_OUTPUT = "df_D05_vv_ladder"
 PAIRED_TAU_INPUT = "df_tau_occupied_pairs"
 
 
-def _prove_ladder_pair_symmetry(root: Node) -> None:
+def _prove_ladder_pair_symmetry(root: Node, *, reference: Node | None = None) -> None:
     """Prove reflection from exact inventory algebra, assuming only tau symmetry.
 
     Free spectator labels alone do not prove that the output can be reflected:
@@ -42,6 +42,8 @@ def _prove_ladder_pair_symmetry(root: Node) -> None:
     renaming, commutative scalar factors, and tau_ijab = tau_jiba. No symmetry
     of the factor matrices is assumed. Small explicit limits keep this proof a
     finite compiler process; larger future inventories require a new proof.
+    An optional reference additionally checks exact polynomial equivalence,
+    so a factored schedule cannot merely be a different symmetric operator.
     """
 
     @cache
@@ -99,8 +101,13 @@ def _prove_ladder_pair_symmetry(root: Node) -> None:
                 raise ValueError("ladder symmetry proof exceeds its dummy limit")
             groups = [
                 [label for label in dummy if spaces[label] == space]
-                for space in dict.fromkeys(spaces[label] for label in dummy)
+                for space in sorted(
+                    {spaces[label] for label in dummy},
+                    key=lambda space: (space.kind, space.name, repr(space)),
+                )
             ]
+            # Dummy spelling must not change the ordinal of an index space.
+            dummy = [label for group in groups for label in group]
             keys = []
             for renamings in product(*(permutations(group) for group in groups)):
                 mapping = {label: position for position, label in enumerate(output)}
@@ -131,6 +138,82 @@ def _prove_ladder_pair_symmetry(root: Node) -> None:
     reflected = _expand("badc->abcd", [original], 1)
     if canonical(original) != canonical(reflected):
         raise ValueError("ladder does not preserve simultaneous pair symmetry")
+    if reference is not None and canonical(original) != canonical(
+        _expand("abcd->abcd", [expand(reference)], 1)
+    ):
+        raise ValueError("ladder differs from its original polynomial")
+
+
+def factor_ladder_dressing(program: Program) -> Program:
+    """Factor one existing ladder dressing, retaining its other signed term.
+
+    For ``D = t1.T @ bov``, the existing polynomial is
+    ``B tau B.T - D tau B.T - B tau D.T``. Replacing its first two terms by
+    ``(B-D) tau B.T`` removes a complete low-rank dressing chain. The remaining
+    term is selected from the supplied DAG by exact polynomial comparison,
+    not by node numbering, factor symmetry, or a second equation inventory.
+
+    Reassociate the new contraction into bounded binary nodes before packing:
+    directly emitting the three-operand spelling would introduce v^4 work.
+    Other cuts retain their original objects. Unsupported inventories return
+    the original program. Native consumers must additionally admit the changed
+    floating-point range and independently qualify its reassociation.
+    """
+    if LADDER_OUTPUT not in program.outputs:
+        return program
+    root = program.outputs[LADDER_OUTPUT]
+    if tuple(index.space.kind for index in root.spec.indices) != (
+        "occupied",
+        "occupied",
+        "virtual",
+        "virtual",
+    ):
+        return program
+    inputs = {
+        node.attrs["name"]: node for node in program.live_nodes if node.op == "input"
+    }
+    required = ("df_tau", "t1", "bov", "bvv")
+    if not all(
+        name in inputs and inputs[name].spec.dtype == "float64" for name in required
+    ):
+        return program
+
+    def signed_terms(node: Node, coefficient: Fraction) -> list[Node]:
+        if node.op != "add":
+            return [
+                node if coefficient == 1 else add(node, coefficients=(coefficient,))
+            ]
+        return [
+            term
+            for child, weight in zip(
+                node.inputs, node.attrs["coefficients"], strict=True
+            )
+            for term in signed_terms(child, coefficient * Fraction(*weight))
+        ]
+
+    terms = signed_terms(root, Fraction(1))
+    if len(terms) != 3:
+        return program
+    tau, singles, bov, bvv = (inputs[name] for name in required)
+    try:
+        dressing = einsum("kc,ka->ac", bov, singles)
+        dressed = add(bvv, dressing, coefficients=(1, -1))
+        combined = _bounded(
+            Program({LADDER_OUTPUT: einsum("ac,ijcd,bd->ijab", dressed, tau, bvv)})
+        ).outputs[LADDER_OUTPUT]
+    except ValueError:
+        return program
+    for term in terms:
+        candidate = add(combined, term)
+        try:
+            _prove_ladder_pair_symmetry(candidate, reference=root)
+        except ValueError:
+            continue
+        return Program(
+            {**program.outputs, LADDER_OUTPUT: candidate},
+            provenance={**program.provenance, "df_ladder_dressing_factorization": True},
+        )
+    return program
 
 
 @dataclass(frozen=True)

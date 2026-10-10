@@ -87,6 +87,31 @@ def test_ieee_upper_includes_subnormals_and_refuses_nonfinite(
             assert not value or _upper(result) < 2 * abs(_real(value))
 
 
+def test_factorization_range_is_a_bounded_refusal_not_a_physical_fault(
+    bound_probe: Path,
+) -> None:
+    limit = 1151 << 52
+    cases = [
+        (128, 128, 65536, 65536, limit, limit, 0, 1),
+        (-1074, -1074, 2, 3, 1, 1, 0, 1),
+        (129, 0, 2, 3, 0, 0, 0, 0),
+        (0, 129, 2, 3, 0, 0, 0, 0),
+        (8193, 0, 2, 3, 0, 0, 0, 0),
+        (0, 0, 65537, 3, 0, 0, 0, 0),
+        (0, 0, 2, 65537, 0, 0, 0, 0),
+        (0, 0, 0, 3, 0, 0, 0, 0),
+        (0, 0, 2, 3, limit + 1, 0, 0, 0),
+        (0, 0, 2, 3, 0, limit + 1, 0, 0),
+        (0, 0, 2, 3, 0, 0x7FF0000000000000, 0, 0),
+        (0, 0, 2, 3, 0, 0, 1, 0),
+    ]
+    results = _run(
+        bound_probe,
+        ["factorization-range " + " ".join(map(str, case[:-1])) for case in cases],
+    )
+    assert results == [[case[-1]] for case in cases]
+
+
 @pytest.mark.parametrize("axes", [0, 1, 2, 3])
 def test_grouped_norm_bounds_all_exact_rows(bound_probe: Path, axes: int) -> None:
     rng = random.Random(9328 + axes)
