@@ -226,7 +226,29 @@ def comparison(arms: dict[str, list[dict[str, object]]]) -> dict[str, object]:
     return result
 
 
-def verify_build(checkout: Path) -> dict[str, object]:
+def compiler_rules(checkout: Path) -> list[str]:
+    # Modern CMake stores ${LAUNCHER} in rules.ninja and the actual launcher
+    # on each build edge. Ask Ninja to expand it; never infer from a substring.
+    rules_text = (checkout / "build-benchmark/CMakeFiles/rules.ninja").read_text()
+    if re.search(
+        r"^rule CXX_COMPILER__generativeqc_scanned_Release\s*$",
+        rules_text,
+        re.MULTILINE,
+    ):
+        raise ValueError(
+            "scanned native compiler rules require explicit diagnostic review"
+        )
+    rules = re.findall(
+        r"^rule (CXX_COMPILER__generativeqc_(?:unscanned_)?Release)\s*$",
+        rules_text,
+        re.MULTILINE,
+    )
+    if not rules or len(rules) != len(set(rules)):
+        raise ValueError("missing or duplicate native CXX compiler rule")
+    return rules
+
+
+def verify_build(checkout: Path, commands_path: Path) -> dict[str, object]:
     build = checkout / "build-benchmark"
     cache = {}
     for line in (build / "CMakeCache.txt").read_text().splitlines():
@@ -237,10 +259,47 @@ def verify_build(checkout: Path) -> dict[str, object]:
         raise ValueError("native build options differ from the standard CPU job")
     if Path(cache.get("CMAKE_HOME_DIRECTORY", "")).resolve() != checkout.resolve():
         raise ValueError("native build is bound to a different checkout")
-    if not re.search(
-        r"(?:^|[\s/])ccache(?:\s|$)", (build / "CMakeFiles/rules.ninja").read_text()
-    ):
-        raise ValueError("native compiler command does not use ccache")
+    commands = json.loads(commands_path.read_text())
+    if not isinstance(commands, list) or not commands:
+        raise ValueError("missing expanded native compiler commands")
+    outputs = {}
+    for row in commands:
+        if not isinstance(row, dict) or any(
+            not isinstance(row.get(key), str)
+            for key in ("directory", "command", "file", "output")
+        ):
+            raise ValueError("malformed native compilation database")
+        output = Path(row["output"])
+        if (
+            Path(row["directory"]).resolve() != build.resolve()
+            or output.is_absolute()
+            or ".." in output.parts
+            or not output.as_posix().startswith("CMakeFiles/generativeqc.dir/")
+            or output.suffix != ".o"
+        ):
+            raise ValueError("unexpected native compiler output identity")
+        # Ninja versions may emit one record per edge input. Count unique
+        # outputs, requiring identical expanded commands for repeated outputs.
+        if row["output"] in outputs and outputs[row["output"]] != row["command"]:
+            raise ValueError("conflicting native compiler output commands")
+        outputs[row["output"]] = row["command"]
+        tokens = shlex.split(row["command"])
+        if tokens and Path(tokens[0]).name == "cmake":
+            if tokens[1:4] != ["-E", "env", f"CCACHE_BASEDIR={build}"]:
+                raise ValueError("unexpected compiler-cache environment wrapper")
+            tokens = tokens[4:]
+        if (
+            len(tokens) < 3
+            or Path(tokens[0]).name != "ccache"
+            or tokens[1] != cache.get("CMAKE_CXX_COMPILER")
+            or tokens.count("-c") != 1
+            or tokens.count("-o") != 1
+            or tokens[tokens.index("-o") + 1 :][:1] != [row["output"]]
+            or any(token in (";", "&&", "||", "|") for token in tokens)
+        ):
+            raise ValueError(
+                "native compiler command does not use expected ccache/compiler"
+            )
     library = build / "libgenerativeqc.so"
     resolved_library = library.resolve(strict=True)
     # CMake's VERSION/SOVERSION create a normal in-build SONAME symlink chain.
@@ -251,6 +310,9 @@ def verify_build(checkout: Path) -> dict[str, object]:
         "resolved_library": str(resolved_library),
         "library_sha256": sha256(library),
         "cmake_cache_sha256": sha256(build / "CMakeCache.txt"),
+        "expanded_compiler_commands_sha256": sha256(commands_path),
+        "verified_compiler_outputs": len(outputs),
+        "compilation_database_rows": len(commands),
         "options": {key: cache[key] for key in BUILD_OPTIONS},
         "compiler": {
             key: cache.get(key)
@@ -407,7 +469,11 @@ def execute(args: argparse.Namespace) -> int:
         )
         if (artifact / "initial-status.log").read_text().strip():
             raise ValueError("paired diagnostic requires a clean tested checkout")
-        head_build = verify_build(root)
+        run(
+            ["ninja", "-C", "build-benchmark", "-t", "compdb", *compiler_rules(root)],
+            "head-compile-commands.json",
+        )
+        head_build = verify_build(root, artifact / "head-compile-commands.json")
         run(["readelf", "-d", "-n", head_build["library"]], "head-elf.log")
         libraries = output / "libraries"
         libraries.mkdir()
@@ -451,7 +517,11 @@ def execute(args: argparse.Namespace) -> int:
             seconds=300,
         )
         run(["ccache", "--show-stats"], "ccache-after.log")
-        base_build = verify_build(root)
+        run(
+            ["ninja", "-C", "build-benchmark", "-t", "compdb", *compiler_rules(root)],
+            "base-compile-commands.json",
+        )
+        base_build = verify_build(root, artifact / "base-compile-commands.json")
         run(["readelf", "-d", "-n", base_build["library"]], "base-elf.log")
         if base_build["compiler"] != head_build["compiler"]:
             raise ValueError("baseline/head compiler configuration mismatch")

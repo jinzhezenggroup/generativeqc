@@ -117,3 +117,28 @@ add samples or reinterpret a proxy as a backend threshold without review.
 - [Measurement model and syscall limits](https://codspeed.io/docs/instruments/cpu)
 
 - [Primary variance guidance](https://codspeed.io/docs/instruments/cpu/reducing-variance)
+
+## Follow-up: generated launcher indirection
+
+The first diagnostic job [114312391272](https://github.com/jinzhezenggroup/generativeqc/actions/runs/38085962118/job/114312391272)
+authenticated merge `e9b4fce248595fa40558efbd92e62c69d82d7735`, head
+`e95f306446493e0f9b1360415c08d8295267ab55` and master `82bdc5c`, then correctly
+identified an Intel Xeon Platinum 8370C versus AMD EPYC 9V74 CPU mismatch.
+It stopped before any diagnostic build or endpoint because the initial verifier
+looked for a literal `ccache` inside `rules.ninja`. The standard build had logged
+`/usr/local/bin/ccache` and 219/219 cache hits. Modern CMake stores `${LAUNCHER}` in
+that shared rule and its concrete command on each build edge, so that substring
+check was insufficient evidence of missing cache use.
+
+The verifier now asks Ninja's read-only `-t compdb` tool to expand only the native
+library's Release CXX rules. Every returned object must have the expected target
+identity, cache/environment prefix and configured C++ compiler. Empty, malformed,
+uncached, misleading or conflicting commands fail closed. Repeated input records
+must agree on the command for their output; reported object counts are unique.
+The expanded commands and their hash are retained for both builds. A tiny Ninja
+graph test reproduces launcher indirection without invoking a compiler, generator
+or benchmark. This repair does not change selection, authentication, upload,
+CPU/threshold gates or the four-arm budget; the performance question is still open.
+
+Primary implementations: [CMake launcher binding](https://github.com/Kitware/CMake/blob/master/Source/cmNinjaTargetGenerator.cxx)
+and [Ninja extra tools](https://ninja-build.org/manual.html#_extra_tools).

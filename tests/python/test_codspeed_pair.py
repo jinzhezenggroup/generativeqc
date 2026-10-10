@@ -7,6 +7,7 @@ import copy
 import gzip
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -163,19 +164,103 @@ def _build(root: Path) -> None:
     (build / "CMakeCache.txt").write_text(
         "".join(f"{k}:STRING={v}\n" for k, v in pair.BUILD_OPTIONS.items())
         + f"CMAKE_HOME_DIRECTORY:INTERNAL={root}\n"
+        + "CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++\n"
     )
     (build / "CMakeFiles/rules.ninja").write_text(
-        "rule CXX_COMPILER__generativeqc_Release\n  command = /usr/bin/ccache /usr/bin/c++\n"
+        "rule CXX_COMPILER__generativeqc_unscanned_Release\n"
+        "  command = ${LAUNCHER}/usr/bin/c++ -o $out -c $in\n"
     )
+    (build / "compile-commands.json").write_text(json.dumps([_compile_command(root)]))
     (build / "libgenerativeqc.so.0.1").write_bytes(b"fixture library")
     if (build / "libgenerativeqc.so").is_symlink():
         (build / "libgenerativeqc.so").unlink()
     (build / "libgenerativeqc.so").symlink_to("libgenerativeqc.so.0.1")
 
 
+def _compile_command(root: Path) -> dict[str, str]:
+    return {
+        "directory": str(root / "build-benchmark"),
+        "command": f"/usr/bin/cmake -E env CCACHE_BASEDIR={root}/build-benchmark /usr/local/bin/ccache /usr/bin/c++ -o CMakeFiles/generativeqc.dir/source.cpp.o -c source.cpp",
+        "file": "source.cpp",
+        "output": "CMakeFiles/generativeqc.dir/source.cpp.o",
+    }
+
+
+def test_native_rule_selection_excludes_cli_and_custom_commands(tmp_path: Path) -> None:
+    _build(tmp_path)
+    rules = tmp_path / "build-benchmark/CMakeFiles/rules.ninja"
+    with rules.open("a") as handle:
+        handle.write(
+            "rule CXX_COMPILER__generativeqc_cli_Release\n  command = ccache misleading\nrule CUSTOM_COMMAND\n  command = echo ccache\n"
+        )
+    assert pair.compiler_rules(tmp_path) == [
+        "CXX_COMPILER__generativeqc_unscanned_Release"
+    ]
+    rules.write_text("rule CUSTOM_COMMAND\n  command = echo ccache\n")
+    with pytest.raises(ValueError):
+        pair.compiler_rules(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "uncached",
+        "fake-word",
+        "wrong-compiler",
+        "wrapper",
+        "empty",
+        "conflicting-output",
+        "wrong-target",
+        "command-output",
+        "malformed",
+    ],
+)
+def test_expanded_native_compiler_commands_fail_closed(
+    tmp_path: Path, bad: str
+) -> None:
+    _build(tmp_path)
+    row = _compile_command(tmp_path)
+    if bad == "uncached":
+        row["command"] = row["command"].replace("/usr/local/bin/ccache ", "")
+    if bad == "fake-word":
+        row["command"] = "echo ccache " + row["command"]
+    if bad == "wrong-compiler":
+        row["command"] = row["command"].replace("/usr/bin/c++", "/wrong/c++")
+    if bad == "wrapper":
+        row["command"] = row["command"].replace("CCACHE_BASEDIR=", "CCACHE_DISABLE=")
+    if bad == "wrong-target":
+        row["output"] = "CMakeFiles/generativeqc_cli.dir/source.cpp.o"
+    if bad == "command-output":
+        row["command"] = row["command"].replace("source.cpp.o", "other.cpp.o")
+    data = [] if bad == "empty" else {} if bad == "malformed" else [row]
+    if bad == "conflicting-output":
+        data.append({**row, "command": row["command"] + " -O0"})
+    commands = tmp_path / "build-benchmark/compile-commands.json"
+    commands.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        pair.verify_build(tmp_path, commands)
+
+
+def test_direct_ccache_command_and_multiple_inputs_still_accepted(
+    tmp_path: Path,
+) -> None:
+    _build(tmp_path)
+    row = _compile_command(tmp_path)
+    row["command"] = (
+        "/usr/local/bin/ccache" + row["command"].split("/usr/local/bin/ccache", 1)[1]
+    )
+    commands = tmp_path / "build-benchmark/compile-commands.json"
+    commands.write_text(json.dumps([row, {**row, "file": "header.hpp"}]))
+    result = pair.verify_build(tmp_path, commands)
+    assert result["verified_compiler_outputs"] == 1
+    assert result["compilation_database_rows"] == 2
+
+
 def test_verified_build_accepts_only_in_build_soname_link(tmp_path: Path) -> None:
     _build(tmp_path)
-    verified = pair.verify_build(tmp_path)
+    verified = pair.verify_build(
+        tmp_path, tmp_path / "build-benchmark/compile-commands.json"
+    )
     assert verified["resolved_library"].endswith("libgenerativeqc.so.0.1")
     (tmp_path / "build-benchmark/libgenerativeqc.so").unlink()
     (tmp_path / "outside.so").write_bytes(b"wrong")
@@ -183,7 +268,7 @@ def test_verified_build_accepts_only_in_build_soname_link(tmp_path: Path) -> Non
         tmp_path / "outside.so"
     )
     with pytest.raises(ValueError):
-        pair.verify_build(tmp_path)
+        pair.verify_build(tmp_path, tmp_path / "build-benchmark/compile-commands.json")
 
 
 @pytest.mark.parametrize("field", list(pair.BUILD_OPTIONS))
@@ -196,7 +281,7 @@ def test_changed_build_options_rejected(tmp_path: Path, field: str) -> None:
         )
     )
     with pytest.raises(ValueError):
-        pair.verify_build(tmp_path)
+        pair.verify_build(tmp_path, tmp_path / "build-benchmark/compile-commands.json")
 
 
 def test_raw_retention_is_lossless_bounded_and_allowlisted(tmp_path: Path) -> None:
@@ -299,6 +384,16 @@ def _fake_execute(
             current_head = command[-1]
         elif command[:2] == ["git", "rev-parse"]:
             handle.write(current_head + "\n")
+        elif command[0] == "ninja":
+            assert command == [
+                "ninja",
+                "-C",
+                "build-benchmark",
+                "-t",
+                "compdb",
+                "CXX_COMPILER__generativeqc_unscanned_Release",
+            ]
+            handle.write(json.dumps([_compile_command(root)]))
         elif command[:2] == ["cmake", "--build"]:
             _build(kwargs["cwd"])
             (root / "build-benchmark/libgenerativeqc.so.0.1").write_bytes(
@@ -397,3 +492,39 @@ def test_timeout_only_terminates_the_owned_process_group(
     with (tmp_path / "log").open("w") as log, pytest.raises(subprocess.TimeoutExpired):
         pair.run_bounded(["owned-child"], cwd=tmp_path, stdout=log, timeout=1)
     assert signals == [(1234, pair.signal.SIGTERM), (1234, pair.signal.SIGKILL)]
+
+
+def test_real_ninja_expands_edge_launcher_without_building(tmp_path: Path) -> None:
+    ninja = shutil.which("ninja")
+    if ninja is None:
+        pytest.skip("Ninja is needed for the read-only graph fixture")
+    _build(tmp_path)
+    build = tmp_path / "build-benchmark"
+    (build / "build.ninja").write_text(
+        "include CMakeFiles/rules.ninja\n"
+        "build CMakeFiles/generativeqc.dir/source.cpp.o: CXX_COMPILER__generativeqc_unscanned_Release source.cpp | header.hpp\n"
+        f"  LAUNCHER = /usr/bin/cmake -E env CCACHE_BASEDIR={build} /usr/local/bin/ccache \n"
+    )
+    commands = build / "ninja-expanded.json"
+    with commands.open("w") as handle:
+        subprocess.run(
+            [ninja, "-C", str(build), "-t", "compdb", *pair.compiler_rules(tmp_path)],
+            stdout=handle,
+            check=True,
+            timeout=10,
+        )
+    result = pair.verify_build(tmp_path, commands)
+    assert result["verified_compiler_outputs"] == 1
+    assert not (build / "CMakeFiles/generativeqc.dir/source.cpp.o").exists()
+    assert not (build / ".ninja_log").exists()
+    assert "ccache" not in (build / "CMakeFiles/rules.ninja").read_text()
+
+
+def test_scanned_native_compiler_rule_requires_review(tmp_path: Path) -> None:
+    _build(tmp_path)
+    with (tmp_path / "build-benchmark/CMakeFiles/rules.ninja").open("a") as handle:
+        handle.write(
+            "rule CXX_COMPILER__generativeqc_scanned_Release\n  command = compiler\n"
+        )
+    with pytest.raises(ValueError, match="scanned native"):
+        pair.compiler_rules(tmp_path)
