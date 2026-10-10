@@ -21,6 +21,11 @@ from pathlib import Path
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 ROOT = Path(__file__).resolve().parents[1]
 SENTINEL = -314159.25
 
@@ -946,7 +951,7 @@ def main() -> int:
             "pilot-endpoint",
         ),
     )
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--driver", type=Path)
     parser.add_argument("--compiler", type=Path)
     parser.add_argument("--cuda", type=Path)
