@@ -93,9 +93,14 @@ void stationary_pbe_xc_nuclear_finite_difference() {
           plus.atoms[atom].position[axis] += step;
           minus.atoms[atom].position[axis] -= step;
           const double fd = (energy(plus) - energy(minus)) / (2.0 * step);
-          if (!std::isfinite(fd) || std::abs(fd - response.gradient[3 * atom + axis]) > 4e-5)
-            throw std::runtime_error(
-                "stationary PBE XC AO/grid/Becke nuclear finite difference mismatch");
+          if (!std::isfinite(fd) || std::abs(fd - response.gradient[3 * atom + axis]) > 4e-5) {
+            std::ostringstream message;
+            message << "stationary PBE XC AO/grid/Becke nuclear finite difference mismatch"
+                    << " spin=" << blocks.size() << " exchange=" << exchange_scale
+                    << " atom=" << atom << " axis=" << axis << " FD=" << fd
+                    << " analytic=" << response.gradient[3 * atom + axis];
+            throw std::runtime_error(message.str());
+          }
         }
     }
   }
