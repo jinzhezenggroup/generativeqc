@@ -74,6 +74,18 @@ It also injects a mutation after a real second dependency scan.
 The assembler-input regression compares object digests and embedded payload bytes
 after both a cwd change and an opaque input change within the same cwd, using the
 verified finite compiler-cache path rather than merely checking closure/store keys.
+Latest-head review exposed two further depfile boundaries: a terminal filename
+backslash can absorb the dependency separator, and blanket output stripping loses
+escaped terminal spaces/tabs. A merged decoy file can make the first misparse look
+valid while real header comment changes remain invisible to preprocessing. Parser
+negative controls reproduced accepted merged/wrapped tokens and false continuations;
+a collector control reproduced a dangling escape after terminal-space stripping.
+Reject indistinguishable depfile spellings rather than use file existence as a
+disambiguation oracle, and trim only CR/LF record terminators. Real-GCC regressions
+retain both merged/wrapped decoys and require no reusable key, while unambiguous
+terminal spaces/tabs must remain hashed and invalidate on header comment changes.
+This intentionally rejects otherwise valid paths with the same ambiguous spelling;
+loosening it requires an independent, non-depfile source of dependency identity.
 Windows-local execution skips real Linux compilation; source-matched repository CI is required
 before claiming that gate passes. The existing cache/store tests and compiler
 structure checker protect the handoff without changing those implementations.

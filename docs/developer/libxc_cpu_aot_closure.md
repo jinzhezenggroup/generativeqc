@@ -22,7 +22,14 @@ GCC `-M` includes system headers as well as nested user headers. The collector
 parses its fixed-target make rule, hashes each resolved file, repeats dependency
 discovery, and rechecks source, compiler, header and manifest bytes. Path parsing
 preserves ordinary literal backslashes and decodes GNU make's odd backslash runs
-before whitespace; ambiguous trailing-backslash names fail closed. It binds the
+before whitespace. GCC can emit terminal filename backslashes indistinguishably
+from escaped spaces or line continuations. These ambiguous spellings fail closed,
+even when a merged decoy pathname exists: escaped whitespace followed by a slash
+or another unescaped whitespace, even backslash runs before whitespace, and
+continuations without a preceding separator are rejected. This also excludes
+otherwise valid filenames with the same ambiguous spelling. Unambiguous terminal
+spaces and tabs are preserved; compiler queries trim only CR/LF record terminators.
+It binds the
 exact source/ABI emission identity, source bytes and physical path, working
 directory, ordered flags,
 compiler path/bytes/version, native target, resolved downstream programs,

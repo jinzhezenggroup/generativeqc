@@ -87,8 +87,14 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     GCC escapes spaces/tabs and #, doubles dollars, and preserves backslashes
     except for GNU make's 2N+1 backslash quoting before whitespace.
     The target is forced to ``closure`` so colons in file paths are unambiguous.
-    Empty rules, extra rules, unescaped comments and dangling escapes fail closed.
+    Ambiguous terminal backslashes, empty/extra rules, unescaped comments and
+    dangling escapes fail closed, even if a misparsed decoy file exists.
     """
+    # A filename's terminal backslash must not masquerade as a continuation.
+    # GCC inserts whitespace before genuine rule continuations.
+    for continuation in re.finditer(r"\\\r?\n", text):
+        if continuation.start() == 0 or text[continuation.start() - 1] not in " \t":
+            raise ValueError("ambiguous trailing dependency backslashes")
     text = re.sub(r"\\\r?\n", "", text)
     if not text.startswith("closure:"):
         raise ValueError("unexpected dependency target")
@@ -109,7 +115,12 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
             count = index - begin
             escaped = body[index]
             if escaped in " \t":
-                if count % 2 == 0:
+                # GCC does not quote terminal filename backslashes before a
+                # dependency separator. Even a real merged decoy file cannot
+                # disambiguate that output from an escaped filename space.
+                if count % 2 == 0 or (
+                    index + 1 < len(body) and body[index + 1] in "/ \t"
+                ):
                     raise ValueError("ambiguous trailing dependency backslashes")
                 word += "\\" * (count // 2) + escaped
             elif escaped == "#":
@@ -235,7 +246,9 @@ def collect_cpu_closure(
             raise TimeoutError
         if result.returncode:
             raise ValueError("compiler-command-failed")
-        return result.stdout.strip()
+        # Remove record terminators only: GCC quotes a filename's terminal
+        # space/tab, and trimming that whitespace destroys dependency identity.
+        return result.stdout.rstrip("\r\n")
 
     def snapshot(files: tuple[CacheDependency, ...]) -> None:
         for item in files:

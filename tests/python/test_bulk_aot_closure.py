@@ -6,6 +6,7 @@ import importlib
 import os
 import shutil
 import sys
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,6 +51,8 @@ def dependency(path: Path) -> bulk_aot_cache.CacheDependency:
         ("closure: /a\\\\b.c /a\\\\b.c\n", ("/a\\\\b.c",)),
         ("closure: /a\\q.c /a\\\\\\ b.h\n", ("/a\\ b.h", "/a\\q.c")),
         ("closure: /a.c \\\r\n\t/b.h\r\n", ("/a.c", "/b.h")),
+        ("closure: /a.c /tail\\ \n", ("/a.c", "/tail ")),
+        ("closure: /a.c /tail\\\t\n", ("/a.c", "/tail\t")),
     ],
 )
 def test_parser(text: str, expected: tuple[str, ...]) -> None:
@@ -66,6 +69,10 @@ def test_parser(text: str, expected: tuple[str, ...]) -> None:
         "closure: /a #comment",
         "closure: /a\nother: /b",
         "closure: /a\\\\ /b.h",
+        "closure: /a\\ /b.h",
+        "closure: /a\\  /b.h",
+        "closure: /a\\\n /b.h\n",
+        "closure: /a\\\n",
     ],
 )
 def test_unsupported_make_syntax(text: str) -> None:
@@ -149,6 +156,29 @@ def test_manifest_is_never_inferred(fake_gcc: tuple) -> None:
     )
     assert result.closure is not None and not result.closure.complete
     assert result.reasons == ("downstream-toolchain-not-covered",)
+
+
+def test_dependency_query_preserves_terminal_space(
+    fake_gcc: tuple, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    item, source, manifest = fake_gcc
+    header = source.parent / "tail.h "
+    header.write_text("/* trailing-space dependency */\n", encoding="utf-8")
+    original = collector.run_compiler
+
+    def run(command: list[str], timeout: float, **kwargs: Any) -> CompileResult:
+        result = original(command, timeout, **kwargs)
+        if "-M" in command:
+            names = [str(source), str(header)]
+            text = "closure: " + " ".join(n.replace(" ", "\\ ") for n in names) + "\n"
+            return replace(result, stdout=text)
+        return result
+
+    monkeypatch.setattr(collector, "run_compiler", run)
+    result = collector.collect_cpu_closure(item, source, toolchain=manifest)
+    assert not result.reasons and result.closure is not None
+    assert result.closure.reusable
+    assert [record.identity for record in result.headers] == [str(header)]
 
 
 @pytest.mark.parametrize(
@@ -351,6 +381,72 @@ def compile_controlled(
         for key, value in collector.CPU_ENVIRONMENT.items():
             clean.setenv(key, value)
         return run_cached_compiler(command, 60, label="real CPU closure integration")
+
+
+def test_real_gcc_terminal_backslash_decoys_fail_closed(real_gcc: tuple) -> None:
+    compiler, manifest = real_gcc
+    # A short path keeps both user headers on one GCC -M line. Cover a decoy
+    # for both merged tokens and a wrapped separator, so existence is no oracle.
+    with tempfile.TemporaryDirectory(prefix="closure-", dir="/tmp") as temporary:
+        root = Path(temporary)
+        header = root / "foo\\"
+        other = root / "z.h"
+        header.write_text("/* real first header */\n", encoding="utf-8")
+        other.write_text("/* real second header */\n", encoding="utf-8")
+        merged = Path(str(header)[:-1] + " " + str(other))
+        merged.parent.mkdir(parents=True)
+        merged.write_text("/* merged decoy */\n", encoding="utf-8")
+        (root / "foo ").write_text("/* wrapped decoy */\n", encoding="utf-8")
+        source = root / "point.c"
+        text = '#include "foo\\"\n#include "z.h"\nint point(void) { return 0; }\n'
+        source.write_text(text, encoding="utf-8")
+        emitted = run_compiler(
+            [compiler, "-M", "-MT", "closure", str(source)],
+            30,
+            label="terminal-backslash GCC evidence",
+            environment=collector.CPU_ENVIRONMENT,
+        )
+        assert emitted.returncode == 0 and not emitted.timed_out, emitted.stderr
+        assert str(header) + " " + str(other) in emitted.stdout, repr(emitted.stdout)
+        for comment in ("first", "changed"):
+            header.write_text(f"/* {comment} real header */\n", encoding="utf-8")
+            result = collector.collect_cpu_closure(
+                variant(text), source, compiler=compiler, toolchain=manifest
+            )
+            assert result.reasons == ("ambiguous trailing dependency backslashes",)
+            assert result.closure is not None and result.closure.cache_key is None
+
+
+@pytest.mark.parametrize("suffix", [" ", "\t"])
+def test_real_gcc_terminal_whitespace_dependencies(
+    tmp_path: Path, real_gcc: tuple, suffix: str
+) -> None:
+    compiler, manifest = real_gcc
+    header = tmp_path / ("tail.h" + suffix)
+    header.write_text("/* real trailing-whitespace header */\n", encoding="utf-8")
+    source = tmp_path / "point.c"
+    text = f'#include "{header.name}"\nint point(void) {{ return 0; }}\n'
+    source.write_text(text, encoding="utf-8")
+    emitted = run_compiler(
+        [compiler, "-M", "-MT", "closure", str(source)],
+        30,
+        label="terminal-whitespace GCC evidence",
+        environment=collector.CPU_ENVIRONMENT,
+    )
+    assert emitted.returncode == 0 and not emitted.timed_out, emitted.stderr
+    assert emitted.stdout.endswith("\\" + suffix + "\n"), repr(emitted.stdout)
+    keys = []
+    for comment in ("first", "changed"):
+        header.write_text(f"/* {comment} header comment */\n", encoding="utf-8")
+        result = collector.collect_cpu_closure(
+            variant(text), source, compiler=compiler, toolchain=manifest
+        )
+        assert not result.reasons and result.closure is not None
+        assert result.closure.reusable
+        observed = {entry.identity: entry.content_sha256 for entry in result.headers}
+        assert observed[str(header)] == file_hash(header)
+        keys.append(result.closure.cache_key)
+    assert keys[0] != keys[1]
 
 
 def test_real_gcc_identity_headers_and_store(
