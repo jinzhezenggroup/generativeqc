@@ -4,18 +4,9 @@ import subprocess
 from pathlib import Path
 
 from test_coulomb_optional_allocation import compile_cached_probe
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-def _definition(source: str, marker: str) -> str:
-    begin = source.index(marker)
-    opening = source.index("{", begin)
-    depth, end = 1, opening + 1
-    while depth:
-        depth += (source[end] == "{") - (source[end] == "}")
-        end += 1
-    return source[begin:end]
 
 
 STUBS = r"""
@@ -207,9 +198,9 @@ def test_production_optional_rollback_preserves_owner_and_failure_classification
 ) -> None:
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     definitions = [
-        _definition(source, "void direct_jk_check("),
-        _definition(source, "struct DirectJkDownloadFence") + ";",
-        _definition(source, "template <class Prepare, class Restore>"),
+        cpp_function_definition(source, "direct_jk_check"),
+        cpp_record_definition(source, "DirectJkDownloadFence") + ";",
+        cpp_function_definition(source, "direct_jk_optional_storage", include_template=True),
     ]
     cpp, binary = tmp_path / "probe.cpp", tmp_path / "probe"
     cpp.write_text(STUBS + "\n".join(definitions) + DRIVER)
