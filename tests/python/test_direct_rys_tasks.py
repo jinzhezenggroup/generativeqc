@@ -211,7 +211,8 @@ def test_qualified_rys_task_preference_manifest_validation(
     invalid: object, tmp_path: Path
 ) -> None:
     payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    payload["architectures"]["sm_120"]["preferred_rys_task_fock_shell_classes"] = invalid
+    profile = payload["architectures"]["sm_120"]
+    profile["preferred_rys_task_fock_shell_classes"] = invalid
     path = tmp_path / "profile.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises((TypeError, ValueError), match="Rys-task Fock classes"):
