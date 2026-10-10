@@ -141,6 +141,20 @@ class NativeDftDfCliTests(unittest.TestCase):
             delta=1.0e-9,
         )
 
+    def test_cpu_df_pbe_analytic_forces(self) -> None:
+        result = self.call("--backend", "cpu", "--density-fitting", "cpu", "--forces")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertTrue(math.isfinite(data["energy_hartree"]))
+        self.assertEqual(data["density_fitting"], "cpu")
+        force = data["forces_hartree_per_bohr"]
+        self.assertEqual(len(force), 2)
+        for vector in force:
+            self.assertEqual(len(vector), 3)
+            self.assertTrue(all(math.isfinite(component) for component in vector))
+        for axis in range(3):
+            self.assertAlmostEqual(force[0][axis] + force[1][axis], 0.0, delta=2e-5)
+
     def test_cpu_auto_df_same_orbital_default(self) -> None:
         result = self.call("--backend", "cpu", "--density-fitting", "auto")
         self.assertEqual(result.returncode, 0, result.stderr)
