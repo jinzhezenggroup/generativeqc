@@ -105,6 +105,8 @@ def tensor_source_identity() -> str:
                     "src/runtime/cuda_resources.cuh",
                     "src/runtime/resource_cuda.cuh",
                     "src/runtime/resource_ledger.hpp",
+                    "src/runtime/residency_boundaries.hpp",
+                    "src/runtime/residency_observer.hpp",
                     "src/tensor/cuda_graph_context.cuh",
                     "src/runtime/cuda_graph_region.cuh",
                     "src/runtime/compiled_execution_region.hpp",

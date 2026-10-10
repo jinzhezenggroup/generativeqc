@@ -49,6 +49,16 @@ Prepared CUDA batches expose the provider's metric diagnostics. Whole-KS
 `estimate_resources`/resource-plan admission is rejected for DF until its
 combined inventory is qualified; conventional inventories must not describe DF.
 
+Large ordinary fitted CUDA force workloads may use the native active-AO bitmask
+consumer under the unchanged stationary force budgets. It examines all requested
+AO value/derivative jets at the existing `1e-16` force cutoff, including second
+derivatives where needed; SCF masks are not reused for a different derivative
+order. No grid points, weights or Becke response terms are pruned. Missing map
+capabilities, insufficient optional storage or excessive AO occupancy retain
+the dense bounded consumer. This admission does not include the separate DF
+response owner's memory or establish a whole-force peak-memory bound. See
+[stationary CUDA scheduling](../developer/stationary_cuda_scheduling.md).
+
 For a CUDA restricted fitted hybrid with method-owned integer occupations,
 automatic value storage keeps a fully resident dense owner when it fits. If
 dense storage would stream, the same planner may instead retain one symmetric
@@ -103,6 +113,23 @@ the device matrix directly and therefore reports zero density H2D bytes for
 that J-only call. Exchange K' deliberately keeps its existing density/projection
 path in this change, and unrestricted/multi-term response retains the ordinary
 upload path. This is therefore not a zero-upload resident whole-force path.
+
+Full-rank J-only response contracts the resident whitened factor once with the
+folded density, applies its symmetric metric root to that charge, and emits
+bounded three-center and metric cotangents. It does not repeatedly refit AO
+panels or construct exchange-style AO Gram matrices. Rank-deficient metrics,
+mixed J/K terms and diagnostic algebra retain their general response routes.
+`GENERATIVEQC_DF_COULOMB_RESPONSE=panels` selects the original bounded-panel
+route for qualification; the default is `auto`. Both preserve the same metric
+gauge, auxiliary-center response and derivative consumer.
+
+The known native DF snapshot provider separately bounds its additional paired
+one-electron/publication storage; DF response scratch stays in its independent
+resource contract. Spare geometry budget admits point-parallel Becke phases.
+Automatic large fitted grids prefer 256-point tiles to leave room for that
+cache; explicit tiles, unknown providers and insufficient budgets retain their
+bounded fallback. Reported one-electron device usage must fit the reserved
+envelope, rather than relying on unaccounted memory.
 
 Resource metadata distinguishes the resident one-electron path from its host
 fallback; `density_fitted_response_resources_included=0` still explicitly

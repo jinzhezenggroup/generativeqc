@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
     if (argc < 4 || argc > 28)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
+          "[CCSD_Q_BATCH_LIMIT_OR_AUTO_0 "
           "[ORBITAL_SCHWARZ "
           "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     const auto diis_history = unsigned_argument(8, 6);
     if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
-    const auto ccsd_batch_limit = unsigned_argument(9, 8);
+    const auto ccsd_batch_limit = unsigned_argument(9, 0);
     generativeqc::hf::RHFFrameResponseOptions frame_options;
     const std::string screening_argument = argc > 10 ? argv[10] : "0";
     std::size_t screening_consumed = 0;
@@ -219,6 +220,17 @@ int main(int argc, char** argv) {
       work_field("ccsd_accumulation_calls", result.solver.df_accumulation_calls);
       work_field("ccsd_accumulation_bytes", result.solver.df_accumulation_bytes);
       work_field("ccsd_contraction_terms", result.solver.df_contraction_terms);
+      field("ccsd_occupied_pairs", result.solver.df_occupied_pairs ? 1 : 0);
+      field("ccsd_pair_resource_refused", result.solver.df_pair_resource_refused ? 1 : 0);
+      field("ccsd_pair_initial_symmetry_refused",
+            result.solver.df_pair_initial_symmetry_refused ? 1 : 0);
+      work_field("ccsd_pair_evaluations", result.solver.df_pair_evaluations);
+      work_field("ccsd_pair_refusals", result.solver.df_pair_refusals);
+      work_field("ccsd_pair_projection_calls", result.solver.df_pair_projection_calls);
+      work_field("ccsd_pair_projection_bytes", result.solver.df_pair_projection_bytes);
+      work_field("ccsd_pair_geometry_elements", result.solver.df_pair_geometry_elements);
+      work_field("ccsd_pair_capacity_bytes", result.solver.df_pair_capacity_bytes);
+      work_field("ccsd_pair_binding_host_bytes", result.solver.df_pair_binding_host_bytes);
       work_field("ccsd_evaluations", result.solver.iteration_graph_calls);
       work_field("ccsd_capacity", result.solver.numeric_capacity_bytes);
       work_field("ccsd_device_bytes", result.solver.owned_device_bytes);

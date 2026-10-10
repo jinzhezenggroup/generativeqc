@@ -93,6 +93,29 @@ def test_provider_proof_checks_token_before_and_after_native_read(
     assert ("native" in checks) == (failure_check == 2)
 
 
+def test_fitted_integral_reserve_checks_the_live_snapshot() -> None:
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_fitted_integral_reserve,
+    )
+
+    checks = []
+    snapshot = SimpleNamespace(
+        density_fitted=True, check_current=lambda: checks.append("current")
+    )
+    assert NativeKsSnapshot.stationary_integral_device_reserve(
+        snapshot, atoms=96, aos=768, primitives=704
+    ) == stationary_fitted_integral_reserve(atoms=96, aos=768, primitives=704)
+    assert checks == ["current"]
+
+
+def test_direct_snapshot_cannot_offer_a_fitted_integral_reserve() -> None:
+    snapshot = SimpleNamespace(density_fitted=False, check_current=lambda: None)
+    with pytest.raises(ValueError, match="fitted snapshot"):
+        NativeKsSnapshot.stationary_integral_device_reserve(
+            snapshot, atoms=3, aos=24, primitives=22
+        )
+
+
 def test_missing_native_proof_never_guesses_a_fitted_provider() -> None:
     snapshot, _ = _snapshot()
     snapshot._library = SimpleNamespace()
@@ -144,7 +167,14 @@ def test_snapshot_api_compiles_with_direct_capability_dependencies(
     tmp_path: Path, native_cxx: typing.Any
 ) -> None:
     """Compile the real CPU translation unit, without transitive-header stubs."""
+    from tools.generate_libxc_semilocal_cpu_registry import emit_header
+
     root = Path(__file__).resolve().parents[2]
+    # Use the production generator for this build-owned declaration dependency;
+    # keep the probe independent of an existing CMake build or handwritten stubs.
+    registry = tmp_path / "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+    registry.parent.mkdir()
+    registry.write_text(emit_header(), encoding="utf-8")
     native_cxx.compile_object(
         root / "src/api/c_api_ks_snapshot.cpp",
         tmp_path / "ks_snapshot.o",
@@ -157,5 +187,6 @@ def test_snapshot_api_compiles_with_direct_capability_dependencies(
             f"-I{root / 'src'}",
             f"-I{root / 'src/xtb/native'}",
             f"-I{root / 'src/xtb/native/src'}",
+            f"-I{tmp_path}",
         ),
     )

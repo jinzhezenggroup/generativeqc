@@ -34,8 +34,15 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "const generativeqc_method_descriptor&,",
         "const generativeqc_method_descriptor& descriptor,",
     )
+    implementation = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
+    resolution = re.findall(
+        r"^\s*ccsd_batch_limit = [^;]+;", implementation, re.MULTILINE
+    )
+    assert len(resolution) == 1
     definition += (
-        " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
+        " { "
+        + resolution[0]
+        + " return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
@@ -215,7 +222,7 @@ int main() {
                            token.c_str()};
     const auto old = select(9,selected);
     if(old.diis_history != history || !default_frame(old.frame) || old.reduction ||
-       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 8 || !old.derived_denominators) return 12;
+       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 32 || !old.derived_denominators) return 12;
   }
   // No numeric guessing: even an integer zero in argv[8] always means DIIS zero.
   // Fractional/scientific legacy screening tokens must not partially parse.
@@ -241,12 +248,19 @@ int main() {
     try { (void)select(13,bad);return 15; }
     catch(const std::invalid_argument&) {}
   }
-  for(const char* batch : {"0","1","3","8","32"}) {
-    const char* selected[]{"endpoint","input","output","1","1","1","1","8","6",batch};
-    const auto old = select(10,selected);
-    if(old.ccsd_batch_limit != std::stoull(batch) || !default_frame(old.frame) ||
-       old.diis_history != 6) return 17;
+  for(const char* forces : {"0","1"}) {
+    for(const char* batch : {"0","1","3","8","16","32"}) {
+      const char* selected[]{"endpoint","input","output","1","1",forces,"1","8","6",batch};
+      const auto actual = select(10,selected);
+      const auto requested = std::stoull(batch);
+      const auto expected = requested ? requested : (forces[0]=='1' ? 8U : 32U);
+      if(actual.ccsd_batch_limit != expected || !default_frame(actual.frame) ||
+         actual.diis_history != 6) return 17;
+    }
   }
+  const auto energy_default=run_df_ccsdt_native(context,system,system,descriptor,false);
+  const auto force_default=run_df_ccsdt_native(context,system,system,descriptor);
+  if(energy_default.ccsd_batch_limit!=32 || force_default.ccsd_batch_limit!=8) return 46;
   for(int index : {7,8,9}) {
     for(const char* token : {"-1","+2","2.0","2e-12","8junk",""}) {
       const char* bad[]{"endpoint","input","output","1","1","1","1","8","6","8"};

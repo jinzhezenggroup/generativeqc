@@ -29,6 +29,7 @@ def _select(
     ecp: bool = False,
     required: bool = False,
     host_reserve: int = 32,
+    device_reserve: int = 32,
 ) -> object:
     path = ROOT / "python/generativeqc/_stationary_cuda.py"
     module = ast.parse(path.read_text())
@@ -88,6 +89,7 @@ def _select(
             "ecp": ecp,
             "requires_native_integrals": required,
             "native_integral_host_reserve": host_reserve,
+            "layout": SimpleNamespace(native_geometry_reserve=device_reserve),
             "na": 2,
             "np": np,
             "os": os,
@@ -191,6 +193,26 @@ def test_native_host_staging_must_fit_its_concurrent_reserve(actual: int) -> Non
     else:
         with pytest.raises(RuntimeError, match="host staging exceeds"):
             _select(source, required=True, host_reserve=32)
+
+
+@pytest.mark.parametrize("actual", [31, 32, 33])
+def test_fitted_device_staging_must_fit_its_concurrent_reserve(actual: int) -> None:
+    source = SimpleNamespace(
+        density_fitted=True,
+        density_fitted_integral_derivatives=Mock(
+            return_value=(
+                np.zeros((4, 2, 3)),
+                {"one_electron_device_peak_bytes": actual},
+            )
+        ),
+        cuda_integral_derivatives=Mock(),
+    )
+    if actual <= 32:
+        assert _select(source, budget=64, device_reserve=32) is not None
+    else:
+        with pytest.raises(RuntimeError, match="device staging exceeds"):
+            _select(source, budget=64, device_reserve=32)
+    source.cuda_integral_derivatives.assert_not_called()
 
 
 def test_combined_unavailable_retries_complete_separate_owner(

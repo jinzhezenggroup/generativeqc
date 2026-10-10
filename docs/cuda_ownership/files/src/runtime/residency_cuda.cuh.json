@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/residency_cuda.cuh",
+  "reason": "Observation-only adapters around existing CUDA copy and fence calls. Preserve arguments, status and execution order; source tags and callback records do not establish scientific dependency lineage.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

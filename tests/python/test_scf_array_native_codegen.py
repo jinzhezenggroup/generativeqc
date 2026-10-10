@@ -163,3 +163,27 @@ def test_fixed_native_specialization_rejects_changed_diis_topology(
     monkeypatch.setattr(generator, builder_name, lambda *args, **kwargs: replacement)
     with pytest.raises(ValueError, match="DIIS"):
         generator.native_header()
+
+
+def test_cuda_dot_uses_the_same_canonical_gram_identity() -> None:
+    from tools.generate_scf_array_native import diis_cuda_header
+
+    source = diis_cuda_header()
+    assert source == diis_cuda_header()
+    identity = template_hash(diis_gram_program(1, 3, 2, spin_count=2))
+    assert identity in source
+    assert "__host__ __device__" in source
+    assert "value += left[element] * right[element]" in source
+    assert "cublas" not in source
+
+
+def test_cuda_dot_rejects_changed_scientific_topology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools import generate_scf_array_native as generator
+
+    monkeypatch.setattr(
+        generator, "diis_gram_program", lambda *args, **kwargs: density_program(1, 2)
+    )
+    with pytest.raises(ValueError, match="DIIS"):
+        generator.diis_cuda_header()

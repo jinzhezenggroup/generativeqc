@@ -66,11 +66,19 @@ def handle_probe(
     folder = tmp_path_factory.mktemp(f"shared-eigen-handles-{request.param}")
     (folder / "shared_eigen_lifetimes.inc").write_text(_consumer_lifetimes())
     (folder / "cuda_runtime_api.h").write_text(
-        "#pragma once\nstruct cudaStream; using cudaStream_t = cudaStream*;\n"
+        "#pragma once\n#include <cstddef>\n"
+        "struct cudaStream; using cudaStream_t = cudaStream*;\n"
+        "struct cudaEvent; using cudaEvent_t = cudaEvent*;\n"
         "enum cudaError_t { cudaSuccess = 0, cudaErrorUnknown = 999 };\n"
+        "enum cudaMemcpyKind { cudaMemcpyHostToHost, cudaMemcpyHostToDevice,\n"
+        "cudaMemcpyDeviceToHost, cudaMemcpyDeviceToDevice, cudaMemcpyDefault };\n"
         "cudaError_t cudaSetDevice(int); cudaError_t cudaGetDevice(int*);\n"
         "cudaError_t cudaStreamSynchronize(cudaStream_t);\n"
         "cudaError_t cudaStreamDestroy(cudaStream_t);\n"
+        "cudaError_t cudaEventSynchronize(cudaEvent_t);\n"
+        "cudaError_t cudaMemcpy(void*, const void*, std::size_t, cudaMemcpyKind);\n"
+        "cudaError_t cudaMemcpyAsync(void*, const void*, std::size_t,\n"
+        "cudaMemcpyKind, cudaStream_t);\n"
     )
     (folder / "library_types.h").write_text(
         "#pragma once\nenum cudaDataType { CUDA_R_32F = 0, CUDA_R_64F = 1 };\n"

@@ -27,6 +27,8 @@ void check_incremental_diis_capacity() {
   using generativeqc::scf::small_hf_cuda_resource_layout;
   using generativeqc::scf::small_hf_cuda_resource_layout_v2;
   constexpr auto selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM";
+  constexpr auto reduction = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION";
+  assert(unsetenv(reduction) == 0);
   const std::array<std::uint8_t, 2> angular{0, 0};
   const std::array<std::size_t, 2> primitives{3, 3};
   for (const unsigned history : {1U, 2U, 8U, 64U}) {
@@ -40,6 +42,25 @@ void check_incremental_diis_capacity() {
             2, 2, 2, angular.data(), primitives.data(), angular.size(), history, spins,
             GENERATIVEQC_PRECISION_FP64, 1e-10, 1e-12, v2[incremental], plan_bytes));
       }
+      for (const char* reducer : {"cooperative", "ordered"}) {
+        assert(setenv(reduction, reducer, 1) == 0);
+        std::size_t ordered_v1{}, ordered_v2{};
+        assert(
+            small_hf_cuda_resource_layout(2, 2, 2, 2, 6, history, spins, ordered_v1, plan_bytes));
+        assert(small_hf_cuda_resource_layout_v2(
+            2, 2, 2, angular.data(), primitives.data(), angular.size(), history, spins,
+            GENERATIVEQC_PRECISION_FP64, 1e-10, 1e-12, ordered_v2, plan_bytes));
+        assert(ordered_v1 == v1[1] && ordered_v2 == v2[1]);
+      }
+      assert(setenv(reduction, "invalid", 1) == 0);
+      std::size_t refused_v1{}, refused_v2{};
+      assert(small_hf_cuda_resource_layout(2, 2, 2, 2, 6, history, spins, refused_v1, plan_bytes) ==
+             (history < 2));
+      assert(small_hf_cuda_resource_layout_v2(2, 2, 2, angular.data(), primitives.data(),
+                                              angular.size(), history, spins,
+                                              GENERATIVEQC_PRECISION_FP64, 1e-10, 1e-12, refused_v2,
+                                              plan_bytes) == (history < 2));
+      assert(unsetenv(reduction) == 0);
       const auto gram_bytes = history >= 2 ? sizeof(double) * history * history : 0;
       assert(v1[1] == v1[0] + gram_bytes);
       assert(v2[1] == v2[0] + gram_bytes);

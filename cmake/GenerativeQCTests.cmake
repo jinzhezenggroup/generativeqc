@@ -447,6 +447,8 @@ macro(generativeqc_add_native_tests)
   endif()
 
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_dft_integral_sources_tests
+                       tests/native/test_dft_integral_sources.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_uks_tests tests/native/test_uks.cpp)
@@ -469,6 +471,9 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_df_occupied_response_tests tests/native/test_df_occupied_response.cpp
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver)
     generativeqc_native_test(generativeqc_cuda_diis_tests tests/native/test_cuda_diis.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
+    generativeqc_native_test(generativeqc_cuda_diis_cached_gram_tests
+                       tests/native/test_cuda_diis_cached_gram.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_direct_streaming_graph_cuda_tests
                        tests/native/test_direct_streaming_graph_cuda.cpp

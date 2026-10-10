@@ -125,6 +125,8 @@ std::size_t direct_jk_product(std::size_t a,std::size_t b) { return runtime::siz
         source += _definition(direct, signature) + "\n"
     source += (
         "}\nnamespace generativeqc::scf::cuda_execution {\n"
+        + _definition(diis, "bool ordered_incremental_diis_gram_requested(")
+        + "\n"
         + _definition(diis, "bool incremental_diis_gram_requested(")
         + "\n}\n"
     )
@@ -456,6 +458,7 @@ def _request(
 @pytest.mark.parametrize("count,workspace", [(1, 512 << 20), (1024, 128 << 20)])
 @pytest.mark.parametrize("explicit_limit", [False, True])
 @pytest.mark.parametrize("incremental_gram", ["0", "1"])
+@pytest.mark.parametrize("reduction", [None, "cooperative", "ordered"])
 def test_public_budget_preserves_fleet_and_later_workspace(
     native_probe: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -463,7 +466,16 @@ def test_public_budget_preserves_fleet_and_later_workspace(
     workspace: int,
     explicit_limit: bool,
     incremental_gram: str,
+    reduction: str | None,
 ) -> None:
+    if reduction is None:
+        monkeypatch.delenv(
+            "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION", raising=False
+        )
+    else:
+        monkeypatch.setenv(
+            "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION", reduction
+        )
     monkeypatch.setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", incremental_gram)
     for name in CONTROLS:
         monkeypatch.delenv(name, raising=False)
@@ -487,13 +499,20 @@ def test_public_budget_preserves_fleet_and_later_workspace(
 
 
 @pytest.mark.parametrize("history", [1, 2, 8, 64])
+@pytest.mark.parametrize("reduction", [None, "cooperative", "ordered"])
 @pytest.mark.parametrize("spins", [1, 2])
 def test_incremental_gram_charges_only_optional_physical_cache(
     native_probe: Any,
     monkeypatch: pytest.MonkeyPatch,
     history: int,
     spins: int,
+    reduction: str | None,
 ) -> None:
+    selector = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION"
+    if reduction is None:
+        monkeypatch.delenv(selector, raising=False)
+    else:
+        monkeypatch.setenv(selector, reduction)
     inventories = []
     selection = "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM"
     for mode in (None, "0", "1"):
@@ -518,8 +537,21 @@ def test_incremental_gram_charges_only_optional_physical_cache(
     assert inventories[2]["state"] - inventories[0]["state"] == expected
     for key in ("xc", "coulomb"):
         assert inventories[2][key] == inventories[0][key]
-    monkeypatch.setenv(selection, "invalid")
+    monkeypatch.setenv(selection, "1")
+    monkeypatch.setenv(selector, "invalid")
     output = (ctypes.c_uint64 * 3)()
+    status = native_probe.generativeqc_resource_ks_cuda_v1(
+        2, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+    )
+    assert (status != 0) == (history >= 2)
+    monkeypatch.setenv(selection, "0")
+    assert (
+        native_probe.generativeqc_resource_ks_cuda_v1(
+            2, 2, 2, 6, 49152, history, spins, 0, 256, output, 3
+        )
+        == 0
+    )
+    monkeypatch.setenv(selection, "invalid")
     assert (
         native_probe.generativeqc_resource_ks_cuda_v1(
             2, 2, 2, 6, 49152, 8, spins, 0, 256, output, 3

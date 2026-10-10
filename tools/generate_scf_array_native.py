@@ -1,4 +1,4 @@
-"""Generate native CPU SCF helpers from validated SCF TensorIR equations."""
+"""Generate native SCF helpers from validated SCF TensorIR equations."""
 
 from __future__ import annotations
 
@@ -305,12 +305,46 @@ inline void diis_extrapolate(double* output, const History& fock_history,
 """
 
 
+def diis_cuda_header() -> str:
+    """Emit the same ordered FP64 dot recipe for a cached CUDA history view.
+
+    The ring/cache/solve remain runtime policy. Only the pure contraction moves
+    to this TensorIR-owned helper, without changing its scalar reduction order.
+    """
+    program = prepare_for_backend(
+        diis_gram_program(1, 3, 2, spin_count=2),
+        "cuda",
+        preserve_reduction_order=True,
+    )
+    _validate_diis_gram(program)
+    identity = template_hash(program)
+    return f"""// Generated from the canonical SCF residual Gram TensorIR.
+#pragma once
+#include <cstddef>
+namespace generativeqc::tensor::generated {{
+inline constexpr const char* ordered_history_dot_identity = "{identity}";
+#ifdef __CUDACC__
+__host__ __device__
+#endif
+inline double ordered_history_dot(const double* left, const double* right,
+                                  std::size_t vector_size) {{
+  double value = 0.0;
+  for (std::size_t element = 0; element < vector_size; ++element)
+    value += left[element] * right[element];
+  return value;
+}}
+}}  // namespace generativeqc::tensor::generated
+"""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--backend", choices=("cpu", "cuda-diis"), default="cpu")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(native_header(), encoding="utf-8")
+    source = diis_cuda_header() if args.backend == "cuda-diis" else native_header()
+    args.output.write_text(source, encoding="utf-8")
 
 
 if __name__ == "__main__":

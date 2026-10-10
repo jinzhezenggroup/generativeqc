@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -50,7 +51,7 @@ int main() {
     subprocess.run([str(binary)], check=True, timeout=10)
 
 
-@pytest.mark.parametrize("family", ["matrices", "occupations"])
+@pytest.mark.parametrize("family", ["matrices", "matrices_receipt", "occupations"])
 def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
     """Real kernels gate ragged matrix tiles and exact spin-task sharing."""
     if os.environ.get("GENERATIVEQC_TEST_GFN2_CUDA") != "1":
@@ -60,10 +61,14 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
     nvcc = shutil.which("nvcc")
     if nvcc is None:
         pytest.skip("CUDA compiler required for the isolated native harness")
-    ccache = shutil.which("ccache")
-    if ccache is None:
-        pytest.fail("ccache is required for local CUDA compilation")
-    subprocess.run([ccache, "--version"], check=True, capture_output=True)
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if launcher is None:
+        pytest.fail("sccache or ccache is required for CUDA compilation")
+    subprocess.run([launcher, "--version"], check=True, capture_output=True)
+    architecture = os.environ.get("GENERATIVEQC_TEST_CUDA_ARCH", "")
+    if architecture and not re.fullmatch(r"sm_[0-9]+", architecture):
+        pytest.fail("GENERATIVEQC_TEST_CUDA_ARCH must name one sm_NN target")
+    arch_flags = [f"-arch={architecture}"] if architecture else []
     subprocess.run(
         [
             sys.executable,
@@ -74,16 +79,20 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
         check=True,
         timeout=60,
     )
-    subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / "tools/generate_gfn2_density_cuda.py"),
-            "--output",
-            str(tmp_path / "generated_gfn2_density_contract.inc"),
-        ],
-        check=True,
-        timeout=60,
-    )
+    density_command = [
+        sys.executable,
+        str(ROOT / "tools/generate_gfn2_density_cuda.py"),
+        "--output",
+        str(tmp_path / "generated_gfn2_density_contract.inc"),
+    ]
+    if family == "matrices_receipt":
+        density_command.extend(
+            [
+                "--instrumented-output",
+                str(tmp_path / "generated_gfn2_density_contract_receipt.inc"),
+            ]
+        )
+    subprocess.run(density_command, check=True, timeout=60)
     objects = []
     native = ROOT / "src/xtb/native"
     sources = (
@@ -92,7 +101,7 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
             native / "src/backends/cuda/gfn2_hamiltonian.cu",
             native / "src/backends/cuda/gfn2_density.cu",
         )
-        if family == "matrices"
+        if family.startswith("matrices")
         else (
             ROOT / "tests/native/test_gfn2_occupation_sharing.cu",
             native / "src/backends/cuda/gfn2_occupations.cu",
@@ -102,10 +111,16 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
         output = tmp_path / f"part{i}.o"
         subprocess.run(
             [
-                ccache,
+                launcher,
                 nvcc,
                 "-std=c++20",
                 "-O3",
+                *arch_flags,
+                *(
+                    ["-DGENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS=1"]
+                    if family == "matrices_receipt"
+                    else []
+                ),
                 "-I",
                 str(tmp_path),
                 "-I",
@@ -122,5 +137,7 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
         )
         objects.append(str(output))
     binary = tmp_path / "electronic"
-    subprocess.run([nvcc, *objects, "-o", str(binary)], check=True, timeout=60)
+    subprocess.run(
+        [nvcc, *arch_flags, *objects, "-o", str(binary)], check=True, timeout=60
+    )
     subprocess.run([str(binary)], check=True, timeout=120)

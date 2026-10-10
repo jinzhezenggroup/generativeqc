@@ -26,7 +26,7 @@
       "source_bindings": {
         "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
         "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
-        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+        "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
@@ -55,7 +55,7 @@
       "source_bindings": {
         "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
         "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
-        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+        "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
@@ -105,7 +105,7 @@
         "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
         "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
         "src/posthf/mp2_derivative_cuda.cpp": "3e70a1765a10b77b3e563f4d118c9c94f183212560e45044b55b380baba53aae",
-        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+        "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
@@ -138,7 +138,7 @@
         "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
         "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
         "src/posthf/mp2_derivative_cuda.cpp": "3e70a1765a10b77b3e563f4d118c9c94f183212560e45044b55b380baba53aae",
-        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+        "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
@@ -168,7 +168,7 @@
       "source_bindings": {
         "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
         "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
-        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+        "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
@@ -181,7 +181,7 @@
       ],
       "disposition": "retained-pending-evidence",
       "evidence_gaps": [
-        "Verify selected endpoint, dense/oracle size gate, and all retaining consumers.",
+        "Qualify selected dense/legacy endpoints and all retaining consumers beyond the bounded native oracle calls.",
         "Validate independent parity and consumer ABI for a representation change.",
         "No complete endpoint profitability comparison has been supplied for retiring this retained path."
       ],
@@ -192,18 +192,18 @@
         "path": "src/posthf/mp2_gradient.cpp",
         "symbol": "initial_orbital_weights"
       },
-      "reason": "Dense/oracle source path remains distinct from canonical_orbital_rhs_streamed. Keep visible pending source-matched endpoint/size-policy evidence; do not infer production use or required dense layout from the allocation.",
+      "reason": "Dense/oracle source path remains distinct from canonical_orbital_rhs_streamed. A checked preallocation gate now limits native dense RHS and relaxed-weight calls to 12 orbitals and a default 1 MiB owned numeric budget, with explicit tighter-budget entry points. Keep visible pending endpoint, retaining-consumer and profitability evidence; size admission does not prove production use or a required dense layout.",
       "residency": "Host OrbitalRhs::two_electron vector, N^4 elements",
-      "resource_owner": "OrbitalRhs::two_electron is allocated by initial_orbital_weights, owned by canonical_orbital_rhs and retained for dense rotation-gradient, multiplier and subsequent Lagrangian consumption. Source inspection does not establish a qualified endpoint size gate or resource-admission plan.",
+      "resource_owner": "OrbitalRhs::two_electron is allocated by initial_orbital_weights after dense_orbital_rhs_plan admission, owned by canonical_orbital_rhs and retained for dense rotation-gradient, multiplier and subsequent Lagrangian consumption. dense_lagrangian_weights_plan separately admits the relaxed caller's complete owned numeric peak. Both plans exclude borrowed inputs, allocator rounding and exception storage; they do not establish complete endpoint/RSS admission or a retention profitability decision.",
       "source_bindings": {
         "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
         "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
-        "src/posthf/mp2_gradient.cpp": "d7f31508d2ff9ae30689a46084705e1149a479ebf5ed9b33c01f25fa3f8ea8ac",
-        "src/posthf/mp2_gradient.hpp": "c9ec55699f91b02ae70c307c38697ed5fc7ce795d937507f46e4e913670358dd"
+        "src/posthf/mp2_gradient.cpp": "1a775cc0eb06a4c6c6a13b6150a33c82d9fed952016e9f8a299d1610189bb92a",
+        "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     }
   ],
   "issue": "https://github.com/jinzhezenggroup/generativeqc/issues/1626",
   "schema": "generativeqc.materialization-dispositions.v1",
-  "scope": "Review inventory only. All six retained MP2 findings have open evidence gaps; no required-materialization or profitability proof is asserted."
+  "scope": "Review inventory only. All six retained MP2 findings have open evidence gaps; the native dense orbital-oracle size/owned-byte gate does not establish required-materialization, complete endpoint admission or profitability."
 }

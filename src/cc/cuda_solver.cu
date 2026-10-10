@@ -18,11 +18,13 @@
 
 #include "cc/cuda_solver_support.cuh"
 #include "cc/cuda_state.cuh"
+#include "cc/df_pair_projection.cuh"
 #include "cc/df_plan.hpp"
 #include "generated_df_ccsd_core_cpu.hpp"
 #include "generated_df_ccsd_core_cuda.cuh"
 #include "generated_df_ccsd_cuda.cuh"
 #include "generated_df_ccsd_hoisted_cuda.cuh"
+#include "generated_df_ccsd_spectator_pairs_cuda.cuh"
 #include "generated_rccsd_cpu.hpp"
 #include "runtime/allocation_measurement.hpp"
 #include "solver/diis_ring.hpp"
@@ -79,6 +81,7 @@ struct Layout {
   std::size_t status{}, generated_error{}, arithmetic{}, total{};
   std::size_t history_bytes{}, metric_weights{};
   std::size_t df_bov{}, df_bvv{}, df_arena{}, df_sum{}, df_prepare{};
+  std::size_t df_paired_tau{}, df_pair_maxima{};
 };
 
 std::size_t reserve(Layout& layout, std::size_t& cursor, std::size_t bytes) {
@@ -105,6 +108,12 @@ struct Owner {
   generated::df::ReplayCudaState replay_state;
   bool replay_matrix{};
   generated::dfhoist::CudaState hoisted_state;
+  generated::dfpairs::CudaState paired_state;
+  bool pairs_enabled{};
+  double* paired_tau{};
+  pair_bound::ProjectionMaxima* pair_maxima{};
+  std::array<pair_bound::Power, 2> pair_geometry{};
+  std::array<pair_bound::Power, 2> pair_factor_geometry{};
   DFIterationPlan plan;
   double *df_bov{}, *df_bvv{}, *df_sum{};
   std::size_t naux{};
@@ -130,15 +139,19 @@ struct Owner {
         coordinates{p.nocc, p.nvir},
         history(options.diis_size) {
     packed = options.packed_diis && options.diis_size;
+    // A single occupied block has no missing spectator partner to eliminate.
+    bool pair_candidate =
+        p.nocc > 1 && p.naux && options.df_occupied_pairs && pair_bound::projection_supported;
     // Supplied amplitudes are a contract, not a projected guess. Require
     // exact symmetry here; the bounded rounding policy applies only later.
-    if (packed) {
+    if (packed || pair_candidate) {
       for (std::size_t k = 0; k < n2; ++k) {
         const auto mate = coordinates(k).partner;
         if (std::bit_cast<std::uint64_t>(p.initial_t2[k]) !=
             std::bit_cast<std::uint64_t>(p.initial_t2[mate])) {
-          packed = false;
-          diagnostic.packed_diis_refused = true;
+          diagnostic.packed_diis_refused = packed;
+          diagnostic.df_pair_initial_symmetry_refused = pair_candidate;
+          packed = pair_candidate = false;
           break;
         }
       }
@@ -175,10 +188,22 @@ struct Owner {
       if (naux) {
         layout.df_bov = reserve(layout, cursor, checked_mul(p.df_bov.size(), sizeof(double)));
         layout.df_bvv = reserve(layout, cursor, checked_mul(p.df_bvv.size(), sizeof(double)));
-        const auto auxiliary =
+        auto auxiliary =
             replay_matrix ? std::max(plan.auxiliary,
                                      generated::df::virtual_replay_arena_elements(p.nocc, p.nvir))
                           : plan.auxiliary;
+        if (pairs_enabled) {
+          auxiliary = std::max(auxiliary,
+                               generated::dfpairs::auxiliary_packed_arena_elements(p.nocc, p.nvir));
+          if (plan.auxiliary_batch_size > 1)
+            auxiliary = std::max(auxiliary, generated::dfpairs::auxiliary_batched_arena_elements(
+                                                p.nocc, p.nvir, plan.auxiliary_batch_size));
+          layout.df_paired_tau =
+              reserve(layout, cursor,
+                      checked_mul(generated::dfpairs::occupied_tau_elements(p.nocc, p.nvir),
+                                  sizeof(double)));
+          layout.df_pair_maxima = reserve(layout, cursor, sizeof(pair_bound::ProjectionMaxima));
+        }
         layout.df_arena = reserve(layout, cursor, checked_mul(auxiliary, sizeof(double)));
         layout.df_sum = reserve(layout, cursor, checked_mul(plan.accumulation, sizeof(double)));
         if (plan.hoisted)
@@ -229,6 +254,11 @@ struct Owner {
                            tensor::PreparedContractions::storage_bytes(
                                generated::iteration_prepared_contractions));
       if (replay_matrix) total = checked_add(total, generated::df::replay_binding_host_bytes());
+      if (pairs_enabled)
+        total = checked_add(
+            total,
+            generated::dfpairs::contraction_host_bytes(
+                plan.auxiliary_batch_size > 1 ? 1 + (naux % plan.auxiliary_batch_size > 1) : 0));
       return plan.matrix_gemm ? checked_add(checked_add(total, kContractionProviderAllowance),
                                             generated::dfhoist::contraction_host_bytes(
                                                 plan.auxiliary_batch_size > 1
@@ -257,6 +287,8 @@ struct Owner {
       }
     }
     const auto scalar_plan = [&]() {
+      if (pairs_enabled) diagnostic.df_pair_resource_refused = true;
+      pairs_enabled = false;
       replay_matrix = false;
       if (!naux)
         conventional_prepared = false;
@@ -294,6 +326,50 @@ struct Owner {
       }
       if (!replay_matrix) combined = build_layout();
     }
+    // Pair storage is last in admission priority: it may not displace the
+    // already selected original primal tile or independent replay provider.
+    if (pair_candidate && plan.hoisted && plan.matrix_gemm) {
+      try {
+        if (generated::dfpairs::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
+            (plan.auxiliary_batch_size == 1 || generated::dfpairs::auxiliary_batched_dimensions_fit(
+                                                   p.nocc, p.nvir, plan.auxiliary_batch_size))) {
+          pairs_enabled = true;
+          const auto candidate = build_layout();
+          pairs_enabled = candidate <= options.max_bytes;
+          if (pairs_enabled) combined = candidate;
+        }
+      } catch (const std::length_error&) {
+        pairs_enabled = false;
+      }
+      if (pairs_enabled) {
+        for (std::size_t auxiliary = 0; auxiliary < naux; ++auxiliary) {
+          std::array<pair_bound::Power, generated::dfpairs::geometry_norms.size()> norms;
+          for (std::size_t index = 0; index < norms.size(); ++index) {
+            const auto binding = generated::dfpairs::geometry_norms[index];
+            const bool bov = binding.source == generated::dfpairs::NormSource::bov;
+            const auto rows = bov ? p.nocc : p.nvir;
+            const auto extent = checked_mul(rows, p.nvir);
+            const auto* factor = (bov ? p.df_bov.data() : p.df_bvv.data()) + auxiliary * extent;
+            norms[index] = pair_bound::row_l1_upper(factor, rows, p.nvir, binding.summed_axes,
+                                                    diagnostic.df_pair_geometry_elements);
+            // Reuse the existing geometry audit, without another factor scan.
+            auto& magnitude = pair_factor_geometry[bov ? 0 : 1];
+            magnitude = pair_bound::maximum(magnitude, norms[index]);
+          }
+          const auto coefficients = generated::dfpairs::ladder_coefficient_bounds(norms);
+          for (std::size_t index = 0; index < pair_geometry.size(); ++index)
+            pair_geometry[index] = pair_bound::maximum(pair_geometry[index], coefficients[index]);
+        }
+        for (auto& coefficient : pair_geometry) {
+          coefficient = pair_bound::product({coefficient, pair_bound::extent_upper(naux)});
+          if (coefficient.state == pair_bound::Power::State::refused) pairs_enabled = false;
+        }
+      }
+      if (!pairs_enabled) {
+        diagnostic.df_pair_resource_refused = true;
+        combined = build_layout();
+      }
+    }
     try {
       cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
       if (options.diis_size) {
@@ -329,6 +405,13 @@ struct Owner {
         return code;
       };
       auto allocation = allocate_numeric();
+      if (allocation == cudaErrorMemoryAllocation && pairs_enabled) {
+        (void)cudaGetLastError();
+        pairs_enabled = false;
+        diagnostic.df_pair_resource_refused = true;
+        combined = build_layout();
+        allocation = allocate_numeric();
+      }
       if (allocation == cudaErrorMemoryAllocation && replay_matrix) {
         (void)cudaGetLastError();
         replay_matrix = false;
@@ -423,6 +506,24 @@ struct Owner {
             replay_matrix = false;
           }
         }
+        if (pairs_enabled) {
+          paired_tau = reinterpret_cast<double*>(base + layout.df_paired_tau);
+          pair_maxima =
+              reinterpret_cast<pair_bound::ProjectionMaxima*>(base + layout.df_pair_maxima);
+          paired_state.o = p.nocc;
+          paired_state.v = p.nvir;
+          try {
+            generated::dfpairs::prepare_contractions(
+                paired_state, contractions, plan.auxiliary_batch_size,
+                naux % plan.auxiliary_batch_size, diagnostic.df_gemm_calls,
+                diagnostic.df_gemm_summands);
+          } catch (const std::bad_alloc&) {
+            paired_state.paired_contractions.release();
+            paired_state.paired_batched_contractions.release();
+            pairs_enabled = false;
+            diagnostic.df_pair_resource_refused = true;
+          }
+        }
       }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
@@ -458,6 +559,14 @@ struct Owner {
                                 : 0;
       diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kContractionProviderAllowance : 0;
       diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
+      diagnostic.df_occupied_pairs = pairs_enabled;
+      if (layout.df_paired_tau) {
+        diagnostic.df_pair_capacity_bytes = checked_add(
+            checked_mul(generated::dfpairs::occupied_tau_elements(p.nocc, p.nvir), sizeof(double)),
+            sizeof(pair_bound::ProjectionMaxima));
+        diagnostic.df_pair_binding_host_bytes = generated::dfpairs::contraction_host_bytes(
+            plan.auxiliary_batch_size > 1 ? 1 + (naux % plan.auxiliary_batch_size > 1) : 0);
+      }
       diagnostic.owned_device_bytes =
           std::max(diagnostic.owned_device_bytes,
                    checked_add(checked_add(layout.total, layout.history_bytes),
@@ -567,7 +676,52 @@ struct Owner {
     cuda_check(cudaGetLastError());
   }
 
-  generated::DeviceIterationOutputs iteration() {
+  // Geometry coefficients are immutable admission metadata. The original tau
+  // and current singles are audited on-device at every trial/primary state;
+  // refusal selects the original complete Q loop without altering amplitudes.
+  bool prepare_occupied_pairs(double tolerance) {
+    if (!pairs_enabled) return false;
+    pair_bound::project_tau(hoisted_state.df_tau, state.t1, state.o, state.v, n2, n1, paired_tau,
+                            pair_maxima, stream);
+    pair_bound::ProjectionMaxima metadata{};
+    cuda_check(
+        cudaMemcpyAsync(&metadata, pair_maxima, sizeof(metadata), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaStreamSynchronize(stream));
+    ++diagnostic.synchronizations;
+    diagnostic.scalar_d2h_bytes += sizeof(metadata);
+    ++diagnostic.df_pair_projection_calls;
+    diagnostic.df_pair_projection_bytes = checked_add(
+        diagnostic.df_pair_projection_bytes,
+        checked_mul(
+            checked_add(checked_mul(3, generated::dfpairs::occupied_tau_elements(state.o, state.v)),
+                        n1),
+            sizeof(double)));
+    const auto amplitude_extent =
+        checked_mul(generated::dfpairs::amplitude_norm_axes & 1 ? state.o : 1,
+                    generated::dfpairs::amplitude_norm_axes & 2 ? state.v : 1);
+    const auto amplitude =
+        pair_bound::product({pair_bound::magnitude_upper(metadata.t1_magnitude_bits),
+                             pair_bound::extent_upper(amplitude_extent)});
+    const auto error = pair_bound::product(
+        {pair_bound::magnitude_upper(metadata.tau_error_bits),
+         generated::dfpairs::ladder_residual_gain,
+         pair_bound::sum({pair_geometry[0], pair_bound::product({pair_geometry[1], amplitude})})});
+    if (metadata.refused || !pair_bound::within_residual_margin(error, tolerance) ||
+        (generated::dfpairs::ladder_dressing_factored &&
+         !pair_bound::within_factorization_range(metadata, pair_factor_geometry[0],
+                                                 pair_factor_geometry[1], state.o, state.v))) {
+      ++diagnostic.df_pair_refusals;
+      return false;
+    }
+    static_cast<generated::dfcore::CudaState&>(paired_state) = state;
+    paired_state.auxiliary_arena = hoisted_state.auxiliary_arena;
+    paired_state.df_tau = hoisted_state.df_tau;
+    paired_state.df_tau_occupied_pairs = paired_tau;
+    ++diagnostic.df_pair_evaluations;
+    return true;
+  }
+
+  generated::DeviceIterationOutputs iteration(double tolerance) {
     if (!naux)
       return conventional_prepared ? generated::run_iteration_prepared_cuda(state)
                                    : generated::run_iteration_cuda(state);
@@ -585,22 +739,40 @@ struct Owner {
       hoisted_state.df_Xv = hoisted_state.df_Wvovo + n2;
       hoisted_state.df_tau = generated::dfhoist::run_prepare_cuda(hoisted_state).tau;
       ++diagnostic.df_preparation_calls;
+      const bool use_pairs = prepare_occupied_pairs(tolerance);
       for (std::size_t q = 0; q < naux; q += plan.auxiliary_batch_size) {
         const auto batch = std::min(plan.auxiliary_batch_size, naux - q);
         hoisted_state.q = batch;
         hoisted_state.bov = df_bov + q * n1;
         hoisted_state.bvv = df_bvv + q * state.v * state.v;
-        const auto row = generated::dfhoist::run_auxiliary_cuda(hoisted_state);
+        generated::dfhoist::AuxiliaryOutputs row{};
+        if (use_pairs) {
+          paired_state.q = batch;
+          paired_state.bov = hoisted_state.bov;
+          paired_state.bvv = hoisted_state.bvv;
+          row = generated::dfpairs::run_auxiliary_cuda(paired_state);
+        } else {
+          row = generated::dfhoist::run_auxiliary_cuda(hoisted_state);
+        }
         // These read-only core views alias mutable, owner-retained cut storage.
-        generated::dfhoist::accumulate_auxiliary_cuda(
-            hoisted_state, row, const_cast<double*>(hoisted_state.df_Lvv),
-            const_cast<double*>(hoisted_state.df_Wvoov),
-            const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
-            df_sum + n1, df_sum);
+        if (use_pairs)
+          generated::dfpairs::accumulate_occupied_auxiliary_cuda(
+              paired_state, row, const_cast<double*>(hoisted_state.df_Lvv),
+              const_cast<double*>(hoisted_state.df_Wvoov),
+              const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
+              df_sum + n1, df_sum);
+        else
+          generated::dfhoist::accumulate_auxiliary_cuda(
+              hoisted_state, row, const_cast<double*>(hoisted_state.df_Lvv),
+              const_cast<double*>(hoisted_state.df_Wvoov),
+              const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
+              df_sum + n1, df_sum);
         diagnostic.df_auxiliary_slices += batch;
         ++diagnostic.df_auxiliary_tiles;
         diagnostic.df_virtual_operations +=
-            batch > 1          ? generated::dfhoist::auxiliary_batched_operations
+            use_pairs          ? (batch > 1 ? generated::dfpairs::auxiliary_batched_cuda_operations
+                                            : generated::dfpairs::auxiliary_packed_cuda_operations)
+            : batch > 1        ? generated::dfhoist::auxiliary_batched_operations
             : plan.matrix_gemm ? generated::dfhoist::auxiliary_packed_operations
                                : generated::dfhoist::auxiliary_operation_count;
         ++diagnostic.df_accumulation_calls;
@@ -609,12 +781,21 @@ struct Owner {
                         checked_mul(checked_mul(batch + 2, plan.accumulation), sizeof(double)));
         diagnostic.df_contraction_terms = checked_add(
             diagnostic.df_contraction_terms,
-            batch > 1
+            use_pairs ? (batch > 1 ? generated::dfpairs::auxiliary_batched_contraction_terms(
+                                         state.o, state.v, batch)
+                                   : generated::dfpairs::auxiliary_packed_contraction_terms(
+                                         state.o, state.v))
+            : batch > 1
                 ? generated::dfhoist::auxiliary_batched_contraction_terms(state.o, state.v, batch)
                 : plan.auxiliary_terms);
         if (plan.matrix_gemm) {
           const auto packing =
-              batch > 1
+              use_pairs
+                  ? (batch > 1
+                         ? generated::dfpairs::auxiliary_batched_packing_elements(state.o, state.v,
+                                                                                  batch)
+                         : generated::dfpairs::auxiliary_packed_packing_elements(state.o, state.v))
+              : batch > 1
                   ? generated::dfhoist::auxiliary_batched_packing_elements(state.o, state.v, batch)
                   : generated::dfhoist::auxiliary_packing_elements(state.o, state.v);
           diagnostic.df_packing_bytes =
@@ -877,7 +1058,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         if (carried) {
           output = *carried;
         } else {
-          output = owner.iteration();
+          output = owner.iteration(options.residual_tolerance);
           ++owner.diagnostic.iteration_graph_calls;
           if (owner.state.canonical_eps)
             owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
@@ -920,7 +1101,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         if (owner.history.capacity()) {
           const auto trial_diis_started = std::chrono::steady_clock::now();
           cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
-          const auto trial = owner.iteration();
+          const auto trial = owner.iteration(options.residual_tolerance);
           cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
           ++owner.diagnostic.iteration_graph_calls;
           if (owner.state.canonical_eps)

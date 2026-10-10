@@ -100,6 +100,7 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
         "scf/cuda_batch.hpp",
         "scf/eigensolver_workspace.hpp",
         "runtime/resource_cuda.cuh",
+        "runtime/residency_cuda.cuh",
         "runtime/lowering_binding.hpp",
         "generativeqc/generativeqc.hpp",
     ),
@@ -192,6 +193,16 @@ CUDA_ALLOWED["cuda_component_trace"] = (
     "runtime/cuda_component_trace.hpp",
     "runtime/df_progress_trace.hpp",
 )
+CUDA_MODULES["cuda_residency_observation"] = (
+    "runtime/residency_boundaries",
+    "runtime/residency_observer",
+    "runtime/residency_cuda",
+)
+CUDA_ALLOWED["cuda_residency_observation"] = (
+    "runtime/residency_boundaries.hpp",
+    "runtime/residency_observer.hpp",
+    "runtime/residency_cuda.cuh",
+)
 CUDA_MODULES["cuda_df_kernels"] = (
     "df_metric_kernels",
     "df_jk_kernels",
@@ -213,7 +224,12 @@ CUDA_MODULES["cuda_scf_kernels"] = (
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
-) + ("scf/cuda/matrix_index.", "tensor/cuda_history.cuh")
+) + (
+    "scf/cuda/matrix_index.",
+    "tensor/cuda_history.cuh",
+    "tensor/cuda_ring_gram.cuh",
+    "tensor/ring_gram.hpp",
+)
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
     "solver/cuda/symmetric_eigen_handles.hpp",
@@ -221,6 +237,7 @@ CUDA_ALLOWED["cuda_resources"] = (
     "scf/cuda/eigensolver.",
     "scf/cuda/matrix_library.",
     "runtime/resource_cuda.cuh",
+    "runtime/residency_cuda.cuh",
     "runtime/allocation_measurement.hpp",
 )
 CUDA_MODULES["cuda_matrix_library"] = ("matrix_library", "runtime_support")
@@ -542,6 +559,8 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
 CUDA_MODULES["cuda_hf_graph"] = ("rhf_graph",)
 CUDA_ALLOWED["cuda_hf_graph"] = (
     "runtime/allocation_measurement.hpp",
+    "runtime/residency_cuda.cuh",
+    "runtime/residency_observer.hpp",
     "scf/cuda/rhf_graph.",
     "scf/types.hpp",
 )
@@ -560,6 +579,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "runtime/df_progress_trace.hpp",
     "runtime/cuda_component_trace.hpp",
     "runtime/resource_cuda.cuh",
+    "runtime/residency_cuda.cuh",
     "runtime/resource_usage.hpp",
     "scf/aot_shell_registry.hpp",
     "runtime/bounded_workspace.hpp",

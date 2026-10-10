@@ -7,9 +7,24 @@
 #include <limits>
 #include <new>
 
+#include "residency_boundaries.hpp"
 #include "resource_ledger.hpp"
 
 namespace generativeqc::runtime {
+
+/** Observe only an existing ledger-owned lifetime fence. The ledger is shared
+ * across consumers, so its reservation/rollback work must not inherit a caller's
+ * scientific or publication role. No allocation identity or dependency is asserted.
+ */
+inline cudaError_t resource_cuda_ledger_fence(cudaStream_t stream, ResidencySite site) noexcept {
+  const ResidencyExecution execution(ResidencyOwner::device_resource_ledger);
+  ResidencyBoundary observation(execution, ResidencyOperationKind::stream_sync,
+                                ResidencyRole::lifetime, site, ResidencyPayload::none,
+                                ResidencyDirection::none, 0);
+  const auto status = cudaStreamSynchronize(stream);
+  observation.finish(status);
+  return status;
+}
 
 /** Keep partial device uploads owned across host staging/vector failures.
  * The callable outlives this noncopyable guard and may also run explicitly
@@ -69,12 +84,20 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
       const auto old = device_allocation_owners.find(*output);
       if (old != device_allocation_owners.end()) {
         old->second.ledger->live -= old->second.bytes;
+        if (old->second.ledger->journal)
+          old->second.ledger->journal->record(1, old->second.generation, old->second.bytes);
         device_allocation_owners.erase(old);
       }
       device_allocation_owners.emplace(
           *output, DeviceAllocationOwner{ledger, bytes, ++device_allocation_generation});
+      if (ledger->journal) ledger->journal->record(0, device_allocation_generation, bytes);
       ledger->peak = std::max(ledger->peak, ledger->live);
       ++ledger->allocations;
+      if (bytes > std::numeric_limits<std::uint64_t>::max() - ledger->requested_bytes) {
+        ledger->requested_bytes_overflow = true;
+      } else {
+        ledger->requested_bytes += bytes;
+      }
       return status;
     } catch (const std::bad_alloc&) {
       (void)release();
@@ -112,7 +135,7 @@ inline cudaError_t resource_cuda_malloc_async(void** output, std::size_t bytes,
       output, bytes, [&] { return cudaMallocAsync(output, bytes, stream); },
       [&] {
         const auto status = cudaFreeAsync(*output, stream);
-        (void)cudaStreamSynchronize(stream);
+        (void)resource_cuda_ledger_fence(stream, ResidencySite::resource_ledger_rollback_fence);
         return status;
       });
 }
@@ -134,6 +157,8 @@ inline void resource_cuda_forget(void* pointer, std::uint64_t generation) {
   const auto found = device_allocation_owners.find(pointer);
   if (found == device_allocation_owners.end() || found->second.generation != generation) return;
   found->second.ledger->live -= found->second.bytes;
+  if (found->second.ledger->journal)
+    found->second.ledger->journal->record(1, found->second.generation, found->second.bytes);
   device_allocation_owners.erase(found);
 }
 
@@ -150,7 +175,8 @@ inline cudaError_t resource_cuda_free_async(void* pointer, cudaStream_t stream) 
   // The next owner can use a different stream. Do not release its logical
   // reservation until the previous physical use is complete. Unbudgeted
   // stream-ordered destruction keeps its original asynchronous behavior.
-  if (status == cudaSuccess && generation != 0) status = cudaStreamSynchronize(stream);
+  if (status == cudaSuccess && generation != 0)
+    status = resource_cuda_ledger_fence(stream, ResidencySite::resource_ledger_release_fence);
   if (status == cudaSuccess) resource_cuda_forget(pointer, generation);
   return status;
 }

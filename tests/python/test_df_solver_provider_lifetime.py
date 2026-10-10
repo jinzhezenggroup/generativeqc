@@ -142,8 +142,10 @@ struct Owner {
   std::size_t build_layout() { return layout.total; }
   bool conventional_prepared=false;
   bool replay_matrix=false;
+  bool pairs_enabled=false;
   struct { std::size_t total=1024,history_bytes=0; } layout;
-  struct { unsigned synchronizations=0; std::size_t owned_device_bytes=0,numeric_capacity_bytes=0; } diagnostic;
+  struct { unsigned synchronizations=0; std::size_t owned_device_bytes=0,numeric_capacity_bytes=0;
+           bool df_pair_resource_refused=false; } diagnostic;
   int replans=0;
   void scalar_plan() {
     conventional_prepared=false; plan.matrix_gemm=false; layout.total=512; ++replans;
