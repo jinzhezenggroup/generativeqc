@@ -226,8 +226,13 @@ def test_native_minao_shape_query_is_authoritative(
         pytest.fail("current native library must expose MINAO numeric capacity")
     expected = _minao_numeric_capacity(nbf, atomic_numbers)
     assert _minao_numeric_capacity(nbf, atomic_numbers, library) == expected
-    with pytest.raises(ValueError, match="rejected topology"):
+    with pytest.raises(ValueError, match="H-Ar"):
         _minao_numeric_capacity(nbf, [19], library)
+    output = ctypes.c_uint64(9876)
+    assert query(
+        nbf, (ctypes.c_int32 * 1)(19), 1, ctypes.byref(output)
+    ) != 0
+    assert output.value == 9876
 
 
 def test_native_minao_query_failure_does_not_fall_back_to_python() -> None:
