@@ -215,6 +215,29 @@ def test_distinct_triples_default_refuses_precision_or_routing_drift(
     )
 
 
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("distinct_moments && p.panel_capacity == 3", "p.panel_capacity == 3"),
+        ("distinct_moments && p.panel_capacity == 3", "distinct_moments"),
+        ("energies + canonical_tile", "energies + tile"),
+    ],
+)
+def test_panel_traversal_refuses_domain_or_reduction_order_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "bounded panel traversal admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_fixture_copies_registered_sources_outside_the_audited_scope(
     tmp_path: Path,
 ) -> None:

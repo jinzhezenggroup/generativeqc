@@ -476,7 +476,19 @@ def _discover_cc_execution(root: Path) -> dict[str, str]:
         for fragment in ("MomentSourceMap", "energy_distinct_tile")
     ):
         raise ValueError("DF triples distinct-moment FP64 energy admission drifted")
-    return {"cc-execution:df-triples-distinct-moments": relative.as_posix()}
+    traversal = (
+        "detail::visit_occupied_tiles(o,distinct_moments&&p.panel_capacity==3,visit_tile);",
+        "reduce<<<1,256,0,context.stream>>>(partials,p.blocks,energies+canonical_tile,context.error);",
+    )
+    if (
+        any(body.count(fragment) != 1 for fragment in traversal)
+        or "visit_occupied_tiles" in source[response_start:]
+    ):
+        raise ValueError("DF triples bounded panel traversal admission drifted")
+    return {
+        "cc-execution:df-triples-distinct-moments": relative.as_posix(),
+        "cc-execution:df-triples-panel-traversal": relative.as_posix(),
+    }
 
 
 def _discover_response_options(root: Path) -> dict[str, str]:

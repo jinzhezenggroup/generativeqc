@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "cc/df_triples.hpp"
+#include "cc/df_triples_traversal.hpp"
 #include "generated_df_occupied_triples_cuda.cuh"
 #include "posthf/capacity.hpp"
 #include "tensor/cuda_runtime.cuh"
@@ -519,47 +520,49 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
       ages[slot] = ++epoch;
       return slot;
     };
-    for (std::size_t i = 0; i < o; ++i)
-      for (std::size_t j = 0; j <= i; ++j)
-        for (std::size_t k = 0; k <= j; ++k) {
-          const std::array<std::size_t, 3> occupied{i, j, k};
-          const bool alias_tile = distinct_moments && (i == j || j == k);
-          const auto sources = alias_tile ? generated_df::occupied_moment_sources(i, j, k)
-                                          : generated_df::MomentSourceMap{};
-          // Group W seeds by their integral-panel index. A single-panel fallback
-          // consumes every dependent GEMM before that storage is reused. All
-          // producer/consumer work is ordered on Context's one owned stream.
-          for (std::size_t index = 0; index < occupied.size(); ++index) {
-            if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
-                occupied.begin() + index)
-              continue;
-            const auto slot = panel_slot_for(occupied[index]);
-            const auto* panel = panels + slot * p.v3;
-            for (std::size_t permutation = 0; permutation < 6; ++permutation) {
-              const auto* order = generated_df::permutations[permutation];
-              if (occupied[order[0]] != occupied[index]) continue;
-              // Equal physical tuples have identical W seeds; every original
-              // energy contribution still loads its canonical stored seed.
-              if (sources.index[permutation] != permutation) continue;
-              execution.build_w(context, in, occupied[order[0]], occupied[order[1]],
-                                occupied[order[2]], panel, moments + permutation * p.v3, slot);
-              result.moment_gemms += 2;
-            }
-          }
-          const double degeneracy = i == k ? 6.0 : (i == j || j == k ? 2.0 : 1.0);
-          if (alias_tile)
-            generated_df::energy_distinct_tile(o, v, i, j, k, degeneracy, threshold, in, moments,
-                                               sources, p.blocks, partials, context.error,
-                                               context.stream);
-          else
-            generated_df::energy_tile(o, v, i, j, k, degeneracy, threshold, in, moments, p.blocks,
-                                      partials, context.error, context.stream);
-          ++result.epilogue_kernels;
-          reduce<<<1, 256, 0, context.stream>>>(partials, p.blocks, energies + tile, context.error);
-          generativeqc_tensor::cuda_check(cudaGetLastError());
-          ++result.reduction_kernels;
-          ++tile;
+    auto visit_tile = [&](std::size_t i, std::size_t j, std::size_t k, std::size_t canonical_tile) {
+      const std::array<std::size_t, 3> occupied{i, j, k};
+      const bool alias_tile = distinct_moments && (i == j || j == k);
+      const auto sources = alias_tile ? generated_df::occupied_moment_sources(i, j, k)
+                                      : generated_df::MomentSourceMap{};
+      // Group W seeds by their integral-panel index. A single-panel fallback
+      // consumes every dependent GEMM before that storage is reused. All
+      // producer/consumer work is ordered on Context's one owned stream.
+      for (std::size_t index = 0; index < occupied.size(); ++index) {
+        if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
+            occupied.begin() + index)
+          continue;
+        const auto slot = panel_slot_for(occupied[index]);
+        const auto* panel = panels + slot * p.v3;
+        for (std::size_t permutation = 0; permutation < 6; ++permutation) {
+          const auto* order = generated_df::permutations[permutation];
+          if (occupied[order[0]] != occupied[index]) continue;
+          // Equal physical tuples have identical W seeds; every original
+          // energy contribution still loads its canonical stored seed.
+          if (sources.index[permutation] != permutation) continue;
+          execution.build_w(context, in, occupied[order[0]], occupied[order[1]], occupied[order[2]],
+                            panel, moments + permutation * p.v3, slot);
+          result.moment_gemms += 2;
         }
+      }
+      const double degeneracy = i == k ? 6.0 : (i == j || j == k ? 2.0 : 1.0);
+      if (alias_tile)
+        generated_df::energy_distinct_tile(o, v, i, j, k, degeneracy, threshold, in, moments,
+                                           sources, p.blocks, partials, context.error,
+                                           context.stream);
+      else
+        generated_df::energy_tile(o, v, i, j, k, degeneracy, threshold, in, moments, p.blocks,
+                                  partials, context.error, context.stream);
+      ++result.epilogue_kernels;
+      reduce<<<1, 256, 0, context.stream>>>(partials, p.blocks, energies + canonical_tile,
+                                            context.error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      ++result.reduction_kernels;
+      ++tile;
+    };
+    // Only the qualified three-panel FP64 domain changes its visit order;
+    // canonical tile addresses preserve the original final reduction inputs.
+    detail::visit_occupied_tiles(o, distinct_moments && p.panel_capacity == 3, visit_tile);
     if (tile != p.tiles) throw std::logic_error("DF triples occupied work mismatch");
     reduce<<<1, 256, 0, context.stream>>>(energies, p.tiles, energy, context.error);
     generativeqc_tensor::cuda_check(cudaGetLastError());

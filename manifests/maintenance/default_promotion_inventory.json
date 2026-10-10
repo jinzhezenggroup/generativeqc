@@ -896,6 +896,21 @@
       ]
     },
     {
+      "id": "cc.df-bounded-panel-traversal",
+      "classification": "already-default",
+      "controls": ["cc-execution:df-triples-panel-traversal"],
+      "owner_issues": [1598],
+      "sources": ["src/cc/df_triples_cuda.cu", "src/cc/df_triples_traversal.hpp"],
+      "rationale": "Only actual FP64 energy execution with exactly three panel slots uses a bounded serpentine triangular visit order. Original canonical tile addresses preserve the final energy reduction order. The three-panel LRU, every occupied tile, original generated W/energy algebra, finite checks and budgets remain; one/two-panel and non-FP64 execution retain the original traversal. Force/response do not use this helper. No tile list, new numeric storage, public option, provider or ABI change.",
+      "revisit_condition": "Broaden precision/cache domains only with independent gates and exact complete endpoint work. Preserve canonical reduction addresses and bounded traversal; reject algorithms that sort or materialize O(o^3) host tile lists.",
+      "evidence": [
+        "tests/python/test_df_triples_traversal.py",
+        "benchmarks/results/df-triples-panel-traversal-20261011/publication.json",
+        ".agents/notes/implemented/performance/2026-10-11-df-triples-panel-traversal.md",
+        "docs/developer/df_ccsdt.md"
+      ]
+    },
+    {
       "id": "cc.packed-diis",
       "classification": "guarded-promotion-candidate",
       "controls": [
