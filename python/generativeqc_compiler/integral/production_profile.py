@@ -92,7 +92,9 @@ def _qualified_rys_task_classes(
     if not isinstance(raw, list) or any(
         not isinstance(name, str) or not name for name in raw
     ):
-        raise TypeError("preferred Rys-task Fock classes must be a list of nonempty names")
+        raise TypeError(
+            "preferred Rys-task Fock classes must be a list of nonempty names"
+        )
     if len(raw) != len(set(raw)):
         raise ValueError("preferred Rys-task Fock classes contain duplicates")
     return tuple(raw) if tuned else ()
