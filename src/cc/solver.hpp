@@ -44,6 +44,9 @@ struct SolverOptions {
   // residual). Default callers retain same-state trial/residual DIIS; only
   // qualified CUDA DF energy endpoints opt in, not CPU or response owners.
   bool diis_input_residual{false};
+  // Independent expanded physical replay only. Optional tiles may reuse the
+  // admitted DF scratch, never grow it or displace a primal/pair schedule.
+  bool df_replay_auxiliary_batch{false};
 };
 
 enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
