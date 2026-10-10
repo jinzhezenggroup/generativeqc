@@ -35,6 +35,27 @@ primitive-pair geometry; `serial` is a deterministic diagnostic mapping with
 one owner per system. None of these switches changes the value implementation
 selected by `GENERATIVEQC_ONE_ELECTRON_VALUES`.
 
+The standalone and stationary bridges can enumerate cooperative AO pairs
+implicitly rather than allocate a triangular AO-pair index list. Each warp
+decodes one lower-triangular ordinal; integer inequalities repair the
+floating-point address estimate before any basis access. This retains one AO
+pair per warp and the existing generated nuclear-center pullback, without
+screening, component serialization, additional retained scratch or a second
+derivative implementation. The original explicit AO-list cooperative caller
+remains valid. Production shell-pair inventories are complete per-system
+triangles, so the implicit enumeration preserves their AO domain.
+
+The prepared stationary KS bridge borrows its Direct owner's shell metadata,
+resident D/W and stream. An explicit `nucleus_cooperative` selection enables
+implicit cooperative Hcore, while overlap-only Pulay retains component lanes.
+Without an explicit mapping it preserves the previous prepared Hcore schedule:
+the implicit Hcore path alone has not passed complete-endpoint promotion, and
+the qualified composed path also requires cooperative two-electron forces.
+Explicit `shell_warp` and other noncooperative
+selectors also retain that bounded schedule because this prepared bridge does
+not own the AO-pair lists or serial diagnostic contract. The standalone public
+bridge still implements every documented mapping.
+
 ## Mathematical and weight contract
 
 The generator differentiates the validated S/T/V value DAG before emission.

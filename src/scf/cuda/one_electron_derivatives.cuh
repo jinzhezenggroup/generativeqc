@@ -26,7 +26,12 @@ struct OneElectronWeightView {
  * An optional active mask isolates failed batch items. Schedule 0 owns AO pairs
  * by thread, 1 uses shell-pair/component warp lanes, 2 uses one serial owner per
  * system for deterministic diagnostics, and 3 assigns one AO pair to a warp with
- * lanes owning nuclear centers. No derivative tensors, allocation, transfer,
+ * lanes owning nuclear centers. Schedule 3 can instead enumerate those AO pairs
+ * implicitly when both pair pointers and pair_count are zero, keeping
+ * prepared callers independent of an O(NAO^2) pair-index reservation.
+ * Integer-corrected triangular decoding preserves one AO pair per warp and
+ * requires no shell-pair scan, component serialization or index upload.
+ * No derivative tensors, allocation, transfer,
  * or stream synchronization occurs in this launch.
  */
 cudaError_t launch_generated_one_electron_gradient(

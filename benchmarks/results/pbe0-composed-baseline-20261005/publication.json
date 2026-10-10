@@ -97,10 +97,10 @@
       "sha256": "2426d9cf16409bc3c2f6e3a44e8512374769e6263c0a2eddc9bc168a2da7a536"
     },
     {
-      "bytes": 25982,
-      "path": "validation.json",
+      "bytes": 3996,
+      "path": "validation.json.gz",
       "role": "evidence",
-      "sha256": "a1f06429f268aba19fd511281d498feea1ee7d5c4ca311ba3aff8635d2ea8f5c"
+      "sha256": "89828bd6ac6feb6eb733ea2807249610953fe8198af940d24ee9bd2103760c31"
     }
   ],
   "reproduction": {
