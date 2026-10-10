@@ -130,6 +130,13 @@ campaign and its old-base 6.5923% measurement are unchanged.
 
 ## Consequences and revisit conditions
 
+PR publication against concurrent master changes exceeded the unchanged 64 MiB
+aggregate evidence budget. The existing
+`benchmarks/results/df-lambda-cost-2136-20261009/samples.json` is retained as
+deterministic `samples.json.gz`, saving 58,679 bytes with byte-identical
+decompression. Only its storage references and checksums change; no historical
+measurement, source provenance, acceptance gate or force bundle is rewritten.
+
 This supersedes the whole-core storage layout, not the scientific equations,
 purity proof, independent audit or owner epoch. The existing default requests
 retention automatically; its old explicit disable and all resource fallbacks
