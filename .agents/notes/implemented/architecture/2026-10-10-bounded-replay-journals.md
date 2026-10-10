@@ -197,8 +197,9 @@ This is observer/resource non-regression, not a new independent method oracle.
 
 The separately retained host hoist captures still prove zeroed-vector requests
 `1024 -> 1` with independent exact returned-array equality to `2 I`. Total
-observed heap requests are `2050 -> 1026`, requested bytes
-`25165840 -> 16785408`, and peaks `8405008 -> 8404992`; peak storage is not
+observed heap requests, independently recomputed from the retained raw captures,
+are `2049 -> 1026`, requested bytes `25165824 -> 16785408`, and peaks
+`8404992 -> 8404992`; peak storage is not
 misrepresented as the same reduction as request count or cumulative bytes.
 No complete-endpoint speedup, global heap/device-zero or RSS claim is made.
 
@@ -210,6 +211,39 @@ Raw captures, contracts, source/build verification, binaries, controller state,
 fixtures and the independently recomputed summary remain under ignored
 `.artifacts/issue1630-pr-qualified/`, locally and on `n1`. This appendix
 postdates the freeze and changes no qualified implementation or test source.
+
+## Device-identity follow-up qualification (2026-10-10)
+
+The later CUDA-visible-ordinal/PCI/UUID fix is qualified at commit
+`a9d8da25d55e77406a289fcf6e27c0f3a81e11e7`, tree
+`e95646d45c4a54d3b44f98b9c1e47d7f2b6c4a3c`, 9,391 entries. All source entries
+verify before and after CMake configuration/build. Native source is unchanged
+since the full build above, so Ninja correctly reports no work; the marker object
+uses verified ccache before separate linking. The host suite reports **229
+passed, 57 subtests passed**, no skips, including runtime/NVML ordering and MIG
+rejection fixtures.
+
+Slurm job **6991**, `main`/`node1`, one `gpu:5090:1`, finite 15-minute limit,
+preserves assigned visibility `0`. The controller records `COMPLETED`, exit
+`0:0`, runtime 25 seconds. Accounting storage is disabled; the failed accounting
+query is retained and is not substituted for controller completion evidence.
+Both RHF/UHF joint 13-window receipts independently reverify, and **2** real-GPU
+resource regressions pass. The runtime-resolved physical identity is
+`GPU-45f177f9-33ac-0e4e-f473-2beeaf6d413d/visible:0`.
+
+Warm owned-device count/bytes and close/tail owned-device live bytes remain zero.
+RHF warm energy/force host requests are **513/527**, bytes **164403/165051**;
+UHF **516/529**, bytes **165875/166443**. Raw host events are **8642/8686**.
+Matched iterations agree; maximum energy/force differences are
+`2.842170943040401e-14` Eh and `9.2148511043888e-15` Eh/bohr. The current host
+hoist fixtures reproduce `1024 -> 1` zeroed-vector requests and the corrected
+aggregate totals above, with the independent exact `2 I` numerical gate.
+
+The new archive, source checks, raw captures, contracts, qualified binaries,
+compiler/cache records, controller state and independent summary remain under
+ignored `.artifacts/issue1630-device-identity-qualified/`, locally and on `n1`.
+This editorial appendix postdates the qualified implementation/test freeze;
+the same observer/resource scope and no-speedup/no-global-zero limits apply.
 
 ## Revisit when
 
