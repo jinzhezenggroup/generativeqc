@@ -100,8 +100,9 @@ def test_cpu_jit_identity_reuses_equivalent_custom_programs() -> None:
     source_a, _ = tensor_cpu.emit_cpu(custom_a)
     source_b, _ = tensor_cpu.emit_cpu(custom_b)
     assert source_a == source_b
-    assert tensor.compile_capabilities(custom_a)["identity"] == (
-        tensor.compile_capabilities(custom_b)["identity"]
+    assert (
+        tensor.compile_capabilities(custom_a)["identity"]
+        == (tensor.compile_capabilities(custom_b)["identity"])
     )
 
 
@@ -112,8 +113,9 @@ def test_cpu_jit_identity_preserves_diagnostic_pass_selection() -> None:
     # A pass bisection must keep its own artifact identity even when the
     # current small program happens not to be changed by either pass set.
     assert diagnostic.logical_hash == original.logical_hash
-    assert tensor.compile_capabilities(original)["identity"] != (
-        tensor.compile_capabilities(diagnostic)["identity"]
+    assert (
+        tensor.compile_capabilities(original)["identity"]
+        != (tensor.compile_capabilities(diagnostic)["identity"])
     )
 
 
@@ -126,8 +128,9 @@ def test_cpu_jit_identity_keeps_precision_evidence_isolated() -> None:
         original.outputs, provenance={"precision_source_equation": "source-B"}
     )
     assert first.logical_hash == second.logical_hash
-    assert tensor.compile_capabilities(first)["identity"] != (
-        tensor.compile_capabilities(second)["identity"]
+    assert (
+        tensor.compile_capabilities(first)["identity"]
+        != (tensor.compile_capabilities(second)["identity"])
     )
 
 
