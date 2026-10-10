@@ -2093,6 +2093,7 @@ class KsPreparedBatch final : public PreparedBatch {
     for (std::size_t i = 0; i < size(); ++i) {
       runtime::CpuRetainedCapacity neighbors(host_numeric_capacity());
       items_[i].plan = make_plan(systems_[i]);
+      items_[i].prepared_properties = items_[i].plan->supported_properties();
     }
   }
 
@@ -2110,8 +2111,7 @@ class KsPreparedBatch final : public PreparedBatch {
     // the source-complete CPU DF-PBE/PBE0 owner. Mixed or missing contexts must
     // not quietly receive an energy-only result with an unfilled force buffer.
     if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
-          return item.plan &&
-                 (item.plan->supported_properties() & GENERATIVEQC_PROPERTY_FORCES) != 0;
+          return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
         }))
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
@@ -2540,6 +2540,10 @@ class KsPreparedBatch final : public PreparedBatch {
   }
 
   struct Item {
+    // Admission belongs to the immutable prepared model/basis/backend, not a
+    // replaceable geometry owner. A failed rebuild must not revoke it and
+    // prevent the next force replay from reconstructing this item's plan.
+    generativeqc_property_flags prepared_properties{};
     std::unique_ptr<KsPreparedCalculation> plan;
     // Density is materialized only for explicit output, import, or rebuilding
     // an owner. Empty density with resident_warm=true is a valid lazy snapshot.
