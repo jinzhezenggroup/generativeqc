@@ -30,9 +30,11 @@ int main() {
   if (df_response_shell_source_eligible(true, false, false, true, false)) return 3;
   if (df_response_shell_source_eligible(true, false, false, false, true)) return 4;
   if (!df_response_shell_source_eligible(true, false, false, true, true)) return 5;
-  // Representation eligibility does not manufacture a target profile.
+  // The work gate is common across known CUDA targets but fails closed if
+  // the target was never probed.
   if (df_shell_execution_preferred(768, 3712, 0)) return 6;
   if (!df_shell_execution_preferred(768, 3712, 120)) return 7;
+  if (!df_shell_execution_preferred(768, 3712, 90)) return 8;
 }
 """)
     executable = tmp_path / "source_policy"

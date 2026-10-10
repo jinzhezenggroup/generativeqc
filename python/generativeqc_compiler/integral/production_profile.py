@@ -60,7 +60,7 @@ class ResolvedProductionProfile:
     tuned: bool
     selections: tuple[KernelSelection, ...]
     cuda_toolkit: str
-    preferred_rys_task_fock_shell_classes: tuple[str, ...] = ()
+    preferred_rys_task_fock_shell_classes: tuple[str, ...] | None = None
 
     @property
     def portable(self) -> bool:
@@ -80,15 +80,18 @@ def _profile_kind(name: str, profile: dict[str, object]) -> str:
 
 def _qualified_rys_task_classes(
     profile: dict[str, object], *, tuned: bool
-) -> tuple[str, ...]:
-    """Read measured per-class K preferences; never transfer them to an unqualified GPU.
+) -> tuple[str, ...] | None:
+    """Read exact-tuned overrides without transferring them across targets.
 
     The compiler uses the same admission mechanism for every CUDA architecture.
     Capability is determined by the generated candidate inventory, while the
-    preference comes only from the selected exact, tuned profile's evidence.
+    override comes only from the selected exact, tuned profile's evidence.
+    None means use the shared default; an explicit empty tuple disables it.
     """
 
-    raw = profile.get("preferred_rys_task_fock_shell_classes", [])
+    if "preferred_rys_task_fock_shell_classes" not in profile:
+        return None
+    raw = profile["preferred_rys_task_fock_shell_classes"]
     if not isinstance(raw, list) or any(
         not isinstance(name, str) or not name for name in raw
     ):
@@ -97,7 +100,7 @@ def _qualified_rys_task_classes(
         )
     if len(raw) != len(set(raw)):
         raise ValueError("preferred Rys-task Fock classes contain duplicates")
-    return tuple(raw) if tuned else ()
+    return tuple(raw) if tuned else None
 
 
 def _profile_compatible(

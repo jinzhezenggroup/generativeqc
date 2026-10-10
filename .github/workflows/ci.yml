@@ -720,7 +720,7 @@ jobs:
       - name: Compile generated XC derivative consumers
         run: >-
           python3 tools/validate_xc.py --tier cuda-compile
-          --functionals PBE --nvcc "$CUDACXX"
+          --functionals PBE --nvcc "$CUDACXX" --target sm_120
           --cache build/xc-cache --output build/xc-compile
       - name: Save generated XC compile cache
         if: github.event_name != 'merge_group' && steps.xc_compile_cache.outputs.cache-hit != 'true'
@@ -749,6 +749,7 @@ jobs:
         run: >-
           python3 tools/validate_stationary_cuda_compile.py
           --nvcc "$CUDACXX" --cache build/stationary-cuda-compile
+          --architecture sm_120
       - name: Save stationary CUDA compile cache
         if: github.event_name != 'merge_group' && steps.stationary_cuda_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

@@ -158,6 +158,7 @@ def test_native_streaming_dispatch_preserves_fock_planes(
     )
     selection = next(item for item in profile.selections if item.spec.name == "dsss")
     # Retain dsss qualification without claiming classes omitted by this fixture.
+    assert profile.preferred_rys_task_fock_shell_classes is not None
     reduced = replace(
         profile,
         selections=(selection,),

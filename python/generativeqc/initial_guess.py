@@ -208,8 +208,10 @@ _MINAO_PRIMITIVES = (
 )
 
 
-def _minao_numeric_capacity(n: int, numbers: typing.Sequence[int]) -> int:
-    """Mirror native preliminary_numeric_capacity, including strict admission.
+def _minao_numeric_capacity(
+    n: int, numbers: typing.Sequence[int], library: object | None = None
+) -> int:
+    """Prefer the native preliminary_numeric_capacity formula when available.
 
     16 square matrices cover caller X/raw/output and validator/eigensolver
     copies. The remaining terms conservatively sum projection buffers, linear
@@ -218,10 +220,33 @@ def _minao_numeric_capacity(n: int, numbers: typing.Sequence[int]) -> int:
     """
     from generativeqc_compiler.common.resources import byte_product, checked_bytes
 
-    if type(n) is not int or n <= 0:
+    if type(n) is not int or not 1 <= n <= 2**63 - 1:
         raise ValueError("invalid MINAO target AO topology")
     if any(type(z) is not int or not 1 <= z <= 18 for z in numbers):
         raise ValueError("MINAO initial guess is currently qualified for H-Ar")
+    if not numbers:
+        raise ValueError("MINAO initial guess requires at least one atom")
+    query = (
+        None
+        if library is None
+        else getattr(library, "generativeqc_resource_minao_numeric_capacity_v1", None)
+    )
+    if query is not None:
+        query.argtypes = [
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_int32),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint64),
+        ]
+        query.restype = ctypes.c_int
+        atomic_numbers = (ctypes.c_int32 * len(numbers))(*numbers)
+        result = ctypes.c_uint64()
+        if query(n, atomic_numbers, len(numbers), ctypes.byref(result)) != 0:
+            raise ValueError("native MINAO numeric capacity query rejected topology")
+        return checked_bytes(int(result.value))
+    # Compatibility for older native libraries without the additive resource
+    # query, and for data-only, library-free resource contract tests. This path
+    # is never used by a current native build exposing the C++ query.
     source_n = checked_bytes(
         sum(
             1 if z <= 2 else 2 if z <= 4 else 5 if z <= 10 else 6 if z <= 12 else 9
@@ -319,7 +344,7 @@ def with_initial_guess_resources(
             # The same complete preparation bound is used by native admission.
             # One output matrix is retained separately for every batch member;
             # preparation is serialized, so only the largest remainder is live.
-            workspace = _minao_numeric_capacity(n, numbers) - seed
+            workspace = _minao_numeric_capacity(n, numbers, calculator._library) - seed
             retained = checked_bytes(retained + seed)
             largest_workspace = max(largest_workspace, workspace)
         extra = (

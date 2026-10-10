@@ -1072,6 +1072,8 @@ RccsdNativeState run_rccsd_native_state(
   // force/Lambda owners and conventional/CPU callers retain trial-state DIIS.
   solver_options.diis_input_residual =
       execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
+  solver_options.df_replay_auxiliary_batch =
+      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
   auto reference = reference_options(descriptor, phase_budget);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;

@@ -1,4 +1,4 @@
-"""Task-parallel Rys-K inventory and explicitly qualified target preferences."""
+"""Task-parallel Rys-K inventory and capability-gated default preferences."""
 
 from __future__ import annotations
 
@@ -77,25 +77,26 @@ def direct_rys_task_candidates(
 def preferred_rys_task_candidates(
     profile: ResolvedProductionProfile,
 ) -> tuple[KernelSelection, ...]:
-    """Use measured profile preferences, never an architecture-name allowlist.
+    """Use shared capability defaults unless an exact tuned profile overrides them.
 
-    Generation capability and performance qualification are independent. An
-    unsupported class in a supposedly qualified profile is an error rather
-    than a silently truncated optimization.
+    Overrides replace the shared classes, including an empty explicit opt-out.
+    They never transfer through compatibility. Missing override capability is a
+    manifest error; unsupported shared defaults retain the incumbent instead.
     """
-    if not profile.tuned:
+    if profile.portable:
         return ()
-    preferred = frozenset(profile.preferred_rys_task_fock_shell_classes)
-    if not preferred:
-        return ()
+    preferred = {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
+    override = profile.preferred_rys_task_fock_shell_classes if profile.tuned else None
     candidates = direct_rys_task_candidates(profile)
-    available = {candidate.spec.name for candidate in candidates}
-    missing = preferred - available
-    if missing:
-        raise ValueError(
-            "qualified Rys-task Fock classes lack generated capability: "
-            + ", ".join(sorted(missing))
-        )
+    if override is not None:
+        preferred = set(override)
+        available = {candidate.spec.name for candidate in candidates}
+        missing = preferred - available
+        if missing:
+            raise ValueError(
+                "qualified Rys-task Fock classes lack generated capability: "
+                + ", ".join(sorted(missing))
+            )
     return tuple(
         candidate for candidate in candidates if candidate.spec.name in preferred
     )

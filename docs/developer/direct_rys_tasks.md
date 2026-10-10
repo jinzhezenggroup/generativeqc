@@ -1,12 +1,11 @@
 # Independent task-parallel Direct Rys-K
 
-The currently qualified `sm_120` profile records value-only `_rys_task` AOT
-preferences for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`,
-`dpps` and `dspp` Direct exchange classes in the **production manifest**.
-The compiler does not use a hard-coded architecture-name allowlist: each exact,
-tuned profile may declare its independently measured preferred classes.
-Other classes and profiles retain the incumbent
-recurrence with the independently selected queue schedule. Selection freezes at provider
+Without an explicit exact-tuned override, compiled non-portable CUDA profiles
+default to value-only `_rys_task` AOT variants
+for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`, `dpps` and `dspp`
+Direct exchange classes when the target supports their packed-task schedule.
+Other classes and generic portable profiles retain the incumbent recurrence
+with the independently selected queue schedule. Selection freezes at provider
 preparation; it does not reselect the old component-lane `rys` experiment,
 select Coulomb J, or select analytic derivatives. Set
 `GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent` to disable task preference;
@@ -17,16 +16,27 @@ also set `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill` to roll back both promotions
 `integral/production_rys_tasks.py` intersects the compiled streaming-Fock
 inventory with `rys_task.py`'s bounded value capability. Eligibility requires
 one through three Rys roots, s/p/d shells, at most a p shell on the fourth center,
-and at most 64 Cartesian components. Capability and measured preference are
-separate: `preferred_rys_task_candidates` reads the exact tuned profile's
-`preferred_rys_task_fock_shell_classes` manifest metadata and checks each
-entry against the candidate inventory. The `sm_120` profile currently carries
-nine independently qualified classes; additional architectures can publish their
-own preferences **without editing compiler selection code**. Portable or
-compatible-but-not-exact profiles do not inherit performance preferences. Class
-capability alone never promotes an untested target: first use the independent
-matrix/sanitizer checks and paired complete PBE0 E+F benchmarks, then update
-that target's measured profile.
+and at most 64 Cartesian components. `preferred_rys_task_candidates` uses the
+same nine-class algorithmic policy on any compiled non-portable target. The
+compiler validates the actual target's schedule and the runtime intersects
+enabled incumbent coverage. A target need not repeat the full scientific
+numerical matrix just because its compute capability differs. Performance
+results remain device-specific evidence, not an assumed cross-GPU speedup.
+
+An exact tuned profile can replace this shared default with an explicit
+`preferred_rys_task_fock_shell_classes` list in the production manifest. A missing
+field means use the shared default; an explicit empty list disables preference.
+Every override entry must be present in the actual target's generated candidate
+inventory, otherwise generation rejects the stale or unsupported override.
+Compatible and non-tuned profiles discard the source profile's override and use
+the shared default; portable profiles always retain the incumbent. Unsupported
+shared-default classes retain their incumbent rather than causing an error.
+
+This reconciles the shared capability policy with independently measured profile
+choices: exact-profile evidence can change the class set without compiler edits,
+but absence of that evidence does not disable the shared policy. It deliberately
+replaces the earlier proposed rule that all unqualified profiles must retain the
+incumbent. See the [integration decision](../../.agents/notes/implemented/architecture/2026-10-10-rys-task-profile-overrides.md).
 
 `lowering/fock_rys_task.py` changes execution ownership: each lane in a
 128-thread packed CTA owns a complete admitted quartet. Its four 32-lane
@@ -65,7 +75,7 @@ substitute for measured occupancy or complete-endpoint performance.
 classes, using the existing comma-separated exact-class selection convention.
 Unset, empty, or `all` permits the compiled candidate inventory; `none` permits
 none. With the lowering selector unset or empty, this filter can only restrict
-the qualified nine-class preference, not expand it. Explicit `rys-task` selects
+the resolved default or exact-profile preference, not expand it. Explicit `rys-task` selects
 the full permitted capability inventory (twelve classes on `sm_120`), which is
 an experiment rather than a generally faster configuration. Both selections
 intersect enabled incumbent Fock coverage and freeze in the prepared K owner.

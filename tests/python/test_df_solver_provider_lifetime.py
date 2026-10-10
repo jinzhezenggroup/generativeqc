@@ -151,6 +151,7 @@ struct Owner {
   std::size_t build_layout() { return layout.total; }
   bool conventional_prepared=false;
   bool replay_matrix=false;
+  std::size_t replay_batch=0;
   bool pairs_enabled=false;
   struct { std::size_t total=1024,history_bytes=0; } layout;
   struct { unsigned synchronizations=0; std::size_t owned_device_bytes=0,numeric_capacity_bytes=0;

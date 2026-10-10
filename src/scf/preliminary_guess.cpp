@@ -25,6 +25,32 @@ double elapsed(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
 }
 
+/** One native numeric-payload formula for both actual preliminary admission
+ * and the Python/CLI planner's shape-only query. The MINAO element tables stay
+ * exclusively in integrals/minao_basis.cpp. No target SCF is prepared here. */
+std::size_t minao_numeric_capacity_shape(std::size_t n, std::size_t atom_count,
+                                         std::size_t source_n, std::size_t source_primitives) {
+  if (!n || !atom_count || !source_n)
+    throw std::invalid_argument("MINAO capacity requires nonempty AO/atom topology");
+  const auto checked_add = [](std::size_t a, std::size_t b) { return runtime::size_add(a, b); };
+  const auto checked_mul = [](std::size_t a, std::size_t b) { return runtime::size_mul(a, b); };
+  const auto n2 = checked_mul(n, n);
+  // X/raw/output and the strict validator's eigensolver and matrix copies,
+  // two cross-overlap buffers, source occupations and linear eigen workspace.
+  auto doubles = checked_add(checked_mul(16, n2), checked_mul(2, checked_mul(n, source_n)));
+  doubles = checked_add(doubles, checked_add(checked_mul(8, n), source_n));
+  auto bytes = checked_mul(sizeof(double), doubles);
+  // Sparse angular views, both Jet center arrays and primitive reservations;
+  // exclude the target's owned integrals, allocator headers and process RSS.
+  bytes = checked_add(bytes, checked_mul(512, checked_add(n, source_n)));
+  bytes = checked_add(bytes, checked_mul(256, atom_count));
+  bytes = checked_add(bytes, checked_mul(2 * sizeof(double), source_primitives));
+  bytes = checked_add(bytes, 8192);
+  if (bytes > static_cast<std::uint64_t>(INT64_MAX))
+    throw std::overflow_error("MINAO capacity exceeds portable int64 scope");
+  return bytes;
+}
+
 std::optional<std::vector<double>> prepare_impl(const PreparedFockPlan& target,
                                                 const PreliminaryOptions& policy,
                                                 PreliminaryDiagnostic& diagnostic,
@@ -157,35 +183,9 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   const auto checked_mul = [](std::size_t a, std::size_t b) { return runtime::size_mul(a, b); };
   const auto n = molecule::ao_count(system);
   const auto n2 = checked_mul(n, n);
-  if (options.kind == PreliminaryKind::Minao) {
-    const auto source_n = minao_source_ao_count(system);
-    const auto source_primitives = minao_source_primitive_count(system);
-    // Mirror _minao_numeric_capacity in the public planner. Conservative sum
-    // of phase inventories (not a claim that every term coexists):
-    // - 16 n^2 doubles: X/raw/output + the strict validator's 12 matrices,
-    //   including Jacobi input/eigenvectors/sorted eigenvectors and copies.
-    //   The separate occupation construction peaks below this inventory.
-    // - two n*ns projection buffers; source occupations; eight n-sized
-    //   64-bit slots for eigensolver values/order and electron-count arrays.
-    // - 512 bytes per target/source AO covers Cartesian AoViews, sparse
-    //   public expansions (through g), source shells and vector capacities.
-    // - 256 bytes per atom covers source atoms and both Jet center arrays;
-    //   exact reserved source primitive pairs need 16 bytes per primitive.
-    // - 8192 bytes covers bounded single-shell angular expansions and local
-    //   overlap recurrence/generated temporaries through target g/source p.
-    // Target S/Hcore/provider storage belongs to the target owner. Allocator
-    // metadata/runtime overhead remain outside the narrow numeric cap.
-    auto doubles = checked_add(checked_mul(16, n2), checked_mul(2, checked_mul(n, source_n)));
-    doubles = checked_add(doubles, checked_add(checked_mul(8, n), source_n));
-    auto bytes = checked_mul(sizeof(double), doubles);
-    bytes = checked_add(bytes, checked_mul(512, checked_add(n, source_n)));
-    bytes = checked_add(bytes, checked_mul(256, system.atoms.size()));
-    bytes = checked_add(bytes, checked_mul(2 * sizeof(double), source_primitives));
-    bytes = checked_add(bytes, 8192);
-    if (bytes > static_cast<std::uint64_t>(INT64_MAX))
-      throw std::overflow_error("MINAO capacity exceeds portable int64 scope");
-    return bytes;
-  }
+  if (options.kind == PreliminaryKind::Minao)
+    return minao_numeric_capacity_shape(n, system.atoms.size(), minao_source_ao_count(system),
+                                        minao_source_primitive_count(system));
   const auto cartesian = molecule::cartesian_ao_count(system);
   const auto c2 = checked_mul(cartesian, cartesian);
   std::size_t primitives = 0;
@@ -220,6 +220,26 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   if (bytes > static_cast<std::uint64_t>(INT64_MAX))
     throw std::overflow_error("preliminary SCF capacity exceeds portable int64 scope");
   return bytes;
+}
+
+std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
+                                               const std::int32_t* atomic_numbers,
+                                               std::size_t atom_count) {
+  if (!target_aos || !atomic_numbers || !atom_count ||
+      atom_count > std::numeric_limits<std::uint32_t>::max())
+    throw std::invalid_argument("invalid MINAO capacity query topology");
+  // The source's exact occupied-ANO counts come from the same native table as
+  // actual MINAO preparation. No synthetic target basis or integral tensors.
+  core::System elements;
+  elements.atoms.reserve(atom_count);
+  for (std::size_t index = 0; index < atom_count; ++index) {
+    const auto z = atomic_numbers[index];
+    if (z < 1 || z > 18)
+      throw std::invalid_argument("MINAO initial guess is currently qualified for H-Ar");
+    elements.atoms.push_back({z, {0.0, 0.0, 0.0}, 0});
+  }
+  return minao_numeric_capacity_shape(target_aos, atom_count, minao_source_ao_count(elements),
+                                      minao_source_primitive_count(elements));
 }
 
 void validate_preliminary_target(const core::System& system, const ResolvedFockBuild& strategy,
