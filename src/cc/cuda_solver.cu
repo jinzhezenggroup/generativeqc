@@ -763,8 +763,8 @@ struct Owner {
         diagnostic.df_auxiliary_slices += batch;
         ++diagnostic.df_auxiliary_tiles;
         diagnostic.df_virtual_operations +=
-            use_pairs          ? (batch > 1 ? generated::dfpairs::auxiliary_batched_operations
-                                            : generated::dfpairs::auxiliary_packed_operations)
+            use_pairs          ? (batch > 1 ? generated::dfpairs::auxiliary_batched_cuda_operations
+                                            : generated::dfpairs::auxiliary_packed_cuda_operations)
             : batch > 1        ? generated::dfhoist::auxiliary_batched_operations
             : plan.matrix_gemm ? generated::dfhoist::auxiliary_packed_operations
                                : generated::dfhoist::auxiliary_operation_count;

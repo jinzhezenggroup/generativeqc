@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -54,6 +54,106 @@ class SymbolicArenaPlan:
             "checked_product({" + ",".join(shape) + "})" if shape else "1"
             for shape in self.slots
         )
+
+
+@dataclass(frozen=True)
+class NativeCopyRoundTrips:
+    """Consecutive native FP64 copies returning to already populated storage.
+
+    The scientific Program and complete materialized arena remain unchanged.
+    Every triple names an audited producer, its sole-reader unit copy, and the
+    final unit copy whose original arena slot equals the producer's slot.
+    Skipping both copies therefore leaves the final pointer and value intact;
+    this does not introduce a view, donation, or a new lifetime assumption.
+    """
+
+    program_identity: str
+    arena_identity: str
+    triples: tuple[tuple[int, int, int], ...]
+
+    @property
+    def elided_nodes(self) -> tuple[int, ...]:
+        return tuple(number for triple in self.triples for number in triple[1:])
+
+    @property
+    def identity(self) -> str:
+        return canonical_hash(
+            {
+                "schema": "generativeqc.tensor.native-copy-roundtrips.v1",
+                "program": self.program_identity,
+                "arena": self.arena_identity,
+                "triples": self.triples,
+            }
+        )
+
+
+def analyze_native_copy_roundtrips(
+    program: Program,
+    *,
+    dimension_symbol: Callable[[Index], str],
+    execution_nodes: Sequence[Node] | None = None,
+) -> NativeCopyRoundTrips:
+    """Prove bounded elisions for the existing audited native FP64 emitter.
+
+    This is not an algebraic TensorIR rewrite: native singleton addition emits
+    exactly ``1.0 * source``, without a leading zero addition. Finite values,
+    signed zero and subnormals survive both copies bit-for-bit. The producer
+    must itself audit every output, preserving its earlier sticky error even
+    for nonfinite values. Matrix callbacks and borrowed inputs are excluded.
+
+    Adjacency, single-reader edges and the existing exact symbolic arena slot
+    equality prove that no intervening write or hidden reader can observe the
+    omitted storage. A future unsupported graph simply retains its copies.
+    """
+    arena = plan_symbolic_arena(
+        program, dimension_symbol=dimension_symbol, execution_nodes=execution_nodes
+    )
+    nodes = tuple(program.live_nodes if execution_nodes is None else execution_nodes)
+    readers: dict[Node, set[Node]] = {node: set() for node in nodes}
+    for node in nodes:
+        for source in node.inputs:
+            readers[source].add(node)
+    outputs = set(program.outputs.values())
+
+    def unit_copy(node: Node, source: Node) -> bool:
+        return (
+            node.op == "add"
+            and node.inputs == (source,)
+            and node.attrs["coefficients"] == ((1, 1),)
+            and node.spec.dtype == "float64"
+            and replace(source.spec, role=node.spec.role) == node.spec
+        )
+
+    def audited_scalar(node: Node) -> bool:
+        if node.spec.dtype != "float64":
+            return False
+        if node.op in ("add", "multiply", "transpose"):
+            return True
+        if node.op != "einsum" or len(node.inputs) != 2:
+            return False
+        labels = {label for operand in node.attrs["labels"] for label in operand}
+        return labels == set(node.attrs["output"])
+
+    triples = []
+    used_positions: set[int] = set()
+    for number in range(len(nodes) - 2):
+        positions = (number, number + 1, number + 2)
+        if any(position in used_positions for position in positions):
+            continue
+        producer, first, final = nodes[number : number + 3]
+        if (
+            audited_scalar(producer)
+            and unit_copy(first, producer)
+            and unit_copy(final, first)
+            and readers[producer] == {first}
+            and readers[first] == {final}
+            and producer not in outputs
+            and first not in outputs
+            and arena.node_slots[number] == arena.node_slots[number + 2]
+        ):
+            triples.append(positions)
+            used_positions.update(positions)
+    return NativeCopyRoundTrips(program.logical_hash, arena.identity, tuple(triples))
 
 
 def plan_symbolic_arena(

@@ -1,0 +1,230 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "gpu-numerical",
+  "subject": "bounded native copy roundtrip elimination in pair-enabled energy-only DF CCSD(T)",
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "revision": "d4b44b06489d44a517d3dfaecc6b7269f5b89b7a",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": null,
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "No mathematical DAG changes; exact program/copy identities are retained in copy-plans.json, not a global equation digest.",
+    "ir": "Original graph and complete arena remain intact; per-program identities are in copy-plans.json, not a global IR digest.",
+    "source": "Exact frozen parent plus measured-source.patch.gz reconstruct the initial library overlay; archive/binary hashes are retained, not a complete tree digest.",
+    "schedule": "The bounded elision plans are retained; no full formal endpoint schedule digest was registered."
+  },
+  "device": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+    "cuda_driver_api": 13020,
+    "cuda_runtime": 12090
+  },
+  "toolchain": {
+    "cuda_toolkit": "12.9.1",
+    "cuda_runtime_api": 12090,
+    "cuda_driver_api": 13020,
+    "architecture": "sm_120",
+    "build_type": "Release",
+    "aot_profile": "portable_cuda",
+    "build_recipe": "build.sh.gz"
+  },
+  "settings": {
+    "device": "cuda",
+    "precision": "FP64, pedantic matrix GEMMs, unchanged ascending-Q accumulation",
+    "forces_requested": false,
+    "diis_history": 8,
+    "packed_diis": false,
+    "q_batch_limit": 8,
+    "correlation_budget_bytes": 68719476736,
+    "timing_boundary": "fresh process: native molecular RHF, DF source, CCSD including admission/projection, independent expanded replay, FP64 (T), and owner teardown",
+    "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+    "qualification_limits": "Frozen pair-enabled baseline; energy-only, not master recomposition or force/Lambda/response qualification."
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": "Matched endpoints run on the recorded CUDA device under preserved finite Slurm allocation.",
+    "slurm_job": "2810",
+    "visibility": "0"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": "Adjacent audited producers, sole-reader unit copies and exact original slot return are proved; unsupported graphs retain their copies."
+    },
+    "source": {
+      "status": "pass",
+      "reason": "Host proof checks and compiler-only generation pass; eleven original generated artifacts and pair CPU header are unchanged."
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": "The ccache-enabled CUDA library links successfully and executes targeted solver/action/bitwise checks."
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": "Every matched independent total/(T) and expanded-replay gate passes; both energy outputs remain bit-identical."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "Four fresh complete matched energy-only endpoints retain all contraction/GEMM/capacity/trajectory counts and exactly 13908 fewer launches."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "No formal/global performance or force/Lambda/response promotion."
+    }
+  },
+  "timings": [
+    {
+      "selection": "baseline",
+      "seconds": 165.32293058908544,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "seconds": 160.86772636999376,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "seconds": 160.91762477508746,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "baseline",
+      "seconds": 165.67545826197602,
+      "workload": "energy-only",
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    }
+  ],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "The unchanged solver numeric capacity is retained per sample; complete physical allocated/peak process memory is not measured."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "Successful cached build and recipes are retained; complete formal compilation cost/budget is not measured."
+  },
+  "residuals": {
+    "physical_replay_r1": {
+      "maximum": 5.315799883609529e-13,
+      "tolerance": 1e-10
+    },
+    "physical_replay_r2": {
+      "maximum": 2.620571945208261e-13,
+      "tolerance": 1e-10
+    }
+  },
+  "block_errors": {
+    "total_energy_error": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0.0,
+      "max_absolute_error": 2.2026824808563106e-12,
+      "max_scaled_error": 0.00022026824808563106,
+      "rms_error": 2.2026824808563106e-12,
+      "shape": [
+        4
+      ]
+    },
+    "triples_energy_error": {
+      "passed": true,
+      "atol": 1e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 8.44810332800705e-14,
+      "max_scaled_error": 0.0008448103328007051,
+      "rms_error": 8.44810332800705e-14,
+      "shape": [
+        4
+      ]
+    },
+    "physical_replay_r1": {
+      "passed": true,
+      "atol": 1e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 5.315799883609529e-13,
+      "max_scaled_error": 0.005315799883609529,
+      "rms_error": 5.315799883609529e-13,
+      "shape": [
+        4
+      ]
+    },
+    "physical_replay_r2": {
+      "passed": true,
+      "atol": 1e-10,
+      "rtol": 0.0,
+      "max_absolute_error": 2.620571945208261e-13,
+      "max_scaled_error": 0.002620571945208261,
+      "rms_error": 2.620571945208261e-13,
+      "shape": [
+        4
+      ]
+    }
+  },
+  "solver_iterations": [
+    {
+      "sample_index": 0,
+      "observations": 20,
+      "evaluations": 38
+    },
+    {
+      "sample_index": 1,
+      "observations": 20,
+      "evaluations": 38
+    },
+    {
+      "sample_index": 2,
+      "observations": 20,
+      "evaluations": 38
+    },
+    {
+      "sample_index": 3,
+      "observations": 20,
+      "evaluations": 38
+    }
+  ],
+  "solver_trace_reason": "Iteration/evaluation counts, unchanged work and final physical replay are retained; full formal per-iteration traces are not exposed.",
+  "attachments": [
+    {
+      "path": "provenance.json",
+      "sha256": "3c8718592d0c09887de73279e3f7fd03a0b3ed92277eb3c94592812ae72eecc6"
+    },
+    {
+      "path": "copy-plans.json",
+      "sha256": "b35040c7aff72d34a0cf99abb64c8a7b9583e58edfba3c9342d5656cc962492d"
+    },
+    {
+      "path": "samples.json.gz",
+      "sha256": "e1f7b59380656525780d080d9a7da06fef8501761b99ff082f4e55d7ea2a693d"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Two observations per selection retain a scoped endpoint timing observation, not formal performance promotion."
+  },
+  "work": {
+    "primary_q_tiles": 2318,
+    "elided_launches_per_tile": 6,
+    "elided_launches": 13908,
+    "avoided_logical_copy_read_write_bytes": 7042781551104,
+    "traffic_interpretation": "logical native load/store bytes, not measured DRAM traffic",
+    "all_gemm_contraction_capacity_and_trajectory_counts_identical": true
+  },
+  "qualification_receipts": {
+    "host-final-tests.log": "..........................s                                              [100%]\n26 passed, 1 skipped in 1.61s",
+    "library-tests.log": ".........                                                                [100%]\n9 passed, 67 deselected in 25.23s",
+    "action-tests.log": ".....                                                                    [100%]\n5 passed, 7 deselected in 41.70s",
+    "bits-tests.log": ".                                                                        [100%]\n1 passed, 26 deselected in 23.38s",
+    "bits-memcheck.log": "========= COMPUTE-SANITIZER\nbitwise, canaries, and first-error gates passed\n========= ERROR SUMMARY: 0 errors",
+    "unchanged-generated.sha256": "b60eb861a75fef8efd30d7aaf2022ef01623fac2d8b1dd03421eac20b7bc97b2  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_rccsd_cpu.hpp\n20b921c153593a95c1cc89d5f22700e71dcde3b79055f238c815f07aa4021640  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_rccsd_cuda.cu\n1ac9553f02a2a116dd02069bbafdd475bb5efe8725cd0da30a559b64b350d848  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_cpu.hpp\n02f04a26f6ff881bc43ecc1037071c91a32cac091cb39a8277aebeb09b3a6ecf  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_cuda.cu\ncead77bd021fda50bba3bc08d31399c321afe1ac022b90c610143c9efcde6513  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_cuda.cuh\n7d1cb5070b414cc8eef2e0376226a91aa1b6ae7366bebd00bdeb9a73182f8839  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_core_cpu.hpp\nf0ffa9e80e15a1d3c73128d53b232de2cdb2418fd308ef42af32eba2d49c3e3d  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_core_cuda.cu\n39ae12d24d272bb9f2e1612f4c264c30aa601bd51779dc9679242133aa6dff76  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_core_cuda.cuh\n3536180cb8d2046a75c1be148e2e117a28b8b0168e69dbb65cacb91831b0cac1  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_hoisted_cpu.hpp\n648794b4dbfa23e8545d231463211319d261baaab34dcb59332fe9eb5baf491e  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_hoisted_cuda.cu\nbc5bec4a2e2fbf37d82cb7bb3ad880c13f0da185ec8ac05fea987f304296ba8e  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_hoisted_cuda.cuh\n2b699b56ec76736b3f7bb69419d54830cb5271a43aa815336978d350a6569fcf  /data/jzzeng/qc-cc-copy-roundtrips-20261010/candidate/generated/generated_df_ccsd_spectator_pairs_cpu.hpp",
+    "qualify-allocation.txt": "2809\n0",
+    "bits-allocation.txt": "2811\n1"
+  }
+}

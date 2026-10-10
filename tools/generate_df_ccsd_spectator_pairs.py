@@ -26,11 +26,14 @@ from generativeqc_compiler.cc.df_spectator_pairs import (
     build_ladder_pair_majorant,
     fold_occupied_ladder_pairs,
 )
+from generativeqc_compiler.tensor.native_arena import analyze_native_copy_roundtrips
 
 from tools import generate_df_ccsd_hoisted as hoisted
 from tools.generate_rccsd_native import (
     _cpu_function,
     _cuda_program,
+    _dim,
+    _execution_nodes,
     _occupied_pair_declaration,
     _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
@@ -312,6 +315,18 @@ def cuda_header() -> str:
         or _packed_batched_matrix_gemm(node) is not None
         for node in batched.live_nodes
     )
+    copy_metadata = []
+    for name in ("auxiliary_packed", "auxiliary_batched"):
+        program = programs()[name]
+        copies = analyze_native_copy_roundtrips(
+            program, dimension_symbol=_dim, execution_nodes=_execution_nodes(program)
+        )
+        operations = sum(node.op != "input" for node in program.live_nodes)
+        copy_metadata += [
+            f"inline constexpr std::size_t {name}_cuda_operations={operations - len(copies.elided_nodes)};",
+            f"inline constexpr std::size_t {name}_elided_copy_operations={len(copies.elided_nodes)};",
+            f'inline constexpr const char* {name}_copy_plan_hash="{copies.identity}";',
+        ]
     return "\n".join(
         [
             "// Generated occupied-spectator-pair DF CUDA declarations; do not edit.",
@@ -319,6 +334,7 @@ def cuda_header() -> str:
             '#include "generated_df_ccsd_spectator_pairs_cpu.hpp"',
             '#include "generated_df_ccsd_hoisted_cuda.cuh"',
             "namespace generativeqc::cc::generated::dfpairs {",
+            *copy_metadata,
             "struct CudaState : dfhoist::CudaState {",
             f"  const double* {PAIRED_TAU_INPUT}{{}};",
             "  tensor::PreparedContractions paired_contractions, paired_batched_contractions;",
@@ -364,6 +380,7 @@ def cuda_source() -> str:
                     else None
                 ),
                 batch_dim=batched,
+                elide_native_copy_roundtrips=name != "auxiliary",
             )
         )
     lines += [
