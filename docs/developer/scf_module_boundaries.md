@@ -135,6 +135,20 @@ physical pair orientation, original screening and generated-class ownership,
 without new resident storage or another full-domain traversal. This changes
 execution partitioning, not derivative algebra or the number of physical passes.
 
+CUDA KS final-state export keeps the shared physical/canonical acceptance policy
+and orbital-energy weighted-density expression. The optional
+`GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION=1` route computes validation products
+from authenticated resident D/F/C/energies with borrowed matrix-library resources
+and the shared tensor primitive. It reuses four phase-local iteration matrices
+and an arena-charged bounded reduction packet array; it does not upload detached
+host matrices or allocate another dense arena/handle. The default is `0`; other
+values are errors. Small or unavailable-library owners, and repeated exports
+with a published stationary-weight lease, retain reference validation without
+recycling leased storage. An admitted provider failure is explicit, not a silent
+reference retry. See the
+[resident final-validation decision](../../.agents/notes/implemented/performance/2026-10-10-ks-resident-final-validation.md)
+for layout, lifetime and qualification rationale.
+
 CUDA DF is not a single interchangeable `cuda_rhf` execution mode.
 Raw/metric source setup, bounded J/K contraction, source-backed derivatives,
 persistent solver state and final-state publication have distinct owners.

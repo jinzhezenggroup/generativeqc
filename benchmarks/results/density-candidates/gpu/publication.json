@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 51468,
+      "bytes": 51460,
       "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "f4df56c2a8f51db1bf9015a922ed48859a79b469a36e02a5651686ad7f88b642"
+      "sha256": "4fe248822afaa2d8117e343e0338f86f8fa3702a13f34f4d0e44204e49286af4"
     },
     {
       "bytes": 35209,
@@ -25,15 +25,15 @@
       "role": "samples"
     },
     {
-      "path": "evidence-timings/water_tzvp.json",
-      "bytes": 105505,
-      "sha256": "a4078c4362b33f0bdce1396bd85fae88b2e6912f5d5675701e896816edbecae8",
+      "path": "evidence-timings/water_tzvp.json.gz",
+      "bytes": 9076,
+      "sha256": "38444c1471c9869eb54dee6d517ea5f98e4d8e3edb838ad7866990e749eb744d",
       "role": "samples"
     },
     {
-      "path": "evidence-timings/co2_tzvp.json",
-      "bytes": 105431,
-      "sha256": "5bb3fd4bcf4841487ffab16b2774a6763abf2ef2b15792ed4879d8ea1298e56f",
+      "path": "evidence-timings/co2_tzvp.json.gz",
+      "bytes": 9158,
+      "sha256": "b158e68f48a8adb4a0835e7247b0005d7f00dc17a270c8e1d67a8f47f0cc77b5",
       "role": "samples"
     },
     {
@@ -55,9 +55,9 @@
       "role": "samples"
     },
     {
-      "path": "evidence-timings/oh_minus_diffuse.json",
-      "bytes": 105659,
-      "sha256": "9ef54b02097c602108d5e8f50a491015f408922310153c0bd1a7695e87fc78d7",
+      "path": "evidence-timings/oh_minus_diffuse.json.gz",
+      "bytes": 9088,
+      "sha256": "b51ae171a1a3ac830a84f9f2533ca677f325a5ccfdca150ab0ba1c681b3416c3",
       "role": "samples"
     }
   ],

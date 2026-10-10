@@ -1,5 +1,15 @@
 {
   "families": {
+    "ks-resident-final-validation-default-20261011": {
+      "owner": "bounded automatic resident direct PBE0/RKS final-state proof",
+      "reason": "Lossless receipts retain all 40 complete unset-vs-zero E/F observations, both failed admission records, the 17-sample timed-out attempt without pooling, independent references and exact scheduler/cache/replay recipes. Complete vectors are stored once; large build listings remain ignored with exact digests. No broad formal performance envelope, external archive or budget increase.",
+      "review_document": "benchmarks/results/ks-resident-final-validation-default-20261011/README.md"
+    },
+    "ks-resident-final-validation-20261010": {
+      "owner": "opt-in resident KS final-state products and complete restricted PBE0 endpoints",
+      "reason": "Lossless compact records retain both separate frozen cohorts, all 80 timed E/F records, numerical/work/seed/lease gates, historical below-gate and failed attempts, independent references and source/scheduler/cache receipts. No broad default promotion, external archive, GPU rerun or storage-budget increase.",
+      "review_document": "benchmarks/results/ks-resident-final-validation-20261010/README.md"
+    },
     "pbe0-restricted-point-default-20261010": {
       "owner": "producer-bound restricted PBE0 complete default-route qualification",
       "reason": "Lossless compact source-frozen 48/96 original endpoint records retain setup, priming, all 40 measured E/F vectors, actual dispatch and semantic work, immutable seed identities and independent references. No profiler arrays, binaries, peak-memory invention, external archive or storage-budget increase.",
@@ -205,12 +215,28 @@
   },
   "files": [
     {
-      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
-      "family": "pbe0-restricted-point-default-20261010",
-      "bytes": 214312,
-      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
+      "bytes": 197796,
       "classification": "required-compact-accepted-evidence",
-      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
+      "family": "ks-resident-final-validation-default-20261011",
+      "path": "benchmarks/results/ks-resident-final-validation-default-20261011/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "621564ea80107ef7010f88ae3fb5956ef37b8553c07e9c5438b389f98c94c6cd"
+    },
+    {
+      "bytes": 227600,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/raw-receipts.json.xz",
+      "role": "decision-or-audit-record",
+      "sha256": "310a27e8f93477d428a8a176f9e9749e4de788f0c041f66cce976ef629c7b9ff"
+    },
+    {
+      "bytes": 381579,
+      "classification": "required-compact-accepted-evidence",
+      "family": "ks-resident-final-validation-20261010",
+      "path": "benchmarks/results/ks-resident-final-validation-20261010/validation.json.gz",
+      "role": "endpoint-or-numerical-samples",
+      "sha256": "99d597e55a326868ba7a0d670b6330b2f2658341bbe50a1cbf8370a348f9008c"
     },
     {
       "bytes": 145857,
@@ -645,12 +671,20 @@
       "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
     },
     {
-      "bytes": 382561,
+      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
+      "family": "pbe0-restricted-point-default-20261010",
+      "bytes": 214312,
+      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
+    },
+    {
+      "bytes": 300235,
       "classification": "required-compact-accepted-evidence",
       "family": "retention-238",
       "path": "benchmarks/results/retention-238/migration.json",
       "role": "scientific-record",
-      "sha256": "0350f91c92ec350a5b9527b5989a5ee1f10e1e1c0d338adf39e1dd94ba1af7d7"
+      "sha256": "43fc8bc29c8bcbb8954dbe96b40020a9e4ba204588897422ff8dca411374d5aa"
     },
     {
       "bytes": 230258,

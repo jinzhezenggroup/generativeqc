@@ -37,6 +37,9 @@ struct ValidationInputs {
   const int* info{};
   std::uint64_t expected_generation{};
   bool physical_fock{};
+  // KS exports these operator buffers as row-major; C remains column-major.
+  // Preserve tiny allowed asymmetries instead of treating A and A^T as equal.
+  bool transposed_operators{};
 };
 // J/K use the existing row-major provider layout; validation uses column major.
 void launch_validation_fock(cudaStream_t stream, std::size_t n, const double* hcore,
