@@ -81,9 +81,9 @@ class NativeContractTests(unittest.TestCase):
     def test_repository_coverage_and_reference(self) -> None:
         declarations = validate(ROOT)
         # Exact current inventory is a reviewed audit, not a wildcard allowance.
-        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 82)
+        self.assertEqual(sum(d.kind == "c-function" for d in declarations), 83)
         self.assertEqual(sum(d.kind == "cpp-type" for d in declarations), 11)
-        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 42)
+        self.assertEqual(sum(d.kind == "cpp-operation" for d in declarations), 43)
         self.assertEqual(
             (ROOT / REFERENCE).read_text(encoding="utf-8"), render(declarations)
         )
