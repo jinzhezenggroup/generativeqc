@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from _cpp_source_support import (
     cpp_function_declaration,
+    cpp_if_block,
     cpp_function_definition,
     cpp_record_definition,
 )
@@ -59,3 +60,18 @@ def test_missing_template_and_unbalanced_body_are_errors() -> None:
         cpp_function_definition("void f() {}", "f", include_template=True)
     with pytest.raises(ValueError, match="unclosed C\\+\\+ '\\{'"):
         cpp_function_definition("void f() {", "f")
+
+
+def test_if_block_skips_unbraced_guards_and_string_braces() -> None:
+    source = """
+if (retain_resident) additional += 10;
+if (retain_resident /* guarded lease */) {
+  const char* marker = "}";
+  if (ready) { ++count; }
+}
+"""
+    block = cpp_if_block(source, "retain_resident")
+    assert block.startswith("if (retain_resident /* guarded lease */) {")
+    assert block.endswith("\n}")
+    with pytest.raises(ValueError, match="found 2"):
+        cpp_if_block("if (ready) {} if (ready) {}", "ready")

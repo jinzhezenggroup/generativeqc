@@ -6,8 +6,9 @@ from pathlib import Path
 from generativeqc_compiler.integral.direct_resident_schedule import (
     emit_direct_resident_psss_schedule_header,
 )
+from _cpp_source_support import cpp_function_definition, cpp_if_block
 from test_coulomb_optional_allocation import compile_cached_probe
-from test_direct_jk_optional_allocation import STUBS, _definition
+from test_direct_jk_optional_allocation import STUBS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -16,10 +17,10 @@ def test_resident_capacity_and_complete_view_admission(tmp_path: Path) -> None:
     """Zero, over-limit, null and complete leases select the intended owner."""
     source = (ROOT / "src/scf/cuda/direct_angular_force.cu").read_text()
     definitions = "\n".join(
-        _definition(source, marker)
-        for marker in (
-            "bool direct_force_resident_bra_capacity_supported(",
-            "bool direct_force_resident_bra_schedule_available(",
+        cpp_function_definition(source, name)
+        for name in (
+            "direct_force_resident_bra_capacity_supported",
+            "direct_force_resident_bra_schedule_available",
         )
     )
     cpp, binary = tmp_path / "admission.cpp", tmp_path / "admission"
@@ -53,7 +54,7 @@ int main() {
 def test_partial_resident_allocation_preserves_bounded_lease(tmp_path: Path) -> None:
     """OOM drains pending uploads and retires only optional views; errors propagate."""
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    block = _definition(source, "  if (retain_resident) {")
+    block = cpp_if_block(source, "retain_resident")
     stubs = STUBS.replace("CudaDirectJkPlan", "GeneratedExchangePlan").replace(
         "  std::size_t device_bytes = 0;",
         "  std::size_t device_bytes = 0;\n"

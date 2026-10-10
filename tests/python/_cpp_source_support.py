@@ -175,3 +175,28 @@ def cpp_record_definition(source: str, name: str) -> str:
         found.append((match.start(), _closing(code, begin, "{", "}") + 1))
     start, end = _unique(found, name)
     return source[start:end]
+
+
+def cpp_if_block(source: str, condition_prefix: str) -> str:
+    """Extract one braced production if-body, matching a stable condition prefix.
+
+    This is reserved for host-only execution of CUDA admission/rollback code.
+    It skips single-statement guards and ignores comments, literals and spacing.
+    """
+    code = _code_only(source)
+    target = "".join(condition_prefix.split())
+    matches = []
+    for match in re.finditer(r"\bif\s*\(", code):
+        opening = code.find("(", match.start(), match.end())
+        closing = _closing(code, opening, "(", ")")
+        condition = "".join(code[opening + 1 : closing].split())
+        if not condition.startswith(target):
+            continue
+        brace = closing + 1
+        while brace < len(code) and code[brace].isspace():
+            brace += 1
+        if brace >= len(code) or code[brace] != "{":
+            continue
+        matches.append((match.start(), _closing(code, brace, "{", "}") + 1))
+    start, end = _unique(matches, f"if({condition_prefix}...)")
+    return source[start:end]
