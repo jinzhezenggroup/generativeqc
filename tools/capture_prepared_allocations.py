@@ -214,17 +214,39 @@ def verify_source(root: Path, manifest: dict[str, Any]) -> None:
 
 
 def workload(method: str) -> dict[str, Any]:
-    """Pin ragged inputs, every property request, and geometry invalidation."""
+    """Pin ragged inputs and an internal displacement, not a rigid translation.
+
+    Moving only the final atom changes molecular distances, so unchanged stale
+    integrals/results cannot pass merely through translation invariance. The
+    exact moved coordinates belong to the pinned workload, not observer policy.
+    """
     hydrogen = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
     water = [(8, (0.0, 0.0, 0.0)), (1, (1.43, 0.0, 1.11)), (1, (-1.43, 0.0, 1.11))]
+    systems = [hydrogen, water, hydrogen]
+    moved_dz = 0.01
+    moved_coordinates = [
+        [
+            (
+                coordinate_x,
+                coordinate_y,
+                coordinate_z + (moved_dz if atom_index == len(atoms) - 1 else 0.0),
+            )
+            for atom_index, (
+                _,
+                (coordinate_x, coordinate_y, coordinate_z),
+            ) in enumerate(atoms)
+        ]
+        for atoms in systems
+    ]
     return {
         "method": method,
         "basis": "sto-3g",
         "precision": "fp64",
         "density_fitting": "none",
         "device_id": 0,
-        "systems": [hydrogen, water, hydrogen],
-        "moved_dz": 0.01,
+        "systems": systems,
+        "moved_dz": moved_dz,
+        "moved_coordinates": moved_coordinates,
         "endpoints": ENDPOINTS,
         "energy_gate": 1e-10,
         "force_gate": 1e-9,
@@ -468,13 +490,7 @@ def capture(arguments: argparse.Namespace, actual_identity: dict[str, Any]) -> N
     release.argtypes, release.restype = [ctypes.c_void_p], None
     case = workload(arguments.method)
     systems = case["systems"]
-    coordinates = [
-        [
-            (coordinate_x, coordinate_y, coordinate_z + case["moved_dz"])
-            for _, (coordinate_x, coordinate_y, coordinate_z) in atoms
-        ]
-        for atoms in systems
-    ]
+    coordinates = case["moved_coordinates"]
     config = {
         key: case[key]
         for key in ("method", "basis", "precision", "density_fitting", "device_id")

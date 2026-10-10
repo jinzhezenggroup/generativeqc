@@ -154,6 +154,18 @@ reverified before this evidence append; the append does not change the frozen
 tree. Every full residency result remains `INCOMPLETE`, with a null zero-round-
 trip assertion and no endpoint timing claim.
 
+## Workload compatibility (2026-10-10)
+
+The shared audit workload now pins an internal final-atom displacement, rather
+than translating every atom equally. The residency producer consumes those
+exact pinned coordinates too. Retained v1 limits remain bound to their original
+rigid-translation workload and source/binary identities: changing their workload
+hash without fresh measurements would invent qualification for different work.
+Tests retain the historical selector and explicitly reject the new workload;
+current-policy pinning is tested with clearly synthetic CPU metadata, not a
+relabeled GPU baseline. A fresh non-rigid observed-work policy remains required
+before that optional assertion can be used on current captures.
+
 ## References
 
 - [Device-ledger lifetime source qualification](2026-10-10-device-ledger-lifetime-fence-owner.md)

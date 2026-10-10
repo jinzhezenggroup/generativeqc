@@ -150,7 +150,6 @@ python tools/capture_prepared_residency.py --pin --method rhf \
   --library "$GENERATIVEQC_LIBRARY" \
   --collector .artifacts/residency-audit/collector.so \
   --cupti-library "$CUPTI_ROOT/lib64/libcupti.so" \
-  --work-ratchet manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json \
   --toolchain '<verified compiler/build/cache identity>' \
   --expected .artifacts/residency-audit/rhf-expected.json
 ```
@@ -177,14 +176,22 @@ total nodes per definition (`--graph-node-limit`, at most 4096) and nesting dept
 
 ### Observed replay work ratchet
 
-The optional `--work-ratchet` selects independently reviewed limits from
-`manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json`. Supply the
+The optional `--work-ratchet` selects independently reviewed limits for the
+complete declared workload. Supply the
 same file for `--pin` and `--capture`. The whole policy SHA-256 and selected
 profile are pinned outside capture and rechecked after execution; pinning never
 learns or raises limits from the run being checked. Matching uses the complete
 declared workload, including method, precision, systems, endpoint properties and
 numerical gates. The retained RHF/UHF profiles cover the fixed direct-FP64
 H2/water/H2 warm energy/force histories, not arbitrary systems or other owners.
+
+The retained `manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json`
+profiles use the historical rigid-translation workload. Current producers pin
+and execute a non-rigid final-atom displacement; the old profiles therefore
+fail the exact-workload gate and must not be relabeled with the new workload
+hash. Capture without an observed-work assertion until a matching independently
+reviewed policy has fresh source-matched evidence. Omitting this optional gate
+does not establish work boundedness or complete residency acceptance.
 
 `source-work-ratchet.json` recomputes source/API/activity joins from the bounded
 raw journals. It checks each selected public hot region by actual source owner

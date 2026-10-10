@@ -20,7 +20,7 @@ from test_cupti_source_capture import (
 
 from tools import capture_prepared_residency
 from tools.audit_replay_allocations import InvalidReceipt
-from tools.capture_prepared_allocations import workload
+from tools.capture_prepared_allocations import ENDPOINTS, workload
 from tools.cupti_source_capture import WORK_COUNTERS, summarize_sources
 from tools.cupti_source_ratchet import (
     LEGACY_SCHEMA,
@@ -34,6 +34,24 @@ from tools.cupti_source_ratchet import (
 CASE = {"method": "synthetic", "basis": "fixture", "precision": "fp64"}
 ROOT = Path(__file__).resolve().parents[2]
 QUALIFIED = ROOT / "manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json"
+
+
+def legacy_translation_workload(method: str) -> dict[str, Any]:
+    """Reproduce the retained descriptor, not a receipt for today's displacement."""
+    hydrogen = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
+    water = [(8, (0.0, 0.0, 0.0)), (1, (1.43, 0.0, 1.11)), (1, (-1.43, 0.0, 1.11))]
+    return {
+        "method": method,
+        "basis": "sto-3g",
+        "precision": "fp64",
+        "density_fitting": "none",
+        "device_id": 0,
+        "systems": [hydrogen, water, hydrogen],
+        "moved_dz": 0.01,
+        "endpoints": ENDPOINTS,
+        "energy_gate": 1e-10,
+        "force_gate": 1e-9,
+    }
 
 
 def policy() -> dict[str, Any]:
@@ -435,10 +453,21 @@ def test_changed_workload_and_changed_policy_do_not_reuse_an_independent_pin(
 def test_retained_profiles_match_only_their_exact_qualified_workload(
     method: str,
 ) -> None:
-    profile = load_work_ratchet(QUALIFIED, workload(method))["profile"]
+    profile = load_work_ratchet(QUALIFIED, legacy_translation_workload(method))[
+        "profile"
+    ]
     assert profile["name"] == f"prepared-{method}-direct-fp64-h2-water-h2-v1"
     assert [row["name"] for row in profile["regions"]] == ["energy-warm", "force-warm"]
     assert profile["baseline"]["slurm_job_id"] == "6933"
+
+
+@pytest.mark.parametrize("method", ["rhf", "uhf"])
+def test_historical_limits_cannot_be_relabeled_for_nonrigid_geometry(
+    method: str,
+) -> None:
+    """Old limits remain bound to old work; changed inputs require fresh evidence."""
+    with pytest.raises(InvalidReceipt, match="complete workload"):
+        load_work_ratchet(QUALIFIED, workload(method))
 
 
 def test_phase_owner_role_is_an_alternate_projection_not_extra_work() -> None:
@@ -499,7 +528,11 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     binary = tmp_path / "not-a-library"
     binary.write_bytes(b"metadata-double-not-executable")
     limits = tmp_path / "independent-policy.json"
-    limits.write_bytes(QUALIFIED.read_bytes())
+    synthetic_policy = policy()
+    synthetic_policy["profiles"][0]["workload_sha256"] = workload_digest(
+        workload("rhf")
+    )
+    limits.write_text(json.dumps(synthetic_policy))
     arguments = SimpleNamespace(
         source_manifest=manifest,
         library=binary,

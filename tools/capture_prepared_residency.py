@@ -143,13 +143,7 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
     arguments.output.mkdir(parents=True)
     case = workload(arguments.method)
     systems = case["systems"]
-    coordinates = [
-        [
-            (coordinate_x, coordinate_y, coordinate_z + case["moved_dz"])
-            for _, (coordinate_x, coordinate_y, coordinate_z) in atoms
-        ]
-        for atoms in systems
-    ]
+    coordinates = case["moved_coordinates"]
     config = {
         key: case[key]
         for key in ("method", "basis", "precision", "density_fitting", "device_id")
