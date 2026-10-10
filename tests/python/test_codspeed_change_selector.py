@@ -78,40 +78,39 @@ def _select(repository: Path, base: str, head: str) -> str:
 
 
 @pytest.mark.parametrize(
-    ("path", "extra"),
+    "path",
     [
-        ("src/dft/xc.cpp", "wb97mv"),
-        ("src/scf/solver.cpp", "wb97mv"),
-        ("src/methods/rks.cpp", "wb97mv"),
-        ("src/integrals/eri.cpp", "wb97mv"),
-        ("include/generativeqc.h", "wb97mv"),
-        ("python/generativeqc/calculator.py", "wb97mv"),
-        ("python/generativeqc_compiler/method/spec.py", "wb97mv"),
-        ("python/generativeqc_compiler/xc/spec.py", "wb97mv"),
-        ("python/generativeqc_compiler/integral/eri.py", "wb97mv"),
-        ("manifests/method.json", "wb97mv"),
-        ("upstream/libxc/functional.c", "wb97mv"),
-        ("tools/libxc_metadata.py", "wb97mv"),
-        ("benchmarks/test_cpu_codspeed.py", "wb97mv"),
-        (".github/workflows/ci.yml", "wb97mv"),
-        ("docs/README.md", ""),
-        ("tools/render_python_api_doc.py", ""),
-        ("manifests/maintenance/state.json", ""),
-        ("src/xtb/native/runtime.cpp", ""),
-        ("tools/unrelated.py", ""),
-        ("tests/python/test_unrelated.py", ""),
+        "src/dft/xc.cpp",
+        "src/scf/solver.cpp",
+        "src/methods/rks.cpp",
+        "src/integrals/eri.cpp",
+        "include/generativeqc.h",
+        "python/generativeqc/calculator.py",
+        "python/generativeqc_compiler/method/spec.py",
+        "python/generativeqc_compiler/xc/spec.py",
+        "python/generativeqc_compiler/integral/eri.py",
+        "manifests/method.json",
+        "upstream/libxc/functional.c",
+        "tools/libxc_metadata.py",
+        "benchmarks/test_cpu_codspeed.py",
+        ".github/workflows/ci.yml",
+        "docs/README.md",
+        "tools/render_python_api_doc.py",
+        "manifests/maintenance/state.json",
+        "src/xtb/native/runtime.cpp",
+        "src/cc/df_triples_cuda.cu",
+        "tools/generate_df_occupied_triples.py",
+        "tools/unrelated.py",
+        "tests/python/test_unrelated.py",
     ],
 )
-def test_changed_path_selects_bounded_extras(
-    repository: Path, path: str, extra: str
-) -> None:
+def test_changed_path_only_selects_whether_to_run(repository: Path, path: str) -> None:
     base = _git(repository, "rev-parse", "HEAD")
     head = _commit_file(repository, path)
     irrelevant = path.startswith(("docs/", "tests/", "manifests/maintenance/"))
     irrelevant = irrelevant or path == "tools/render_python_api_doc.py"
     expected_run = 0 if irrelevant else 1
     assert _select(repository, base, head) == (
-        f"GENERATIVEQC_CODSPEED_EXTRA_CASES={extra}\n"
         f"GENERATIVEQC_CODSPEED_RUN={expected_run}\n"
     )
 
@@ -121,17 +120,19 @@ def test_base_only_change_does_not_expand_pr_tier(repository: Path) -> None:
     head = _commit_file(repository, "docs/change.md")
     _git(repository, "checkout", "main")
     base = _commit_file(repository, "src/dft/base-only.cpp")
-    assert _select(repository, base, head) == (
-        "GENERATIVEQC_CODSPEED_EXTRA_CASES=\nGENERATIVEQC_CODSPEED_RUN=0\n"
-    )
+    assert _select(repository, base, head) == ("GENERATIVEQC_CODSPEED_RUN=0\n")
 
 
-def test_sensitive_rename_still_selects_advanced_endpoint(repository: Path) -> None:
+def test_sensitive_rename_still_runs_shared_core(repository: Path) -> None:
     base = _commit_file(repository, "src/dft/removed.cpp")
     _git(repository, "mv", "src/dft/removed.cpp", "relocated.txt")
     _git(repository, "commit", "-m", "rename")
     head = _git(repository, "rev-parse", "HEAD")
-    assert (
-        _select(repository, base, head) == "GENERATIVEQC_CODSPEED_EXTRA_CASES=wb97mv\n"
-        "GENERATIVEQC_CODSPEED_RUN=1\n"
-    )
+    assert _select(repository, base, head) == "GENERATIVEQC_CODSPEED_RUN=1\n"
+
+
+def test_mixed_irrelevant_and_relevant_changes_still_run(repository: Path) -> None:
+    base = _git(repository, "rev-parse", "HEAD")
+    _commit_file(repository, "docs/change.md")
+    head = _commit_file(repository, "src/cc/df_triples_cuda.cu")
+    assert _select(repository, base, head) == "GENERATIVEQC_CODSPEED_RUN=1\n"

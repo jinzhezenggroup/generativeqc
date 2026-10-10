@@ -13,6 +13,7 @@
 #include <tuple>
 #include <type_traits>
 
+#include "dft/cuda_ks_final_validation_policy.hpp"
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
@@ -28,6 +29,7 @@
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/mean_field_setup.hpp"
+#include "scf/cuda/resident_final_validation.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/scf_constants.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
@@ -109,6 +111,7 @@ std::size_t sum(std::size_t a, std::size_t b) {
 }
 /** Numeric arena view shared by allocation and metadata-only planning. */
 struct KsStateStorage {
+  scf::cuda_df::ValidationPartial* final_validation_partial{};
   double *hcore{}, *overlap{}, *x{}, *j{}, *exchange{}, *range_exchange{}, *density{}, *proposal{},
       *warm{}, *warm_orbitals{}, *fock{}, *residual{}, *tmp1{}, *tmp2{}, *effective{},
       *masked_matrix_output{}, *fock_history{}, *residual_history{}, *gram{}, *raw_gram{},
@@ -203,6 +206,12 @@ struct KsStateStorage {
     reserve(final_enabled, 1);
     reserve(control, 1);
     reserve(scalar_records, kCudaKsChunkCapacity);
+    // Reuse four existing iteration matrices after final-frame export. Only
+    // bounded scalar reductions need additional, publicly charged storage.
+    if (MatrixLibraryOwner::provider_allowance(static_cast<int>(n)))
+      reserve(final_validation_partial, resident_final_validation_partial_count(n));
+    else
+      final_validation_partial = nullptr;
     return bytes;
   }
 };
@@ -2251,11 +2260,25 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
-    // The derivative snapshot always asks for W. Stage both one-electron
-    // weights before the existing final-state drain so downstream native force
-    // consumers can borrow them without a D/W H2D round trip.
+    const bool direct_pbe0 =
+        pbe0_rks_final_validation_composition(
+            is_semilocal_family(functional, SemilocalFamily::Pbe), exchange_coefficient,
+            options.semilocal_exchange_scale, options.semilocal_correlation_scale) &&
+        has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction &&
+        !nonlocal_correlation;
+    const bool default_device_validation = device_final_validation_default_eligible(
+        n, spins, direct_pbe0, !precision_schedule.any_lower_precision());
+    const bool device_validation = device_final_validation_requested(
+                                       std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
+                                       default_device_validation) &&
+                                   final_validation_partial && matrix_products.library_enabled() &&
+                                   !final_stationary_weights_ready;
+    // A previously published W/total-D lease stays valid for this token. A
+    // repeated read must not borrow its storage, even if it could rebuild W.
+    // A device proof borrows tmp1/tmp2 before staging the force consumer's W/D.
+    // The reference fallback retains its original single-drain staging order.
     bool staged_stationary_weights = false;
-    if (compute_weighted_density && !final_stationary_weights_ready) {
+    const auto stage_stationary_weights = [&] {
       constexpr unsigned threads = 128;
       const auto weight_elements = spins == 1 ? matrix : elements;
       const auto weight_blocks = static_cast<unsigned>((weight_elements + threads - 1) / threads);
@@ -2281,7 +2304,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaGetLastError());
       }
       staged_stationary_weights = true;
-    }
+    };
+    if (compute_weighted_density && !final_stationary_weights_ready && !device_validation)
+      stage_stationary_weights();
 
     KsPhysicalState physical;
     KsFinalStateCandidate candidate;
@@ -2346,12 +2371,81 @@ struct CudaKsPlan::Impl : KsStateStorage {
     limits.energy_tolerance = options.energy_tolerance;
     limits.maximum_corrections = 0;
     limits.require_canonicality = true;
+    scf::solver::FinalStateOperations operations;
+    if (device_validation) {
+      // The exported host frame and resident inputs were read under the same
+      // live token above. The private callback admits only that exact request,
+      // not arbitrary detached arrays carrying copied identity labels.
+      final_stationary_weights_ready = false;
+      operations.products = [&](const auto& identity, const auto& metric, const auto& core,
+                                double nuclear, const auto& densities, const auto& physical_fock,
+                                const auto& frame, const auto& validation_limits, auto& diagnostic,
+                                auto& product_detail) {
+        if (token() != current || identity != current.identity.determinant ||
+            &metric != &provider.one_electron().overlap ||
+            &core != &provider.one_electron().hcore || densities != physical.density ||
+            physical_fock.spins != physical.fock || frame.spins.size() != candidate.spins.size())
+          throw std::invalid_argument("CUDA KS validation products lost their exported owner");
+        std::array<scf::cuda_df::ValidationInputs, 2> inputs{};
+        for (unsigned spin = 0; spin < spins; ++spin) {
+          if (frame.spins[spin].vectors != candidate.spins[spin].vectors ||
+              frame.spins[spin].values != candidate.spins[spin].values)
+            throw std::invalid_argument("CUDA KS validation products lost their exported frame");
+          auto& input = inputs[spin];
+          const auto offset = static_cast<std::size_t>(spin) * matrix;
+          input.n = n;
+          input.occupied = occupations[spin];
+          input.weight = spins == 1 ? 2 : 1;
+          input.f = fock + offset;
+          input.s = overlap;
+          input.h = hcore;
+          input.d = density + offset;
+          input.c = final_coefficients + offset;
+          input.values = final_eigenvalues + static_cast<std::size_t>(spin) * n;
+          input.info = final_solver_info + spin;
+          input.physical_fock = true;
+          input.transposed_operators = true;
+        }
+        const ResidentFinalValidationWorkspace workspace{
+            {tmp1, tmp2, residual, effective},
+            final_validation_partial,
+            resident_final_validation_partial_count(n)};
+        const bool valid = resident_final_state_products(
+            matrix_products.view(), std::span(inputs.data(), spins), workspace,
+            validation_limits.require_canonicality, nuclear, diagnostic, product_detail);
+        const auto diagnostic_bytes = spins * sizeof(scf::cuda_df::ValidationPartial);
+        movement.scalar_d2h_bytes += diagnostic_bytes;
+        movement.final_state_d2h_bytes += diagnostic_bytes;
+        ++movement.synchronizations;
+        if (token() != current)
+          throw std::invalid_argument("CUDA KS final-state owner changed during validation");
+        return valid;
+      };
+    }
     VerifiedKsFinalState verified;
-    if (!validate_ks_final_state(current.identity, provider.one_electron().overlap,
-                                 provider.one_electron().hcore, physical, candidate, limits,
-                                 compute_weighted_density, verified, detail)) {
+    bool accepted = false;
+    try {
+      accepted = validate_ks_final_state(current.identity, provider.one_electron().overlap,
+                                         provider.one_electron().hcore, physical, candidate, limits,
+                                         compute_weighted_density, verified, detail,
+                                         device_validation ? &operations : nullptr);
+    } catch (...) {
+      final_state_ready = final_stationary_weights_ready = false;
+      throw;
+    }
+    if (!accepted) {
       final_state_ready = final_stationary_weights_ready = false;
       throw std::runtime_error(detail.empty() ? "CUDA KS final-state validation failed" : detail);
+    }
+    if (device_validation && compute_weighted_density) {
+      try {
+        stage_stationary_weights();
+        check(cudaStreamSynchronize(stream));
+        ++movement.synchronizations;
+      } catch (...) {
+        final_state_ready = final_stationary_weights_ready = false;
+        throw;
+      }
     }
     if (staged_stationary_weights) final_stationary_weights_ready = true;
     return verified;

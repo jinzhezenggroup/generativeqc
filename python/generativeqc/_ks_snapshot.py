@@ -45,6 +45,38 @@ _META_GGA_CODES = frozenset(
 )
 
 
+def _integral_source_resources(
+    usage: typing.Iterable[int], *, mixed_rsh_df: bool = False
+) -> typing.Mapping[str, int]:
+    """Decode the private wire without treating lazy LR storage as SCF-owned.
+
+    Mixed slot 2 includes the additional LR owner plus one-electron staging.
+    DF J/K response resources are still unreported. Slot 0 excludes this LR
+    owner, so the source-only additional peak does not double-count it.
+    """
+    names = (
+        "retained_device_bytes",
+        "source_host_preparation_bytes",
+        "mixed_rsh_additional_device_peak_bytes"
+        if mixed_rsh_df
+        else "one_electron_device_peak_bytes",
+        "compact_source_publication_host_peak_bytes"
+        if mixed_rsh_df
+        else "one_electron_host_peak_bytes",
+        "one_electron_h2d_bytes",
+        "one_electron_d2h_bytes",
+        "final_state_export_d2h_bytes",
+        "final_state_export_reads",
+        "final_state_export_synchronizations",
+    )
+    work = dict(zip(names, map(int, usage), strict=True))
+    if mixed_rsh_df:
+        work["mixed_rsh_df_provider"] = 1
+        work["density_fitted_response_resources_included"] = 0
+        work["additional_device_peak_includes_lazy_lr"] = 1
+    return MappingProxyType(work)
+
+
 def _scf_xc_points(
     library: typing.Any,
     functional: typing.Any,
@@ -665,8 +697,10 @@ class NativeKsSnapshot:
         range_exchange: bool,
         combined_two_electron: bool = False,
     ) -> typing.Any:
-        """Execute prepared stationary sources without host density uploads.
+        """Execute prepared stationary integral sources under the live token.
 
+        Mixed RSH-DF reports its lazy LR owner in the additional-device peak;
+        DF J/K response storage and transfers remain explicitly outside scope.
         Full-range combined output has three channels: one-electron, overlap
         Pulay, and total two-electron derivatives. The ordinary v1 export keeps
         independent J/K channels. Missing optional bridges return ``None`` so
@@ -726,19 +760,10 @@ class NativeKsSnapshot:
             return None
         _native.check(self._library, status, context=self._batch._context)
         self.check_current()
-        names = (
-            "retained_device_bytes",
-            "source_host_preparation_bytes",
-            "one_electron_device_peak_bytes",
-            "one_electron_host_peak_bytes",
-            "one_electron_h2d_bytes",
-            "one_electron_d2h_bytes",
-            "final_state_export_d2h_bytes",
-            "final_state_export_reads",
-            "final_state_export_synchronizations",
-        )
-        return immutable(output), MappingProxyType(
-            dict(zip(names, map(int, usage), strict=True))
+        return immutable(output), _integral_source_resources(
+            usage,
+            mixed_rsh_df=range_exchange
+            and bool(getattr(self, "density_fitted", False)),
         )
 
     def decode(self, basis: typing.Any, grid: typing.Any) -> typing.Any:

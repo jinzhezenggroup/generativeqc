@@ -250,6 +250,13 @@ class PreparedBatch {
  public:
   virtual ~PreparedBatch() = default;
   [[nodiscard]] virtual std::size_t size() const noexcept = 0;
+  /** Internal per-item immutable prepared capabilities, not the method-global
+   * registry. Unsupported batch owners return no value, not a fabricated bit. */
+  [[nodiscard]] virtual std::optional<generativeqc_property_flags> supported_properties(
+      std::size_t index) const noexcept {
+    (void)index;
+    return std::nullopt;
+  }
   /** Output selection is per replay; retained scientific controls stay immutable.
    * A false force request skips response evaluation for the complete fleet. */
   virtual std::vector<BatchItemResult> execute(const Coordinates& coordinates,

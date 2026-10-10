@@ -2,7 +2,8 @@
 
 GitHub-hosted runners can change CPU vendor/model and glibc dispatch between
 runs. A PR sample is comparable only with a published, matching master baseline
-at its exact base SHA. Missing proof is advisory, not a regression.
+at the authenticated tested merge's first parent. Missing proof is advisory,
+not a regression.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from pathlib import Path
 _SCHEMA = "generativeqc.codspeed-cpu-baseline.v2"
 _SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 _REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+_PR_EXTRA_CASES = frozenset({"wb97mv"})
 
 
 def _command(*args: str) -> str:
@@ -77,7 +79,7 @@ def benchmark_selection() -> dict[str, object]:
     }
 
 
-def _selection_covers(recorded: object, requested: dict[str, object]) -> bool:
+def _selection_matches(recorded: object, requested: dict[str, object]) -> bool:
     if not isinstance(recorded, dict):
         return False
     digest = requested.get("source_sha256")
@@ -91,17 +93,49 @@ def _selection_covers(recorded: object, requested: dict[str, object]) -> bool:
         return False
     available = recorded.get("extra_cases")
     needed = requested.get("extra_cases")
-    if not isinstance(available, list) or not isinstance(needed, list):
-        return False
-    if not all(isinstance(item, str) for item in [*available, *needed]):
-        return False
-    return set(needed) <= set(available)
+    for extras in (available, needed):
+        if not isinstance(extras, list):
+            return False
+        if not all(
+            isinstance(item, str) and item in _PR_EXTRA_CASES for item in extras
+        ):
+            return False
+        if extras != sorted(set(extras)):
+            return False
+    # A superset baseline changes the preceding in-process allocation history.
+    # Instrumentation resets simulated caches, not allocator/application state.
+    # The unchanged benchmark source fixes execution order for equal selectors.
+    return available == needed
 
 
 def _baseline_name(sha: str) -> str:
     if not _SHA_RE.fullmatch(sha):
         raise ValueError("invalid 40-character baseline commit SHA")
     return f"codspeed-cpu-baseline-{sha}"
+
+
+def tested_master_base(merge_sha: str, head_sha: str, base_ref: str) -> str:
+    """Bind the baseline to the checked-out PR merge, not a stale event base."""
+    if base_ref != "master":
+        raise ValueError("CodSpeed PR baseline requires the master target")
+    if (
+        not _SHA_RE.fullmatch(merge_sha)
+        or not _SHA_RE.fullmatch(head_sha)
+        or merge_sha == head_sha
+    ):
+        raise ValueError("invalid event merge/head identity")
+    # rev-list includes HEAD and its ordered parents. A shallow checkout, root,
+    # linear or octopus commit cannot prove the intended two-parent PR merge.
+    ancestry = _command("git", "rev-list", "--parents", "-n", "1", "HEAD").split()
+    if (
+        len(ancestry) != 3
+        or any(not _SHA_RE.fullmatch(sha) for sha in ancestry)
+        or len(set(ancestry)) != 3
+        or ancestry[0] != merge_sha
+        or ancestry[2] != head_sha
+    ):
+        raise ValueError("checkout does not authenticate the event PR merge")
+    return ancestry[1]
 
 
 def _lookup_baseline(repo: str, sha: str) -> dict[str, object]:
@@ -163,8 +197,8 @@ def qualify(
     """Fail closed on an old schema, stale source, or different CPU/runtime."""
     if baseline.get("schema") != _SCHEMA or baseline.get("sha") != sha:
         return False, "baseline identity/schema mismatch"
-    if not _selection_covers(baseline.get("benchmark_selection"), selection):
-        return False, "baseline does not cover the requested benchmark source/selection"
+    if not _selection_matches(baseline.get("benchmark_selection"), selection):
+        return False, "baseline does not match the requested benchmark source/selection"
     recorded = baseline.get("environment")
     if not isinstance(recorded, dict):
         return False, "baseline environment missing"
@@ -181,7 +215,7 @@ def qualify(
     return True, "exact-master-base and runtime environment match"
 
 
-def _output(qualified: bool, reason: str) -> None:
+def _output(qualified: bool, reason: str, *, paired_diagnostic: bool = False) -> None:
     status = "qualified" if qualified else "unqualified"
     print(f"CodSpeed comparison {status}: {reason}")
     if not qualified:
@@ -189,6 +223,9 @@ def _output(qualified: bool, reason: str) -> None:
     if destination := os.environ.get("GITHUB_OUTPUT"):
         with Path(destination).open("a", encoding="utf-8") as handle:
             handle.write(f"qualified={'true' if qualified else 'false'}\n")
+            handle.write(
+                f"paired_diagnostic={'true' if paired_diagnostic else 'false'}\n"
+            )
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(summary).open("a", encoding="utf-8") as handle:
             handle.write(f"### CodSpeed CPU comparison: {status}\n\n{reason}\n\n")
@@ -201,7 +238,9 @@ def main() -> None:
     record.add_argument("--sha", required=True)
     record.add_argument("--output", type=Path, required=True)
     check = subcommands.add_parser("qualify")
-    check.add_argument("--base-sha", required=True)
+    check.add_argument("--merge-sha", required=True)
+    check.add_argument("--head-sha", required=True)
+    check.add_argument("--base-ref", required=True)
     check.add_argument("--repo", required=True)
     args = parser.parse_args()
     if args.command == "record":
@@ -218,11 +257,30 @@ def main() -> None:
             encoding="utf-8",
         )
         return
+    paired_diagnostic = False
     try:
+        base_sha = tested_master_base(args.merge_sha, args.head_sha, args.base_ref)
+        print(
+            f"CodSpeed tested merge: {args.merge_sha}; PR head: {args.head_sha}; "
+            f"actual master base: {base_sha}"
+        )
         current = environment_fingerprint()
-        baseline = _lookup_baseline(args.repo, args.base_sha)
-        matched, reason = qualify(
-            baseline, args.base_sha, current, benchmark_selection()
+        baseline = _lookup_baseline(args.repo, base_sha)
+        matched, reason = qualify(baseline, base_sha, current, benchmark_selection())
+        # Only an authenticated, identical-source/selector baseline with a
+        # CPU-only mismatch may trigger an artifact-only paired diagnostic.
+        # This never qualifies either arm for a CodSpeed/master upload.
+        paired_diagnostic = (
+            not matched
+            and reason == "different benchmark environments: cpu"
+            and all(
+                isinstance(cpu, dict)
+                and all(
+                    isinstance(cpu.get(key), str) and bool(cpu[key])
+                    for key in ("vendor", "model", "flags")
+                )
+                for cpu in (current.get("cpu"), baseline["environment"].get("cpu"))
+            )
         )
     except (
         OSError,
@@ -235,7 +293,7 @@ def main() -> None:
     ) as exc:
         matched = False
         reason = f"baseline qualification unavailable: {type(exc).__name__}"
-    _output(matched, reason)
+    _output(matched, reason, paired_diagnostic=paired_diagnostic)
 
 
 if __name__ == "__main__":

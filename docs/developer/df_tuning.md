@@ -61,7 +61,7 @@ python tools/benchmark_df_values.py \
 | `GENERATIVEQC_DF_VALUE_MATH` | Existing generic Rys | `generic`, `polynomial`, `rys`, `candidate` |
 | `GENERATIVEQC_DF_VALUE_RAW_MAPPING` | Existing scalar raw export | `scalar`, `subgroup`, `warp`, `candidate` |
 | `GENERATIVEQC_DF_FORCE_SCREEN_ABS` | Off | Nonnegative finite absolute force budget, or `off` |
-| `GENERATIVEQC_DF_SHELL_SCREEN_ABS` | `1e-10 Eh/Bohr` on the qualified sm_120 automatic shell domain; strict otherwise | Nonnegative finite absolute force-component budget, or `off` |
+| `GENERATIVEQC_DF_SHELL_SCREEN_ABS` | `1e-10 Eh/Bohr` on a work-qualified automatic shell domain on any probed CUDA target; strict otherwise | Nonnegative finite absolute force-component budget, or `off` |
 | `GENERATIVEQC_DF_FINAL_PROJECTION` | Reuse under the shared resident RHF work/capacity policy | `off`, `reuse` |
 
 The qualified sm_120 derivative manifest chooses cooperative Rys/compact for
@@ -96,9 +96,10 @@ See the [selector retirement note](../../.agents/notes/implemented/compatibility
 
 ## Derivative consumer admission
 
-`src/scf/df_derivative_policy.hpp` owns the initial conservative sm_120 work
-profile. This is an empirical scheduling envelope, not a universal latency
-prediction or a mathematical capability declaration:
+`src/scf/df_derivative_policy.hpp` owns an architecture-independent work
+admission policy. It reuses conservative thresholds derived from initial
+measurements rather than binding scheduling to one GPU name. It is neither a
+universal latency prediction nor a mathematical capability declaration:
 
 - Full shell execution requires estimated public weight work `N_AO² * N_aux`
   of at least `2^18`.
@@ -106,18 +107,25 @@ prediction or a mathematical capability declaration:
   `P_orbital² * P_auxiliary` of at least `2^22`, with contraction-length
   variation within an angular class. `P` sums primitive counts over shells.
 
-Comparisons use overflow-safe ceiling divisions. Unknown architectures and
-smaller work retain the generic/angular-only alternatives. The existing
+Comparisons use overflow-safe ceiling divisions. An unprobed target (architecture
+zero) and smaller work retain the generic/angular-only alternatives. The existing
 source, metric, derivative schedule, representation, response-state and arena
 checks still decide correctness eligibility. The profile does not authorize
 new mathematical kernels, change precision or screening, or bypass allocations.
 Generated architecture/class manifests remain the separate lowering authority.
 
-The shell and packet rules generalize across AO/auxiliary ratios and non-water
-fixtures without storing a molecular histogram. They do not replace the separate
-packed occupied-response layout selector. That remaining selector and wider
-profile qualification stay under #444/#445; no universal cross-device speedup
-is implied.
+The shell and packet rules generalize across AO/auxiliary ratios, non-water
+fixtures and CUDA targets without storing molecular or device identities. They
+do not replace the separate packed occupied-response layout selector. That
+remaining selector and wider profile qualification stay under #444/#445; no
+universal cross-device speedup is implied.
+
+Scientific correctness, independent reference energies/forces, sanitizer gates,
+and fallback behavior are shared across GPU models with the same execution
+capabilities. A new GPU needs a compilation/resource/functional smoke test and
+representative complete-endpoint timing before any performance claim; it does
+not need the entire historical numerical benchmark matrix re-run merely because
+its marketing name differs.
 
 Schedule lookups query only CUDA compute-capability attributes through
 `runtime/cuda_architecture.hpp`. They do not fetch the complete device property
