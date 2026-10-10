@@ -42,11 +42,13 @@ struct Capture {
 };
 
 Capture& capture = *new Capture;
-constexpr std::array<CUpti_ActivityKind, 7> kKinds{
-    CUPTI_ACTIVITY_KIND_MEMCPY, CUPTI_ACTIVITY_KIND_MEMCPY2,
-    CUPTI_ACTIVITY_KIND_SYNCHRONIZATION, CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION,
-    CUPTI_ACTIVITY_KIND_RUNTIME, CUPTI_ACTIVITY_KIND_DRIVER,
-    CUPTI_ACTIVITY_KIND_INTERNAL_LAUNCH_API};
+constexpr std::array<CUpti_ActivityKind, 7> kKinds{CUPTI_ACTIVITY_KIND_MEMCPY,
+                                                   CUPTI_ACTIVITY_KIND_MEMCPY2,
+                                                   CUPTI_ACTIVITY_KIND_SYNCHRONIZATION,
+                                                   CUPTI_ACTIVITY_KIND_EXTERNAL_CORRELATION,
+                                                   CUPTI_ACTIVITY_KIND_RUNTIME,
+                                                   CUPTI_ACTIVITY_KIND_DRIVER,
+                                                   CUPTI_ACTIVITY_KIND_INTERNAL_LAUNCH_API};
 
 void add_saturated(std::uint64_t& counter, std::uint64_t value = 1) noexcept {
   counter = value > std::numeric_limits<std::uint64_t>::max() - counter
@@ -141,8 +143,7 @@ void consume(const CUpti_Activity* activity) {
   append(record);
 }
 
-void CUPTIAPI request_buffer(std::uint8_t** buffer, std::size_t* size,
-                             std::size_t* max_records) {
+void CUPTIAPI request_buffer(std::uint8_t** buffer, std::size_t* size, std::size_t* max_records) {
   std::lock_guard lock(capture.mutex);
   *buffer = nullptr;
   *size = 0;
@@ -158,9 +159,8 @@ void CUPTIAPI request_buffer(std::uint8_t** buffer, std::size_t* size,
   add_saturated(capture.starved);
 }
 
-void CUPTIAPI complete_buffer(CUcontext context, std::uint32_t stream,
-                              std::uint8_t* buffer, std::size_t,
-                              std::size_t valid_bytes) {
+void CUPTIAPI complete_buffer(CUcontext context, std::uint32_t stream, std::uint8_t* buffer,
+                              std::size_t, std::size_t valid_bytes) {
   CUpti_Activity* activity = nullptr;
   CUptiResult result;
   while ((result = cuptiActivityGetNextRecord(buffer, valid_bytes, &activity)) == CUPTI_SUCCESS) {
@@ -223,8 +223,8 @@ extern "C" int generativeqc_cupti_push_v1(std::uint64_t region) {
 
 extern "C" int generativeqc_cupti_pop_v1(std::uint64_t expected) {
   std::uint64_t actual = 0;
-  const auto status = cuptiActivityPopExternalCorrelationId(
-      CUPTI_EXTERNAL_CORRELATION_KIND_CUSTOM0, &actual);
+  const auto status =
+      cuptiActivityPopExternalCorrelationId(CUPTI_EXTERNAL_CORRELATION_KIND_CUSTOM0, &actual);
   return status != CUPTI_SUCCESS ? static_cast<int>(status) : (actual == expected ? 0 : -4);
 }
 
@@ -261,11 +261,17 @@ extern "C" int generativeqc_cupti_read_v1(std::uint64_t* records, std::uint64_t 
     return -1;
   }
   const auto pending = std::count_if(capture.buffers.begin(), capture.buffers.end(),
-                                    [](const auto& slot) { return slot.busy; });
-  const std::array<std::uint64_t, kMetadataFields> values{
-      capture.count, capture.records.size(), capture.dropped, capture.starved,
-      capture.parse_errors, capture.unknown, static_cast<std::uint64_t>(pending),
-      capture.version, capture.stopped, capture.finish_errors};
+                                     [](const auto& slot) { return slot.busy; });
+  const std::array<std::uint64_t, kMetadataFields> values{capture.count,
+                                                          capture.records.size(),
+                                                          capture.dropped,
+                                                          capture.starved,
+                                                          capture.parse_errors,
+                                                          capture.unknown,
+                                                          static_cast<std::uint64_t>(pending),
+                                                          capture.version,
+                                                          capture.stopped,
+                                                          capture.finish_errors};
   std::copy(values.begin(), values.end(), metadata);
   if (records) {
     for (std::size_t index = 0; index < capture.count; ++index) {
@@ -276,14 +282,15 @@ extern "C" int generativeqc_cupti_read_v1(std::uint64_t* records, std::uint64_t 
   return 0;
 }
 
-extern "C" const char* generativeqc_cupti_api_name_v1(std::uint64_t kind,
-                                                      std::uint64_t callback) {
+extern "C" const char* generativeqc_cupti_api_name_v1(std::uint64_t kind, std::uint64_t callback) {
   const char* name = nullptr;
   if (kind != CUPTI_ACTIVITY_KIND_RUNTIME && kind != CUPTI_ACTIVITY_KIND_DRIVER &&
-      kind != CUPTI_ACTIVITY_KIND_INTERNAL_LAUNCH_API) return nullptr;
+      kind != CUPTI_ACTIVITY_KIND_INTERNAL_LAUNCH_API)
+    return nullptr;
   const auto domain = kind == CUPTI_ACTIVITY_KIND_RUNTIME ? CUPTI_CB_DOMAIN_RUNTIME_API
-                                                         : CUPTI_CB_DOMAIN_DRIVER_API;
-  return cuptiGetCallbackName(domain, static_cast<CUpti_CallbackId>(callback), &name) == CUPTI_SUCCESS
+                                                          : CUPTI_CB_DOMAIN_DRIVER_API;
+  return cuptiGetCallbackName(domain, static_cast<CUpti_CallbackId>(callback), &name) ==
+                 CUPTI_SUCCESS
              ? name
              : nullptr;
 }

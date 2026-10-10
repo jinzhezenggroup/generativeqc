@@ -2870,17 +2870,18 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           const generativeqc_status order_upload_status = cuda_status(runtime::residency_upload(
               residency_execution, SourceRole::prepare, SourceSite::hf_shell_order_inputs,
               SourcePayload::input_bounded_direct_shell_pair_order, bounded_direct_shell_pair_order,
-              plan.bounded_direct_shell_pair_order.data(), total_shell_pairs * sizeof(std::uint32_t),
-              resources.stream_));
+              plan.bounded_direct_shell_pair_order.data(),
+              total_shell_pairs * sizeof(std::uint32_t), resources.stream_));
           if (order_upload_status != GENERATIVEQC_STATUS_SUCCESS) {
             fill_global_failure(outputs, order_upload_status);
             return outputs;
           }
-          const generativeqc_status stream_order_upload_status = cuda_status(runtime::residency_upload(
-              residency_execution, SourceRole::prepare, SourceSite::hf_shell_order_inputs,
-              SourcePayload::input_bounded_stream_shell_pair_order, bounded_stream_shell_pair_order,
-              plan.bounded_stream_shell_pair_order.data(), total_shell_pairs * sizeof(std::uint32_t),
-              resources.stream_));
+          const generativeqc_status stream_order_upload_status =
+              cuda_status(runtime::residency_upload(
+                  residency_execution, SourceRole::prepare, SourceSite::hf_shell_order_inputs,
+                  SourcePayload::input_bounded_stream_shell_pair_order,
+                  bounded_stream_shell_pair_order, plan.bounded_stream_shell_pair_order.data(),
+                  total_shell_pairs * sizeof(std::uint32_t), resources.stream_));
           if (stream_order_upload_status != GENERATIVEQC_STATUS_SUCCESS) {
             fill_global_failure(outputs, stream_order_upload_status);
             return outputs;
