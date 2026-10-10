@@ -40,14 +40,22 @@ def test_force_domain_publication_pins_dirty_source_and_scoped_abba() -> None:
     assert evidence["stages"]["production"]["status"] == "not-run"
     patch = gzip.decompress(files["measured-source.patch.gz"])
     assert hashlib.sha256(patch).hexdigest() == provenance["patch_sha256"]
-    assert provenance["production_inputs_manifest_hash"] == evidence["hashes"]["source"]
+    # Independently reconstructed from the recorded base plus patch: every blob
+    # under src/, python/, include/ and cmake/, plus CMakeLists.txt and
+    # benchmarks/df_ccsdt_force_endpoint.cpp.
+    # Freeze those historical identities; two editable copies are not a check.
+    assert (
+        provenance["production_inputs_manifest_hash"]
+        == evidence["hashes"]["source"]
+        == "2a15d4b8ca0d4da5b1cdc5b8135f9714a345c734857648cb5b74d9a562b6a8c8"
+    )
     assert provenance["production_input_count"] == 1513
-    assert set(provenance["changed_production_inputs"]) == {
-        "cmake/GenerativeQCCuda.cmake",
-        "src/scf/cuda/direct_bounded_fallback.cu",
-        "src/scf/cuda/direct_force_class_domains.cu",
-        "src/scf/cuda/direct_force_class_domains.hpp",
-        "src/scf/cuda/direct_force_class_pages.cuh",
+    assert provenance["changed_production_inputs"] == {
+        "cmake/GenerativeQCCuda.cmake": "6758c283ee13781890f50c572b07d5f2442145b0d6d716b4acc7e36ea1366781",
+        "src/scf/cuda/direct_bounded_fallback.cu": "397231b17c7b1e15d35f182a7195e43b4997e96fd2a7086f4e7b086902877526",
+        "src/scf/cuda/direct_force_class_domains.cu": "3790d1c595a968a04c22328a597c68d6ad110fea4498aae807472d2ee8423737",
+        "src/scf/cuda/direct_force_class_domains.hpp": "b80e8cf2de366c23ad90d94490c000328a344b7183325bb03a6000c9f22db283",
+        "src/scf/cuda/direct_force_class_pages.cuh": "99134c1417672cbe94188c81269d52cce1db5656362bd2e503d8410cd9ee84ee",
     }
     for path in provenance["patch_paths"]:
         assert f"diff --git a/{path} b/{path}\n".encode() in patch
