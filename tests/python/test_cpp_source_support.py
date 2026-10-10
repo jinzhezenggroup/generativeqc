@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from _cpp_source_support import (
     cpp_function_declaration,
-    cpp_if_block,
     cpp_function_definition,
+    cpp_if_block,
     cpp_record_definition,
 )
 

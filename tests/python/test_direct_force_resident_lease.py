@@ -3,10 +3,10 @@
 import subprocess
 from pathlib import Path
 
+from _cpp_source_support import cpp_function_definition, cpp_if_block
 from generativeqc_compiler.integral.direct_resident_schedule import (
     emit_direct_resident_psss_schedule_header,
 )
-from _cpp_source_support import cpp_function_definition, cpp_if_block
 from test_coulomb_optional_allocation import compile_cached_probe
 from test_direct_jk_optional_allocation import STUBS
 
