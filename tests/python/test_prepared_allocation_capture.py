@@ -26,8 +26,24 @@ from tools.capture_prepared_allocations import (
     schedule,
     source_tree,
     verify_source,
+    workload,
     write_new,
 )
+
+
+@pytest.mark.parametrize("method", ["rhf", "uhf"])
+def test_pinned_moved_geometry_changes_internal_distances(method: str) -> None:
+    """A stale geometry must not pass the audit solely by rigid translation."""
+    case = workload(method)
+    for atoms, moved in zip(case["systems"], case["moved_coordinates"], strict=True):
+        original = np.array([position for _, position in atoms])
+        displaced = np.asarray(moved)
+        np.testing.assert_array_equal(displaced[:-1], original[:-1])
+        np.testing.assert_array_equal(displaced[-1, :2], original[-1, :2])
+        assert displaced[-1, 2] == original[-1, 2] + case["moved_dz"]
+        assert np.linalg.norm(displaced[-1] - displaced[0]) != pytest.approx(
+            np.linalg.norm(original[-1] - original[0]), abs=1e-12, rel=0.0
+        )
 
 
 def entries_for(root: Path) -> list[dict[str, str]]:

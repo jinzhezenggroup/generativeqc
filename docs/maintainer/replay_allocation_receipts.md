@@ -222,7 +222,9 @@ failures prevent a passing receipt. The default host parsing bound is 1,048,576
 raw events, with a configurable lower bound via `--max-host-events`.
 
 Matched ordinary prepared execution, including changed geometry, runs outside
-the monitored lifecycle. Gates are `1e-10` Eh energy and `1e-9` Eh/bohr force;
+the monitored lifecycle. The pinned moved coordinates displace only the final
+atom of each item, changing internal distances rather than merely translating
+the whole molecule. Gates are `1e-10` Eh energy and `1e-9` Eh/bohr force;
 real iteration counts are recorded. This is an instrumentation non-regression
 comparison, not independent scientific qualification of a new method. The
 reference warms CUDA context/library state before collection; the host owner
