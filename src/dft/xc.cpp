@@ -1215,7 +1215,7 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
               for (unsigned k = 0; k < 3; ++k) {
                 derivative += 2.0 * xc.gradient[physical_spin][k] *
                               (jet[hessian[axis][k]][mu] * density_phi[mu] +
-                               jet[k + 1][mu] * density_jet[3 * mu + axis]);
+                               jet[axis + 1][mu] * density_jet[3 * mu + k]);
               }
               const double contribution = weight * derivative;
               result.gradient[3 * owner + axis] += contribution;
