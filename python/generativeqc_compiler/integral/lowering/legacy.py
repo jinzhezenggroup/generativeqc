@@ -19,6 +19,7 @@ from .common import _specialize_dppp_identifiers
 from .dispatch import emit_shell_class_fused_cuda
 from .force_resident import _emit_ppps_resident_bra_rys3_force_consumer_cuda
 
+
 def emit_ppps_resident_bra_rys3_cuda(
     *,
     target: CudaTargetInfo,

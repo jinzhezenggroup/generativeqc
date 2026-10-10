@@ -180,7 +180,8 @@ def main() -> None:
     )
     artifact = (
         compile_cuda(
-            CudaCompilerAdapter(args.nvcc, cuda_target_info(args.cuda_target)), args.cache
+            CudaCompilerAdapter(args.nvcc, cuda_target_info(args.cuda_target)),
+            args.cache,
         )
         if args.cuda
         else None
