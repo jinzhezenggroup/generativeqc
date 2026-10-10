@@ -73,8 +73,9 @@ domain is warm replay and moved-geometry replay, not cold SCF convergence.
 Native CPU build job 7270 verifies ccache 4.5.1 and preserves before/after stats,
 actual compiler commands, full source manifest and pre/post artifact checks.
 GPU jobs 7271/7276 run through Slurm on node1, main, gpu:5090:1, preserving
-assigned visibility 3. Slurm accounting storage is disabled; original terminal
-and per-driver receipts are retained without inventing accounting records.
+assigned visibility 1 for job 7271 and 3 for job 7276. Slurm accounting storage
+is disabled; original terminal and per-driver receipts are retained without
+inventing accounting records.
 
 At publication, master `20baf5826a76661de7ed0ea7f06dfefb41574f2a` was inspected
 and automatic merge-tree was clean. Neighboring DF/RSH, CLI, HVP, CPU-AOT and
