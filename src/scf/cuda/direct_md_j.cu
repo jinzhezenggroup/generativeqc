@@ -1,5 +1,6 @@
 #include <cmath>
 
+#include "generated_md_j_reciprocal.cuh"
 #include "scf/cuda/cartesian_angular.cuh"
 #include "scf/cuda/coulomb_auxiliary.cuh"
 #include "scf/cuda/direct_md_j.hpp"
@@ -196,7 +197,7 @@ __device__ __forceinline__ void contract_potential(const MdJPrimitive& bra, cons
 /** Fixed angular products keep small recurrences from inheriting the largest
  * ket class's local storage. Sequential class launches own disjoint bra outputs
  * within each launch, so potential accumulation needs no floating atomics. */
-template <unsigned BraAngular, unsigned KetAngular>
+template <unsigned BraAngular, unsigned KetAngular, bool CountWork>
 __global__ void md_j_potential(MdJView md, std::size_t class_begin, std::size_t begin,
                                std::size_t end, double screening) {
   const auto bra_index = md.ordered_primitives[class_begin + blockIdx.x];
@@ -204,6 +205,7 @@ __global__ void md_j_potential(MdJView md, std::size_t class_begin, std::size_t 
   const auto pair = md.pairs[bra.pair];
   if (pair.system < begin || pair.system >= end) return;
   double potential[md_j_hermite_count(BraAngular)]{};
+  unsigned long long admitted = 0;
   const double bound = md.minimum_bounds[bra.pair];
   // The compact pair upper bound is conservative for the existing minimum
   // mask. Inactive bras still clear their potential before AO projection.
@@ -224,6 +226,18 @@ __global__ void md_j_potential(MdJView md, std::size_t class_begin, std::size_t 
         __dmul_ru(__dmul_ru(output_bound, md.maximum_bounds[ket_pair_index]), density_bound);
     if (density_bound == 0.0 || contribution_bound < allowance) continue;
     contract_potential<BraAngular, KetAngular>(bra, ket, md, potential);
+    if constexpr (CountWork) ++admitted;
+  }
+  if constexpr (CountWork) {
+    for (unsigned stride = kMdThreads / 2; stride; stride /= 2)
+      admitted += __shfl_down_sync(0xffffffff, admitted, stride);
+    if (threadIdx.x == 0) {
+      constexpr auto angular = 5 * BraAngular + KetAngular;
+      atomicAdd(&md.work_counts->uniform_roots[angular], admitted);
+      atomicAdd(&md.work_counts->uniform_directions[angular], admitted);
+      atomicAdd(&md.work_counts->uniform_summands[angular],
+                admitted * md_j_hermite_count(BraAngular) * md_j_hermite_count(KetAngular));
+    }
   }
   for (unsigned index = 0; index < md_j_hermite_count(BraAngular); ++index) {
     double value = potential[index];
@@ -260,9 +274,15 @@ template <unsigned Angular, unsigned KetAngular>
 void launch_potential(cudaStream_t stream, MdJView md, std::size_t begin, std::size_t end,
                       double screening) {
   const auto count = md.class_offsets[Angular + 1] - md.class_offsets[Angular];
-  if (count && md.class_offsets[KetAngular] != md.class_offsets[KetAngular + 1])
-    md_j_potential<Angular, KetAngular><<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(
-        md, md.class_offsets[Angular], begin, end, screening);
+  if (!count || md.class_offsets[KetAngular] == md.class_offsets[KetAngular + 1]) return;
+  if (md.work_counts)
+    md_j_potential<Angular, KetAngular, true>
+        <<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(md, md.class_offsets[Angular],
+                                                                  begin, end, screening);
+  else
+    md_j_potential<Angular, KetAngular, false>
+        <<<static_cast<unsigned>(count), kMdThreads, 0, stream>>>(md, md.class_offsets[Angular],
+                                                                  begin, end, screening);
 }
 
 template <unsigned Angular>
@@ -343,9 +363,24 @@ void launch_md_j(cudaStream_t stream, DeviceBatch batch, MdJView md, std::size_t
       batch, md, system_begin, end, unrestricted, density, beta);
   md_j_density<<<static_cast<unsigned>(md.primitive_count), kMdThreads, 0, stream>>>(
       batch, md, system_begin, end, unrestricted, density, beta);
-  launch_potential_classes<0>(stream, md, system_begin, end, screening);
-  launch_potential_classes<1>(stream, md, system_begin, end, screening);
-  launch_potential_classes<2>(stream, md, system_begin, end, screening);
+  if (md.reciprocal) {
+    launch_md_reciprocal_potential<0, 0>(stream, md, system_begin, end, screening);
+    launch_md_reciprocal_potential<0, 1>(stream, md, system_begin, end, screening);
+    launch_md_reciprocal_potential<0, 2>(stream, md, system_begin, end, screening);
+    launch_md_reciprocal_potential<1, 1>(stream, md, system_begin, end, screening);
+    launch_md_reciprocal_potential<1, 2>(stream, md, system_begin, end, screening);
+    launch_md_reciprocal_potential<2, 2>(stream, md, system_begin, end, screening);
+    launch_potential<0, 3>(stream, md, system_begin, end, screening);
+    launch_potential<0, 4>(stream, md, system_begin, end, screening);
+    launch_potential<1, 3>(stream, md, system_begin, end, screening);
+    launch_potential<1, 4>(stream, md, system_begin, end, screening);
+    launch_potential<2, 3>(stream, md, system_begin, end, screening);
+    launch_potential<2, 4>(stream, md, system_begin, end, screening);
+  } else {
+    launch_potential_classes<0>(stream, md, system_begin, end, screening);
+    launch_potential_classes<1>(stream, md, system_begin, end, screening);
+    launch_potential_classes<2>(stream, md, system_begin, end, screening);
+  }
   launch_potential_classes<3>(stream, md, system_begin, end, screening);
   launch_potential_classes<4>(stream, md, system_begin, end, screening);
   md_j_project<<<static_cast<unsigned>(md.pair_count), kMdThreads, 0, stream>>>(

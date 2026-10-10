@@ -139,13 +139,16 @@ void exercise(bool ledger,int stage,int kind,const char* disabled) {
       propagated=true; assert(f.status!=GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
     const bool eligible=!ledger && !(disabled && std::strcmp(disabled,"1")==0);
+    const bool faulted=stage>=0 && allocation_index>stage;
     assert(eligible || allocation_index==0);
-    if(!eligible || (stage>=0 && kind<=2)) {
+    if(!eligible || (faulted && kind<=2)) {
       assert(!propagated && !owner.md_j.minimum_bounds);
       assert(owner.allocations.size()==1 && owner.device_bytes==8);
       direct_jk_check(cudaGetLastError());
-    } else if(stage<0) {
+    } else if(!faulted) {
       assert(!propagated && owner.md_j.minimum_bounds && owner.device_bytes>8);
+      const char* counts=std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
+      assert(bool(owner.md_j.work_counts)==bool(counts && std::strcmp(counts,"1")==0));
     } else {
       assert(propagated);
     }
@@ -157,7 +160,7 @@ int main() {
     // The same construction path is revisited after ledger binding/unbinding.
     for(bool ledger:{false,true,true,false}) {
       exercise(ledger,-1,1,disabled);
-      for(int stage=0;stage<16;++stage)
+      for(int stage=0;stage<20;++stage)
         for(int kind:{0,1,3,6}) exercise(ledger,stage,kind,disabled);
     }
   }
@@ -165,14 +168,22 @@ int main() {
 """
 
 
+@pytest.mark.parametrize("counted", [False, True])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    counted: bool,
 ) -> None:
+    """Optional diagnostic storage obeys the same admission and rollback cap."""
+    if counted:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
+    else:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     header = (ROOT / "src/scf/cuda/direct_md_j.hpp").read_text()
     types = "\n".join(
         _definition(header, "struct " + name) + ";"
-        for name in ("MdJPair", "MdJPrimitive", "MdJView")
+        for name in ("MdJPair", "MdJPrimitive", "MdJWorkCounts", "MdJView")
     )
     constants = "\n".join(
         header[header.index("inline constexpr std::size_t " + name) :].split(";", 1)[0]

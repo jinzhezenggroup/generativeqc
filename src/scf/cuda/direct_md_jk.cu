@@ -211,7 +211,7 @@ __device__ __forceinline__ void contract_source_task(
  * nor the scratch grows with the molecular quartet count. Angular dispatch is
  * a launch boundary, not a device switch: low-order tasks cannot inherit the
  * high-order recurrence's register footprint and stack frame. */
-template <unsigned BraAngular, unsigned KetAngular>
+template <unsigned BraAngular, unsigned KetAngular, bool CountWork>
 __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t system_begin,
                                      std::size_t system_end, bool want_j, bool want_k,
                                      bool unrestricted, double screening, const double* bounds,
@@ -230,6 +230,7 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
                               : static_cast<unsigned long long>(bra_count) * ket_count;
   const double density_allowance =
       __ddiv_rd(fmin(screening, kMdJDensityErrorCap), double(md.pair_count));
+  unsigned long long tested = 0, admitted = 0, roots = 0;
   while (true) {
     if (threadIdx.x == 0) {
       candidate_begin =
@@ -237,10 +238,26 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
       task_count = 0;
     }
     __syncthreads();
-    if (candidate_begin >= candidates) return;
+    if (candidate_begin >= candidates) {
+      if constexpr (CountWork) {
+        for (unsigned stride = 16; stride; stride /= 2) {
+          tested += __shfl_down_sync(0xffffffff, tested, stride);
+          admitted += __shfl_down_sync(0xffffffff, admitted, stride);
+          roots += __shfl_down_sync(0xffffffff, roots, stride);
+        }
+        if (threadIdx.x % 32 == 0) {
+          constexpr auto angular = 5 * BraAngular + KetAngular;
+          atomicAdd(&md.work_counts->residual_candidates[angular], tested);
+          atomicAdd(&md.work_counts->residual_tasks[angular], admitted);
+          atomicAdd(&md.work_counts->residual_roots[angular], roots);
+        }
+      }
+      return;
+    }
     for (auto candidate = candidate_begin + threadIdx.x;
          candidate < candidates && candidate < candidate_begin + kSourceCandidates;
          candidate += blockDim.x) {
+      if constexpr (CountWork) ++tested;
       unsigned long long bra_index{}, ket_index{};
       if constexpr (BraAngular == KetAngular) {
         bra_index = static_cast<unsigned long long>((sqrt(8.0 * candidate + 1.0) - 1.0) * 0.5);
@@ -266,6 +283,7 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
               continue;
           }
           tasks[atomicAdd(&task_count, 1U)] = {bra, ket};
+          if constexpr (CountWork) ++admitted;
         }
       }
     }
@@ -282,6 +300,12 @@ __global__ void consume_source_tasks(DeviceBatch batch, MdJView md, std::size_t 
       contract_source_task<BraAngular, KetAngular>(
           batch, md, task, want_j, want_k, unrestricted, screening, bounds, density, beta, coulomb,
           alpha_exchange, beta_exchange, workspace + group_index * workspace_width);
+      if constexpr (CountWork) {
+        if (threadIdx.x % group_threads == 0)
+          roots += static_cast<unsigned long long>(md.pairs[task.bra].primitive_end -
+                                                   md.pairs[task.bra].primitive_begin) *
+                   (md.pairs[task.ket].primitive_end - md.pairs[task.ket].primitive_begin);
+      }
     }
     __syncthreads();
   }
@@ -311,10 +335,16 @@ void launch_source_class(cudaStream_t stream, DeviceBatch batch, MdJView md,
   const unsigned workers = static_cast<unsigned>(std::min<unsigned long long>(
       kSourceWorkers, (candidates + kSourceCandidates - 1) / kSourceCandidates));
   cudaMemsetAsync(md.source_cursor, 0, sizeof(unsigned long long), stream);
-  consume_source_tasks<BraAngular, KetAngular>
-      <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
-          batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
-          screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
+  if (md.work_counts && !want_k)
+    consume_source_tasks<BraAngular, KetAngular, true>
+        <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
+            batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
+            screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
+  else
+    consume_source_tasks<BraAngular, KetAngular, false>
+        <<<workers, SourceSchedule<BraAngular, KetAngular>::block_threads, shared_bytes, stream>>>(
+            batch, md, system_begin, system_begin + system_count, want_j, want_k, unrestricted,
+            screening, bounds, density, beta, coulomb, alpha_exchange, beta_exchange);
 }
 
 }  // namespace

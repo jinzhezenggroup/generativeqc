@@ -1009,6 +1009,19 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
 
+  set(GENERATIVEQC_MD_J_RECIPROCAL_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_reciprocal.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_md_j_reciprocal_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_md_j_reciprocal.py"
+    OUTPUTS "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_reciprocal_cuda.py"
+    ARGS --output "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    COMMENT "Generating compiler-owned reciprocal MD Coulomb consumer")
+
   set(GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_derivative_cuda_shell_aot.cuh")
   generativeqc_register_generated_sources(
