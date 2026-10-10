@@ -67,14 +67,107 @@ function(generativeqc_configure_cpu_linalg target)
       set(_lapack_probe
           "#include <lapacke.h>\nint main(){double a[1]={1},w[1];int x=LAPACKE_dpotrf(LAPACK_ROW_MAJOR,'L',1,a,1);return x+LAPACKE_dsyevd(LAPACK_ROW_MAJOR,'V','L',1,a,1,w);}")
     endif()
-    # Capability results depend on the selected provider, not merely the build
-    # directory. Re-probe if callers switch OpenBLAS implementations in place.
-    unset(GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS CACHE)
-    unset(GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS CACHE)
-    unset(GENERATIVEQC_OPENBLAS_HAS_LAPACKE CACHE)
-    check_cxx_source_compiles("${_thread_probe}" GENERATIVEQC_OPENBLAS_HAS_LOCAL_THREADS)
-    check_cxx_source_compiles("${_global_thread_probe}" GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS)
-    check_cxx_source_compiles("${_lapack_probe}" GENERATIVEQC_OPENBLAS_HAS_LAPACKE)
+    # Cached successes are hints only: validate their actual compile/link inputs
+    # together before reusing them. A dependency fingerprint cannot in general
+    # cover transitive target properties, new include files, or replaced archives.
+    # Cached failures are always re-probed, so newly available APIs are detected.
+    unset(GENERATIVEQC_OPENBLAS_PROBE_CACHE_KEY CACHE)
+    set(_capabilities LOCAL_THREADS GLOBAL_THREADS LAPACKE)
+    set(_probe_variables _thread_probe _global_thread_probe _lapack_probe)
+    set(_positive_capabilities "")
+    foreach(_capability IN LISTS _capabilities)
+      if(GENERATIVEQC_OPENBLAS_HAS_${_capability})
+        list(APPEND _positive_capabilities "${_capability}")
+      endif()
+    endforeach()
+    list(LENGTH _positive_capabilities _positive_count)
+    set(_batch_valid FALSE)
+    # Keep unusual project hooks/toolchains on CMake's ordinary check path.
+    # The batch hook must exclusively own the generated check project setup.
+    set(_batch_eligible TRUE)
+    foreach(_variable IN ITEMS CMAKE_TOOLCHAIN_FILE CMAKE_PROJECT_INCLUDE
+        CMAKE_PROJECT_INCLUDE_BEFORE CMAKE_PROJECT_TOP_LEVEL_INCLUDES
+        CMAKE_PROJECT_CMAKE_TRY_COMPILE_INCLUDE
+        CMAKE_PROJECT_CMAKE_TRY_COMPILE_INCLUDE_BEFORE
+        CMAKE_USER_MAKE_RULES_OVERRIDE CMAKE_USER_MAKE_RULES_OVERRIDE_CXX)
+      if(${_variable})
+        set(_batch_eligible FALSE)
+      endif()
+    endforeach()
+    if(NOT CMAKE_GENERATOR STREQUAL "Unix Makefiles"
+       AND NOT CMAKE_GENERATOR STREQUAL "Ninja"
+       AND NOT CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+      set(_batch_eligible FALSE)
+    endif()
+    # Semicolon-containing required flags have version-dependent legacy parsing.
+    if(_positive_count GREATER 1 AND _batch_eligible
+       AND NOT CMAKE_REQUIRED_FLAGS MATCHES ";")
+      set(_probe_dir "${CMAKE_BINARY_DIR}/CMakeFiles/GenerativeQCOpenBLASProbe")
+      file(MAKE_DIRECTORY "${_probe_dir}")
+      foreach(_capability IN LISTS _positive_capabilities)
+        list(FIND _capabilities "${_capability}" _index)
+        list(GET _probe_variables ${_index} _probe_variable)
+        file(WRITE "${_probe_dir}/${_capability}.cpp" "${${_probe_variable}}\n")
+      endforeach()
+      list(GET _positive_capabilities 0 _first_capability)
+      set(_link_options "")
+      if(CMAKE_REQUIRED_LINK_OPTIONS)
+        set(_link_options LINK_OPTIONS ${CMAKE_REQUIRED_LINK_OPTIONS})
+      endif()
+      set(_link_directories "")
+      if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.31 AND CMAKE_REQUIRED_LINK_DIRECTORIES)
+        set(_link_directories
+            "-DLINK_DIRECTORIES:STRING=${CMAKE_REQUIRED_LINK_DIRECTORIES}")
+      endif()
+      if(NOT CMAKE_REQUIRED_QUIET)
+        message(CHECK_START "Validating cached OpenBLAS capabilities")
+      endif()
+      # Do not let retained native build outputs bypass any compilation/link.
+      # Compiler launchers may still safely reuse their content-addressed cache.
+      file(REMOVE_RECURSE "${_probe_dir}/build")
+      file(REMOVE "${_probe_dir}/validated.txt")
+      unset(_batch_result)
+      unset(_batch_result CACHE)
+      try_compile(_batch_result "${_probe_dir}/build"
+        SOURCES "${_probe_dir}/${_first_capability}.cpp"
+        COMPILE_DEFINITIONS ${CMAKE_REQUIRED_DEFINITIONS}
+        ${_link_options}
+        LINK_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES}
+        CMAKE_FLAGS "-DCOMPILE_DEFINITIONS:STRING=${CMAKE_REQUIRED_FLAGS}"
+                    "-DINCLUDE_DIRECTORIES:STRING=${CMAKE_REQUIRED_INCLUDES}"
+                    ${_link_directories}
+                    "-DCMAKE_PROJECT_INCLUDE:FILEPATH=${CMAKE_CURRENT_FUNCTION_LIST_DIR}/GenerativeQCOpenBLASProbeBatch.cmake"
+                    "-DGENERATIVEQC_OPENBLAS_BATCH_CAPABILITIES:STRING=${_positive_capabilities}"
+                    "-DGENERATIVEQC_OPENBLAS_BATCH_DIR:PATH=${_probe_dir}"
+        OUTPUT_VARIABLE _batch_output)
+      # A project/toolchain hook may intercept CMAKE_PROJECT_INCLUDE. Require
+      # proof that every independent target was attached before trusting it.
+      if(_batch_result AND EXISTS "${_probe_dir}/validated.txt")
+        file(READ "${_probe_dir}/validated.txt" _validated)
+        if(_validated STREQUAL _positive_capabilities)
+          set(_batch_valid TRUE)
+        endif()
+      endif()
+      if(NOT CMAKE_REQUIRED_QUIET)
+        if(_batch_valid)
+          message(CHECK_PASS "Success")
+        else()
+          message(CHECK_FAIL "Failed; re-probing individually")
+        endif()
+      endif()
+      # try_compile always runs; do not retain its own implementation result.
+      unset(_batch_result CACHE)
+    endif()
+    foreach(_capability IN LISTS _capabilities)
+      if(NOT _batch_valid OR NOT _capability IN_LIST _positive_capabilities)
+        list(FIND _capabilities "${_capability}" _index)
+        list(GET _probe_variables ${_index} _probe_variable)
+        unset(GENERATIVEQC_OPENBLAS_HAS_${_capability})
+        unset(GENERATIVEQC_OPENBLAS_HAS_${_capability} CACHE)
+        check_cxx_source_compiles("${${_probe_variable}}"
+          GENERATIVEQC_OPENBLAS_HAS_${_capability})
+      endif()
+    endforeach()
     unset(CMAKE_REQUIRED_INCLUDES)
     unset(CMAKE_REQUIRED_LIBRARIES)
 
