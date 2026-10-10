@@ -402,8 +402,15 @@ class Calculation {
    * and destruction. No concurrent execute/query or destroy/use is supported.
    * @units Energy Hartree, forces -dE/dR Hartree/Bohr, atom-major xyz order.
    */
-  /** Query the exact prepared method/backend/system contract, not the
-   * family-wide registry. No numerical work or Python runtime is involved. */
+  /** @native-contract generativeqc::Calculation::supported_properties
+   * @behavior Query the exact prepared method/backend/system property contract.
+   * @inputs The live Calculation owner; no execution is requested.
+   * @outputs Returns context-qualified energy/force property bits by value.
+   * @lifetime The returned flags are independent of the owner; the native handle
+   * remains borrowed by this wrapper during the call.
+   * @errors Throws Error if the native context query fails.
+   * @execution Synchronous, Python-free; serialize against execute/destruction.
+   */
   [[nodiscard]] generativeqc_property_flags supported_properties() const {
     generativeqc_property_flags properties{};
     check(generativeqc_calculation_get_supported_properties_v1(handle_, &properties));
