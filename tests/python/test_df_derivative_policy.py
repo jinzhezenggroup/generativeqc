@@ -87,7 +87,7 @@ def test_work_model_boundaries_and_unknown_architecture(
         ]
         for rank in (0, max(1, n // 5), max(1, n // 4), n // 4 + 1)
         for v in (0, 1)
-        for arch in (80, 89, 100, 120, 121)
+        for arch in (0, 80, 89, 90, 100, 120, 121)
     ]
     for (n, a, op, ap, rank, v, arch), selected in zip(rows, policy(rows), strict=True):
         assert selected == (
