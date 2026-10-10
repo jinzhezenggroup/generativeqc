@@ -79,3 +79,10 @@ def test_materialized_canonical_sources_reuse_range_and_scatter_owners() -> None
     assert "value[slot], true, false" in source
     assert "value[slot], false, true" in source
     assert "range, omega, shared.coulomb" in source
+
+
+def test_materialized_recurrence_retains_qualified_order_bounds() -> None:
+    """Multi-packet canonical reuse retains the established scientific owner."""
+    source = emit_direct_source_contraction_header()
+    assert "AngularOrder >= 5 && AngularOrder <= kMaximumCoulombOrder" in source
+    assert "sizeof(MaterializedDirectPairRecurrence<12>) <= (48U << 10)" in source
