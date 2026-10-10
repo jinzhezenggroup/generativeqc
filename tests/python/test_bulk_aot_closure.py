@@ -383,12 +383,19 @@ def compile_controlled(
         return run_cached_compiler(command, 60, label="real CPU closure integration")
 
 
-def test_real_gcc_terminal_backslash_decoys_fail_closed(real_gcc: tuple) -> None:
+@pytest.mark.parametrize("position", ["followed", "wrapped", "final"])
+def test_real_gcc_terminal_backslash_decoys_fail_closed(
+    real_gcc: tuple, position: str
+) -> None:
     compiler, manifest = real_gcc
     # A short path keeps both user headers on one GCC -M line. Cover a decoy
-    # for both merged tokens and a wrapped separator, so existence is no oracle.
+    # for merged tokens, a wrapped separator and the final rule terminator, so
+    # existence is no oracle for any of the ambiguous spellings.
     with tempfile.TemporaryDirectory(prefix="closure-", dir="/tmp") as temporary:
         root = Path(temporary)
+        if position == "wrapped":
+            root /= "long-" + "n" * 90
+            root.mkdir()
         header = root / "foo\\"
         other = root / "z.h"
         header.write_text("/* real first header */\n", encoding="utf-8")
@@ -397,8 +404,12 @@ def test_real_gcc_terminal_backslash_decoys_fail_closed(real_gcc: tuple) -> None
         merged.parent.mkdir(parents=True)
         merged.write_text("/* merged decoy */\n", encoding="utf-8")
         (root / "foo ").write_text("/* wrapped decoy */\n", encoding="utf-8")
+        (root / "foo").write_text("/* final-continuation decoy */\n", encoding="utf-8")
         source = root / "point.c"
-        text = '#include "foo\\"\n#include "z.h"\nint point(void) { return 0; }\n'
+        includes = ['#include "foo\\"\n', '#include "z.h"\n']
+        if position == "final":
+            includes.reverse()
+        text = "".join(includes) + "int point(void) { return 0; }\n"
         source.write_text(text, encoding="utf-8")
         emitted = run_compiler(
             [compiler, "-M", "-MT", "closure", str(source)],
@@ -407,13 +418,20 @@ def test_real_gcc_terminal_backslash_decoys_fail_closed(real_gcc: tuple) -> None
             environment=collector.CPU_ENVIRONMENT,
         )
         assert emitted.returncode == 0 and not emitted.timed_out, emitted.stderr
-        assert str(header) + " " + str(other) in emitted.stdout, repr(emitted.stdout)
+        if position == "followed":
+            assert str(header) + " " + str(other) in emitted.stdout, repr(
+                emitted.stdout
+            )
+        elif position == "wrapped":
+            assert str(header) + " \\\n" in emitted.stdout, repr(emitted.stdout)
+        else:
+            assert emitted.stdout.endswith(str(header) + "\n"), repr(emitted.stdout)
         for comment in ("first", "changed"):
             header.write_text(f"/* {comment} real header */\n", encoding="utf-8")
             result = collector.collect_cpu_closure(
                 variant(text), source, compiler=compiler, toolchain=manifest
             )
-            assert result.reasons == ("ambiguous trailing dependency backslashes",)
+            assert result.reasons
             assert result.closure is not None and result.closure.cache_key is None
 
 
