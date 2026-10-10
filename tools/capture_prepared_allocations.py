@@ -269,15 +269,15 @@ def schedule() -> list[dict[str, Any]]:
     ]
 
 
-def identity(arguments: argparse.Namespace) -> dict[str, Any]:
-    """Verify exported source, installed artifacts and the Slurm-assigned GPU."""
+def visible_device_uuid(library: Path) -> str:
+    """Resolve the actual full GPU visible to a pinned CUDA runtime, without fallback."""
     _require(bool(os.environ.get("SLURM_JOB_ID")), "GPU capture/pinning requires Slurm")
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     _require(bool(visible) and "," not in visible, "request exactly one Slurm GPU")
     _require(not visible.startswith("MIG-"), "MIG capture is not supported")
     # NVML ordinals need not match CUDA's ordering or scheduler remapping.
     # Resolve visible ordinal zero through the same library used for capture.
-    native = ctypes.CDLL(str(arguments.library.resolve()))
+    native = ctypes.CDLL(str(library.resolve()))
     count = ctypes.c_int()
     native.cudaGetDeviceCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
     native.cudaGetDeviceCount.restype = ctypes.c_int
@@ -315,6 +315,12 @@ def identity(arguments: argparse.Namespace) -> dict[str, Any]:
         mig_mode in ("Disabled", "[N/A]"),
         "MIG-enabled or unknown GPU mode is unsupported",
     )
+    return uuid
+
+
+def identity(arguments: argparse.Namespace) -> dict[str, Any]:
+    """Verify exported source, installed artifacts and the Slurm-assigned GPU."""
+    uuid = visible_device_uuid(arguments.library)
     manifest = load(arguments.source_manifest)
     verify_source(ROOT, manifest)
     paths = {entry["path"] for entry in manifest["entries"]}

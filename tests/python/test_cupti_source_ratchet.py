@@ -20,7 +20,7 @@ from test_cupti_source_capture import (
 
 from tools import capture_prepared_residency
 from tools.audit_replay_allocations import InvalidReceipt
-from tools.capture_prepared_allocations import ENDPOINTS, workload
+from tools.capture_prepared_allocations import workload
 from tools.cupti_source_capture import WORK_COUNTERS, summarize_sources
 from tools.cupti_source_ratchet import (
     LEGACY_SCHEMA,
@@ -37,7 +37,7 @@ QUALIFIED = ROOT / "manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1
 
 
 def legacy_translation_workload(method: str) -> dict[str, Any]:
-    """Reproduce the retained descriptor, not a receipt for today's displacement."""
+    """Keep Slurm job 6933's literal descriptor independent of today's workload."""
     hydrogen = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
     water = [(8, (0.0, 0.0, 0.0)), (1, (1.43, 0.0, 1.11)), (1, (-1.43, 0.0, 1.11))]
     return {
@@ -48,7 +48,13 @@ def legacy_translation_workload(method: str) -> dict[str, Any]:
         "device_id": 0,
         "systems": [hydrogen, water, hydrogen],
         "moved_dz": 0.01,
-        "endpoints": ENDPOINTS,
+        "endpoints": (
+            ("energy-first", "endpoint", ("energy",)),
+            ("energy-warm", "replay", ("energy",)),
+            ("force-first", "endpoint", ("energy", "forces")),
+            ("force-warm", "replay", ("energy", "forces")),
+            ("moved", "geometry_rebuild", ("energy", "forces")),
+        ),
         "energy_gate": 1e-10,
         "force_gate": 1e-9,
     }
@@ -490,12 +496,14 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     monkeypatch.setenv("SLURM_JOB_ID", "cpu-metadata-double")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     monkeypatch.setattr(
-        capture_prepared_residency.subprocess,
-        "check_output",
-        lambda *args, **kwargs: "GPU-cpu-metadata-double\n",
+        capture_prepared_residency,
+        "visible_device_uuid",
+        lambda _: "GPU-cpu-metadata-double",
+        raising=False,
     )
     monkeypatch.setattr(capture_prepared_residency, "verify_source", lambda *args: None)
     required = [
+        "tools/capture_prepared_allocations.py",
         "tools/cupti_residency_capture.cpp",
         "tools/cupti_residency_capture.py",
         "tools/capture_prepared_residency.py",
@@ -528,6 +536,7 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     binary = tmp_path / "not-a-library"
     binary.write_bytes(b"metadata-double-not-executable")
     limits = tmp_path / "independent-policy.json"
+    # Synthetic contract metadata only, with no relabeled historical baseline.
     synthetic_policy = policy()
     synthetic_policy["profiles"][0]["workload_sha256"] = workload_digest(
         workload("rhf")

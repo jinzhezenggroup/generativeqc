@@ -54,6 +54,8 @@ static __global__ void project_tau_kernel(const double* tau, const double* singl
       local.refused = 1;
       continue;
     }
+    local.tau_magnitude_bits =
+        max(local.tau_magnitude_bits, max(mean_bits, max(left_bits, right_bits)));
     local.tau_error_bits = max(local.tau_error_bits, outward_distance(left, mean, local.refused));
     local.tau_error_bits = max(local.tau_error_bits, outward_distance(right, mean, local.refused));
   }
@@ -65,6 +67,7 @@ static __global__ void project_tau_kernel(const double* tau, const double* singl
       const auto source = partial[threadIdx.x + offset];
       target.tau_error_bits = max(target.tau_error_bits, source.tau_error_bits);
       target.t1_magnitude_bits = max(target.t1_magnitude_bits, source.t1_magnitude_bits);
+      target.tau_magnitude_bits = max(target.tau_magnitude_bits, source.tau_magnitude_bits);
       target.refused |= source.refused;
     }
     __syncthreads();
@@ -74,6 +77,8 @@ static __global__ void project_tau_kernel(const double* tau, const double* singl
               static_cast<unsigned long long>(partial[0].tau_error_bits));
     atomicMax(reinterpret_cast<unsigned long long*>(&maxima->t1_magnitude_bits),
               static_cast<unsigned long long>(partial[0].t1_magnitude_bits));
+    atomicMax(reinterpret_cast<unsigned long long*>(&maxima->tau_magnitude_bits),
+              static_cast<unsigned long long>(partial[0].tau_magnitude_bits));
     atomicOr(&maxima->refused, partial[0].refused);
   }
 }

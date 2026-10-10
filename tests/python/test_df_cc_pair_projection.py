@@ -96,6 +96,7 @@ def test_outward_projection_covers_actual_error_and_diagonal_reflection(
     metadata, paired = _run(projection_probe, occupied, virtuals, singles, tau)
     assert metadata[0] == 0
     assert metadata[2] == max(bits & 0x7FFFFFFFFFFFFFFF for bits in singles)
+    assert metadata[3] == max(bits & 0x7FFFFFFFFFFFFFFF for bits in [*tau, *paired])
     error = _real(metadata[1])
     cursor = 0
     for first_occupied in range(occupied):
@@ -125,7 +126,7 @@ def test_outward_projection_covers_actual_error_and_diagonal_reflection(
 
 def test_equal_subnormal_tau_is_bitwise_preserved(projection_probe: Path) -> None:
     metadata, paired = _run(projection_probe, 2, 3, [1] * 6, [1] * 36)
-    assert metadata == [0, 0, 1]
+    assert metadata == [0, 0, 1, 1]
     assert paired == [1] * 27
 
 
