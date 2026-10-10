@@ -10,13 +10,13 @@ is the user-facing source for capability admission.
 
 ## Stationary DFT plan and molecular execution
 
-DFT Hessian support is derived from resolved `MethodIR` primitive capabilities,
-not from functional-name branches. `StationaryHVPPlan` is the first compiler
-boundary for this rule. Its initial admitted topology is direct all-electron
-FP64 LDA/GGA RKS/UKS with the native SCF point model: LDA and GGA share the
-same one-electron, Coulomb, XC AO/grid/partition, overlap/Pulay and nuclear
-directional source inventory, while their active `rho`/`sigma` features come
-from the method graph.
+DFT Hessian source planning comes from resolved `MethodIR` primitive
+capabilities, not functional-name branches. `StationaryHVPPlan` admits
+compiler-only direct all-electron FP64 LDA/GGA RKS/UKS with the native SCF
+point model and optionally composes full-range exact exchange. LDA/GGA share
+one-electron, Coulomb, XC AO/grid/partition, overlap/Pulay and nuclear
+sources, while their `rho`/`sigma` features come from the method graph.
+Global hybrids add one exchange source without PBE0/B3LYP-specific code.
 
 The planner binds the shared #179 CPKS contract, #161/#236 XC feature-Hessian
 action and #178 weighted second-integral HVP contract. Its integral blocks
@@ -27,11 +27,12 @@ condition. Each rule declares its required derivative capabilities, supported
 ingredients, directional sources and any response inputs needed by bounded
 integral HVP lowering. The plan derives its source inventory by composing those
 rules with the stationary mean-field envelope. It fails closed when an active
-primitive has no registered second-order rule. Therefore full/range-separated
-exchange, `tau`, nonlocal correlation, DF and ECP do not inherit Hessian
-support merely from energy or gradient support. Adding another functional
-inside an already qualified LDA/GGA primitive family must not add
-Hessian-specific scientific source code.
+primitive has no registered second-order rule. The full-range exchange rule reuses the existing
+ordered-quartet stationary-gradient weight and its TensorIR JVP with both
+same-spin density response inputs. It requires first-integral directions
+and generated weighted second-integral HVPs. Range-separated exchange,
+`tau`, nonlocal correlation, DF and ECP remain unsupported at this planning
+boundary. A compiled source rule does not qualify a molecular endpoint.
 
 Molecular execution is a separate method-neutral layer. Its canonical
 installed owner is now `generativeqc.second_order`; the former
@@ -48,14 +49,18 @@ response and primitive providers. Missing or extra contributors fail before
 execution.
 
 The plan now exposes bounded `integral_block` programs for the one-electron,
-Coulomb and overlap/Pulay sources. Each block reuses the stationary-gradient
+Coulomb, overlap/Pulay and optional full-range exchange sources. Each block
+reuses the stationary-gradient
 source energy and derives its fixed integral weights, then generates an exact
 TensorIR JVP for a supplied
 density or weighted-density response, and contracts that response with the
 first-integral directional tile plus #178's fixed-weight second-integral HVP
 vector. This is an executable source-level algebra slice for both RKS and UKS;
 native shell/center recovery, shared CPKS execution, XC/grid/partition motion
-and molecular assembly remain owned by their qualified consumers.
+and molecular assembly remain owned by their qualified consumers. In particular,
+compiled PBE0/B3LYP exchange HVP weights do **not** qualify hybrid molecular
+Hessians: the mixed K/XC CPKS response, metric/Pulay relaxation and complete
+molecular source inventory still need independent numerical acceptance.
 
 The closed-shell nuclear-perturbation consumer follows the same rule. Its
 canonical installed owner is now `generativeqc.stationary_nuclear`: metric-density
