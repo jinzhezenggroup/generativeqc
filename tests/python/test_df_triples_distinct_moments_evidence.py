@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
 
