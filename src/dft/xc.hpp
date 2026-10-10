@@ -270,6 +270,26 @@ SpinXcIntegral integrate_pbe_uks_with_tail(const AoBasis& basis, const Molecular
                                            const std::vector<double>& beta_density,
                                            std::size_t tile_points = 256);
 
+/** Analytic nuclear derivative of the *discrete* PBE XC energy at fixed,
+ * already converged AO spin densities. This is +dE_xc/dR, NOT a force:
+ * H'/Pulay/J'/K' and nuclear repulsion belong to separate native owners.
+ *
+ * Reuses the exact generated production PBE point evaluator and the
+ * MolecularGrid's analytic Becke partition derivative. The grid points move
+ * with their owning nuclei; AO-center and point-translation chain rules are
+ * both included. One total-density matrix means RKS (double occupation);
+ * two separately occupied matrices mean UKS. Mixed/other functionals are
+ * deliberately not inferred from the scales.
+ */
+struct PbeStationaryXcDerivative {
+  double energy{};
+  std::vector<double> gradient;
+};
+PbeStationaryXcDerivative stationary_pbe_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points,
+    double exchange_scale = 1.0, double correlation_scale = 1.0);
+
 }  // namespace generativeqc::dft
 
 #endif

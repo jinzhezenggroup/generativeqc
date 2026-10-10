@@ -20,6 +20,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc_cuda_tuning_device](#native-c-generativeqc-cuda-tuning-device)
 - [generativeqc_status_message](#native-c-generativeqc-status-message)
 - [generativeqc_method_available](#native-c-generativeqc-method-available)
+- [generativeqc_method_from_name](#native-c-generativeqc-method-from-name)
+- [generativeqc_method_get_name](#native-c-generativeqc-method-get-name)
 - [generativeqc_method_get_capabilities](#native-c-generativeqc-method-get-capabilities)
 - [generativeqc_context_create](#native-c-generativeqc-context-create)
 - [generativeqc_context_destroy](#native-c-generativeqc-context-destroy)
@@ -35,6 +37,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc_system_df_gradient_cuda](#native-c-generativeqc-system-df-gradient-cuda)
 - [generativeqc_calculation_prepare](#native-c-generativeqc-calculation-prepare)
 - [generativeqc_calculation_destroy](#native-c-generativeqc-calculation-destroy)
+- [generativeqc_calculation_get_supported_properties_v1](#native-c-generativeqc-calculation-get-supported-properties-v1)
 - [generativeqc_calculation_execute](#native-c-generativeqc-calculation-execute)
 - [generativeqc_calculation_get_scf_diagnostic](#native-c-generativeqc-calculation-get-scf-diagnostic)
 - [generativeqc_calculation_get_ks_diagnostic](#native-c-generativeqc-calculation-get-ks-diagnostic)
@@ -96,6 +99,8 @@ capability authorities, serialization, and status handling.
 - [generativeqc::check](#native-cpp-generativeqc-check)
 - [generativeqc::MethodCapabilities](#native-cpp-generativeqc-methodcapabilities)
 - [generativeqc::method_capabilities](#native-cpp-generativeqc-method-capabilities)
+- [generativeqc::resolve_method](#native-cpp-generativeqc-resolve-method)
+- [generativeqc::default_method_descriptor](#native-cpp-generativeqc-default-method-descriptor)
 - [generativeqc::Context](#native-cpp-generativeqc-context)
 - [generativeqc::Context::Context](#native-cpp-generativeqc-context-context)
 - [generativeqc::Context::~Context](#native-cpp-generativeqc-context-destructor-context)
@@ -118,6 +123,7 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Calculation::Calculation-copy](#native-cpp-generativeqc-calculation-calculation-copy)
 - [generativeqc::Calculation::operator=-copy](#native-cpp-generativeqc-calculation-copy-assignment-copy)
 - [generativeqc::Calculation::Calculation-move](#native-cpp-generativeqc-calculation-calculation-move)
+- [generativeqc::Calculation::supported_properties](#native-cpp-generativeqc-calculation-supported-properties)
 - [generativeqc::Calculation::execute](#native-cpp-generativeqc-calculation-execute)
 - [generativeqc::BatchItemResult](#native-cpp-generativeqc-batchitemresult)
 - [generativeqc::DensityFittingMetricDiagnostic](#native-cpp-generativeqc-densityfittingmetricdiagnostic)
@@ -132,6 +138,15 @@ capability authorities, serialization, and status handling.
 - [generativeqc::Batch::clear_warm_starts](#native-cpp-generativeqc-batch-clear-warm-starts)
 - [generativeqc::Batch::set_warm_start_updates](#native-cpp-generativeqc-batch-set-warm-start-updates)
 - [generativeqc::Batch::last_density_fitting_metric_diagnostics](#native-cpp-generativeqc-batch-last-density-fitting-metric-diagnostics)
+- [generativeqc::KsGrid](#native-cpp-generativeqc-ksgrid)
+- [generativeqc::KsComposition](#native-cpp-generativeqc-kscomposition)
+- [generativeqc::KsComposition::KsComposition](#native-cpp-generativeqc-kscomposition-kscomposition)
+- [generativeqc::KsComposition::set_grid](#native-cpp-generativeqc-kscomposition-set-grid)
+- [generativeqc::KsComposition::set_element_radii](#native-cpp-generativeqc-kscomposition-set-element-radii)
+- [generativeqc::KsComposition::set_xc_schedule](#native-cpp-generativeqc-kscomposition-set-xc-schedule)
+- [generativeqc::KsComposition::add_semilocal](#native-cpp-generativeqc-kscomposition-add-semilocal)
+- [generativeqc::KsComposition::add_exact_exchange](#native-cpp-generativeqc-kscomposition-add-exact-exchange)
+- [generativeqc::KsComposition::prepare](#native-cpp-generativeqc-kscomposition-prepare)
 
 (native-c-generativeqc-ks-options-version)=
 ## generativeqc_ks_options_version
@@ -355,6 +370,57 @@ context/basis/property.
 
 **Execution.** Synchronous immutable registry lookup; no numerical execution or device
 initialization.
+
+(native-c-generativeqc-method-from-name)=
+## generativeqc_method_from_name
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_method_from_name ( const char * canonical_name , generativeqc_method * output ) ;
+```
+
+Resolve an exact canonical native-manifest name (no Python or dynamic Libxc discovery).
+On invalid arguments or unknown names returns INVALID_ARGUMENT without writing out.
+An accepted name identifies a provider, not contextual method/backend/property support.
+
+**Behavior.** Resolve an exact canonical generated native-manifest name to its method identifier.
+
+**Inputs.** canonical_name is a readable NUL-terminated string; output is writable for one
+generativeqc_method. Names are case-sensitive with no alias or whitespace normalization.
+
+**Outputs.** Writes the method identifier only on SUCCESS; leaves output unchanged on failure.
+
+**Lifetime.** Borrows input/output storage only for this synchronous call; retains neither.
+
+**Errors.** Returns INVALID_ARGUMENT for a NULL argument, an empty name, or an unknown name.
+
+**Execution.** Immutable registry lookup without a context or numerical execution.
+
+(native-c-generativeqc-method-get-name)=
+## generativeqc_method_get_name
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_method_get_name ( generativeqc_method method , const char * * output ) ;
+```
+
+Borrow the manifest's canonical NUL-terminated name, valid for process lifetime.
+Unknown method IDs or NULL output return INVALID_ARGUMENT.
+
+**Behavior.** Look up the canonical generated native-manifest name for a method identifier.
+
+**Inputs.** method is a generated native identifier; output is writable for one const char pointer.
+
+**Outputs.** Writes the borrowed canonical name only on SUCCESS; leaves output unchanged on failure.
+
+**Lifetime.** The immutable returned NUL-terminated string remains valid for the process lifetime;
+do not modify or free it.
+
+**Errors.** Returns INVALID_ARGUMENT for an unknown method identifier or NULL output.
+
+**Execution.** Immutable registry lookup without a context or numerical execution.
 
 (native-c-generativeqc-method-get-capabilities)=
 ## generativeqc_method_get_capabilities
@@ -830,6 +896,27 @@ and invalidates the handle and all borrowed owner state.
 the handle contract.
 
 **Execution.** Synchronous release; serialize with every use of this handle and its context.
+
+(native-c-generativeqc-calculation-get-supported-properties-v1)=
+## generativeqc_calculation_get_supported_properties_v1
+
+Source: [generativeqc.h](../../include/generativeqc/generativeqc.h)
+
+```cpp
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_supported_properties_v1 ( const generativeqc_calculation * calculation , generativeqc_property_flags * properties ) ;
+```
+
+**Behavior.** Query context-qualified energy/force properties of an immutable prepared calculation.
+
+**Inputs.** A live prepared calculation and non-NULL output pointer; no SCF inputs are needed.
+
+**Outputs.** Returns admitted property flags for the exact system, method, backend and provider.
+
+**Lifetime.** The output is copied; callers own its value and keep the context alive.
+
+**Errors.** INVALID_ARGUMENT for NULL inputs; any failure leaves output unchanged.
+
+**Execution.** Synchronous no-work query; serialize against execution and owner destruction.
 
 (native-c-generativeqc-calculation-execute)=
 ## generativeqc_calculation_execute
@@ -2689,6 +2776,57 @@ propagate.
 
 **Execution.** Synchronous registry query; no numerical execution.
 
+(native-cpp-generativeqc-resolve-method)=
+## generativeqc::resolve_method
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+inline generativeqc_method resolve_method ( std :: string_view canonical_name )
+```
+
+Resolve only names in the compiled native provider manifest.
+Compiler-only MethodIR aliases such as pbe0-rks require explicit KS composition.
+
+**Behavior.** Resolve an exact canonical name in the generated native provider manifest.
+
+**Inputs.** canonical_name is a complete string view, with no embedded or trailing NUL.
+
+**Outputs.** Returns the native method identifier; this does not establish contextual support.
+
+**Lifetime.** Copies the view for the synchronous C query; retains no caller storage.
+
+**Errors.** Throws Error with INVALID_ARGUMENT for empty, unknown, or NUL-containing names;
+string allocation may throw std::bad_alloc.
+
+**Execution.** Immutable registry query without numerical execution or a context.
+
+(native-cpp-generativeqc-default-method-descriptor)=
+## generativeqc::default_method_descriptor
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+inline generativeqc_method_descriptor default_method_descriptor ( std :: string_view name )
+```
+
+A zero-initialized descriptor with the required ABI header.
+Method-specific zero fields retain the native default contract.
+
+**Behavior.** Build a zero-initialized method descriptor for an exact native manifest name.
+
+**Inputs.** name obeys resolve_method's complete-string, no-NUL contract.
+
+**Outputs.** Sets struct_size, abi_version, and method; all other fields remain zero/null and
+retain their method-specific native default meaning.
+
+**Lifetime.** Returns an owned value and retains no name storage or native handles.
+
+**Errors.** Propagates resolve_method's Error or allocation exception; native preparation still
+validates the completed descriptor, backend, system, and requested properties.
+
+**Execution.** Synchronous registry query; no calculation is prepared or executed.
+
 (native-cpp-generativeqc-context)=
 ## generativeqc::Context
 
@@ -3132,6 +3270,28 @@ alive.
 **Execution.** Synchronous ownership transfer; moved-from operations other than destruction are
 outside the wrapper contract.
 
+(native-cpp-generativeqc-calculation-supported-properties)=
+## generativeqc::Calculation::supported_properties
+
+Source: [generativeqc.hpp](../../include/generativeqc/generativeqc.hpp)
+
+```cpp
+[[ nodiscard ]] generativeqc_property_flags supported_properties ( ) const
+```
+
+**Behavior.** Query the exact prepared method/backend/system property contract.
+
+**Inputs.** The live Calculation owner; no execution is requested.
+
+**Outputs.** Returns context-qualified energy/force property bits by value.
+
+**Lifetime.** The returned flags are independent of the owner; the native handle
+remains borrowed by this wrapper during the call.
+
+**Errors.** Throws Error if the native context query fails.
+
+**Execution.** Synchronous, Python-free; serialize against execute/destruction.
+
 (native-cpp-generativeqc-calculation-execute)=
 ## generativeqc::Calculation::execute
 
@@ -3456,3 +3616,217 @@ and destruction. No concurrent execute/query or destroy/use is supported.
 
 **Units.** Byte/rank/threshold/conditioning semantics are those of
 DensityFittingMetricDiagnostic; peaks exclude generated-force staging.
+
+(native-cpp-generativeqc-ksgrid)=
+## generativeqc::KsGrid
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+struct KsGrid
+```
+
+Caller-selected molecular quadrature; no implicit production grid is promised.
+
+**Behavior.** Value descriptor for caller-selected molecular quadrature; defaults form a small
+reference grid and do not promise production convergence.
+
+**Outputs.** version selects reference (1) or resolved production (2) grid semantics;
+radial_points, angular_polar, and angular_azimuth set quadrature counts;
+partition_iterations sets Becke partition smoothing; coincident_tolerance sets the
+coincident-center threshold; tile_points bounds the grid tile size.
+
+**Lifetime.** Owns only scalar values; copying preserves the complete descriptor.
+
+**Errors.** Construction does not validate the grid; native preparation validates it.
+
+**Units.** coincident_tolerance is in Bohr; point/iteration counts and version are dimensionless.
+
+(native-cpp-generativeqc-kscomposition)=
+## generativeqc::KsComposition
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+class KsComposition
+```
+
+Build a compiler-equivalent explicit KS composition in plain C++.
+
+This is a transport builder, not a second scientific functional registry:
+callers supply semilocal component IDs, coefficients and the qualified SCF
+domain. Native preparation copies every pointer-backed field synchronously.
+Its returned Calculation therefore does not borrow this builder's lifetime.
+A force request still obeys the native method capabilities; no Python fallback.
+
+**Behavior.** Own a caller-supplied KS primitive composition for native preparation; this builder
+is not a functional-name registry and adds no method or property capabilities.
+
+**Lifetime.** Owns copied/moved strings, exchange terms, grid, and optional radii. Copies are
+independent; a successfully prepared Calculation does not borrow builder storage.
+
+**Errors.** Explicit operations can throw std::invalid_argument, Error, or standard allocation
+exceptions as documented below; native preparation validates physical admissibility.
+
+**Execution.** Serialize mutation with reads/preparation using the same builder. Prepared
+calculations obey their own Context lifetime and execution rules.
+
+(native-cpp-generativeqc-kscomposition-kscomposition)=
+## generativeqc::KsComposition::KsComposition
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+KsComposition ( generativeqc_method carrier , std :: string scf_domain , std :: uint32_t spin_channels )
+```
+
+**Behavior.** Initialize an empty explicit KS composition for a selected native DFT carrier.
+
+**Inputs.** carrier identifies the eventual DFT method; scf_domain names its compiler-owned
+numerical domain; spin_channels is 1 for RKS or 2 for UKS.
+
+**Lifetime.** Owns the supplied domain string; retains no caller storage.
+
+**Errors.** Throws std::invalid_argument for an empty domain or a spin count other than 1/2.
+Carrier/domain compatibility is deferred to prepare; allocation may throw.
+
+**Execution.** Synchronous value construction without native execution.
+
+(native-cpp-generativeqc-kscomposition-set-grid)=
+## generativeqc::KsComposition::set_grid
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+KsComposition & set_grid ( KsGrid grid )
+```
+
+**Behavior.** Replace the quadrature descriptor used by subsequent preparation.
+
+**Inputs.** grid follows the KsGrid field and unit conventions.
+
+**Outputs.** Returns this builder by reference for chaining.
+
+**Lifetime.** Copies the complete descriptor; previously prepared calculations are unaffected.
+
+**Errors.** No validation here; invalid grid values are rejected during native preparation.
+
+**Execution.** Synchronous mutation; serialize with other accesses to this builder.
+
+(native-cpp-generativeqc-kscomposition-set-element-radii)=
+## generativeqc::KsComposition::set_element_radii
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+KsComposition & set_element_radii ( std :: array < double , 119 > radii )
+```
+
+**Behavior.** Replace the optional element-radius table used by subsequent preparation.
+
+**Inputs.** radii has slots 0..118 indexed by atomic number; slot zero is unused.
+
+**Outputs.** Returns this builder by reference for chaining.
+
+**Lifetime.** Owns the supplied array independently of caller storage.
+
+**Errors.** Validation is deferred to native preparation, including production-grid radii.
+
+**Execution.** Synchronous mutation; serialize with other accesses to this builder.
+
+**Units.** Radii are in Bohr.
+
+(native-cpp-generativeqc-kscomposition-set-xc-schedule)=
+## generativeqc::KsComposition::set_xc_schedule
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+KsComposition & set_xc_schedule ( generativeqc_xc_execution_schedule schedule )
+```
+
+**Behavior.** Select the XC execution schedule for subsequent preparation.
+
+**Inputs.** schedule is a native XC schedule identifier; the initial value is DEVICE_FUSED.
+
+**Outputs.** Returns this builder by reference for chaining.
+
+**Errors.** Native preparation validates schedule/backend support; this setter does not.
+
+**Execution.** Synchronous scalar mutation; serialize with other accesses to this builder.
+
+(native-cpp-generativeqc-kscomposition-add-semilocal)=
+## generativeqc::KsComposition::add_semilocal
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+KsComposition & add_semilocal ( std :: string component_id , double coefficient )
+```
+
+**Behavior.** Append one explicit semilocal component and its physical coefficient.
+
+**Inputs.** component_id names a native-supported semilocal component; coefficient is its
+dimensionless multiplier. Composition/domain compatibility is checked during preparation.
+
+**Outputs.** Returns this builder by reference for chaining; does not deduplicate components.
+
+**Lifetime.** Owns the component string and coefficient independently of caller storage.
+
+**Errors.** Throws std::invalid_argument for an empty identifier; allocation may throw.
+
+**Execution.** Synchronous mutation; serialize with other accesses to this builder.
+
+(native-cpp-generativeqc-kscomposition-add-exact-exchange)=
+## generativeqc::KsComposition::add_exact_exchange
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+KsComposition & add_exact_exchange ( generativeqc_ks_exchange_operator operation , double coefficient , double omega = 0.0 )
+```
+
+**Behavior.** Append an exact-exchange term with the spin-resolved native Fock coefficient:
+minus one half of coefficient for RKS, or minus coefficient for UKS.
+
+**Inputs.** operation selects full-, short-, or long-range exchange; coefficient is its
+physical fraction; omega is the range parameter and defaults to zero.
+
+**Outputs.** Returns this builder by reference for chaining; does not deduplicate terms.
+
+**Lifetime.** Owns a value copy of the term.
+
+**Errors.** Allocation may throw; operator/range/composition validation is deferred to prepare.
+
+**Execution.** Synchronous mutation; serialize with other accesses to this builder.
+
+**Units.** coefficient is dimensionless; omega is in inverse Bohr and zero for full range.
+
+(native-cpp-generativeqc-kscomposition-prepare)=
+## generativeqc::KsComposition::prepare
+
+Source: [ks.hpp](../../include/generativeqc/ks.hpp)
+
+```cpp
+[[ nodiscard ]] Calculation prepare ( Context & context , const System & system , generativeqc_method_descriptor descriptor ) const
+```
+
+**Behavior.** Prepare a native calculation from a snapshot of this explicit KS composition.
+
+**Inputs.** context and system must be valid; descriptor must have its ABI header initialized
+and its method equal to this builder's DFT carrier. Replaces descriptor.ks_options in the
+local descriptor copy; other options retain their ordinary native contract.
+
+**Outputs.** Returns an owned Calculation; no energy or forces are computed here.
+
+**Lifetime.** Native preparation copies all pointer-backed composition data before returning.
+The builder and input system need not survive the calculation; its Context must survive it.
+
+**Errors.** Throws std::invalid_argument for carrier mismatch or a non-DFT carrier; unknown
+carrier/query or native preparation failures throw Error. Allocation exceptions may propagate.
+
+**Execution.** Synchronous preparation; serialize with builder mutation and Context operations.
+Native capabilities still govern execution, including rejection of unsupported DFT forces.
+
+**Units.** Grid radii/tolerances use Bohr, exchange range uses inverse Bohr, and energies use
+Hartree when the returned calculation is subsequently executed.

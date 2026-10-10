@@ -2,6 +2,21 @@
   "benchmark_results_max_bytes": 67108864,
   "change_review_max_bytes": 2097152,
   "exceptions": {
+    "benchmarks/results/ecp-consumers-171/raw-evidence.zip": {
+      "owner": "ecp-consumers-171",
+      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ecp-consumers-171/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
+      "sha256": "628ddb41f9654f211a527c728ebf5f7f25f883e6ac5ecb5f4345e3909838839c"
+    },
+    "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip": {
+      "owner": "ecp-projector-171",
+      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
+      "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960"
+    },
+    "benchmarks/results/issue174-slice-e/raw-evidence.zip": {
+      "owner": "issue174-slice-e",
+      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue174-slice-e/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
+      "sha256": "5965ee285b48bfd618bc94cc0c170d2ce069145b538c5e0d6b7a7a3ee318f5fc"
+    },
     "benchmarks/results/issue206-direct-force-state/integration-e4f2f67/00-configure.log.gz": {
       "owner": "issue206-direct-force-state/integration-e4f2f67",
       "reason": "Hash-bound provenance for this previously blocked production acceptance: records the complete Release/default-AOT build, frozen-source completion marker and exact-base rebuild, distinguishing these measured binaries from earlier incomplete/dev/stale builds. Compact gzip only; excludes compiler objects and binaries.",
@@ -112,26 +127,6 @@
       "reason": "Hash-bound provenance for this previously blocked production acceptance: records the complete Release/default-AOT build, frozen-source completion marker and exact-base rebuild, distinguishing these measured binaries from earlier incomplete/dev/stale builds. Compact gzip only; excludes compiler objects and binaries.",
       "sha256": "56dbda21ad111017313644649fb7574ce2d74a1a8a7851b43e612de6820206be"
     },
-    "benchmarks/results/issue308-property-budgets/evidence.zip": {
-      "owner": "issue308-property-budgets",
-      "reason": "Bounded native preparation outputs, exact accepted/initial-rejected native source reconstruction, input identity and reproduction commands; excludes binaries, routine logs and full transient matrices. Every member byte-restored.",
-      "sha256": "08880e8b611d21dd4e111152cb084a34819684a6b0c1f93aa0bf809e8e4cbf37"
-    },
-    "benchmarks/results/ecp-consumers-171/raw-evidence.zip": {
-      "owner": "ecp-consumers-171",
-      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ecp-consumers-171/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
-      "sha256": "628ddb41f9654f211a527c728ebf5f7f25f883e6ac5ecb5f4345e3909838839c"
-    },
-    "benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.zip": {
-      "owner": "ecp-projector-171",
-      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ecp-projector-171/review-qualification/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
-      "sha256": "4e8c5cad08e424fdd1690af316277b5ee833288b7d0b5332629c5422be6c6960"
-    },
-    "benchmarks/results/issue174-slice-e/raw-evidence.zip": {
-      "owner": "issue174-slice-e",
-      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue174-slice-e/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
-      "sha256": "5965ee285b48bfd618bc94cc0c170d2ce069145b538c5e0d6b7a7a3ee318f5fc"
-    },
     "benchmarks/results/issue282-283-integration/raw-evidence.zip": {
       "owner": "issue282-283-integration",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue282-283-integration/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
@@ -157,6 +152,11 @@
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue308-large-diagnostics/manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
       "sha256": "b9e4876e70aa15887ac7281da466798109611e7ef591584c24e46c48f5e621f0"
     },
+    "benchmarks/results/issue308-property-budgets/evidence.zip": {
+      "owner": "issue308-property-budgets",
+      "reason": "Bounded native preparation outputs, exact accepted/initial-rejected native source reconstruction, input identity and reproduction commands; excludes binaries, routine logs and full transient matrices. Every member byte-restored.",
+      "sha256": "08880e8b611d21dd4e111152cb084a34819684a6b0c1f93aa0bf809e8e4cbf37"
+    },
     "benchmarks/results/issue310-capture-recovery/evidence.zip": {
       "owner": "issue310-capture-recovery",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue310-capture-recovery/manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
@@ -171,6 +171,26 @@
       "owner": "ks-final-state-review-162",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ks-final-state-review-162/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
       "sha256": "39fc6ac7a36335f7e488fb51227e88a6b81efe37d4bd56fdcc0a0cf0a0611d6d"
+    },
+    "benchmarks/results/md-j-reciprocal-cold-20261010/receipts/7033/oracle.log.gz": {
+      "owner": "md-j-reciprocal-cold-20261010",
+      "reason": "Exact compact receipt of the 16 actual resident raw-J/K oracle tests supporting the broad cold/warm/moved qualification. Retains the original test count and outcome; complete numerical arrays and frozen source/binary hashes are separate campaign members.",
+      "sha256": "9b3051be025d6aa3a6edbfc1b1ea726ff1367b442b66db1feef6423bdbdcfa91"
+    },
+    "benchmarks/results/md-j-reciprocal-cold-20261010/receipts/7045/memcheck.log.gz": {
+      "owner": "md-j-reciprocal-cold-20261010",
+      "reason": "Exact 102-byte compact final-source sanitizer receipt: all 16 resident tests pass and Compute Sanitizer reports zero errors. Retain original diagnostics for the qualified reciprocal schedule, not a generic passing flag.",
+      "sha256": "5b14aef8a6f41dad9cdad35490fd1e001e4e65b866bab04a9c86cc6bc76642ac"
+    },
+    "benchmarks/results/md-j-reciprocal-cold-20261010/receipts/7045/oracle.log.gz": {
+      "owner": "md-j-reciprocal-cold-20261010",
+      "reason": "Exact compact receipt of all 16 independent resident enqueue/libcint tests on the measured final-source library, rather than the public host compatibility route. Frozen library/source and outer Slurm outcome are independently retained.",
+      "sha256": "087badbfc91171cde309a8f0b4dcfafb0cfd600b9c01841c5c5fb92461fa1494"
+    },
+    "benchmarks/results/md-j-reciprocal-cold-20261010/receipts/7045/racecheck.log.gz": {
+      "owner": "md-j-reciprocal-cold-20261010",
+      "reason": "Exact compact final-source racecheck receipt: two selected resident tests pass, fourteen are deselected, and zero hazards/errors/warnings are reported. Preserves actual coverage rather than claiming all 16 tests ran under racecheck.",
+      "sha256": "fe2c159a2f873bb0b512cd5b4c4d4ce0a51fcc8111e72f6e4e8dacecbd5c9160"
     },
     "benchmarks/results/rccsd-149-bc-review/raw-evidence.zip": {
       "owner": "rccsd-149-bc-review",

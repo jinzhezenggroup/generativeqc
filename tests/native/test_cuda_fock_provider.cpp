@@ -17,6 +17,7 @@
 #include "molecule/basis.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_ledger.hpp"
+#include "runtime/resource_usage.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/rhf_policy.hpp"
@@ -61,6 +62,30 @@ struct DeviceMatrix {
               "independent device provider matrix differs from CPU");
   }
 };
+
+/** Force-only qualification must not require optional packaged value kernels.
+ * Prepare the public stationary consumer's bounded owner when value admission
+ * left it absent, retaining the original combined allowance and normalized basis.
+ */
+void ensure_bounded_force_owner(CudaDirectJkPlan& plan,
+                                const std::vector<generativeqc::core::System>& systems,
+                                double screening, std::size_t budget) {
+  using namespace generativeqc::scf::cuda_execution;
+  if (plan.generated_exchange) return;
+  HostBatch host;
+  require(pack_host_batch(systems, std::vector<const std::vector<double>*>(systems.size(), nullptr),
+                          host, true, false, true, ResidentPsssPolicy::Skip),
+          "cannot pack force-only owner");
+  require(budget > plan.diagnostic.device_bytes, "force-only owner has no optional allowance");
+  auto owner = prepare_generated_exchange(host, plan.batch, plan.stream, plan.device_id, screening,
+                                          budget - plan.diagnostic.device_bytes, true, true);
+  require(owner && owner->force_capability, "missing bounded derivative owner");
+  plan.diagnostic.device_bytes += owner->device_bytes;
+  plan.diagnostic.host_bytes +=
+      sizeof(GeneratedExchangePlan) + generativeqc::runtime::vector_bytes(owner->allocations);
+  plan.diagnostic.host_preparation_bytes += owner->host_preparation_bytes;
+  plan.generated_exchange = std::move(owner);
+}
 
 struct DeviceCounter {
   std::uint64_t* pointer{};
@@ -1355,11 +1380,21 @@ std::vector<double> screened_cartesian_public_eri(const generativeqc::core::Syst
   return projected;
 }
 
-void canonical_screened_values() {
+void canonical_screened_values(bool materialized = false) {
   for (double displacement : {0.0, 0.27}) {
     generativeqc::core::System system;
     system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7 + displacement}}};
     system.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, 3, {{0.5, 1.0}}}};
+    if (materialized) {
+      require((displacement == 0.0
+                   ? unsetenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES")
+                   : setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", "0", 1)) == 0,
+              "cannot test automatic admission without the legacy HF opt-in");
+      // Exercise all three order-five pair-sum buckets, signed contractions,
+      // diffuse components and reconstruction at a displaced geometry.
+      system.shells.push_back({0, 1, {{0.7, 0.8}, {0.12, -0.2}}});
+      system.shells.push_back({1, 2, {{0.09, 1.0}}});
+    }
     system.electron_count = 2;
     system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
     std::string detail;
@@ -1393,6 +1428,23 @@ void canonical_screened_values() {
                   plan->generated_exchange->shared &&
                   !plan->generated_exchange->shared->value_capability,
               "screened canonical fallback and competing through-f shell owner were not prepared");
+      if (materialized)
+        require(plan->materialized_pair_order && plan->materialized_row_prefix &&
+                    plan->materialized_bounds && plan->materialized_batch.shell_primitive_pairs &&
+                    diagnostic.device_bytes <= 32U << 20,
+                "default indexed canonical lease was not admitted within budget");
+      if (materialized) {
+        const auto count = static_cast<std::size_t>(plan->canonical_batch.nbf);
+        std::vector<double> row_major(count * count), column_major(count * count);
+        check(cudaMemcpy(row_major.data(), plan->canonical_bounds,
+                         row_major.size() * sizeof(double), cudaMemcpyDeviceToHost));
+        check(cudaMemcpy(column_major.data(), plan->materialized_bounds,
+                         column_major.size() * sizeof(double), cudaMemcpyDeviceToHost));
+        for (std::size_t row = 0; row < count; ++row)
+          for (std::size_t column = 0; column < count; ++column)
+            require(row_major[row * count + column] == column_major[row + count * column],
+                    "canonical-to-HF Schwarz layout changed a bound");
+      }
       // This oracle screens Cartesian AO pairs before public projection. The
       // opt-in shell provider applies a different shell+density predicate.
       // Select only this fixture's canonical fallback; canonical_value_provider
@@ -1446,6 +1498,17 @@ void canonical_screened_values() {
           require(work[0] == admitted &&
                       work[1] == admitted * (operation == FockOperator::FullRange ? 1U : 2U),
                   "screened canonical source still visited rejected quartets");
+          if (materialized) {
+            auto exchange_only = spec;
+            exchange_only.coulomb.present = false;
+            direct_device(plan.get(), exchange_only, alpha,
+                          spin == FockSpin::Unrestricted ? beta : std::vector<double>{}, {}, ka,
+                          kb);
+            check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                             cudaMemcpyDeviceToHost));
+            require(work[0] == admitted && work[1] == admitted,
+                    "single-range materialized source changed canonical work");
+          }
           const auto check_joint = [&] {
             if (!plan->canonical_range_exchange || operation == FockOperator::FullRange) return;
             const auto full_ka = reference_exchange_from_eri(screened_full, dimension, alpha);
@@ -1469,6 +1532,117 @@ void canonical_screened_values() {
     }
   }
   std::cout << "CUDA screened full/SR/LR matrices and work gates PASS\n";
+}
+
+/** The shell index cannot displace an incumbent geometry/cache owner. */
+void materialized_optional_budget_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger;
+    std::shared_ptr<runtime::DeviceResourceLedger> previous;
+    explicit LedgerScope(std::size_t limit)
+        : ledger(std::make_shared<runtime::DeviceResourceLedger>()),
+          previous(runtime::active_device_resource_ledger) {
+      ledger->limit = limit;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {
+      {0, 0, {{0.8, 1.0}}}, {1, 1, {{0.7, 1.0}}}, {0, 2, {{0.3, 1.0}}}, {1, 3, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(dimension * dimension, 0.1 / dimension);
+  const auto eri = generativeqc::integrals::build_integrals(system, false).eri;
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  const auto reference = build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0),
+                                               dimension, eri, density, {});
+  const auto exchange = reference_exchange_from_eri(eri, dimension, density);
+  constexpr std::size_t budget = 64U << 20;
+  std::size_t constrained_budget = budget;
+  for (unsigned policy : {0U, 1U, 2U}) {
+    const bool constrained = policy != 0;
+    const auto provider_budget = policy == 1 ? constrained_budget : budget;
+    LedgerScope scope(policy == 2 ? constrained_budget : budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, provider_budget, &raw, diagnostic,
+                                       detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->generated_exchange && plan->canonical_row_prefix &&
+                bool(plan->materialized_pair_order) == !constrained &&
+                diagnostic.device_bytes <= provider_budget &&
+                diagnostic.device_bytes == scope.ledger->live,
+            "optional shell index displaced the canonical or immutable cache owner");
+    if (!constrained) {
+      require(plan->materialized_device_bytes > 0, "shell index storage was not charged");
+      constrained_budget = diagnostic.device_bytes - plan->materialized_device_bytes;
+    }
+    if (policy == 2)
+      require(scope.ledger->rejected > 0,
+              "optional shell index did not exercise allocation failure");
+    scope.ledger->limit = budget;
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, exchange, {});
+    plan.reset();
+    require(scope.ledger->live == 0, "optional shell-index preparation leaked device storage");
+  }
+  std::cout << "CUDA materialized shell-index budget/allocation fallback PASS\n";
+}
+
+/** Optional range-K reuse must not evict the previously admitted SPD MD-J source. */
+void materialized_incumbent_md_budget() {
+  const auto* previous = std::getenv("GENERATIVEQC_DISABLE_MD_J");
+  const bool was_set = previous != nullptr;
+  const std::string saved = previous ? previous : "";
+  require(setenv("GENERATIVEQC_DISABLE_MD_J", "0", 1) == 0,
+          "cannot exercise incumbent MD-J admission");
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 1, {{0.7, 1.0}}}, {0, 2, {{0.3, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(dimension * dimension, 0.1 / dimension);
+  const auto eri = generativeqc::integrals::build_integrals(system, false).eri;
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  const auto reference = build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0),
+                                               dimension, eri, density, {});
+  const auto exchange = reference_exchange_from_eri(eri, dimension, density);
+  std::size_t budget = 64U << 20;
+  for (bool constrained : {false, true}) {
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->md_j.minimum_bounds && bool(plan->materialized_pair_order) == !constrained &&
+                diagnostic.device_bytes <= budget,
+            "optional canonical reuse displaced incumbent MD-J storage");
+    if (!constrained) budget = diagnostic.device_bytes - plan->materialized_device_bytes;
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, exchange, {});
+  }
+  if (was_set)
+    setenv("GENERATIVEQC_DISABLE_MD_J", saved.c_str(), 1);
+  else
+    unsetenv("GENERATIVEQC_DISABLE_MD_J");
+  std::cout << "CUDA automatic canonical reuse preserves incumbent MD-J budget PASS\n";
 }
 
 /** Deny only the final optional range matrix through the real resource ledger.
@@ -1957,6 +2131,7 @@ void range_exchange_derivatives() {
                   detail.c_str());
           std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> shell_plan(
               shell_raw, &destroy_cuda_direct_jk_plan);
+          ensure_bounded_force_owner(*shell_plan, {item == 0 ? first : second}, 0.0, 64U << 20);
           DeviceMatrix device_a(a), device_b(b);
           std::vector<double> shell;
           // Both schedules satisfy the same independent canonical/CPU oracle.
@@ -2040,6 +2215,7 @@ void shell_range_four_center_derivatives() {
       DeviceMatrix device_a(a), device_b(b);
       // f/d/p/s covers orders 10/11; f/f/s/s admits multi-center order-12
       // derivatives. Reuse each CPU derivative for both schedules.
+      ensure_bounded_force_owner(*plan, {system}, 0.0, 64U << 20);
       std::array<std::array<std::vector<double>, 2>, 2> scheduled, full_scheduled;
       for (unsigned schedule = 0; schedule < 2; ++schedule) {
         plan->generated_exchange->angular_force_opt_in = schedule != 0;
@@ -2235,7 +2411,7 @@ void bounded_schwarz_schedule_budget() {
   HostBatch host;
   require(pack_host_batch(systems, {nullptr, nullptr}, host, true, false, true),
           "cannot pack batch");
-  for (double screening : {0.0, 1e-12}) {
+  for (double screening : {0.0, 1e-12, 2.0}) {
     CudaDirectJkPlan* raw = nullptr;
     CudaDirectJkDiagnostic diagnostic;
     require(create_cuda_direct_jk_plan(0, systems, 1, screening, 64U << 20, &raw, diagnostic,
@@ -2243,9 +2419,13 @@ void bounded_schwarz_schedule_budget() {
             detail.c_str());
     std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
         raw, destroy_cuda_direct_jk_plan);
-    require(bool(plan->generated_exchange), "missing derivative owner");
+    ensure_bounded_force_owner(*plan, systems, screening, 64U << 20);
     auto& original = *plan->generated_exchange;
     require(original.bounded_block_domain.prefix, "missing indexed domain");
+    const bool empty_domain = screening == 2.0;
+    if (empty_domain)
+      require(original.bounded_block_domain.quartet_count == 0,
+              "empty-domain fixture retained a geometric product");
     const auto prefix_bytes =
         (original.bounded_block_domain.row_count + 1U) * sizeof(std::uint64_t);
     const auto full_budget = original.device_bytes;
@@ -2253,8 +2433,9 @@ void bounded_schwarz_schedule_budget() {
                      cudaMemcpyHostToDevice));
     std::vector<double> indexed_range;
     for (const auto budget : {full_budget, full_budget - 1U, full_budget - prefix_bytes}) {
-      auto owner = prepare_generated_exchange(host, original.shared->batch, plan->stream, 0,
-                                              screening, budget, true, false);
+      auto owner =
+          prepare_generated_exchange(host, original.shared->batch, plan->stream, 0, screening,
+                                     budget, true, !original.shared->value_capability);
       require(bool(owner), "tight prefix budget discarded admitted owner");
       const bool indexed = owner->bounded_block_domain.prefix != nullptr;
       require(indexed == (budget == full_budget), "incorrect prefix budget edge");
@@ -2270,7 +2451,7 @@ void bounded_schwarz_schedule_budget() {
       double error = 0;
       for (std::size_t index = 0; index < actual.size(); ++index) {
         require(std::isfinite(actual[index]), "nonfinite batch derivative");
-        error = std::max(error, std::abs(actual[index] - expected[index]));
+        error = std::max(error, std::abs(actual[index] - (empty_domain ? 0.0 : expected[index])));
       }
       require(error < 3e-10, "screened/budget batch derivative differs from CPU ERIs");
       unsigned long long cursor = 0;
@@ -2285,6 +2466,9 @@ void bounded_schwarz_schedule_budget() {
       check(execute_generated_rsh_energy_derivatives(*owner, false, plan->density, nullptr, 0.0,
                                                      0.0, -0.25, 0.3, range_actual));
       require(range_actual.size() == 6U * coordinates, "batch LR source shape changed");
+      if (empty_domain)
+        for (const auto value : range_actual)
+          require(value == 0.0, "empty LR domain published a contribution");
       check(cudaMemcpy(&cursor, owner->force_cursor, sizeof(cursor), cudaMemcpyDeviceToHost));
       require(cursor == products * pages + owner->shared->worker_blocks,
               "LR scheduler did not consume the retained indexed domain");
@@ -2362,9 +2546,11 @@ void generated_coulomb_budget() {
   std::cout << "CUDA generated J shape-only density budget gates PASS\n";
 }
 
-void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
+void direct_providers(bool through_f_response, bool eri_tiles_only = false,
+                      bool mixed_force_domains = false) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      if (mixed_force_domains && angular != 3U) continue;
       // Noncoincident centers and unequal primitive/basis metadata distinguish
       // items with identical dimensions. Through-f values also test public AO
       // expansion ordering. The optional numerical tier adds d/f response
@@ -2375,6 +2561,12 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
       // Mixed p/d quartets exercise generated classes that s+d alone cannot
       // reach. Retain unequal contraction lengths and test both AO conventions.
       if (angular == 2) first.shells.push_back({0, 1, {{1.1, 0.6}, {0.3, 0.4}}});
+      if (mixed_force_domains) {
+        // A global f bound must not hide any of the 21 s/p/d subdomains.
+        first.shells.push_back({0, 1, {{1.1, 0.6}, {0.3, 0.4}}});
+        first.shells.push_back({1, 2, {{0.7, 1.0}}});
+        first.shells.push_back({0, 2, {{0.9, 1.0}}});
+      }
       first.electron_count = 2;
       first.basis_representation = representation;
       auto second = first;
@@ -2490,7 +2682,8 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
       for (bool uhf : {false, true})
         for (bool j : {false, true})
           for (bool k : {false, true}) {
-            const bool response = derivatives && (angular < 2 || (uhf && j && k));
+            const bool response =
+                derivatives && (mixed_force_domains || angular < 2 || (uhf && j && k));
             auto spec = make_hf_fock_spec(uhf ? FockSpin::Unrestricted : FockSpin::Restricted);
             spec.derivative_order = derivatives ? 1 : 0;
             spec.coulomb.present = j;
@@ -2612,6 +2805,25 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && (std::string(argv[1]) == "--canonical-materialized-only" ||
+                      std::string(argv[1]) == "--canonical-materialized-screened-only")) {
+      canonical_screened_values(true);
+      if (std::string(argv[1]) == "--canonical-materialized-only") canonical_value_provider();
+      materialized_optional_budget_fallback();
+      materialized_incumbent_md_budget();
+      if (std::string(argv[1]) == "--canonical-materialized-only")
+        spd_optional_allocation_fallback();
+      std::cout
+          << "CUDA indexed materialized J/K, SR/LR, screening, projection and fallback PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--mixed-force-domains-only") {
+      // Attach sanitizers before the expensive independent CPU ERI oracle.
+      check(cudaFree(nullptr));
+      direct_providers(true, false, true);
+      std::cout << "CUDA mixed s/p/d/f class-domain values, J'/K', spins and masks PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--generated-j-budget-only") {
       generated_coulomb_budget();
       return 0;
@@ -2667,6 +2879,13 @@ int main(int argc, char** argv) {
       shell_range_four_center_derivatives();
       canonical_order_two_derivatives();
       std::cout << "CUDA s/p/d/f SR/LR derivative gates PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--lr-domain-only") {
+      require(cuda_policy::bounded_schwarz_schedule_requested(),
+              "LR domain gate requires the retained indexed owner");
+      bounded_schwarz_schedule_budget();
+      std::cout << "CUDA indexed LR domain and allocation gates PASS\n";
       return 0;
     }
     require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--through-f-response"),

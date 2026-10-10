@@ -14,10 +14,13 @@ struct Scalars {
   double electrons[2]{}, grid_electrons[2]{};
   double energy_change{};
   int failure{};
+  // Preserve the unrounded compensated electronic trace for convergence.
+  double electronic_energy{}, electronic_energy_correction{};
 };
 
 struct Control {
   double previous_energy{};
+  double previous_energy_correction{};
   std::uint32_t iterations{};
   int active{}, converged{}, failed{};
 };

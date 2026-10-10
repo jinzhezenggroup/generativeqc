@@ -4,11 +4,13 @@ The stable native declarations live in
 [`generativeqc.h`](https://github.com/jinzhezenggroup/generativeqc/blob/master/include/generativeqc/generativeqc.h).
 The move-only C++ convenience wrappers are in
 [`generativeqc.hpp`](https://github.com/jinzhezenggroup/generativeqc/blob/master/include/generativeqc/generativeqc.hpp).
+The explicit Kohn-Sham composition builder is in
+[`ks.hpp`](https://github.com/jinzhezenggroup/generativeqc/blob/master/include/generativeqc/ks.hpp).
 Internal `src/` headers are not public API declarations.
 
 The [complete symbol reference](native_symbols.md) contains stable targets and
 source-owned contracts for every exported C function, every explicitly declared
-public C++ operation, and all nine public C++ owner/record types. Record fields
+public C++ operation, and all eleven public C++ owner/record types. Record fields
 are described with their owning type. Generated method identifiers are covered
 by the [capability authorities](capabilities.md), rather than a second copied
 support matrix.

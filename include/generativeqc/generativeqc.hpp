@@ -6,6 +6,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -88,6 +89,46 @@ inline MethodCapabilities method_capabilities(generativeqc_method method) {
   check(generativeqc_method_get_capabilities(method, &native));
   return {native.method, native.family, native.supported_properties, native.available != 0,
           native.supports_batch != 0};
+}
+
+/** Resolve only names in the compiled native provider manifest.
+ * Compiler-only MethodIR aliases such as pbe0-rks require explicit KS composition. */
+/** @native-contract generativeqc::resolve_method
+ * @behavior Resolve an exact canonical name in the generated native provider manifest.
+ * @inputs canonical_name is a complete string view, with no embedded or trailing NUL.
+ * @outputs Returns the native method identifier; this does not establish contextual support.
+ * @lifetime Copies the view for the synchronous C query; retains no caller storage.
+ * @errors Throws Error with INVALID_ARGUMENT for empty, unknown, or NUL-containing names;
+ * string allocation may throw std::bad_alloc.
+ * @execution Immutable registry query without numerical execution or a context.
+ */
+inline generativeqc_method resolve_method(std::string_view canonical_name) {
+  if (canonical_name.find('\0') != std::string_view::npos)
+    throw Error(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "native method name contains NUL");
+  generativeqc_method method{};
+  const std::string name(canonical_name);
+  check(generativeqc_method_from_name(name.c_str(), &method));
+  return method;
+}
+
+/** A zero-initialized descriptor with the required ABI header.
+ * Method-specific zero fields retain the native default contract. */
+/** @native-contract generativeqc::default_method_descriptor
+ * @behavior Build a zero-initialized method descriptor for an exact native manifest name.
+ * @inputs name obeys resolve_method's complete-string, no-NUL contract.
+ * @outputs Sets struct_size, abi_version, and method; all other fields remain zero/null and
+ * retain their method-specific native default meaning.
+ * @lifetime Returns an owned value and retains no name storage or native handles.
+ * @errors Propagates resolve_method's Error or allocation exception; native preparation still
+ * validates the completed descriptor, backend, system, and requested properties.
+ * @execution Synchronous registry query; no calculation is prepared or executed.
+ */
+inline generativeqc_method_descriptor default_method_descriptor(std::string_view name) {
+  generativeqc_method_descriptor descriptor{};
+  descriptor.struct_size = sizeof(descriptor);
+  descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
+  descriptor.method = resolve_method(name);
+  return descriptor;
 }
 
 /** Move-only context owner; dependent native objects must be destroyed first. */
@@ -345,6 +386,21 @@ class Calculation {
         handle_(std::exchange(other.handle_, nullptr)),
         atom_count_(other.atom_count_),
         capabilities_(other.capabilities_) {}
+  /** @native-contract generativeqc::Calculation::supported_properties
+   * @behavior Query the exact prepared method/backend/system property contract.
+   * @inputs The live Calculation owner; no execution is requested.
+   * @outputs Returns context-qualified energy/force property bits by value.
+   * @lifetime The returned flags are independent of the owner; the native handle
+   * remains borrowed by this wrapper during the call.
+   * @errors Throws Error if the native context query fails.
+   * @execution Synchronous, Python-free; serialize against execute/destruction.
+   */
+  [[nodiscard]] generativeqc_property_flags supported_properties() const {
+    generativeqc_property_flags properties{};
+    check(generativeqc_calculation_get_supported_properties_v1(handle_, &properties));
+    return properties;
+  }
+
   /** @native-contract generativeqc::Calculation::execute
    * @behavior Run a prepared method and return a value result.
    * @inputs properties defaults to ENERGY; nonzero supported flag combinations are required.
@@ -363,7 +419,7 @@ class Calculation {
    */
   CalculationResult execute(generativeqc_property_flags properties = GENERATIVEQC_PROPERTY_ENERGY) {
     CalculationResult result;
-    if (!properties || (properties & ~capabilities_.supported_properties))
+    if (!properties || (properties & ~supported_properties()))
       throw Error(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "requested method property is unsupported");
     if (properties & GENERATIVEQC_PROPERTY_FORCES) result.forces.emplace(atom_count_ * 3);
     generativeqc_result_descriptor output{

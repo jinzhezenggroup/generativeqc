@@ -10,10 +10,12 @@
 #include <utility>
 
 #include "runtime/nvidia_host_api.h"
+#include "runtime/residency_cuda.cuh"
 #include "runtime/types.hpp"
 #include "solver/cuda/symmetric_eigen_handles.hpp"
 
 namespace shared = generativeqc::solver::cuda;
+namespace runtime = generativeqc::runtime;
 static_assert(std::is_same_v<cusolverStatus_t, std::uint32_t>);
 
 std::uint32_t private_handle_create(shared::PreparedSymmetricEigenHandles& owner) {
@@ -55,13 +57,13 @@ extern "C" cublasStatus_t cublasDestroy_v2(cublasHandle_t handle) {
   return trace_blas_destroy(handle);
 }
 
-namespace runtime {
+namespace generativeqc::runtime {
 std::mutex allocation_measurement_mutex;
 cudaError_t resource_cuda_free(void* pointer) { return trace_release(pointer, false); }
 cudaError_t resource_cuda_free_async(void* pointer, cudaStream_t) {
   return trace_release(pointer, true);
 }
-}  // namespace runtime
+}  // namespace generativeqc::runtime
 
 struct Prepared {
   ~Prepared() { trace_external("prepared"); }

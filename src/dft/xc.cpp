@@ -1126,4 +1126,115 @@ SpinXcIntegral integrate_pbe_uks_with_tail(const AoBasis& basis, const Molecular
   return integrate_pbe_uks(basis, grid, alpha, beta, tile_points);
 }
 
+PbeStationaryXcDerivative stationary_pbe_xc_derivative(
+    const AoBasis& basis, const MolecularGrid& grid,
+    const std::vector<std::vector<double>>& density, std::size_t tile_points, double exchange_scale,
+    double correlation_scale) {
+  // This is the derivative of the exact *discrete* PBE quadrature held by the
+  // prepared KS owner, not a new XC model or a finite-difference approximation.
+  if (density.size() != 1 && density.size() != 2)
+    throw std::invalid_argument("stationary PBE needs one RKS or two UKS density blocks");
+  if (!std::isfinite(exchange_scale) || exchange_scale < 0.0 || !std::isfinite(correlation_scale) ||
+      correlation_scale < 0.0)
+    throw std::invalid_argument("invalid stationary PBE XC composition scale");
+  for (const auto& block : density) validate_density_matrix(basis, grid, block, tile_points);
+  const std::size_t n = basis.nao;
+  const std::size_t atoms = basis.natom;
+  if (atoms > std::numeric_limits<std::size_t>::max() / 3 ||
+      n > std::numeric_limits<std::size_t>::max() / 10 ||
+      tile_points > std::numeric_limits<std::size_t>::max() / (10 * n))
+    throw std::invalid_argument("stationary PBE AO/grid allocation overflow");
+  const std::size_t ncoord = 3 * atoms;
+  const std::size_t ao_record_start = 3 * atoms + 2 * basis.nprimitive;
+  if (ao_record_start > basis.packed.size() || n > (basis.packed.size() - ao_record_start) / 16)
+    throw std::invalid_argument("stationary PBE AO center records are invalid");
+
+  PbeStationaryXcDerivative result;
+  result.gradient.assign(ncoord, 0.0);
+  std::vector<double> weight_sensitivity(grid.point_count());
+  std::vector<double> ao, density_phi(n), density_jet(3 * n);
+  static constexpr unsigned hessian[3][3]{{4, 5, 6}, {5, 7, 8}, {6, 8, 9}};
+  const auto& points = grid.points();
+  const auto& weights = grid.weights();
+  const auto& owners = grid.owners();
+  for (std::size_t begin = 0; begin < grid.point_count(); begin += tile_points) {
+    const std::size_t count = std::min(tile_points, grid.point_count() - begin);
+    ao.resize(10 * count * n);
+    basis.evaluate(points.data() + 3 * begin, count, 2, 0, n, ao.data(), ao.size());
+    for (std::size_t local = 0; local < count; ++local) {
+      const std::size_t point = begin + local;
+      const auto owner = static_cast<std::size_t>(owners[point]);
+      if (owner >= atoms) throw std::invalid_argument("invalid stationary PBE grid owner");
+      std::array<const double*, 10> jet{};
+      for (std::size_t j = 0; j < jet.size(); ++j) jet[j] = ao.data() + (j * count + local) * n;
+      const std::array<const double*, 3> first{jet[1], jet[2], jet[3]};
+      double rho[2]{}, grad_rho[2][3]{};
+      for (std::size_t spin = 0; spin < density.size(); ++spin) {
+        const auto features = rks_features(jet[0], first, n, density[spin], nullptr, 7U);
+        const double occupation = density.size() == 1 ? 0.5 : 1.0;
+        rho[spin] = occupation * features[0];
+        for (unsigned axis = 0; axis < 3; ++axis)
+          grad_rho[spin][axis] = occupation * features[axis + 1];
+      }
+      if (density.size() == 1) {
+        rho[1] = rho[0];
+        for (unsigned axis = 0; axis < 3; ++axis) grad_rho[1][axis] = grad_rho[0][axis];
+      }
+      const auto xc =
+          evaluate_generated_pbe_point(rho, grad_rho, exchange_scale, correlation_scale);
+      if (!xc.valid) throw std::runtime_error("nonfinite stationary PBE point response");
+      const double weight = weights[point];
+      result.energy += weight * xc.energy;
+      weight_sensitivity[point] = xc.energy;
+
+      // The grid point follows owner O. At fixed global quadrature index,
+      // d(phi_mu)/dR_A = (delta_{A,O} - delta_{A,center(mu)}) grad_r(phi_mu).
+      // Differentiating grad_r(rho) additionally requires Hessian AO jets.
+      for (std::size_t spin = 0; spin < density.size(); ++spin) {
+        const double occupation = density.size() == 1 ? 0.5 : 1.0;
+        const auto& matrix = density[spin];
+        std::fill(density_phi.begin(), density_phi.end(), 0.0);
+        std::fill(density_jet.begin(), density_jet.end(), 0.0);
+        for (std::size_t mu = 0; mu < n; ++mu)
+          for (std::size_t nu = 0; nu < n; ++nu) {
+            const double d = occupation * matrix[mu * n + nu];
+            density_phi[mu] += d * jet[0][nu];
+            for (unsigned axis = 0; axis < 3; ++axis)
+              density_jet[3 * mu + axis] += d * jet[axis + 1][nu];
+          }
+        const unsigned repeats = density.size() == 1 ? 2U : 1U;
+        for (unsigned duplicate = 0; duplicate < repeats; ++duplicate) {
+          const unsigned physical_spin =
+              density.size() == 1 ? duplicate : static_cast<unsigned>(spin);
+          for (std::size_t mu = 0; mu < n; ++mu) {
+            const auto center = static_cast<std::size_t>(basis.packed[ao_record_start + 16 * mu]);
+            if (center >= atoms) throw std::invalid_argument("invalid stationary PBE AO center");
+            if (center == owner) continue;  // Co-translated AO and point cancel.
+            for (unsigned axis = 0; axis < 3; ++axis) {
+              double derivative = 2.0 * xc.rho[physical_spin] * jet[axis + 1][mu] * density_phi[mu];
+              for (unsigned k = 0; k < 3; ++k) {
+                derivative += 2.0 * xc.gradient[physical_spin][k] *
+                              (jet[hessian[axis][k]][mu] * density_phi[mu] +
+                               jet[axis + 1][mu] * density_jet[3 * mu + k]);
+              }
+              const double contribution = weight * derivative;
+              result.gradient[3 * owner + axis] += contribution;
+              result.gradient[3 * center + axis] -= contribution;
+            }
+          }
+        }
+      }
+    }
+  }
+  const auto partition = grid.contract_weight_derivative(weight_sensitivity);
+  if (partition.size() != ncoord)
+    throw std::runtime_error("stationary PBE Becke derivative shape mismatch");
+  for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
+    result.gradient[coordinate] += partition[coordinate];
+  if (!std::isfinite(result.energy) || !std::all_of(result.gradient.begin(), result.gradient.end(),
+                                                    [](double x) { return std::isfinite(x); }))
+    throw std::runtime_error("nonfinite stationary PBE XC geometry response");
+  return result;
+}
+
 }  // namespace generativeqc::dft

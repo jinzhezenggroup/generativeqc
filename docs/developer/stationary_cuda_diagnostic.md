@@ -104,6 +104,22 @@ The complete route retains these explicit host boundaries:
   shared CPU/CUDA Becke adjoint execute on device. No interior diagnostic XC
   model, CPU derivative/contraction or interpreter fallback is selected.
 
+For admitted phased Becke geometry, a bulk producer evaluates the same SCF
+point model or consumes borrowed external seeds once per point, using one
+thread per point. The cooperative AO
+consumer then specializes away both that evaluator and the unused inline Becke
+adjoint. It borrows the already allocated inline scratch for the point value
+and external grid-motion seeds, ordered on the grid producer's stream; no new
+resident allocation or host staging is needed. Admission requires one geometry
+lane per point and enough atom-channel scratch to keep those values disjoint.
+Nonphased geometry and small scratch domains retain the original evaluator,
+while an AO panel that does not fit shared memory retains the ordered scalar AO
+consumer. The panel reducer visits AO labels once, preserving each atom's and
+the moving grid's original AO addition order even for repeated or unordered maps.
+Native preflight and stage launch gates preserve sticky CUDA status without
+adding a stream synchronization or letting a consumer read a failed producer's
+scratch.
+
 Native code owns traversal, primitive normalization, atom scatter and bounded
 reductions. The Becke worker shares one two-pass implementation across backends,
 including the single-zero-factor derivative and saturated-branch policy.
@@ -332,6 +348,42 @@ The [decision record](../../.agents/notes/implemented/architecture/2026-09-19-st
 preserves shared-science choices, measured evidence and remaining qualification.
 The [s/p/d shard decision](../../.agents/notes/implemented/architecture/2026-09-22-stationary-cuda-spd-derivative-shards.md)
 records the multicomponent lowering, compiler boundary and resource caps.
+
+## Restricted PBE0 point schedule
+
+`GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT=off|on` requests the private
+restricted geometry-point schedule; its default is `on`, with `off` retaining
+the general point route for qualification or diagnosis. It does not change
+the SCF policy, precision, functional weights, force assembly or public force
+capability, and a request alone does not prove fast-path execution.
+
+The compiler admits only explicitly unpolarized PBE components with exact
+semilocal weights 3/4 exchange and 1 correlation. The optional grid v2 getter
+lends a generation-bound identical-spin density-and-gradient witness from the
+owned density producer. The optional stationary resident-weight enqueue v2
+rejects stale generations and unknown flags before geometry work. Selection
+also requires precomputed phased storage, sufficient atom scratch and no
+external seed. Legacy artifacts, unproven producers and bounded nonphased
+plans retain the general point evaluator; the v1 task-view ABI is unchanged.
+
+Clean-source qualification at `99ebd196d`, aligned to master `4444d0376`, is
+retained in
+[`pbe0-restricted-point-default-20261010`](../../benchmarks/results/pbe0-restricted-point-default-20261010/README.md).
+It covers same-binary off versus unset/default complete warm and moved-warm
+energy-plus-force endpoints, with actual route/work counts and independent
+accuracy gates. It does not qualify cold/reconvergence, later master changes,
+UKS/HVP, or resource-complete global performance promotion.
+
+Force-work diagnostics expose `pbe0_restricted_point_capable`,
+`restricted_point_requested`, `restricted_point_batches`,
+`restricted_point_count`, `general_point_batches` and `general_point_count`.
+Batch/point counts describe actual enqueues and are differenced per execution;
+capability and request are policy metadata, not semantic work counts. The
+specialized point retains the direct AO translation pullback and complete
+moving-grid/Becke terms. This private gate does not qualify general PBE, UKS,
+response or HVP numerics. The
+[producer-binding decision](../../.agents/notes/implemented/performance/2026-10-10-producer-bound-pbe0-force-point.md)
+records the rationale and separate scientific/endpoint acceptance boundaries.
 
 ## Strict compilation environment
 

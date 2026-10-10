@@ -21,10 +21,12 @@
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
+#include "dft/xc.hpp"
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "molecule/basis.hpp"
+#include "molecule/nuclear_gradient.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
@@ -885,6 +887,41 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   std::size_t atom_count() const noexcept override { return system_.atoms.size(); }
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
+  /** Method-global manifest stays energy-only. Force capability is a
+   * property of this immutable prepared physical execution context. Only
+   * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
+   * providers is currently admitted; UKS, CUDA, Direct, corrections and
+   * unrepresented XC graphs remain fail-closed until separately qualified. */
+  [[nodiscard]] bool supports_native_pbe_force() const noexcept {
+    if (backend_ != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE ||
+        execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe ||
+        execution_plan_.spin_channels != 1 || execution_plan_.automatic_program ||
+        execution_plan_.generated_split_hybrid || execution_plan_.range_exchange ||
+        execution_plan_.nonlocal_correlation || execution_plan_.d4_correction ||
+        !system_.ecp_terms.empty() ||
+        std::any_of(system_.atoms.begin(), system_.atoms.end(),
+                    [](const auto& atom) { return atom.ecp_core != 0; }))
+      return false;
+    const auto& spec = fock_.strategy().spec;
+    const auto fitted = [](const scf::FockTermSpec& term) {
+      return !term.present || (term.approximation == scf::FockApproximation::DensityFitted &&
+                               term.op == scf::FockOperator::FullRange);
+    };
+    if (!spec.coulomb.present || spec.coulomb.coefficient != 1.0 || !fitted(spec.coulomb) ||
+        !fitted(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
+      return false;
+    const bool pbe = !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
+    const bool pbe0 = spec.exchange.present && spec.exchange.coefficient == -0.125 &&
+                      options_.semilocal_exchange_scale == 0.75;
+    return pbe || pbe0;
+  }
+
+  [[nodiscard]] generativeqc_property_flags supported_properties() const noexcept override {
+    return capabilities_.supported_properties |
+           (supports_native_pbe_force() ? GENERATIVEQC_PROPERTY_FORCES : 0u);
+  }
+
   const core::System& system() const noexcept { return system_; }
   const std::vector<scf::CudaDensityFittingMetricDiagnostic>& fitted_diagnostics() const noexcept {
     return fock_.diagnostic().fitted;
@@ -1225,10 +1262,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto& one = fock_.one_electron();
     const auto matrix_elements = one.nbf * one.nbf;
     const auto coordinates = 3 * system_.atoms.size();
-    if (spins < 1 || spins > 2 || density.size() != spins || weighted_density.size() != spins ||
-        one.ncoord != coordinates || one.hcore_derivative.size() != coordinates * matrix_elements ||
-        one.overlap_derivative.size() != coordinates * matrix_elements) {
-      detail = "density-fitted stationary D/W or one-electron derivative shape mismatch";
+    if (spins < 1 || spins > 2 || density.size() != spins || weighted_density.size() != spins) {
+      detail = "density-fitted stationary D/W shape mismatch";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     for (unsigned spin = 0; spin < spins; ++spin)
@@ -1284,6 +1319,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
       // contraction. CUDA only reaches this branch when the optional resident
       // one-electron consumer cannot be admitted; J/K response ownership is
       // unaffected.
+      fock_.ensure_one_electron_derivatives();
+      if (one.ncoord != coordinates ||
+          one.hcore_derivative.size() != coordinates * matrix_elements ||
+          one.overlap_derivative.size() != coordinates * matrix_elements) {
+        detail = "density-fitted stationary one-electron derivative shape mismatch";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
       hcore.assign(coordinates, 0.0);
       pulay.assign(coordinates, 0.0);
       for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
@@ -1395,6 +1437,43 @@ class KsPreparedCalculation final : public PreparedCalculation {
     output = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  /** Reuse the exact retained response providers without claiming a complete
+   * analytic force. The validated single-system snapshot supplies D/W and the
+   * live token proves the SCF Hamiltonian and basis have not changed. */
+  generativeqc_status prepared_integral_gradient(
+      const dft::CudaKsFinalStateToken& expected,
+      const std::vector<scf::reference::Matrix>& density,
+      const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+    output.clear();
+    work = {};
+    if (!system_.ecp_terms.empty() ||
+        std::any_of(system_.atoms.begin(), system_.atoms.end(),
+                    [](const auto& atom) { return atom.ecp_core != 0; }) ||
+        execution_plan_.range_exchange || execution_plan_.nonlocal_correlation ||
+        execution_plan_.d4_correction) {
+      detail = "native stationary integral sources require uncorrected all-electron full-range KS";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsFinalStateToken current;
+    const auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "native stationary integral source token is stale";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE)
+      return density_fitted_integral_gradient(expected, density, weighted_density, output,
+                                              maximum_bytes, work, detail);
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_)
+      return cuda_integral_gradient(expected, output, maximum_bytes, work, detail, &density,
+                                    &weighted_density);
+#endif
+    detail = "CPU Direct KS stationary integral sources need a retained native derivative owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   generativeqc_status cuda_full_range_integral_derivatives(
@@ -1599,18 +1678,63 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
   Result execute(bool compute_forces) override {
     invalidate_final_state();
-    const char* method_name = semilocal_family_name(execution_plan_);
-    if (compute_forces) {
-      const char* issue =
-          execution_plan_.automatic_program
-              ? "#1122"
-              : (dft::semilocal_family_requires_tau(execution_plan_.semilocal_family) ? "#164"
-                                                                                      : "#163");
+    if (compute_forces && !supports_native_pbe_force()) {
+      const char* issue = execution_plan_.automatic_program ? "#1122"
+                          : dft::semilocal_family_requires_tau(execution_plan_.semilocal_family)
+                              ? "#164"
+                              : "#163";
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        std::string(method_name) +
-                            " KS nuclear gradients are tracked separately in issue " + issue);
+                        std::string(semilocal_family_name(execution_plan_)) +
+                            " KS nuclear gradients are tracked separately in issue " + issue +
+                            "; this prepared native DFT force context is unqualified (#2151)");
     }
     auto result = adapt_result(run(nullptr, true, true), backend_);
+    if (compute_forces && result.convergence.converged) {
+      dft::CudaKsFinalStateToken token;
+      dft::VerifiedKsFinalState frame;
+      std::string detail;
+      auto status = final_state_token(token, detail);
+      if (status == GENERATIVEQC_STATUS_SUCCESS)
+        status = read_final_state(token, true, frame, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS)
+        throw MethodError(status, detail.empty() ? "native DFT final state unavailable" : detail);
+
+      std::vector<double> integrals;
+      std::array<std::uint64_t, 9> work{};
+      // Bound compact source publication separately from the prepared DF
+      // metric and response providers, which enforce their own budgets.
+      constexpr std::size_t kSourcePublicationBytes = 64ull * 1024ull * 1024ull;
+      status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
+                                          kSourcePublicationBytes, work, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS)
+        throw MethodError(status,
+                          detail.empty() ? "native DFT integral force unavailable" : detail);
+
+      const auto xc = dft::stationary_pbe_xc_derivative(
+          basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
+          options_.semilocal_correlation_scale);
+      const std::size_t ncoord = 3 * system_.atoms.size();
+      if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
+        throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
+                          "native DFT stationary-force source shape mismatch");
+      std::vector<double> gradient = xc.gradient;
+      for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate)
+        for (std::size_t source = 0; source < 4; ++source)
+          gradient[coordinate] += integrals[source * ncoord + coordinate];
+      molecule::add_nuclear_repulsion_gradient(system_, gradient);
+      dft::CudaKsFinalStateToken current;
+      status = final_state_token(current, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS || current != token)
+        throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                          "native DFT final-state force token changed");
+      result.forces.resize(ncoord);
+      for (std::size_t coordinate = 0; coordinate < ncoord; ++coordinate) {
+        if (!std::isfinite(gradient[coordinate]))
+          throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                            "nonfinite complete native DFT nuclear gradient");
+        result.forces[coordinate] = -gradient[coordinate];
+      }
+    }
     apply_d4(result);
     return result;
   }
@@ -2454,6 +2578,21 @@ generativeqc_status read_dft_final_state(PreparedCalculation& calculation,
   state = {};
   detail = "prepared calculation is not a KS final-state owner";
   return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+}
+
+generativeqc_status dft_prepared_integral_gradient_cached(
+    PreparedCalculation& calculation, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedCalculation*>(&calculation);
+  if (ks)
+    return ks->prepared_integral_gradient(expected, density, weighted_density, output,
+                                          maximum_bytes, work, detail);
+  output.clear();
+  work = {};
+  detail = "stationary integral sources require a native prepared KS calculation";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
 generativeqc_status dft_final_state_token(const PreparedBatch& batch, std::size_t index,

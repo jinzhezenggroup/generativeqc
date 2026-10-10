@@ -3,6 +3,7 @@
 from collections import defaultdict
 
 import pytest
+from generativeqc_compiler.tensor.native_arena import SymbolicArenaPlan
 from generativeqc_compiler.tensor.program import Program
 
 from tools import generate_rccsd_native as codegen
@@ -70,6 +71,7 @@ def test_every_slot_excludes_live_inputs_and_retains_all_outputs(
             for source in node.inputs:
                 consumers[id(source)].append(index)
         plan = codegen._arena_plan(program)
+        assert isinstance(plan, SymbolicArenaPlan)
         owners = defaultdict(list)
         for number, slot in plan.node_slots.items():
             node = nodes[number]

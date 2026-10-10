@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_symmetric_rank_k.cuh",
+  "reason": "Prepared shared signed rank-k execution for canonical TensorIR weighted Gram requests. The runtime owns stream/device binding, bounded generated fallback, qualification-only cuBLAS resources, finite validation and transactional symmetric publication; scientific equations and provider-neutral candidates remain compiler-owned.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

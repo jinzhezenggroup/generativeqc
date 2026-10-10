@@ -35,10 +35,11 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 27)
+    if (argc < 4 || argc > 28)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
+          "[CCSD_Q_BATCH_LIMIT_OR_AUTO_0 "
           "[ORBITAL_SCHWARZ "
           "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
@@ -46,7 +47,7 @@ int main(int argc, char** argv) {
           "[PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1 [REFERENCE_TOLERANCE_OR_AUTO "
           "[FUSED_SCALAR_RESPONSE_0_OR_1 [TRIPLES_W_FP32_0_OR_1 "
           "[LAMBDA_TRUE_RESIDUAL_INTERVAL [LAMBDA_CORE_REUSE_0_OR_1 "
-          "[LAMBDA_AUDIT_MATRIX_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]");
+          "[LAMBDA_AUDIT_MATRIX_0_OR_1 [LAMBDA_PRIMAL_MATRIX_0_OR_1]]]]]]]]]]]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -64,12 +65,12 @@ int main(int argc, char** argv) {
         throw std::invalid_argument("invalid unsigned endpoint argument");
       return std::stoull(token);
     };
-    const std::size_t batch_limit = unsigned_argument(7, 8);
+    const std::size_t batch_limit = unsigned_argument(7, 32);
     // Preserve the established DIIS and CCSD batch slots; append response controls.
     const auto diis_history = unsigned_argument(8, 6);
     if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
-    const auto ccsd_batch_limit = unsigned_argument(9, 8);
+    const auto ccsd_batch_limit = unsigned_argument(9, 0);
     generativeqc::hf::RHFFrameResponseOptions frame_options;
     const std::string screening_argument = argc > 10 ? argv[10] : "0";
     std::size_t screening_consumed = 0;
@@ -99,6 +100,7 @@ int main(int argc, char** argv) {
     const bool fused_triples_scalar_response = argc > 22 && selector(22);
     const bool lambda_core_reuse = selector(25);
     const bool lambda_audit_matrix = selector(26);
+    const bool lambda_primal_matrix = argc <= 27 || selector(27);
     const bool triples_w_fp32 = argc > 23 && selector(23);
     // The complete DF force owner defaults to amortized FP64 Lambda checks.
     // Explicit interval 1 retains the historical per-iteration control.
@@ -162,8 +164,8 @@ int main(int argc, char** argv) {
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
           batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           parallel_gap_reduction, request_triples_gap_cotangents, fused_triples_scalar_response,
-          admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse,
-          lambda_audit_matrix);
+          admitted_triples_w, lambda_true_residual_interval, lambda_core_reuse, lambda_audit_matrix,
+          lambda_primal_matrix);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -206,6 +208,7 @@ int main(int argc, char** argv) {
       work_field("source_seconds", result.primal.problem_seconds);
       work_field("ccsd_seconds", result.primal.solver_seconds);
       field("ccsd_matrix_gemm", result.solver.df_matrix_gemm ? 1 : 0);
+      field("ccsd_replay_matrix_gemm", result.solver.df_replay_matrix_gemm ? 1 : 0);
       work_field("ccsd_gemm_calls", result.solver.df_gemm_calls);
       work_field("ccsd_gemm_summands", result.solver.df_gemm_summands);
       work_field("ccsd_packing_bytes", result.solver.df_packing_bytes);
@@ -217,6 +220,17 @@ int main(int argc, char** argv) {
       work_field("ccsd_accumulation_calls", result.solver.df_accumulation_calls);
       work_field("ccsd_accumulation_bytes", result.solver.df_accumulation_bytes);
       work_field("ccsd_contraction_terms", result.solver.df_contraction_terms);
+      field("ccsd_occupied_pairs", result.solver.df_occupied_pairs ? 1 : 0);
+      field("ccsd_pair_resource_refused", result.solver.df_pair_resource_refused ? 1 : 0);
+      field("ccsd_pair_initial_symmetry_refused",
+            result.solver.df_pair_initial_symmetry_refused ? 1 : 0);
+      work_field("ccsd_pair_evaluations", result.solver.df_pair_evaluations);
+      work_field("ccsd_pair_refusals", result.solver.df_pair_refusals);
+      work_field("ccsd_pair_projection_calls", result.solver.df_pair_projection_calls);
+      work_field("ccsd_pair_projection_bytes", result.solver.df_pair_projection_bytes);
+      work_field("ccsd_pair_geometry_elements", result.solver.df_pair_geometry_elements);
+      work_field("ccsd_pair_capacity_bytes", result.solver.df_pair_capacity_bytes);
+      work_field("ccsd_pair_binding_host_bytes", result.solver.df_pair_binding_host_bytes);
       work_field("ccsd_evaluations", result.solver.iteration_graph_calls);
       work_field("ccsd_capacity", result.solver.numeric_capacity_bytes);
       work_field("ccsd_device_bytes", result.solver.owned_device_bytes);
@@ -229,6 +243,9 @@ int main(int argc, char** argv) {
       field("ccsd_replay_r2_max", result.solver.replay_r2_max);
       field("ccsd_diis_history", diis_history);
       work_field("ccsd_diis_seconds", result.solver.diis_seconds);
+      work_field("ccsd_iteration_seconds", result.solver.iteration_seconds);
+      work_field("ccsd_replay_seconds", result.solver.replay_seconds);
+      work_field("ccsd_update_seconds", result.solver.update_seconds);
       work_field("ccsd_diis_restarts", result.solver.diis_restarts);
       field("ccsd_packed_diis", result.solver.packed_diis ? 1 : 0);
       field("ccsd_packed_diis_refused", result.solver.packed_diis_refused ? 1 : 0);
@@ -360,6 +377,8 @@ int main(int argc, char** argv) {
       work_field("lambda_gemm_summands", result.lambda.df_gemm_summands);
       work_field("lambda_packing_output_bytes", result.lambda.df_packing_output_bytes);
       work_field("lambda_provider_allowance", result.lambda.df_provider_allowance_bytes);
+      work_field("lambda_available_device_bytes", result.lambda.df_available_device_bytes);
+      work_field("lambda_device_limit_bytes", result.lambda.df_device_limit_bytes);
       output << "  \"lambda_shared_program_hash\": "
              << std::quoted(result.lambda.shared_program_hash ? result.lambda.shared_program_hash
                                                               : "")
@@ -375,6 +394,8 @@ int main(int argc, char** argv) {
       work_field("lambda_core_reuse_actions", result.lambda.df_core_reuse_actions);
       field("lambda_audit_matrix_requested", lambda_audit_matrix);
       field("lambda_audit_matrix", result.lambda.df_audit_matrix_gemm);
+      field("lambda_primal_matrix_requested", lambda_primal_matrix);
+      field("lambda_primal_matrix", result.lambda.df_primal_matrix_gemm);
       work_field("lambda_audit_arena_bytes", result.lambda.df_audit_arena_bytes);
       output << "  \"lambda_audit_schedule_hash\": "
              << std::quoted(result.lambda.audit_schedule_hash ? result.lambda.audit_schedule_hash

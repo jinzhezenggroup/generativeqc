@@ -1357,6 +1357,35 @@ GENERATIVEQC_API const char* generativeqc_status_message(generativeqc_status sta
 GENERATIVEQC_API generativeqc_status generativeqc_method_available(generativeqc_method method,
                                                                    int32_t* available);
 
+/** Resolve an exact canonical native-manifest name (no Python or dynamic Libxc discovery).
+ * On invalid arguments or unknown names returns INVALID_ARGUMENT without writing out.
+ * An accepted name identifies a provider, not contextual method/backend/property support. */
+/** @native-contract generativeqc_method_from_name
+ * @behavior Resolve an exact canonical generated native-manifest name to its method identifier.
+ * @inputs canonical_name is a readable NUL-terminated string; output is writable for one
+ * generativeqc_method. Names are case-sensitive with no alias or whitespace normalization.
+ * @outputs Writes the method identifier only on SUCCESS; leaves output unchanged on failure.
+ * @lifetime Borrows input/output storage only for this synchronous call; retains neither.
+ * @errors Returns INVALID_ARGUMENT for a NULL argument, an empty name, or an unknown name.
+ * @execution Immutable registry lookup without a context or numerical execution.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_method_from_name(const char* canonical_name,
+                                                                   generativeqc_method* output);
+
+/** Borrow the manifest's canonical NUL-terminated name, valid for process lifetime.
+ * Unknown method IDs or NULL output return INVALID_ARGUMENT. */
+/** @native-contract generativeqc_method_get_name
+ * @behavior Look up the canonical generated native-manifest name for a method identifier.
+ * @inputs method is a generated native identifier; output is writable for one const char pointer.
+ * @outputs Writes the borrowed canonical name only on SUCCESS; leaves output unchanged on failure.
+ * @lifetime The immutable returned NUL-terminated string remains valid for the process lifetime;
+ * do not modify or free it.
+ * @errors Returns INVALID_ARGUMENT for an unknown method identifier or NULL output.
+ * @execution Immutable registry lookup without a context or numerical execution.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_method_get_name(generativeqc_method method,
+                                                                  const char** output);
+
 /** Query method family, properties, and batch support without preparing work. */
 /** @native-contract generativeqc_method_get_capabilities
  * @behavior Copy registry family, property flags, availability and batch support.
@@ -1708,6 +1737,17 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
  * @execution Synchronous release; serialize with every use of this handle and its context.
  */
 GENERATIVEQC_API void generativeqc_calculation_destroy(generativeqc_calculation* calculation);
+
+/** @native-contract generativeqc_calculation_get_supported_properties_v1
+ * @behavior Query context-qualified energy/force properties of an immutable prepared calculation.
+ * @inputs A live prepared calculation and non-NULL output pointer; no SCF inputs are needed.
+ * @outputs Returns admitted property flags for the exact system, method, backend and provider.
+ * @lifetime The output is copied; callers own its value and keep the context alive.
+ * @errors INVALID_ARGUMENT for NULL inputs; any failure leaves output unchanged.
+ * @execution Synchronous no-work query; serialize against execution and owner destruction.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_supported_properties_v1(
+    const generativeqc_calculation* calculation, generativeqc_property_flags* properties);
 
 /**
  * Execute synchronously. To request forces, the caller owns result->forces and

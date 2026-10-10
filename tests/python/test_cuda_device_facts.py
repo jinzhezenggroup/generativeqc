@@ -35,7 +35,7 @@ def test_hf_driver_uses_qualified_facts_without_unbatched_grid_query() -> None:
     assert setup.index(guard) < query
     assert setup.index("first_setup ? requested_bounded_direct_streaming") < query
     assert query < setup.index("++plan.execution_generation")
-    assert query < setup.index("copy_to_device(positions,")
+    assert query < setup.index("SourceSite::hf_positions_input")
     assert setup.count("cudaGetDeviceProperties(") == 1
     assert "compaction_properties.maxGridSize[1]" in setup
     assert "fill_global_failure(outputs, cuda_status(compaction_target_error))" in setup
@@ -134,21 +134,32 @@ int cudaGetDeviceProperties(cudaDeviceProp* properties, int device) {
   properties->maxGridSize[1] = 23;
   return injected_error;
 }
-int cuda_status(int error) { return 1000 + error; }
+int cuda_status(int error) { return error == cudaSuccess ? 0 : 1000 + error; }
 void fill_global_failure(std::vector<RhfBucketItem>& outputs, int status) {
   for (auto& output : outputs) output.status = status;
 }
-int copy_to_device(double* out, const double* in, std::size_t bytes, int stream) {
+enum class SourceRole { prepare };
+enum class SourceSite { hf_positions_input };
+enum class SourcePayload { input_positions };
+namespace runtime {
+int residency_upload(int execution, SourceRole role, SourceSite site,
+                     SourcePayload payload, double* out, const double* in,
+                     std::size_t bytes, int stream) {
+  assert(execution == 17 && role == SourceRole::prepare);
+  assert(site == SourceSite::hf_positions_input);
+  assert(payload == SourcePayload::input_positions);
   assert(stream == 9);
   ++uploads;
   std::copy_n(in, bytes / sizeof(double), out);
-  return GENERATIVEQC_STATUS_SUCCESS;
+  return cudaSuccess;
+}
 }
 std::vector<RhfBucketItem> execute(Plan& plan, Host host, double& device_position,
     bool requested_quartet_direct, bool requested_bounded_direct_streaming,
     std::size_t batch_size) {
   std::vector<RhfBucketItem> outputs(batch_size);
   const int device_id = 7;
+  const int residency_execution = 17;
   struct { int stream_ = 9; } resources;
   double* positions = &device_position;
   const bool first_setup = !plan.initialized;

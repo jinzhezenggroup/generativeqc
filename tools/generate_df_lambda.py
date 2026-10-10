@@ -64,6 +64,7 @@ def audit_programs() -> dict[str, Program]:
             "independent_transpose"
         ],
         "audit_auxiliary": virtual_programs("cuda")["amplitude_vjp"],
+        "primal_virtual": virtual_programs("cuda")["virtual"],
     }
 
 
@@ -72,13 +73,20 @@ def staged_type(name: str) -> str:
 
 
 BATCHED_STAGES = frozenset(
-    ("staged_primal_auxiliary", "staged_auxiliary", "staged_factors", "audit_auxiliary")
+    (
+        "staged_primal_auxiliary",
+        "staged_auxiliary",
+        "staged_factors",
+        "audit_auxiliary",
+        "primal_virtual",
+    )
 )
 ACCUMULATED_STAGES = (
     "staged_primal_auxiliary",
     "staged_auxiliary",
     "staged_prepare",
     "audit_auxiliary",
+    "primal_virtual",
 )
 
 
@@ -310,7 +318,7 @@ def cuda_header() -> str:
                 for name in audit_programs()
             )
             + "; }",
-            "void prepare_audit_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands);",
+            "void prepare_audit_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,bool primal,std::size_t& calls,std::size_t& summands);",
             "inline std::size_t core_reuse_contraction_host_bytes(){ return "
             + "+".join(
                 f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(node) is not None for node in nodes)})"
@@ -458,10 +466,14 @@ def cuda_source() -> str:
             lines.append("  }")
     lines.append("}")
     lines += [
-        "void prepare_audit_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,std::size_t& calls,std::size_t& summands){",
+        "void prepare_audit_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,bool primal,std::size_t& calls,std::size_t& summands){",
         "  bind_audit_core_matrix(s,context,1,calls,summands);",
         "  bind_audit_auxiliary_matrix(s,context,batch,calls,summands);",
         "  if(tail && tail!=batch) bind_audit_auxiliary_matrix(s,context,tail,calls,summands);",
+        "  if(primal){",
+        "    bind_primal_virtual_matrix(s,context,batch,calls,summands);",
+        "    if(tail && tail!=batch) bind_primal_virtual_matrix(s,context,tail,calls,summands);",
+        "  }",
         "}",
     ]
     lines.extend(accumulation_source(name) for name in ACCUMULATED_STAGES)

@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_class_pages.cuh",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Integer address decoder and disjoint ownership classifier for the 21 s/p/d quartet classes. Enumerates same-system rectangles and diagonal-inclusive triangles from borrowed class-major offsets; no integral mathematics, screening criterion or derivative weights.",
+  "regions": []
+}

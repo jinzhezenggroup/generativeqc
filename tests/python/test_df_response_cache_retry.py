@@ -169,6 +169,7 @@ assert(admitted_triples_w.accumulation_dtype == expected_w.accumulation_dtype);
 assert(admitted_triples_w.qualification == expected_w.qualification);
 assert(admitted_triples_w.math_mode == expected_w.math_mode);
 assert(lambda_true_residual_interval == expected_lambda_interval);
+assert(lambda_primal_matrix == (physical_replay == nullptr));
 later_phase(state.budget);
 DFCCSDTResult result;
 result.total_seconds = elapsed(started);
@@ -189,7 +190,7 @@ int main() {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
                                true, 8, 8, opts, true, expected_packed,
                                expected_parallel_gap, expected_gap_cotangents, false,
-                               expected_w, expected_lambda_interval, true, true, nullptr);
+                               expected_w, expected_lambda_interval, true, true, true, nullptr);
   };
   for (bool mixed_w : {false, true})
   for (std::size_t interval : {1, 30})
@@ -282,6 +283,15 @@ int main() {
     republished_failure = true;
   }
   assert(republished_failure && calls == 2 && drains == 2 && clears == 1 && cache.retained == 10);
+  reset();
+  DFCCSDTReferenceExperiment experiment;
+  r = run_df_ccsdt_native(
+      execution, system, auxiliary, descriptor, true, true, true, true, true, 8, 8, opts,
+      true, expected_packed, expected_parallel_gap, expected_gap_cotangents, false,
+      expected_w, expected_lambda_interval, true, true, true, &experiment);
+  assert(experiment.reference.has_value() && experiment.initial_density == nullptr);
+  assert(preparations == 1 && calls == 2 && clears == 1 &&
+         r.recycling_discarded_primal_attempt);
   // The diagnostic output stays live beside the retained cache during primal
   // admission. Exercise that reservation without changing the retry wrapper.
   auto diagnostic_call = [&](DFPhysicalResponseComparison& comparison) {

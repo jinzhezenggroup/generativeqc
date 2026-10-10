@@ -85,15 +85,22 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
                 "raise RuntimeError('external package ran')\n"
             )
     samples_path.write_bytes(gzip.compress(json.dumps(samples).encode(), mtime=0))
-    evidence_path = tmp_path / "evidence.json"
-    evidence = json.loads(evidence_path.read_text())
+    manifest_path = tmp_path / "publication.json"
+    manifest = json.loads(manifest_path.read_text())
+    evidence_path = tmp_path / next(
+        entry["path"] for entry in manifest["files"] if entry["role"] == "evidence"
+    )
+    compressed_evidence = evidence_path.suffix == ".gz"
+    raw = evidence_path.read_bytes()
+    evidence = json.loads(gzip.decompress(raw) if compressed_evidence else raw)
     for attachment in evidence["attachments"]:
         attachment["sha256"] = hashlib.sha256(
             (tmp_path / attachment["path"]).read_bytes()
         ).hexdigest()
-    evidence_path.write_text(json.dumps(evidence))
-    manifest_path = tmp_path / "publication.json"
-    manifest = json.loads(manifest_path.read_text())
+    raw = json.dumps(evidence).encode()
+    evidence_path.write_bytes(
+        gzip.compress(raw, mtime=0) if compressed_evidence else raw
+    )
     for entry in manifest["files"]:
         data = (tmp_path / entry["path"]).read_bytes()
         entry.update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())

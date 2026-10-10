@@ -33,6 +33,55 @@ def test_hf_driver_can_borrow_only_qualified_device_facts(
     assert f"forbidden cuda_hf_driver dependency on runtime/{unrelated}" in errors[0]
 
 
+@pytest.mark.parametrize(
+    ("owner", "header"),
+    [
+        ("scf/cuda/eigensolver.cpp", "residency_cuda.cuh"),
+        ("scf/cuda/resources.cpp", "residency_cuda.cuh"),
+        ("scf/cuda/rhf_graph.cpp", "residency_cuda.cuh"),
+        ("scf/cuda/rhf_graph.hpp", "residency_observer.hpp"),
+        ("scf/cuda_rhf.cpp", "residency_cuda.cuh"),
+    ],
+)
+def test_residency_consumers_borrow_only_explicit_runtime_leaves(
+    tmp_path: Path, owner: str, header: str
+) -> None:
+    """Observation adds a narrow runtime edge, not an exemption for runtime owners."""
+    source = tmp_path / "src"
+    adapter = source / owner
+    adapter.parent.mkdir(parents=True)
+    runtime = source / "runtime"
+    runtime.mkdir()
+    (runtime / header).write_text("\n")
+    adapter.write_text(f'#include "runtime/{header}"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    (runtime / "unrelated_cuda.hpp").write_text("\n")
+    adapter.write_text('#include "runtime/unrelated_cuda.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["residency_boundaries.hpp", "residency_observer.hpp", "residency_cuda.cuh"],
+)
+def test_residency_observation_cannot_acquire_scientific_ownership(
+    tmp_path: Path, header: str
+) -> None:
+    """Collectors share leaf tags and callbacks, never scientific driver interfaces."""
+    source = tmp_path / "src"
+    runtime = source / "runtime"
+    runtime.mkdir(parents=True)
+    scf = source / "scf"
+    scf.mkdir()
+    (scf / "types.hpp").write_text("\n")
+    (runtime / header).write_text('#include "scf/types.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_residency_observation" in errors[0]
+
+
 @pytest.mark.parametrize("owner", ["direct_jk.cpp", "direct_jk_plan.hpp"])
 def test_md_j_host_borrows_interface_not_recurrence(tmp_path: Path, owner: str) -> None:
     """The default provider may borrow MD launch metadata, not device formulas."""
@@ -137,6 +186,36 @@ def test_rhf_bucket_allows_reference_policy_without_device_implementation(
     errors = audit_scf_structure(tmp_path)["errors"]
     assert len(errors) == 1
     assert "forbidden cuda_hf_bucket dependency" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "forbidden_header",
+    [
+        "scf/cuda/direct_jk_plan.hpp",
+        "scf/cuda/rhf_bucket_internal.hpp",
+        "scf/cuda/direct_native_cartesian.cuh",
+    ],
+)
+def test_rhf_phase_values_borrow_public_provider_without_private_state(
+    tmp_path: Path, forbidden_header: str
+) -> None:
+    """The driver consumes the lease; the lease cannot acquire provider/bucket internals."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    lease_header = source / "scf/cuda/rhf_resident_values.hpp"
+    provider = source / "scf/cuda_direct_jk_device.hpp"
+    provider.write_text("// Public Direct capability seam\n")
+    lease_header.write_text('#include "scf/cuda_direct_jk_device.hpp"\n')
+    driver = source / "scf/cuda_rhf.cpp"
+    driver.write_text('#include "scf/cuda/rhf_resident_values.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    (source / forbidden_header).write_text(
+        "// Private state or recurrence implementation\n"
+    )
+    lease_header.write_text(f'#include "{forbidden_header}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_rhf_resident_values dependency" in errors[0]
 
 
 def test_one_electron_mapping_uses_explicit_cuda_provider_capability() -> None:

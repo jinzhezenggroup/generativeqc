@@ -178,7 +178,8 @@ class DFProvider:
             "source_seconds": 0.0,
             "transformation_seconds": 0.0,
             "host_transform_calls": 0,
-            "subsequent_h2d_bytes": 0,
+            # This CPU owner cannot observe uploads by downstream consumers.
+            "subsequent_h2d_bytes": None,
             "endpoint_seconds": 0.0,
             "external_reserved_bytes": 0,
         }

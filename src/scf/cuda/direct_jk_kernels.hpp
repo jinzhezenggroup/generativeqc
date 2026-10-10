@@ -35,6 +35,25 @@ cudaError_t prepare_canonical_pair_order(cudaStream_t stream, DeviceBatch batch,
                                          std::int32_t* sorted_order, void* workspace,
                                          std::size_t workspace_bytes);
 
+/** Sort shell-pair maxima of the original canonical AO bounds. The initial
+ * order contains global shell-pair IDs grouped by item and angular sum. */
+cudaError_t prepare_materialized_pair_order(cudaStream_t stream, DeviceBatch batch,
+                                            const double* bounds, int pair_count, int segment_count,
+                                            const int* segment_offsets, double* input_keys,
+                                            const std::int32_t* input_order, double* sorted_keys,
+                                            std::int32_t* sorted_order, void* workspace,
+                                            std::size_t workspace_bytes);
+
+/** Persistent, indexed order-five shell CTAs; all Cartesian components fit
+ * one packet. Full J/K or a single SR/LR K reuses one primitive recurrence.
+ * No task tensor, density screening, or new mathematical evaluator is used. */
+void launch_materialized_canonical_jk_kernel(
+    cudaStream_t stream, DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin,
+    std::size_t first_count, std::size_t second_begin, std::size_t second_count, bool unrestricted,
+    DirectCoulombRange range, double omega, double screening, const double* bounds,
+    const double* density, const std::uint8_t* active, double* coulomb, double* exchange,
+    std::uint64_t* work_count);
+
 /** Prefix only quartets admitted by the original product comparison.
  * The same-bucket triangle is defined in the sorted order, preserving symmetry.
  */
@@ -167,7 +186,8 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true);
+    detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true,
+    const GeneratedShellPairStream* force_topology = nullptr);
 
 /** Qualification-only angular partition behind the provider launch boundary.
  * Full publishes separate J/K channels; Long publishes one K channel. Short

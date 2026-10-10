@@ -6,6 +6,7 @@
 
 #include "generated_solver_lowering.hpp"
 #include "generativeqc/generativeqc.hpp"
+#include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda/eigensolver_kernels.hpp"
 #include "scf/cuda/launch_geometry.hpp"
@@ -141,10 +142,15 @@ std::size_t OrdinaryStreamEigensolver::metadata_bytes() const noexcept {
 }
 
 void OrdinaryStreamEigensolver::cleanup() noexcept {
+  const runtime::ResidencyExecution source_execution(
+      runtime::ResidencyOwner::hf_eigensolver_resources);
   int previous = device_;
   (void)cudaGetDevice(&previous);
   (void)cudaSetDevice(device_);
-  if (resources_.stream_) (void)cudaStreamSynchronize(resources_.stream_);
+  if (resources_.stream_)
+    (void)runtime::residency_stream_synchronize(
+        source_execution, runtime::ResidencyRole::lifetime,
+        runtime::ResidencySite::hf_eigensolver_release_fence, resources_.stream_);
   if (resources_.solver_workspace_) (void)runtime::resource_cuda_free(resources_.solver_workspace_);
   handles_.reset();
   resources_ = {};

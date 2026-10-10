@@ -20,6 +20,7 @@ from .production_registry import (
     emit_registry_header,
     emit_registry_source,
 )
+from .production_rys_tasks import direct_rys_task_candidates
 from .production_rys_values import direct_rys_value_candidates
 from .shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
@@ -83,12 +84,16 @@ def write_production_bundles(
         k_block_by_name = {
             item.spec.name: item for item in direct_k_block_candidates(profile)
         }
+        rys_task_by_name = {
+            item.spec.name: item for item in direct_rys_task_candidates(profile)
+        }
 
         def emit_unit(
             unit: tuple[KernelSelection, ...],
             profile: ResolvedProductionProfile = profile,
             rys_by_name: dict[str, KernelSelection] = rys_by_name,
             k_block_by_name: dict[str, KernelSelection] = k_block_by_name,
+            rys_task_by_name: dict[str, KernelSelection] = rys_task_by_name,
         ) -> str:
             """Keep alternatives in the same stable build unit as their owner."""
             rys_alternatives = tuple(
@@ -101,10 +106,18 @@ def write_production_bundles(
                 for item in unit
                 if item.spec.name in k_block_by_name
             )
+            rys_task_alternatives = tuple(
+                rys_task_by_name[item.spec.name]
+                for item in unit
+                if item.spec.name in rys_task_by_name
+            )
             return (
                 emit_profile_shard(profile, unit)
                 + emit_profile_shard(profile, rys_alternatives, variant="_rys_value")
                 + emit_profile_shard(profile, k_block_alternatives, variant="_k_block")
+                + emit_profile_shard(
+                    profile, rys_task_alternatives, variant="_rys_task"
+                )
             )
 
         identifier = _profile_identifier(profile.target.architecture)

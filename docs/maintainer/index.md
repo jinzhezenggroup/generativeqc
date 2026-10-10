@@ -13,6 +13,7 @@ Keep the distinction clear: the current rules and qualification procedures live 
 validation
 oh_uhf_comparison
 performance_engineering
+gfn2_density_work_diagnostics
 evidence_retention
 resource_planning
 roadmap

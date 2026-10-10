@@ -1,16 +1,16 @@
 {
   "archives": [],
   "decision": {
-    "reason": "Every measured control/candidate state and force comparison passes, with independent conventional RHF and same-Hamiltonian correlation/two-step force differences. Native default performance evidence is recorded separately as complete paired endpoints, not a compiler primitive promotion.",
+    "reason": "The original numerical evidence and separately labeled qualifying 144/230 cases pass their unchanged gates. Rejected streamed 414 proposals are retained as negative evidence, not admitted qualification or compiler promotion. Complete endpoint timings, work counts and source/binary identities remain separately scoped.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 43494,
-      "path": "evidence.json",
+      "bytes": 3519,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "a31002afe7d26a9f148332ed2239e3579d9b17ddeb47481216776313ac8082da"
+      "sha256": "cb654c2ab52678cda389e73f14108be36959763a8db33387de1657efa02f9de4"
     },
     {
       "bytes": 1871,
@@ -47,6 +47,42 @@
       "role": "summary",
       "bytes": 35450,
       "sha256": "470a97cc6b3b31b793c74f303589cc30db169219f4bf4d35dbc04397f23a8c4a"
+    },
+    {
+      "path": "work-admission-qualification.json.gz",
+      "role": "summary",
+      "bytes": 15559,
+      "sha256": "ff77ca9f793cc360325a1e026c504f3dfe69f2a584e26a364c04dd124f683b24"
+    },
+    {
+      "path": "source-work-admission.patch",
+      "role": "source-patch",
+      "bytes": 2771,
+      "sha256": "626e299a1f50ab90288e0b825dc4ec9d3bdfdf4ea985737ec287d943d2302b1f"
+    },
+    {
+      "path": "work-admission-latest-master.json.gz",
+      "role": "summary",
+      "bytes": 6687,
+      "sha256": "aa55118255a020377c5936a38aee093223fecf3f37eb5a60cbb70e1f3a309e1e"
+    },
+    {
+      "path": "work-admission-resident.json.gz",
+      "role": "summary",
+      "bytes": 5920,
+      "sha256": "231e38d82f298473e83ef0daa5950af44be817787598d62c04881fa19588faaa"
+    },
+    {
+      "path": "source-resident-admission.patch",
+      "role": "source-patch",
+      "bytes": 3503,
+      "sha256": "d34e854e913596a86d5d589a6ea913ffbe294801c88df5b6bea4d816aab855fc"
+    },
+    {
+      "path": "storage.json",
+      "role": "reproduction",
+      "bytes": 869,
+      "sha256": "033f1b4d577a5ceb2f7557a0311ecc6067899d451dcfae8b0f8ec8f195be9709"
     }
   ],
   "reproduction": {

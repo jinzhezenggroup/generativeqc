@@ -78,6 +78,7 @@ void validate_problem(const Problem&,bool) {}
 void validate_options(const SolverOptions&) {}
 struct Owner {
   solver::DiisRing history;
+  double configured_residual_tolerance{};
   SolverDiagnostic diagnostic;
   unsigned restarts{}, step{};
   Event first_event,last_event;
@@ -87,10 +88,13 @@ struct Owner {
   double current1=0,current2=0,previous1=0,previous2=0;
   double *last_t1=&previous1,*last_t2=&previous2;
   struct State { double *canonical_eps=nullptr,*t1,*t2; } state{nullptr,&current1,&current2};
-  Owner(const Problem&,const SolverOptions& options,int) : history(options.diis_size) {
+  Owner(const Problem&,const SolverOptions& options,int)
+      : history(options.diis_size), configured_residual_tolerance(options.residual_tolerance) {
     diagnostic.packed_diis=scenario!=0;
   }
-  generated::DeviceIterationOutputs iteration() {
+  generated::DeviceIterationOutputs iteration(double residual_tolerance) {
+    if(residual_tolerance!=configured_residual_tolerance)
+      throw std::runtime_error("incorrect per-state residual tolerance");
     ++queued; return {step};
   }
   generated::DeviceIterationOutputs replay() { ++queued; return {step+100}; }
@@ -138,6 +142,7 @@ int main() {
   for(scenario=0;scenario<5;++scenario) for(failure=0;failure<4;++failure) {
     queued=completed=event_records=timing_reads=active_diis=0;
     SolverOptions options; options.diis_size=8; options.max_iterations=4;
+    options.residual_tolerance=3e-10;
     options.packed_diis=scenario!=0;
     try {
       const auto result=solve_cuda(Problem{},options,0);

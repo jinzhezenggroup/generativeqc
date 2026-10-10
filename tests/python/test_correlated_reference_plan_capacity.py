@@ -1,8 +1,9 @@
 """Host-execute production plan accounting and bucket admission without CUDA work.
 
 The harness uses the real owner/topology types, packer, accounting functions,
-cache lifecycle, and reference capacity expressions. Only CUDA execution and
-runtime policy probes are replaced; no integrals or SCF iterations run.
+cache lifecycle, and reference capacity expressions. The DIIS selectors are
+compiled from their production owner. CUDA execution and unrelated runtime
+policy probes are replaced; no integrals or SCF iterations run.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_declaration, cpp_record_definition
 from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +53,18 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     driver = (ROOT / "src/scf/cuda_rhf.cpp").read_text()
     reference = (ROOT / "src/scf/cuda/reference_export.cuh").read_text()
+    diis = (ROOT / "src/scf/cuda/scf_diis_kernels.cu").read_text()
+    # The bucket admission calls these host-only selectors owned by the CUDA TU.
+    selectors = between(
+        diis,
+        "bool ordered_incremental_diis_gram_requested()",
+        "cudaError_t launch_diis_pending_gram(",
+    )
+    diis_policy = between(
+        driver,
+        "  const std::size_t diis_history = std::max<std::size_t>(1, options.diis_history);",
+        "  if (diis_history > 64)",
+    )
     capacity = between(reference, "inline std::size_t check_capacity(", "/** Stage")
     peak = between(
         driver,
@@ -64,13 +78,15 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "      // Download has synchronized",
     )
     # Exercise every declared numeric vector, including capacity retained at size zero.
-    topology = between(
-        (ROOT / "src/scf/cuda/topology.hpp").read_text(), "struct HostBatch {", "\n};"
+    topology = cpp_record_definition(
+        (ROOT / "src/scf/cuda/topology.hpp").read_text(), "HostBatch"
     )
-    owner = between(
-        (ROOT / "src/scf/cuda/rhf_bucket_internal.hpp").read_text(),
-        "struct CudaRhfBucketPlan {",
-        "\n};",
+    bucket_header = (ROOT / "src/scf/cuda/rhf_bucket_internal.hpp").read_text()
+    owner = cpp_record_definition(bucket_header, "CudaRhfBucketPlan")
+    # Derive the fake driver's complete ABI from the production declaration.
+    # New optional driver arguments must not silently break every host probe.
+    driver_signature = cpp_function_declaration(
+        bucket_header, "execute_hf_cuda_bucket_driver"
     )
     fields = re.findall(r"std::vector<[^>]+> (\w+);", topology)
     fields.remove("ecp_systems")
@@ -83,10 +99,16 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = directory / "probe.cpp"
     source.write_text(
         PREFIX
+        + "namespace generativeqc::scf::cuda_execution {\n"
+        + selectors
+        + "}\n"
         + "namespace generativeqc::scf::reference_detail {\n"
         + capacity
         + "}\n"
-        + DRIVER.replace("@PEAK@", peak).replace("@SNAPSHOT@", snapshot)
+        + DRIVER.replace("@DRIVER_SIGNATURE@", driver_signature)
+        .replace("@PEAK@", peak)
+        .replace("@SNAPSHOT@", snapshot)
+        .replace("@DIIS_POLICY@", diis_policy)
         + MAIN.replace("@FILL@", fill)
     )
     objects = []
@@ -133,11 +155,25 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
+@pytest.mark.parametrize("reducer", [None, "cooperative", "ordered"])
 @pytest.mark.parametrize(
     "mode",
     ["accounting", "warm", "short", "scientific", "growth", "freeze", "overflow"],
 )
-def test_reference_plan_capacity(capacity_probe: Path, mode: str) -> None:
+def test_reference_plan_capacity(
+    capacity_probe: Path,
+    mode: str,
+    reducer: str | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    if reducer is None:
+        monkeypatch.delenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", raising=False)
+        monkeypatch.delenv(
+            "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION", raising=False
+        )
+    else:
+        monkeypatch.setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM", "1")
+        monkeypatch.setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION", reducer)
     result = subprocess.run(
         [str(capacity_probe), mode],
         capture_output=True,
@@ -146,6 +182,16 @@ def test_reference_plan_capacity(capacity_probe: Path, mode: str) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_diis_mode_and_history_recreate_capacity_owner(capacity_probe: Path) -> None:
+    subprocess.run(
+        [str(capacity_probe), "diis"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
 
 def test_non_cuda_query_has_matching_noexcept_stub() -> None:
@@ -158,6 +204,8 @@ def test_non_cuda_query_has_matching_noexcept_stub() -> None:
 
 PREFIX = r"""
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -203,16 +251,17 @@ void require_exact_direct_strategy(const ResolvedFockBuild&,FockSpin,FockBackend
 
 DRIVER = r"""
 namespace generativeqc::scf {
-std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan,
-    const HostBatch& host,const ScfOptions& options,int device_id,bool unrestricted,
-    bool shell_class_profiling,bool inactive_eigensolver_profiling) {
+@DRIVER_SIGNATURE@ {
   const bool first_setup=!plan.initialized;
+@DIIS_POLICY@
   // Preserve the real driver's exact-option invariant after lifecycle admission.
   require(first_setup || same_hf_bucket_options(plan.options,options),"stale driver budget");
   require(first_setup || compatible_hf_bucket_options(plan,host,options),"unsafe driver reuse");
   const auto retained_reference_peak=first_setup?0:hf_cuda_reference_reuse_capacity(plan,host);
   if(first_setup) {
     ++created; plan.options=options; plan.topology=host;
+    plan.incremental_diis_gram=requested_incremental_diis_gram;
+    plan.ordered_diis_gram=requested_ordered_diis_gram;
     plan.topology.positions.clear(); plan.topology.warm_mask.clear(); plan.topology.warm_density.clear();
     plan.resources.device_id_=device_id; plan.resources.arena_=&plan; plan.layout.bytes=2456;
     plan.unrestricted=unrestricted; plan.shell_class_profiling=shell_class_profiling;
@@ -338,6 +387,30 @@ void scientific() {
     require(!run(owner,changed).execution_plan_reused,"scientific option mismatch reused plan");
   }
 }
+void diis_lifecycle() {
+  Owner owner; auto o=options();
+  bool previous_incremental=false, previous_ordered=false;
+  int previous_history=-1;
+  for(int history : {0,1,2,64,2,1,0}) {
+    o.diis_history=history;
+    for(int mode : {0,1,2,1,0}) {
+      setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM",mode?"1":"0",1);
+      setenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION",mode==2?"ordered":"cooperative",1);
+      const bool incremental=history>=2 && mode!=0, ordered=incremental && mode==2;
+      const bool reused=previous_history==history && previous_incremental==incremental && previous_ordered==ordered;
+      const auto before_created=created, before_destroyed=destroyed;
+      const bool had_owner=owner.p!=nullptr;
+      require(run(owner,o).execution_plan_reused==reused,"DIIS mode/history recreation mismatch");
+      require(created==before_created+!reused,"DIIS owner creation mismatch");
+      require(destroyed==before_destroyed+(had_owner && !reused),"DIIS owner destruction mismatch");
+      require(owner.p->incremental_diis_gram==incremental && owner.p->ordered_diis_gram==ordered,
+              "DIIS mode not retained by owner");
+      require(run(owner,o,true).execution_plan_reused,"unchanged DIIS plan not reused");
+      require(created==before_created+!reused,"unchanged DIIS plan recreated");
+      previous_history=history; previous_incremental=incremental; previous_ordered=ordered;
+    }
+  }
+}
 void growth() {
   Owner owner; auto o=options(); run(owner,o);
   HostBatch candidate; require(pack_host_batch({h2()},{nullptr},candidate,false,true,false),"packing");
@@ -389,7 +462,7 @@ int main(int argc,char** argv) {
     if(mode=="accounting") accounting(); else if(mode=="warm") warm();
     else if(mode=="short") short_budget(); else if(mode=="scientific") scientific();
     else if(mode=="growth") growth(); else if(mode=="freeze") freeze();
-    else if(mode=="overflow") overflow(); else return 2;
+    else if(mode=="overflow") overflow(); else if(mode=="diis") diis_lifecycle(); else return 2;
     std::cout<<mode<<" passed\n"; return 0;
   } catch(const std::exception& error) { std::cerr<<error.what()<<'\n'; return 1; }
 }

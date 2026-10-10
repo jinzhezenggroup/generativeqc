@@ -1192,6 +1192,8 @@ def emit_grid_source(
             asset_path("src/runtime/cuda_resources.cuh"),
             asset_path("src/runtime/resource_cuda.cuh"),
             asset_path("src/runtime/resource_ledger.hpp"),
+            asset_path("src/runtime/residency_boundaries.hpp"),
+            asset_path("src/runtime/residency_observer.hpp"),
             asset_path("src/dft/grid_task_view.cuh"),
             asset_path("src/dft/xc_point.hpp"),
             asset_path("src/dft/semilocal_family.hpp"),

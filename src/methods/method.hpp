@@ -216,6 +216,11 @@ class PreparedCalculation {
   virtual ~PreparedCalculation() = default;
   [[nodiscard]] virtual std::size_t atom_count() const noexcept = 0;
   [[nodiscard]] virtual const Capabilities& capabilities() const noexcept = 0;
+  /** Context-qualified property bits of this immutable prepared plan. The
+   * registry reports method-wide capabilities, never every backend/basis. */
+  [[nodiscard]] virtual generativeqc_property_flags supported_properties() const noexcept {
+    return capabilities().supported_properties;
+  }
   /** Method-neutral execution-resource high waters. Zero means the owner has
    * not supplied a measurement for that category; it must not be guessed. */
   [[nodiscard]] virtual runtime::ExecutionResourceSnapshot execution_resources() const noexcept {

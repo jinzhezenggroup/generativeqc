@@ -64,6 +64,50 @@ __device__ void canonical_pair_indices(std::size_t work, std::size_t first_count
   }
 }
 
+/** Build conservative shell keys from the incumbent component predicate,
+ * rather than from a second Schwarz implementation or a density bound. */
+__global__ void materialized_pair_keys_kernel(DeviceBatch batch, const double* bounds, int count,
+                                              const std::int32_t* order, double* keys) {
+  for (std::size_t ordinal = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+       ordinal < static_cast<std::size_t>(count); ordinal += std::size_t(blockDim.x) * gridDim.x) {
+    const auto pair = order[ordinal];
+    const auto system = batch.shell_pair_systems[pair];
+    const auto first = batch.shell_pair_first[pair], second = batch.shell_pair_second[pair];
+    const auto dimension = static_cast<std::size_t>(batch.direct_nbf);
+    const auto begin = std::size_t(system) * dimension;
+    double maximum = 0.0;
+    for (auto bra = batch.shell_direct_ao_offsets[first];
+         bra < batch.shell_direct_ao_offsets[first + 1]; ++bra)
+      for (auto ket = batch.shell_direct_ao_offsets[second];
+           ket < batch.shell_direct_ao_offsets[second + 1]; ++ket)
+        maximum = fmax(maximum, bounds[std::size_t(system) * dimension * dimension +
+                                       (bra - begin) * dimension + ket - begin]);
+    keys[ordinal] = maximum;
+  }
+}
+
+template <bool Unrestricted>
+__global__ void materialized_canonical_jk_kernel(
+    DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
+    std::size_t second_begin, std::size_t second_count, generativeqc::integrals::CoulombRange range,
+    double omega, double screening, const double* bounds, const double* density,
+    const std::uint8_t* active, double* coulomb, double* exchange, std::uint64_t* work_census) {
+  __shared__ MaterializedDirectPairRecurrence<5> shared;
+  const auto count = rows.prefix[first_count - 1];
+  // Every lane visits the same task and participates in all publication and
+  // retirement barriers. Only the helper's original AO predicate admits work.
+  for (std::size_t work = blockIdx.x; work < count; work += gridDim.x) {
+    std::size_t first{}, second{};
+    canonical_pair_indices(work, first_count, second_count, false, rows, first, second);
+    const ActiveShellQuartetTile task{static_cast<std::uint32_t>(rows.order[first_begin + first]),
+                                      static_cast<std::uint32_t>(rows.order[second_begin + second]),
+                                      0};
+    contract_materialized_direct_pair_fock<Unrestricted, 5>(
+        batch, task, screening, bounds, density, active, nullptr, nullptr, shared, nullptr, false,
+        false, nullptr, false, range, omega, coulomb, exchange, work_census);
+  }
+}
+
 __global__ void canonical_pair_keys_kernel(DeviceBatch batch, const std::int32_t* pairs,
                                            const double* bounds, int count, double* keys,
                                            std::int32_t* order) {
@@ -758,6 +802,41 @@ cudaError_t prepare_canonical_pair_rows(cudaStream_t stream, const double* sorte
                                        static_cast<int>(first_count), stream);
 }
 
+cudaError_t prepare_materialized_pair_order(cudaStream_t stream, DeviceBatch batch,
+                                            const double* bounds, int pair_count, int segment_count,
+                                            const int* segment_offsets, double* input_keys,
+                                            const std::int32_t* input_order, double* sorted_keys,
+                                            std::int32_t* sorted_order, void* workspace,
+                                            std::size_t workspace_bytes) {
+  const auto blocks =
+      static_cast<unsigned>(std::min<std::size_t>((pair_count + 127U) / 128U, 4096U));
+  materialized_pair_keys_kernel<<<blocks, 128, 0, stream>>>(batch, bounds, pair_count, input_order,
+                                                            input_keys);
+  const auto status = cudaGetLastError();
+  if (status != cudaSuccess) return status;
+  return cub::DeviceSegmentedRadixSort::SortPairsDescending(
+      workspace, workspace_bytes, input_keys, sorted_keys, input_order, sorted_order, pair_count,
+      segment_count, segment_offsets, segment_offsets + 1, 0, 64, stream);
+}
+
+void launch_materialized_canonical_jk_kernel(
+    cudaStream_t stream, DeviceBatch batch, CanonicalPairRows rows, std::size_t first_begin,
+    std::size_t first_count, std::size_t second_begin, std::size_t second_count, bool unrestricted,
+    DirectCoulombRange range, double omega, double screening, const double* bounds,
+    const double* density, const std::uint8_t* active, double* coulomb, double* exchange,
+    std::uint64_t* work_count) {
+  if (!first_count || !second_count) return;
+  constexpr unsigned blocks = 4096, threads = detail::kDirectQuartetTileSize;
+  if (unrestricted)
+    materialized_canonical_jk_kernel<true><<<blocks, threads, 0, stream>>>(
+        batch, rows, first_begin, first_count, second_begin, second_count, integral_range(range),
+        omega, screening, bounds, density, active, coulomb, exchange, work_count);
+  else
+    materialized_canonical_jk_kernel<false><<<blocks, threads, 0, stream>>>(
+        batch, rows, first_begin, first_count, second_begin, second_count, integral_range(range),
+        omega, screening, bounds, density, active, coulomb, exchange, work_count);
+}
+
 void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* values,
                                          std::size_t count, int* failure) {
   const unsigned blocks = static_cast<unsigned>(std::min<std::size_t>((count + 127) / 128, 65535));
@@ -1086,13 +1165,14 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain, bool separate_sources) {
+    detail::BoundedDirectBlockDomain block_domain, bool separate_sources,
+    const GeneratedShellPairStream* force_topology) {
   return launch_bounded_direct_shell_quartet_kernel_scaled(
       unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
       batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
       shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
       density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient,
-      separate_sources, block_domain);
+      separate_sources, block_domain, force_topology);
 }
 
 cudaError_t launch_bounded_shell_angular_energy_derivative(

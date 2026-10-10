@@ -386,6 +386,17 @@ macro(generativeqc_register_host_generated_sources target)
     set(GENERATIVEQC_SCF_DENSITY_CUDA_HEADER
         "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_density_cuda.cuh")
     generativeqc_register_generated_sources(
+      NAME generativeqc_scf_diis_cuda_codegen
+      TARGET ${target}
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_scf_array_native.py"
+      OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_diis_cuda.cuh"
+      DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/array_api/scf.py"
+      ARGS --backend cuda-diis --output
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_scf_diis_cuda.cuh"
+      COMMENT "Generating shared ordered CUDA residual Gram contraction")
+    generativeqc_register_generated_sources(
       NAME generativeqc_scf_density_cuda_codegen
       TARGET ${target}
       GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_scf_density_cuda.py"
@@ -611,7 +622,7 @@ macro(generativeqc_register_host_generated_sources target)
 
   # The DF families share the existing RCCSD emitter. Their CPU queries
   # also own exact admission sizes for CUDA; generate once for both backends.
-  foreach(_df_family IN ITEMS native core hoisted)
+  foreach(_df_family IN ITEMS native core hoisted spectator_pairs)
     if(_df_family STREQUAL "native")
       set(_df_prefix "generated_df_ccsd")
     else()
@@ -629,6 +640,7 @@ macro(generativeqc_register_host_generated_sources target)
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_native.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
       ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
   endforeach()
 
@@ -723,7 +735,8 @@ macro(generativeqc_register_cuda_generated_sources target)
   target_sources(${target} PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_cuda.cu"
     "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_core_cuda.cu"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_hoisted_cuda.cu")
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_hoisted_cuda.cu"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_spectator_pairs_cuda.cu")
   set(GENERATIVEQC_MEAN_FIELD_SETUP_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_mean_field_setup.cuh")
   generativeqc_register_generated_sources(
@@ -995,6 +1008,19 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py"
     ARGS --output "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF source-contraction helper")
+
+  set(GENERATIVEQC_MD_J_RECIPROCAL_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_md_j_reciprocal.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_md_j_reciprocal_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_md_j_reciprocal.py"
+    OUTPUTS "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/md_j_reciprocal_cuda.py"
+    ARGS --output "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
+    COMMENT "Generating compiler-owned reciprocal MD Coulomb consumer")
 
   set(GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_derivative_cuda_shell_aot.cuh")

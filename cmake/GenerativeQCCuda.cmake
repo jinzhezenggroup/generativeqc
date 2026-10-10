@@ -35,6 +35,8 @@ macro(generativeqc_configure_cuda_backend target)
     src/scf/cuda/direct_reference_force.cu
     src/scf/cuda/direct_bounded_dddd.cu
     src/scf/cuda/direct_bounded_exact_force.cu
+    src/scf/cuda/direct_order_seven_force.cu
+    src/scf/cuda/direct_force_class_domains.cu
     src/scf/cuda/direct_bounded_fallback.cu
   )
   # The resident angular-force kernels have launch-bound register ceilings.
@@ -47,6 +49,7 @@ macro(generativeqc_configure_cuda_backend target)
     "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
     "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
+    "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
     ${GENERATIVEQC_DIRECT_RECURRENCE_HEADERS}
     ${GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS}
     "${GENERATIVEQC_DIRECT_ORDER2_SHELL_HEADER}"
@@ -80,6 +83,7 @@ macro(generativeqc_configure_cuda_backend target)
                 "${GENERATIVEQC_ORDER4_WEIGHTED_ERI_HEADER}"
                 "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     "${GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER}"
+    "${GENERATIVEQC_MD_J_RECIPROCAL_HEADER}"
     "${GENERATIVEQC_DERIVATIVE_SHELL_AOT_HEADER}"
     ${GENERATIVEQC_DIRECT_RECURRENCE_HEADERS}
     ${GENERATIVEQC_DIRECT_PAIR_SUPPORT_HEADERS}
@@ -336,6 +340,8 @@ macro(generativeqc_configure_cuda_backend target)
       "src/runtime/cuda_resources.cuh"
       "src/runtime/resource_cuda.cuh"
       "src/runtime/resource_ledger.hpp"
+      "src/runtime/residency_boundaries.hpp"
+      "src/runtime/residency_observer.hpp"
       "src/tensor/cuda_error.hpp"
       "src/tensor/metrics.hpp"
       "src/runtime/allocation_measurement.hpp"

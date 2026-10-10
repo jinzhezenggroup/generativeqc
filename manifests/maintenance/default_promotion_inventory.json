@@ -25,12 +25,40 @@
       "src/methods/df_hf_guess.cpp",
       "src/scf/cuda/direct_jk.cpp",
       "src/scf/cuda/direct_md_j.hpp",
+      "src/scf/cuda/direct_fock_lowering.hpp",
+      "src/scf/cuda/reference_eri_policy.hpp",
+      "src/scf/cuda/rhf_resident_values.cpp",
+      "python/generativeqc_compiler/integral/production_rys_tasks.py",
+      "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
   "entries": [
+    {
+      "id": "scf.phase-local-exact-reference-values",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/scf/cuda/reference_eri_policy.hpp",
+        "src/scf/cuda/rhf_resident_values.cpp",
+        "src/scf/cuda_rhf.cpp"
+      ],
+      "rationale": "Unset/auto conservatively selects a phase-local exact FP64 source only for fresh single restricted unscreened physical-reference buckets with uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs and an iteration limit of at least eight. The static domain heuristic is not an observed reuse count or a universal profitability model. Complete numeric admission, an 8-GiB value ceiling and a 256-MiB free-device reserve retain exact fallback. Local graphs and values retire before correlation; refused/warm calls reuse ordinary bucket graphs. Explicit 0 restores the original schedule and 1 requests values without bypassing scientific/resource gates.",
+      "revisit_condition": "Broaden the cold/domain heuristic only with new source-matched complete E+F comparisons and independent gates, including quickly converged fresh seeds and generated/lower-angular schedules. Preserve final physical Fock/census audits, compensated FP64 arithmetic and bounded lifetime; do not pool retained opt-in measurements with new default-auto qualification.",
+      "evidence": [
+        "docs/developer/scf_module_boundaries.md",
+        ".agents/notes/implemented/performance/2026-10-10-rhf-phase-values-auto.md",
+        "benchmarks/results/rhf-phase-values-auto-20261010/README.md",
+        "tests/python/test_rhf_reference_cache_policy.py",
+        "tests/python/test_rhf_resident_values_lifetime.py",
+        "tests/python/test_rhf_phase_resident_values_cuda.py"
+      ]
+    },
     {
       "id": "initial-guess.df-rhf-preconvergence",
       "classification": "already-default",
@@ -43,11 +71,12 @@
         "src/methods/df_hf_guess_basis.hpp",
         "src/methods/df_ccsdt_force.cu"
       ],
-      "rationale": "The native DF-CCSD(T) owner may preconverge a detached density with a separately bundled H/C JK-fit basis, only for neutral spherical through-f 200–400 AO cold references. The accepted RHF reference, Hamiltonian and complete analytic response remain unscreened FP64 Direct. Preliminary work is finite and included in reference/endpoint timing; unsupported topology, tight budgets and refused guesses retain Direct. Explicit or warm density seeds take precedence.",
+      "rationale": "The native DF-CCSD(T) owner may preconverge a detached density with a separately bundled H/C JK-fit basis for neutral spherical through-f cold references. Admission excludes cache-eligible exact references, requires a conservative dense Cartesian/fitting sweep-volume amortization screen, charges actual preparation metadata/matrices under the finite cap, and requires the shared source-backed dense/packed planner to retain full factors with metadata and DIIS reservations; there is no fixed AO interval. Streamed proposals are skipped because bounded memory does not imply profitable work. The volume screen is a heuristic, not a universal measured crossover or actual integral census. The accepted RHF reference, Hamiltonian and complete analytic response remain unscreened FP64 Direct. Preliminary work is finite and included in reference/endpoint timing; unsupported topology, tight budgets and refused guesses retain Direct. Explicit or warm density seeds take precedence.",
       "revisit_condition": "Expand the topology/resource domain only with independent reference/force gates and paired complete endpoint evidence, including a larger planner case. Never interpret this policy as promotion of a fitted accepted reference or DF-HF gradients.",
       "evidence": [
         "docs/developer/df_hf_preconvergence.md",
         ".agents/notes/implemented/performance/2026-10-09-df-rhf-preconvergence-default.md",
+        ".agents/notes/implemented/performance/2026-10-09-df-rhf-work-admission.md",
         "tests/python/test_df_hf_guess_policy.py",
         "tests/python/test_df_hf_preconvergence.py"
       ]
@@ -895,6 +924,57 @@
         "issue:#1901",
         "issue:#1972",
         "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
+      ]
+    },
+    {
+      "id": "dft.rys-task-k-default",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:rys-task-k-default",
+        "dft-policy:GENERATIVEQC_DIRECT_K_FOCK_LOWERING",
+        "dft-policy:GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/scf/cuda/direct_fock_lowering.hpp",
+        "python/generativeqc_compiler/integral/production_rys_tasks.py",
+        "python/generativeqc_compiler/integral/production_registry.py"
+      ],
+      "rationale": "Only the qualified sm_120 profile prefers psps, ppps, dsss, dpss, dsps, ddss, dsds, dpps and dspp quartet-parallel Rys-K; other classes and profiles retain incumbent recurrence with the independently selected work/fill schedule. Three-root classes use one-word 64-bit component masks and bounded local contraction, with generic scatter beyond its private footprint. Construction freezes selection and coverage filters cannot broaden preference. Lowering incumbent disables task preference; also select task fill to roll back both promotions. A separately identified joint campaign qualifies task Work companions with independent matrices/sanitizers, complete cold E+F mean/median gains against both standalone policies and retained actual Fock counts. Historical separate promotions and rejected cohorts remain independently labeled rather than relabeled as joint qualification.",
+      "revisit_condition": "Any target/class expansion or queue/parallel-granularity change requires renewed source-identified numerical, sanitizer, work-count and complete-endpoint qualification. Keep frozen historical measurements distinct from current-master qualification and retain valid negative cohorts.",
+      "evidence": [
+        "benchmarks/results/rys-task-default-20261008/README.md",
+        "benchmarks/results/rys-task-master-20261008/README.md",
+        "docs/developer/direct_rys_tasks.md",
+        "benchmarks/results/unified-k-work-20261009/README.md",
+        ".agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md",
+        ".agents/notes/implemented/performance/2026-10-08-rys-task-k-default.md"
+      ]
+    },
+    {
+      "id": "dft.direct-k-work-default",
+      "classification": "already-default",
+      "controls": [
+        "dft-policy:GENERATIVEQC_DIRECT_K_TASK_SCHEDULE"
+      ],
+      "owner_issues": [
+        1598,
+        1892
+      ],
+      "sources": [
+        "src/scf/cuda/direct_fock_lowering.hpp"
+      ],
+      "rationale": "Primitive-work buckets are the prepared raw-K default for eligible incumbent and quartet-parallel Rys-task producers. Task producers retain the same quartet arithmetic and use four independently retiring warp-private eight-bin queues; explicit component-Rys/block and whole-CTA/native/unsupported classes retain their existing workers. Current joint qualification retains every sample and passes independent matrix/sanitizer, admission-count and complete cold E+F mean/median gates against both standalone policies. Historical unmatched two-sample trajectories and the rejected initial union remain distinct evidence. Explicit fill restores the preceding schedule and smaller task scratch independently of lowering preference.",
+      "revisit_condition": "Retain finite post-screening queues, unchanged mathematical contracts and explicit fill rollback. Renew source-identified matrix, sanitizer, work-count and complete-endpoint qualification before changing task granularity, work buckets or combining performance claims.",
+      "evidence": [
+        "pr:#2135",
+        "benchmarks:benchmarks/results/pbe0-k-work-20261008/README.md",
+        "note:.agents/notes/implemented/performance/2026-10-09-direct-k-work-default.md",
+        "note:.agents/notes/implemented/architecture/2026-10-09-unified-direct-k-selector.md",
+        "benchmarks:benchmarks/results/unified-k-work-20261009/README.md",
+        "note:.agents/notes/implemented/performance/2026-10-09-rys-task-work-buckets.md"
       ]
     },
     {

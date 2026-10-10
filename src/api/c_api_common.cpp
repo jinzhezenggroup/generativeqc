@@ -1,5 +1,6 @@
 #include "api/error.hpp"
 #include "generativeqc/generativeqc.h"
+#include "methods/generated_method_manifest.hpp"
 #include "methods/method.hpp"
 
 extern "C" {
@@ -32,6 +33,24 @@ const char* generativeqc_status_message(generativeqc_status status) {
       return "precision provenance not yet populated";
   }
   return "unknown status";
+}
+
+generativeqc_status generativeqc_method_from_name(const char* canonical_name,
+                                                  generativeqc_method* output) {
+  if (canonical_name == nullptr || output == nullptr || *canonical_name == '\0')
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* entry = generativeqc::methods::generated::find_method(canonical_name);
+  if (entry == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *output = entry->method;
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
+generativeqc_status generativeqc_method_get_name(generativeqc_method method, const char** output) {
+  if (output == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  const auto* entry = generativeqc::methods::generated::find_method(method);
+  if (entry == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *output = entry->name.data();
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 
 generativeqc_status generativeqc_method_available(generativeqc_method method, int32_t* available) {

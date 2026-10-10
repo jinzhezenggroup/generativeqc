@@ -11,10 +11,11 @@
 #include "cc/lambda_response.hpp"
 
 extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, int mode,
-                                  std::size_t budget, const double* const* input,
-                                  const double* source1, const double* source2,
-                                  double* const* output, double* values, std::size_t* counts,
-                                  char* error, std::size_t error_size) noexcept {
+                                  std::size_t budget, std::size_t device_budget,
+                                  const double* const* input, const double* source1,
+                                  const double* source2, double* const* output, double* values,
+                                  std::size_t* counts, char* error,
+                                  std::size_t error_size) noexcept {
   try {
     generativeqc::cc::Problem p;
     p.nocc = o;
@@ -53,12 +54,16 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     if (!cc.converged()) throw std::runtime_error(cc.reason);
     generativeqc::cc::LambdaOptions response;
     response.max_bytes = budget;
+    response.df_max_device_bytes = device_budget;
     response.gmres.absolute_tolerance = 1e-12;
     response.df_auxiliary_reduction = !(mode & 4);
     response.df_matrix_gemm = !(mode & 8);
     response.df_core_reuse = !(mode & 64);
     response.df_audit_matrix_gemm = !(mode & 128);
-    response.df_auxiliary_batch_limit = (mode & 16) ? 2 : 8;
+    if (!(mode & 2048)) {
+      response.df_primal_matrix_gemm = mode & 1024;
+      response.df_auxiliary_batch_limit = (mode & 512) ? 32 : (mode & 16) ? 2 : 8;
+    }
     if (mode & 32) {
       // Large finite seeds overflow intermediate adjoints. The sticky flag
       // must reject the complete action before the adapter publishes outputs.
@@ -111,7 +116,10 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              d.df_core_reuse_preparations,
                              d.df_core_reuse_actions,
                              std::size_t(d.df_audit_matrix_gemm),
-                             d.df_audit_arena_bytes};
+                             d.df_audit_arena_bytes,
+                             std::size_t(d.df_primal_matrix_gemm),
+                             d.df_available_device_bytes,
+                             d.df_device_limit_bytes};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

@@ -51,6 +51,7 @@ from generativeqc_compiler.xc.contractions import (
 )
 from generativeqc_compiler.xc.grid_native import NativeGridContraction
 from generativeqc_compiler.xc.grid_response import partition_response
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 from generativeqc_compiler.xc.native import NativeContractionProgram
 
 from ._dft_gradient import (
@@ -490,16 +491,15 @@ def complete_rks_gradient_diagnostic(
     # coefficients and split energy/Fock semantics from the derivative.
     method = state._source.method_ir
     functional = state._source.functional
+    scf_domain = state._source._batch._calculator._ks_options.scf_domain
+    point_model = (
+        scf_domain
+        if uses_molecular_nonlocal_domain(method) or scf_domain == LIBXC_WORK_DOMAIN
+        else SCF_POINT_MODEL
+    )
     plan = StationaryGradientPlan(
         method,
-        StationaryMeanField(
-            (
-                state._source._batch._calculator._ks_options.scf_domain
-                if uses_molecular_nonlocal_domain(state._source.method_ir)
-                else SCF_POINT_MODEL
-            ),
-            hamiltonian=state._source.hamiltonian,
-        ),
+        StationaryMeanField(point_model, hamiltonian=state._source.hamiltonian),
     )
     density = state.density if contract.spin == "polarized" else state.density[0]
     if compiler is None:

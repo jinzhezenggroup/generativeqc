@@ -394,6 +394,7 @@ __global__ void validate_centers(const double* centers, size_t na, double tolera
           centers, na, tolerance, center_pairs, local_norm, local_ratio_geometry))
     atomicExch(error, 1);
 }
+template <bool restricted_point = false>
 __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     size_t p, size_t owner, size_t na,
     const double* raw, const double* external, size_t external_stride, size_t external_offset,
@@ -407,7 +408,14 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     for (size_t s = 0; s < 2; ++s) tau[s] = view.features[(5 * s + 4) * np + p];
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
-  if (external) {
+  if constexpr (restricted_point) {
+    static_assert(!restricted_point || stationary_pbe0_restricted_point_capable);
+    if (external) {
+      atomicExch(error, 1);
+      return false;
+    }
+    xc = stationary_evaluate_restricted_point(rho, g, tau);
+  } else if (external) {
     // Nonlocal E supplies partials in total rho/sigma, explicit pair
     // coordinates and both weight legs. Device-resident callers may lend a
     // full-grid [6,stride] seed owner and select one tile by offset, avoiding
@@ -470,13 +478,9 @@ __device__ void geometry_ao_gradient(generativeqc::dft::GridTaskView view, const
   }
 }
 
-__device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const double* work,
+__device__ bool geometry_point_ao_prepared(generativeqc::dft::GridTaskView view, const double* work,
     const int64_t* ao_atoms, size_t p, size_t owner, size_t na, const double* weights,
-    const double* raw, const double* external, size_t external_stride, size_t external_offset,
-    double* grad, double& becke_seed, int* error) {
-  StationaryPointValue xc;
-  if (!geometry_point_setup(view, p, owner, na, raw, external, external_stride, external_offset,
-                            grad, xc, becke_seed, error)) return false;
+    const StationaryPointValue& xc, double* grad, int* error) {
   const size_t n = view.nactive;
   for (size_t mu = 0; mu < n; ++mu) {
     const size_t global_ao = view.ao_ids ? view.ao_ids[mu] : mu;
@@ -500,6 +504,50 @@ __device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const do
   return true;
 }
 
+__device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const double* work,
+    const int64_t* ao_atoms, size_t p, size_t owner, size_t na, const double* weights,
+    const double* raw, const double* external, size_t external_stride, size_t external_offset,
+    double* grad, double& becke_seed, int* error) {
+  StationaryPointValue xc;
+  if (!geometry_point_setup(view, p, owner, na, raw, external, external_stride, external_offset,
+                            grad, xc, becke_seed, error)) return false;
+  return geometry_point_ao_prepared(view, work, ao_atoms, p, owner, na, weights, xc, grad, error);
+}
+
+/** Evaluate one shared SCF point model per thread, before cooperative AO work.
+ * Phased Becke never consumes the inline pair scratch. Its first atom channel
+ * holds the point value; three grid-motion slots retain any external seed.
+ * Admission guarantees these regions are disjoint, without another allocation.
+ * The borrowed stream orders publication and the sticky status gates readers. */
+template <bool restricted_point = false>
+__global__ void geometry_point_kernel(generativeqc::dft::GridTaskView view,
+    const int64_t* owners, size_t owner_offset, size_t points_per_atom, size_t na,
+    const double* weights, const double* raw, const double* external,
+    size_t external_stride, size_t external_offset, double* scratch,
+    double* phase_seeds, int* error) {
+  const size_t point = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (point >= view.npoint) return;
+  if (view.error && *view.error) {
+    atomicExch(error, 1);
+    return;
+  }
+  if (*error) return;
+  const int64_t owner = owners ? owners[point]
+      : (points_per_atom ? int64_t((owner_offset + point) / points_per_atom) : int64_t{-1});
+  if (owner < 0 || owner >= int64_t(na) || !isfinite(weights[point]) || !isfinite(raw[point])) {
+    atomicExch(error, 1);
+    return;
+  }
+  double* ws = scratch + point * 9 * na;
+  for (size_t axis = 0; axis < 3; ++axis) ws[3 * na + 3 * owner + axis] = 0;
+  StationaryPointValue xc;
+  double seed = 0;
+  if (!geometry_point_setup<restricted_point>(view, point, size_t(owner), na, raw, external,
+                            external_stride, external_offset, ws, xc, seed, error)) return;
+  *reinterpret_cast<StationaryPointValue*>(ws) = xc;
+  phase_seeds[point] = seed;
+}
+
 struct GeometryBlockControl {
   double seed;
   int valid;
@@ -519,6 +567,44 @@ struct GeometryBlockTeam {
     return result;
   }
 };
+/** Consume the published AO panel once, with one writer for both atom channels.
+ * Validated AO labels may be repeated, noncontiguous or unordered. Each atom's
+ * subtraction and the owner's grid-motion sum retain the original AO order.
+ * Keep both accumulators private across consecutive columns of one atom: the
+ * common atom-grouped maps then avoid per-AO global gradient reads/writes.
+ * Unordered maps flush/reload each run, preserving the same per-atom order. */
+__device__ void geometry_reduce_ao_panel(generativeqc::dft::GridTaskView view,
+    const int64_t* ao_atoms, size_t owner, size_t na, const double* ao_gradient,
+    double* grad) {
+  const size_t grid_coordinate = 3 * na + 3 * owner;
+  double grid_gradient[3]{grad[grid_coordinate], grad[grid_coordinate + 1],
+                          grad[grid_coordinate + 2]};
+  size_t previous_atom = na;
+  double atom_gradient[3]{};
+  for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
+    const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
+    const size_t atom = size_t(ao_atoms[global_ao]);
+    if (atom != previous_atom) {
+      if (previous_atom != na)
+        for (size_t axis = 0; axis < 3; ++axis)
+          grad[3 * previous_atom + axis] = atom_gradient[axis];
+      for (size_t axis = 0; axis < 3; ++axis)
+        atom_gradient[axis] = grad[3 * atom + axis];
+      previous_atom = atom;
+    }
+    for (size_t axis = 0; axis < 3; ++axis) {
+      const double value = ao_gradient[3 * ao_index + axis];
+      atom_gradient[axis] -= value;
+      grid_gradient[axis] += value;
+    }
+  }
+  if (previous_atom != na)
+    for (size_t axis = 0; axis < 3; ++axis)
+      grad[3 * previous_atom + axis] = atom_gradient[axis];
+  for (size_t axis = 0; axis < 3; ++axis)
+    grad[grid_coordinate + axis] = grid_gradient[axis];
+}
+template<bool precomputed_point>
 __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
                                 size_t owner_offset, size_t points_per_atom,
@@ -527,7 +613,7 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-                                double* phase_seeds = nullptr) {
+                                double* phase_seeds) {
   // Lanes remain point workers. A whole block cooperates on one worker's panel.
   const size_t lane = blockIdx.x;
   if (lane >= geometry_lanes) return;
@@ -562,13 +648,25 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
     if (threadIdx.x == 0) {
       control.collective_valid = 1;
       control.valid = owner >= 0 && owner < int64_t(na) && isfinite(weights[p]) && isfinite(raw[p]);
+      // A concurrent CTA may set sticky status: keep this CTA's participation uniform.
+      if constexpr (precomputed_point) control.valid = control.valid && !*error;
       if (control.valid) {
-        if (cooperative_ao)
-          control.valid = geometry_point_setup(view, p, owner, na, raw, external,
-              external_stride, external_offset, grad, *point_value, control.seed, error);
-        else
-          control.valid = geometry_point_ao(view, work, ao_atoms, p, owner, na, weights, raw, external,
-                                          external_stride, external_offset, grad, control.seed, error);
+        if constexpr (precomputed_point) {
+          *point_value = *reinterpret_cast<const StationaryPointValue*>(ws);
+          control.seed = phase_seeds[p];
+          for (size_t axis = 0; axis < 3; ++axis)
+            grad[3 * na + 3 * owner + axis] += ws[3 * na + 3 * owner + axis];
+          if (!cooperative_ao)
+            control.valid = geometry_point_ao_prepared(view, work, ao_atoms, p, owner, na,
+                                                       weights, *point_value, grad, error);
+        } else {
+          if (cooperative_ao)
+            control.valid = geometry_point_setup(view, p, owner, na, raw, external,
+                external_stride, external_offset, grad, *point_value, control.seed, error);
+          else
+            control.valid = geometry_point_ao(view, work, ao_atoms, p, owner, na, weights, raw, external,
+                                            external_stride, external_offset, grad, control.seed, error);
+        }
       }
     }
     __syncthreads();
@@ -591,39 +689,36 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
         if (threadIdx.x == 0) atomicExch(error, 1);
         return;
       }
-      // Each atom has one writer. Both reductions retain the original AO
-      // order, including arbitrary active-AO maps and noncontiguous atoms.
-      for (size_t atom = threadIdx.x; atom < na; atom += blockDim.x)
-        for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
-          const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
-          if (ao_atoms[global_ao] == int64_t(atom))
-            for (size_t axis = 0; axis < 3; ++axis)
-              grad[3 * atom + axis] -= ao_gradient[3 * ao_index + axis];
-        }
+      // One ordered traversal replaces na full AO-label scans. The producer's
+      // preceding collective vote validates every label before any scatter.
       if (threadIdx.x == 0)
-        for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index)
-          for (size_t axis = 0; axis < 3; ++axis)
-            grad[3 * na + 3 * owner + axis] += ao_gradient[3 * ao_index + axis];
+        geometry_reduce_ao_panel(view, ao_atoms, size_t(owner), na, ao_gradient, grad);
       // Every reader must finish before Becke overwrites the aliased panel.
       __syncthreads();
     }
-    if (phase_seeds) {
-      if (threadIdx.x == 0) phase_seeds[p] = control.seed;
+    if constexpr (precomputed_point) {
+      // Compile out both the point model and inline Becke from this consumer:
+      // neither their registers nor their control flow belong to an AO CTA.
       continue;
-    }
-    const bool valid = na <= stationary_becke_retained_max_atoms
-        ? generativeqc_grid_adjoint::contract_point_cooperative(
-            view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
-            ws + 2 * na, ws + 3 * na, zeros, distances, states, GeometryBlockTeam{},
-            local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)
-        : generativeqc_grid_adjoint::contract_point_tiled_cooperative(
-            view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
-            ws + 2 * na, ws + 3 * na, zeros, distances, states, stationary_becke_pair_tile_rows,
-            GeometryBlockTeam{&control.collective_valid}, local_norm, local_ratio, local_log, local_becke,
-            center_pairs, local_ratio_prepared);
-    if (!valid) {
-      if (threadIdx.x == 0) atomicExch(error, 1);
-      return;
+    } else {
+      if (phase_seeds) {
+        if (threadIdx.x == 0) phase_seeds[p] = control.seed;
+        continue;
+      }
+      const bool valid = na <= stationary_becke_retained_max_atoms
+          ? generativeqc_grid_adjoint::contract_point_cooperative(
+              view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
+              ws + 2 * na, ws + 3 * na, zeros, distances, states, GeometryBlockTeam{},
+              local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)
+          : generativeqc_grid_adjoint::contract_point_tiled_cooperative(
+              view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
+              ws + 2 * na, ws + 3 * na, zeros, distances, states, stationary_becke_pair_tile_rows,
+              GeometryBlockTeam{&control.collective_valid}, local_norm, local_ratio, local_log, local_becke,
+              center_pairs, local_ratio_prepared);
+      if (!valid) {
+        if (threadIdx.x == 0) atomicExch(error, 1);
+        return;
+      }
     }
   }
   for (size_t k = threadIdx.x; k < 9 * na; k += blockDim.x) finite(grad[k], error, 0);
@@ -788,6 +883,8 @@ STATIONARY_AOT_ASSETS = (
     "src/runtime/cuda_resources.cuh",
     "src/runtime/resource_cuda.cuh",
     "src/runtime/resource_ledger.hpp",
+    "src/runtime/residency_boundaries.hpp",
+    "src/runtime/residency_observer.hpp",
     "src/tensor/cuda_error.hpp",
     "src/tensor/metrics.hpp",
     "src/runtime/allocation_measurement.hpp",
@@ -1675,6 +1772,8 @@ def compile_stationary_cuda(
             "src/runtime/cuda_resources.cuh",
             "src/runtime/resource_cuda.cuh",
             "src/runtime/resource_ledger.hpp",
+            "src/runtime/residency_boundaries.hpp",
+            "src/runtime/residency_observer.hpp",
             "src/tensor/cuda_error.hpp",
             "src/tensor/metrics.hpp",
             "src/runtime/allocation_measurement.hpp",

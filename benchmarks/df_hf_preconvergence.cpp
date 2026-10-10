@@ -71,9 +71,8 @@ int main(int argc, char** argv) {
     const std::string mode(argv[4]), endpoint(argv[5]);
     if (mode != "direct" && mode != "df-direct" && mode != "auto-direct")
       throw std::invalid_argument("invalid mode");
-    if (mode == "auto-direct" && (argc > 6 || endpoint == "hf"))
-      throw std::invalid_argument(
-          "auto-direct qualifies native energy/forces with fixed policy controls");
+    if (mode == "auto-direct" && argc > 6)
+      throw std::invalid_argument("auto-direct uses fixed policy controls");
     if (endpoint != "hf" && endpoint != "energy" && endpoint != "forces")
       throw std::invalid_argument("invalid endpoint");
     const double pre_tolerance = mode == "auto-direct" ? 1e-4
@@ -125,6 +124,22 @@ int main(int argc, char** argv) {
     unsigned pre_cycles{};
     bool pre_converged{}, pre_fallback{};
     bool pre_work_counters_complete{true};
+    generativeqc::methods::detail::DFHFGuess automatic_guess;
+    if (mode == "auto-direct" && endpoint == "hf") {
+      generativeqc_method_descriptor descriptor{};
+      descriptor.correlation_memory_budget_bytes = budget;
+      automatic_guess = generativeqc::methods::detail::prepare_df_hf_guess(
+          orbital, correlation, descriptor, 0, execution.device_id());
+      seed = std::move(automatic_guess.density);
+      pre_seconds = automatic_guess.seconds;
+      pre_cycles = automatic_guess.iterations;
+      pre_work_counters_complete = automatic_guess.work_counters_complete;
+      native_jk_functions = automatic_guess.auxiliary_functions;
+      pre_converged =
+          automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
+      pre_fallback =
+          automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Failed;
+    }
     if (mode == "df-direct") {
       auto pre_options = exact_options;
       pre_options.export_physical_reference = false;
@@ -213,20 +228,21 @@ int main(int argc, char** argv) {
       descriptor.ccsd_energy_tolerance = 1e-12;
       descriptor.ccsd_residual_tolerance = 1e-10;
       descriptor.correlation_memory_budget_bytes = budget;
-      const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
+      auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, correlation, descriptor, endpoint == "forces", true, true, true, true,
-          8, 8, {}, true, true, true, false, false, {}, 30, true, true, &experiment);
+          8, 8, {}, true, true, true, false, false, {}, 30, true, true, false, &experiment);
       direct_seconds = result.primal.reference_seconds;
       if (mode == "auto-direct") {
-        pre_seconds = result.reference_guess.seconds;
+        automatic_guess = std::move(result.reference_guess);
+        pre_seconds = automatic_guess.seconds;
         direct_seconds -= pre_seconds;
-        pre_cycles = result.reference_guess.iterations;
-        pre_work_counters_complete = result.reference_guess.work_counters_complete;
-        native_jk_functions = result.reference_guess.auxiliary_functions;
+        pre_cycles = automatic_guess.iterations;
+        pre_work_counters_complete = automatic_guess.work_counters_complete;
+        native_jk_functions = automatic_guess.auxiliary_functions;
         pre_converged =
-            result.reference_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
-        pre_fallback = result.reference_guess.outcome ==
-                       generativeqc::methods::detail::DFHFGuessOutcome::Failed;
+            automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Used;
+        pre_fallback =
+            automatic_guess.outcome == generativeqc::methods::detail::DFHFGuessOutcome::Failed;
       }
       native_seconds = result.total_seconds;
       direct_cycles = result.reference_iterations;
@@ -295,6 +311,12 @@ int main(int argc, char** argv) {
     field("pre_tolerance", pre_tolerance);
     field("pre_iterations", pre_work_counters_complete ? std::to_string(pre_cycles) : "null");
     field("pre_work_counters_complete", pre_work_counters_complete ? "true" : "false");
+    field("pre_policy_outcome", static_cast<unsigned>(automatic_guess.outcome));
+    field("pre_cartesian_functions", automatic_guess.cartesian_functions);
+    field("pre_work_amortization_ratio", automatic_guess.work_amortization_ratio);
+    field("pre_preparation_peak_bytes", automatic_guess.preparation_peak_bytes);
+    field("pre_resident_plan_peak_bytes", automatic_guess.resident_plan_peak_bytes);
+    field("pre_value_budget_bytes", automatic_guess.value_budget_bytes);
     field("df_fock_builds", "null");
     field("pre_converged", pre_converged ? "true" : "false");
     field("pre_fallback", pre_fallback ? "true" : "false");

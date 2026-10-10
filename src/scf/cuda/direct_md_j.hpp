@@ -35,6 +35,17 @@ struct MdJPrimitive {
   Vec3<double> product;
 };
 
+/** Intrusive per-replay work census, never allocated in the normal path.
+ * Uniform roots are radial source evaluations; directions and summands count
+ * density consumers independently. Residual roots count primitive products
+ * actually contracted after shell and density admission, not queue capacity.
+ * All arrays use the index 5 * bra_angular + ket_angular.
+ */
+struct MdJWorkCounts {
+  unsigned long long uniform_roots[25]{}, uniform_directions[25]{}, uniform_summands[25]{};
+  unsigned long long residual_candidates[25]{}, residual_tasks[25]{}, residual_roots[25]{};
+};
+
 /** Borrowed, budgeted resident transforms and density-dependent Hermite scratch.
  * A null minimum_bounds selects the unchanged normal J provider. The minimum
  * of every AO-pair Schwarz bound permits MD only for uniformly accepted shell
@@ -49,6 +60,9 @@ struct MdJView {
       *density{}, *potential{};
   std::uint32_t *active_pairs{}, *active_count{};
   unsigned long long* source_cursor{};
+  MdJWorkCounts* work_counts{};
+  /** Freeze the schedule with the resident owner; replay never polls policy. */
+  bool reciprocal{};
   std::size_t active_pair_count{};
   std::size_t residual_candidate_count{};
   /** Compact angular segments let each source kernel retain a fixed recurrence

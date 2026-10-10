@@ -53,10 +53,29 @@ _HOST_REALLOCATORS = frozenset(["realloc"])
 _DEVICE_RELEASES = frozenset(["cudaFree", "cudaFreeAsync"])
 _HOST_RELEASES = frozenset(["free", "cudaFreeHost"])
 _SYNCS = frozenset(
-    ["cudaDeviceSynchronize", "cudaStreamSynchronize", "cudaEventSynchronize"]
+    [
+        "cudaDeviceSynchronize",
+        "cudaStreamSynchronize",
+        "cudaEventSynchronize",
+        "runtime::residency_stream_synchronize",
+        "generativeqc::runtime::residency_stream_synchronize",
+        "runtime::residency_event_synchronize",
+        "generativeqc::runtime::residency_event_synchronize",
+    ]
 )
 _TRANSFERS = frozenset(
-    ["cudaMemcpy", "cudaMemcpyAsync", "cudaMemcpy2D", "cudaMemcpy2DAsync"]
+    [
+        "cudaMemcpy",
+        "cudaMemcpyAsync",
+        "cudaMemcpy2D",
+        "cudaMemcpy2DAsync",
+        "runtime::residency_memcpy",
+        "runtime::residency_memcpy_async",
+        "runtime::residency_upload",
+        "generativeqc::runtime::residency_memcpy",
+        "generativeqc::runtime::residency_memcpy_async",
+        "generativeqc::runtime::residency_upload",
+    ]
 )
 _CONTROL = frozenset(
     [

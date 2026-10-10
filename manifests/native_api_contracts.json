@@ -368,6 +368,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc_calculation_get_supported_properties_v1": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "5c8bea1ab16be9b58a9ca0c846ada78ce5039869eb674360a7a0da5f4ca97e78",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc_calculation_execute": {
       "kind": "c-function",
       "header": "include/generativeqc/generativeqc.h",
@@ -1604,6 +1619,21 @@
       "fields": [],
       "field_declarations": []
     },
+    "generativeqc::Calculation::supported_properties": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "c5b0cb5e9d546469ecf56024c572c0b7f351ecc00aca9f419af41bf6a4a194b3",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
     "generativeqc::Calculation::execute": {
       "kind": "cpp-operation",
       "header": "include/generativeqc/generativeqc.hpp",
@@ -1848,6 +1878,215 @@
         "behavior",
         "errors",
         "execution",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_method_from_name": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "ed2e515e703a7b309592d6f1fce7c2f9931d8658d19b16f2f686f4bbe7f69f0a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc_method_get_name": {
+      "kind": "c-function",
+      "header": "include/generativeqc/generativeqc.h",
+      "signature_sha256": "ccdcd3da6cb2d66e407dc3ddcf9a4ee3c15419e784fc98de156b08f2c0bfcdaf",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::resolve_method": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "bac6f54dc95387a4888778b9ee9d636c14481df198de596a8b4df8b8b663bab6",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::default_method_descriptor": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/generativeqc.hpp",
+      "signature_sha256": "bf97a4fa3b93172aa97f948dc73abce12b82ac5835a935aa9e2b3883d01d7a11",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsGrid": {
+      "kind": "cpp-type",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "1bbfb1018d39812d4ed622db63f83c48e7859505bcb49c4946c18b6ff49c7006",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [
+        "version",
+        "radial_points",
+        "angular_polar",
+        "angular_azimuth",
+        "partition_iterations",
+        "coincident_tolerance",
+        "tile_points"
+      ],
+      "field_declarations": [
+        "std :: uint32_t version { 1 } ;",
+        "std :: uint32_t radial_points { 64 } ;",
+        "std :: uint32_t angular_polar { 12 } ;",
+        "std :: uint32_t angular_azimuth { 24 } ;",
+        "std :: uint32_t partition_iterations { 3 } ;",
+        "double coincident_tolerance { 1.0 e - 12 } ;",
+        "std :: uint64_t tile_points { 256 } ;"
+      ]
+    },
+    "generativeqc::KsComposition": {
+      "kind": "cpp-type",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "3d682062a819a8f47992387f18c592d11c004678e61bbae7d40de8ff27a8c891",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::KsComposition": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "c3e1e6116437544a1a8122d12dd18c4cdc53631cc80b9c79dc51e74e58b370fd",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::set_grid": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "f308940970b1181b823f1b7226fad95ca6bbe0dbc405aefc4158d5d1f1ef2992",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::set_element_radii": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "360947847454115a06b9912abf86fdeadf722bacf6f02eb7405345ac671470e5",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::set_xc_schedule": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "2946de5a082adb640fcf90ab42634d5e50c8ee9dabc639cc738a495c2a7ef0c5",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::add_semilocal": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "35b21ba9a63089601c710e895e4c76eed5682d7fbd50408a4b66a007700534ec",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::add_exact_exchange": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "c190cdd7be54153df0d919344f7cacab69263946597a54a6c81916f82920ab67",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
+        "lifetime",
+        "outputs",
+        "units"
+      ],
+      "fields": [],
+      "field_declarations": []
+    },
+    "generativeqc::KsComposition::prepare": {
+      "kind": "cpp-operation",
+      "header": "include/generativeqc/ks.hpp",
+      "signature_sha256": "34e54131bb4c3a3ba1776a61998280ad6508fca230a34a4d96455f65be725a9a",
+      "required_facets": [
+        "behavior",
+        "errors",
+        "execution",
+        "inputs",
         "lifetime",
         "outputs",
         "units"

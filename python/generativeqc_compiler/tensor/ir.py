@@ -57,10 +57,10 @@ def _freeze(value: typing.Any) -> typing.Any:
     """Only JSON data can enter attributes; executable objects cannot."""
     if isinstance(value, (list, tuple)):
         return tuple(_freeze(x) for x in value)
-    if type(value) in (int, str) or value is None:
+    if type(value) in (bool, int, str) or value is None:
         return value
     raise ValueError(
-        "node attributes must contain only integers, strings, and sequences"
+        "node attributes must contain only booleans, integers, strings, and sequences"
     )
 
 
@@ -100,7 +100,7 @@ class Node:
 
 @dataclass(frozen=True)
 class PrimitiveContract:
-    """AD/lowering boundary; every listed primitive has rules in autodiff.py."""
+    """AD/lowering boundary; non-differentiable primitives have no AD rule."""
 
     differentiable_operands: str
     accumulation: str
@@ -108,6 +108,10 @@ class PrimitiveContract:
 
 
 TRANSCENDENTALS = frozenset(("exp", "log", "sqrt", "power"))
+COMPARISONS = frozenset(
+    ("equal", "not_equal", "greater", "greater_equal", "less", "less_equal")
+)
+BOOLEAN_VIEWS = frozenset(("transpose", "reshape", "slice", "gather", "broadcast"))
 
 
 PRIMITIVES = {
@@ -147,6 +151,11 @@ PRIMITIVES["runtime_indexed_scatter_add"] = PrimitiveContract(
 )
 PRIMITIVES["runtime_cartesian_select"] = PRIMITIVES["runtime_indexed_select"]
 PRIMITIVES["runtime_cartesian_scatter_add"] = PRIMITIVES["runtime_indexed_scatter_add"]
+for op in COMPARISONS:
+    PRIMITIVES[op] = PrimitiveContract(
+        "real floating operands only; Boolean result is non-differentiable",
+        "no derivative through comparison",
+    )
 
 
 def _common(inputs: tuple[Node, ...]) -> TensorSpec:
@@ -223,11 +232,27 @@ def _infer(
         dtype = a["dtype"]
         if dtype not in ("float32", "float64"):
             raise ValueError("cast target must be float32 or float64")
-        if inputs[0].spec.dtype == "int64":
+        if inputs[0].spec.dtype in ("int64", "bool"):
             raise ValueError(
-                "int64 TensorIR controls cannot be cast into scientific arithmetic"
+                "int64 controls and bool data cannot be cast into scientific arithmetic"
             )
         return replace(inputs[0].spec, dtype=dtype, role="intermediate")
+    if op in COMPARISONS:
+        if len(inputs) != 2:
+            raise ValueError(f"{op} requires exactly two operands")
+        left, right = inputs
+        if left.spec.dtype not in ("float32", "float64") or (
+            left.spec.dtype,
+            left.spec.representation,
+        ) != (right.spec.dtype, right.spec.representation):
+            raise ValueError(
+                "comparison operands require the same real float dtype and representation"
+            )
+        if tuple(i.domain for i in left.spec.indices) != tuple(
+            i.domain for i in right.spec.indices
+        ):
+            raise ValueError("comparison operands must have identical index domains")
+        return TensorSpec(left.spec.indices, dtype="bool", role="intermediate")
     if op == "runtime_indexed_select":
         if len(inputs) < 2:
             raise ValueError("runtime_indexed_select requires a source and index maps")
@@ -369,6 +394,10 @@ def _infer(
             differentiable=source.spec.differentiable,
         )
     base = _common(inputs)
+    if base.dtype == "bool" and op not in BOOLEAN_VIEWS:
+        raise ValueError(
+            "bool TensorIR data cannot enter floating arithmetic or reductions"
+        )
     if op in TRANSCENDENTALS:
         if len(inputs) != 1:
             raise ValueError(f"{op} requires exactly one operand")
@@ -545,6 +574,7 @@ _ATTRS = {
     "reduce": {"axes"},
     "broadcast": {"axes"},
     "cast": {"dtype"},
+    **{op: set() for op in COMPARISONS},
 }
 
 
@@ -571,8 +601,12 @@ def _validate(node: Node) -> None:
                 )
             if len(a["values"]) != spec.size:
                 raise ValueError("constant length must match logical shape")
-            for pair in a["values"]:
-                _fraction(pair)
+            for value in a["values"]:
+                if spec.dtype == "bool":
+                    if type(value) is not bool:
+                        raise ValueError("bool constants require literal True or False")
+                else:
+                    _fraction(value)
         return
     expected = _infer(node.op, node.inputs, a, spec)
     if spec != expected:
@@ -602,9 +636,12 @@ def constant(values: typing.Any, spec: TensorSpec | None = None) -> Node:
     """Define exact scalar or flattened row-major tensor literals."""
     if spec is None:
         spec = TensorSpec(role="constant")
-    if type(values) in (int, str, Fraction):
+    if type(values) in (bool, int, str, Fraction):
         values = (values,)
-    return Node("constant", (), spec, (("values", tuple(rational(x) for x in values)),))
+    literals = (
+        tuple(values) if spec.dtype == "bool" else tuple(rational(x) for x in values)
+    )
+    return Node("constant", (), spec, (("values", literals),))
 
 
 def cast(value: Node, dtype: str) -> Node:
@@ -618,6 +655,13 @@ def cast(value: Node, dtype: str) -> Node:
         raise ValueError("cast target must be float32 or float64")
     spec = replace(value.spec, dtype=dtype, role="intermediate")
     return Node("cast", (value,), spec, (("dtype", dtype),))
+
+
+def compare(op: str, left: Node, right: Node) -> Node:
+    """Compare same-domain real values and produce non-differentiable bool data."""
+    if op not in COMPARISONS:
+        raise ValueError(f"unsupported TensorIR comparison: {op}")
+    return _make(op, (left, right))
 
 
 def add(*inputs: Node, coefficients: typing.Any = None) -> Node:

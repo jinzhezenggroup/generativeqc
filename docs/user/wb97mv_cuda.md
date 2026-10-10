@@ -99,6 +99,13 @@ RSH derivatives reuse that geometry-bound schedule and the same compiler-owned
 integral algebra. Screening is defined in the selected source representation,
 with identical full-range Schwarz admission for its J/K and RSH force consumers.
 Generated SPD workloads retain their existing HF source owner.
+Within canonical Cartesian sources, total-angular-order-five values automatically
+share primitive-pair geometry and recurrence work across a complete shell
+quartet. The route covers full J/K and standalone SR/LR K, keeps exact AO
+screening, and falls back when its separately budgeted index/bounds view or
+borrowed cache is unavailable. It is not an opt-in and does not enable the
+legacy dense HF materialization schedule. See the
+[prepared-pair contract](../developer/direct_pair_recurrence.md).
 If optional sort/scan storage does not fit, execution keeps dense canonical
 contraction. If Cartesian metadata/projection storage does not fit, the smaller
 public-AO canonical source remains; if its pair/matrix storage also does not fit,

@@ -34,13 +34,21 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "const generativeqc_method_descriptor&,",
         "const generativeqc_method_descriptor& descriptor,",
     )
+    implementation = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
+    resolution = re.findall(
+        r"^\s*ccsd_batch_limit = [^;]+;", implementation, re.MULTILINE
+    )
+    assert len(resolution) == 1
     definition += (
-        " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
+        " { "
+        + resolution[0]
+        + " return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
         "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
-        "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix}; }\n"
+        "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
+        "reference_experiment}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -66,6 +74,16 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
             "    std::ofstream output", 1
         )[0]
     )
+    reference_benchmark = (ROOT / "benchmarks/df_hf_preconvergence.cpp").read_text()
+    # The reference probe moves its guess out of the result. Extract the actual
+    # native call without requiring a const result or duplicating its selectors.
+    reference_calls = re.findall(
+        r"(?:const\s+)?auto\s+result\s*=\s*"
+        r"generativeqc::methods::detail::run_df_ccsdt_native\([^;]+;",
+        reference_benchmark,
+    )
+    assert len(reference_calls) == 1
+    reference_call = reference_calls[0] + "\n"
     source = tmp_path / "defaults.cpp"
     source.write_text(
         r"""
@@ -80,7 +98,7 @@ namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace hf { struct RHFFrameResponseOptions; }
 namespace methods::detail {
-struct DFCCSDTReferenceExperiment;
+struct DFCCSDTReferenceExperiment {};
 struct DFCCSDTResult {
   bool primal, forces, lambda;
   hf::RHFFrameResponseOptions frame;
@@ -94,6 +112,8 @@ struct DFCCSDTResult {
   std::size_t lambda_interval;
   bool core_reuse;
   bool audit_matrix;
+  bool replay_matrix;
+  DFCCSDTReferenceExperiment* reference_experiment;
 };
 """
         + declaration
@@ -112,14 +132,29 @@ generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) 
         + r"""
   return result;
 }
+void check_reference_benchmark() {
+  generativeqc::runtime::ExecutionContext execution;
+  generativeqc::core::System orbital, correlation;
+  generativeqc_method_descriptor descriptor{};
+  generativeqc::methods::detail::DFCCSDTReferenceExperiment experiment;
+  const std::string endpoint = "forces";
+"""
+        + reference_call
+        + r"""
+  if(result.reference_experiment != &experiment || result.replay_matrix ||
+     result.batch_limit != 8 || result.ccsd_batch_limit != 8)
+    throw std::runtime_error("reference benchmark selectors or experiment pointer changed");
+}
 bool default_frame(const generativeqc::hf::RHFFrameResponseOptions& frame) {
   return frame.orbital_screening_tolerance == 0.0 && !frame.profile_jk &&
          !frame.bilinear_derivative && frame.symmetric_polarization;
 }
 int main() {
+  check_reference_benchmark();
   generativeqc::cc::LambdaOptions options;
   if(!options.df_matrix_gemm || !options.df_auxiliary_reduction ||
-     options.gmres.true_residual_every != 1) return 1;
+     options.gmres.true_residual_every != 1 ||
+     options.df_auxiliary_batch_limit != 32 || !options.df_primal_matrix_gemm) return 1;
   options.df_matrix_gemm=false;
   if(options.df_matrix_gemm) return 2;
   generativeqc::runtime::ExecutionContext context;
@@ -134,7 +169,9 @@ int main() {
      ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
      !explicit_matrix.parallel_gap || ordinary.request_gap || explicit_matrix.request_gap) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame) ||
-     ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30) return 7;
+     ordinary.lambda_interval != 30 || explicit_matrix.lambda_interval != 30 ||
+     ordinary.batch_limit != 32 || explicit_matrix.batch_limit != 8 ||
+     !ordinary.replay_matrix) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
   explicit_frame.profile_jk = true;
@@ -159,7 +196,7 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
+     defaults.batch_limit != 32 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
      !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap ||
      defaults.lambda_interval != 30) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
@@ -185,7 +222,7 @@ int main() {
                            token.c_str()};
     const auto old = select(9,selected);
     if(old.diis_history != history || !default_frame(old.frame) || old.reduction ||
-       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 8 || !old.derived_denominators) return 12;
+       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 32 || !old.derived_denominators) return 12;
   }
   // No numeric guessing: even an integer zero in argv[8] always means DIIS zero.
   // Fractional/scientific legacy screening tokens must not partially parse.
@@ -211,12 +248,19 @@ int main() {
     try { (void)select(13,bad);return 15; }
     catch(const std::invalid_argument&) {}
   }
-  for(const char* batch : {"0","1","3","8","32"}) {
-    const char* selected[]{"endpoint","input","output","1","1","1","1","8","6",batch};
-    const auto old = select(10,selected);
-    if(old.ccsd_batch_limit != std::stoull(batch) || !default_frame(old.frame) ||
-       old.diis_history != 6) return 17;
+  for(const char* forces : {"0","1"}) {
+    for(const char* batch : {"0","1","3","8","16","32"}) {
+      const char* selected[]{"endpoint","input","output","1","1",forces,"1","8","6",batch};
+      const auto actual = select(10,selected);
+      const auto requested = std::stoull(batch);
+      const auto expected = requested ? requested : (forces[0]=='1' ? 8U : 32U);
+      if(actual.ccsd_batch_limit != expected || !default_frame(actual.frame) ||
+         actual.diis_history != 6) return 17;
+    }
   }
+  const auto energy_default=run_df_ccsdt_native(context,system,system,descriptor,false);
+  const auto force_default=run_df_ccsdt_native(context,system,system,descriptor);
+  if(energy_default.ccsd_batch_limit!=32 || force_default.ccsd_batch_limit!=8) return 46;
   for(int index : {7,8,9}) {
     for(const char* token : {"-1","+2","2.0","2e-12","8junk",""}) {
       const char* bad[]{"endpoint","input","output","1","1","1","1","8","6","8"};
@@ -391,7 +435,14 @@ int main() {
     if(select(27,selected).audit_matrix != (audit[0]=='1') ||
        !select(26,selected).audit_matrix) return 46;
   }
-  for(int argc : {0,1,2,3,28}) {
+  for(const char* replay : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1",replay};
+    if(select(28,selected).replay_matrix != (replay[0]=='1') ||
+       !select(27,selected).replay_matrix || !ordinary.replay_matrix) return 47;
+  }
+  for(int argc : {0,1,2,3,29}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

@@ -77,6 +77,148 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
     target.write_text(source, encoding="utf-8")
 
 
+@pytest.mark.parametrize(
+    "owner,old,new",
+    [
+        (
+            "_plan_stationary_cuda_tile",
+            "min(\n            max(",
+            "max(\n            max(",
+        ),
+        (
+            "_plan_stationary_cuda_tile",
+            'and bool(getattr(state._source, "density_fitted", False))',
+            "and True",
+        ),
+        (
+            "_plan_stationary_cuda_tile",
+            'and callable(getattr(state._source, "stationary_integral_device_reserve", None))',
+            "and True",
+        ),
+        (
+            "_plan_stationary_cuda_tile",
+            "else max(\n            0, available - sum(value.peak_bytes for value in tensor_plans.values())\n        )",
+            "else 0",
+        ),
+        (
+            "_plan_stationary_cuda_tile",
+            "state._source.stationary_integral_device_reserve(\n                atoms=na, aos=n, primitives=basis.nprimitive",
+            "state._source.stationary_integral_device_reserve(\n                atoms=na, aos=1, primitives=basis.nprimitive",
+        ),
+        ("_complete_rks_cuda_gradient_diagnostic", "        256\n", "        512\n"),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "if na >= _AUTO_PHASED_BECKE_MIN_ATOMS",
+            "if True",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            'and bool(getattr(state._source, "density_fitted", False))',
+            "and True",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            'and callable(getattr(state._source, "stationary_integral_device_reserve", None))',
+            "and True",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            "> layout.native_geometry_reserve",
+            "> max_device_bytes",
+        ),
+        (
+            "_complete_rks_cuda_gradient_diagnostic",
+            'native_integral_resources.get("one_electron_device_peak_bytes", 0)',
+            'native_integral_resources.get("one_electron_host_peak_bytes", 0)',
+        ),
+    ],
+)
+def test_fitted_geometry_semantic_contract_rejects_admission_drift(
+    tmp_path: Path, owner: str, old: str, new: str
+) -> None:
+    """A digest refresh cannot silently spend reserves or broaden DF policy."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+
+    def check(value: str) -> None:
+        owners = {
+            node.name: node
+            for node in ast.parse(value).body
+            if isinstance(node, ast.FunctionDef)
+        }
+        qualify_capacity._fitted_geometry_policy_contract(
+            owners["_plan_stationary_cuda_tile"],
+            owners["_complete_rks_cuda_gradient_diagnostic"],
+        )
+
+    check(source)
+    node = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef) and node.name == owner
+    )
+    segment = ast.get_source_segment(source, node)
+    assert segment is not None and old in segment
+    mutated = source.replace(segment, segment.replace(old, new, 1), 1)
+    with pytest.raises(RuntimeError, match="fitted geometry .*contract changed"):
+        check(mutated)
+    stationary_contract_tree(tmp_path, mutated)
+    with pytest.raises(RuntimeError, match="fitted geometry .*contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "relative,owner,old,new,message",
+    [
+        (
+            "python/generativeqc/_ks_snapshot.py",
+            "stationary_integral_device_reserve",
+            "self.check_current()",
+            "pass",
+            "native KS snapshot functional contract changed",
+        ),
+        (
+            "python/generativeqc/_ks_snapshot.py",
+            "stationary_integral_device_reserve",
+            "if not self.density_fitted:",
+            "if False:",
+            "native KS snapshot functional contract changed",
+        ),
+        (
+            "python/generativeqc_compiler/method/stationary_resources.py",
+            "stationary_fitted_integral_reserve",
+            "+ 16 * aos * aos",
+            "+ 8 * aos * aos",
+            "geometry-resource contract changed",
+        ),
+        (
+            "python/generativeqc_compiler/method/stationary_resources.py",
+            "stationary_fitted_integral_reserve",
+            "+ 192 * atoms",
+            "+ 96 * atoms",
+            "geometry-resource contract changed",
+        ),
+    ],
+)
+def test_fitted_geometry_provider_contract_rejects_reserve_drift(
+    tmp_path: Path, relative: str, owner: str, old: str, new: str, message: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text()
+    node = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef) and node.name == owner
+    )
+    segment = ast.get_source_segment(source, node)
+    assert segment is not None and segment.count(old) == 1
+    target.write_text(source.replace(segment, segment.replace(old, new, 1), 1))
+    with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._source_limits(tmp_path)
+
+
 def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     result = report()
 
@@ -288,7 +430,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
         "exact_ao_map_resources_sha256": "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9",
-        "geometry_resources_sha256": "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811",
+        "geometry_resources_sha256": "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f",
         "public_wrapper_sha256": (
             "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
         ),
@@ -305,16 +447,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3e881038ead5082a0297c98d37d5c8d636f80f6647611f9cdc4720970582bb44"
         ),
         "metric_delta_sha256": (
-            "fb08b91ffdb5c3075aad6a2b02dca2092fe6d24f3cc992e5564dae19d2043e6c"
+            "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
         ),
         "metrics_sha256": (
-            "4f7265bac664ae2c08440866e1aa577f585968ef919a848bab483f9b190fb529"
+            "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
         ),
         "ordinary_tile_resources_sha256": (
-            "58be748f2b084ab282c1294e9bb6e07ee55b4f6514b108f195adca9dd7cc0a2e"
+            "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
         ),
         "initializer_sha256": (
-            "9257425e1f04c46f88ace0f9dc13a0bc9368e43840230856133f42b36f7eee86"
+            "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -350,7 +492,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "11953bdd5a073e7cf4f07c424737918357d3477ff5b3dc2442670f97c3f6a495"
+            "0b59f42d41f6a06cf14df6ff9d3fdfe3a03a37ca69e85bf4d4087c9a8b6b5b23"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -362,7 +504,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
         ),
         "native_owner_sha256": (
-            "452baac0eade9180c23d37a2fef846f07979e172c52ab4dd223fcc6ea74d4a5c"
+            "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -404,7 +546,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "e2887ec3f402a587417cd16180d09f3df3e25988ddf52a0416e454b4ba0afe62"
+            "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -466,6 +608,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "state._source.functional.ingredients"
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
+        "stationary_integral_device_reserve_sha256": (
+            "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
+        ),
         "init_sha256": (
             "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
@@ -1925,6 +2070,23 @@ def test_prepared_request_cannot_drop_the_resident_ao_policy(
         qualify_capacity._prepared_aot_route_contract(tmp_path)
 
 
+def test_prepared_request_cannot_drop_the_restricted_point_policy(
+    tmp_path: Path,
+) -> None:
+    relative = "python/generativeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    qualify_capacity._prepared_aot_route_contract(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text(encoding="utf-8")
+    old = '"pbe0_restricted_point": _resolve_restricted_point_policy(),'
+    assert source.count(old) == 1
+    target.write_text(
+        source.replace(old, '"pbe0_restricted_point": True,', 1), encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="AO request contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
+
+
 def test_grid_count_fails_closed_when_native_cuda_shape_moves(
     tmp_path: Path,
 ) -> None:
@@ -2473,6 +2635,51 @@ def test_geometry_resource_budget_changes_fail_closed(
             "native_launch_geometry_sha256",
         ),
         (
+            "void launch_geometry(",
+            "geometry_lanes != view.npoint",
+            "false",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "owner.phased_storage &&",
+            "true &&",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "na >= (sizeof(StationaryPointValue) + 3 * sizeof(double) - 1) / (3 * sizeof(double))",
+            "na >= 1",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "external_offset, scratch, phased.seeds, error);",
+            "external_offset, partial, phased.seeds, error);",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            (
+                "external_offset, scratch, phased.seeds, error);\n"
+                "    cuda_check(cudaPeekAtLastError());"
+            ),
+            "external_offset, scratch, phased.seeds, error);",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "geometry_cooperative_kernel<true>",
+            "geometry_cooperative_kernel<false>",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "void launch_geometry(",
+            "++owner.launches;",
+            "/* producer launch omitted */",
+            "native_launch_geometry_sha256",
+        ),
+        (
             "int stationary_configure_becke(",
             "p->atoms > stationary_becke_max_atoms",
             "p->atoms > 128",
@@ -2975,8 +3182,8 @@ def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
             'int(native_integral_resources.get("one_electron_host_peak_bytes", 0)) // 2',
         ),
         (
-            'int(native_integral_resources.get("one_electron_device_peak_bytes", 0))',
-            'int(native_integral_resources.get("one_electron_device_peak_bytes", 0)) // 2',
+            '        + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),',
+            '        + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)) // 2,',
         ),
     ],
 )
@@ -3609,6 +3816,80 @@ def test_zero_seed_native_contract_fails_closed(
     )
     qualify_capacity._source_limits(tmp_path)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    source = target.read_text()
+    position = source.index(old, source.index(marker))
+    target.write_text(source[:position] + new + source[position + len(old) :])
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "counter",
+    (
+        "restricted_point_batches",
+        "restricted_point_count",
+        "general_point_batches",
+        "general_point_count",
+    ),
+)
+def test_restricted_point_metric_deltas_remain_source_bound(
+    tmp_path: Path, counter: str
+) -> None:
+    """Refreshing reviewed hashes must not admit cumulative work as per-call work."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    qualify_capacity._source_limits(tmp_path)
+    old = f'        "{counter}",\n'
+    position = source.index(old, source.index("def _metric_delta("))
+    (tmp_path / "python/generativeqc/_stationary_cuda.py").write_text(
+        source[:position] + source[position + len(old) :]
+    )
+    with pytest.raises(RuntimeError, match="metric_delta_sha256 contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "relative,marker,old,new,gate",
+    [
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "class _CudaSources:",
+            "self.restricted_point_requested = _resolve_restricted_point_policy(",
+            "self.restricted_point_requested = bool(",
+            "initializer page",
+        ),
+        (
+            "python/generativeqc/_stationary_cuda.py",
+            "    def metrics(self)",
+            "if point_metrics(self.handle, point_values, 5):",
+            "if False:",
+            "metrics page",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_geometry(",
+            "restricted_point && stationary_pbe0_restricted_point_capable && !external",
+            "restricted_point",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "src/dft/stationary_gradient_cuda.cuh",
+            "void launch_geometry(",
+            "owner.phased_storage &&\n      na >=",
+            "owner.phased_storage ||\n      na >=",
+            "native_launch_geometry_sha256",
+        ),
+    ],
+)
+def test_restricted_point_capacity_controls_remain_source_bound(
+    tmp_path: Path, relative: str, marker: str, old: str, new: str, gate: str
+) -> None:
+    """Retain policy, telemetry, capability/seed and existing-scratch admission."""
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    qualify_capacity._source_limits(tmp_path)
+    target = tmp_path / relative
     source = target.read_text()
     position = source.index(old, source.index(marker))
     target.write_text(source[:position] + new + source[position + len(old) :])

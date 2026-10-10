@@ -268,7 +268,7 @@ def test_high_impact_fock_classes_emit_generated_mixed_capability() -> None:
     assert "struct GeneratedDppsMixedValueTerm" in dpps
     assert "  float component_integral = 0.0F;" in dpps
     assert "const double* density" in dpps
-    assert "double* fock" in dpps
+    assert "generativeqc::runtime::CompensatedOutput fock" in dpps
     assert "generated_ppps_shell_class_mixed_fock" in sources["ppps"]
     assert "generated_ddds_shell_class_mixed_fock" in sources["ddds"]
     assert "generated_dspp_shell_class_mixed_fock" not in sources["dspp"]

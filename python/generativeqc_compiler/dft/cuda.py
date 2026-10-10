@@ -196,6 +196,30 @@ class DeviceGridTask:
         )
         return output
 
+    def density_jets_binding(self, jets: typing.Any) -> tuple[typing.Any, int]:
+        """Borrow jets and producer flags from this exact task generation.
+
+        Bit zero witnesses equal spin features from an owned restricted density
+        split. It is meaningful only while this lease remains active. Older
+        native artifacts return the existing jets with no proof, so consumers
+        retain their general path rather than trusting a functional label.
+        """
+        view = self.view
+        if type(jets) is not int or jets not in (1, 4):
+            raise ValueError("contracted jet domain must be one or four")
+        if not hasattr(self._owner._library, "grid_cuda_density_jets_v2"):
+            return self.density_jets(jets), 0
+        output, flags = DOUBLE(), ct.c_uint64()
+        self._owner._call(
+            "grid_cuda_density_jets_v2",
+            self._owner._handle,
+            view.generation,
+            jets,
+            ct.byref(output),
+            ct.byref(flags),
+        )
+        return output, flags.value
+
     def xc(
         self,
         weights: typing.Any,
@@ -529,6 +553,16 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        if hasattr(lib, "grid_cuda_density_jets_v2"):
+            lib.grid_cuda_density_jets_v2.argtypes = [
+                ct.c_void_p,
+                ct.c_uint64,
+                ct.c_uint,
+                ct.POINTER(DOUBLE),
+                ct.POINTER(ct.c_uint64),
+                ct.c_char_p,
+                ct.c_size_t,
+            ]
         lib.grid_cuda_xc_v2.argtypes = [
             ct.c_void_p,
             ct.c_uint64,

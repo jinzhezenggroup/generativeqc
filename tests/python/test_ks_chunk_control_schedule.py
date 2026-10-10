@@ -16,6 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = r"""
+#include "dft/energy_change.hpp"
 #include <barrier>
 #include <cmath>
 #include <cstddef>
@@ -25,6 +26,7 @@ PREFIX = r"""
 #include <thread>
 #include <vector>
 using std::isfinite;
+namespace detail = generativeqc::dft::detail;
 struct Dim { unsigned x; };
 thread_local Dim threadIdx{};
 constexpr Dim blockDim{256};
@@ -56,13 +58,27 @@ int main(int argc, char** argv) {
   }
   Scalars current{};
   current.one_electron = 1.0;
+  current.electronic_energy = current.one_electron;
   current.electrons[0] = current.electrons[1] = 1.0;
   if (mode == 1 || mode == 3) current.residual = 0.1;
   if (mode == 2) current.failure = 1;
   // A small RMS cannot publish a state rejected by the AO maximum-norm gate.
   if (mode == 6) current.maximum_residual = 2e-10;
-  const bool continuing = mode == 1 || mode == 6;
-  Control control{1.0, 1U, mode == 4 ? 0 : 1, 0, 0};
+  const bool continuing = mode == 1 || mode == 6 || mode == 8;
+  const bool converged = mode == 0 || mode == 5 || mode == 7;
+  const bool publish_warm = mode == 0 || mode == 7;
+  Control control{};
+  control.previous_energy = current.electronic_energy;
+  control.iterations = 1;
+  control.active = mode == 4 ? 0 : 1;
+  // Both rounded energies are identical, but the low-word delta lies on
+  // opposite sides of the unchanged 1e-12 convergence tolerance.
+  if (mode == 7 || mode == 8) {
+    current.one_electron = current.electronic_energy = -16384.0;
+    control.previous_energy = current.electronic_energy;
+    current.electronic_energy_correction = mode == 7 ? 4e-13 : 6e-13;
+    control.previous_energy_correction = -current.electronic_energy_correction;
+  }
   std::uint8_t enabled = control.active, spin_enabled = control.active;
   std::barrier fence(static_cast<std::ptrdiff_t>(blockDim.x));
   block_barrier = &fence;
@@ -82,7 +98,7 @@ int main(int argc, char** argv) {
   for (auto& thread : threads) thread.join();
   for (std::size_t i = 0; i < size; ++i) {
     const double expected_density = 1.0 + i + (continuing ? 1.0 : 0.0);
-    const double expected_warm = mode == 0 ? 1.0 + i : -99.0;
+    const double expected_warm = publish_warm ? 1.0 + i : -99.0;
     if (density[i] != expected_density || warm[i] != expected_warm) {
       std::cerr << "incomplete publication at " << i << " density=" << density[i]
                 << " warm=" << warm[i] << '\n';
@@ -91,9 +107,14 @@ int main(int argc, char** argv) {
   }
   if (mode == 4 && control.iterations != 1) return 2;
   if (mode != 4 && control.iterations != 2) return 3;
-  if (control.active != continuing || enabled != continuing) return 4;
-  if (control.converged != (mode == 0 || mode == 5)) return 5;
+  if (control.active != continuing || enabled != continuing || spin_enabled != continuing) return 4;
+  if (control.converged != converged) return 5;
   if (control.failed != (mode == 2)) return 6;
+  if (mode == 7 || mode == 8) {
+    if (current.energy_change != 2.0 * current.electronic_energy_correction) return 7;
+    if (control.previous_energy != current.electronic_energy ||
+        control.previous_energy_correction != current.electronic_energy_correction) return 8;
+  }
   return 0;
 }
 """
@@ -116,7 +137,7 @@ def control_executable(
     required_native_cxx.build_executable(
         [cpp],
         executable,
-        compile_args=("-std=c++20", "-O1", "-pthread"),
+        compile_args=("-std=c++20", "-O1", "-pthread", "-I", str(ROOT / "src")),
         link_args=("-pthread",),
         compile_timeout=60,
     )
@@ -125,7 +146,7 @@ def control_executable(
 
 @pytest.mark.parametrize(
     "mode",
-    range(7),
+    range(9),
     ids=(
         "converged-warm-copy",
         "continue-density-copy",
@@ -134,6 +155,8 @@ def control_executable(
         "inactive",
         "converged-no-warm",
         "maximum-residual-prevents-warm-publication",
+        "sub-ulp-energy-change-allows-warm-publication",
+        "sub-ulp-energy-change-prevents-warm-publication",
     ),
 )
 def test_late_threads_keep_control_publication(

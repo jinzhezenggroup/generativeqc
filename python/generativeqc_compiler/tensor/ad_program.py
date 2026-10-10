@@ -11,11 +11,13 @@ only primal nodes on a requested dependency path produce new nodes.  A
 requested output with no active tangent becomes an explicit zero-like node,
 so provenance never depends on Python control-flow state.
 
-Slice B generates forward and reverse programs for every primitive.
-Gather/slice use exact incidence matrices and repeated einsum labels use exact
-identity projections.  Packed parameters are expanded through an explicit
-unpack DAG, and their reverse programs apply the weighted transpose; callers
-request this with the ``packed=`` mapping. Dense symmetry-constrained inputs
+Slice B generates forward and reverse programs for every differentiable
+primitive. Non-differentiable comparisons are rebuilt when preserving primal
+definitions but reject if selected for AD. Gather/slice use exact incidence
+matrices and repeated einsum labels use exact identity projections. Packed
+parameters are expanded through an explicit unpack DAG, and their reverse
+programs apply the weighted transpose; callers request this with the
+``packed=`` mapping. Dense symmetry-constrained inputs
 keep their dense storage: forward seeds obey the declared symmetry and reverse
 results use a signed-permutation group projector under the dense inner product,
 without constructing coordinate-incidence matrices.
@@ -32,12 +34,14 @@ from itertools import pairwise
 from types import MappingProxyType
 
 from .ir import (
+    COMPARISONS,
     TRANSCENDENTALS,
     Node,
     _execution_power_exponent,
     add,
     broadcast,
     cast,
+    compare,
     constant,
     divide,
     einsum,
@@ -725,6 +729,8 @@ def _rebuild_node(node: Node, inputs: typing.Any) -> Node:
         )
     if node.op == "cast":
         return cast(inputs[0], node.spec.dtype)
+    if node.op in COMPARISONS:
+        return compare(node.op, *inputs)
     if node.op == "multiply":
         return multiply(*inputs)
     if node.op == "divide":
@@ -963,13 +969,16 @@ def linearize(
     program, _layouts = (
         _expand_packed_inputs(program, packed) if packed else (program, {})
     )
+    selected_outputs = _select_names(program.outputs, outputs, "output")
+    needed = _ancestors(selected_outputs.values())
+    if any(node.spec.dtype == "bool" for node in needed):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     inputs = _input_nodes(program)
     requested = _select_names(
         {name: node for name, node in inputs.items() if node.spec.differentiable},
         tangent_inputs,
         "tangent input",
     )
-    selected_outputs = _select_names(program.outputs, outputs, "output")
     tangent_nodes = {}
     for name, node in requested.items():
         generated = f"{TANGENT_PREFIX}{name}"
@@ -978,7 +987,6 @@ def linearize(
                 f"generated tangent name collides with input/output: {generated}"
             )
         tangent_nodes[name] = _derivative_input(node, generated)
-    needed = _ancestors(selected_outputs.values())
     tangents: dict[Node, Node | None] = {}
     generated_nodes = []
     for node in program.nodes:
@@ -1057,6 +1065,9 @@ def transpose_program(
     selected_outputs = _select_names(
         program.outputs, cotangent_outputs, "cotangent output"
     )
+    needed = _ancestors(selected_outputs.values())
+    if any(node.spec.dtype == "bool" for node in needed):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     differentiable = {
         name: node
         for name, node in _input_nodes(program).items()
@@ -1065,7 +1076,7 @@ def transpose_program(
     selected_inputs = _select_names(differentiable, inputs, "input")
     groups = _input_groups(program)
     roots = (node for name in selected_inputs for node in groups[name])
-    relevant = _ancestors(selected_outputs.values()) & _descendants_of(program, roots)
+    relevant = needed & _descendants_of(program, roots)
     bars: dict[Node, Node | None] = {}
     for name, node in selected_outputs.items():
         generated = f"{COTANGENT_PREFIX}{name}"

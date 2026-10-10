@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_class_domains.cu",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Bounded class-major mixed-basis force producers and launch dispatch. Delegates unchanged screening, low-order, weighted, cooperative and materialized compiler-owned derivatives; owns only queue scheduling, physical-ID canonicalization and existing profile/output channels.",
+  "regions": []
+}

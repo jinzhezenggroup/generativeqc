@@ -313,14 +313,17 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 # Both primitive modes share the admitted phase storage. Bind constructor-only
 # mode selection, legacy-artifact fallback, and boolean resource reservation.
 # The zero-seed override configures an existing owner without adding capacity.
+# Producer-bound restricted points add optional ABI binding and execution counters;
+# they borrow admitted phased scratch without changing any allocation equation.
+# Keep whole-owner fingerprints so these controls and metric deltas fail closed.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "9257425e1f04c46f88ace0f9dc13a0bc9368e43840230856133f42b36f7eee86"
+    "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
 )
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "4f7265bac664ae2c08440866e1aa577f585968ef919a848bab483f9b190fb529"
+    "2f0af6355801b8336a473d336a7d5b8ecafb552014fe867d95689abe69c51ce1"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
-    "fb08b91ffdb5c3075aad6a2b02dca2092fe6d24f3cc992e5564dae19d2043e6c"
+    "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -365,7 +368,7 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # Exact maps reserve only their finite numeric owner, including both offset
 # mirrors and compact AO scratch; bind the helper and endpoint independently.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "11953bdd5a073e7cf4f07c424737918357d3477ff5b3dc2442670f97c3f6a495"
+    "0b59f42d41f6a06cf14df6ff9d3fdfe3a03a37ca69e85bf4d4087c9a8b6b5b23"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -377,7 +380,7 @@ STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
     "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "58be748f2b084ab282c1294e9bb6e07ee55b4f6514b108f195adca9dd7cc0a2e"
+    "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
@@ -399,6 +402,10 @@ NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
     "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
 )
+# The fitted reserve is valid only for a current, known native DF snapshot.
+NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256 = (
+    "1e2eb25ca455dd5505a535a3917a148fbf8cfd59dc6839eeb770aa7c38219f64"
+)
 SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "503c86800926f501f06e3f9b53ed7853cac4a5282f096e56fa6792e46e87872d"
 )
@@ -406,7 +413,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "6ce09ccf6dc931f63cf97720bbc1b5efe64ab851f60d0a0f597202ea2499d09a"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "452baac0eade9180c23d37a2fef846f07979e172c52ab4dd223fcc6ea74d4a5c"
+    "86fb32e4a599e93e54b019a6f5e547144371b4468a3525e0c7cb392e2886cf0b"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -454,8 +461,12 @@ NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
+# The phased point/AO split borrows the existing per-lane inline scratch and
+# preserves the existing point/AO work and the seven Becke phases.
+# Its additional producer launch changes neither retained capacity nor pair
+# visits; bind the scratch admission and launch/publication gates explicitly.
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "e2887ec3f402a587417cd16180d09f3df3e25988ddf52a0416e454b4ba0afe62"
+    "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
@@ -505,8 +516,9 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "c99d5d3e5eddad75508273d7636591394edd70b61f19aeea504bc8e5035f9b25"
 )
+# The restricted-point request joins schedule identity without changing AO reserves.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
-    "6a1915ecf09bf67dc34d9d9e3f14fc00c92ea6b2ab93adff40fb2eb5fced53ad"
+    "8c0ffff5e9d0a6052556611b0df6066e4090163a12f137dcfe9c30f963e7e4a2"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -542,7 +554,7 @@ EXACT_AO_MAP_RESOURCES_CONTRACT_SHA256 = (
     "79bf92d98faa27523d70d16578e31e38af699727c78ec4c1f194869ad2c0dcb9"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811"
+    "598d214682c854c3cb8950c8ea3fa6183ced160fb009cb633953e3d58232657f"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -743,6 +755,9 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
     expected = {
         "__init__": NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256,
         "decode": NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256,
+        "stationary_integral_device_reserve": (
+            NATIVE_KS_SNAPSHOT_INTEGRAL_RESERVE_CONTRACT_SHA256
+        ),
     }
     for name, expected_digest in expected.items():
         candidates = [
@@ -786,6 +801,55 @@ def _require_ast_fragments(
             expected = expected.value
         if actual.count(ast.dump(expected)) != 1:
             raise RuntimeError(f"{label} contract changed: {fragment}")
+
+
+def _fitted_geometry_policy_contract(
+    resource_owner: ast.FunctionDef, endpoint: ast.FunctionDef
+) -> None:
+    """Bind the fitted-only reserve and preference without changing Direct rows.
+
+    The frozen census estimates Direct providers. Its existing resource equations
+    and explicit tile size remain valid only while the new bounded reserve and
+    automatic 256-point preference stay guarded by the fitted-provider contract.
+    Keep these semantic checks in addition to the complete owner fingerprints.
+    """
+    _require_ast_fragments(
+        resource_owner,
+        (
+            (
+                "native_geometry_reserve = ("
+                "min(max(0, available - sum(value.peak_bytes for value in tensor_plans.values())), "
+                "state._source.stationary_integral_device_reserve(atoms=na, aos=n, primitives=basis.nprimitive)) "
+                "if not ecp and bool(getattr(state._source, 'density_fitted', False)) "
+                "and callable(getattr(state._source, 'stationary_integral_device_reserve', None)) "
+                "else max(0, available - sum(value.peak_bytes for value in tensor_plans.values())) "
+                "if not ecp and bool(getattr(state._source, 'density_fitted', False)) "
+                "else min(max(0, available - sum(value.peak_bytes for value in tensor_plans.values())), "
+                "stationary_native_pair_reserve(atoms=na, aos=n, primitives=basis.nprimitive)) "
+                "if not ecp and callable(getattr(state._source, 'cuda_integral_derivatives', None)) "
+                "else 0)"
+            ),
+        ),
+        label="stationary CUDA fitted geometry reserve",
+    )
+    _require_ast_fragments(
+        endpoint,
+        (
+            (
+                "preferred_tile_points = (256 if na >= _AUTO_PHASED_BECKE_MIN_ATOMS "
+                "and bool(getattr(state._source, 'density_fitted', False)) "
+                "and callable(getattr(state._source, 'stationary_integral_device_reserve', None)) "
+                "else 512)"
+            ),
+            (
+                "if (use_fitted_integrals and "
+                "int(native_integral_resources.get('one_electron_device_peak_bytes', 0)) "
+                "> layout.native_geometry_reserve):\n"
+                "    raise RuntimeError('fitted stationary device staging exceeds admitted reserve')"
+            ),
+        ),
+        label="stationary CUDA fitted geometry policy",
+    )
 
 
 def _resident_ao_policy_contract(tree: ast.Module) -> None:
@@ -1085,6 +1149,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if len(resource_owners) != 1 or len(tile_callbacks) != 1:
         raise RuntimeError("stationary CUDA tile admission owners are ambiguous")
     resource_owner, tile_callback = resource_owners[0], tile_callbacks[0]
+    _fitted_geometry_policy_contract(resource_owner, owner)
     layout_node = classes.get("_StationaryCudaTileLayout")
     if (
         layout_node is None
@@ -1473,7 +1538,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ]
     if len(selections) != 1 or ast.unparse(selections[0].value) != (
         "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
-        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=512)"
+        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=preferred_tile_points)"
     ):
         raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (

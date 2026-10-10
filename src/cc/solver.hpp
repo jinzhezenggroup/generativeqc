@@ -25,6 +25,13 @@ struct SolverOptions {
   bool df_auxiliary_reduction{true};
   // Optional compiler-packed FP64 matrix contractions, with scalar fallback.
   bool df_matrix_gemm{true};
+  // Independently admitted lowering of the original expanded physical replay.
+  // Disable for ablation; never reuse the primal's reduced intermediates.
+  bool df_replay_matrix_gemm{true};
+  // Optional free-occupied-spectator folding of the virtual ladder only.
+  // Per-state projection bounds may refuse; the complete original arena and
+  // independently expanded physical replay remain resident and unchanged.
+  bool df_occupied_pairs{true};
   // Shape/budget admission may choose a smaller Q tile, including one slice.
   std::size_t df_auxiliary_batch_limit{8};
   // Native canonical CUDA construction may retain the small spectrum instead
@@ -121,9 +128,14 @@ struct SolverDiagnostic {
   std::size_t df_preparation_calls{};
   std::size_t df_contraction_terms{};
   bool df_matrix_gemm{};
+  bool df_replay_matrix_gemm{};
   std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_bytes{};
   std::size_t df_provider_capacity_bytes{};
   std::size_t df_auxiliary_batch_size{1}, df_auxiliary_tiles{}, df_accumulation_bytes{};
+  bool df_occupied_pairs{}, df_pair_resource_refused{}, df_pair_initial_symmetry_refused{};
+  std::size_t df_pair_evaluations{}, df_pair_refusals{}, df_pair_projection_calls{};
+  std::size_t df_pair_projection_bytes{}, df_pair_geometry_elements{};
+  std::size_t df_pair_capacity_bytes{}, df_pair_binding_host_bytes{};
   double tensor_seconds{};
   double iteration_seconds{};
   double replay_seconds{};

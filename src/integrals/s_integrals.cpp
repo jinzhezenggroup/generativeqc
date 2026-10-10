@@ -793,22 +793,179 @@ std::vector<std::size_t> cartesian_shell_offsets(const core::System& system) {
 }
 
 template <typename Consumer>
-void for_each_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
-                                      const std::vector<std::size_t>& offsets, Consumer&& consume) {
-  ValueEriComponents components;
-  for (std::size_t i = 0; i < system.shells.size(); ++i) {
-    for (std::size_t j = 0; j <= i; ++j) {
-      for (std::size_t k = 0; k <= i; ++k) {
-        for (std::size_t l = 0; l <= k; ++l) {
-          if (i == k && j < l) continue;
-          const std::array<std::size_t, 4> shells{i, j, k, l};
-          const std::size_t count =
-              build_value_eri_shell_quartet(system, aos, offsets, shells, components);
-          consume(shells, components, count);
+void for_each_eri_shell_quartet(const core::System& system, Consumer&& consume) {
+  for (std::size_t first = 0; first < system.shells.size(); ++first) {
+    for (std::size_t second = 0; second <= first; ++second) {
+      for (std::size_t third = 0; third <= first; ++third) {
+        for (std::size_t fourth = 0; fourth <= third; ++fourth) {
+          if (first == third && second < fourth) continue;
+          const std::array<std::size_t, 4> shells{first, second, third, fourth};
+          consume(shells);
         }
       }
     }
   }
+}
+
+template <typename Consumer>
+void for_each_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
+                                      const std::vector<std::size_t>& offsets, Consumer&& consume) {
+  ValueEriComponents components;
+  for_each_eri_shell_quartet(system, [&](const std::array<std::size_t, 4>& shells) {
+    // Adding f/g must not make the remaining s/p/d quartets rebuild common
+    // geometry and Boys values for every Cartesian component.
+    if (std::any_of(shells.begin(), shells.end(),
+                    [&](std::size_t shell) { return system.shells[shell].angular_momentum > 2; }))
+      return;
+    const std::size_t count =
+        build_value_eri_shell_quartet(system, aos, offsets, shells, components);
+    consume(shells, components, count);
+  });
+}
+
+// Consume value-only recurrence tables in FP64 without allocating empty Jets.
+// Keep the scalar/derivative primitive monolithic: factoring its Jet contraction
+// changes compiler specialization and regresses complete force endpoints. Both
+// consumers use fill_hermite/fill_coulomb as the sole recurrence owners.
+double contract_prepared_eri_value(const std::array<HermiteCoefficients, 3>& first_coefficients,
+                                   const std::array<HermiteCoefficients, 3>& second_coefficients,
+                                   const CoulombAuxiliary& auxiliary,
+                                   const molecule::CartesianComponent& angular_a,
+                                   const molecule::CartesianComponent& angular_b,
+                                   const molecule::CartesianComponent& angular_c,
+                                   const molecule::CartesianComponent& angular_d) {
+  double value = 0.0;
+  for (unsigned bra_x = 0; bra_x <= angular_a[0] + angular_b[0]; ++bra_x) {
+    for (unsigned bra_y = 0; bra_y <= angular_a[1] + angular_b[1]; ++bra_y) {
+      for (unsigned bra_z = 0; bra_z <= angular_a[2] + angular_b[2]; ++bra_z) {
+        const double first = first_coefficients[0].at(angular_a[0], angular_b[0], bra_x).value *
+                             first_coefficients[1].at(angular_a[1], angular_b[1], bra_y).value *
+                             first_coefficients[2].at(angular_a[2], angular_b[2], bra_z).value;
+        for (unsigned ket_x = 0; ket_x <= angular_c[0] + angular_d[0]; ++ket_x) {
+          for (unsigned ket_y = 0; ket_y <= angular_c[1] + angular_d[1]; ++ket_y) {
+            for (unsigned ket_z = 0; ket_z <= angular_c[2] + angular_d[2]; ++ket_z) {
+              const double sign = ((ket_x + ket_y + ket_z) & 1U) == 0 ? 1.0 : -1.0;
+              value =
+                  value + sign * first *
+                              second_coefficients[0].at(angular_c[0], angular_d[0], ket_x).value *
+                              second_coefficients[1].at(angular_c[1], angular_d[1], ket_y).value *
+                              second_coefficients[2].at(angular_c[2], angular_d[2], ket_z).value *
+                              auxiliary.at(0, bra_x + ket_x, bra_y + ket_y, bra_z + ket_z).value;
+            }
+          }
+        }
+      }
+    }
+  }
+  return value;
+}
+
+struct PreparedCartesianEri {
+  std::array<HermiteCoefficients, 3> first;
+  std::array<HermiteCoefficients, 3> second;
+  CoulombAuxiliary auxiliary;
+  double prefactor{};
+};
+
+PreparedCartesianEri prepare_eri_cartesian(
+    double alpha, const Vec3& center_a, const molecule::CartesianComponent& angular_a, double beta,
+    const Vec3& center_b, const molecule::CartesianComponent& angular_b, double gamma,
+    const Vec3& center_c, const molecule::CartesianComponent& angular_c, double delta,
+    const Vec3& center_d, const molecule::CartesianComponent& angular_d, unsigned maximum) {
+  const double bra_exponent = alpha + beta;
+  const double ket_exponent = gamma + delta;
+  const double coulomb_exponent = bra_exponent * ket_exponent / (bra_exponent + ket_exponent);
+  const Vec3 product_p = product_center(alpha, center_a, beta, center_b);
+  const Vec3 product_q = product_center(gamma, center_c, delta, center_d);
+  std::array<HermiteCoefficients, 3> first_coefficients{
+      fill_hermite(angular_a[0], angular_b[0], product_p[0], center_a[0], center_b[0], alpha, beta),
+      fill_hermite(angular_a[1], angular_b[1], product_p[1], center_a[1], center_b[1], alpha, beta),
+      fill_hermite(angular_a[2], angular_b[2], product_p[2], center_a[2], center_b[2], alpha,
+                   beta)};
+  std::array<HermiteCoefficients, 3> second_coefficients{
+      fill_hermite(angular_c[0], angular_d[0], product_q[0], center_c[0], center_d[0], gamma,
+                   delta),
+      fill_hermite(angular_c[1], angular_d[1], product_q[1], center_c[1], center_d[1], gamma,
+                   delta),
+      fill_hermite(angular_c[2], angular_d[2], product_q[2], center_c[2], center_d[2], gamma,
+                   delta)};
+  auto auxiliary = fill_coulomb(maximum, coulomb_exponent, product_p, product_q);
+  const double prefactor = 2.0 * std::pow(std::numbers::pi, 2.5) /
+                           (bra_exponent * ket_exponent * std::sqrt(bra_exponent + ket_exponent));
+  return {std::move(first_coefficients), std::move(second_coefficients), std::move(auxiliary),
+          prefactor};
+}
+
+void build_f_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
+                                      std::vector<double>& eri) {
+  const auto offsets = cartesian_shell_offsets(system);
+  std::vector<ValueEriComponent> components;
+  for_each_eri_shell_quartet(system, [&](const std::array<std::size_t, 4>& indices) {
+    std::array<const core::Shell*, 4> shells;
+    std::array<Vec3, 4> centers;
+    std::array<molecule::CartesianComponent, 4> maxima;
+    unsigned maximum_shell = 0, maximum_order = 0;
+    // Axis ceilings cover every component, but the radial order is the sum
+    // of shell labels, not the sum of all three independent axis ceilings.
+    for (unsigned slot = 0; slot < 4; ++slot) {
+      shells[slot] = &system.shells[indices[slot]];
+      maximum_shell = std::max(maximum_shell, shells[slot]->angular_momentum);
+      maximum_order += shells[slot]->angular_momentum;
+      maxima[slot].fill(shells[slot]->angular_momentum);
+      const auto& position = system.atoms[shells[slot]->atom_index].position;
+      for (unsigned axis = 0; axis < 3; ++axis) centers[slot][axis] = Jet(position[axis], 0);
+    }
+    if (maximum_shell != 3) return;
+    // This invocation-local buffer holds at most 10^4 Cartesian components.
+    // Only values use it; derivatives and g+ retain the scalar oracle schedule.
+    components.clear();
+    std::size_t component_bound = 1;
+    for (unsigned slot = 0; slot < 4; ++slot)
+      component_bound *= offsets[indices[slot] + 1] - offsets[indices[slot]];
+    components.reserve(component_bound);
+    for (std::size_t first = offsets[indices[0]]; first < offsets[indices[0] + 1]; ++first)
+      for (std::size_t second = offsets[indices[1]]; second < offsets[indices[1] + 1]; ++second) {
+        if (indices[0] == indices[1] && second > first) continue;
+        for (std::size_t third = offsets[indices[2]]; third < offsets[indices[2] + 1]; ++third)
+          for (std::size_t fourth = offsets[indices[3]]; fourth < offsets[indices[3] + 1];
+               ++fourth) {
+            if (indices[2] == indices[3] && fourth > third) continue;
+            if (indices[0] == indices[2] && indices[1] == indices[3] &&
+                first * (first + 1) / 2 + second < third * (third + 1) / 2 + fourth)
+              continue;
+            components.push_back(
+                {{first, second, third, fourth},
+                 0,
+                 aos[first].component_normalization * aos[second].component_normalization *
+                     aos[third].component_normalization * aos[fourth].component_normalization,
+                 0.0});
+          }
+      }
+    for (const auto& bra_first : shells[0]->primitives)
+      for (const auto& bra_second : shells[1]->primitives)
+        for (const auto& ket_first : shells[2]->primitives)
+          for (const auto& ket_second : shells[3]->primitives) {
+            // The existing recurrence is the scientific owner. Its full
+            // Coulomb box and all Hermite prefixes are component-independent.
+            const auto prepared = prepare_eri_cartesian(
+                bra_first.exponent, centers[0], maxima[0], bra_second.exponent, centers[1],
+                maxima[1], ket_first.exponent, centers[2], maxima[2], ket_second.exponent,
+                centers[3], maxima[3], maximum_order);
+            for (auto& component : components) {
+              const auto& selected = component.indices;
+              const double weight = component.normalization * bra_first.coefficient *
+                                    bra_second.coefficient * ket_first.coefficient *
+                                    ket_second.coefficient;
+              component.value += weight * (prepared.prefactor *
+                                           contract_prepared_eri_value(
+                                               prepared.first, prepared.second, prepared.auxiliary,
+                                               aos[selected[0]].angular, aos[selected[1]].angular,
+                                               aos[selected[2]].angular, aos[selected[3]].angular));
+            }
+          }
+    for (const auto& component : components)
+      store_eri_symmetry(eri, aos.size(), component.indices, component.value);
+  });
 }
 
 void build_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
@@ -950,13 +1107,17 @@ std::vector<double> transform_matrix(const double* source, std::size_t cartesian
 }
 
 std::vector<double> transform_eri(const double* source, std::size_t cartesian_count,
-                                  const std::vector<GlobalAoExpansion>& target_aos) {
+                                  const std::vector<GlobalAoExpansion>& target_aos,
+                                  bool eightfold_symmetric = false) {
   const std::size_t target_count = target_aos.size();
   std::vector<double> transformed(target_count * target_count * target_count * target_count, 0.0);
   for (std::size_t p = 0; p < target_count; ++p) {
-    for (std::size_t q = 0; q < target_count; ++q) {
-      for (std::size_t r = 0; r < target_count; ++r) {
-        for (std::size_t s = 0; s < target_count; ++s) {
+    const std::size_t second_end = eightfold_symmetric ? p + 1 : target_count;
+    for (std::size_t q = 0; q < second_end; ++q) {
+      for (std::size_t r = 0; r < second_end; ++r) {
+        const std::size_t fourth_end =
+            eightfold_symmetric ? (r == p ? q + 1 : r + 1) : target_count;
+        for (std::size_t s = 0; s < fourth_end; ++s) {
           double value = 0.0;
           for (const GlobalExpansionTerm& i : target_aos[p]) {
             for (const GlobalExpansionTerm& j : target_aos[q]) {
@@ -969,7 +1130,13 @@ std::vector<double> transform_eri(const double* source, std::size_t cartesian_co
               }
             }
           }
-          transformed[eri_index(p, q, r, s, target_count)] = value;
+          // Only integral producers may assert this invariant. The generic
+          // transform_integrals adapter must preserve arbitrary input tensors.
+          // Physical-atom nuclear derivatives share the same eightfold orbit.
+          if (eightfold_symmetric)
+            store_eri_symmetry(transformed, target_count, {p, q, r, s}, value);
+          else
+            transformed[eri_index(p, q, r, s, target_count)] = value;
         }
       }
     }
@@ -1949,9 +2116,11 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   if (shell_local_spherical) {
     build_spherical_value_eri_shell_quartets(system, aos, target_aos, target_offsets,
                                              spherical_eri);
-  } else if (include_eri && shared_value_geometry) {
+  } else if (include_eri && !include_derivatives) {
     build_value_eri_shell_quartets(system, aos, out.eri);
-  } else if (include_eri) {
+    build_f_value_eri_shell_quartets(system, aos, out.eri);
+  }
+  if (include_eri && !shared_value_geometry) {
     for (std::size_t i = 0; i < n; ++i) {
       const AoView& ao_i = aos[i];
       const Vec3& a = atom_coordinates[ao_i.shell->atom_index];
@@ -1964,6 +2133,16 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
           for (std::size_t l = 0; l <= k; ++l) {
             if (i * (i + 1) / 2 + j < k * (k + 1) / 2 + l) continue;
             const AoView& ao_l = aos[l];
+            // The generated shell pass owns these value-only orbits already.
+            // Higher-l values and every derivative retain the exact fallback.
+            if (!include_derivatives && ao_i.eri_component_index < 10 &&
+                ao_j.eri_component_index < 10 && ao_k.eri_component_index < 10 &&
+                ao_l.eri_component_index < 10)
+              continue;
+            if (!include_derivatives && ao_i.shell->angular_momentum <= 3 &&
+                ao_j.shell->angular_momentum <= 3 && ao_k.shell->angular_momentum <= 3 &&
+                ao_l.shell->angular_momentum <= 3)
+              continue;
             const Vec3& d = atom_coordinates[ao_l.shell->atom_index];
             Jet value(0.0, out.ncoord);
             const double component_factor =
@@ -2024,7 +2203,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
     if (shell_local_spherical)
       spherical.eri = std::move(spherical_eri);
     else if (include_eri)
-      spherical.eri = transform_eri(out.eri.data(), out.nbf, target_aos);
+      spherical.eri = transform_eri(out.eri.data(), out.nbf, target_aos, true);
     const std::size_t cartesian_matrix_size = out.nbf * out.nbf;
     const std::size_t cartesian_eri_size =
         include_eri ? cartesian_matrix_size * cartesian_matrix_size : 0;
@@ -2042,7 +2221,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
       std::vector<double> eri_derivative;
       if (include_eri)
         eri_derivative = transform_eri(out.eri_derivative.data() + coordinate * cartesian_eri_size,
-                                       out.nbf, target_aos);
+                                       out.nbf, target_aos, true);
       spherical.overlap_derivative.insert(spherical.overlap_derivative.end(),
                                           overlap_derivative.begin(), overlap_derivative.end());
       spherical.hcore_derivative.insert(spherical.hcore_derivative.end(), hcore_derivative.begin(),
@@ -2108,7 +2287,7 @@ std::vector<double> build_range_eri(const core::System& system, CoulombRange ran
     }
   }
   if (system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL) return eri;
-  return transform_eri(eri.data(), cartesian_nbf, spherical_expansions(system));
+  return transform_eri(eri.data(), cartesian_nbf, spherical_expansions(system), true);
 }
 
 std::array<double, 12> contract_weighted_eri_shell_derivative(

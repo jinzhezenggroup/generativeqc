@@ -1,0 +1,372 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Strict-FP64 complete DF-CCSD(T) Lambda batch/fresh-replay follow-up",
+  "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "revision": "d5a3173cc89b399ed105b0750124473eb782e2e5",
+  "hashes": {
+    "source": "30861599e3bfe7d124a2e0a4d589996fa176f768b65cc9fd41c4863c01c2b1fe",
+    "equation": "6da577324b1e99937ac9a08307b6c9e15f455bf7ccc3209292fb8105c30cbce0",
+    "ir": "a11d4b420cf7a2a8f4570d7915913a26c9167e4660b9196eecd94cd926571e61",
+    "schedule": "a3f465b4f39e0f0225c629bd7cb19218bd8df50cbe26402ab3d2b027868ce30f"
+  },
+  "hash_reasons": {},
+  "device": "GPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "toolchain": {
+    "cuda": "12.9.1",
+    "compiler_cache": "ccache 4.5.1",
+    "cuda_architectures": "120",
+    "build_type": "Release",
+    "aot_profile": "portable_cuda"
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "precision": "strict FP64 throughout; W experiment disabled",
+    "dependency_pr": 2156,
+    "dependency_head": "3f79e2a93d28c5ed1d9817871f365473e5710e17",
+    "sample_file": "samples.json.gz",
+    "profile_file": "profile-summary.json.gz",
+    "source_reconstruction": "measured-source.patch.gz",
+    "clean_repetitions_per_cell": 2,
+    "instrumented_repetitions_per_cell": 1,
+    "frozen_sha256": {
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/build/endpoint": "1e2e98e0438481a693dfe9f89a45f127c73493474b19803adbfad34359bd41d8",
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "2df02642da424df6a7c31c2b35b210032cfa0f466d6b93788e843a2360799ebf",
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/df_lambda_batch_ablation.py": "f8797863fa3c4c6772f60133d409aebcdc54a9ce481b332c77654572835857d0",
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/df_lambda_core_reuse_ablation.py": "143ce0d42a85da450cddd9775234dd471dce529f69ba99ac6c3bb3f750787ecb",
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+      "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29"
+    },
+    "defaults_promoted": false
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "gpu": "GPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+    "host": "n2/node2"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": null,
+      "dimensions": {
+        "ao": 230,
+        "o": 9,
+        "v": 221,
+        "q": 488
+      }
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "reconstruction": "measured-source.patch.gz"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "frozen_sha256": {
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/build/endpoint": "1e2e98e0438481a693dfe9f89a45f127c73493474b19803adbfad34359bd41d8",
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "2df02642da424df6a7c31c2b35b210032cfa0f466d6b93788e843a2360799ebf",
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/df_lambda_batch_ablation.py": "f8797863fa3c4c6772f60133d409aebcdc54a9ce481b332c77654572835857d0",
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/df_lambda_core_reuse_ablation.py": "143ce0d42a85da450cddd9775234dd471dce529f69ba99ac6c3bb3f750787ecb",
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+        "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29"
+      }
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": null,
+      "references": "Existing pinned PySCF 2.14.0 energy and original two-step finite differences; references read after production."
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": null,
+      "clean_samples": 8,
+      "separate_instrumented_samples": 4
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    }
+  },
+  "timings": [
+    {
+      "selection": "baseline",
+      "configuration": "b8",
+      "repetition": 0,
+      "workload": "cold-start",
+      "seconds": 516.377321368,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b32",
+      "repetition": 0,
+      "workload": "cold-start",
+      "seconds": 481.445311604,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b8_p1",
+      "repetition": 0,
+      "workload": "cold-start",
+      "seconds": 507.69519825,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b32_p1",
+      "repetition": 0,
+      "workload": "cold-start",
+      "seconds": 471.384842907,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b32_p1",
+      "repetition": 1,
+      "workload": "cold-start",
+      "seconds": 471.213510284,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b8_p1",
+      "repetition": 1,
+      "workload": "cold-start",
+      "seconds": 507.517429772,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "candidate",
+      "configuration": "b32",
+      "repetition": 1,
+      "workload": "cold-start",
+      "seconds": 481.493044705,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "selection": "baseline",
+      "configuration": "b8",
+      "repetition": 1,
+      "workload": "cold-start",
+      "seconds": 517.466847699,
+      "inputs_hash": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    }
+  ],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Per-sample complete capacity/owned-byte ceilings retained; these are not measured VRAM peaks or physical DRAM traffic."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {
+    "0": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "1": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "2": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "3": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "4": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "5": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "6": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "7": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "8": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "9": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "10": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    },
+    "11": {
+      "value": 6.11632758978413e-13,
+      "z": 1.3569479381157108e-13,
+      "stationarity": 5.356344550257999e-13,
+      "independently_evaluated": true
+    }
+  },
+  "block_errors": {
+    "independent_total_energy": {
+      "passed": true,
+      "atol": 3e-09,
+      "rtol": 0,
+      "max_absolute_error": 2.0321522242738865e-12,
+      "max_scaled_error": 0.0006773840747579621,
+      "rms_error": 2.0321522242738865e-12,
+      "shape": [
+        12
+      ]
+    },
+    "components_vs_common_strict_native_baseline": {
+      "passed": true,
+      "atol": 3e-07,
+      "rtol": 0,
+      "max_absolute_error": 4.1744385725905886e-13,
+      "max_scaled_error": 1.391479524196863e-06,
+      "rms_error": 8.290705878131313e-14,
+      "shape": [
+        12,
+        8,
+        3
+      ]
+    },
+    "additional_original_strict_component_sanity": {
+      "passed": true,
+      "atol": 3e-09,
+      "rtol": 0,
+      "max_absolute_error": 4.1744385725905886e-13,
+      "max_scaled_error": 0.00013914795241968628,
+      "rms_error": 8.290705878131313e-14,
+      "shape": [
+        12,
+        8,
+        3
+      ]
+    },
+    "translation": {
+      "passed": true,
+      "atol": 3e-08,
+      "rtol": 0,
+      "max_absolute_error": 1.06284772649623e-12,
+      "max_scaled_error": 3.542825754987433e-05,
+      "rms_error": 4.985544605466299e-13,
+      "shape": [
+        12,
+        3
+      ]
+    },
+    "independent_force_step_0.0001": {
+      "passed": true,
+      "atol": 3e-07,
+      "rtol": 0,
+      "max_absolute_error": 7.560560864872112e-09,
+      "max_scaled_error": 0.025201869549573708,
+      "rms_error": 7.560264304943317e-09,
+      "shape": [
+        12
+      ]
+    },
+    "independent_force_step_3e-05": {
+      "passed": true,
+      "atol": 3e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.956084724226038e-09,
+      "max_scaled_error": 0.009853615747420127,
+      "rms_error": 2.955730331499203e-09,
+      "shape": [
+        12
+      ]
+    },
+    "lambda_residual": {
+      "passed": true,
+      "atol": 1e-09,
+      "rtol": 0,
+      "max_absolute_error": 6.11632758978413e-13,
+      "max_scaled_error": 0.000611632758978413,
+      "rms_error": 6.116327589784129e-13,
+      "shape": [
+        12
+      ]
+    },
+    "z_residual": {
+      "passed": true,
+      "atol": 1e-09,
+      "rtol": 0,
+      "max_absolute_error": 1.3569479381157108e-13,
+      "max_scaled_error": 0.00013569479381157106,
+      "rms_error": 1.3569479381157108e-13,
+      "shape": [
+        12
+      ]
+    },
+    "stationarity": {
+      "passed": true,
+      "atol": 1e-09,
+      "rtol": 0,
+      "max_absolute_error": 5.356344550257999e-13,
+      "max_scaled_error": 0.0005356344550257999,
+      "rms_error": 5.356344550257999e-13,
+      "shape": [
+        12
+      ]
+    }
+  },
+  "solver_iterations": [
+    21,
+    21,
+    21,
+    21,
+    21,
+    21,
+    21,
+    21,
+    21,
+    21,
+    21,
+    21
+  ],
+  "solver_trace_reason": "Final 21 iterations/22 actions and exact residuals retained; full iterative trajectories not exported. Nested instrumented actions are explanatory, not extra parent timings.",
+  "attachments": [],
+  "performance": {
+    "status": "not-run",
+    "reason": "Two forward/reverse repetitions are descriptive, not the shared five-pair promotion gate; measured peak VRAM, full compilation cost and full solver trajectories are unavailable. Defaults remain batch eight / fresh matrix replay off."
+  }
+}

@@ -4,6 +4,7 @@
 
 #include <functional>
 
+#include "runtime/residency_observer.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -34,6 +35,13 @@ class RhfIterationGraphs {
   RhfIterationGraphs& operator=(const RhfIterationGraphs&) = delete;
   ~RhfIterationGraphs();
 
+  /** Retire captured borrowers after their stream has been drained. */
+  void reset() noexcept;
+  /** A phase-local execution may initialize the bucket without a retained graph. */
+  bool has_iteration() const noexcept { return iteration_graph_exec_ != nullptr; }
+  /** Read-only lifetime identity for verifying replay without exposing handles. */
+  std::uint64_t iteration_generation() const noexcept { return iteration_generation_; }
+
   RhfGraphCaptureResult capture_iteration(int device_id, cudaStream_t stream, bool device_launch,
                                           const std::function<generativeqc_status()>& body);
   RhfGraphCaptureResult capture_post_eigensolver(int device_id, cudaStream_t stream,
@@ -44,16 +52,23 @@ class RhfIterationGraphs {
 
  private:
   RhfGraphCaptureResult capture(cudaStream_t stream, cudaGraph_t& graph,
-                                cudaGraphExec_t& executable, unsigned long long instantiate_flags,
-                                bool synchronize_before,
+                                cudaGraphExec_t& executable, std::uint64_t& generation,
+                                runtime::ResidencyGraphRole role,
+                                unsigned long long instantiate_flags, bool synchronize_before,
                                 const std::function<generativeqc_status()>& body);
-  static void destroy(cudaGraph_t& graph, cudaGraphExec_t& executable) noexcept;
+  static void destroy(cudaGraph_t& graph, cudaGraphExec_t& executable, std::uint64_t& generation,
+                      runtime::ResidencyGraphRole role) noexcept;
+  cudaError_t launch(cudaGraph_t graph, cudaGraphExec_t executable, std::uint64_t generation,
+                     runtime::ResidencyGraphRole role, cudaStream_t stream) const noexcept;
 
   int device_id_{-1};
   cudaGraph_t iteration_graph_{};
   cudaGraphExec_t iteration_graph_exec_{};
+  std::uint64_t iteration_generation_{};
+  unsigned long long iteration_flags_{};
   cudaGraph_t post_eigensolver_graph_{};
   cudaGraphExec_t post_eigensolver_graph_exec_{};
+  std::uint64_t post_eigensolver_generation_{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

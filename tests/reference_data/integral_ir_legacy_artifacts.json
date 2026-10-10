@@ -2,7 +2,7 @@
   "baseline_revision": "2414c57dbc7a11c7cd33e3f81fad333be44422e4",
   "generator_abi": 1,
   "manifest_schema": 2,
-  "manifest_sha256": "e9f7e4fb37bfaa1a527b1eef6e3370a7f493ba63d4ce2f51f08526be812359e3",
+  "manifest_sha256": "992f5aa94b9ea021b6dcdc9000aecc85cbfad8064f11e2ec1304909afd9b975a",
   "architectures": [
     "sm_120",
     "sm_90"
@@ -507,18 +507,61 @@
     ]
   ],
   "artifacts": {
-    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "a19c4f1d7c87a8f6d98358d03d9e3d666b70fc02245e468ac510defa20160911",
-    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "2445a5bc078eda4bb2e02b729412fa60bb347737020761712d1530d6b38eeb60",
-    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "c9fb44889162087b23437e2eae1c0c2426fd1242cf315ae3227fd867e5769955",
-    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "fa631a5255de9abd6010698ae63d43f9a75fcce7c391f76f94832cc275c08d7a",
-    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "1c5bf58c6f007ce5c2ac15192fd465dd5556b78588e30db6e6c4fd3b4147e845",
+    "sm_90/generativeqc_generated_shell_sm90_shard_0.cu": "351b9c57402c685174480b73e1758f54231de669e539cd021daa5cc31739949f",
+    "sm_90/generativeqc_generated_shell_sm90_shard_1.cu": "351b9c57402c685174480b73e1758f54231de669e539cd021daa5cc31739949f",
+    "sm_90/generativeqc_generated_shell_sm90_shard_2.cu": "351b9c57402c685174480b73e1758f54231de669e539cd021daa5cc31739949f",
+    "sm_90/generativeqc_generated_shell_sm90_shard_3.cu": "351b9c57402c685174480b73e1758f54231de669e539cd021daa5cc31739949f",
+    "sm_120/generativeqc_generated_shell_sm120_shard_0.cu": "eabd0bb95f346082d312c9f95232effef79ec7e1e724b27cdb4ed398afb86ebf",
+    "sm_120/generativeqc_generated_shell_sm120_shard_1.cu": "84c1d00db9a9a434f431ef6e13f3fc6b94563c0708353f5bb40632e0019388f7",
+    "sm_120/generativeqc_generated_shell_sm120_shard_2.cu": "40e9432cfa1181e6aef8e50a604479642eb8a2e8a941f05d18b9082751b9e134",
+    "sm_120/generativeqc_generated_shell_sm120_shard_3.cu": "e3910b267a189cc11d1058a90bed99bb1d61107808d3cc35dce3b01ea7ee1c8e",
     "generativeqc_generated_shell_registry.hpp": "f8638593a743d58560b8d99038b690426b44c3c607b54af18e248dbffc9f07cb",
-    "generativeqc_generated_shell_registry.cu": "11709decd1ad7b7bfe402a5e8415fa6926baa0af36829bca88f1500342b6d898"
+    "generativeqc_generated_shell_registry.cu": "74888bdc75f97959c1edb5fdf65792d1b64dd8159675ded62720e05d7b6a59b7"
+  },
+  "retained_source_baseline_revision": "4385f72751b829883407c01106186917c344317b",
+  "retained_sources": {
+    "sm_120": "2bbb7112a22842c202f3d4c7e83dd597bc5234f9df5faab2f74d46e6b94b2cd0",
+    "sm_120_rys_value": "8e87e544583116ef81f8f07e6e2be8e6b0b8fc2778c22c9627e8e2288a4447ee",
+    "sm_120_k_block": "2763017db84ca4f85942883b84fdae0440304811a72d3767aeb5e657f5d577b9",
+    "sm_90": "f67fb7d7ac619c152a06bc13a784b3f8467875650d9447bfb42738ced2a3f817",
+    "sm_90_rys_value": "a36a0cdedd84070ba23a422f7f0aed3657b6e2c9a859430307c0bccfa5a84072",
+    "sm_90_k_block": "b9e2568163513ebd365b6d2439428e77f67158426703e780008c21e1bc513a74"
   },
   "artifact_corrections": [
+    {
+      "task": "rys-task-three-root-64-component-mask-20261008",
+      "integrated_base_revision": "99a2a5cac926edc69c28453977d1bc9b70d8bd06",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ],
+      "reason": "Extend bounded quartet-parallel values to three roots and at most 64 Cartesian components. Newly compiled ddss/dsds/dpps/dspp use 64-bit retained-component masks, shared high-accuracy Rys3 interpolation with bounded inner unrolling, and at most 80 doubles of private restricted raw-K contraction; larger contractions retain generic scatter. Add the four classes to sm_120 preference only with independent numerical, sanitizer, identical admission and complete cold endpoint qualification. Regeneration changes task sections in shards 1/2/3 and registry dispatch metadata; shard 0 and every portable artifact remain identical. Six separately pinned incumbent, component-Rys and old-K-block mathematical sources remain byte-identical. New source capability or this identity correction alone is not a performance claim."
+    },
+    {
+      "task": "rys-task-four-independent-warps-20261008",
+      "integrated_base_revision": "4385f72751b829883407c01106186917c344317b",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu"
+      ],
+      "reason": "Expand only task-parallel Rys candidates to 128 threads with four independently retiring 32-lane warp queues. Scalar per-quartet geometry, roots and recurrence are unchanged; packed ordinary/persistent entry points use the actual task width and lane-private storage. Streaming bra cursors, survivor queues and warp barriers are isolated per warp while sharing the existing global bra head, screening and counters. Regeneration changes only sm_120 shards 0/1/2, which contain the task candidates; the empty task section in shard 3 is unchanged. Registry/header, portable shards, manifest, catalog, and separately pinned incumbent/old-Rys/old-K-block mathematics are unchanged. Numerical, sanitizer, admission-count and complete-endpoint qualification are independent gates; the expanded schedule alone is not a performance claim."
+    },
+    {
+      "task": "rys-task-default-five-20261008",
+      "integrated_base_revision": "4385f72751b829883407c01106186917c344317b",
+      "paths": [
+        "generativeqc_generated_shell_registry.cu"
+      ],
+      "reason": "Promote only the five measured sm_120 Rys task classes in separate target dispatch metadata. Registry source adds the preferred mask and getter intersected with enabled capability/coverage. Full regenerated bundles prove every mathematical shard (including task variants), registry header, manifest and catalog unchanged relative to the qualified opt-in implementation. Separate retained-source hashes continue to pin incumbent, old Rys and old K-block mathematics. Other target/portable preferences remain zero; explicit incumbent rolls back the default. Complete unset-selector endpoint and independent oracle receipts accompany this dispatch-identity change."
+    },
+    {
+      "task": "rys-task-cold96-20261008",
+      "base_revision": "4385f72751b829883407c01106186917c344317b",
+      "reason": "Add independent opt-in _rys_task AOT variants and their prepared registry/filter. All four sm_120 shards gain candidate source; empty portable shards gain the empty variant comment. Registry source gains the optional mask and launcher, but the registry header, manifest, catalog and public generator ABI remain unchanged. Independent regeneration of the frozen base reproduces the prior full-bundle fixture. Separate retained-source hashes prove that every incumbent, old Rys-value and old K-block profile shard remains byte-identical to that base. Updating these bundle hashes does not promote the candidate or change the default mathematics."
+    },
     {
       "issue": 888,
       "source_revision": "2cf3dec31100b0cda0b5267dc4364f75ccad9682",
@@ -726,6 +769,80 @@
         "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
         "generativeqc_generated_shell_registry.cu"
       ]
+    },
+    {
+      "issue": 2135,
+      "source_revision": "6e97c0d2379dc68b411aaa010c9088a2535e0578",
+      "integrated_base_revision": "6b439bb003d50b6dd854e81400977195bb4bf460",
+      "reason": "Compose the independently qualified #2135 work companions with #2133 Rys-task shards and registry preference through one typed prepared selector. Regeneration deliberately changes the four sm_120 shards and registry source; portable shards and registry header remain identical. Independent frozen-PR emission reproduces all 21 incumbent/work streaming sources, all twelve Rys-task class shards and the component-Rys/K-block alternatives byte-for-byte. Omitting work companions for validation-only source reproduction preserves all six separately pinned retained-source hashes. No recurrence, force, precision or automatic target/class expansion is introduced; historical separate GPU qualification is not a combined cold-speedup claim.",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ]
+    },
+    {
+      "task": "rys-task-warp-private-work-buckets-20261009",
+      "integrated_base_revision": "6acb3e70e3031b4a7ef44ef77df551b354e34e59",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ],
+      "reason": "Add separately compiled work companions for the twelve existing task-parallel Rys classes, selecting them through the frozen schedule rather than changing Fill scratch or numerical bodies. Each of four warps owns eight bounded two-batch bins and retires independently; admission, precision, quartet recurrence and scatter are unchanged. Explicit typed registry dispatch changes the registry source identity; the generated header remains unchanged. Independent emission retains all 21 incumbent/work streams, all twelve original task shards when work companions are omitted, component-Rys/block alternatives and the six retained scientific hashes. All portable artifacts are unchanged. Identity correction alone does not establish a performance claim."
+    },
+    {
+      "task": "ddds-pair-product-precision-compatibility-20261009",
+      "source_revision": "9db85cf78451134d037513f73b583751e1c84ce7",
+      "integrated_base_revision": "c77bd483cbe4e109b90b1a1930c65495e84b8142",
+      "paths": [
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu"
+      ],
+      "reason": "Record the deliberately changed dppp/ddds value-pair orientation and ddds materialization after independently reproducing all ten prior c77 artifacts. Only sm_120 shards 0 and 3 and the retained sm_120 source change relative to c77; registry/header, portable shards, Rys and K-block retained sources remain identical. Review of 9db exposed incidental narrowing of mixed ddds coefficient products through an indentation-based float-sign rewrite. The explicit mixed_pair_products_fp64 opt-in restores its previous double promotion without changing default-false custom profiles. Relative to frozen 9db generated source, only the mixed ddds sign type changes from float to double; all FP64 helpers, force definitions, streaming queues and other artifacts retain exact bytes. The ddds Fock unroll flag now correctly records the already-emitted rolled pragmas. Independent host Decimal product tests and source-identity checks validate compatibility; frozen GPU receipts remain pinned to the original 9db candidate and do not qualify a rebuilt repaired binary."
+    },
+    {
+      "issue": 2161,
+      "source_revision": "0e3bdbc72721c6d6a4d2f56d4822ccbed7060096",
+      "reason": "Generated Fock workers and registry launchers now carry the runtime-owned CompensatedOutput value. The four sm_120 shards add the shared runtime header, polymorphic scatter output and two-plane Fock signatures; the four empty portable sm_90 shards only add the header. The registry source changes its Fock declarations and dispatch function-pointer type. Pre-PR cdb2131a regenerates all ten prior hashes exactly; reversing only these ABI edits and line wrapping in the 807b0bf1 emission recovers every remaining non-whitespace byte. Registry header, manifest, shell catalog, schedules and numerical expressions are unchanged.",
+      "paths": [
+        "sm_90/generativeqc_generated_shell_sm90_shard_0.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_3.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ]
+    },
+    {
+      "task": "rys-task-compensated-fock-integration-20261009",
+      "source_revision": "bf39f790553a8c4dd285ff206eaee417ff07c973",
+      "integrated_base_revision": "ec71ef7fea6f705a3623b45c7bfb51105c43337a",
+      "paths": [
+        "sm_90/generativeqc_generated_shell_sm90_shard_0.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_1.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_2.cu",
+        "sm_90/generativeqc_generated_shell_sm90_shard_3.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_0.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_1.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_2.cu",
+        "sm_120/generativeqc_generated_shell_sm120_shard_3.cu",
+        "generativeqc_generated_shell_registry.cu"
+      ],
+      "retained_sources": [
+        "sm_120",
+        "sm_120_rys_value",
+        "sm_120_k_block",
+        "sm_90"
+      ],
+      "reason": "Integrate the reviewed compensated Fock sink with the Rys-task and task-work routes. Both exact parents independently reproduce every recorded bundle hash, and bf39 reproduces all six retained-source hashes. All ten combined bundles and six retained sources reproduce bf39 byte-for-byte after reversing only the compensation include, output template/types, Fock launch alias and resulting line wrapping. The four empty portable shards gain only the runtime header; generated registry header, manifest and catalog remain unchanged. Explicitly reconcile task/task-work registry declarations and disabled stubs with the already-upgraded shared emitter; host executables check all six selector routes, both spin modes and present/absent correction planes. Keep the low-word state, rolled ddds schedule and widened mixed pair products. Frozen GPU receipts keep their original source identities; these regenerated hashes and host tests do not qualify a rebuilt combined binary."
     }
   ]
 }

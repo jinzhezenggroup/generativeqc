@@ -100,6 +100,7 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
         "scf/cuda_batch.hpp",
         "scf/eigensolver_workspace.hpp",
         "runtime/resource_cuda.cuh",
+        "runtime/residency_cuda.cuh",
         "runtime/lowering_binding.hpp",
         "generativeqc/generativeqc.hpp",
     ),
@@ -192,6 +193,16 @@ CUDA_ALLOWED["cuda_component_trace"] = (
     "runtime/cuda_component_trace.hpp",
     "runtime/df_progress_trace.hpp",
 )
+CUDA_MODULES["cuda_residency_observation"] = (
+    "runtime/residency_boundaries",
+    "runtime/residency_observer",
+    "runtime/residency_cuda",
+)
+CUDA_ALLOWED["cuda_residency_observation"] = (
+    "runtime/residency_boundaries.hpp",
+    "runtime/residency_observer.hpp",
+    "runtime/residency_cuda.cuh",
+)
 CUDA_MODULES["cuda_df_kernels"] = (
     "df_metric_kernels",
     "df_jk_kernels",
@@ -213,7 +224,12 @@ CUDA_MODULES["cuda_scf_kernels"] = (
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
-) + ("scf/cuda/matrix_index.",)
+) + (
+    "scf/cuda/matrix_index.",
+    "tensor/cuda_history.cuh",
+    "tensor/cuda_ring_gram.cuh",
+    "tensor/ring_gram.hpp",
+)
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
     "solver/cuda/symmetric_eigen_handles.hpp",
@@ -221,6 +237,7 @@ CUDA_ALLOWED["cuda_resources"] = (
     "scf/cuda/eigensolver.",
     "scf/cuda/matrix_library.",
     "runtime/resource_cuda.cuh",
+    "runtime/residency_cuda.cuh",
     "runtime/allocation_measurement.hpp",
 )
 CUDA_MODULES["cuda_matrix_library"] = ("matrix_library", "runtime_support")
@@ -275,8 +292,11 @@ CUDA_EXACT_ALLOWED = {
     "cuda_direct_consumers": ("runtime/compensated_atomic.cuh",),
 }
 # The shared sink must not acquire scientific, provider, or host-plan state.
-CUDA_MODULES["cuda_compensated_atomic"] = ("runtime/compensated_atomic.cuh",)
-CUDA_ALLOWED["cuda_compensated_atomic"] = ()
+CUDA_MODULES["cuda_compensated_atomic"] = (
+    "runtime/compensated_atomic.cuh",
+    "runtime/compensated_output.hpp",
+)
+CUDA_ALLOWED["cuda_compensated_atomic"] = ("runtime/compensated_output.hpp",)
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (
@@ -424,6 +444,10 @@ CUDA_ALLOWED["cuda_direct_force_sources"] = ()
 # The borrowed resident lease exposes metadata only, never device execution.
 CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
 CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
+CUDA_MODULES["cuda_direct_order_seven_pages"] = ("direct_order_seven_pages.cuh",)
+CUDA_ALLOWED["cuda_direct_order_seven_pages"] = ()
+CUDA_MODULES["cuda_direct_force_class_pages"] = ("direct_force_class_pages.cuh",)
+CUDA_ALLOWED["cuda_direct_force_class_pages"] = ()
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -459,6 +483,8 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "scf/cuda/direct_screening.cuh",
         "scf/cuda/direct_task_encoding.cuh",
         "scf/cuda/direct_page_screening.cuh",
+        "scf/cuda/direct_order_seven_pages.cuh",
+        "scf/cuda/direct_force_class_pages.cuh",
         "scf/cuda/direct_queue_profile.cuh",
         "scf/cuda/matrix_index.cuh",
         "scf/cuda/device_timer.cuh",
@@ -472,6 +498,8 @@ CUDA_MODULES["cuda_direct_consumers"] = (
     "direct_reference_force.cu",
     "direct_bounded_dddd.cu",
     "direct_bounded_exact_force.cu",
+    "direct_order_seven_force.cu",
+    "direct_force_class_domains.cu",
     "direct_bounded_fallback.cu",
     "direct_angular_force.cu",
     "direct_jk_kernels.cu",
@@ -495,6 +523,8 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_reference_force.hpp",
     "direct_bounded_dddd.hpp",
     "direct_bounded_exact_force.hpp",
+    "direct_order_seven_force.hpp",
+    "direct_force_class_domains.hpp",
     "direct_bounded_fallback.hpp",
     "direct_angular_force.hpp",
     "weighted_eri_kernels.hpp",
@@ -534,8 +564,25 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
 CUDA_MODULES["cuda_hf_graph"] = ("rhf_graph",)
 CUDA_ALLOWED["cuda_hf_graph"] = (
     "runtime/allocation_measurement.hpp",
+    "runtime/residency_cuda.cuh",
+    "runtime/residency_observer.hpp",
     "scf/cuda/rhf_graph.",
     "scf/types.hpp",
+)
+# A phase-local exact source borrows public Direct/assembly capabilities and
+# owns local graphs; it must not acquire bucket state or recurrence internals.
+CUDA_MODULES["cuda_rhf_resident_values"] = ("rhf_resident_values",)
+CUDA_ALLOWED["cuda_rhf_resident_values"] = (
+    "molecule/basis.hpp",
+    "posthf/capacity.hpp",
+    "runtime/df_progress_trace.hpp",
+    "runtime/resource_cuda.cuh",
+    "scf/cuda/df_scf_kernels.hpp",
+    "scf/cuda/reference_eri_policy.hpp",
+    "scf/cuda/rhf_graph.hpp",
+    "scf/cuda/rhf_resident_values.",
+    "scf/cuda/runtime_support.hpp",
+    "scf/cuda_direct_jk_device.hpp",
 )
 # The remaining host driver owns direct-HF numerical launch order, not bucket
 # admission/lifetime or CUDA Graph handles. Keep recurrence and kernel
@@ -553,6 +600,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "runtime/cuda_component_trace.hpp",
     "runtime/cuda_device_facts.hpp",
     "runtime/resource_cuda.cuh",
+    "runtime/residency_cuda.cuh",
     "runtime/resource_usage.hpp",
     "scf/aot_shell_registry.hpp",
     "runtime/bounded_workspace.hpp",
@@ -595,6 +643,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/resources.hpp",
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/rhf_policy.hpp",
+    "scf/cuda/rhf_resident_values.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",

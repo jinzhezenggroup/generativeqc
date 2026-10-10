@@ -1,5 +1,15 @@
 # Occupied-factor CUDA exchange and force response
 
+This page is the entry point for the occupied RI-K work policy,
+resident/executed exchange contraction, seed and final state selection,
+and SCF diagnostics. The [CPU mathematical contraction](df_occupied_exchange.md)
+owns the normalized RI-K equation; [strict final-state selection](df_final_state.md)
+owns determinant and physical-Fock acceptance. For device response and
+packed-source layout see [occupied force response](df_occupied_response.md)
+and [packed DF storage](df_packed_storage.md).
+
+## Exchange work model and admission
+
 `GENERATIVEQC_DF_EXCHANGE=auto` (also the unset default) selects occupied RI-K
 using the shared work policy in `src/scf/df_exchange_policy.hpp`. For `n`
 orbital AOs, `a` auxiliary AOs and occupied rank `r`, dense exchange requires
@@ -19,6 +29,8 @@ comparison overrides. All factor, density and final-state checks still apply.
 The [selection decision](../../.agents/notes/implemented/performance/2026-09-18-general-occupied-df-policy.md)
 records the work model, validation and performance limitations.
 
+## Generated streamed occupied exchange
+
 Generated streamed singleton RHF value execution has a separate compiler-owned
 schedule in `generativeqc_compiler.method.df_exchange_schedule`. When the metric is
 full rank and the existing four scratch buffers can reduce source work, project
@@ -31,6 +43,8 @@ is `n + h*(b-1)*max(0,b-2)/2`; one or two blocks need exactly one raw tensor pas
 The explicit full-matrix traversal retains its `n*b` row count. Admission compares
 these counts against the dense fallback, without increasing buffer capacity.
 The value schedule grants no final-state or force-response projection lease.
+
+## CUDA exchange contraction and occupations
 
 For one spin, `D = w C C^T` with canonical occupation w=2 (RHF) or w=1 (UHF).
 On a full resident plan, project the existing pair-major tensor directly:
@@ -91,6 +105,8 @@ cannot authorize use. A missing or incompatible factor runs dense K for that
 item while compatible neighbors retain factorized K. Factor upload borrows
 the existing density-transpose staging; no allocation is needed for host B.
 
+## SCF convergence and physical acceptance
+
 The production CUDA direct and DIIS-enabled DF RHF/UHF loops share the FP64
 stopping policy in `scf_convergence_policy.cuh`. They require a finite preceding
 energy and all three tests:
@@ -113,6 +129,8 @@ strict final-state validation; host numerical recovery retains its stricter
 unguarded energy comparison. Neither compatibility route licenses skipping
 final validation. Coarse direct mixed-precision stages still require subsequent
 FP64 target refinement before publication.
+
+## Seed factorization and warm replay
 
 Every device SCF invocation starts with one seed iteration. Imported and unmatched warm
 densities have no trustworthy orbital factor, but a checked algebraic factor
@@ -164,6 +182,8 @@ Fock owners retain the existing path. `GENERATIVEQC_DF_WARM_REUSE=0` (or benchma
 warm-factor, algebraic-factor and dense seed iterations and include retention
 transfers and the separate energy reduction.
 
+## Final physical exchange
+
 `GENERATIVEQC_DF_FINAL_EXCHANGE=dense|occupied|auto` independently controls final
 physical Fock evaluation. Unset/`auto` selects occupied K whenever the same
 resident, single-fitted-B or streamed work/capacity and provenance gates qualify it; `occupied`
@@ -195,6 +215,8 @@ readback; a stale generation rejects the device result and preserves the
 caller's established numerical recovery. Force evaluation receives only the
 validated converged density and keeps its full metric/center/Pulay response.
 
+## Resources and observability
+
 Native and common resource ledgers reserve two full AO matrices for spin
 factors plus generation flags only for explicit occupied selection or a known
 RHF occupation accepted by the shared work policy. Unknown references, UHF,
@@ -224,135 +246,18 @@ records the factorization, final-state audit and qualification rationale.
 
 ## Resident raw ownership and response storage
 
-A full, single-system host-raw plan retains the original FP64 values in its
-former exchange-contribution buffer as `A[Q,mu,nu]`. Setup fills this buffer
-while the original raw device input is still live. The new resident K path
-fits its temporaries in the two other tensors, so no extra full tensor is
-allocated and both the setup and persistent reservations remain unchanged. Transformed B
-alone cannot recover discarded metric directions needed by exact forces.
-
-The prepared HF owner binds immutable raw, atom and shell allocations plus
-both basis representations. These allocations survive moves into the prepared
-cache. A force call must match these bindings before receiving a
-`CudaDfRawTensorView`: pointer, dimensions, strides, process-unique owner
-identity, and the original metric eigensystem/cutoff. The view always denotes
-untruncated raw values, never a streamed panel or transformed B. Rebuilding
-geometry, either basis, or the metric owner invalidates the previous view.
-Standalone tensor-plan callers have no immutable source binding and upload
-through the compatibility adapter.
-
-J/K and response share one stream. Two full buffers become mutable response
-scratch; the retained raw buffer remains read-only until the bridge drains.
-Matching warm resident calls perform zero raw-tensor H2D copies or transposes.
-`GENERATIVEQC_DF_RAW_REUSE=off` retains the upload ablation. An upload revokes raw
-validity before submission and restores it only after successful response
-from the matching immutable source, including failure/retry handling.
-
-`GENERATIVEQC_DF_RESPONSE_STORAGE=auto` borrows full J/K capacity for singleton RHF
-responses with default shell/BLAS controls. Dense response also benefits from
-projecting each auxiliary only once, so unavailable occupied factors do not
-force repeated panel projections. Occupied algebra additionally requires the
-shared work/capacity policy and validated final-state factors. Packed storage
-can only lend its smaller scratch to a qualified occupied response.
-`panel` preserves bounded execution;
-`jk-scratch` requests validated borrowing explicitly. Borrowed capacity is
-reported once alongside owned scratch and transfers; reuse is never inferred
-from dimensions or a small component-local budget alone.
+The exact retained raw tensor and borrowed response scratch ownership
+are specified in [occupied force response](df_occupied_response.md#resident-raw-ownership-and-response-storage).
+Value-plan residency does **not** authorize an unrelated response
+consumer to reuse raw pointers or omit metric directions.
 
 ## Exact occupied force response
 
-`GENERATIVEQC_DF_RESPONSE_SPACE=auto` (also unset) shares SCF's rank/work and resident
-capacity selector. Explicit panel storage and diagnostic schedules preserve
-their original route. `dense` retains the full-AO comparison; `occupied` requests
-factor validation on compatible resident plans, including explicit UHF/batch
-experiments. Neither the work model nor a token used as a selection hint
-supplies execution authority.
-
-The method passes its verified final-state token. The response owner checks
-source identity, solve epoch, system, model, occupations, exact canonical device
-density, and each device factor generation before borrowing C. Missing/stale
-tokens, corrected determinants, external densities, unreserved plans and
-unsupported factors keep dense response under `auto`. UHF additionally verifies
-the exact sum of its spin densities and admits both rank-squared projections
-together.
-
-On singleton, full-rank streamed RHF plans only, an explicit
-`GENERATIVEQC_DF_RESPONSE_SPACE=occupied` request may reconstruct a *new* algebraic
-factor from a corrected final density. It requires the same source/model/solve
-epoch/occupation, bounded matching density and orbital generation advances,
-and the charged occupied value-plan reservation. A GPU eigensolve and full
-density reconstruction gate reject indefinite, non-finite, excess-rank or
-inexact densities; the existing bounded dense response remains the fallback.
-Before overwriting factor scratch, the response revokes the previous SCF
-generation, so this factor is never advertised as a canonical SCF factor.
-`auto`, UHF, batch and truncated-metric response policies are unchanged.
-
-The response computes `T_Q=C^T A_Q C` and `U_P=sum_Q V_PQ T_Q` from raw
-three-center values, preserving finite discarded metric directions. In the
-qualified domain it feeds at most 64 auxiliary slices of packed symmetric
-AO-pair weights to the existing generated derivative consumers. It does not
-retain a full response-weight tensor. Projections, transformed projections and raw
-values occupy the three already charged resident J/K tensors; the consumed
-projection buffer becomes panel storage. `GENERATIVEQC_DF_RESPONSE_BATCHING=auto`
-concatenates Q slices for a large `C^T [A_0 ... A_(a-1)]` GEMM and batches the
-second multiplication by C. Previously retained spin factors remain outside
-that staging range. Pseudo-density expansion batches `C U_P` and lower
-rectangular products across each bounded auxiliary panel. Capacity checks
-include weights, projected factors and rectangular outputs simultaneously;
-`off` and insufficient capacity preserve serial projections. The algebraic
-FLOP count stays fixed while BLAS submissions and repeated factor reads fall.
-Additional response workspace contains
-four auxiliary matrices, three AO matrices, densities and auxiliary charges.
-`DfGradientResources` reports the executed route and borrowed capacity.
-
-`GENERATIVEQC_DF_DERIVATIVE_PAIRS=auto` selects packed weights for the qualified
-768/768-AO, rank-160 RHF occupied response on RTX 5090. The previously promoted
-resident 192--384-AO shell route instead folds the existing dense weights,
-preserving its response producer. Other automatic routes retain their original
-execution. Explicit `full` executes the ordered dense shell product;
-`symmetric` adds the two dense off-diagonal shell weights and executes each
-unordered shell pair once. `packed` requests packed production when a trusted
-occupied response and complete generated shell consumer are available, otherwise
-retaining the dense producer and symmetric shell consumer. Generic and host
-consumers retain their dense contracts. These controls are captured in resource
-plan identity and cannot be changed inside a frozen global resource plan.
-
-Packed weights store `W_ii` once and `W_ij+W_ji` at `i*(i+1)/2+j` for `i>j`.
-Diagonal-shell AO pairs and normalized spherical/Cartesian expansions preserve
-their physical atom derivatives. Auxiliary panels end at whole shells whenever
-the cap permits; a smaller explicit cap can still split a shell. Generated
-derivatives reduce directly into the atomic gradient, without a derivative
-tensor or a second derivative formula implementation.
-
-The producer expands only lower rectangular AO blocks, with 256 rows by
-default. `GENERATIVEQC_DF_PACKED_AO_BLOCK_ROWS=64|128|256|384` retains diagnostic
-alternatives. Upper off-diagonal blocks are skipped; unused upper entries
-inside diagonal blocks are counted as executed work. Counters distinguish
-shell pairs/triples, public weight loads including zeros, primitive products,
-nonzero Cartesian contractions, rectangular GEMM entries and panel bytes.
-`GENERATIVEQC_DF_SHELL_COUNTERS=1` enables diagnostic device atomics and must be
-disabled for clean timings.
-
-Packing halves the weight handoff, not the complete resident plan allocation.
-Raw uploads, validated raw reuse and borrowed J/K capacity are reported
-separately; packed weights do not imply a smaller persistent value plan.
-Tiny explicit domains can fit in one panel or one AO block; counters report
-their actual dense and packed materialization rather than implying a saving.
-
-The [derivation and lifetime note](../../.agents/notes/implemented/performance/2026-09-15-occupied-df-response.md)
-records RHF/UHF coefficients, metric response and rejected schedules.
-The [qualification evidence](../../benchmarks/results/issue377-379-df/README.md)
-retains frozen-density policy comparisons, independent strict force gates,
-component/work counters, reservation and priming costs. These are historical
-validation points for the shared work policy, not runtime admission branches.
-They establish no universal device latency or COSX crossover. Memory diagnostics
-report charged capacity, not a measured global GPU peak. The derivative schedule,
-pair-layout and primitive-packet selectors below remain separate policies;
-their existing endpoint restrictions do not restrict occupied SCF admission.
-
-The [packed derivative note](../../.agents/notes/implemented/performance/2026-09-15-packed-df-derivative-pairs.md)
-documents symmetry, diagonal-shell treatment, the block-size tradeoff and
-[current qualification](../../benchmarks/results/issue382-packed-df/README.md).
+The mathematical weighted projection, full/truncated metric scope,
+generation checks, packed derivative pairs and bounded resources are
+specified in [occupied force response](df_occupied_response.md#exact-occupied-force-response).
+See [DF derivatives](df_derivatives.md) for the generated scientific
+weight-consumer contract.
 
 ## Compact SCF DIIS and solver timing
 
@@ -386,121 +291,15 @@ for these paths.
 
 ## Experimental native packed values
 
-The explicit `create_cuda_density_fitting_jk_plan_from_source` overload accepts
-`DfValueStorageOptions{DfPairStorage::SymmetricLower, rank_capacity}`. This route
-requires a retained physical integral source and complete AO rows. Physical CUDA
-SCF and composed Fock preparation accept the diagnostic selector
-`GENERATIVEQC_DF_VALUE_STORAGE=auto|dense|packed|packed-single`. In HF SCF, unset/`auto`
-keeps a fully resident dense owner when it fits; for a generated singleton RHF
-source it promotes to `packed-single` only when dense would stream and the single
-fitted owner fits the same value allowance. UHF, multi-item batches,
-general-density/composed Fock and arbitrary public-tensor callers remain dense
-unless packing is requested explicitly. The explicit native constructor does not
-consult this ambient selector.
+The packed raw/fitted owner, capacity admission and exact fallback
+semantics live in [packed DF value storage](df_packed_storage.md).
+The explicit packed constructor and diagnostic controls are not
+unrestricted public capability claims.
 
-The physical selector runs before full host raw construction, including requests
-with a zero value budget. Prepared metadata, device plans, composed Fock variants
-and resource identities distinguish the representations. Changing the selector
-invalidates ordinary cached preparation and is rejected by an admitted global
-resource plan. Composed fixed-density Fock reserves no complete occupied U and
-uses the exact bounded compatibility route.
+```{toctree}
+:hidden:
+:maxdepth: 1
 
-Packed plans own separate immutable raw A and whitened B arrays in unit-weight
-`[mu*(mu+1)/2+nu,Q]` order for `mu>=nu`. Raw generation writes lower rows directly;
-native metric setup and one all-Q whitening preserve discarded raw directions.
-J uses diagonal density entries once and off-diagonal `D_mn+D_nm`. Occupied K
-projects directly into the existing full U layout when its rank fits the
-reservation, then uses the existing Gram. Larger ranks and arbitrary densities
-use exact bounded expansion. The common planner charges both immutable owners,
-one `max(n*rank_capacity*a,n*n*q)` scratch buffer and two `n*n*q` buffers, plus
-the existing source, metric, library and SCF reservations.
-
-The explicit `packed-single` experiment retains only fitted B in the same
-lower-pair order. It generates raw A once in bounded panels during setup, but
-does not retain those panels. J/K, including qualified final physical Fock
-validation, reuses B without claiming a raw-A owner. Validated canonical or
-strictly reconstructed corrected occupied factors can use a separately budgeted
-force response with `GENERATIVEQC_DF_RESPONSE_SPACE=occupied`.
-`GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE=fitted` projects retained B in bounded
-auxiliary panels when the source/metric identity matches and the metric is
-full rank. The `raw` control instead regenerates raw A from the matching source;
-`GENERATIVEQC_DF_SOURCE_PROJECTION=batched` batches its occupied projection.
-Automatic response keeps its bounded general-density route. A constrained value allowance may
-drop optional automatic occupied K scratch without dropping B; explicit
-occupied requests still require their full reservation. The global small-HF
-resource inventory currently supports `packed` but not `packed-single`.
-The [single-owner qualification note](../../.agents/notes/implemented/performance/2026-09-25-single-fitted-df-owner.md)
-records the numerical gates and complete-endpoint evidence.
-
-For the qualified full-rank fitted occupied consumer,
-`GENERATIVEQC_DF_OCCUPIED_METRIC=auto|retained-root|spectral` controls the second
-metric transformation. `auto` and `retained-root` apply the plan's immutable
-symmetric inverse root `X` directly to the projected factors `S = C^T B C`:
-`U = S X`. This uses one GEMM into the existing disjoint retained staging
-interval, with no final factor copy. `spectral` retains the two-GEMM
-eigenvector/scale route for independent comparisons. Raw and rank-truncated
-consumers retain their original spectral response, including discarded-direction
-derivatives; they cannot borrow this root shortcut. The choice adds no device
-allocation and grants no raw final-projection lease. Trace counters report the
-actual root GEMMs, FLOPs, copy bytes and scratch allowance.
-
-An exact final-K projection from a physical packed AO source additionally proves
-`S_Q = C^T B_Q C` symmetric. The response stores its `r*(r+1)/2` independent
-occupied pairs, with diagonals first, and applies the second metric root to
-that smaller extent. The Coulomb potential still reads the diagonal trace.
-Two lower-triangle SYRK products form the metric adjoint: diagonal occupied
-pairs have weight one and off-diagonal pairs weight two. Their `beta=1`
-updates preserve the existing Coulomb contribution before mirroring. Providers
-without SYRK keep two full GEMM products over those same weighted pairs, with
-full-product FLOPs reported; NVIDIA execution retains the two SYRK calls.
-
-Only singleton RHF with its exact final-state lease, retained full-rank metric
-root and packed physical source can take this route. Dense/nonsymmetric
-fixtures, spectral and truncated-metric controls, UHF, corrected factors
-without a lease and insufficient resident storage preserve their original
-paths. Off-diagonal projection entries are averaged to remove FP64 reduction
-asymmetry. After the compact Gram finishes, expansion uses the dead exchange
-interval and restores the original disjoint staging layout; bounded derivative
-panels and resource reservations remain unchanged. No in-place expansion is
-permitted. Counters expose compact root elements, actual contraction FLOPs and
-the expansion copy separately.
-
-`benchmarks/compare_df_direct_endpoint.py` qualifies complete energy/force
-endpoints for direct RHF and explicitly selected DF on identical geometry,
-orbital basis, convergence thresholds and host thread counts. Each method has
-its own independent GPU4PySCF oracle. Cold timing includes preparation; frozen
-post-cold and post-move replays retain iterations and the API's optional Fock
-count (`null` when unavailable); DF traces retain executed J/K work. `--interleave`
-alternates dense-final/spectral, occupied-final/spectral and occupied-final/root
-DF controls on the same density. Diagnostic traces are separate from clean
-timings. These controls are same-binary ablations, not historical-build results.
-
-`density_fitting_tile_plan(..., generated_source=True, pair_storage="packed")`
-queries these capacities without allocating a tensor or creating a CUDA context.
-Its `occupied` argument is the complete-U reservation and may be zero for a
-bounded-only packed plan. The private `generativeqc_resource_df_packed_tiles_v1` ABI
-reports both distinct factor owners and unequal scratch capacities through the
-Python descriptor; existing dense v1/v2 queries retain their original ABI.
-The complete Python HF candidate inventory exposes only `cuda-df-packed` for an
-explicit packed request, charging both immutable owners and the actual scratch
-capacities. Its existing limit of 16 orbital AOs and 128 auxiliary AOs still
-applies; the standalone shape query is not subject to this inventory limit.
-
-Force response uses a distinct `CudaDfPackedRawTensorView` with the plan's
-metric/owner identity. Canonical factors may borrow the three actual scratch
-capacities for occupied response. Missing/stale factors or insufficient
-rank-squared storage use the bounded raw loader. Neither route regenerates raw
-integrals or constructs a persistent full raw tensor. `GENERATIVEQC_DF_RAW_REUSE=off`
-instead selects bounded source regeneration for diagnosis. Explicit seed/final
-occupied overrides admit this resident source; automatic selection uses the
-same resident work policy and checks the selected rank against both logical
-rank capacity and actual retained projection storage. Other generated-source
-exclusions remain. A final U lease is
-published only if its full projection was retained;
-the full-rank restriction and single-consumer invalidation still apply.
-
-Explicit packed selection is retained for the measured warm/constrained domains;
-unset and `auto` remain dense because bounded response and geometry rebuild can
-regress substantially. The 384/1856 unequal case remains numerically unqualified.
-The [retention decision](../../.agents/notes/implemented/performance/2026-09-17-packed-df-retention.md)
-records domain evidence, validation and conditions for revisiting selection.
+df_occupied_response
+df_packed_storage
+```

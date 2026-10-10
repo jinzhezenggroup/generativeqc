@@ -44,6 +44,10 @@ struct Vv10Parameters;
 
 namespace generativeqc::scf {
 
+/** Reject explicit preliminary guesses before resident CUDA DF resource allocation.
+ * Applied by the common dispatch and direct native single/batch entry points. */
+void reject_cuda_df_preliminary_guess(const ScfOptions& options);
+
 /** Validate controls and derive the requested value/force capability for this
  * execution without changing the immutable prepared method request. */
 ResolvedFockBuild fock_strategy_for_execution(const ScfOptions& options);

@@ -179,7 +179,7 @@ struct Slots : std::vector<void*> {
 };
 struct Diagnostic {
   size_t batch_size{1}, device_bytes{16}, resident_value_count{}, resident_value_bytes{},
-      host_bytes{}, host_preparation_bytes{};
+      resident_values_submitted{}, resident_values_completed{}, host_bytes{}, host_preparation_bytes{};
 };
 struct CanonicalBatch {
   int nbf{64};

@@ -8,8 +8,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_definition, cpp_if_block
 from test_coulomb_optional_allocation import compile_cached_probe
-from test_direct_jk_optional_allocation import STUBS, _definition
+from test_direct_jk_optional_allocation import STUBS
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,12 +18,14 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(scope="module")
 def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
-    admission = _definition(
-        source, "    if (plan->canonical_cartesian && plan->canonical_pairs &&"
+    admission = cpp_if_block(
+        source, "plan->canonical_cartesian && plan->canonical_pairs"
     )
     definitions = [
-        _definition(source, "void direct_jk_check("),
-        _definition(source, "template <class Prepare, class Restore>"),
+        cpp_function_definition(source, "direct_jk_check"),
+        cpp_function_definition(
+            source, "direct_jk_optional_storage", include_template=True
+        ),
     ]
     stubs = STUBS.replace(
         "struct CudaDirectJkPlan {",

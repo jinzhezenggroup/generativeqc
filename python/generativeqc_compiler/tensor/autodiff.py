@@ -2,8 +2,8 @@
 
 The rules are matrix-free: a VJP propagates one cotangent through one
 primal evaluation and never materializes a Jacobian.  A JVP evaluates one
-tangent direction through the same immutable SSA graph.  The module covers
-every primitive in :data:`generativeqc_compiler.tensor.ir.PRIMITIVES`.
+tangent direction through the same immutable SSA graph. Boolean data and
+comparisons are explicitly non-differentiable.
 
 Slice A deliberately stops at dense general tensors.  Differentiating with
 respect to a packed/symmetric parameter requires the transpose of the
@@ -28,7 +28,7 @@ from types import MappingProxyType
 import numpy as np
 
 from .interpreter import _evaluate, evaluate_nodes
-from .ir import Node, _execution_power_exponent
+from .ir import COMPARISONS, Node, _execution_power_exponent
 from .program import Program
 from .scaled_arithmetic import scaled_bilinear_value
 from .types import checked_size
@@ -181,6 +181,7 @@ def capabilities() -> dict:
         "schema_version": AD_VERSION,
         "rule_version": AD_RULE_VERSION,
         "primitives": sorted(AD_PRIMITIVES),
+        "non_differentiable_primitives": sorted(COMPARISONS),
         "modes": ["jvp", "vjp"],
         "backend": BACKEND,
         "packed_symmetry": False,
@@ -932,6 +933,8 @@ def jvp(
     """
     if not isinstance(program, Program):
         raise TypeError("jvp requires a Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     checked_size(max_bytes, "autodiff byte budget")
     tangents = _validate_tangents(program, tangents)
     selected = _select_names(program.outputs, outputs, "output")
@@ -968,6 +971,8 @@ def vjp(
     """
     if not isinstance(program, Program):
         raise TypeError("vjp requires a Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     checked_size(max_bytes, "autodiff byte budget")
     cotangents = _validate_cotangents(program, cotangents)
     differentiable = {
@@ -1024,6 +1029,8 @@ def dot_test(
     """Check ``<w, Jv> == <J^T w, v>`` on one fixed primal evaluation."""
     if not isinstance(program, Program):
         raise TypeError("dot_test requires a Program")
+    if any(node.spec.dtype == "bool" for node in program.live_nodes):
+        raise ValueError("Boolean TensorIR data and comparisons are non-differentiable")
     if not math.isfinite(rtol) or rtol < 0:
         raise ValueError("rtol must be finite and nonnegative")
     checked_size(max_bytes, "autodiff byte budget")

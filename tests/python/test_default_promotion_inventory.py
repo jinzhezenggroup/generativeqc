@@ -44,10 +44,59 @@ def test_current_default_promotion_inventory_is_complete() -> None:
 
 
 @pytest.mark.parametrize(
+    "relative,before,after",
+    [
+        ("src/scf/cuda/reference_eri_policy.hpp", "!value ||", "false ||"),
+        ("src/scf/cuda/reference_eri_policy.hpp", "if (!cold_reference)", "if (false)"),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "maximum_angular != 3",
+            "maximum_angular > 3",
+        ),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "direct_nbf < 128",
+            "direct_nbf < 64",
+        ),
+        (
+            "src/scf/cuda/reference_eri_policy.hpp",
+            "maximum_iterations < 8",
+            "maximum_iterations < 4",
+        ),
+        (
+            "src/scf/cuda/rhf_resident_values.cpp",
+            "budget, 8ULL << 30",
+            "budget, 16ULL << 30",
+        ),
+        (
+            "src/scf/cuda/rhf_resident_values.cpp",
+            "device_overhead, 256ULL << 20",
+            "device_overhead, 0",
+        ),
+    ],
+)
+def test_rhf_phase_value_default_domain_is_audited(
+    tmp_path: Path, relative: str, before: str, after: str
+) -> None:
+    """Widening automatic construction needs renewed endpoint qualification."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / relative
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "RHF phase-value auto default or admission domain drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
     "before,after",
     [
-        ("functions > 400", "functions > 600"),
-        ("options.max_iterations = 32", "options.max_iterations = 50"),
+        ("guess.work_amortization_ratio < 1.0", "guess.work_amortization_ratio < 0.1"),
+        ("preliminary_iterations = 32", "preliminary_iterations = 50"),
+        ("guess.preparation_peak_bytes > guess.value_budget_bytes", "false"),
     ],
 )
 def test_df_rhf_guess_default_domain_is_audited(
@@ -104,6 +153,88 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
         for relative in entry["sources"]:
             assert (tmp_path / relative).read_bytes() == (ROOT / relative).read_bytes()
     assert not validate_inventory(payload, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            'profile.target.architecture != "sm_120"',
+            'profile.target.architecture != "sm_90"',
+        ),
+        ('profile.profile != "sm_120"', 'profile.profile != "portable_cuda"'),
+        (
+            '"dpps", "dspp"}',
+            '"dpps", "dspp", "ssss"}',
+        ),
+    ],
+)
+def test_rys_task_default_admission_requires_renewed_qualification(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Preference must not expand beyond the independently measured domain."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default target/class admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            "return exchange ? DirectFockLowering::Default : DirectFockLowering::Incumbent;",
+            "return exchange ? DirectFockLowering::RysTask : DirectFockLowering::Incumbent;",
+        ),
+        (
+            "selection.rys_task_fock_mask &= class_mask;",
+            "selection.rys_task_fock_mask |= class_mask;",
+        ),
+        (
+            "selection.rys_task_fock_mask = generated::preferred_rys_task_fock_shell_class_mask();",
+            "selection.rys_task_fock_mask = generated::enabled_rys_task_fock_shell_class_mask();",
+        ),
+    ],
+)
+def test_unified_k_selector_cannot_bypass_preference_or_coverage(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_fock_lowering.hpp"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default selection/filter guard drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+def test_work_default_must_be_audited_independently_of_task_preference(
+    tmp_path: Path,
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/cuda/direct_fock_lowering.hpp"
+    original = source.read_text()
+    source.write_text(
+        original.replace(
+            "return detail::GeneratedExchangeTaskSchedule::Work;",
+            "return detail::GeneratedExchangeTaskSchedule::Fill;",
+            1,
+        )
+    )
+    assert any(
+        "Direct K work schedule default/selection guard drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
 
 
 def test_inventory_requires_owner_rationale_and_revisit_condition() -> None:

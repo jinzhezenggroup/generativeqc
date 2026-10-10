@@ -1,0 +1,7 @@
+{
+  "name": "md_j_reciprocal",
+  "outputs": [
+    "generated/generated_md_j_reciprocal.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/integral/md_j_reciprocal_cuda.py"
+}

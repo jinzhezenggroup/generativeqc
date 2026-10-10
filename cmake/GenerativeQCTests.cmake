@@ -447,6 +447,8 @@ macro(generativeqc_add_native_tests)
   endif()
 
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_dft_integral_sources_tests
+                       tests/native/test_dft_integral_sources.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_uks_tests tests/native/test_uks.cpp)
@@ -470,6 +472,9 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver)
     generativeqc_native_test(generativeqc_cuda_diis_tests tests/native/test_cuda_diis.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    generativeqc_native_test(generativeqc_cuda_diis_cached_gram_tests
+                       tests/native/test_cuda_diis_cached_gram.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_direct_streaming_graph_cuda_tests
                        tests/native/test_direct_streaming_graph_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
@@ -484,9 +489,16 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_cuda_fock_canonical_tests
              COMMAND generativeqc_cuda_fock_provider_tests --canonical-values-only)
     set_tests_properties(generativeqc_cuda_fock_canonical_tests PROPERTIES TIMEOUT 900)
+    add_test(NAME generativeqc_cuda_fock_materialized_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --canonical-materialized-only)
+    set_tests_properties(generativeqc_cuda_fock_materialized_tests PROPERTIES TIMEOUT 900)
     add_test(NAME generativeqc_cuda_generated_j_budget_tests
              COMMAND generativeqc_cuda_fock_provider_tests --generated-j-budget-only)
     set_tests_properties(generativeqc_cuda_generated_j_budget_tests PROPERTIES TIMEOUT 180)
+    add_test(NAME generativeqc_cuda_lr_domain_tests
+             COMMAND generativeqc_cuda_fock_provider_tests --lr-domain-only)
+    set_tests_properties(generativeqc_cuda_lr_domain_tests PROPERTIES
+                         TIMEOUT 180 ENVIRONMENT "GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=1")
     generativeqc_native_test(generativeqc_cuda_stream_eigensolver_tests tests/native/test_cuda_stream_eigensolver.cpp
                        LIBRARIES CUDA::cudart CUDA::cusolver)
     generativeqc_native_test(generativeqc_ecp_cuda_error_tests tests/native/test_ecp_cuda_errors.cpp

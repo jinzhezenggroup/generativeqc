@@ -33,6 +33,14 @@ package-specific `LD_LIBRARY_PATH`.
 Method discovery comes from the same generated native method registry used by
 the C and C++ APIs.
 
+MethodIR compositions have a separate build-time generated catalog. Query the
+full list, including backend qualification and unsupported-graph reasons:
+
+```bash
+generativeqc methods --compositions
+generativeqc methods --compositions --json
+```
+
 ## Discover bundled Gaussian bases
 
 The native CLI basis catalog is generated at build time from the same bundled
@@ -122,10 +130,94 @@ generativeqc run molecule.xyz \
 ```
 
 The selector is resolved from the native method manifest rather than a second
-CLI-specific DFT list. This slice exposes the manifest DFT energy endpoint with
-conventional Coulomb only. DFT density fitting and DFT forces remain
-fail-closed at argument validation and require separate qualification before
-the CLI exposes them.
+CLI-specific DFT list. Native DFT **energy** can use the same exact
+`--density-fitting none|cpu|cuda|auto` and `--auxiliary-basis` options as
+HF; the backend choice must match the selected fitting provider:
+
+```bash
+generativeqc run molecule.xyz \
+  --method pbe-rks \
+  --basis sto-3g \
+  --backend cpu \
+  --density-fitting cpu \
+  --auxiliary-basis def2-svp \
+  --json
+```
+
+With no explicit auxiliary basis, the orbital basis remains the fitting basis.
+Choose a scientifically appropriate auxiliary basis for production.
+
+### Compiler MethodIR compositions without Python
+
+The CLI method catalog is generated **at build time** from
+`generativeqc_compiler.method.spec.METHOD_CATALOG`, its upstream aliases, and
+`compile_ks_execution_plan`, not from handwritten method-name branches. The
+generated C++ constants carry the exact semilocal components, coefficients,
+full-range exchange contributions, SCF domain, spin and MethodIR identity.
+The native method manifest remains the authority for stable C ABI IDs; these
+composition names are not new ABI IDs. C++ `KsComposition` and the CLI use the
+same native prepared-calculation owner.
+
+```bash
+generativeqc run molecule.xyz --method pbe0-rks --basis sto-3g \
+  --backend cpu --units bohr \
+  --grid-radial-points 64 --grid-polar-points 12 \
+  --grid-azimuth-points 24 --json
+
+generativeqc run molecule.xyz --method b3lyp-rks \
+  --basis def2-svp --backend cpu --json
+```
+
+Built-in curated LDA/PBE/r²SCAN compositions, supported global hybrids (such
+as PBE0 and B3LYP), and the generated CUDA-only split-hybrid compositions
+(M06-2X/MN15) use the same generic code path when their individual native
+backend/basis/SCF gates succeed. RKS and UKS selectors are derived from the
+same MethodIR, but support still depends on the selected backend and system.
+Run `generativeqc methods --compositions --json` to see `cpu`, `cuda` and
+`reason` for each canonical name or generated alias; `--backend` mismatches
+fail **before** molecular execution.
+
+The default version-1 small-grid quadrature is a **reference** prescription
+(64 radial x 12 polar x 24 azimuth points per atom), not a converged
+production-grid policy. Positive `--grid-radial-points`,
+`--grid-polar-points` and `--grid-azimuth-points` are available only for
+compiler-generated compositions; the existing stable native-manifest method
+paths preserve their established controls.
+
+**Representation is not execution qualification.** Methods requiring
+unrepresented range-separated exchange, VV10/rVV10 nonlocal correlation,
+or a D3/D4/gCP/basis correction (such as WB97M-V or r²SCAN-3c) are currently
+listed as unavailable instead of silently dropping operators or returning a
+partial energy. Newly generated MethodIR rows do not automatically gain
+native capability: preparation remains authoritative.
+
+### Context-qualified native DFT analytic forces
+
+A narrow **CPU, density-fitted, all-electron RKS PBE** force path now composes
+the same prepared electronic state as the energy route with the native one-
+and two-electron response providers, generated XC point derivatives, the
+moving molecular grid/Becke partition derivative and nuclear repulsion:
+
+```bash
+generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
+  --backend cpu --density-fitting cpu --forces --json
+```
+
+The generated **PBE0-RKS** composition can use this route only when its
+prepared full-range exact-exchange **and** Coulomb terms both admit the same
+CPU density-fitted derivative provider. The installed C++ SDK queries the
+actual prepared context through
+`generativeqc_calculation_get_supported_properties_v1`; the generic method
+registry remains energy-only because it cannot promise forces for every
+backend, grid, spin or approximation. Use `Calculation::supported_properties()`
+rather than the global method manifest to test this narrow admission.
+
+This is not support for native CUDA DFT forces, CPU Direct DFT forces, UKS,
+r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
+requests reject before execution and do not return a partial derivative.
+Prepared DFT *batch* forces remain a separate qualification task under #2151.
+This slice requires complete independent numeric/CI acceptance before being
+considered production-qualified. See [C++ SDK usage](native_cpp.md).
 
 ## Manage local profile activation
 

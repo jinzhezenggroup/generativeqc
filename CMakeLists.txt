@@ -380,6 +380,22 @@ if(GENERATIVEQC_BUILD_CLI)
       --input "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc/data/basis_pack.json"
       --output "${GENERATIVEQC_CLI_BASIS_HEADER}"
     COMMENT "Generating Python-free CLI basis catalog")
+  set(GENERATIVEQC_CLI_METHOD_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_method_catalog.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_cli_method_codegen
+    TARGET generativeqc_cli
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cli_method_catalog.py"
+    OUTPUTS "${GENERATIVEQC_CLI_METHOD_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/ks_execution.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_libxc_methods.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
+    ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
+    COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
   target_link_libraries(generativeqc_cli PRIVATE generativeqc)
   target_include_directories(generativeqc_cli PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -400,6 +416,13 @@ endif()
 if(GENERATIVEQC_BUILD_TESTS)
   generativeqc_add_native_tests()
   if(GENERATIVEQC_BUILD_CLI)
+    add_test(NAME generativeqc_cli_methodir_codegen
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_cli_method_catalog_codegen.py")
+    add_test(NAME generativeqc_cli_comp_method_catalog
+             COMMAND generativeqc_cli methods --compositions --json)
+    set_tests_properties(generativeqc_cli_comp_method_catalog PROPERTIES
+                         PASS_REGULAR_EXPRESSION "pbe0-rks")
     add_test(NAME generativeqc_cli_methods
              COMMAND generativeqc_cli methods --json)
     set_tests_properties(generativeqc_cli_methods PROPERTIES
@@ -440,6 +463,18 @@ if(GENERATIVEQC_BUILD_TESTS)
                      --json)
     set_tests_properties(generativeqc_cli_pbe_rks_cpu PROPERTIES
                          PASS_REGULAR_EXPRESSION "\"method\":\"pbe-rks\"")
+    add_test(NAME generativeqc_cli_pbe_rks_df_cpu
+             COMMAND generativeqc_cli run
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     --method pbe-rks --basis sto-3g --backend cpu --units bohr
+                     --density-fitting cpu --auxiliary-basis def2-svp --json)
+    set_tests_properties(generativeqc_cli_pbe_rks_df_cpu PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\\\"density_fitting\\\":\\\"cpu\\\"")
+    add_test(NAME generativeqc_cli_dft_df_contract
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_dft_df.py"
+                     $<TARGET_FILE:generativeqc_cli>
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz")
     add_test(NAME generativeqc_cli_profile_safety
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_profile_cache.py"

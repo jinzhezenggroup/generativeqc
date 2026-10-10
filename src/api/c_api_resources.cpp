@@ -7,6 +7,8 @@
 
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
+#include "runtime/residency_boundaries.hpp"
+#include "runtime/residency_observer.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
@@ -20,6 +22,27 @@
 #endif
 
 extern "C" {
+
+/** Read immutable source tags from this actual library, with no CUDA or heap
+ * work. Null is an unknown tag, not an inferred role/payload classification. */
+const char* generativeqc_residency_boundary_name_v1(std::uint64_t category, std::uint64_t value) {
+  return generativeqc::runtime::residency_boundary_name(category, value);
+}
+
+/** Bind a private observation-only callback on the current submitting thread.
+ * The caller keeps its callback/code/context alive through unbind. No CUDA or
+ * allocation is performed, and a second observer cannot replace the first. */
+int generativeqc_residency_observer_bind_v1(generativeqc::runtime::ResidencyObserver callback,
+                                            void* context) {
+  return generativeqc::runtime::bind_residency_observer(callback, context);
+}
+
+/** Only the matching owner can detach; retain dispatch errors for the receipt.
+ * Exceptions or recursive callbacks are observation failures, not solver errors. */
+int generativeqc_residency_observer_unbind_v1(generativeqc::runtime::ResidencyObserver callback,
+                                              void* context, std::uint64_t* errors) {
+  return generativeqc::runtime::unbind_residency_observer(callback, context, errors);
+}
 
 /** Private prepared-request ledger. Creating it performs no CUDA operation. */
 void* generativeqc_resource_ledger_create_v1(std::size_t bytes, int device) {
@@ -51,6 +74,8 @@ int generativeqc_resource_ledger_bind_v1(void* handle) {
   ledger->peak = ledger->live;
   ledger->allocations = 0;
   ledger->rejected = 0;
+  ledger->requested_bytes = 0;
+  ledger->requested_bytes_overflow = false;
   active_device_resource_ledger = std::move(ledger);
   return 0;
 }
@@ -65,6 +90,97 @@ int generativeqc_resource_ledger_read_v1(void* handle, std::uint64_t* values) {
   values[2] = ledger->allocations;
   values[3] = ledger->rejected;
   return 0;
+}
+
+/** Preserve the four-field v1 ABI; v2 adds successful cumulative requested bytes.
+ * All five counters share one locked snapshot. An overflow is unobservable,
+ * not a wrapped zero-byte replay or a reason to fail numerical execution. */
+int generativeqc_resource_ledger_read_v2(void* handle, std::uint64_t* values, std::size_t count) {
+  if (handle == nullptr || values == nullptr || count != 5) return 1;
+  const auto& ledger =
+      *static_cast<std::shared_ptr<generativeqc::runtime::DeviceResourceLedger>*>(handle);
+  std::lock_guard<std::mutex> lock(generativeqc::runtime::device_resource_mutex);
+  if (ledger->requested_bytes_overflow) return 1;
+  values[0] = ledger->live;
+  values[1] = ledger->peak;
+  values[2] = ledger->allocations;
+  values[3] = ledger->rejected;
+  values[4] = ledger->requested_bytes;
+  return 0;
+}
+
+/** Snapshot retained owners and reserve journal slots before a replay begins.
+ * A capture handle survives ledger-handle destruction and cached-buffer frees.
+ * This is observation-only storage; it never selects a resource/solver route. */
+void* generativeqc_resource_journal_create_v1(void* handle, std::size_t capacity) {
+  using namespace generativeqc::runtime;
+  if (handle == nullptr || capacity == 0 || capacity > (1u << 20)) return nullptr;
+  const auto& ledger = *static_cast<std::shared_ptr<DeviceResourceLedger>*>(handle);
+  try {
+    auto journal = std::make_shared<DeviceAllocationJournal>();
+    journal->limit = capacity;
+    journal->events.reserve(capacity);
+    std::lock_guard<std::mutex> lock(device_resource_mutex);
+    if (ledger->active || ledger->journal) return nullptr;
+    const auto owners =
+        std::count_if(device_allocation_owners.begin(), device_allocation_owners.end(),
+                      [&](const auto& entry) { return entry.second.ledger == ledger; });
+    if (static_cast<std::size_t>(owners) > capacity) return nullptr;
+    journal->initial.reserve(owners);
+    for (const auto& entry : device_allocation_owners) {
+      if (entry.second.ledger == ledger)
+        journal->initial.push_back({0, entry.second.generation, entry.second.bytes});
+    }
+    std::sort(
+        journal->initial.begin(), journal->initial.end(),
+        [](const auto& first, const auto& second) { return first.generation < second.generation; });
+    auto* capture = new std::shared_ptr<DeviceAllocationJournal>(journal);
+    ledger->journal = std::move(journal);
+    return capture;
+  } catch (const std::bad_alloc&) {
+    return nullptr;
+  }
+}
+
+/** Return initial-owner count, event count, dropped events and recording flag.
+ * Records are triples (kind, allocation generation, requested bytes), initial
+ * owners first. A null/zero record buffer queries the required size. A short
+ * buffer returns 2 and leaves its records untouched; state is always atomic. */
+int generativeqc_resource_journal_read_v1(void* handle, std::uint64_t* records, std::size_t count,
+                                          std::uint64_t* state) {
+  using namespace generativeqc::runtime;
+  if (handle == nullptr || state == nullptr || (records == nullptr && count != 0)) return 1;
+  const auto& journal = *static_cast<std::shared_ptr<DeviceAllocationJournal>*>(handle);
+  std::lock_guard<std::mutex> lock(device_resource_mutex);
+  state[0] = journal->initial.size();
+  state[1] = journal->events.size();
+  state[2] = journal->dropped;
+  state[3] = journal->recording;
+  if (records == nullptr) return 0;
+  if (count < 3 * (journal->initial.size() + journal->events.size())) return 2;
+  std::size_t index = 0;
+  const auto copy = [&](const auto& events) {
+    for (const auto& event : events) {
+      records[index++] = event.kind;
+      records[index++] = event.generation;
+      records[index++] = event.bytes;
+    }
+  };
+  copy(journal->initial);
+  copy(journal->events);
+  return 0;
+}
+
+/** Stop recording without changing allocation ownership or CUDA visibility. */
+void generativeqc_resource_journal_destroy_v1(void* handle) {
+  using namespace generativeqc::runtime;
+  if (handle == nullptr) return;
+  auto* capture = static_cast<std::shared_ptr<DeviceAllocationJournal>*>(handle);
+  {
+    std::lock_guard<std::mutex> lock(device_resource_mutex);
+    (*capture)->recording = false;
+  }
+  delete capture;
 }
 
 /** Allocation-inventory contract implemented by resources_hf.py. Increment

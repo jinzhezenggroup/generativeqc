@@ -1,5 +1,15 @@
 {
   "families": {
+    "pbe0-restricted-point-default-20261010": {
+      "owner": "producer-bound restricted PBE0 complete default-route qualification",
+      "reason": "Lossless compact source-frozen 48/96 original endpoint records retain setup, priming, all 40 measured E/F vectors, actual dispatch and semantic work, immutable seed identities and independent references. No profiler arrays, binaries, peak-memory invention, external archive or storage-budget increase.",
+      "review_document": "benchmarks/results/pbe0-restricted-point-default-20261010/README.md"
+    },
+    "pbe0-implicit-class-force-20261010": {
+      "owner": "explicit composed PBE0 Hcore and class-major force endpoints",
+      "reason": "All 46 complete 96-atom construction/setup/prime/sample calls retain full independent numerical outputs, semantic work, resources, owner seed identities and five interleaved timings per side/phase. Lossless gzip only; no full logs, binaries, timing retries, default-promotion waiver or storage-budget increase.",
+      "review_document": "benchmarks/results/pbe0-implicit-class-force-20261010/README.md"
+    },
     "pbe0-cuda-schedule-20261006": {
       "owner": "ordinary CUDA force schedule qualification",
       "reason": "Two separately authenticated frozen-source populations retain exact complete endpoint vectors, matched warm work, independent references, source/binary/cache/sanitizer receipts and rejected experiments. Each lossless bundle stays below 1 MiB and the complete publication below the unchanged 2 MiB review budget; no binaries, profiler traces, external archive or policy exception is introduced.",
@@ -133,7 +143,9 @@
     "local-autotune-136": {
       "owner": "local-autotune-136",
       "reason": "Reviewed retained large evidence for User-local autotuning acceptance (#136). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
-      "review_document": "benchmarks/results/local-autotune-136/README.md"
+      "review_document": "benchmarks/results/local-autotune-136/README.md",
+      "lossless_record": "benchmarks/results/local-autotune-136/evidence.json.xz",
+      "recovery_manifest": "benchmarks/results/unified-k-work-20261009/storage-recovery.json"
     },
     "local-spaces-182": {
       "owner": "local-spaces-182",
@@ -192,6 +204,14 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/pbe0-restricted-point-default-20261010/samples.json.gz",
+      "family": "pbe0-restricted-point-default-20261010",
+      "bytes": 214312,
+      "sha256": "8b7ff7f1da8d060e1e63a52876956beb8966eaf913b7dc8eff2a70dbc54b3f2c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Original clean-source off/default complete E/F samples and independent numerical references; cross-arm seeds are explicitly not bit-identical and no latest-master timing claim is made."
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",
@@ -345,14 +365,6 @@
       "sha256": "ab9acbda4ea2a153f59f7da75863640529de36c4948b952862dddec596d6eab7"
     },
     {
-      "path": "benchmarks/results/df-final-occupied-endpoint-20260926/receipt.json",
-      "family": "df-final-occupied-endpoint-20260926",
-      "bytes": 324689,
-      "sha256": "709b72edc673227844ed7ad0a38fe8c572e1d0ebbe39dadf36005fbf95e5d88a",
-      "classification": "required-compact-accepted-evidence",
-      "role": "Independent final-K/root ablations and all diagnostic counters, reconstructed losslessly from split companions."
-    },
-    {
       "path": "benchmarks/results/df-one-step-warm-20260926/references.json",
       "family": "df-one-step-warm-20260926",
       "bytes": 229005,
@@ -415,22 +427,6 @@
       "path": "benchmarks/results/ecp-real-f-171/source-identity.json",
       "role": "source-provenance",
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
-    },
-    {
-      "bytes": 391121,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "544255203a137fa646e65b0304ccecf820ba8b56ac1511c8b8a8c651007a4e05"
-    },
-    {
-      "bytes": 577110,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/isolated.json",
-      "role": "scientific-record",
-      "sha256": "8fc91a883b9fe2ca723f84cc6a1b9a49bb30f45902e0d9a8bcebe1d9cde6f18a"
     },
     {
       "bytes": 162452,
@@ -601,14 +597,6 @@
       "sha256": "4bedbcfff686580f9beab77a224d97610587cb51c256a6e5e531dbe441f5fc2c"
     },
     {
-      "bytes": 369045,
-      "classification": "required-compact-accepted-evidence",
-      "family": "local-autotune-136",
-      "path": "benchmarks/results/local-autotune-136/evidence.json",
-      "role": "decision-or-audit-record",
-      "sha256": "e4c284f632a4752830ec490acb02d20d063f6a1b96d0e52cfffa6dc943291fa7"
-    },
-    {
       "bytes": 276817,
       "classification": "required-compact-accepted-evidence",
       "family": "local-spaces-182",
@@ -647,6 +635,14 @@
       "sha256": "5591f4fe6e6b2d1fddf108a9e8a20d23fae05695de76e6d67b3acf79759a639f",
       "classification": "required-compact-accepted-evidence",
       "role": "Separate Combined-default integration population with five new interleaved pairs, independent references, source/binary/build/device/sanitizer receipts and the retained failed component-name gate; no relabeling of original timings."
+    },
+    {
+      "path": "benchmarks/results/pbe0-implicit-class-force-20261010/paired-96.json.gz",
+      "family": "pbe0-implicit-class-force-20261010",
+      "bytes": 153936,
+      "sha256": "02d860f90dbeecfc85ca708df03edcea64ea60881280506f8badeb29c727f428",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete source-matched clean endpoint and all-call scientific/work records; composed explicit selection only, with differing cross-owner seeds and no cold/default/peak-memory claim."
     },
     {
       "path": "benchmarks/results/pbe0-resident-tiles-20261003/campaign.json.xz",

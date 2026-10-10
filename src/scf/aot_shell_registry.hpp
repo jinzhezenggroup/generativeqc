@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "runtime/compensated_output.hpp"
+
 namespace generativeqc::scf::generated {
 
 /** Runtime identity of the AOT bundle selected for one CUDA device. */
@@ -58,6 +60,10 @@ std::uint64_t enabled_rys_fock_shell_class_mask() noexcept;
 
 /** Optional restricted raw-K shell-block inventory; incumbent remains default. */
 std::uint64_t enabled_k_block_fock_shell_class_mask() noexcept;
+/** Optional lane-local Rys K inventory; unsupported classes retain incumbents. */
+std::uint64_t enabled_rys_task_fock_shell_class_mask() noexcept;
+/** Measured target/class preference, intersected with enabled exact coverage. */
+std::uint64_t preferred_rys_task_fock_shell_class_mask() noexcept;
 
 /**
  * Return generated mixed-Fock classes selected by
@@ -75,21 +81,25 @@ cudaError_t launch_shell_class(unsigned shell_class, cudaStream_t stream, bool u
                                const double* schwarz_bounds, const double* density, double* forces,
                                const std::uint32_t* task_count, std::uint32_t* task_head) noexcept;
 
-/** Launch one generated persistent Fock worker by exact shell-class index. */
+/** Launch one generated persistent Fock worker by exact shell-class index.
+ * The correction plane, when present, uses the same offsets as the Fock sum.
+ */
 cudaError_t launch_shell_class_fock(
     unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
     const void* tasks, const std::uint32_t* task_offset, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
-    double screening_tolerance, const double* schwarz_bounds, const double* density, double* fock,
-    const std::uint32_t* task_count, std::uint32_t* task_head) noexcept;
+    double screening_tolerance, const double* schwarz_bounds, const double* density,
+    runtime::CompensatedOutput fock, const std::uint32_t* task_count,
+    std::uint32_t* task_head) noexcept;
 
 /** Launch one generated mixed-precision Fock worker by exact class index. */
 cudaError_t launch_shell_class_mixed_fock(
     unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
     const void* tasks, const std::uint32_t* task_offset, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
-    double screening_tolerance, const double* schwarz_bounds, const double* density, double* fock,
-    const std::uint32_t* task_count, std::uint32_t* task_head) noexcept;
+    double screening_tolerance, const double* schwarz_bounds, const double* density,
+    runtime::CompensatedOutput fock, const std::uint32_t* task_count,
+    std::uint32_t* task_head) noexcept;
 
 /**
  * Launch one generated Fock worker that enumerates a shell-pair class product
@@ -100,8 +110,9 @@ cudaError_t launch_shell_class_streaming_fock(
     const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
-    const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
-    unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
+    const double* schwarz_bounds, const double* density, runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head, unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
 
 /** Launch the separately compiled work-bucket schedule; whole-CTA classes retain
  * their existing specialized worker. No launch is retried after accumulation. */
@@ -110,8 +121,9 @@ cudaError_t launch_shell_class_work_streaming_fock(
     const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
-    const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
-    unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
+    const double* schwarz_bounds, const double* density, runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head, unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
 
 /** Launch a prepared strict-FP64 Rys alternative through the same topology ABI.
  * The caller must check the compiler inventory before selecting this function.
@@ -122,8 +134,29 @@ cudaError_t launch_shell_class_rys_streaming_fock(
     const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
-    const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
-    unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
+    const double* schwarz_bounds, const double* density, runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head, unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
+
+/** Launch a lane-local Rys quartet through the ordinary bounded K queue. */
+cudaError_t launch_shell_class_rys_task_streaming_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
+    const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
+    const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
+    const double* schwarz_bounds, const double* density, runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head, unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
+
+/** Keep Rys work bins in a separate kernel so fill retains its smaller scratch. */
+cudaError_t launch_shell_class_rys_task_work_streaming_fock(
+    unsigned shell_class, cudaStream_t stream, bool unrestricted, unsigned worker_blocks,
+    const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
+    const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
+    double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
+    const double* schwarz_bounds, const double* density, runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head, unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
 
 /** Launch the optional restricted raw-K block-contraction alternative. */
 cudaError_t launch_shell_class_k_block_streaming_fock(
@@ -131,8 +164,9 @@ cudaError_t launch_shell_class_k_block_streaming_fock(
     const void* shell_pair_stream, const std::int64_t* primitive_pair_offsets,
     const void* primitive_pairs, const double* ao_coefficients, const void* atom_positions,
     double screening_tolerance, bool mixed_precision_enabled, double fp64_threshold,
-    const double* schwarz_bounds, const double* density, double* fock, std::uint32_t* bra_head,
-    unsigned long long* fp64_work_count, unsigned long long* fp32_work_count) noexcept;
+    const double* schwarz_bounds, const double* density, runtime::CompensatedOutput fock,
+    std::uint32_t* bra_head, unsigned long long* fp64_work_count,
+    unsigned long long* fp32_work_count) noexcept;
 
 /**
  * Launch the optional canonical ppps resident-bra force worker.

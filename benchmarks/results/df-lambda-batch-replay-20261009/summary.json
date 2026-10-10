@@ -1,0 +1,330 @@
+{
+  "schema": "generativeqc.df-lambda-batch.ablation.v1",
+  "slurm_job_id": "2767",
+  "cuda_visible_devices": "1",
+  "gpu": "GPU-4b4be14f-ec84-6736-a7d8-968d62900c72, NVIDIA RTX PRO 6000 Blackwell Workstation Edition, 595.91.07, 600.00 W",
+  "frozen_sha256": {
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/build/endpoint": "1e2e98e0438481a693dfe9f89a45f127c73493474b19803adbfad34359bd41d8",
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/build-cuda/libgenerativeqc.so.0.1.0": "2df02642da424df6a7c31c2b35b210032cfa0f466d6b93788e843a2360799ebf",
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/rccsd-diis-ring-1900/ethane230.input": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/df_lambda_batch_ablation.py": "f8797863fa3c4c6772f60133d409aebcdc54a9ce481b332c77654572835857d0",
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/df_lambda_core_reuse_ablation.py": "143ce0d42a85da450cddd9775234dd471dce529f69ba99ac6c3bb3f750787ecb",
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/df-lambda-cost-2136-20261009/oracle-energy.json": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+    "/data/jzzeng/qc-2136-qbatch-followup-20261009/source/benchmarks/results/df-lambda-gemm-20261004/oracle-energy-fd.json": "179bdab4d40da307fb9cfa60e9763ba2e2e8a50752d9fde6821a081b425e6d29"
+  },
+  "screen_only": false,
+  "instrumented": false,
+  "performance_promotion": false,
+  "summary": {
+    "b8": {
+      "native_seconds": {
+        "median": 516.9220845335001,
+        "minimum": 516.377321368,
+        "maximum": 517.466847699
+      },
+      "reference_seconds": {
+        "median": 128.49285776800002,
+        "minimum": 128.072552316,
+        "maximum": 128.91316322
+      },
+      "source_seconds": {
+        "median": 3.6343240465,
+        "minimum": 3.626997144,
+        "maximum": 3.641650949
+      },
+      "ccsd_seconds": {
+        "median": 99.5362709635,
+        "minimum": 99.411090255,
+        "maximum": 99.661451672
+      },
+      "triples_seconds": {
+        "median": 39.2644544895,
+        "minimum": 39.260857989,
+        "maximum": 39.26805099
+      },
+      "lambda_seconds": {
+        "median": 120.46459314,
+        "minimum": 120.45270821,
+        "maximum": 120.47647807
+      },
+      "source_response_seconds": {
+        "median": 3.7697607614999997,
+        "minimum": 3.764799981,
+        "maximum": 3.774721542
+      },
+      "orbital_seconds": {
+        "median": 121.759739637,
+        "minimum": 121.756462627,
+        "maximum": 121.763016647
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 45986.0,
+        "minimum": 45986,
+        "maximum": 45986
+      },
+      "lambda_work": {
+        "median": 38135799179463.0,
+        "minimum": 38135799179463,
+        "maximum": 38135799179463
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1881569130992.0,
+        "minimum": 1881569130992,
+        "maximum": 1881569130992
+      },
+      "lambda_capacity": {
+        "median": 10082032819.0,
+        "minimum": 10082032819,
+        "maximum": 10082032819
+      }
+    },
+    "b32": {
+      "native_seconds": {
+        "median": 481.4691781545,
+        "minimum": 481.445311604,
+        "maximum": 481.493044705
+      },
+      "reference_seconds": {
+        "median": 128.890535497,
+        "minimum": 128.873619745,
+        "maximum": 128.907451249
+      },
+      "source_seconds": {
+        "median": 3.6256225244999998,
+        "minimum": 3.624978765,
+        "maximum": 3.626266284
+      },
+      "ccsd_seconds": {
+        "median": 99.61328856,
+        "minimum": 99.592429968,
+        "maximum": 99.634147152
+      },
+      "triples_seconds": {
+        "median": 39.270525758,
+        "minimum": 39.262009195,
+        "maximum": 39.279042321
+      },
+      "lambda_seconds": {
+        "median": 84.326891632,
+        "minimum": 84.298385771,
+        "maximum": 84.355397493
+      },
+      "source_response_seconds": {
+        "median": 3.7827834659999997,
+        "minimum": 3.779497363,
+        "maximum": 3.786069569
+      },
+      "orbital_seconds": {
+        "median": 121.95944728149999,
+        "minimum": 121.898571765,
+        "maximum": 122.020322798
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 13811.0,
+        "minimum": 13811,
+        "maximum": 13811
+      },
+      "lambda_work": {
+        "median": 37901517693843.0,
+        "minimum": 37901517693843,
+        "maximum": 37901517693843
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1608035327072.0,
+        "minimum": 1608035327072,
+        "maximum": 1608035327072
+      },
+      "lambda_capacity": {
+        "median": 17873308281.0,
+        "minimum": 17873308281,
+        "maximum": 17873308281
+      }
+    },
+    "b8_p1": {
+      "native_seconds": {
+        "median": 507.606314011,
+        "minimum": 507.517429772,
+        "maximum": 507.69519825
+      },
+      "reference_seconds": {
+        "median": 128.9143545165,
+        "minimum": 128.852677867,
+        "maximum": 128.976031166
+      },
+      "source_seconds": {
+        "median": 3.6140046125,
+        "minimum": 3.586364883,
+        "maximum": 3.641644342
+      },
+      "ccsd_seconds": {
+        "median": 99.617199923,
+        "minimum": 99.600075245,
+        "maximum": 99.634324601
+      },
+      "triples_seconds": {
+        "median": 39.2746560175,
+        "minimum": 39.270592985,
+        "maximum": 39.27871905
+      },
+      "lambda_seconds": {
+        "median": 110.6131113495,
+        "minimum": 110.602677178,
+        "maximum": 110.623545521
+      },
+      "source_response_seconds": {
+        "median": 3.776285841,
+        "minimum": 3.772004457,
+        "maximum": 3.780567225
+      },
+      "orbital_seconds": {
+        "median": 121.7966170515,
+        "minimum": 121.769270599,
+        "maximum": 121.823963504
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 47877.0,
+        "minimum": 47877,
+        "maximum": 47877
+      },
+      "lambda_work": {
+        "median": 38135584669791.0,
+        "minimum": 38135584669791,
+        "maximum": 38135584669791
+      },
+      "lambda_packing_output_bytes": {
+        "median": 2147065655920.0,
+        "minimum": 2147065655920,
+        "maximum": 2147065655920
+      },
+      "lambda_capacity": {
+        "median": 10643904947.0,
+        "minimum": 10643904947,
+        "maximum": 10643904947
+      }
+    },
+    "b32_p1": {
+      "native_seconds": {
+        "median": 471.2991765955,
+        "minimum": 471.213510284,
+        "maximum": 471.384842907
+      },
+      "reference_seconds": {
+        "median": 128.907436057,
+        "minimum": 128.88082761,
+        "maximum": 128.934044504
+      },
+      "source_seconds": {
+        "median": 3.621995849,
+        "minimum": 3.619050272,
+        "maximum": 3.624941426
+      },
+      "ccsd_seconds": {
+        "median": 99.6103029805,
+        "minimum": 99.609266434,
+        "maximum": 99.611339527
+      },
+      "triples_seconds": {
+        "median": 39.280837331,
+        "minimum": 39.275539472,
+        "maximum": 39.28613519
+      },
+      "lambda_seconds": {
+        "median": 74.2714361305,
+        "minimum": 74.235010397,
+        "maximum": 74.307861864
+      },
+      "source_response_seconds": {
+        "median": 3.7788217605,
+        "minimum": 3.774043474,
+        "maximum": 3.783600047
+      },
+      "orbital_seconds": {
+        "median": 121.8282645935,
+        "minimum": 121.813799498,
+        "maximum": 121.842729689
+      },
+      "lambda_iterations": {
+        "median": 21.0,
+        "minimum": 21,
+        "maximum": 21
+      },
+      "lambda_actions": {
+        "median": 22.0,
+        "minimum": 22,
+        "maximum": 22
+      },
+      "lambda_gemm_calls": {
+        "median": 14307.0,
+        "minimum": 14307,
+        "maximum": 14307
+      },
+      "lambda_work": {
+        "median": 37901303184171.0,
+        "minimum": 37901303184171,
+        "maximum": 37901303184171
+      },
+      "lambda_packing_output_bytes": {
+        "median": 1862138223520.0,
+        "minimum": 1862138223520,
+        "maximum": 1862138223520
+      },
+      "lambda_capacity": {
+        "median": 20701823865.0,
+        "minimum": 20701823865,
+        "maximum": 20701823865
+      }
+    }
+  },
+  "source": {
+    "revision": "d5a3173cc89b399ed105b0750124473eb782e2e5",
+    "dirty": true,
+    "dependency_pr": 2156,
+    "dependency_head": "3f79e2a93d28c5ed1d9817871f365473e5710e17",
+    "reconstruction": "measured-source.patch.gz",
+    "patch_excludes": "Historical evidence, docs and notes; all measured source/driver changes are included."
+  },
+  "validation": {
+    "gpu_job": 2766,
+    "gpu_tests_passed": 95,
+    "memcheck_cases_passed": 10,
+    "memcheck_errors": 0,
+    "final_endpoint_cli_tests_passed": 39,
+    "host_regressions_passed": 73,
+    "final_host_and_evidence_tests_passed": 148,
+    "compiler_modules": 504,
+    "compiler_dependency_errors": 0,
+    "cuda_ownership_files": 338,
+    "provider_inventory_files": 20,
+    "materialization_delta": 0
+  }
+}

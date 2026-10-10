@@ -56,6 +56,7 @@ def test_repository_provider_selection_inventory_is_complete() -> None:
         "reduction_provider",
         "matrix_gemm",
         "df_matrix_gemm",
+        "df_replay_matrix_gemm",
         "lambda_matrix_gemm",
         "conventional_matrix_gemm",
         "use_cublas",

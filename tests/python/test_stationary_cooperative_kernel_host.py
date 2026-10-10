@@ -57,7 +57,7 @@ double* geometry_pair_storage;
         "  ++ao_evaluations;\n  for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];",
     )
     begin = _STATIONARY_SCIENTIFIC_KERNELS.index(
-        "__device__ bool geometry_point_setup("
+        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
     )
     end = _STATIONARY_SCIENTIFIC_KERNELS.index(
         "}  // namespace generativeqc_stationary_cuda", begin
@@ -113,7 +113,7 @@ int main() {
     auto invoke=[&](bool cooperative,size_t lane,size_t rank) {
       blockIdx.x=cooperative?lane:lane/32; threadIdx.x=cooperative?rank:lane%32;
       if(cooperative)
-        geometry_cooperative_kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
+        geometry_cooperative_kernel<false>(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
              4,3,centers,na,weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
              lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr);
       else

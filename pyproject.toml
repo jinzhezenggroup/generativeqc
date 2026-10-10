@@ -26,7 +26,13 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-cov>=6", "pytest-xdist>=3.8"]
-reference-test = ["scipy>=1.10", "pyscf==2.14.0", "mpmath>=1.3", "threadpoolctl>=3.1"]
+reference-test = [
+  "scipy>=1.10",
+  "pyscf==2.14.0",
+  "mpmath>=1.3",
+  "threadpoolctl>=3.1",
+  "array-api-strict==2.6.1",
+]
 torch = ["torch>=2"]
 autotune = ["pyscf>=2.8"]
 # Compatibility alias retained for callers that already install
@@ -55,6 +61,8 @@ wheel.py-api = "py3"
 [tool.scikit-build.wheel.force-include]
 "manifests/public_methods.json" = "generativeqc/data/public_methods.json"
 "src/runtime/compiled_execution_region.hpp" = "generativeqc_compiler/assets/src/runtime/compiled_execution_region.hpp"
+"src/runtime/compensated_atomic.cuh" = "generativeqc_compiler/assets/src/runtime/compensated_atomic.cuh"
+"src/runtime/compensated_output.hpp" = "generativeqc_compiler/assets/src/runtime/compensated_output.hpp"
 "src/runtime/cuda_graph_region.cuh" = "generativeqc_compiler/assets/src/runtime/cuda_graph_region.cuh"
 "src/tensor/cuda_graph_context.cuh" = "generativeqc_compiler/assets/src/tensor/cuda_graph_context.cuh"
 # JIT templates need their transitive local headers in installed wheels too.
@@ -82,6 +90,8 @@ wheel.py-api = "py3"
 "src/runtime/cuda_resources.cuh" = "generativeqc_compiler/assets/src/runtime/cuda_resources.cuh"
 "src/runtime/resource_cuda.cuh" = "generativeqc_compiler/assets/src/runtime/resource_cuda.cuh"
 "src/runtime/resource_ledger.hpp" = "generativeqc_compiler/assets/src/runtime/resource_ledger.hpp"
+"src/runtime/residency_boundaries.hpp" = "generativeqc_compiler/assets/src/runtime/residency_boundaries.hpp"
+"src/runtime/residency_observer.hpp" = "generativeqc_compiler/assets/src/runtime/residency_observer.hpp"
 "src/dft/cuda_grid.cu" = "generativeqc_compiler/assets/src/dft/cuda_grid.cu"
 "src/dft/ao_grid_work.hpp" = "generativeqc_compiler/assets/src/dft/ao_grid_work.hpp"
 "src/dft/grid_task_view.cuh" = "generativeqc_compiler/assets/src/dft/grid_task_view.cuh"

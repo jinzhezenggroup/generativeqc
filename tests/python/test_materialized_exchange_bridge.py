@@ -10,6 +10,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from _cpp_source_support import cpp_function_definition
 from generativeqc_compiler.integral.direct_pair_materialized_cuda import (
     emit_direct_pair_materialized_support,
 )
@@ -23,28 +24,19 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _definition(source: str, marker: str) -> str:
-    start = source.index(marker)
-    opening = source.index("{", start)
-    depth = 0
-    for end in range(opening, len(source)):
-        depth += (source[end] == "{") - (source[end] == "}")
-        if depth == 0:
-            return source[start : end + 1]
-    raise AssertionError(f"unterminated definition: {marker}")
-
-
 def test_materialized_exchange_bridge_matches_dense_contraction(
     tmp_path: Path, native_cxx: "NativeCxx"
 ) -> None:
     native = (ROOT / "src/scf/cuda/direct_bounded_dddd.cu").read_text()
-    helper = _definition(
+    # CUDA translation units need a host shim here; use named production
+    # implementations instead of matching an entire template signature.
+    helper = cpp_function_definition(
         emit_direct_pair_materialized_support(),
-        "template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1>",
+        "contract_materialized_direct_pair_fock",
+        include_template=True,
     )
-    kernel = _definition(
-        native,
-        "template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,",
+    kernel = cpp_function_definition(
+        native, "bounded_direct_dddd_streaming_kernel", include_template=True
     )
     (tmp_path / "cuda_runtime.h").write_text(
         "#pragma once\n#define __device__\n#define __host__\n"
@@ -112,10 +104,15 @@ struct MaterializedDirectPairWork {
   unsigned long long bra_preparations{}, ket_preparations{}, coulomb_preparations{};
   unsigned long long component_contractions{}, published_components{};
 };
+struct CoulombState {
+  double value{};
+  double& at(unsigned, unsigned, unsigned, unsigned) { return value; }
+};
 template<unsigned Order> struct MaterializedDirectPairRecurrence {
   PrimitivePairData first, second;
   double coefficients[4];
-  int bra[3]{}, ket[3]{}, coulomb{};
+  int bra[3]{}, ket[3]{};
+  CoulombState coulomb{};
 };
 std::array<std::size_t, 4> quartet;
 unsigned expected_mode, screening_calls, fallback_calls;
@@ -132,9 +129,15 @@ template<class T> T atom_position(DeviceBatch, int, int) { return 0; }
 int direct_ao_angular(DeviceBatch, std::size_t) { return 0; }
 void prepare_materialized_direct_pair(const PrimitivePairData&, unsigned, unsigned,
     double, double, int (&)[3]) {}
-template<unsigned Order> void fill_coulomb(double, double, double, int&) {}
+template<unsigned Order> void fill_coulomb(double, double, double, CoulombState&) {}
+template<unsigned Order> bool fill_range_coulomb(double, double, double,
+    generativeqc::integrals::CoulombRange, double, CoulombState&) {
+  assert(false && "full-range bridge must not request a range recurrence");
+  return false;
+}
 template<unsigned Order> double consume_cartesian_coulomb(
-    double, double, int, int, int, int, const int (&)[3], const int (&)[3], int) {
+    double, double, int, int, int, int, const int (&)[3], const int (&)[3],
+    const CoulombState&) {
   return 0.75;
 }
 """

@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import ast
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,6 +51,11 @@ struct StationaryPointValue {
 };
 StationaryPointValue stationary_evaluate_point(const double*, const double (*)[3], const double*) {
   return {};
+}
+constexpr bool stationary_pbe0_restricted_point_capable=false;
+StationaryPointValue stationary_evaluate_restricted_point(
+    const double* rho, const double gradient[2][3], const double* tau) {
+  return stationary_evaluate_point(rho,gradient,tau);
 }
 void ao_pullback(const double* c,const double* w,double* out) {
   for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];
@@ -171,39 +179,28 @@ def _kernel_source() -> str:
     source = ast.literal_eval(assignment.value)
     begin = source.index("__global__ void geometry_kernel(")
     end = source.index("}  // namespace generativeqc_stationary_cuda", begin)
-    ao_begin = source.index("__device__ bool geometry_point_setup(")
+    ao_begin = source.index(
+        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
+    )
     ao_end = source.index("struct GeometryBlockControl", ao_begin)
     return source[ao_begin:ao_end] + source[begin:end]
 
 
 @pytest.fixture(scope="module")
-def geometry_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def geometry_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
     declaration = re.search(r"__global__ void geometry_kernel\([^;]+;", header)
     assert declaration is not None
     directory = tmp_path_factory.mktemp("stationary-geometry")
     source, executable = directory / "probe.cpp", directory / "probe"
     source.write_text(f"{PREFIX}\n{declaration[0]}\n{_kernel_source()}\n{MAIN}")
-    compiled = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-Werror=uninitialized",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    return native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=["-std=c++17", "-O2", "-Werror=uninitialized"],
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
-    return executable
 
 
 @pytest.mark.parametrize(
@@ -223,16 +220,15 @@ def test_emitted_geometry_owner_routes(
     assert process.returncode == 0, (arguments, process.returncode, process.stderr)
 
 
-def test_actual_becke_helper_inside_emitted_geometry_kernel(tmp_path: Path) -> None:
+def test_actual_becke_helper_inside_emitted_geometry_kernel(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     """Compare cache/direct through the real emitted kernel, with AO/XC stubs."""
     from generativeqc_compiler.xc.grid_native import (
         emit_grid_adjoint,
         emit_grid_partials,
     )
 
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     prefix = PREFIX[: PREFIX.index("int local_norm=")]
     source = tmp_path / "becke_kernel.cpp"
     source.write_text(
@@ -294,21 +290,9 @@ int main() {
 }
 """
     )
-    executable = tmp_path / "becke_kernel"
-    result = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-ffp-contract=off",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+    executable = native_cxx.build_executable(
+        [source],
+        tmp_path / "becke_kernel",
+        compile_args=["-std=c++17", "-O2", "-ffp-contract=off"],
     )
-    assert result.returncode == 0, result.stdout + result.stderr
     subprocess.run([str(executable)], check=True, timeout=30)

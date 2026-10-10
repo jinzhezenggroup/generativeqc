@@ -1,0 +1,10 @@
+{
+  "name": "df_ccsd_spectator_pairs",
+  "outputs": [
+    "generated/generated_df_ccsd_spectator_pairs_cpu.hpp",
+    "generated/generated_df_ccsd_spectator_pairs_cuda.cuh",
+    "generated/generated_df_ccsd_spectator_pairs_cuda.cu"
+  ],
+  "owner": "python/generativeqc_compiler/cc/df_spectator_pairs.py",
+  "scope": "Compiler-proved free-occupied-spectator folding of the original DF virtual ladder, full diagonal virtual blocks, storage reflection and positive scalar projection majorant from the original TensorIR. Native owner admission preserves original tau, the original full action arena and independently expanded physical replay; no alternate CC equation or response lowering is introduced."
+}

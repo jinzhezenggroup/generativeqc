@@ -10,11 +10,12 @@ from typing import Any
 
 import pytest
 import test_ks_point_batch_resources as point_budget
+from _cpp_source_support import cpp_function_definition, cpp_record_definition
 from generativeqc import ResourceBudget, resources_ks
 from generativeqc.resources_native import NativeDeviceLedger
 from generativeqc_compiler.common.resources import plan_resources
 from test_coulomb_optional_allocation import compile_cached_probe
-from test_direct_jk_optional_allocation import STUBS, _definition
+from test_direct_jk_optional_allocation import STUBS
 
 ROOT = Path(__file__).resolve().parents[2]
 native_probe = point_budget.native_probe
@@ -93,7 +94,9 @@ MD_STUBS = r"""
 #include <type_traits>
 #define __host__
 #define __device__
-template<class T> struct Vec3 { T x,y,z; };
+// Use actual MD-J types, constants and Vec3/DeviceBatch ABI from production.
+#include "scf/cuda/direct_md_j.hpp"
+using namespace generativeqc::scf::cuda_execution;
 struct HostBatch {
   std::size_t nbf=8;
   std::vector<unsigned> shell_angular{1,2};
@@ -139,13 +142,16 @@ void exercise(bool ledger,int stage,int kind,const char* disabled) {
       propagated=true; assert(f.status!=GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     }
     const bool eligible=!ledger && !(disabled && std::strcmp(disabled,"1")==0);
+    const bool faulted=stage>=0 && allocation_index>stage;
     assert(eligible || allocation_index==0);
-    if(!eligible || (stage>=0 && kind<=2)) {
+    if(!eligible || (faulted && kind<=2)) {
       assert(!propagated && !owner.md_j.minimum_bounds);
       assert(owner.allocations.size()==1 && owner.device_bytes==8);
       direct_jk_check(cudaGetLastError());
-    } else if(stage<0) {
+    } else if(!faulted) {
       assert(!propagated && owner.md_j.minimum_bounds && owner.device_bytes>8);
+      const char* counts=std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
+      assert(bool(owner.md_j.work_counts)==bool(counts && std::strcmp(counts,"1")==0));
     } else {
       assert(propagated);
     }
@@ -157,7 +163,7 @@ int main() {
     // The same construction path is revisited after ledger binding/unbinding.
     for(bool ledger:{false,true,true,false}) {
       exercise(ledger,-1,1,disabled);
-      for(int stage=0;stage<16;++stage)
+      for(int stage=0;stage<20;++stage)
         for(int kind:{0,1,3,6}) exercise(ledger,stage,kind,disabled);
     }
   }
@@ -165,45 +171,43 @@ int main() {
 """
 
 
+@pytest.mark.parametrize("counted", [False, True])
 def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    counted: bool,
 ) -> None:
+    """Optional diagnostic storage obeys the same admission and rollback cap."""
+    if counted:
+        monkeypatch.setenv("GENERATIVEQC_MD_J_WORK_COUNTS", "1")
+    else:
+        monkeypatch.delenv("GENERATIVEQC_MD_J_WORK_COUNTS", raising=False)
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
-    header = (ROOT / "src/scf/cuda/direct_md_j.hpp").read_text()
-    types = "\n".join(
-        _definition(header, "struct " + name) + ";"
-        for name in ("MdJPair", "MdJPrimitive", "MdJView")
-    )
-    constants = "\n".join(
-        header[header.index("inline constexpr std::size_t " + name) :].split(";", 1)[0]
-        + ";"
-        for name in ("kMdJResidentCap", "kMdSourceFixedBytes")
-    )
     # Reuse the existing failure/ownership runtime, adding the real MD layout.
     stubs = STUBS.replace(
         "struct CudaDirectJkPlan {",
-        MD_STUBS.split("struct HostBatch", 1)[0]
-        + types
-        + "\nstruct CudaDirectJkPlan {",
+        MD_STUBS.split("struct HostBatch", 1)[0] + "\nstruct CudaDirectJkPlan {",
     ).replace(
         "std::size_t device_bytes = 0;",
         "std::size_t device_bytes = 0;\nMdJView md_j; int batch=0; double* bounds=nullptr;"
         " double screening_tolerance=1e-12; struct { const char* schedule; } diagnostic;",
     )
     definitions = [
-        constants,
         "struct HostBatch" + MD_STUBS.split("struct HostBatch", 1)[1],
-        _definition(
-            header, "__host__ __device__ constexpr unsigned md_j_hermite_count("
+        cpp_record_definition(source, "MdJHost") + ";",
+        cpp_function_definition(source, "direct_jk_check"),
+        cpp_function_definition(
+            source, "direct_jk_optional_storage", include_template=True
         ),
-        _definition(source, "struct MdJHost") + ";",
-        _definition(source, "void direct_jk_check("),
-        _definition(source, "template <class Prepare, class Restore>"),
     ]
     start = source.index("    MdJHost md_host;")
-    end = source.index("    auto& info =", start)
+    # Isolate incumbent MD admission from the later optional materialized owner.
+    end = source.index("    prepare_materialized_values();", start)
     driver = MD_DRIVER.replace("MD_PREPARATION", source[start:end])
+    # The host compiler has no CUDA SDK; only its runtime type declarations
+    # are supplied by the controlled shim. All MD-J structs are real headers.
+    (tmp_path / "cuda_runtime_api.h").write_text("#pragma once\n")
     cpp, binary = tmp_path / "md.cpp", tmp_path / "md"
     cpp.write_text(stubs + "\n".join(definitions) + driver)
-    compile_cached_probe(cpp, binary)
+    compile_cached_probe(cpp, binary, include_dirs=(tmp_path,))
     subprocess.run([str(binary)], check=True, timeout=10)
