@@ -147,7 +147,7 @@ def test_generated_df_source_staging_and_same_hamiltonian(
         assert staged["tile_count"] >= 1
         assert staged["host_staged_tiles"] >= 1
         assert staged["device_handoffs"] == 0
-        assert staged["subsequent_h2d_bytes"] == 0
+        assert staged["subsequent_h2d_bytes"] is None
         with DFProvider(snapshot, source, factor, auxiliary_tile=3) as provider:
             result = restricted_mp2(snapshot, provider)
             np.testing.assert_allclose(
@@ -166,5 +166,5 @@ def test_generated_df_source_staging_and_same_hamiltonian(
             assert cached.diagnostics["generated_bytes"] > 0
             assert cached.diagnostics["d2h_bytes"] > 0
             assert cached.diagnostics["host_transform_calls"] > 0
-            assert cached.diagnostics["subsequent_h2d_bytes"] == 0
+            assert cached.diagnostics["subsequent_h2d_bytes"] is None
         assert source.source_device_bytes > 0

@@ -132,6 +132,8 @@ def test_df_raw_b_blocks_and_same_hamiltonian_mp2(
     with DFProvider(s, source, metric, axis_tile=2, auxiliary_tile=3) as provider:
         block = MOBlock.from_spaces(s, "ovov")
         result = provider.get(block)
+        assert result.diagnostics["subsequent_h2d_bytes"] is None
+        assert provider.statistics["subsequent_h2d_bytes"] is None
         np.testing.assert_allclose(
             result.to_host(), a["df_mo"][np.ix_(*block.slots)], atol=1e-11, rtol=1e-10
         )

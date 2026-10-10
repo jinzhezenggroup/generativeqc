@@ -3,12 +3,14 @@
 #include <cstdlib>
 
 #include "runtime/allocation_measurement.hpp"
+#include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 
 CudaResources::~CudaResources() {
   std::lock_guard<std::mutex> allocation_lock(runtime::allocation_measurement_mutex);
+  const runtime::ResidencyExecution source_execution(runtime::ResidencyOwner::hf_bucket_resources);
   if (device_id_ >= 0) (void)cudaSetDevice(device_id_);
   eigen_handles_.reset();
   if (blas_ != nullptr) (void)cublasDestroy(blas_);
@@ -28,7 +30,11 @@ CudaResources::~CudaResources() {
       (void)runtime::resource_cuda_free_async(direct_tile_validation_, stream_);
     }
     if (arena_ != nullptr) (void)runtime::resource_cuda_free_async(arena_, stream_);
-    (void)cudaStreamSynchronize(stream_);
+    // Resource release can run inside an endpoint, not just during final close.
+    // Declare its lifetime boundary without turning it into publication/setup.
+    (void)runtime::residency_stream_synchronize(source_execution, runtime::ResidencyRole::lifetime,
+                                                runtime::ResidencySite::hf_bucket_release_fence,
+                                                stream_);
     (void)cudaStreamDestroy(stream_);
   }
   std::free(solver_host_workspace_);

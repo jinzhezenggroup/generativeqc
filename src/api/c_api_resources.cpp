@@ -9,6 +9,8 @@
 #include "dft/scf_diagnostic.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
+#include "runtime/residency_boundaries.hpp"
+#include "runtime/residency_observer.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
 
@@ -20,6 +22,27 @@
 #endif
 
 extern "C" {
+
+/** Read immutable source tags from this actual library, with no CUDA or heap
+ * work. Null is an unknown tag, not an inferred role/payload classification. */
+const char* generativeqc_residency_boundary_name_v1(std::uint64_t category, std::uint64_t value) {
+  return generativeqc::runtime::residency_boundary_name(category, value);
+}
+
+/** Bind a private observation-only callback on the current submitting thread.
+ * The caller keeps its callback/code/context alive through unbind. No CUDA or
+ * allocation is performed, and a second observer cannot replace the first. */
+int generativeqc_residency_observer_bind_v1(generativeqc::runtime::ResidencyObserver callback,
+                                          void* context) {
+  return generativeqc::runtime::bind_residency_observer(callback, context);
+}
+
+/** Only the matching owner can detach; retain dispatch errors for the receipt.
+ * Exceptions or recursive callbacks are observation failures, not solver errors. */
+int generativeqc_residency_observer_unbind_v1(generativeqc::runtime::ResidencyObserver callback,
+                                            void* context, std::uint64_t* errors) {
+  return generativeqc::runtime::unbind_residency_observer(callback, context, errors);
+}
 
 /** Private prepared-request ledger. Creating it performs no CUDA operation. */
 void* generativeqc_resource_ledger_create_v1(std::size_t bytes, int device) {

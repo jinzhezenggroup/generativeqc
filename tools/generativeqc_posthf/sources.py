@@ -1110,7 +1110,11 @@ class CudaDFSource(NativeSource):
             return out
 
     def source_metrics(self) -> typing.Any:
-        """Cumulative generated-value traffic for the explicit compatibility source."""
+        """Cumulative generated-value traffic for the explicit compatibility source.
+
+        Subsequent consumers are outside this owner's observation scope. An
+        unknown H2D count must not be reported as measured zero round trips.
+        """
         with self._lock:
             self._check_open()
             counters = (ct.c_uint64 * 5)()
@@ -1129,7 +1133,7 @@ class CudaDFSource(NativeSource):
                 "tile_count": int(counters[2]),
                 "host_staged_tiles": int(counters[3]),
                 "device_handoffs": int(counters[4]),
-                "subsequent_h2d_bytes": 0,
+                "subsequent_h2d_bytes": None,
                 "generation_ms": float(values[0]),
                 "transfer_ms": float(values[1]),
                 "endpoint_ms": float(values[2]),
