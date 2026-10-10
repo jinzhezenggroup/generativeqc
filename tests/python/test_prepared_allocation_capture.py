@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from tools import capture_prepared_allocations as coordinator
 from tools.audit_replay_allocations import SCHEMA_V2, InvalidReceipt, verify_receipt
 from tools.capture_prepared_allocations import (
     DEVICE,
@@ -29,6 +30,173 @@ from tools.capture_prepared_allocations import (
     workload,
     write_new,
 )
+
+
+@pytest.fixture
+def identity_inputs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
+    """Isolate device provenance from the separately tested source manifest."""
+    monkeypatch.setenv("SLURM_JOB_ID", "test-job")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER", raising=False)
+    manifest = {
+        "source_commit": "a" * 40,
+        "source_tree": "b" * 40,
+        "entries": [
+            {"path": path}
+            for path in (
+                "tools/capture_prepared_allocations.py",
+                "tools/replay_allocation_capture.py",
+                "tools/allocation_audit_marker.cpp",
+                "tools/audit_replay_allocations.py",
+                "python/generativeqc/resources_native.py",
+                "src/runtime/resource_ledger.hpp",
+                "src/api/c_api_resources.cpp",
+            )
+        ],
+    }
+    monkeypatch.setattr(coordinator, "load", lambda _: manifest)
+    monkeypatch.setattr(coordinator, "verify_source", lambda *_: None)
+    monkeypatch.setattr(coordinator, "digest", lambda _: "c" * 64)
+    return SimpleNamespace(
+        source_manifest=tmp_path / "source.json",
+        library=tmp_path / "library.so",
+        marker=tmp_path / "marker.so",
+        method="rhf",
+        toolchain="device identity fixture",
+    )
+
+
+def device_runtime(
+    *,
+    count_status: int = 0,
+    count: int = 1,
+    pci_status: int = 0,
+    bus: bytes = b"0000:03:00.0",
+) -> Any:
+    """Model runtime visibility independently of the NVML device index."""
+
+    def get_count(output: Any) -> int:
+        output._obj.value = count
+        return count_status
+
+    def get_bus(output: Any, length: int, ordinal: int) -> int:
+        assert ordinal == 0 and length >= 13
+        output.value = bus
+        return pci_status
+
+    return SimpleNamespace(cudaGetDeviceCount=get_count, cudaDeviceGetPCIBusId=get_bus)
+
+
+@pytest.mark.parametrize("visible", ["0", "3", "GPU-assigned"])
+@pytest.mark.parametrize("order", [None, "FASTEST_FIRST", "PCI_BUS_ID"])
+def test_identity_uses_runtime_device_instead_of_nvml_ordinal(
+    monkeypatch: pytest.MonkeyPatch,
+    identity_inputs: Any,
+    visible: str,
+    order: str | None,
+) -> None:
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+    if order is not None:
+        monkeypatch.setenv("CUDA_DEVICE_ORDER", order)
+    loaded = []
+    monkeypatch.setattr(
+        coordinator.ctypes,
+        "CDLL",
+        lambda path: loaded.append(path) or device_runtime(),
+    )
+    queries = []
+
+    def query(arguments: list[str], **_: Any) -> str:
+        queries.append(arguments)
+        # Reusing a numeric visibility token returns a different, valid UUID.
+        return (
+            "GPU-assigned, Disabled\n"
+            if "--id=0000:03:00.0" in arguments
+            else "GPU-wrong, Disabled\n"
+        )
+
+    monkeypatch.setattr(coordinator.subprocess, "check_output", query)
+    assert coordinator.identity(identity_inputs)["device"] == "GPU-assigned/visible:0"
+    assert loaded == [str(identity_inputs.library.resolve())]
+    assert len(queries) == 1
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == visible
+
+
+@pytest.mark.parametrize(
+    "options,match",
+    [
+        ({"count_status": 100}, "exactly one"),
+        ({"count": 0}, "exactly one"),
+        ({"count": 2}, "exactly one"),
+        ({"pci_status": 100}, "cannot identify"),
+        ({"bus": b""}, "cannot identify"),
+    ],
+)
+def test_identity_rejects_failed_runtime_probe_without_nvml_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    identity_inputs: Any,
+    options: dict[str, Any],
+    match: str,
+) -> None:
+    monkeypatch.setattr(coordinator.ctypes, "CDLL", lambda _: device_runtime(**options))
+
+    def forbidden(*_: Any, **__: Any) -> str:
+        pytest.fail("NVML must not substitute a device after a failed CUDA probe")
+
+    monkeypatch.setattr(coordinator.subprocess, "check_output", forbidden)
+    with pytest.raises(InvalidReceipt, match=match):
+        coordinator.identity(identity_inputs)
+
+
+@pytest.mark.parametrize("visible", ["", "0,1", "MIG-instance"])
+def test_identity_rejects_unsupported_visibility_before_loading_runtime(
+    monkeypatch: pytest.MonkeyPatch, identity_inputs: Any, visible: str
+) -> None:
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+
+    def forbidden(*_: Any, **__: Any) -> Any:
+        pytest.fail("invalid visibility must fail before device access")
+
+    monkeypatch.setattr(coordinator.ctypes, "CDLL", forbidden)
+    monkeypatch.setattr(coordinator.subprocess, "check_output", forbidden)
+    with pytest.raises(InvalidReceipt, match="Slurm GPU|MIG capture"):
+        coordinator.identity(identity_inputs)
+
+
+@pytest.mark.parametrize(
+    "uuid", ["", "not-a-uuid, Disabled", "GPU-one, Disabled\nGPU-two, Disabled"]
+)
+def test_identity_rejects_ambiguous_uuid(
+    monkeypatch: pytest.MonkeyPatch, identity_inputs: Any, uuid: str
+) -> None:
+    monkeypatch.setattr(coordinator.ctypes, "CDLL", lambda _: device_runtime())
+    monkeypatch.setattr(coordinator.subprocess, "check_output", lambda *_, **__: uuid)
+    with pytest.raises(InvalidReceipt, match="ambiguous assigned GPU UUID"):
+        coordinator.identity(identity_inputs)
+
+
+@pytest.mark.parametrize("mode", ["Enabled", "", "unknown"])
+def test_identity_rejects_numeric_mig_or_unknown_parent_mode(
+    monkeypatch: pytest.MonkeyPatch, identity_inputs: Any, mode: str
+) -> None:
+    monkeypatch.setattr(coordinator.ctypes, "CDLL", lambda _: device_runtime())
+    monkeypatch.setattr(
+        coordinator.subprocess,
+        "check_output",
+        lambda *_, **__: f"GPU-parent, {mode}\n",
+    )
+    with pytest.raises(InvalidReceipt, match="MIG-enabled or unknown"):
+        coordinator.identity(identity_inputs)
+
+
+def test_identity_accepts_gpu_without_mig_support(
+    monkeypatch: pytest.MonkeyPatch, identity_inputs: Any
+) -> None:
+    monkeypatch.setattr(coordinator.ctypes, "CDLL", lambda _: device_runtime())
+    monkeypatch.setattr(
+        coordinator.subprocess, "check_output", lambda *_, **__: "GPU-assigned, [N/A]\n"
+    )
+    assert coordinator.identity(identity_inputs)["device"] == "GPU-assigned/visible:0"
 
 
 @pytest.mark.parametrize("method", ["rhf", "uhf"])

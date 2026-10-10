@@ -2,7 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
-#include "runtime/residency_boundaries.hpp"
+#include "residency_boundaries.hpp"
 
 namespace generativeqc::runtime {
 

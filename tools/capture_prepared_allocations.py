@@ -274,12 +274,46 @@ def identity(arguments: argparse.Namespace) -> dict[str, Any]:
     _require(bool(os.environ.get("SLURM_JOB_ID")), "GPU capture/pinning requires Slurm")
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     _require(bool(visible) and "," not in visible, "request exactly one Slurm GPU")
-    uuid = subprocess.check_output(
-        ["nvidia-smi", f"--id={visible}", "--query-gpu=uuid", "--format=csv,noheader"],
+    _require(not visible.startswith("MIG-"), "MIG capture is not supported")
+    # NVML ordinals need not match CUDA's ordering or scheduler remapping.
+    # Resolve visible ordinal zero through the same library used for capture.
+    native = ctypes.CDLL(str(arguments.library.resolve()))
+    count = ctypes.c_int()
+    native.cudaGetDeviceCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    native.cudaGetDeviceCount.restype = ctypes.c_int
+    _require(
+        native.cudaGetDeviceCount(ctypes.byref(count)) == 0 and count.value == 1,
+        "expected exactly one visible CUDA device",
+    )
+    pci_bus = native.cudaDeviceGetPCIBusId
+    pci_bus.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+    pci_bus.restype = ctypes.c_int
+    bus = ctypes.create_string_buffer(32)
+    _require(
+        pci_bus(bus, len(bus), 0) == 0 and bool(bus.value),
+        "cannot identify visible CUDA device 0",
+    )
+    bus_id = bus.value.decode("ascii")
+    device = subprocess.check_output(
+        [
+            "nvidia-smi",
+            f"--id={bus_id}",
+            "--query-gpu=uuid,mig.mode.current",
+            "--format=csv,noheader",
+        ],
         text=True,
     ).strip()
+    fields = [value.strip() for value in device.split(",")]
+    _require(len(fields) == 2 and "\n" not in device, "ambiguous assigned GPU UUID")
+    uuid, mig_mode = fields
     _require(
         uuid.startswith("GPU-") and "\n" not in uuid, "ambiguous assigned GPU UUID"
+    )
+    # A numeric visibility token can also select a MIG instance. Its PCI ID
+    # names the parent GPU, not the instance; do not publish that parent UUID.
+    _require(
+        mig_mode in ("Disabled", "[N/A]"),
+        "MIG-enabled or unknown GPU mode is unsupported",
     )
     manifest = load(arguments.source_manifest)
     verify_source(ROOT, manifest)

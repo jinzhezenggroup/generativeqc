@@ -165,6 +165,52 @@ independent numerical `2 I` response-buffer hoist count reduction `1024 -> 1`.
 This completes the missing runtime integration locally, not a merge or GitHub
 issue closure. Other pathways retain their own unqualified ownership scopes.
 
+## Isolated non-rigid PR qualification (2026-10-10)
+
+Non-rigid implementation/test freeze (before the later device-identity fix): commit
+`367bd7a904b57522287943489e8f98df81b63b30`, tree
+`1840d341d485f9f7c8edec060b2163e9116414b7`, 9,391 entries. Export verification
+before and after the complete Release/sm_120 build passes. Verified ccache 4.5.1
+is reused for C++/CUDA compilation and the compiled marker, with actual compiler
+commands and before/after shared-cache statistics retained. The first system
+Python lacked NumPy; that failed generation attempt is retained separately and
+the successful configuration explicitly selects the existing profiling Python.
+The no-Git remote export also cannot execute the Git-index fixture; the complete
+checkout-host suite instead runs that fixture plus real Memray tests, reporting
+**205 passed, 57 subtests passed**, with no skips.
+
+Slurm job **6986**, `main`/`node1`, one `gpu:5090:1`, finite 15-minute limit,
+preserves assigned visibility `1` and completes in 24 seconds with
+`COMPLETED`, `ExitCode=0:0`. Both RHF/UHF joint 13-window captures pass the strict
+current verifier, and the strengthened resource regressions report **2 passed**.
+Warm energy/force owned-device request counts and requested bytes are zero;
+close/tail leave zero owned-device live bytes. Host counts remain nonzero:
+RHF energy/force **513/528** requests and **164403/165131** bytes; UHF
+**515/530** and **165795/166523**. Raw host events number **8644/8688**.
+
+Actual and ordinary iteration trajectories match, including the genuinely
+displaced geometry's `[2,8,2]` rather than the old translation's `[2,2,2]`.
+Maximum matched energy/force errors are `2.842170943040401e-14` Eh and
+`4.496403249731884e-15` Eh/bohr. The GPU regression also requires a changed
+energy and matched displaced energy/forces while retaining resource identity.
+This is observer/resource non-regression, not a new independent method oracle.
+
+The separately retained host hoist captures still prove zeroed-vector requests
+`1024 -> 1` with independent exact returned-array equality to `2 I`. Total
+observed heap requests are `2050 -> 1026`, requested bytes
+`25165840 -> 16785408`, and peaks `8405008 -> 8404992`; peak storage is not
+misrepresented as the same reduction as request count or cumulative bytes.
+No complete-endpoint speedup, global heap/device-zero or RSS claim is made.
+
+Qualified library SHA-256:
+`598d7b4851ba81142609ba17ff6460abe3ff35c6b0577344700a0ac40a2c842e`;
+marker SHA-256:
+`f34fbdf9a0d7d7ac10c7b4a0b2a9f7432153da082a5d82f6598dd0ba37682d3c`.
+Raw captures, contracts, source/build verification, binaries, controller state,
+fixtures and the independently recomputed summary remain under ignored
+`.artifacts/issue1630-pr-qualified/`, locally and on `n1`. This appendix
+postdates the freeze and changes no qualified implementation or test source.
+
 ## Revisit when
 
 The current audit workload displaces only the final atom of each ragged item
