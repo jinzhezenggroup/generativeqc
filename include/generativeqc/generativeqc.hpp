@@ -402,9 +402,17 @@ class Calculation {
    * and destruction. No concurrent execute/query or destroy/use is supported.
    * @units Energy Hartree, forces -dE/dR Hartree/Bohr, atom-major xyz order.
    */
+  /** Query the exact prepared method/backend/system contract, not the
+   * family-wide registry. No numerical work or Python runtime is involved. */
+  [[nodiscard]] generativeqc_property_flags supported_properties() const {
+    generativeqc_property_flags properties{};
+    check(generativeqc_calculation_get_supported_properties_v1(handle_, &properties));
+    return properties;
+  }
+
   CalculationResult execute(generativeqc_property_flags properties = GENERATIVEQC_PROPERTY_ENERGY) {
     CalculationResult result;
-    if (!properties || (properties & ~capabilities_.supported_properties))
+    if (!properties || (properties & ~supported_properties()))
       throw Error(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "requested method property is unsupported");
     if (properties & GENERATIVEQC_PROPERTY_FORCES) result.forces.emplace(atom_count_ * 3);
     generativeqc_result_descriptor output{
