@@ -406,6 +406,65 @@ void pbe0_composition_snapshot() {
           "PBE0 RKS accepted an unrestricted exchange coefficient");
 }
 
+void force_preparation_failure_recovery() {
+  Fixture fixture;
+  auto method = lda_method();
+  method.method = GENERATIVEQC_METHOD_PBE_RKS;
+  method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+  method.density_fitting_relative_threshold = 1.0e-10;
+  generativeqc_system* systems[]{fixture.system, fixture.system};
+  generativeqc_batch* batch = nullptr;
+  require(generativeqc_batch_prepare(fixture.context, systems, 2, &method,
+                                     GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
+                                     &batch) == GENERATIVEQC_STATUS_SUCCESS,
+          "force recovery batch preparation failed");
+  std::unique_ptr<generativeqc_batch, decltype(&generativeqc_batch_destroy)> owner(
+      batch, &generativeqc_batch_destroy);
+  std::array<std::array<double, 6>, 2> forces{};
+  std::array<generativeqc_batch_item_result_descriptor, 2> results{};
+  const auto execute = [&](const generativeqc_batch_input_descriptor* inputs = nullptr) {
+    for (std::size_t i = 0; i < results.size(); ++i) {
+      results[i] = {};
+      results[i].struct_size = sizeof(results[i]);
+      results[i].abi_version = GENERATIVEQC_ABI_VERSION;
+      results[i].forces = forces[i].data();
+      results[i].force_count = forces[i].size();
+      forces[i].fill(1234.0);
+    }
+    return generativeqc_batch_execute(batch, inputs, inputs ? 2 : 0, results.data(),
+                                      results.size());
+  };
+  require(execute() == GENERATIVEQC_STATUS_SUCCESS &&
+              results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+              results[1].status == GENERATIVEQC_STATUS_SUCCESS,
+          "force recovery initial batch execution failed");
+  const auto expected = forces;
+  const std::array<double, 6> changed{0.0, 0.0, -0.7, 0.0, 0.0, 0.705};
+  std::array<generativeqc_batch_input_descriptor, 2> inputs{};
+  for (auto& input : inputs) {
+    input.struct_size = sizeof(input);
+    input.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  inputs[1].coordinates = changed.data();
+  inputs[1].coordinate_count = changed.size();
+  fail_allocation_bytes = 2 * 48 * 16 * 32 * 3 * sizeof(double);
+  require(execute(inputs.data()) == GENERATIVEQC_STATUS_SUCCESS && !fail_allocation_bytes &&
+              results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+              results[1].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+          "force geometry preparation failure was not isolated");
+  for (double force : forces[1])
+    require(force == 1234.0, "failed force geometry published a partial result");
+  require(execute() == GENERATIVEQC_STATUS_SUCCESS &&
+              results[0].status == GENERATIVEQC_STATUS_SUCCESS &&
+              results[1].status == GENERATIVEQC_STATUS_SUCCESS,
+          "force replay could not recover a missing geometry owner");
+  for (std::size_t i = 0; i < forces.size(); ++i)
+    for (std::size_t coordinate = 0; coordinate < forces[i].size(); ++coordinate)
+      require(std::isfinite(forces[i][coordinate]) &&
+                  std::abs(forces[i][coordinate] - expected[i][coordinate]) < 1e-4,
+              "recovered force differs from the last good geometry");
+}
+
 void warm_preparation_failure(bool retained_plan) {
   Fixture fixture;
   auto method = lda_method();
@@ -631,6 +690,7 @@ int main() {
     automatic_libxc_semilocal_plan();
     pbe0_composition_snapshot();
     mixed_df_rsh_cpu_endpoints();
+    force_preparation_failure_recovery();
     warm_preparation_failure(false);
     warm_preparation_failure(true);
     warm_execution_allocation_failure();
