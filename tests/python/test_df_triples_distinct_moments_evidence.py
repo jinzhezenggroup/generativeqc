@@ -7,12 +7,34 @@ import lzma
 from pathlib import Path
 
 import numpy as np
-
+import pytest
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = ROOT / "benchmarks/results/df-triples-distinct-moments-20261011"
+
+
+def _assert_native_owner_layout(
+    qualified: bytes, current: bytes, identity: dict
+) -> None:
+    """Bind the measured source to exactly the three reviewed space insertions."""
+    layout = identity["native_owner_layout_delta"]
+    assert layout["schema"] == "generativeqc.source-leading-space-delta.v1"
+    assert layout["path"] == "src/cc/df_triples_cuda.cu"
+    assert hashlib.sha256(qualified).hexdigest() == layout["qualified_sha256"]
+    assert hashlib.sha256(current).hexdigest() == layout["current_sha256"]
+    lines = qualified.splitlines(keepends=True)
+    edits = layout["edits"]
+    assert len(edits) == 3
+    assert len({entry["line"] for entry in edits}) == 3
+    for entry in edits:
+        before, after = entry["before"].encode(), entry["after"].encode()
+        assert after == b" " + before
+        index = entry["line"] - 1
+        assert 0 <= index < len(lines) and lines[index] == before
+        lines[index] = after
+    assert b"".join(lines) == current
 
 
 def test_publication_retains_hash_bound_inputs_sources_and_unpooled_scope() -> None:
@@ -62,19 +84,17 @@ def test_publication_retains_hash_bound_inputs_sources_and_unpooled_scope() -> N
             == expected
         )
     owner = ROOT / "src/cc/df_triples_cuda.cu"
-    qualified_owner = restored["qualified-source/src/cc/df_triples_cuda.cu"].decode()
-    current_owner = owner.read_text()
-    assert 'R"' not in qualified_owner and 'R"' not in current_owner
-    assert "\\\n" not in qualified_owner and "\\\n" not in current_owner
-    # The format bot changes leading indentation only. Retain the exact measured
-    # bytes/hash above; do not silently allow token, literal or line-wrap drift.
-    assert [line.lstrip(" \t") for line in current_owner.splitlines()] == [
-        line.lstrip(" \t") for line in qualified_owner.splitlines()
-    ]
+    qualified_owner = restored["qualified-source/src/cc/df_triples_cuda.cu"]
+    current_owner = owner.read_bytes()
     reconstruction = evidence["source_reconstruction"]
     assert reconstruction["production_objects_recompiled"] == 2
     identity = reconstruction["master_source_assessment"]
-    assert identity["native_owner_byte_identical_to_qualified"]
+    assert not identity["native_owner_byte_identical_to_qualified"]
+    _assert_native_owner_layout(qualified_owner, current_owner, identity)
+    assert (
+        identity["native_owner_layout_delta"]["qualified_sha256"]
+        == build["source_sha256"]["source/src/cc/df_triples_cuda.cu"]
+    )
     assert (
         identity["generated_byte_identical_to_qualified"] == build["generated_sha256"]
     )
@@ -187,3 +207,28 @@ def test_complete_endpoint_gain_reduces_only_declared_triples_work() -> None:
     )
     assert summary["ccsd_capacity_delta"] == 0
     assert summary["whole_process_peak_rss_delta"] == 1212416
+
+
+@pytest.mark.parametrize(
+    "mutation", ("extra-indent", "token", "line-ending", "trailing-line")
+)
+def test_native_layout_binding_rejects_unrecorded_drift(mutation: str) -> None:
+    evidence = load_publication_record(BUNDLE)
+    identity = evidence["source_reconstruction"]["master_source_assessment"]
+    receipts = json.loads(
+        lzma.decompress((BUNDLE / "raw-receipts.json.xz").read_bytes())
+    )
+    receipt = receipts["qualified-source/src/cc/df_triples_cuda.cu"]
+    assert receipt["encoding"] == "utf-8"
+    qualified = receipt["data"].encode()
+    current = (ROOT / "src/cc/df_triples_cuda.cu").read_bytes()
+    _assert_native_owner_layout(qualified, current, identity)
+    altered = {
+        "extra-indent": b" " + current,
+        "token": current.replace(b" == 64", b" == 32", 1),
+        "line-ending": current.replace(b"\n", b"\r\n", 1),
+        "trailing-line": current + b"\n",
+    }[mutation]
+    assert altered != current
+    with pytest.raises(AssertionError):
+        _assert_native_owner_layout(qualified, altered, identity)

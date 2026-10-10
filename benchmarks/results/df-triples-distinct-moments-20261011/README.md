@@ -35,8 +35,12 @@ patch base 9b5b4849629f4ace4ffb7f00bf37dc4d5dd0a492, not an assertion that its
 entire tree was built. Baseline/candidate library hashes and complete commands
 are retained. No new #2215/#2217 HF, #2219 force/response, broad statistical
 performance or production qualification is inferred. Parent #2221 merged as
-5da28bdca: its tree is equivalent, consumed sources match, and current compiler
-regeneration is byte-identical to all three qualified artifacts. Unrelated
+5da28bdca: its tree is equivalent, consumed equation sources match, and current compiler
+regeneration is byte-identical to all three qualified artifacts. The current
+native owner differs from the measured source by exactly three leading-space
+insertions from formatting. The validation envelope separately pins both raw
+source hashes and those exact line edits; every other byte must match. The
+measured source/build hashes and all 75 raw receipts remain unchanged. Unrelated
 master changes did not trigger another endpoint or passing GPU matrix.
 
 production-source.patch.gz reconstructs the two modified files from the pinned

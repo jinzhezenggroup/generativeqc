@@ -83,7 +83,8 @@ objects change, and borrowed link inputs are checksum-verified immutable.
 It does not qualify newer #2215/#2217 HF or #2219 force/response behavior.
 Parent #2221 merged as 5da28bdca; its squash tree equals the rebased parent tree.
 Latest-master regeneration matches all three GPU-qualified artifacts byte for
-byte, and the native owner matches the compiled prototype. Rebase/merging alone
+byte; the native owner is semantically unchanged apart from the three recorded
+leading-space insertions described below. Rebase/merging alone
 does not require repeated GPU tests when those consumed identities are unchanged.
 Broad/statistical performance and production/force stages remain `not-run`.
 
@@ -109,3 +110,16 @@ Master advanced to 2b68d10a9 (#2218, offline CPU XC AOT dependency closures).
 It changes no DF triples owner, generator or CC/scalar/tensor equation consumer.
 This is an impact assessment, not new CPU-XC numerical qualification. The prior
 measured source/library and current-master HF/force limits remain unchanged.
+
+
+## Exact layout binding clarification
+
+The initial post-publication comparison accepted arbitrary leading-indentation
+changes. Its replacement binds the measured owner and current owner by separate
+SHA-256 values and records exactly the three one-space insertions. The test
+replays those edits byte-for-byte and rejects any other indentation, token,
+line-ending or trailing-line change. The current-assessment byte-identical flag
+is false; the measured source/build hashes, reconstruction patch, original
+numerical gates and all 75 raw receipts remain unchanged. Regenerated .hpp,
+.cuh and .cu artifacts still match the GPU-qualified hashes. No GPU rerun or
+latest-master HF/force qualification is inferred from this provenance repair.
