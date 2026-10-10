@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "generativeqc.replay-allocations.v1"
+SCHEMA_V2 = "generativeqc.replay-allocations.v2"
 PHASES = {
     "setup",
     "geometry_rebuild",
@@ -88,19 +89,42 @@ def _domain(value: Any) -> tuple[str, str, str]:
     return owner, space, counter
 
 
-def _schedule(value: Any) -> None:
+def _schedule(
+    value: Any,
+    *,
+    schema: str = SCHEMA,
+    domains: list[tuple[str, str, str]] | None = None,
+) -> None:
     _require(type(value) is list and bool(value), "windows: expected nonempty list")
     ids = set()
     asserted = False
     for window in value:
-        _fields(window, {"id", "phase", "zero_new_allocations"}, "window contract")
+        assertion = (
+            "zero_new_allocations"
+            if schema == SCHEMA
+            else "zero_new_allocation_domains"
+        )
+        _fields(window, {"id", "phase", assertion}, "window contract")
         name = _text(window["id"], "window id")
         _require(name not in ids, "duplicate window id")
         ids.add(name)
         phase = _text(window["phase"], "phase")
         _require(phase in PHASES, "unknown phase")
-        _require(type(window["zero_new_allocations"]) is bool, "assertion must be bool")
-        if window["zero_new_allocations"]:
+        if schema == SCHEMA:
+            _require(type(window[assertion]) is bool, "assertion must be bool")
+            zero = window[assertion]
+        else:
+            _require(type(window[assertion]) is list, "zero domains must be a list")
+            selected = [_domain(domain) for domain in window[assertion]]
+            _require(
+                len(set(selected)) == len(selected), "duplicate zero-allocation domain"
+            )
+            _require(
+                all(domain in (domains or []) for domain in selected),
+                "unadmitted zero-allocation domain",
+            )
+            zero = bool(selected)
+        if zero:
             _require(phase in HOT_PHASES, "zero assertion requires hot phase")
             asserted = True
     _require(
@@ -225,7 +249,9 @@ def verify_receipt(receipt: Any, expected: Any) -> dict[str, Any]:
     """
     try:
         _fields(expected, {"schema", "identity", "domains", "windows"}, "contract")
-        _require(expected["schema"] == SCHEMA, "unsupported contract schema")
+        _require(
+            expected["schema"] in (SCHEMA, SCHEMA_V2), "unsupported contract schema"
+        )
         _identity(expected["identity"])
         domains = expected["domains"]
         _require(
@@ -237,9 +263,9 @@ def verify_receipt(receipt: Any, expected: Any) -> dict[str, Any]:
             len({(owner, space) for owner, space, _ in keys}) == len(keys),
             "duplicate ownership domain",
         )
-        _schedule(expected["windows"])
+        _schedule(expected["windows"], schema=expected["schema"], domains=keys)
         _fields(receipt, {"schema", "identity", "execution", "windows"}, "receipt")
-        _require(receipt["schema"] == SCHEMA, "unsupported receipt schema")
+        _require(receipt["schema"] == expected["schema"], "unsupported receipt schema")
         _identity(receipt["identity"])
         _require(
             receipt["identity"] == expected["identity"],
@@ -276,9 +302,16 @@ def verify_receipt(receipt: Any, expected: Any) -> dict[str, Any]:
             )
             rows = []
             for observed, domain in zip(observations, keys, strict=True):
-                metrics, live, end = _observation(
-                    observed, domain, specification["zero_new_allocations"]
+                zero = (
+                    specification["zero_new_allocations"]
+                    if expected["schema"] == SCHEMA
+                    else domain
+                    in {
+                        _domain(value)
+                        for value in specification["zero_new_allocation_domains"]
+                    }
                 )
+                metrics, live, end = _observation(observed, domain, zero)
                 if domain in previous:
                     old_live, old_end = previous[domain]
                     _require(
@@ -301,14 +334,20 @@ def verify_receipt(receipt: Any, expected: Any) -> dict[str, Any]:
         return {"status": "FAIL", "windows": [], "errors": [str(error)]}
 
 
-def assess_native_device_ledger(observation: Any) -> dict[str, Any]:
+def assess_native_device_ledger(
+    observation: Any, *, version: int = 1
+) -> dict[str, Any]:
     """Consume NativeDeviceLedger.to_dict without inventing unavailable evidence.
 
     V1 reports successful allocation count and owned live/peak capacity. It has
-    no cumulative requested-byte counter, event journal or full host coverage.
-    Even allocations == 0 cannot upgrade it to the strict receipt contract.
+    no cumulative requested-byte counter. V2 supplies it, but neither version
+    has an event journal or full host coverage. Even allocations == 0 cannot
+    upgrade either version to the strict receipt contract.
     """
     try:
+        _require(
+            type(version) is int and version in (1, 2), "unsupported ledger version"
+        )
         _fields(
             observation,
             {
@@ -320,8 +359,9 @@ def assess_native_device_ledger(observation: Any) -> dict[str, Any]:
                 "rejected_allocations",
                 "owner",
                 "scope",
-            },
-            "NativeDeviceLedger v1",
+            }
+            | ({"requested_bytes"} if version == 2 else set()),
+            f"NativeDeviceLedger v{version}",
         )
         for key in (
             "device",
@@ -334,6 +374,13 @@ def assess_native_device_ledger(observation: Any) -> dict[str, Any]:
             _integer(observation[key], key)
         _text(observation["owner"], "owner")
         _text(observation["scope"], "scope")
+        requested = None
+        if version == 2:
+            requested = _integer(observation["requested_bytes"], "requested_bytes")
+            _require(
+                observation["allocations"] != 0 or requested == 0,
+                "requested bytes without successful allocations",
+            )
         _require(
             observation["live_bytes"]
             <= observation["peak_bytes"]
@@ -345,12 +392,12 @@ def assess_native_device_ledger(observation: Any) -> dict[str, Any]:
             "owner": observation["owner"],
             "space": f"device:{observation['device']}",
             "allocation_count": observation["allocations"],
-            "requested_bytes": None,
+            "requested_bytes": requested,
             "peak_live_bytes": observation["peak_bytes"],
             "live_bytes": observation["live_bytes"],
             "rejected_allocations": observation["rejected_allocations"],
-            "missing": [
-                "requested-byte counter",
+            "missing": (["requested-byte counter"] if version == 1 else [])
+            + [
                 "event journal",
                 "phase/source/build identity",
                 "complete host observation",
@@ -382,13 +429,20 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="assess existing incomplete NativeDeviceLedger export",
     )
+    modes.add_argument(
+        "--native-ledger-v2",
+        action="store_true",
+        help="assess owned-device metrics including successful requested bytes",
+    )
     args = parser.parse_args(argv)
     try:
         receipt = json.loads(
             args.receipt.read_text(encoding="utf-8"), object_pairs_hook=_unique_object
         )
-        if args.native_ledger_v1:
-            result = assess_native_device_ledger(receipt)
+        if args.native_ledger_v1 or args.native_ledger_v2:
+            result = assess_native_device_ledger(
+                receipt, version=2 if args.native_ledger_v2 else 1
+            )
         else:
             expected = json.loads(
                 args.expected.read_text(encoding="utf-8"),

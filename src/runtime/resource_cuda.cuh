@@ -69,12 +69,20 @@ cudaError_t resource_cuda_allocate(void** output, std::size_t bytes, Allocate al
       const auto old = device_allocation_owners.find(*output);
       if (old != device_allocation_owners.end()) {
         old->second.ledger->live -= old->second.bytes;
+        if (old->second.ledger->journal)
+          old->second.ledger->journal->record(1, old->second.generation, old->second.bytes);
         device_allocation_owners.erase(old);
       }
       device_allocation_owners.emplace(
           *output, DeviceAllocationOwner{ledger, bytes, ++device_allocation_generation});
+      if (ledger->journal) ledger->journal->record(0, device_allocation_generation, bytes);
       ledger->peak = std::max(ledger->peak, ledger->live);
       ++ledger->allocations;
+      if (bytes > std::numeric_limits<std::uint64_t>::max() - ledger->requested_bytes) {
+        ledger->requested_bytes_overflow = true;
+      } else {
+        ledger->requested_bytes += bytes;
+      }
       return status;
     } catch (const std::bad_alloc&) {
       (void)release();
@@ -134,6 +142,8 @@ inline void resource_cuda_forget(void* pointer, std::uint64_t generation) {
   const auto found = device_allocation_owners.find(pointer);
   if (found == device_allocation_owners.end() || found->second.generation != generation) return;
   found->second.ledger->live -= found->second.bytes;
+  if (found->second.ledger->journal)
+    found->second.ledger->journal->record(1, found->second.generation, found->second.bytes);
   device_allocation_owners.erase(found);
 }
 

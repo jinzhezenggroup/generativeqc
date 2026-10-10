@@ -12,6 +12,7 @@ from pathlib import Path
 
 from tools.audit_replay_allocations import (
     SCHEMA,
+    SCHEMA_V2,
     assess_native_device_ledger,
     main,
     verify_receipt,
@@ -104,6 +105,70 @@ def ledger_fixture() -> dict:
 
 
 class ReplayAllocationAuditTests(unittest.TestCase):
+    def test_v2_can_assert_device_zero_without_banning_host_publication(self) -> None:
+        receipt, expected = fixture()
+        receipt["schema"] = expected["schema"] = SCHEMA_V2
+        for window in expected["windows"]:
+            asserted = window.pop("zero_new_allocations")
+            window["zero_new_allocation_domains"] = (
+                [expected["domains"][1]] if asserted else []
+            )
+        host = receipt["windows"][2]["observations"][0]
+        host["event_end"] = 2
+        host["events"] = [
+            {
+                "sequence": 1,
+                "kind": "allocate",
+                "allocation_id": "result",
+                "requested_bytes": 13,
+            }
+        ]
+        host["metrics"] = {
+            "allocation_count": 1,
+            "requested_bytes": 13,
+            "peak_live_bytes": 77,
+            "live_bytes": 77,
+        }
+        publication = receipt["windows"][3]["observations"][0]
+        publication["initial_live"] = {"arena": 64, "result": 13}
+        publication["event_begin"] = publication["event_end"] = 2
+        publication["metrics"]["peak_live_bytes"] = publication["metrics"][
+            "live_bytes"
+        ] = 77
+        self.assertEqual(verify_receipt(receipt, expected)["status"], "PASS")
+        expected["windows"][2]["zero_new_allocation_domains"].append(
+            expected["domains"][0]
+        )
+        self.assert_fails(receipt, expected, "new allocations")
+
+    def test_v2_zero_domains_are_explicit_admitted_and_unique(self) -> None:
+        for invalid, message in (
+            (True, "must be a list"),
+            (
+                [{"owner": "unknown", "space": "device:0", "counter": "other"}],
+                "unadmitted",
+            ),
+            (
+                [
+                    {
+                        "owner": "hf",
+                        "space": "device:0",
+                        "counter": "fixture-device-journal",
+                    }
+                ]
+                * 2,
+                "duplicate",
+            ),
+        ):
+            with self.subTest(invalid=invalid):
+                receipt, expected = fixture()
+                receipt["schema"] = expected["schema"] = SCHEMA_V2
+                for window in expected["windows"]:
+                    window.pop("zero_new_allocations")
+                    window["zero_new_allocation_domains"] = []
+                expected["windows"][2]["zero_new_allocation_domains"] = invalid
+                self.assert_fails(receipt, expected, message)
+
     def assert_fails(self, receipt: dict, expected: dict, message: str) -> None:
         result = verify_receipt(receipt, expected)
         self.assertEqual(result["status"], "FAIL")
@@ -388,6 +453,12 @@ class ReplayAllocationAuditTests(unittest.TestCase):
                 (receipt, ["--expected", str(contract)], 0, "PASS"),
                 ({}, ["--expected", str(contract)], 1, "FAIL"),
                 (ledger_fixture(), ["--native-ledger-v1"], 1, "INCOMPLETE"),
+                (
+                    {**ledger_fixture(), "requested_bytes": 0},
+                    ["--native-ledger-v2"],
+                    1,
+                    "INCOMPLETE",
+                ),
             ):
                 path.write_text(json.dumps(value), encoding="utf-8")
                 with redirect_stdout(io.StringIO()) as output:
@@ -397,6 +468,35 @@ class ReplayAllocationAuditTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()) as output:
                 self.assertEqual(main([str(path), "--native-ledger-v1"]), 1)
             self.assertIn("duplicate JSON", output.getvalue())
+
+    def test_native_v2_keeps_requested_bytes_distinct_from_peak(self) -> None:
+        ledger = {**ledger_fixture(), "allocations": 3, "requested_bytes": 192}
+        result = assess_native_device_ledger(ledger, version=2)
+        self.assertEqual(result["status"], "INCOMPLETE")
+        self.assertEqual(result["requested_bytes"], 192)
+        self.assertEqual(result["peak_live_bytes"], 64)
+        self.assertNotIn("requested-byte counter", result["missing"])
+        self.assertIn("event journal", result["missing"])
+        self.assertEqual(assess_native_device_ledger(ledger)["status"], "FAIL")
+        self.assertEqual(
+            assess_native_device_ledger(ledger_fixture(), version=2)["status"], "FAIL"
+        )
+
+    def test_native_v2_rejects_invalid_and_inconsistent_requests(self) -> None:
+        for invalid in (None, False, -1, 0.0, "0", 1 << 64, 1):
+            with self.subTest(invalid=invalid):
+                ledger = {**ledger_fixture(), "requested_bytes": invalid}
+                self.assertEqual(
+                    assess_native_device_ledger(ledger, version=2)["status"], "FAIL"
+                )
+        for invalid in (0, 3, True, 1.0):
+            with self.subTest(version=invalid):
+                self.assertEqual(
+                    assess_native_device_ledger(ledger_fixture(), version=invalid)[
+                        "status"
+                    ],
+                    "FAIL",
+                )
 
 
 if __name__ == "__main__":

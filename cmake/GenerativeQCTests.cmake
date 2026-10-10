@@ -472,6 +472,9 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart CUDA::cublas CUDA::cusolver)
     generativeqc_native_test(generativeqc_cuda_diis_tests tests/native/test_cuda_diis.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    generativeqc_native_test(generativeqc_cuda_diis_cached_gram_tests
+                       tests/native/test_cuda_diis_cached_gram.cpp
+                       LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_direct_streaming_graph_cuda_tests
                        tests/native/test_direct_streaming_graph_cuda.cpp
                        LIBRARIES CUDA::cudart SKIP_77)

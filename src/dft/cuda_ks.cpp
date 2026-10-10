@@ -243,6 +243,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   std::size_t n{}, matrix{}, elements{};
   unsigned spins{}, history{};
   bool incremental_diis_gram{};
+  bool ordered_diis_gram{};
   std::array<std::size_t, 2> occupations{};
   std::vector<double> host_xc_density, host_xc_alpha, host_xc_beta, host_xc_potential;
   // Async H2D copies retain these controls through the existing stream drain.
@@ -796,6 +797,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw std::runtime_error("nonfinite CUDA KS one-electron or nuclear energy");
     history = std::max(1U, options.diis_history);
     incremental_diis_gram = history >= 2 && scf::cuda_execution::incremental_diis_gram_requested();
+    ordered_diis_gram =
+        incremental_diis_gram && scf::cuda_execution::ordered_incremental_diis_gram_requested();
     device = fock_binding.device_id;
     stream = fock_binding.stream;
     if (range_provider) {
@@ -1354,13 +1357,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
     launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                           residual);
     check(cudaGetLastError());
-    const bool incremental_gram = incremental_diis_gram;
-    if (incremental_gram)
-      check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
-                                     enabled, history_count, history_head, raw_gram));
-    launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
-                              fock_history, residual_history, gram, weights, history_count,
-                              history_head, effective, true, false, nullptr, 0, raw_gram);
+    if (ordered_diis_gram) {
+      launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual,
+                                     enabled, fock_history, residual_history, gram, weights,
+                                     history_count, history_head, effective, raw_gram, true);
+    } else {
+      const bool incremental_gram = incremental_diis_gram;
+      if (incremental_gram)
+        check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
+                                       enabled, history_count, history_head, raw_gram));
+      launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
+                                fock_history, residual_history, gram, weights, history_count,
+                                history_head, effective, true, false, nullptr, 0, raw_gram);
+    }
     check(cudaGetLastError());
     multiply(effective, true, false, x, false, enabled, tmp1);
     multiply(x, false, true, tmp1, true, enabled, tmp2);
@@ -1884,13 +1893,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(effective, fock, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
       } else {
-        const bool incremental_gram = incremental_diis_gram;
-        if (incremental_gram)
-          check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
-                                         enabled, history_count, history_head, raw_gram));
-        launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
-                                  fock_history, residual_history, gram, weights, history_count,
-                                  history_head, effective, true, false, nullptr, 0, raw_gram);
+        if (ordered_diis_gram) {
+          launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual,
+                                         enabled, fock_history, residual_history, gram, weights,
+                                         history_count, history_head, effective, raw_gram, true);
+        } else {
+          const bool incremental_gram = incremental_diis_gram;
+          if (incremental_gram)
+            check(launch_diis_pending_gram(stream, 1, n, spins, history, residual, residual_history,
+                                           enabled, history_count, history_head, raw_gram));
+          launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
+                                    fock_history, residual_history, gram, weights, history_count,
+                                    history_head, effective, true, false, nullptr, 0, raw_gram);
+        }
         check(cudaGetLastError());
       }
       if (stabilize_occupations) {

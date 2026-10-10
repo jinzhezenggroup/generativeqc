@@ -132,6 +132,7 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
     triggers = source.split("\non:\n", 1)[1].split("\npermissions:\n", 1)[0]
     assert set(re.findall(r"^  ([a-z_]+):", triggers, re.MULTILINE)) == {
         "pull_request",
+        "push",
         "schedule",
         "workflow_dispatch",
     }
@@ -150,6 +151,15 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
         "tools/generate_cuda_implib.py",
         "tools/link_cuda_implib.py",
     }
+
+
+def test_wheels_refresh_default_branch_cache_on_every_master_push() -> None:
+    source = (WORKFLOWS / "wheels.yml").read_text(encoding="utf-8")
+    triggers = source.split("\non:\n", 1)[1].split("\npermissions:\n", 1)[0]
+    push = triggers.split("  push:\n", 1)[1]
+    push = re.split(r"^  [a-z_]+:", push, maxsplit=1, flags=re.MULTILINE)[0]
+    # No paths filter: source/compiler changes must also refresh master wheels.
+    assert push.strip() == "branches: [master]"
 
 
 def test_wheels_coalesce_only_pending_runs_in_the_matching_scope() -> None:

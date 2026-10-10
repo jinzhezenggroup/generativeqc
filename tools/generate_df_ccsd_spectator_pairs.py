@@ -24,6 +24,7 @@ from generativeqc_compiler.cc.df_spectator_pairs import (
     LADDER_OUTPUT,
     PAIRED_TAU_INPUT,
     build_ladder_pair_majorant,
+    factor_ladder_dressing,
     fold_occupied_ladder_pairs,
 )
 from generativeqc_compiler.tensor.native_arena import analyze_native_copy_roundtrips
@@ -157,7 +158,9 @@ def _ladder_residual_gain() -> Fraction:
 @cache
 def programs() -> dict[str, Program]:
     """Retain all other cuts and derive both Q layouts from the admitted fold."""
-    folded = fold_occupied_ladder_pairs(hoisted.programs()["auxiliary"])
+    folded = fold_occupied_ladder_pairs(
+        factor_ladder_dressing(hoisted.programs()["auxiliary"])
+    )
     return {
         "auxiliary": folded,
         "auxiliary_packed": pack_df_contractions(folded),
@@ -194,6 +197,15 @@ def cpu_header() -> str:
         '#include "cc/df_pair_bound.hpp"',
         '#include "generated_df_ccsd_hoisted_cpu.hpp"',
         "namespace generativeqc::cc::generated::dfpairs {",
+        "inline constexpr bool ladder_dressing_factored="
+        + str(
+            bool(
+                programs()["auxiliary"].provenance.get(
+                    "df_ladder_dressing_factorization"
+                )
+            )
+        ).lower()
+        + ";",
         "using df::checked_add; using df::checked_mul; using df::checked_product;",
         "using dfhoist::AuxiliaryOutputs;",
         "struct Inputs : dfhoist::Inputs {",

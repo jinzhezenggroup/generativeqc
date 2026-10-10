@@ -7,11 +7,14 @@ This does not substitute for a full native force or NVIDIA execution gate.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -142,10 +145,9 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def workspace_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
+def workspace_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     header = (ROOT / "src/posthf/mp2_force_workspace.hpp").read_text()
     helper = header[header.index("namespace generativeqc::mp2::detail {") :]
     text = (ROOT / "src/posthf/mp2_gradient.cpp").read_text()
@@ -159,12 +161,8 @@ def workspace_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     prefix = PREFIX.replace("// CHECKED_ARITHMETIC", arithmetic)
     source.write_text(prefix + helper + ROTATION_PREFIX + rotation + MAIN)
     executable = directory / "probe"
-    subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(source), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    native_cxx.build_executable(
+        [source], executable, compile_args=("-std=c++20", "-O0")
     )
     return executable
 

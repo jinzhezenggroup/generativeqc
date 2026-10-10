@@ -10,6 +10,7 @@
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "tensor/cuda_history.cuh"
+#include "tensor/cuda_ring_gram.cuh"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -93,10 +94,22 @@ void launch_diis_dot_partials(cudaStream_t stream, std::int32_t batch_size, std:
       counts, heads, parts, partials);
 }
 
+bool ordered_incremental_diis_gram_requested() {
+  const char* selection = std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION");
+  if (!selection || std::strcmp(selection, "cooperative") == 0) return false;
+  if (std::strcmp(selection, "ordered") == 0) return true;
+  throw std::invalid_argument(
+      "GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION must be cooperative or ordered");
+}
+
 bool incremental_diis_gram_requested() {
   const char* selection = std::getenv("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM");
   if (!selection || std::strcmp(selection, "0") == 0) return false;
-  if (std::strcmp(selection, "1") == 0) return true;
+  if (std::strcmp(selection, "1") == 0) {
+    // Resource queries and execution validate the same active reducer choice.
+    (void)ordered_incremental_diis_gram_requested();
+    return true;
+  }
   throw std::invalid_argument("GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM must be 0 or 1");
 }
 
@@ -121,16 +134,15 @@ cudaError_t launch_diis_pending_gram(cudaStream_t stream, std::int32_t batch_siz
   return cudaGetLastError();
 }
 
-template <bool CooperativeDots, bool IncrementalGram>
-__global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
-                                   std::int32_t matrices_per_system, std::uint32_t history_capacity,
-                                   const double* fock, const double* residual,
-                                   const std::uint8_t* active, double* fock_history,
-                                   double* residual_history, double* linear_system,
-                                   double* coefficients, std::uint32_t* history_count,
-                                   std::uint32_t* history_head, double* effective_fock,
-                                   bool normalize_metric, const double* dot_partials,
-                                   std::size_t parts, const double* raw_gram) {
+template <bool CooperativeDots, bool IncrementalGram, bool CachedGram = false>
+__global__ void update_diis_kernel(
+    std::int32_t batch_size, std::int32_t nbf, std::int32_t matrices_per_system,
+    std::uint32_t history_capacity, const double* fock, const double* residual,
+    const std::uint8_t* active, double* fock_history, double* residual_history,
+    double* linear_system, double* coefficients, std::uint32_t* history_count,
+    std::uint32_t* history_head, double* effective_fock, bool normalize_metric,
+    const double* dot_partials, std::size_t parts, const double* raw_gram,
+    double* gram_cache = nullptr, tensor::RingGramWork* work = nullptr) {
   constexpr bool cooperative_dots = CooperativeDots;
   // One warp owns one system.  History vectors and the O(N^2) residual-dot
   // products are distributed across lanes, while the small dense DIIS solve
@@ -141,10 +153,11 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
   const std::size_t matrix_size = static_cast<std::size_t>(nbf) * nbf;
   const std::size_t vector_size = matrix_size * static_cast<std::size_t>(matrices_per_system);
   const std::size_t matrix_offset = static_cast<std::size_t>(system) * vector_size;
-  if constexpr (IncrementalGram) {
+  if constexpr (IncrementalGram || CachedGram) {
     unsigned valid = 0;
     if (threadIdx.x == 0)
-      valid = history_count[system] <= history_capacity && history_head[system] < history_capacity;
+      valid = (CachedGram && history_capacity < 2) || (history_count[system] <= history_capacity &&
+                                                       history_head[system] < history_capacity);
     valid = __shfl_sync(0xffffffffU, valid, 0);
     if (!valid) {
       if (threadIdx.x == 0) {
@@ -175,8 +188,10 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
   }
   __syncwarp();
   std::uint32_t count = 0;
+  std::uint32_t previous_count = 0;
   if (threadIdx.x == 0) {
-    count = history_count[system] < history_capacity ? history_count[system] + 1 : history_capacity;
+    previous_count = history_count[system];
+    count = previous_count < history_capacity ? previous_count + 1 : history_capacity;
     history_count[system] = count;
     history_head[system] = (slot + 1) % history_capacity;
   }
@@ -186,6 +201,17 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
       effective_fock[matrix_offset + element] = fock[matrix_offset + element];
     }
     return;
+  }
+
+  if constexpr (CachedGram) {
+    previous_count = __shfl_sync(0xffffffffU, previous_count, 0);
+    const auto first =
+        normalize_metric ? (slot + 1 + history_capacity - count) % history_capacity : 0;
+    tensor::refresh_ring_gram(
+        residual_history + static_cast<std::size_t>(system) * history_stride, vector_size,
+        history_capacity, slot, first, count, previous_count == 1,
+        gram_cache + static_cast<std::size_t>(system) * history_capacity * history_capacity,
+        work ? work + system : nullptr);
   }
 
   const std::size_t system_stride =
@@ -236,12 +262,13 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
           static_cast<std::size_t>(system) * history_stride +
           static_cast<std::size_t>((first + column) % history_capacity) * vector_size;
       double dot = 0.0;
-      if constexpr (IncrementalGram) {
+      if constexpr (IncrementalGram || CachedGram) {
         const auto row_slot = (first + row) % history_capacity;
         const auto column_slot = (first + column) % history_capacity;
-        dot = raw_gram[(static_cast<std::size_t>(system) * history_capacity + row_slot) *
-                           history_capacity +
-                       column_slot];
+        const auto* cache = CachedGram ? gram_cache : raw_gram;
+        dot = cache[(static_cast<std::size_t>(system) * history_capacity + row_slot) *
+                        history_capacity +
+                    column_slot];
       } else if (cooperative_dots && dot_partials) {
         const auto row_slot = (first + row) % history_capacity;
         const auto column_slot = (first + column) % history_capacity;
@@ -379,6 +406,35 @@ void launch_update_diis_kernel(
     launch.template operator()<true, false>();
   else
     launch.template operator()<false, false>();
+}
+
+void launch_update_diis_cached_gram(
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
+    std::int32_t nbf, std::int32_t matrices_per_system, std::uint32_t history_capacity,
+    const double* fock, const double* residual, const std::uint8_t* active, double* fock_history,
+    double* residual_history, double* linear_system, double* coefficients,
+    std::uint32_t* history_count, std::uint32_t* history_head, double* effective_fock,
+    double* gram_cache, bool normalize_metric, tensor::RingGramWork* work) {
+  if (batch_size <= 0 || nbf <= 0 || (matrices_per_system != 1 && matrices_per_system != 2) ||
+      history_capacity > 64 || !fock || !active || !effective_fock || block.x != 32 ||
+      block.y != 1 || block.z != 1 || grid.y != 1 || grid.z != 1 ||
+      grid.x < static_cast<unsigned>(batch_size))
+    throw std::invalid_argument("invalid ordered Gram shape or launch geometry");
+  if (history_capacity >= 2 &&
+      (!residual || !fock_history || !residual_history || !linear_system || !coefficients ||
+       !history_count || !history_head || !gram_cache || gram_cache == linear_system))
+    throw std::invalid_argument("cached Gram requires independent history and solve storage");
+  const auto maximum = std::numeric_limits<std::size_t>::max() / sizeof(double);
+  const auto history_slots = history_capacity >= 2 ? history_capacity : 1U;
+  const auto per_system = maximum / static_cast<std::size_t>(batch_size);
+  if (static_cast<std::size_t>(nbf) >
+          per_system / history_slots / static_cast<std::size_t>(nbf) / matrices_per_system ||
+      (history_capacity >= 2 && history_capacity + 1U > per_system / (history_capacity + 1U)))
+    throw std::invalid_argument("ordered Gram history size exceeds addressable storage");
+  update_diis_kernel<false, false, true><<<grid, block, shared_bytes, stream>>>(
+      batch_size, nbf, matrices_per_system, history_capacity, fock, residual, active, fock_history,
+      residual_history, linear_system, coefficients, history_count, history_head, effective_fock,
+      normalize_metric, nullptr, 0, nullptr, gram_cache, work);
 }
 
 }  // namespace generativeqc::scf::cuda_execution
