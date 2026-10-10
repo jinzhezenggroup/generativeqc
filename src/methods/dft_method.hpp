@@ -30,6 +30,23 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
                                               const dft::CudaKsFinalStateToken& expected,
                                               KsDerivativeSnapshot& output, std::string& detail);
 
+/** Private #2151 single-calculation stationary integral-source bridge.
+ * Reuses the exact converged owner and the already qualified DF (CPU/CUDA)
+ * or Direct (CUDA) derivative provider. The output is source-major
+ * [H', overlap/Pulay, Coulomb J', exchange K'], four times 3*Natom.
+ * These are +dE/dR integral terms, NOT a complete molecular gradient or force:
+ * XC, Becke moving-grid and nuclear terms belong to a later consumer.
+ * Unsupported Hamiltonians (ECP, range, nonlocal, D4) fail closed.
+ * All supplied D/W blocks must belong to expected and are validated by the
+ * caller's verified final-state export; live token is rechecked by the owner.
+ * Failure clears output/work and never authorizes GENERATIVEQC_PROPERTY_FORCES.
+ */
+generativeqc_status dft_prepared_integral_gradient_cached(
+    PreparedCalculation& calculation, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
+
 /** Five explicit CUDA stationary sources: hcore, overlap/Pulay, J, SR-K,
  * LR-K. The live token binds D/W, geometry, radial parameters and spin.
  * XC, nonlocal correlation and nuclear repulsion are separate consumers. */
