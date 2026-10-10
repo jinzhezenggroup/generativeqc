@@ -5,6 +5,12 @@
   "reason": "Retained direct public-AO J/K and fixed-density derivative contractions against shared native recurrence definitions. FP64 SR/LR coordinate derivatives contract current spin-density weights; participating-atom filtering and bounded block sums retain the screened ordered-quartet domain.",
   "regions": [
     {
+      "start": "__global__ void materialized_canonical_jk_kernel(",
+      "stop": "__global__ void canonical_pair_keys_kernel(",
+      "role": "runtime",
+      "reason": "Persistent indexed CTA traversal forwards immutable geometry, unchanged AO bounds and independent J/K destinations to the compiler-owned pair recurrence; it introduces no handwritten integral or scatter algebra. Conservative shell-key maxima retain the file's scientific classification."
+    },
+    {
       "start": "namespace cuda_execution {",
       "stop": null,
       "role": "runtime",

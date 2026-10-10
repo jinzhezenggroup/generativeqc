@@ -207,6 +207,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda/rhf_bucket.cpp
       src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
+      src/scf/cuda/rhf_resident_values.cpp
       src/scf/cuda/one_electron_reference.cu
       src/scf/cuda/nuclear_kernels.cu
       src/scf/cuda/direct_pair_cache.cu

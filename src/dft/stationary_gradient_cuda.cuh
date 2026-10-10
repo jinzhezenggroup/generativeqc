@@ -48,6 +48,8 @@ struct Owner {
       becke_pair_state_evaluations{}, phased_batches{};
   uint64_t becke_primitive_batches{}, becke_primitive_reverse_pair_visits{};
   uint64_t phased_points{}, becke_profile_batches{};
+  uint64_t restricted_point_batches{}, restricted_point_count{}, general_point_batches{},
+      general_point_count{};
   bool retains_becke_pair_state() const {
     return bool(phased_storage) ||
            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
@@ -194,6 +196,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs,
                                 int* error);
+template <bool restricted_point>
 __global__ void geometry_point_kernel(generativeqc::dft::GridTaskView view, const int64_t* owners,
                                       size_t owner_offset, size_t points_per_atom, size_t na,
                                       const double* weights, const double* raw,
@@ -217,7 +220,8 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                      const double* weights, const double* raw, const double* external,
                      size_t external_stride, size_t external_offset, size_t geometry_lanes,
                      double* partial, double* scratch,
-                     const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+                     const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
+                     bool restricted_point = false) {
   PhasedBeckeInput phased{};
   if (owner.phased_storage) {
     if (geometry_lanes != view.npoint || !center_pairs || owner.becke_threads_per_point <= 1)
@@ -244,10 +248,26 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     // Preserve incoming launch status and stop before any consumer can observe
     // scratch from a failed producer. Peeking neither clears nor synchronizes.
     cuda_check(cudaPeekAtLastError());
-    geometry_point_kernel<<<blocks(view.npoint, 128), 128, 0, stream>>>(
-        view, owners, owner_offset, points_per_atom, na, weights, raw, external, external_stride,
-        external_offset, scratch, phased.seeds, error);
+    const bool bound_point =
+        restricted_point && stationary_pbe0_restricted_point_capable && !external;
+    if constexpr (stationary_pbe0_restricted_point_capable) {
+      if (bound_point)
+        geometry_point_kernel<true><<<blocks(view.npoint, 128), 128, 0, stream>>>(
+            view, owners, owner_offset, points_per_atom, na, weights, raw, external,
+            external_stride, external_offset, scratch, phased.seeds, error);
+      else
+        geometry_point_kernel<false><<<blocks(view.npoint, 128), 128, 0, stream>>>(
+            view, owners, owner_offset, points_per_atom, na, weights, raw, external,
+            external_stride, external_offset, scratch, phased.seeds, error);
+    } else
+      geometry_point_kernel<false><<<blocks(view.npoint, 128), 128, 0, stream>>>(
+          view, owners, owner_offset, points_per_atom, na, weights, raw, external, external_stride,
+          external_offset, scratch, phased.seeds, error);
     cuda_check(cudaPeekAtLastError());
+    if (bound_point) {
+      ++owner.restricted_point_batches;
+      owner.restricted_point_count += view.npoint;
+    }
     ++owner.launches;
     geometry_cooperative_kernel<true>
         <<<geometry_lanes, owner.becke_threads_per_point,
@@ -269,6 +289,11 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                                 centers, na, weights, raw, external, external_stride,
                                 external_offset, geometry_lanes, partial, scratch, center_pairs,
                                 error);
+  if (!precomputed_point || !restricted_point || !stationary_pbe0_restricted_point_capable ||
+      external) {
+    ++owner.general_point_batches;
+    owner.general_point_count += view.npoint;
+  }
   if (owner.phased_storage) {
     const dim3 atom_blocks(blocks(view.npoint, 128), na);
     const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
@@ -1143,10 +1168,11 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
   });
 }
 
-int stationary_geometry_molecular_resident_weights_enqueue(
+static int stationary_geometry_molecular_resident_weights_enqueue_impl(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
     size_t owner_offset, size_t points_per_atom, const double* device_weights,
-    const double* device_raw, char* error, size_t size) {
+    const double* device_raw, bool versioned_binding, uint64_t generation, uint64_t binding_flags,
+    char* error, size_t size) {
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
@@ -1156,6 +1182,10 @@ int stationary_geometry_molecular_resident_weights_enqueue(
         points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
         view->npoint > p->atoms * points_per_atom - owner_offset)
       throw std::invalid_argument("invalid resident-weight geometry task lease");
+    // Bit zero comes only from the owned grid producer's identical rho/gradient
+    // witness. A functional name is not a proof; v1 never selects this route.
+    if (versioned_binding && (generation != view->generation || (binding_flags & ~uint64_t{1})))
+      throw std::invalid_argument("invalid resident-weight density binding proof");
     check(*p);
     if (!view->npoint) return;
     const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
@@ -1169,7 +1199,8 @@ int stationary_geometry_molecular_resident_weights_enqueue(
     }
     launch_geometry(*p, stream, *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom,
                     p->centers, p->atoms, device_weights, device_raw, nullptr, 0, 0, geometry_lanes,
-                    p->partial, p->scratch, p->center_pairs, p->context.error);
+                    p->partial, p->scratch, p->center_pairs, p->context.error,
+                    versioned_binding && (binding_flags & 1));
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
         p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
         p->context.error);
@@ -1183,6 +1214,37 @@ int stationary_geometry_molecular_resident_weights_enqueue(
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
+}
+
+int stationary_geometry_molecular_resident_weights_enqueue(
+    void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
+    size_t owner_offset, size_t points_per_atom, const double* device_weights,
+    const double* device_raw, char* error, size_t size) {
+  return stationary_geometry_molecular_resident_weights_enqueue_impl(
+      pointer, view, work, owner_offset, points_per_atom, device_weights, device_raw, false, 0, 0,
+      error, size);
+}
+
+int stationary_geometry_molecular_resident_weights_enqueue_v2(
+    void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
+    size_t owner_offset, size_t points_per_atom, const double* device_weights,
+    const double* device_raw, uint64_t generation, uint64_t binding_flags, char* error,
+    size_t size) {
+  return stationary_geometry_molecular_resident_weights_enqueue_impl(
+      pointer, view, work, owner_offset, points_per_atom, device_weights, device_raw, true,
+      generation, binding_flags, error, size);
+}
+
+int stationary_point_binding_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  using namespace generativeqc_stationary_cuda;
+  const auto* owner = static_cast<const Owner*>(pointer);
+  if (!owner || !output || count != 5) return 1;
+  output[0] = stationary_pbe0_restricted_point_capable;
+  output[1] = owner->restricted_point_batches;
+  output[2] = owner->restricted_point_count;
+  output[3] = owner->general_point_batches;
+  output[4] = owner->general_point_count;
+  return 0;
 }
 
 int stationary_geometry_molecular_enqueue(void* pointer,

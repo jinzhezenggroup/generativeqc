@@ -139,8 +139,10 @@ struct Fixture {
 };
 
 template <unsigned A, unsigned B, unsigned C, unsigned D>
-__global__ void retained_components(DeviceBatch batch, const ActiveShellQuartetTile* tasks,
-                                    const double* schwarz, double threshold, double* values) {
+__global__ void retained_components(
+    DeviceBatch batch, const ActiveShellQuartetTile* tasks, const double* schwarz, double threshold,
+    double* values,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   const auto task = tasks[blockIdx.x];
   const auto first_count = shell_ao_pair_count(batch, task.first_pair);
   const auto second_count = shell_ao_pair_count(batch, task.second_pair);
@@ -156,20 +158,21 @@ __global__ void retained_components(DeviceBatch batch, const ActiveShellQuartetT
   values[ordinal] = contracted_eri_cartesian_source_shell_class<A, B, C, D, double>(
       batch, i, j, k, l, batch.shell_pair_first[task.first_pair],
       batch.shell_pair_second[task.first_pair], batch.shell_pair_first[task.second_pair],
-      batch.shell_pair_second[task.second_pair], -1);
+      batch.shell_pair_second[task.second_pair], -1, range, 0.37);
 }
 
 template <bool Unrestricted, unsigned Order, bool WholeShell = false>
-__global__ void shared_components(DeviceBatch batch, const ActiveShellQuartetTile* tasks,
-                                  const double* schwarz, double threshold, const double* density,
-                                  const std::uint8_t* active, double* fock, unsigned channel,
-                                  MaterializedDirectPairWork* work, double* values) {
+__global__ void shared_components(
+    DeviceBatch batch, const ActiveShellQuartetTile* tasks, const double* schwarz, double threshold,
+    const double* density, const std::uint8_t* active, double* fock, unsigned channel,
+    MaterializedDirectPairWork* work, double* values,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   __shared__ MaterializedDirectPairRecurrence<Order> shared;
   // Forty register slots cover the largest through-f shell quartet. The DFT
   // dddd production stream needs only six, retaining the same admission math.
   contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? 40 : 1>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
-      channel == 1, channel == 2 || channel == 3, values, channel == 3);
+      channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
 }
 
 /** Independent retained Dual3 component traversal, without shared preparation. */
@@ -245,7 +248,9 @@ void close(double actual, double expected, const char* message) {
 
 template <unsigned A, unsigned B, unsigned C, unsigned D, bool Unrestricted,
           bool WholeShell = false>
-void qualify(bool same_pair, bool coincident, double threshold) {
+void qualify(
+    bool same_pair, bool coincident, double threshold,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   constexpr auto order = A + B + C + D;
   Fixture fixture({D, C, B, A}, Unrestricted, coincident);
   const auto n = std::size_t(fixture.batch.direct_nbf), matrix = n * n;
@@ -262,8 +267,8 @@ void qualify(bool same_pair, bool coincident, double threshold) {
   Device<double> retained(count), materialized(count), fock((Unrestricted ? 2 : 1) * matrix);
   Device<std::uint8_t> active(std::vector<std::uint8_t>{1});
   Device<MaterializedDirectPairWork> work(1);
-  retained_components<A, B, C, D>
-      <<<tasks.size(), 256>>>(fixture.batch, dtasks.data, schwarz.data, threshold, retained.data);
+  retained_components<A, B, C, D><<<tasks.size(), 256>>>(fixture.batch, dtasks.data, schwarz.data,
+                                                         threshold, retained.data, range);
   check(cudaGetLastError());
   const auto expected_values = retained.read();
   std::size_t admitted_count = 0, live_packets = 0;
@@ -273,7 +278,7 @@ void qualify(bool same_pair, bool coincident, double threshold) {
     fock.clear();
     shared_components<Unrestricted, order, WholeShell><<<WholeShell ? 1 : tasks.size(), 256>>>(
         fixture.batch, dtasks.data, schwarz.data, threshold, density.data, active.data, fock.data,
-        channel, work.data, materialized.data);
+        channel, work.data, materialized.data, range);
     check(cudaGetLastError());
     const auto values = materialized.read(), actual_fock = fock.read();
     std::vector<double> expected_fock(actual_fock.size(), 0.0);
@@ -338,7 +343,7 @@ void qualify(bool same_pair, bool coincident, double threshold) {
     throw std::runtime_error("inactive system consumed recurrence");
   std::cout << "order=" << order << " uhf=" << Unrestricted << " same=" << same_pair
             << " whole_shell=" << WholeShell << " live_packets=" << live_packets
-            << " components=" << admitted_count
+            << " components=" << admitted_count << " range=" << static_cast<unsigned>(range)
             << " recurrence=" << 16 * (WholeShell ? std::size_t(admitted_count != 0) : live_packets)
             << '\n';
 }
@@ -640,6 +645,13 @@ int main(int argc, char** argv) {
     }
     qualify<2, 1, 1, 1, false>(false, false, 0.0);
     qualify<2, 1, 1, 1, true>(false, true, 0.8);
+    // Range moments share precisely the same lifetime and work contract as
+    // full-range moments, including inactive lanes and signed contractions.
+    for (auto range : {generativeqc::integrals::CoulombRange::Short,
+                       generativeqc::integrals::CoulombRange::Long}) {
+      qualify<2, 1, 1, 1, false>(false, false, 0.0, range);
+      qualify<2, 1, 1, 1, true>(false, false, 0.8, range);
+    }
     qualify<2, 2, 1, 1, false>(false, false, 0.0);
     qualify<2, 2, 2, 1, true>(false, false, 0.8);
     qualify<2, 2, 2, 2, false>(true, true, 0.0);

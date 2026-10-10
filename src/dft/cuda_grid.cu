@@ -1039,6 +1039,31 @@ int grid_cuda_density_jets_v1(void* pointer, std::uint64_t generation, unsigned 
   });
 }
 
+/** Borrow contracted jets and a same-generation restricted feature witness.
+ * Bit zero is established only by the owned single-spin device-density split,
+ * not by a functional label or equality inferred from external arrays. The
+ * caller must retain the ordinary task lease and stream ownership throughout
+ * consumption. No field is added to the existing v1 GridTaskView ABI.
+ */
+int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned jets,
+                              const double** output, std::uint64_t* flags, char* error,
+                              size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !output || !flags) throw std::invalid_argument("null contracted AO binding");
+    *output = nullptr;
+    *flags = 0;
+    auto& p = *static_cast<GridPlan*>(pointer);
+    std::lock_guard<std::mutex> lock(p.context.mutex);
+    p.context.check_device();
+    if (!p.local || !p.view_ready || !p.features_ready || !p.density_jets_ready || p.use_orbitals ||
+        generation != p.generation || (jets != 1 && jets != 4) || !(p.feature_mask & 7) ||
+        (jets == 4 && !(p.feature_mask & 8)))
+      throw std::invalid_argument("contracted AO jets are unavailable");
+    *output = p.work;
+    if (p.identical_spin_density && (p.feature_mask & 3) == 3) *flags = 1;
+  });
+}
+
 int grid_cuda_xc_v2(void* pointer, std::uint64_t generation, int pbe, int restricted, int interior,
                     const double* weights, size_t npoint, double* integrals, char* error,
                     size_t size) {

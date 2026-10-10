@@ -1,0 +1,1163 @@
+{
+  "schema": "wb97mv-cold96-investigation.v1",
+  "date": "2026-10-10",
+  "baseline_source": "15bc697009d191a88120607e0e50a15561d35d61",
+  "latest_validation_source": "cd0eb059fd1d0ba205c7db160e50c1145cb8488e",
+  "closing_master_source": "82c166caca181fc0df51b1ff9378b972e3b1eba8",
+  "closing_master_audit": {
+    "unchanged": "canonical direct J/K sources, source-contraction compiler, KS solver and force equations",
+    "changed": "allocation-receipt bookkeeping/tooling (#2187) and opt-in GFN2 receipts (#2180)",
+    "qualification": "source audit only; no binary timing or numerical claim for the closing revision"
+  },
+  "production_patch": null,
+  "fixture_warning": "README water-96 proxy; not the actual OMol25 molecular distribution or ORCA grid",
+  "protocol": {
+    "case": "water-96",
+    "atoms": 96,
+    "aos": 1856,
+    "method": "WB97M-V/RKS",
+    "basis": "def2-TZVPD",
+    "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+    "representation": "spherical",
+    "grid": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "properties": [
+      "energy",
+      "forces"
+    ],
+    "force_return": "host_array_in_timed_endpoint",
+    "density_fitting": false,
+    "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+    "nonlocal_density_threshold": 1e-08,
+    "reference_nonlocal_weight_threshold": 1e-14,
+    "repeats": 1,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "reference_gradient_tolerance": 1e-10,
+    "screening_tolerance": 1e-12,
+    "reference_direct_scf_tolerance": 1e-14,
+    "reference_fock_policy": "incremental",
+    "max_iterations": 100,
+    "energy_gate": 1e-08,
+    "force_gate": 1e-07,
+    "cold_definition": "preparation plus first synchronized energy/force endpoint",
+    "warm_definition": "1 fixed engine-local post-cold/post-move density replays",
+    "threads": {
+      "OMP_NUM_THREADS": "8",
+      "OPENBLAS_NUM_THREADS": "8",
+      "MKL_NUM_THREADS": "8"
+    },
+    "geometry_identity": {
+      "generator": "benchmarks.readme_hf_scaling.scaling_cases()['water-96']",
+      "canonical_json_sha256": "1e04619f207848e6eeedbf62fc00c0f3cc4071f0993274ddfc1229bb55fbd11a"
+    }
+  },
+  "force_budget_bytes": 4294967296,
+  "basis_sha256": "b765184b9a25e4b27a33d1225c90c634d494da0d1f19fd84526ffc298477477e",
+  "basis_counts": {
+    "spherical_aos": 1856,
+    "cartesian_aos": 2048,
+    "shells_by_l": [
+      384,
+      256,
+      96,
+      32
+    ],
+    "packed_primitives_by_l": [
+      704,
+      352,
+      96,
+      32
+    ]
+  },
+  "dense_cartesian_unique_quartet_capacity": 2201172312576,
+  "count_warning": "row-prefix entries are geometry-admitted candidates, not evaluated radial/primitive work or FLOPs",
+  "timing_boundary": "prepare through synchronized first public E+F/host forces",
+  "timing_excludes": "imports, CUDA context, Calculator construction, serialization and owner teardown",
+  "cache_policy": "fresh owners/densities; existing compiler/JIT caches reused, not cleared",
+  "environment": {
+    "timestamp_utc": "2026-10-10T03:39:11.702243+00:00",
+    "git": {
+      "commit": null,
+      "dirty": null,
+      "pending_generated_benchmark_artifacts": null
+    },
+    "host": {
+      "node": "node1",
+      "platform": "Linux-6.8.0-90-generic-x86_64-with-glibc2.39",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    },
+    "python": {
+      "version": "3.13.9",
+      "executable": "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python"
+    },
+    "packages": {
+      "gpu4pyscf": "1.8.1",
+      "pyscf": "2.14.0",
+      "cupy": "13.6.0"
+    },
+    "runtime": {
+      "generativeqc_library": "/data/jzzeng/wb97m-cold96-master-20261010-15bc69700/source/build/cuda-release-sm120/libgenerativeqc.so",
+      "cuda_visible_devices": "0"
+    },
+    "toolchain": {
+      "nvcc": {
+        "path": "/group/software/cuda-12.9.1/bin/nvcc",
+        "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      },
+      "ptxas": {
+        "path": "/group/software/cuda-12.9.1/bin/ptxas",
+        "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+      },
+      "cuobjdump": {
+        "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+        "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+      },
+      "host_cxx": {
+        "path": "/usr/bin/c++",
+        "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+      }
+    },
+    "accelerator": null
+  },
+  "gpu": {
+    "backend": "cuda",
+    "device_id": 0,
+    "name": "NVIDIA GeForce RTX 5090",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "total_global_memory_bytes": 33668988928,
+    "multiprocessor_count": 170,
+    "clock_rate_khz": 2550000,
+    "driver_version": 13000,
+    "runtime_version": 12090,
+    "nvidia_smi": {
+      "performance_state": "P8",
+      "power_draw_watts": 26.97,
+      "power_limit_watts": 600.0,
+      "sm_clock_mhz": 195.0,
+      "memory_clock_mhz": 405.0,
+      "temperature_celsius": 35.0,
+      "sampling_point": "after benchmark measurements"
+    }
+  },
+  "gpu_metadata_warning": "nvidia_smi subrecord was collected at setup, despite the generic helper's sampling_point label",
+  "native_build": {
+    "library_path": "/data/jzzeng/wb97m-cold96-master-20261010-15bc69700/source/build/cuda-release-sm120/libgenerativeqc.so.0.1.0",
+    "library_sha256": "b0aa621251ef8ce739a450ead5d4b656c45c6ae28c64a45bd4e1d063c7019cbb",
+    "probe": {
+      "source_identity": "faf0ee83be2e1e4350893125222f6a3742c467b195bef188fe08ba3e6aad8566",
+      "native_abi": 0,
+      "schema": 1,
+      "policy": {
+        "precision": "fp64",
+        "spin": [
+          "rhf",
+          "uhf"
+        ],
+        "consumers": [
+          "fock",
+          "force"
+        ]
+      },
+      "host": {
+        "system": "Linux",
+        "machine": "x86_64",
+        "libc": [
+          "glibc",
+          "2.39"
+        ]
+      },
+      "device": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "official_profile": "sm_120",
+        "major": 12,
+        "minor": 0,
+        "warp_size": 32,
+        "maximum_threads_per_block": 1024,
+        "maximum_threads_per_sm": 1536,
+        "maximum_blocks_per_sm": 24,
+        "registers_per_sm": 65536,
+        "maximum_registers_per_thread": 255,
+        "sm_count": 170,
+        "shared_memory_per_block": 49152,
+        "shared_memory_per_block_optin": 101376,
+        "shared_memory_per_sm": 102400,
+        "runtime_version": 12090,
+        "driver_version": 13000,
+        "toolkit_version": 12090,
+        "release_build": 1,
+        "fast_compile": 0,
+        "portable": 0
+      }
+    }
+  },
+  "settings": {
+    "GENERATIVEQC_BENCHMARK_SOURCE": "15bc697009d191a88120607e0e50a15561d35d61",
+    "GENERATIVEQC_CCACHE": "/home/jzzeng/codes/wb97m-20261002/ccache/usr/bin/ccache",
+    "GENERATIVEQC_LIBRARY": "/data/jzzeng/wb97m-cold96-master-20261010-15bc69700/source/build/cuda-release-sm120/libgenerativeqc.so",
+    "GENERATIVEQC_NVCC": "/group/software/cuda-12.9.1/bin/nvcc"
+  },
+  "scheduler_outcomes_sha256": "489ca9168095917694edf4bcac7cb339142d25025f1a143486ab61464feda01b",
+  "compiler_cache": {
+    "launcher_version": "ccache version 4.5.1",
+    "before_stats": "Summary:\n  Hits:             49327 /  59749 (82.56 %)\n    Direct:         48884 /  59792 (81.76 %)\n    Preprocessed:     443 /  10904 (4.06 %)\n  Misses:           10422\n    Direct:         10908\n    Preprocessed:   10461\n  Uncacheable:      11969\nPrimary storage:\n  Hits:            103134 / 119584 (86.24 %)\n  Misses:           16450\n  Cache size (GB):   4.08 /   5.00 (81.66 %)\n  Cleanups:            79\n\nUse the -v/--verbose option for more details.\n",
+    "after_stats": "Summary:\n  Hits:             49807 /  60229 (82.70 %)\n    Direct:         49364 /  60272 (81.90 %)\n    Preprocessed:     443 /  10904 (4.06 %)\n  Misses:           10422\n    Direct:         10908\n    Preprocessed:   10461\n  Uncacheable:      11969\nPrimary storage:\n  Hits:            104094 / 120544 (86.35 %)\n  Misses:           16450\n  Cache size (GB):   4.08 /   5.00 (81.66 %)\n  Cleanups:            79\n\nUse the -v/--verbose option for more details.\n",
+    "statistics_warning": "shared cache global counters; concurrent builds prevent attributing this delta solely to this build"
+  },
+  "endpoints_96": {
+    "native": {
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "6998",
+      "cuda_visible_devices": "0",
+      "outcome": "right-censored: Slurm TIMEOUT",
+      "time_limit_seconds": 2700,
+      "last_journal_stage": "cold.execute",
+      "prepare_seconds": 15.04916861280799,
+      "complete_endpoint_seconds": null,
+      "iterations": null,
+      "fock_builds": null,
+      "energy_error": null,
+      "force_error": null,
+      "raw_journal_sha256": "b242e7323eef2c8a6ed4eb4dc0aa4ff2d7866a6bea010f2ec57db964f1c98301"
+    },
+    "reference": {
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "6997",
+      "cuda_visible_devices": "2",
+      "outcome": "right-censored: Slurm TIMEOUT",
+      "time_limit_seconds": 2700,
+      "last_journal_stage": "cold.scf",
+      "prepare_seconds": 0.7769291289150715,
+      "complete_endpoint_seconds": null,
+      "iterations": null,
+      "fock_builds": null,
+      "energy_error": null,
+      "force_error": null,
+      "raw_journal_sha256": "ff61f3d940bcaa0d4bb9c9e8148c9c4dabea2446690409d7b351924f38f96d98"
+    }
+  },
+  "endpoint_ratio": null,
+  "partial_captures": {
+    "canonical-first3": {
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "7013",
+      "cuda_visible_devices": "1",
+      "shared_rsh_requested": null,
+      "scope": "intrusive completed source actions; not a complete SCF/E+F endpoint",
+      "launch_rows": [
+        {
+          "total_order": 0,
+          "pair_orders": [
+            0,
+            0
+          ],
+          "first_pair_count": 73920,
+          "second_pair_count": 73920,
+          "indexed": true,
+          "indexed_geometry_row_entries": 191170858,
+          "dense_bucket_capacity": 2732120160,
+          "want_j": true,
+          "want_k": true,
+          "range": 0,
+          "omega": 0.0
+        },
+        {
+          "total_order": 1,
+          "pair_orders": [
+            1,
+            0
+          ],
+          "first_pair_count": 294912,
+          "second_pair_count": 73920,
+          "indexed": true,
+          "indexed_geometry_row_entries": 1823825648,
+          "dense_bucket_capacity": 21799895040,
+          "want_j": true,
+          "want_k": true,
+          "range": 0,
+          "omega": 0.0
+        },
+        {
+          "total_order": 2,
+          "pair_orders": [
+            1,
+            1
+          ],
+          "first_pair_count": 294912,
+          "second_pair_count": 294912,
+          "indexed": true,
+          "indexed_geometry_row_entries": 4351701942,
+          "dense_bucket_capacity": 43486691328,
+          "want_j": true,
+          "want_k": true,
+          "range": 0,
+          "omega": 0.0
+        }
+      ],
+      "kernel_duration_sum_seconds": 16.739736731,
+      "canonical_total_orders": {
+        "0": {
+          "seconds": 0.529549639,
+          "launches": 1
+        },
+        "1": {
+          "seconds": 5.821571234,
+          "launches": 1
+        },
+        "2": {
+          "seconds": 10.388615858,
+          "launches": 1
+        }
+      },
+      "canonical_kernels": [
+        {
+          "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)2, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+          "seconds": 10.388615858,
+          "launches": 1,
+          "max_seconds": 10.388615858,
+          "registersPerThread": 254,
+          "staticSharedMemory": 0,
+          "dynamicSharedMemory": 0,
+          "blockX": 64,
+          "blockY": 1,
+          "blockZ": 1,
+          "gridX": 4096,
+          "gridY": 1,
+          "gridZ": 1
+        },
+        {
+          "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)1, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+          "seconds": 5.821571234,
+          "launches": 1,
+          "max_seconds": 5.821571234,
+          "registersPerThread": 194,
+          "staticSharedMemory": 0,
+          "dynamicSharedMemory": 0,
+          "blockX": 64,
+          "blockY": 1,
+          "blockZ": 1,
+          "gridX": 4096,
+          "gridY": 1,
+          "gridZ": 1
+        },
+        {
+          "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)0, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+          "seconds": 0.529549639,
+          "launches": 1,
+          "max_seconds": 0.529549639,
+          "registersPerThread": 192,
+          "staticSharedMemory": 0,
+          "dynamicSharedMemory": 0,
+          "blockX": 64,
+          "blockY": 1,
+          "blockZ": 1,
+          "gridX": 4096,
+          "gridY": 1,
+          "gridZ": 1
+        }
+      ],
+      "database_sha256": "a3da5ec0d73ecbfe7f53289d088d177f37495637731fda31b1ed76edcb21134b"
+    },
+    "class5-split": {
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "7016",
+      "cuda_visible_devices": "3",
+      "shared_rsh_requested": null,
+      "scope": "intrusive completed source actions; not a complete SCF/E+F endpoint",
+      "launch_rows": [
+        {
+          "total_order": 5,
+          "pair_orders": [
+            3,
+            2
+          ],
+          "first_pair_count": 565248,
+          "second_pair_count": 516480,
+          "indexed": true,
+          "indexed_geometry_row_entries": 26062583408,
+          "dense_bucket_capacity": 291939287040,
+          "want_j": true,
+          "want_k": true,
+          "range": 0,
+          "omega": 0.0
+        },
+        {
+          "total_order": 5,
+          "pair_orders": [
+            3,
+            2
+          ],
+          "first_pair_count": 565248,
+          "second_pair_count": 516480,
+          "indexed": true,
+          "indexed_geometry_row_entries": 26062583408,
+          "dense_bucket_capacity": 291939287040,
+          "want_j": false,
+          "want_k": true,
+          "range": 1,
+          "omega": 0.3
+        }
+      ],
+      "kernel_duration_sum_seconds": 553.673478277,
+      "canonical_total_orders": {
+        "5": {
+          "seconds": 553.673017125,
+          "launches": 2
+        }
+      },
+      "canonical_kernels": [
+        {
+          "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)5, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+          "seconds": 553.673017125,
+          "launches": 2,
+          "max_seconds": 276.865502194,
+          "registersPerThread": 174,
+          "staticSharedMemory": 0,
+          "dynamicSharedMemory": 0,
+          "blockX": 64,
+          "blockY": 1,
+          "blockZ": 1,
+          "gridX": 4096,
+          "gridY": 1,
+          "gridZ": 1
+        }
+      ],
+      "database_sha256": "fd359793f2824581ba0786d418910c398a591de93763a90a74854ff797824391"
+    },
+    "class5-shared": {
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "7017",
+      "cuda_visible_devices": "4",
+      "shared_rsh_requested": "shared",
+      "scope": "intrusive completed source actions; not a complete SCF/E+F endpoint",
+      "launch_rows": [
+        {
+          "total_order": 5,
+          "pair_orders": [
+            3,
+            2
+          ],
+          "first_pair_count": 565248,
+          "second_pair_count": 516480,
+          "indexed": true,
+          "indexed_geometry_row_entries": 26062583408,
+          "dense_bucket_capacity": 291939287040,
+          "want_j": true,
+          "want_k": true,
+          "range": 1,
+          "omega": 0.3
+        }
+      ],
+      "kernel_duration_sum_seconds": 429.980196257,
+      "canonical_total_orders": {
+        "5": {
+          "seconds": 429.980196257,
+          "launches": 1
+        }
+      },
+      "canonical_kernels": [
+        {
+          "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)5, (bool)0, (bool)1, (bool)1>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+          "seconds": 429.980196257,
+          "launches": 1,
+          "max_seconds": 429.980196257,
+          "registersPerThread": 180,
+          "staticSharedMemory": 0,
+          "dynamicSharedMemory": 0,
+          "blockX": 64,
+          "blockY": 1,
+          "blockZ": 1,
+          "gridX": 4096,
+          "gridY": 1,
+          "gridZ": 1
+        }
+      ],
+      "database_sha256": "9dbcd0a3acdd09afa928d4b19902a872a69c5c69973759b0471bf114985b30f8"
+    }
+  },
+  "shared_class5_exploratory_comparison": {
+    "split_seconds": 553.673017125,
+    "shared_seconds": 429.980196257,
+    "source_action_speedup": 1.287670971697656,
+    "duration_reduction_fraction": 0.22340409780177983,
+    "qualification": "single intrusive partial source action on separate RTX 5090s; not same-device repeats, endpoint timing or 96-atom numerical acceptance"
+  },
+  "independent_complete_smoke3": {
+    "native": {
+      "complete_seconds": 46.88252420350909,
+      "prepare_seconds": 0.7260989621281624,
+      "force_seconds": 37.46246164664626,
+      "scf_and_publication_seconds": 8.693963594734669,
+      "iterations": 15,
+      "fock_builds": 15,
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "7020",
+      "cuda_visible_devices": "1",
+      "energy_error": 8.355982572538778e-12,
+      "force_error": 1.8177015448372913e-11,
+      "gate": true,
+      "force_component_seconds": {
+        "prepare": 36.190962348133326,
+        "integral_derivatives": 0.7970128133893013,
+        "density_and_nuclear_setup": 0.0026310794055461884,
+        "nonlocal_reset": 4.793703556060791e-05,
+        "resident_feature_seed_enqueue": 5.0477683544158936e-05,
+        "vv10_pair_enqueue": 0.00015833601355552673,
+        "single_pass_geometry_and_pair_drain": 0.4074324443936348,
+        "reduction_and_validation": 0.0021141134202480316
+      }
+    },
+    "reference": {
+      "complete_seconds": 45.542722541838884,
+      "prepare_seconds": 0.7465891055762768,
+      "force_seconds": 4.287201698869467,
+      "scf_and_publication_seconds": 40.50893173739314,
+      "iterations": 35,
+      "fock_builds": 36,
+      "source": "15bc697009d191a88120607e0e50a15561d35d61",
+      "slurm_job_id": "7020",
+      "cuda_visible_devices": "1"
+    }
+  },
+  "counter_limit": "Nsight Compute ERR_NVGPUCTRPERM; achieved occupancy, spills and hardware traffic unmeasured",
+  "invalid_capture_warning": "aborted empty CUPTI captures are not evidence of idle GPUs or CPU fallback",
+  "next_route": "compiler-owned bounded shell/primitive component reuse within canonical exact values; retain indexed fallback and all numerical gates",
+  "raw_artifact_root": "/home/jzzeng/codes/qc-external-basis/.artifacts/wb97m-cold96-master-20261010-15bc69700",
+  "remote_artifact_root": "/data/jzzeng/wb97m-cold96-master-20261010-15bc69700",
+  "all_rows_census": {
+    "source": "15bc697009d191a88120607e0e50a15561d35d61",
+    "scope": "all geometry row prefixes; all canonical J/K value actions omitted; preparation/bound integrals still computed; no physical E/F",
+    "full_range_buckets": [
+      {
+        "total_order": 0,
+        "pair_orders": [
+          0,
+          0
+        ],
+        "first_pair_count": 73920,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 191170858,
+        "dense_bucket_capacity": 2732120160,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 1,
+        "pair_orders": [
+          1,
+          0
+        ],
+        "first_pair_count": 294912,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 1823825648,
+        "dense_bucket_capacity": 21799895040,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 2,
+        "pair_orders": [
+          1,
+          1
+        ],
+        "first_pair_count": 294912,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 4351701942,
+        "dense_bucket_capacity": 43486691328,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 2,
+        "pair_orders": [
+          2,
+          0
+        ],
+        "first_pair_count": 516480,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 3238999700,
+        "dense_bucket_capacity": 38178201600,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 3,
+        "pair_orders": [
+          2,
+          1
+        ],
+        "first_pair_count": 516480,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 15458443576,
+        "dense_bucket_capacity": 152316149760,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 4,
+        "pair_orders": [
+          2,
+          2
+        ],
+        "first_pair_count": 516480,
+        "second_pair_count": 516480,
+        "indexed": true,
+        "indexed_geometry_row_entries": 13728154178,
+        "dense_bucket_capacity": 133376053440,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 3,
+        "pair_orders": [
+          3,
+          0
+        ],
+        "first_pair_count": 565248,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 3075361840,
+        "dense_bucket_capacity": 41783132160,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 4,
+        "pair_orders": [
+          3,
+          1
+        ],
+        "first_pair_count": 565248,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 14671703744,
+        "dense_bucket_capacity": 166698418176,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 5,
+        "pair_orders": [
+          3,
+          2
+        ],
+        "first_pair_count": 565248,
+        "second_pair_count": 516480,
+        "indexed": true,
+        "indexed_geometry_row_entries": 26062583408,
+        "dense_bucket_capacity": 291939287040,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 6,
+        "pair_orders": [
+          3,
+          3
+        ],
+        "first_pair_count": 565248,
+        "second_pair_count": 565248,
+        "indexed": true,
+        "indexed_geometry_row_entries": 12360114660,
+        "dense_bucket_capacity": 159752933376,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 4,
+        "pair_orders": [
+          4,
+          0
+        ],
+        "first_pair_count": 411936,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 1932824576,
+        "dense_bucket_capacity": 30450309120,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 5,
+        "pair_orders": [
+          4,
+          1
+        ],
+        "first_pair_count": 411936,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 9222110704,
+        "dense_bucket_capacity": 121484869632,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 6,
+        "pair_orders": [
+          4,
+          2
+        ],
+        "first_pair_count": 411936,
+        "second_pair_count": 516480,
+        "indexed": true,
+        "indexed_geometry_row_entries": 16388598152,
+        "dense_bucket_capacity": 212756705280,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 7,
+        "pair_orders": [
+          4,
+          3
+        ],
+        "first_pair_count": 411936,
+        "second_pair_count": 565248,
+        "indexed": true,
+        "indexed_geometry_row_entries": 15549919392,
+        "dense_bucket_capacity": 232846000128,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 8,
+        "pair_orders": [
+          4,
+          4
+        ],
+        "first_pair_count": 411936,
+        "second_pair_count": 411936,
+        "indexed": true,
+        "indexed_geometry_row_entries": 4894982848,
+        "dense_bucket_capacity": 84845840016,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 5,
+        "pair_orders": [
+          5,
+          0
+        ],
+        "first_pair_count": 184320,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 621352768,
+        "dense_bucket_capacity": 13624934400,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 6,
+        "pair_orders": [
+          5,
+          1
+        ],
+        "first_pair_count": 184320,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 2965042240,
+        "dense_bucket_capacity": 54358179840,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 7,
+        "pair_orders": [
+          5,
+          2
+        ],
+        "first_pair_count": 184320,
+        "second_pair_count": 516480,
+        "indexed": true,
+        "indexed_geometry_row_entries": 5268901904,
+        "dense_bucket_capacity": 95197593600,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 8,
+        "pair_orders": [
+          5,
+          3
+        ],
+        "first_pair_count": 184320,
+        "second_pair_count": 565248,
+        "indexed": true,
+        "indexed_geometry_row_entries": 5000491360,
+        "dense_bucket_capacity": 104186511360,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 9,
+        "pair_orders": [
+          5,
+          4
+        ],
+        "first_pair_count": 184320,
+        "second_pair_count": 411936,
+        "indexed": true,
+        "indexed_geometry_row_entries": 3156777088,
+        "dense_bucket_capacity": 75928043520,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 10,
+        "pair_orders": [
+          5,
+          5
+        ],
+        "first_pair_count": 184320,
+        "second_pair_count": 184320,
+        "indexed": true,
+        "indexed_geometry_row_entries": 502170808,
+        "dense_bucket_capacity": 16987023360,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 6,
+        "pair_orders": [
+          6,
+          0
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 104198016,
+        "dense_bucket_capacity": 3796531200,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 7,
+        "pair_orders": [
+          6,
+          1
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 494944576,
+        "dense_bucket_capacity": 15146680320,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 8,
+        "pair_orders": [
+          6,
+          2
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 516480,
+        "indexed": true,
+        "indexed_geometry_row_entries": 877906080,
+        "dense_bucket_capacity": 26526412800,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 9,
+        "pair_orders": [
+          6,
+          3
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 565248,
+        "indexed": true,
+        "indexed_geometry_row_entries": 844459968,
+        "dense_bucket_capacity": 29031137280,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 10,
+        "pair_orders": [
+          6,
+          4
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 411936,
+        "indexed": true,
+        "indexed_geometry_row_entries": 528413376,
+        "dense_bucket_capacity": 21157032960,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 11,
+        "pair_orders": [
+          6,
+          5
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 184320,
+        "indexed": true,
+        "indexed_geometry_row_entries": 170583808,
+        "dense_bucket_capacity": 9466675200,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 12,
+        "pair_orders": [
+          6,
+          6
+        ],
+        "first_pair_count": 51360,
+        "second_pair_count": 51360,
+        "indexed": true,
+        "indexed_geometry_row_entries": 11125000,
+        "dense_bucket_capacity": 1318950480,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      }
+    ],
+    "long_range_prefix_entries_match_full": true,
+    "raw_log_sha256": "8831b8894e25a5d7a57dc78f7d94e5e4c54200f4dbe1932338b44874c4c460ef",
+    "full_range_indexed_row_entries": 163496862218,
+    "full_range_dense_capacity": 2201172312576
+  },
+  "latest_artifact_root": "/home/jzzeng/codes/qc-external-basis/.artifacts/wb97m-cold96-master-20261010-cd0eb059f",
+  "latest_library_sha256": "2e346139439b2ecc2f41b6f710b9d3332ad784c318b1c11d14245b3d734eaaff",
+  "latest_compiler_cache": {
+    "before_stats": "Summary:\n  Hits:             50795 /  61244 (82.94 %)\n    Direct:         50352 /  61287 (82.16 %)\n    Preprocessed:     443 /  10931 (4.05 %)\n  Misses:           10449\n    Direct:         10935\n    Preprocessed:   10488\n  Uncacheable:      11978\nPrimary storage:\n  Hits:            106074 / 122574 (86.54 %)\n  Misses:           16500\n  Cache size (GB):   4.09 /   5.00 (81.86 %)\n  Cleanups:            79\n\nUse the -v/--verbose option for more details.\n",
+    "after_stats": "Summary:\n  Hits:             51739 /  62231 (83.14 %)\n    Direct:         51296 /  62274 (82.37 %)\n    Preprocessed:     443 /  10974 (4.04 %)\n  Misses:           10492\n    Direct:         10978\n    Preprocessed:   10531\n  Uncacheable:      11981\nPrimary storage:\n  Hits:            107999 / 124548 (86.71 %)\n  Misses:           16549\n  Cache size (GB):   4.21 /   5.00 (84.22 %)\n  Cleanups:            79\n\nUse the -v/--verbose option for more details.\n"
+  },
+  "latest_partial_capture": {
+    "source": "cd0eb059fd1d0ba205c7db160e50c1145cb8488e",
+    "slurm_job_id": "7037",
+    "cuda_visible_devices": "1",
+    "shared_rsh_requested": null,
+    "scope": "intrusive completed source actions; not a complete SCF/E+F endpoint",
+    "launch_rows": [
+      {
+        "total_order": 0,
+        "pair_orders": [
+          0,
+          0
+        ],
+        "first_pair_count": 73920,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 191170858,
+        "dense_bucket_capacity": 2732120160,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 1,
+        "pair_orders": [
+          1,
+          0
+        ],
+        "first_pair_count": 294912,
+        "second_pair_count": 73920,
+        "indexed": true,
+        "indexed_geometry_row_entries": 1823825648,
+        "dense_bucket_capacity": 21799895040,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      },
+      {
+        "total_order": 2,
+        "pair_orders": [
+          1,
+          1
+        ],
+        "first_pair_count": 294912,
+        "second_pair_count": 294912,
+        "indexed": true,
+        "indexed_geometry_row_entries": 4351701942,
+        "dense_bucket_capacity": 43486691328,
+        "want_j": true,
+        "want_k": true,
+        "range": 0,
+        "omega": 0.0
+      }
+    ],
+    "kernel_duration_sum_seconds": 16.725571758,
+    "canonical_total_orders": {
+      "0": {
+        "seconds": 0.532301578,
+        "launches": 1
+      },
+      "1": {
+        "seconds": 5.808467825,
+        "launches": 1
+      },
+      "2": {
+        "seconds": 10.384802355,
+        "launches": 1
+      }
+    },
+    "canonical_kernels": [
+      {
+        "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)2, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+        "seconds": 10.384802355,
+        "launches": 1,
+        "max_seconds": 10.384802355,
+        "registersPerThread": 254,
+        "staticSharedMemory": 0,
+        "dynamicSharedMemory": 0,
+        "blockX": 64,
+        "blockY": 1,
+        "blockZ": 1,
+        "gridX": 4096,
+        "gridY": 1,
+        "gridZ": 1
+      },
+      {
+        "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)1, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+        "seconds": 5.808467825,
+        "launches": 1,
+        "max_seconds": 5.808467825,
+        "registersPerThread": 194,
+        "staticSharedMemory": 0,
+        "dynamicSharedMemory": 0,
+        "blockX": 64,
+        "blockY": 1,
+        "blockZ": 1,
+        "gridX": 4096,
+        "gridY": 1,
+        "gridZ": 1
+      },
+      {
+        "name": "void generativeqc::scf::<unnamed>::canonical_jk_kernel<(unsigned int)0, (bool)0, (bool)1, (bool)0>(generativeqc::scf::cuda_execution::DeviceBatch, int, const int *, generativeqc::scf::cuda_execution::CanonicalPairRows, unsigned long, unsigned long, unsigned long, unsigned long, bool, unsigned long, bool, bool, generativeqc::integrals::CoulombRange, double, double, const double *, const double *, double *, double *, unsigned long *, double *, double *, double *, double *)",
+        "seconds": 0.532301578,
+        "launches": 1,
+        "max_seconds": 0.532301578,
+        "registersPerThread": 192,
+        "staticSharedMemory": 0,
+        "dynamicSharedMemory": 0,
+        "blockX": 64,
+        "blockY": 1,
+        "blockZ": 1,
+        "gridX": 4096,
+        "gridY": 1,
+        "gridZ": 1
+      }
+    ],
+    "database_sha256": "5ed3c526ee3065bacf91a4e3d84d8f1edef1ffa48c1b0f87d058a440b22bfe18"
+  },
+  "latest_all_rows_census": {
+    "scope": "all geometry row prefixes; canonical J/K value actions omitted; preparation/bound integrals still computed; not physical E/F",
+    "source": "cd0eb059fd1d0ba205c7db160e50c1145cb8488e",
+    "all_56_buckets_match_baseline": true,
+    "raw_log_sha256": "a03616a6fef8e54e617a7e3030558c17556ba8a6c4968303d6779770bcfc0003"
+  },
+  "latest_independent_complete_smoke3": {
+    "source": "cd0eb059fd1d0ba205c7db160e50c1145cb8488e",
+    "slurm_job_id": "7038",
+    "native": {
+      "complete_seconds": 28.794740095734596,
+      "iterations": 15,
+      "fock_builds": 15,
+      "energy_error": 8.355982572538778e-12,
+      "force_error": 1.7535306540139572e-11,
+      "gate": true
+    },
+    "reference_source": "15bc697009d191a88120607e0e50a15561d35d61",
+    "scope": "small same-protocol oracle only; not a matched-revision speed comparison or 96-atom acceptance"
+  },
+  "latest_shared_independent_complete_smoke3": {
+    "source": "cd0eb059fd1d0ba205c7db160e50c1145cb8488e",
+    "slurm_job_id": "7038",
+    "shared_rsh_requested": "shared",
+    "native": {
+      "complete_seconds": 12.361830953508615,
+      "iterations": 15,
+      "fock_builds": 15,
+      "energy_error": 8.37019342725398e-12,
+      "force_error": 1.794431270241148e-11,
+      "gate": true
+    },
+    "reference_source": "15bc697009d191a88120607e0e50a15561d35d61",
+    "scope": "small optional-route accuracy only; not default-policy or 96-atom performance qualification"
+  }
+}

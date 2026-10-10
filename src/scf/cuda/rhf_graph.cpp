@@ -25,7 +25,9 @@ void RhfIterationGraphs::destroy(cudaGraph_t& graph, cudaGraphExec_t& executable
   }
 }
 
-RhfIterationGraphs::~RhfIterationGraphs() {
+RhfIterationGraphs::~RhfIterationGraphs() { reset(); }
+
+void RhfIterationGraphs::reset() noexcept {
   std::lock_guard<std::mutex> allocation_lock(runtime::allocation_measurement_mutex);
   if (device_id_ >= 0) (void)cudaSetDevice(device_id_);
   destroy(post_eigensolver_graph_, post_eigensolver_graph_exec_, post_eigensolver_generation_,

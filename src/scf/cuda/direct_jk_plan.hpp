@@ -53,6 +53,8 @@ struct CudaDirectJkPlan {
   int device_id{-1};
   cuda_execution::DeviceBatch batch{};
   cudaStream_t stream{};
+  /** A phase-local caller may lend its stream; metadata still belongs here. */
+  bool owns_stream{true};
   unsigned derivative_order{};
   std::size_t matrix_elements{}, coordinates_per_item{}, coordinate_elements{};
   double screening_tolerance{};
@@ -94,6 +96,16 @@ struct CudaDirectJkPlan {
    * If its charged workspace does not fit, the dense canonical source remains. */
   const std::int32_t* canonical_pair_order{};
   const std::uint64_t* canonical_row_prefix{};
+  /** Qualification-only indexed order-five shell traversal. It borrows the
+   * immutable primitive cache from the generated owner, but screens every AO
+   * with canonical_bounds. Shell maxima only prune provably empty tasks.
+   * Null storage retains the original per-component source. */
+  cuda_execution::DeviceBatch materialized_batch{};
+  const std::int32_t* materialized_pair_order{};
+  const std::uint64_t* materialized_row_prefix{};
+  double* materialized_bounds{};
+  std::size_t materialized_device_bytes{};
+  std::vector<std::array<std::size_t, 8>> materialized_pair_offsets;
   /** Derivative-capable canonical plans may retain shell AO offsets/pairs in
    * batch so HF's one-electron kernel can borrow metadata and derivative scratch. */
   double *canonical_density{}, *canonical_coulomb{}, *canonical_exchange{};

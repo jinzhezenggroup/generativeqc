@@ -219,10 +219,10 @@
     "src/scf/cuda/direct_jk_kernels.cu": {
       "classification": "infrastructure",
       "contract": "#934",
-      "reason": "CUB scan/sort builds screened integral task queues and block queue offsets. This bounded scheduling exception does not classify scientific tensor reductions as infrastructure.",
+      "reason": "CUB scan/sort builds screened integral task queues, block queue offsets and indexed canonical shell-pair order from immutable Schwarz maxima. This bounded scheduling exception does not classify scientific tensor reductions as infrastructure.",
       "references": {
         "cub::DeviceScan": 2,
-        "cub::DeviceSegmentedRadixSort": 2
+        "cub::DeviceSegmentedRadixSort": 3
       }
     },
     "src/scf/cuda/direct_queue_scan.cu": {

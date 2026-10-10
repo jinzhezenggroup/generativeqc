@@ -144,6 +144,13 @@ std::vector<Item> run() {
   ScfOptions options;options.export_physical_reference=true;
   struct {int stream_=0;std::size_t reference_peak_bytes_=1000,reference_eri_bytes_=0;
           int eigensolver_view(){return 0;}} resources;
+  const auto reference_phase_peak=resources.reference_peak_bytes_;
+  struct MockResidentValues {
+    bool active() const {return false;}
+    generativeqc_status audit(){return GENERATIVEQC_STATUS_SUCCESS;}
+    void observe_completed(std::size_t) const {}
+  };
+  std::unique_ptr<MockResidentValues> resident_values;
   const MockHost host;
   const std::size_t nbf=2,batch_size=1,spin_count=1,spin_matrix_elements=4;
   const unsigned threads=32,matrix_reduction_threads=32;

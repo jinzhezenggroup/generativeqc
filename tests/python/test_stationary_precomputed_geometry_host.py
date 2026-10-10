@@ -65,7 +65,7 @@ std::atomic<size_t> point_evaluations{0};
         "const int old=*p; *p=v; return old;", "return std::atomic_ref(*p).exchange(v);"
     ).replace("  return {};", "  ++point_evaluations; return {};")
     begin = _STATIONARY_SCIENTIFIC_KERNELS.index(
-        "__device__ bool geometry_point_setup("
+        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
     )
     end = _STATIONARY_SCIENTIFIC_KERNELS.index(
         "}  // namespace generativeqc_stationary_cuda", begin

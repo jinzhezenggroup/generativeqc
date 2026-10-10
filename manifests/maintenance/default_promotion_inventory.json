@@ -26,6 +26,8 @@
       "src/scf/cuda/direct_jk.cpp",
       "src/scf/cuda/direct_md_j.hpp",
       "src/scf/cuda/direct_fock_lowering.hpp",
+      "src/scf/cuda/reference_eri_policy.hpp",
+      "src/scf/cuda/rhf_resident_values.cpp",
       "python/generativeqc_compiler/integral/production_rys_tasks.py",
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
@@ -34,6 +36,29 @@
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
   "entries": [
+    {
+      "id": "scf.phase-local-exact-reference-values",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/scf/cuda/reference_eri_policy.hpp",
+        "src/scf/cuda/rhf_resident_values.cpp",
+        "src/scf/cuda_rhf.cpp"
+      ],
+      "rationale": "Unset/auto conservatively selects a phase-local exact FP64 source only for fresh single restricted unscreened physical-reference buckets with uncovered generic f-shell Fock work, at least 64 public/128 Cartesian AOs and an iteration limit of at least eight. The static domain heuristic is not an observed reuse count or a universal profitability model. Complete numeric admission, an 8-GiB value ceiling and a 256-MiB free-device reserve retain exact fallback. Local graphs and values retire before correlation; refused/warm calls reuse ordinary bucket graphs. Explicit 0 restores the original schedule and 1 requests values without bypassing scientific/resource gates.",
+      "revisit_condition": "Broaden the cold/domain heuristic only with new source-matched complete E+F comparisons and independent gates, including quickly converged fresh seeds and generated/lower-angular schedules. Preserve final physical Fock/census audits, compensated FP64 arithmetic and bounded lifetime; do not pool retained opt-in measurements with new default-auto qualification.",
+      "evidence": [
+        "docs/developer/scf_module_boundaries.md",
+        ".agents/notes/implemented/performance/2026-10-10-rhf-phase-values-auto.md",
+        "benchmarks/results/rhf-phase-values-auto-20261010/README.md",
+        "tests/python/test_rhf_reference_cache_policy.py",
+        "tests/python/test_rhf_resident_values_lifetime.py",
+        "tests/python/test_rhf_phase_resident_values_cuda.py"
+      ]
+    },
     {
       "id": "initial-guess.df-rhf-preconvergence",
       "classification": "already-default",

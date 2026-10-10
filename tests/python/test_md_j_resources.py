@@ -201,7 +201,8 @@ def test_actual_md_optional_preparation_preserves_ledger_and_cuda_errors(
         ),
     ]
     start = source.index("    MdJHost md_host;")
-    end = source.index("    auto& info =", start)
+    # Isolate incumbent MD admission from the later optional materialized owner.
+    end = source.index("    prepare_materialized_values();", start)
     driver = MD_DRIVER.replace("MD_PREPARATION", source[start:end])
     # The host compiler has no CUDA SDK; only its runtime type declarations
     # are supplied by the controlled shim. All MD-J structs are real headers.

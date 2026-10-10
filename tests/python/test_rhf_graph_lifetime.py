@@ -134,6 +134,9 @@ int main() {
       if (replay != cudaSuccess) return 8;
       if (events.size() != 3 || events[1][1] != 2 || events[2][1] != 3 ||
           events[2][8] != cudaSuccess || events[0][2] != events[2][2]) return 16;
+      if (owner.has_iteration()==post) return 27;
+      owner.reset();
+      if (owner.has_iteration() || graphs || executables) return 28;
     }
     if (capturing || graphs || executables) return 9;
     if (events.size() != 4 || events.back()[1] != 4 || events.back()[2] != events[0][2]) return 17;
