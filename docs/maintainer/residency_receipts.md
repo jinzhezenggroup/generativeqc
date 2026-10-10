@@ -150,7 +150,6 @@ python tools/capture_prepared_residency.py --pin --method rhf \
   --library "$GENERATIVEQC_LIBRARY" \
   --collector .artifacts/residency-audit/collector.so \
   --cupti-library "$CUPTI_ROOT/lib64/libcupti.so" \
-  --work-ratchet manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json \
   --toolchain '<verified compiler/build/cache identity>' \
   --expected .artifacts/residency-audit/rhf-expected.json
 ```
@@ -160,9 +159,13 @@ Review the contract, then repeat with `--capture` instead of `--pin`, adding
 The case covers ragged direct FP64 H2/water/H2 preparation, first/warm energy,
 first/warm forces, geometry change and closing publication. Installed source,
 native library, collector, loaded CUPTI library and assigned GPU identity are
-checked, including post-execution source/artifact checks. Matched ordinary
-prepared history runs outside capture; energy/force acceptance and real iteration
-counts are recorded without a timing/speedup claim. Matched ordinary CUDA
+checked, including post-execution source/artifact checks. Device identity is
+resolved from visible CUDA ordinal zero through the pinned native library and
+its PCI-selected full-GPU UUID; MIG-enabled/unknown modes and failed probes are
+rejected without falling back to the visibility token as an NVML ordinal.
+The geometry endpoint executes the pinned `moved_coordinates`, displacing only
+the final atom of each item. Matched ordinary prepared history runs outside
+capture; energy/force acceptance and real iteration counts are recorded without a timing/speedup claim. Matched ordinary CUDA
 histories must retain identical iteration counts. A separate native-CPU FP64
 direct history runs outside capture and checks independent-backend energy/force
 errors, retaining but not equating different backend convergence histories.
@@ -177,10 +180,16 @@ total nodes per definition (`--graph-node-limit`, at most 4096) and nesting dept
 
 ### Observed replay work ratchet
 
-The optional `--work-ratchet` selects independently reviewed limits from
-`manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json`. Supply the
-same file for `--pin` and `--capture`. The whole policy SHA-256 and selected
-profile are pinned outside capture and rechecked after execution; pinning never
+The optional `--work-ratchet` selects independently reviewed limits for the exact
+current workload. Supply the same file for `--pin` and `--capture`. The retained
+`manifests/residency_work_ratchets/hf_prepared_direct_fp64.v1.json` is historical:
+its RHF/UHF profiles pin a rigid-translation workload and intentionally do not
+match the current internal-displacement workload. Keep that policy and its
+measurements unchanged. The command above collects current diagnostics without
+a ratchet and reports `not-configured`; it does not pass an observed-work gate.
+To enable the gate, first independently qualify and review a new matching policy,
+then pass its path with `--work-ratchet`. A mismatched policy fails closed.
+The whole policy SHA-256 and selected profile are pinned outside capture and rechecked after execution; pinning never
 learns or raises limits from the run being checked. Matching uses the complete
 declared workload, including method, precision, systems, endpoint properties and
 numerical gates. The retained RHF/UHF profiles cover the fixed direct-FP64

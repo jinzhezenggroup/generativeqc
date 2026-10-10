@@ -435,7 +435,31 @@ def test_changed_workload_and_changed_policy_do_not_reuse_an_independent_pin(
 def test_retained_profiles_match_only_their_exact_qualified_workload(
     method: str,
 ) -> None:
-    profile = load_work_ratchet(QUALIFIED, workload(method))["profile"]
+    # Literal workload of retained Slurm job 6933. Do not derive historical
+    # evidence selectors from today's stronger internal-displacement workload.
+    hydrogen = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
+    water = [(8, (0.0, 0.0, 0.0)), (1, (1.43, 0.0, 1.11)), (1, (-1.43, 0.0, 1.11))]
+    historical = {
+        "method": method,
+        "basis": "sto-3g",
+        "precision": "fp64",
+        "density_fitting": "none",
+        "device_id": 0,
+        "systems": [hydrogen, water, hydrogen],
+        "moved_dz": 0.01,
+        "endpoints": (
+            ("energy-first", "endpoint", ("energy",)),
+            ("energy-warm", "replay", ("energy",)),
+            ("force-first", "endpoint", ("energy", "forces")),
+            ("force-warm", "replay", ("energy", "forces")),
+            ("moved", "geometry_rebuild", ("energy", "forces")),
+        ),
+        "energy_gate": 1e-10,
+        "force_gate": 1e-9,
+    }
+    profile = load_work_ratchet(QUALIFIED, historical)["profile"]
+    with pytest.raises(InvalidReceipt, match="no ratchet profile"):
+        load_work_ratchet(QUALIFIED, workload(method))
     assert profile["name"] == f"prepared-{method}-direct-fp64-h2-water-h2-v1"
     assert [row["name"] for row in profile["regions"]] == ["energy-warm", "force-warm"]
     assert profile["baseline"]["slurm_job_id"] == "6933"
@@ -461,12 +485,14 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     monkeypatch.setenv("SLURM_JOB_ID", "cpu-metadata-double")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
     monkeypatch.setattr(
-        capture_prepared_residency.subprocess,
-        "check_output",
-        lambda *args, **kwargs: "GPU-cpu-metadata-double\n",
+        capture_prepared_residency,
+        "visible_device_uuid",
+        lambda _: "GPU-cpu-metadata-double",
+        raising=False,
     )
     monkeypatch.setattr(capture_prepared_residency, "verify_source", lambda *args: None)
     required = [
+        "tools/capture_prepared_allocations.py",
         "tools/cupti_residency_capture.cpp",
         "tools/cupti_residency_capture.py",
         "tools/capture_prepared_residency.py",
@@ -499,7 +525,10 @@ def test_capture_contract_pins_independent_profile_and_policy_changes_without_gp
     binary = tmp_path / "not-a-library"
     binary.write_bytes(b"metadata-double-not-executable")
     limits = tmp_path / "independent-policy.json"
-    limits.write_bytes(QUALIFIED.read_bytes())
+    # Synthetic contract metadata only, with no relabeled historical baseline.
+    synthetic = policy()
+    synthetic["profiles"][0]["workload_sha256"] = workload_digest(workload("rhf"))
+    limits.write_text(json.dumps(synthetic))
     arguments = SimpleNamespace(
         source_manifest=manifest,
         library=binary,

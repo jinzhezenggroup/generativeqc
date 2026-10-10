@@ -29,6 +29,7 @@ from tools.capture_prepared_allocations import (
     load,
     numerical_evidence,
     verify_source,
+    visible_device_uuid,
     workload,
     write_new,
 )
@@ -53,20 +54,12 @@ def regions() -> dict[int, dict[str, str]]:
 
 def contract(arguments: argparse.Namespace) -> dict[str, Any]:
     """Check actual source/artifacts and the GPU assigned by Slurm before work."""
-    _require(bool(os.environ.get("SLURM_JOB_ID")), "pin/capture requires Slurm")
-    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-    _require(bool(visible) and "," not in visible, "request exactly one Slurm GPU")
-    uuid = subprocess.check_output(
-        ["nvidia-smi", f"--id={visible}", "--query-gpu=uuid", "--format=csv,noheader"],
-        text=True,
-    ).strip()
-    _require(
-        uuid.startswith("GPU-") and "\n" not in uuid, "invalid assigned GPU identity"
-    )
+    uuid = visible_device_uuid(arguments.library)
     manifest = load(arguments.source_manifest)
     verify_source(ROOT, manifest)
     _require(
         {
+            "tools/capture_prepared_allocations.py",
             "tools/cupti_residency_capture.cpp",
             "tools/cupti_residency_capture.py",
             "tools/capture_prepared_residency.py",
@@ -141,15 +134,9 @@ def capture(arguments: argparse.Namespace, expected: dict[str, Any]) -> int:
     _require(load(arguments.expected) == expected, "independent contract mismatch")
     _require(not arguments.output.exists(), "output directory already exists")
     arguments.output.mkdir(parents=True)
-    case = workload(arguments.method)
+    case = expected["workload"]
     systems = case["systems"]
-    coordinates = [
-        [
-            (coordinate_x, coordinate_y, coordinate_z + case["moved_dz"])
-            for _, (coordinate_x, coordinate_y, coordinate_z) in atoms
-        ]
-        for atoms in systems
-    ]
+    coordinates = case["moved_coordinates"]
     config = {
         key: case[key]
         for key in ("method", "basis", "precision", "density_fitting", "device_id")

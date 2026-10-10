@@ -136,9 +136,27 @@ inline bool within_residual_margin(Power error, double tolerance) {
 }
 
 struct ProjectionMaxima {
-  std::uint64_t tau_error_bits{}, t1_magnitude_bits{};
+  std::uint64_t tau_error_bits{}, t1_magnitude_bits{}, tau_magnitude_bits{};
   unsigned refused{};
 };
+
+inline bool within_factorization_range(const ProjectionMaxima& maxima, Power bov, Power bvv,
+                                       std::size_t occupied, std::size_t virtuals) {
+  // This is a range envelope, not a rounding/convergence certificate. Every
+  // input magnitude is <=2^128 and every summed dimension is <=2^16. Even
+  // allowing the new B-t1.T*Bov factor, four input factors, signed additions
+  // and all reduction dimensions keeps intermediate magnitudes below 2^570.
+  // Larger finite inputs retain the original contraction tree instead of
+  // making a newly introduced overflowing dressing a physical sticky fault.
+  constexpr auto magnitude_limit = std::uint64_t{1151} << 52;
+  const auto bounded = [](Power value) {
+    return value.state == Power::State::zero ||
+           (value.state == Power::State::bounded && value.exponent <= 128);
+  };
+  return !maxima.refused && occupied && virtuals && occupied <= 65536 && virtuals <= 65536 &&
+         maxima.t1_magnitude_bits <= magnitude_limit &&
+         maxima.tau_magnitude_bits <= magnitude_limit && bounded(bov) && bounded(bvv);
+}
 
 #if defined(GENERATIVEQC_CUDA_PROVIDER_CUMETAL) && GENERATIVEQC_CUDA_PROVIDER_CUMETAL
 inline constexpr bool projection_supported = false;

@@ -167,6 +167,15 @@ issue closure. Other pathways retain their own unqualified ownership scopes.
 
 ## Revisit when
 
+The current audit workload displaces only the final atom of each ragged item
+and pins the resulting coordinates explicitly. Earlier evidence used a rigid
+translation, which exercised coordinate submission but could not distinguish
+stale integrals/results numerically because molecular distances were unchanged.
+The stronger internal-displacement gate supersedes that workload for new
+qualification; historical source/workload identities are retained unchanged.
+It does not change the native scientific implementation or claim that matched
+ordinary execution is a new independent whole-method oracle.
+
 The supported host interception boundary changes, a new profiler/version is
 qualified, native numeric buffers bypass the existing registry, or a consumer
 requires mapped-memory/Python-suballocator ownership. Do not silently widen

@@ -122,19 +122,18 @@ void* generativeqc_resource_journal_create_v1(void* handle, std::size_t capacity
     journal->events.reserve(capacity);
     std::lock_guard<std::mutex> lock(device_resource_mutex);
     if (ledger->active || ledger->journal) return nullptr;
-    const auto owners = std::count_if(
-        device_allocation_owners.begin(), device_allocation_owners.end(),
-        [&](const auto& entry) { return entry.second.ledger == ledger; });
+    const auto owners =
+        std::count_if(device_allocation_owners.begin(), device_allocation_owners.end(),
+                      [&](const auto& entry) { return entry.second.ledger == ledger; });
     if (static_cast<std::size_t>(owners) > capacity) return nullptr;
     journal->initial.reserve(owners);
     for (const auto& entry : device_allocation_owners) {
       if (entry.second.ledger == ledger)
         journal->initial.push_back({0, entry.second.generation, entry.second.bytes});
     }
-    std::sort(journal->initial.begin(), journal->initial.end(),
-              [](const auto& first, const auto& second) {
-                return first.generation < second.generation;
-              });
+    std::sort(
+        journal->initial.begin(), journal->initial.end(),
+        [](const auto& first, const auto& second) { return first.generation < second.generation; });
     auto* capture = new std::shared_ptr<DeviceAllocationJournal>(journal);
     ledger->journal = std::move(journal);
     return capture;
@@ -147,8 +146,8 @@ void* generativeqc_resource_journal_create_v1(void* handle, std::size_t capacity
  * Records are triples (kind, allocation generation, requested bytes), initial
  * owners first. A null/zero record buffer queries the required size. A short
  * buffer returns 2 and leaves its records untouched; state is always atomic. */
-int generativeqc_resource_journal_read_v1(void* handle, std::uint64_t* records,
-                                         std::size_t count, std::uint64_t* state) {
+int generativeqc_resource_journal_read_v1(void* handle, std::uint64_t* records, std::size_t count,
+                                          std::uint64_t* state) {
   using namespace generativeqc::runtime;
   if (handle == nullptr || state == nullptr || (records == nullptr && count != 0)) return 1;
   const auto& journal = *static_cast<std::shared_ptr<DeviceAllocationJournal>*>(handle);

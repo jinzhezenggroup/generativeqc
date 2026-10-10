@@ -214,17 +214,39 @@ def verify_source(root: Path, manifest: dict[str, Any]) -> None:
 
 
 def workload(method: str) -> dict[str, Any]:
-    """Pin ragged inputs, every property request, and geometry invalidation."""
+    """Pin ragged inputs and an internal displacement, not a rigid translation.
+
+    Moving only the final atom changes molecular distances, so unchanged stale
+    integrals/results cannot pass merely through translation invariance. The
+    exact moved coordinates belong to the pinned workload, not observer policy.
+    """
     hydrogen = [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))]
     water = [(8, (0.0, 0.0, 0.0)), (1, (1.43, 0.0, 1.11)), (1, (-1.43, 0.0, 1.11))]
+    systems = [hydrogen, water, hydrogen]
+    moved_dz = 0.01
+    moved_coordinates = [
+        [
+            (
+                coordinate_x,
+                coordinate_y,
+                coordinate_z + (moved_dz if atom_index == len(atoms) - 1 else 0.0),
+            )
+            for atom_index, (
+                _,
+                (coordinate_x, coordinate_y, coordinate_z),
+            ) in enumerate(atoms)
+        ]
+        for atoms in systems
+    ]
     return {
         "method": method,
         "basis": "sto-3g",
         "precision": "fp64",
         "density_fitting": "none",
         "device_id": 0,
-        "systems": [hydrogen, water, hydrogen],
-        "moved_dz": 0.01,
+        "systems": systems,
+        "moved_dz": moved_dz,
+        "moved_coordinates": moved_coordinates,
         "endpoints": ENDPOINTS,
         "energy_gate": 1e-10,
         "force_gate": 1e-9,
@@ -247,18 +269,58 @@ def schedule() -> list[dict[str, Any]]:
     ]
 
 
-def identity(arguments: argparse.Namespace) -> dict[str, Any]:
-    """Verify exported source, installed artifacts and the Slurm-assigned GPU."""
+def visible_device_uuid(library: Path) -> str:
+    """Resolve the actual full GPU visible to a pinned CUDA runtime, without fallback."""
     _require(bool(os.environ.get("SLURM_JOB_ID")), "GPU capture/pinning requires Slurm")
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     _require(bool(visible) and "," not in visible, "request exactly one Slurm GPU")
-    uuid = subprocess.check_output(
-        ["nvidia-smi", f"--id={visible}", "--query-gpu=uuid", "--format=csv,noheader"],
+    _require(not visible.startswith("MIG-"), "MIG capture is not supported")
+    # NVML ordinals need not match CUDA's ordering or scheduler remapping.
+    # Resolve visible ordinal zero through the same library used for capture.
+    native = ctypes.CDLL(str(library.resolve()))
+    count = ctypes.c_int()
+    native.cudaGetDeviceCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
+    native.cudaGetDeviceCount.restype = ctypes.c_int
+    _require(
+        native.cudaGetDeviceCount(ctypes.byref(count)) == 0 and count.value == 1,
+        "expected exactly one visible CUDA device",
+    )
+    pci_bus = native.cudaDeviceGetPCIBusId
+    pci_bus.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+    pci_bus.restype = ctypes.c_int
+    bus = ctypes.create_string_buffer(32)
+    _require(
+        pci_bus(bus, len(bus), 0) == 0 and bool(bus.value),
+        "cannot identify visible CUDA device 0",
+    )
+    bus_id = bus.value.decode("ascii")
+    device = subprocess.check_output(
+        [
+            "nvidia-smi",
+            f"--id={bus_id}",
+            "--query-gpu=uuid,mig.mode.current",
+            "--format=csv,noheader",
+        ],
         text=True,
     ).strip()
+    fields = [value.strip() for value in device.split(",")]
+    _require(len(fields) == 2 and "\n" not in device, "ambiguous assigned GPU UUID")
+    uuid, mig_mode = fields
     _require(
         uuid.startswith("GPU-") and "\n" not in uuid, "ambiguous assigned GPU UUID"
     )
+    # A numeric visibility token can also select a MIG instance. Its PCI ID
+    # names the parent GPU, not the instance; do not publish that parent UUID.
+    _require(
+        mig_mode in ("Disabled", "[N/A]"),
+        "MIG-enabled or unknown GPU mode is unsupported",
+    )
+    return uuid
+
+
+def identity(arguments: argparse.Namespace) -> dict[str, Any]:
+    """Verify exported source, installed artifacts and the Slurm-assigned GPU."""
+    uuid = visible_device_uuid(arguments.library)
     manifest = load(arguments.source_manifest)
     verify_source(ROOT, manifest)
     paths = {entry["path"] for entry in manifest["entries"]}
@@ -468,13 +530,7 @@ def capture(arguments: argparse.Namespace, actual_identity: dict[str, Any]) -> N
     release.argtypes, release.restype = [ctypes.c_void_p], None
     case = workload(arguments.method)
     systems = case["systems"]
-    coordinates = [
-        [
-            (coordinate_x, coordinate_y, coordinate_z + case["moved_dz"])
-            for _, (coordinate_x, coordinate_y, coordinate_z) in atoms
-        ]
-        for atoms in systems
-    ]
+    coordinates = case["moved_coordinates"]
     config = {
         key: case[key]
         for key in ("method", "basis", "precision", "density_fitting", "device_id")

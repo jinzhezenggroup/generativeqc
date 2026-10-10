@@ -70,11 +70,25 @@ def test_small_direct_cuda_global_budget_covers_all_ragged_caches(
                         actual.forces, target.forces, atol=1e-9, rtol=1e-8
                     )
         identity = batch.resource_plan.identity
-        moved = [
-            [(z, (x, y, zz + 0.01)) for z, (x, y, zz) in atoms] for atoms in systems
-        ]
-        coordinates = [[position for _, position in atoms] for atoms in moved]
-        batch.execute(coordinates=coordinates, strict=True)
+        coordinates = [[position for _, position in atoms] for atoms in systems]
+        for positions in coordinates:
+            coordinate_x, coordinate_y, coordinate_z = positions[-1]
+            positions[-1] = (coordinate_x, coordinate_y, coordinate_z + 0.01)
+        moved_result = batch.execute(
+            coordinates=coordinates, strict=True, properties=("energy", "forces")
+        )
+        moved_expected = ordinary.execute(
+            coordinates=coordinates, strict=True, properties=("energy", "forces")
+        ).items
+        for actual, target in zip(moved_result.items, moved_expected, strict=True):
+            assert actual.energy == pytest.approx(target.energy, abs=1e-10)
+            np.testing.assert_allclose(
+                actual.forces, target.forces, atol=1e-9, rtol=1e-8
+            )
+        assert any(
+            abs(actual.energy - previous.energy) > 1e-8
+            for actual, previous in zip(moved_result.items, result.items, strict=True)
+        )
         assert batch.resource_plan.identity == identity
     constrained = Calculator(
         device="cuda",

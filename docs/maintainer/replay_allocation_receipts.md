@@ -173,9 +173,12 @@ use is real:
 
 ```bash
 mkdir -p .artifacts/joint-allocation-audit
-ccache --version
-ccache c++ -fPIC -O2 -c tools/allocation_audit_marker.cpp \
+launcher="$(command -v sccache || command -v ccache)"
+"$launcher" --version
+"$launcher" --show-stats > .artifacts/joint-allocation-audit/cache-before.txt
+"$launcher" c++ -fPIC -O2 -c tools/allocation_audit_marker.cpp \
   -o .artifacts/joint-allocation-audit/marker.o
+"$launcher" --show-stats > .artifacts/joint-allocation-audit/cache-after.txt
 c++ -shared .artifacts/joint-allocation-audit/marker.o \
   -o .artifacts/joint-allocation-audit/marker.so
 python tools/capture_prepared_allocations.py --freeze-source \
@@ -192,8 +195,12 @@ does not establish that an arbitrary supplied binary was built from the source.
 
 Pinning and collection must run inside a finite Slurm allocation with exactly
 one visible GPU. Preserve `CUDA_VISIBLE_DEVICES`; do not run on a maintenance
-node. For example, inside the scheduled shell with the optional profiling venv
-activated and `PYTHONPATH="$PWD/python:$PWD"`:
+node. The pinned library resolves CUDA visible device 0 to its PCI bus ID before
+the UUID query, so NVML ordinal ordering cannot substitute a different GPU.
+MIG-enabled devices are rejected even with numeric visibility, because their PCI
+ID identifies the parent GPU rather than a specific instance. The mode must be
+disabled or reported as unsupported. For example, inside the scheduled shell
+with the optional profiling venv activated and `PYTHONPATH="$PWD/python:$PWD"`:
 
 ```bash
 export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
@@ -222,7 +229,9 @@ failures prevent a passing receipt. The default host parsing bound is 1,048,576
 raw events, with a configurable lower bound via `--max-host-events`.
 
 Matched ordinary prepared execution, including changed geometry, runs outside
-the monitored lifecycle. Gates are `1e-10` Eh energy and `1e-9` Eh/bohr force;
+the monitored lifecycle. The pinned moved coordinates displace only the final
+atom of each item, changing internal distances rather than merely translating
+the whole molecule. Gates are `1e-10` Eh energy and `1e-9` Eh/bohr force;
 real iteration counts are recorded. This is an instrumentation non-regression
 comparison, not independent scientific qualification of a new method. The
 reference warms CUDA context/library state before collection; the host owner
