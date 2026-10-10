@@ -84,24 +84,26 @@ void launch_assemble_rhf_fock_kernel(unsigned, unsigned, std::size_t, cudaStream
 #include "scf/cuda/rhf_resident_values.hpp"
 #include "molecule/basis.hpp"
 using namespace generativeqc;
-static int allocations=0, plans=0, fences=0, creates=0, mode=0, mallocs=0;
+static int allocations=0, plans=0, fences=0, creates=0, mode=0, mallocs=0, pending=0;
 static std::size_t direct_dimension=64;
 static bool graph_live=false;
 static std::vector<int> teardown;
 static cudaStream_t stream=reinterpret_cast<void*>(123);
 static void require(bool value) { if(!value) throw std::logic_error("lifetime invariant"); }
-int cudaStreamSynchronize(cudaStream_t value) { require(value==stream); ++fences; return 0; }
+int cudaStreamSynchronize(cudaStream_t value) {
+  require(value==stream); ++fences; return mode==15 || mode==19 ? 999 : 0;
+}
 int cudaMemGetInfo(std::size_t* available, std::size_t* total) {
   *available=*total=mode==1 ? 0 : 16ULL<<30; return mode==2 ? 999 : 0;
 }
-int cudaGetLastError() { return mode==3 ? 2 : mode==4 ? 999 : 0; }
-int cudaPeekAtLastError() { return 0; }
+int cudaGetLastError() { const auto value=pending; pending=0; return value; }
+int cudaPeekAtLastError() { return pending; }
 int cudaMemcpyAsync(void* to, const void* from, std::size_t bytes, int, cudaStream_t value) {
   require(value==stream); std::memcpy(to,from,bytes); return 0;
 }
 namespace generativeqc::runtime {
 int resource_cuda_malloc(void** output, std::size_t bytes) {
-  if((mode==3 || mode==4) && ++mallocs==2) return 2;
+  if((mode==3 || mode==4) && ++mallocs==2) { pending=mode==3 ? 2 : 999; return 2; }
   *output=std::malloc(bytes); ++allocations; return 0;
 }
 int resource_cuda_free(void* pointer) {
@@ -128,6 +130,15 @@ generativeqc_status create_cuda_direct_jk_plan_on_stream(
   require(value==stream && order==0 && screening==0 && systems.size()==1);
   ++creates;
   if(mode==5) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  // Real provider metadata/scratch cudaMalloc failures leave last-error pending.
+  if(mode>=13 && mode<=15) {
+    pending=mode==14 ? 999 : 2;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  if(mode>=17 && mode<=19) {
+    pending=mode==17 ? 999 : 0;
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   if(mode==6) return GENERATIVEQC_STATUS_CUDA_ERROR;
   *output=new CudaDirectJkPlan; ++plans;
   diagnostic.device_bytes=4096; diagnostic.host_bytes=100;
@@ -144,6 +155,7 @@ std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*) {
 generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
                                                          std::size_t, std::string&) {
   if(mode==7 || mode==12) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  if(mode==16) { pending=999; return GENERATIVEQC_STATUS_OUT_OF_MEMORY; }
   if(mode==8) return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   plan->resident=true; ++fences; return GENERATIVEQC_STATUS_SUCCESS;
 }
@@ -184,15 +196,19 @@ int main(int argc, char** argv) {
   core::System system; system.atoms.resize(1); system.shells.resize(64);
   for(auto& shell:system.shells) shell.primitives.push_back({1,1});
   std::vector<core::System> systems{system};
-  for(mode=0;mode<13;++mode) {
-    fences=1; mallocs=0; teardown.clear();
-    const bool fatal=mode==2 || mode==4 || mode==6 || mode==8;
+  for(mode=0;mode<20;++mode) {
+    fences=1; mallocs=0; pending=0; teardown.clear();
+    const bool fatal=mode==2 || mode==4 || mode==6 || mode==8 ||
+                     mode==14 || mode==15 || mode==16 || mode==17 || mode==19;
     const bool admitted=mode==0 || (mode>=9 && mode<=11);
     {
       RhfResidentValues owner(stream);
       auto status=owner.prepare(0,systems,100,64,1000,16ULL<<30);
       require((status!=GENERATIVEQC_STATUS_SUCCESS)==fatal);
       require(owner.active()==admitted);
+      if(!fatal && cudaPeekAtLastError()!=0)
+        throw std::logic_error("optional refusal left CUDA last-error pending");
+      if(mode>=14 && fatal) require(status==GENERATIVEQC_STATUS_CUDA_ERROR);
       if(mode==12) require(owner.capacity_bytes()>800 && owner.value_bytes()==0);
       if(admitted) {
         require(owner.capacity_bytes()>800 && owner.value_bytes()==800);

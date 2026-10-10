@@ -248,7 +248,8 @@ void require_exact_direct_strategy(const ResolvedFockBuild&,FockSpin,FockBackend
 DRIVER = r"""
 namespace generativeqc::scf {
 std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan,
-    const HostBatch& host,const ScfOptions& options,int device_id,bool unrestricted,
+    const HostBatch& host,const std::vector<core::System>&,
+    const ScfOptions& options,int device_id,bool unrestricted,
     bool shell_class_profiling,bool inactive_eigensolver_profiling) {
   const bool first_setup=!plan.initialized;
 @DIIS_POLICY@

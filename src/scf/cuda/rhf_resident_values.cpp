@@ -63,6 +63,18 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
                                                        : "failed");
     return status;
   };
+  const auto refuse_optional = [&] {
+    // Provider preparation may fail in metadata/scratch cudaMalloc before its
+    // optional-value allocator clears last-error. Retire only that OOM, and
+    // fence the borrowed stream so a concurrent execution fault cannot become
+    // an apparently successful exact fallback.
+    const auto pending = cudaGetLastError();
+    const auto drain = cudaStreamSynchronize(stream_);
+    if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation)
+      return finish(cuda_status(pending));
+    if (drain != cudaSuccess) return finish(cuda_status(drain));
+    return finish(GENERATIVEQC_STATUS_SUCCESS);
+  };
   const auto selection =
       reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
   if (selection == ReferenceResidentValuesSelection::disabled) {
@@ -128,7 +140,7 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
   auto status = create_cuda_direct_jk_plan_on_stream(device, systems, 0, 0.0, direct_bound, stream_,
                                                      &raw, diagnostic, reason_);
   direct_.reset(raw);
-  if (optional_refusal(status)) return finish(GENERATIVEQC_STATUS_SUCCESS);
+  if (optional_refusal(status)) return refuse_optional();
   if (status != GENERATIVEQC_STATUS_SUCCESS) return finish(status);
   if (diagnostic.device_bytes > direct_bound ||
       diagnostic.host_preparation_bytes + diagnostic.host_bytes >
@@ -165,7 +177,7 @@ generativeqc_status RhfResidentValues::prepare(int device, const std::vector<cor
   runtime::df_progress::Scope::number("admitted_optional_capacity_bytes", capacity_bytes_);
   status = prepare_cuda_direct_jk_resident_values(direct_.get(), allowance, reason_);
   if (optional_refusal(status)) {
-    return finish(GENERATIVEQC_STATUS_SUCCESS);
+    return refuse_optional();
   }
   if (status != GENERATIVEQC_STATUS_SUCCESS) return finish(status);
   diagnostic = cuda_direct_jk_plan_diagnostic(direct_.get());
