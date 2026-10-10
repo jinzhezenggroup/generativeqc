@@ -183,6 +183,38 @@ def test_native_ks_final_validation_default_is_audited(
     )
 
 
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        (
+            "result.w_contraction_storage_bits == 64",
+            "result.w_contraction_storage_bits == 32",
+        ),
+        ("result.w_contraction_compute_bits == 64", "true"),
+        ("result.w_contraction_accumulation_bits == 64", "true"),
+        ("distinct_moments && (i == j || j == k)", "i == j || j == k"),
+        ("sources.index[permutation] != permutation", "false"),
+        (
+            "generated_df::energy_distinct_tile(o, v, i, j, k",
+            "generated_df::energy_tile(o, v, i, j, k",
+        ),
+    ],
+)
+def test_distinct_triples_default_refuses_precision_or_routing_drift(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/df_triples_cuda.cu"
+    original = source.read_text()
+    assert before in original
+    source.write_text(original.replace(before, after))
+    assert any(
+        "distinct-moment FP64 energy admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
 def test_fixture_copies_registered_sources_outside_the_audited_scope(
     tmp_path: Path,
 ) -> None:

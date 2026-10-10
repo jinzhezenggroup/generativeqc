@@ -308,19 +308,37 @@ through the complete native owner rather than exposing the phase API directly.
 The compiler owns the panel and moment TensorIR in `cc/occupied_triples.py`.
 `tools/generate_df_occupied_triples.py` derives direct BLAS products from the
 shared GEMM contract and emits a fused scalar epilogue using the shared emitter.
-For each `i>=j>=k`, the owner builds six W cubes with twelve GEMMs and computes
-V elements inside the epilogue. All six occupied permutations are retained,
-including repeats divided by the occupied 6/2/1 multiplicity. The virtual domain
+For each `i>=j>=k`, the energy owner builds only distinct physical occupied
+`(I,J,K)` W seeds when actual W storage, compute and accumulation are all FP64.
+The compiler maps each occupied permutation to its first identical tuple;
+each distinct seed retains the original two GEMMs. All-distinct tiles use the
+original energy kernel. Non-FP64 execution and force/response owners retain full
+six-seed materialization. V elements are computed inside the epilogue.
+All six projected occupied energy contributions remain, including repeats
+divided by the occupied 6/2/1 multiplicity. Even all-equal tiles retain every
+finite check: algebraic cancellation does not permit skipping a failing tile.
+The virtual domain
 is the full cube: the six original virtual rows have equal complete sums after
 dummy-index relabeling. Folding this virtual cube independently, or keeping only
 one occupied permutation, changes the energy.
 
-One to three occupied integral panels replace full `ovvv`; six W cubes replace
-full T3. Let `T=o(o+1)(o+2)/6` and `P` be the actual panel-build count. Complete
-contraction work is `P Q v^3 + 6 T (v^4 + o v^3)` scalar summands; the epilogue
+One to three occupied integral panels replace full `ovvv`; the original six-cube
+W arena remains, replacing full T3 without changing storage admission. Skipped
+duplicate slots must never be read. One-panel and generated-provider budget
+fallbacks remain unchanged. Let `T=o(o+1)(o+2)/6`, `P` be the actual panel-build
+count and `M` the W evaluation count. Strict FP64 energy uses `M=o^3`; non-FP64
+and response materialization retain `M=6 T`. Complete contraction work is
+`P Q v^3 + M (v^4 + o v^3)` scalar summands; the epilogue
 visits `T v^3` points. Standard triples retain seventh-order leading work.
 Diagnostics separately report panel/moment GEMMs, epilogue/reduction kernels,
 transfers, and admitted/observed storage; summands are not hardware FLOPs.
+
+`tests/python/test_df_triples_distinct_moments.py` checks actual emitted remapped
+loads with poisoned duplicate slots and the independent original energy. This
+execution-only default adds no public option, numeric scratch or production
+CPU/reference work. Equal primal W seeds do not authorize response cotangent
+aliasing. The default-promotion inventory audits the FP64 energy admission as
+`cc-execution:df-triples-distinct-moments`, separately from SolverOptions.
 
 #1764 now has an explicit compiler-owned first precision candidate:
 `w_fp32_candidate_program` lowers only the two reduction-heavy W contractions

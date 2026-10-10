@@ -535,14 +535,6 @@
       "sha256": "513e1cdcae226283a51d7722f1d672b335e8a2995757bc20a06ca233472f9842"
     },
     {
-      "bytes": 233916,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue308-device-diis",
-      "path": "benchmarks/results/issue308-device-diis/summary.json",
-      "role": "decision-or-audit-record",
-      "sha256": "b24b5d2f2b0e930706374c0fb768188fdcc4c78162d2f04e9f456d292d06b463"
-    },
-    {
       "bytes": 139337,
       "classification": "required-compact-accepted-evidence",
       "family": "issue377-379-df",

@@ -498,6 +498,9 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     auto* energies = reinterpret_cast<double*>(context.arena + p.energies);
     auto* energy = reinterpret_cast<double*>(context.arena + p.energy);
     execution.initialize(context, in);
+    const bool distinct_moments = result.w_contraction_storage_bits == 64 &&
+                                  result.w_contraction_compute_bits == 64 &&
+                                  result.w_contraction_accumulation_bits == 64;
     std::array<std::size_t, 3> identities;
     identities.fill(std::numeric_limits<std::size_t>::max());
     std::array<std::size_t, 3> ages{};
@@ -520,6 +523,9 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
       for (std::size_t j = 0; j <= i; ++j)
         for (std::size_t k = 0; k <= j; ++k) {
           const std::array<std::size_t, 3> occupied{i, j, k};
+          const bool alias_tile = distinct_moments && (i == j || j == k);
+          const auto sources = alias_tile ? generated_df::occupied_moment_sources(i, j, k)
+                                          : generated_df::MomentSourceMap{};
           // Group W seeds by their integral-panel index. A single-panel fallback
           // consumes every dependent GEMM before that storage is reused. All
           // producer/consumer work is ordered on Context's one owned stream.
@@ -532,14 +538,22 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
             for (std::size_t permutation = 0; permutation < 6; ++permutation) {
               const auto* order = generated_df::permutations[permutation];
               if (occupied[order[0]] != occupied[index]) continue;
+              // Equal physical tuples have identical W seeds; every original
+              // energy contribution still loads its canonical stored seed.
+              if (sources.index[permutation] != permutation) continue;
               execution.build_w(context, in, occupied[order[0]], occupied[order[1]],
                                 occupied[order[2]], panel, moments + permutation * p.v3, slot);
               result.moment_gemms += 2;
             }
           }
           const double degeneracy = i == k ? 6.0 : (i == j || j == k ? 2.0 : 1.0);
-          generated_df::energy_tile(o, v, i, j, k, degeneracy, threshold, in, moments, p.blocks,
-                                    partials, context.error, context.stream);
+          if (alias_tile)
+            generated_df::energy_distinct_tile(o, v, i, j, k, degeneracy, threshold, in, moments,
+                                               sources, p.blocks, partials, context.error,
+                                               context.stream);
+          else
+            generated_df::energy_tile(o, v, i, j, k, degeneracy, threshold, in, moments, p.blocks,
+                                      partials, context.error, context.stream);
           ++result.epilogue_kernels;
           reduce<<<1, 256, 0, context.stream>>>(partials, p.blocks, energies + tile, context.error);
           generativeqc_tensor::cuda_check(cudaGetLastError());
