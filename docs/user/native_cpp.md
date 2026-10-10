@@ -78,9 +78,25 @@ For energy-only calculations, configure
 `density_fitting_auxiliary_basis`, just as the native CLI does. CPU and CUDA
 support depend on their qualified native provider and execution context.
 
-**The public native `Calculation::execute()` currently advertises DFT energy
-only.** Do not request forces, and do not interpret the presence of internal
-native stationary derivative kernels as a usable C++ force endpoint.
-The Python calculator has separately qualified DFT analytic-force paths that
-still require a future, explicitly validated native public bridge. Requests
-for unsupported properties fail rather than returning an incomplete gradient.
+The public native `Calculation::supported_properties()` reports
+**context-qualified** DFT analytic forces for a narrow, all-electron,
+strict-FP64 **CPU density-fitted PBE/PBE0 RKS** execution domain. The
+method-global registry remains energy-only: exact source coefficients,
+spin, backend, fitting provider, basis/ECP and correction terms determine
+admission for the prepared calculation. Request
+`GENERATIVEQC_PROPERTY_FORCES` only after querying actual prepared properties
+(the property constant is `GENERATIVEQC_PROPERTY_FORCES`).
+
+The same native, token-verified stationary-force consumer is used by
+`generativeqc_batch_execute` when **every member** of the prepared batch
+qualifies and a force output buffer is supplied. Mixed/unsupported native
+DFT force contexts fail before execution; a malformed or nonconverged item
+does not publish partial forces for that item. CPU Direct, CUDA, UKS,
+range-separated, ECP, nonlocal and correction-bearing contexts remain
+unqualified for native DFT forces, even when Python has a separately
+supported DFT-force path.
+
+The CPU PBE0 force qualification must still satisfy the independent
+reconverged finite-difference acceptance in #2151/#2222. A native
+force-capability flag is not evidence of an independently validated
+method/size/backend beyond its explicitly admitted context.
