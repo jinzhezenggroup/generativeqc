@@ -93,7 +93,7 @@ void run_case(const std::filesystem::path& folder, int id, int n, int batch, int
   input.read(reinterpret_cast<char*>(right.data()), right.size() * sizeof(double));
   input.read(reinterpret_cast<char*>(active.data()), active.size());
   require(input.good() && input.peek() == std::char_traits<char>::eof(), "bad fixture length");
-  DeviceBuffer<double> dl(left_size), dr(right_size), dout(output_size);
+  DeviceBuffer<double> dl(left_size), dr(right_size), dout(output_size), masked_output(output_size);
   DeviceBuffer<std::uint8_t> da(batch);
   check(cudaMemcpyAsync(dl.data, left.data(), left_size * sizeof(double), cudaMemcpyHostToDevice,
                         stream));
@@ -112,11 +112,12 @@ void run_case(const std::filesystem::path& folder, int id, int n, int batch, int
     reset_output<<<static_cast<unsigned>((output_size + 255) / 256), 256, 0, stream>>>(dout.data,
                                                                                        output_size);
     check(cudaPeekAtLastError());
-    status = ordinary ? matrix::launch_matrix_product(owner.view(), batch, n, dl.data, transpose,
-                                                      dr.data, da.data, dout.data, library, scale)
-                      : matrix::launch_spin_matrix_product(owner.view(), batch, spins, n, dl.data,
-                                                           left_spin, transpose, dr.data,
-                                                           right_spin, da.data, dout.data, library);
+    status = ordinary ? matrix::launch_matrix_product(owner.view(masked_output.data, output_size),
+                                                      batch, n, dl.data, transpose, dr.data,
+                                                      da.data, dout.data, library, scale)
+                      : matrix::launch_spin_matrix_product(
+                            owner.view(masked_output.data, output_size), batch, spins, n, dl.data,
+                            left_spin, transpose, dr.data, right_spin, da.data, dout.data, library);
   };
   if (graph_mode) {
     check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
