@@ -1,7 +1,11 @@
 # Proposal: bind the qualified PBE0 point to its actual grid producer
 
-Status: default-off integration; GPU owner and matched endpoint gates pass, promotion pending
+Status: historical default-off integration; superseded by the default-on promotion
 Date: 2026-10-10
+
+The subsequent production default and master-aligned qualification are recorded
+in `../implemented/performance/2026-10-10-producer-bound-pbe0-force-point.md`.
+This note retains the distinct initial default-off source and failed attempts.
 
 ## Decision
 
@@ -11,7 +15,7 @@ the ordered panel for the existing two-spin consumers. The remaining target is
 the full-spin point differential, not another duplicate-GEMM removal.
 
 Reuse the independently qualified numerical core from
-`2026-10-10-pbe0-bound-subnormal-exchange.md`. The production header now has its
+`2026-10-10-pbe0-bound-subnormal-exchange.md`. At initial integration the header had its
 exact SHA256 `f9ddf9e8ee0c95680735bc812fe6b20e6d488025d8b7f4a4b44155bf4fd3a204`;
 existing general/response arithmetic remains the eight-direction specialization.
 No general PBE, UKS, response/HVP or complete-endpoint qualification is implied.

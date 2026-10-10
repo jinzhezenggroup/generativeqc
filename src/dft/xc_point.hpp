@@ -364,22 +364,7 @@ GENERATIVEQC_XC_HD inline Value evaluate(bool pbe, const double rho[2], const do
   return evaluate_with_channels<8>(pbe, rho, gradient, exchange_scale, correlation_scale);
 }
 
-/** Exact restricted-spin point value and both spin coefficients.
- * Equal spin features permit common-density differentiation and one exchange
- * evaluation. Unequal features, including NaNs, retain the full-spin path.
- * This does not specialize response directions or assume equality from labels. */
-GENERATIVEQC_XC_HD inline Value evaluate_restricted(bool pbe, const double rho[2],
-                                                    const double gradient[2][3],
-                                                    double exchange_scale = 1.0,
-                                                    double correlation_scale = 1.0) {
-  if (rho[0] != rho[1]) return evaluate(pbe, rho, gradient, exchange_scale, correlation_scale);
-  for (unsigned axis = 0; axis < 3; ++axis)
-    if (gradient[0][axis] != gradient[1][axis])
-      return evaluate(pbe, rho, gradient, exchange_scale, correlation_scale);
-  return evaluate_with_channels<4, true>(pbe, rho, gradient, exchange_scale, correlation_scale);
-}
-
-/** Experimental PBE0 value for a producer-proven equal-spin feature source.
+/** PBE0 value for a producer-proven equal-spin feature source.
  * The four input coordinates are per-spin density and Cartesian gradient.
  * Validation remains in the shared numerical core. Only this private lowering
  * avoids division by a quantized subnormal rho^(4/3); existing entries and

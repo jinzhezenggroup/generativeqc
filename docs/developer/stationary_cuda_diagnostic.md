@@ -349,10 +349,11 @@ preserves shared-science choices, measured evidence and remaining qualification.
 The [s/p/d shard decision](../../.agents/notes/implemented/architecture/2026-09-22-stationary-cuda-spd-derivative-shards.md)
 records the multicomponent lowering, compiler boundary and resource caps.
 
-## Restricted PBE0 point experiment
+## Restricted PBE0 point schedule
 
 `GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT=off|on` requests the private
-restricted geometry-point schedule; its default is `off`. It does not change
+restricted geometry-point schedule; its default is `on`, with `off` retaining
+the general point route for qualification or diagnosis. It does not change
 the SCF policy, precision, functional weights, force assembly or public force
 capability, and a request alone does not prove fast-path execution.
 
@@ -373,7 +374,7 @@ capability and request are policy metadata, not semantic work counts. The
 specialized point retains the direct AO translation pullback and complete
 moving-grid/Becke terms. This private gate does not qualify general PBE, UKS,
 response or HVP numerics. The
-[producer-binding decision](../../.agents/notes/proposed/2026-10-10-rks-point-producer-binding.md)
+[producer-binding decision](../../.agents/notes/implemented/performance/2026-10-10-producer-bound-pbe0-force-point.md)
 records the rationale and separate scientific/endpoint acceptance boundaries.
 
 ## Strict compilation environment

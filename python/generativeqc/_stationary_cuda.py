@@ -172,7 +172,7 @@ def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool | int
 
 
 def _resolve_restricted_point_policy(selection: bool | None = None) -> bool:
-    """Keep the PBE0 point experiment off until complete-endpoint qualification.
+    """Request the qualified PBE0 point schedule unless explicitly disabled.
 
     This requests a schedule, not an equal-spin proof. Native mathematical,
     generation and scratch admission gates still select the actual kernel.
@@ -182,7 +182,7 @@ def _resolve_restricted_point_policy(selection: bool | None = None) -> bool:
         if type(selection) is not bool:
             raise TypeError("restricted point selection must be boolean or None")
         return selection
-    mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "off")
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "on")
     if mode not in {"off", "on"}:
         raise ValueError("PBE0 restricted point mode must be 'off' or 'on'")
     return mode == "on"

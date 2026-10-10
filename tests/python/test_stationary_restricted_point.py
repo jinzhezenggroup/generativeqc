@@ -63,12 +63,14 @@ def test_capability_requires_exact_components_not_a_functional_label(
     )
 
 
-def test_restricted_point_policy_is_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restricted_point_policy_defaults_on_with_explicit_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from generativeqc import _stationary_cuda as runtime
 
     variable = "GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT"
     monkeypatch.delenv(variable, raising=False)
-    assert not runtime._resolve_restricted_point_policy()
+    assert runtime._resolve_restricted_point_policy()
     monkeypatch.setenv(variable, "on")
     assert runtime._resolve_restricted_point_policy()
     assert not runtime._resolve_restricted_point_policy(False)
