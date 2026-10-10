@@ -166,10 +166,29 @@ metric normalization, the augmented pivoted solve, dependent-history retirement,
 and fallback semantics remain native solver policy. The specialization preserves
 the historical FP64 reduction order.
 
-Resident CUDA SCF density and DIIS kernels retain their existing device ownership
-for now; moving those kernels requires separate stream/layout and performance
-qualification. Exposing the frontend as an experimental public facade does not
-change production execution ownership or add an Array API conformance claim.
+Ordinary CUDA HF/KS keeps its serial DIIS default. Setting
+`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=1` opts into a separate physical-slot
+cache. With `GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or set to
+`cooperative`, it retains the cooperative pending-row reducer. Setting that
+subordinate selector to `ordered` instead uses a generated scalar-order FP64 dot
+from the canonical `diis_gram_program` and refreshes the new ring row inside the
+update kernel. The ordered route performs no dot on insertion one and establishes
+that prior diagonal on insertion two. It borrows the same charged cache as the
+cooperative route; neither selection adds a second cache. The reduction selector
+is ignored when incremental DIIS is disabled or history capacity is below two.
+Invalid active reducer values fail both resource admission and execution.
+
+The reducer is part of prepared history ownership: HF rebuilds its cached plan
+when either selection changes; a KS plan retains its constructor-selected route.
+Reset both count and head to zero before changing routes because cached old-old
+entries retain the numerical identity with which they were formed. Normalization,
+retirement, the augmented solve and Fock mixing remain native solver policy.
+Optional caller-owned counters measure actual ordered vector-dot work; they are
+not public endpoint diagnostics or timing claims.
+
+CUDA density and history extrapolation retain their existing device owners.
+The compiler ownership and reduced vector work do not establish an endpoint
+speedup or add an Array API conformance claim.
 
 ## Ownership
 

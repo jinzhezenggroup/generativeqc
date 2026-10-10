@@ -18,6 +18,31 @@ std::size_t square(std::size_t value) { return posthf::checked_mul(value, value)
 
 std::size_t fourth_power(std::size_t value) { return square(square(value)); }
 
+DenseOrbitalOraclePlan dense_oracle_plan(std::size_t orbitals, std::size_t occupied,
+                                         std::size_t budget_bytes, bool relaxed) {
+  if (!orbitals || !occupied || occupied >= orbitals)
+    throw std::invalid_argument("invalid dense MP2 orbital oracle dimensions");
+  if (orbitals > dense_orbital_oracle_maximum_orbitals)
+    throw std::length_error("dense MP2 orbital oracle supports at most 12 orbitals");
+  const auto rank2 = square(orbitals);
+  const auto rank4 = fourth_power(orbitals);
+  const auto orbital_pairs = posthf::checked_mul(occupied, orbitals - occupied);
+  const auto pair_vectors = posthf::checked_mul(2, orbital_pairs);
+  const auto retained = relaxed
+                            ? posthf::checked_add(rank4, posthf::checked_mul(2, rank2))
+                            : posthf::checked_add(posthf::checked_add(rank4, rank2), pair_vectors);
+  // RHS reassignment temporarily owns old and new rotation gradients. Relaxed
+  // weights instead retain both RHS vectors alongside gradient/overlap/scratch.
+  const auto peak = posthf::checked_add(posthf::checked_add(rank4, posthf::checked_mul(4, rank2)),
+                                        relaxed ? pair_vectors : orbital_pairs);
+  DenseOrbitalOraclePlan plan{posthf::checked_mul(sizeof(double), rank4),
+                              posthf::checked_mul(sizeof(double), retained),
+                              posthf::checked_mul(sizeof(double), peak), budget_bytes};
+  if (plan.peak_bytes > budget_bytes)
+    throw std::length_error("dense MP2 orbital oracle exceeds its owned numeric budget");
+  return plan;
+}
+
 std::size_t eri_index(std::size_t n, std::size_t p, std::size_t q, std::size_t r, std::size_t s) {
   return ((p * n + q) * n + r) * n + s;
 }
@@ -322,6 +347,8 @@ EnergyAdjoint canonical_energy_adjoint(std::span<const double> integrals_iajb,
 
 OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<const double> eri_mo,
                                  const EnergyAdjoint& adjoint, double same_space_threshold) {
+  (void)dense_orbital_rhs_plan(adjoint.orbitals, adjoint.occupied,
+                               dense_orbital_oracle_default_budget_bytes);
   validate_adjoint(adjoint);
   const auto n = adjoint.orbitals, occupied = adjoint.occupied;
   if (hcore_mo.size() != square(n) || eri_mo.size() != fourth_power(n) || !finite(hcore_mo) ||
@@ -362,6 +389,25 @@ OrbitalRhs canonical_orbital_rhs(std::span<const double> hcore_mo, std::span<con
   if (!finite(result.energy_gradient) || !finite(result.response_rhs))
     throw std::runtime_error("nonfinite MP2 orbital RHS");
   return result;
+}
+
+DenseOrbitalOraclePlan dense_orbital_rhs_plan(std::size_t orbitals, std::size_t occupied,
+                                              std::size_t budget_bytes) {
+  return dense_oracle_plan(orbitals, occupied, budget_bytes, false);
+}
+
+DenseOrbitalOraclePlan dense_lagrangian_weights_plan(std::size_t orbitals, std::size_t occupied,
+                                                     std::size_t budget_bytes) {
+  return dense_oracle_plan(orbitals, occupied, budget_bytes, true);
+}
+
+OrbitalRhs canonical_orbital_rhs_with_budget(std::span<const double> hcore_mo,
+                                             std::span<const double> eri_mo,
+                                             const EnergyAdjoint& adjoint,
+                                             double same_space_threshold,
+                                             std::size_t budget_bytes) {
+  (void)dense_orbital_rhs_plan(adjoint.orbitals, adjoint.occupied, budget_bytes);
+  return canonical_orbital_rhs(hcore_mo, eri_mo, adjoint, same_space_threshold);
 }
 
 OrbitalRhs canonical_orbital_rhs_streamed(const hf::PhysicalReference& reference,
@@ -424,11 +470,13 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
                                                const EnergyAdjoint& adjoint,
                                                std::span<const double> response,
                                                double same_space_threshold) {
-  auto orbital = canonical_orbital_rhs(hcore_mo, eri_mo, adjoint, same_space_threshold);
+  (void)dense_lagrangian_weights_plan(adjoint.orbitals, adjoint.occupied,
+                                      dense_orbital_oracle_default_budget_bytes);
   const auto n = adjoint.orbitals, occupied = adjoint.occupied;
   const auto virtuals = n - occupied;
   if (response.size() != occupied * virtuals || !finite(response))
     throw std::invalid_argument("MP2 Z-vector does not match occupied-virtual layout");
+  auto orbital = canonical_orbital_rhs(hcore_mo, eri_mo, adjoint, same_space_threshold);
   LagrangianWeights result;
   result.orbitals = n;
   result.occupied = occupied;
@@ -455,6 +503,13 @@ LagrangianWeights canonical_lagrangian_weights(std::span<const double> hcore_mo,
     }
   result.stationarity_residual = response::stable_norm(stationarity);
   return result;
+}
+
+LagrangianWeights canonical_lagrangian_weights_with_budget(
+    std::span<const double> hcore_mo, std::span<const double> eri_mo, const EnergyAdjoint& adjoint,
+    std::span<const double> response, double same_space_threshold, std::size_t budget_bytes) {
+  (void)dense_lagrangian_weights_plan(adjoint.orbitals, adjoint.occupied, budget_bytes);
+  return canonical_lagrangian_weights(hcore_mo, eri_mo, adjoint, response, same_space_threshold);
 }
 
 LagrangianWeights canonical_lagrangian_weights_streamed(

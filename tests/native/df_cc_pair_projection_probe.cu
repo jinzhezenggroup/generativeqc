@@ -64,7 +64,7 @@ int main() {
     if (paired.front() != canary || paired.back() != canary)
       throw std::runtime_error("projection crossed a canary");
     std::cout << metadata.refused << ' ' << metadata.tau_error_bits << ' '
-              << metadata.t1_magnitude_bits << '\n';
+              << metadata.t1_magnitude_bits << ' ' << metadata.tau_magnitude_bits << '\n';
     for (std::size_t index = 1; index <= paired_count; ++index) std::cout << paired[index] << ' ';
     std::cout << '\n';
   } catch (const std::exception& error) {

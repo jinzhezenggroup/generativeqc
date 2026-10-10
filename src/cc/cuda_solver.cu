@@ -113,6 +113,7 @@ struct Owner {
   double* paired_tau{};
   pair_bound::ProjectionMaxima* pair_maxima{};
   std::array<pair_bound::Power, 2> pair_geometry{};
+  std::array<pair_bound::Power, 2> pair_factor_geometry{};
   DFIterationPlan plan;
   double *df_bov{}, *df_bvv{}, *df_sum{};
   std::size_t naux{};
@@ -351,6 +352,9 @@ struct Owner {
             const auto* factor = (bov ? p.df_bov.data() : p.df_bvv.data()) + auxiliary * extent;
             norms[index] = pair_bound::row_l1_upper(factor, rows, p.nvir, binding.summed_axes,
                                                     diagnostic.df_pair_geometry_elements);
+            // Reuse the existing geometry audit, without another factor scan.
+            auto& magnitude = pair_factor_geometry[bov ? 0 : 1];
+            magnitude = pair_bound::maximum(magnitude, norms[index]);
           }
           const auto coefficients = generated::dfpairs::ladder_coefficient_bounds(norms);
           for (std::size_t index = 0; index < pair_geometry.size(); ++index)
@@ -702,7 +706,10 @@ struct Owner {
         {pair_bound::magnitude_upper(metadata.tau_error_bits),
          generated::dfpairs::ladder_residual_gain,
          pair_bound::sum({pair_geometry[0], pair_bound::product({pair_geometry[1], amplitude})})});
-    if (metadata.refused || !pair_bound::within_residual_margin(error, tolerance)) {
+    if (metadata.refused || !pair_bound::within_residual_margin(error, tolerance) ||
+        (generated::dfpairs::ladder_dressing_factored &&
+         !pair_bound::within_factorization_range(metadata, pair_factor_geometry[0],
+                                                 pair_factor_geometry[1], state.o, state.v))) {
       ++diagnostic.df_pair_refusals;
       return false;
     }

@@ -117,6 +117,46 @@ ERIs with a checked capacity; CUDA RHF uses the bounded matrix-direct route.
 
 ## Native path and placement
 
+### Dense Native Orbital Oracle Admission
+
+`canonical_orbital_rhs` and `canonical_lagrangian_weights` in
+`src/posthf/mp2_gradient.hpp` retain the explicit dense legacy/oracle
+representation, not the production streamed force path. They check a hard
+12-orbital cap before inspecting numeric inputs or allocating Fock/weight
+vectors. This matches the small complete-gradient integral oracle's 12-AO
+ceiling. They apply a default 1 MiB upper budget for newly owned numeric payload.
+`canonical_orbital_rhs_with_budget` and
+`canonical_lagrangian_weights_with_budget` accept a tighter explicit byte
+budget without changing the existing entry-point symbols or result layout.
+Insufficient bytes or an oversized oracle throws `std::length_error`; no
+streamed, CPU-reference or other scientific fallback is substituted.
+
+For `N` orbitals, `O` occupied orbitals and `V = N - O`, the allocation-free
+`dense_orbital_rhs_plan` and `dense_lagrangian_weights_plan` report:
+
+| Native oracle | Returned numeric bytes | Simultaneously owned peak bytes |
+| --- | --- | --- |
+| Orbital RHS | `8*(N^4 + N^2 + 2*O*V)` | `8*(N^4 + 4*N^2 + O*V)` |
+| Relaxed weights | `8*(N^4 + 2*N^2)` | `8*(N^4 + 4*N^2 + 2*O*V)` |
+
+The RHS peak includes old/new rotation gradients during reassignment. The
+relaxed peak includes both still-retained orbital-RHS vectors while the
+rotation gradient, overlap and stationarity scratch coexist. Exact-budget
+acceptance is inclusive. Caller-owned h/ERI/adjoint/Z inputs, object headers,
+allocator rounding and exception storage are outside this owned-payload
+scope; these plans are not complete endpoint/RSS admission. The size cap is
+also necessary because bounding bytes alone does not bound dense rotation
+work. Production streamed limits remain independently planned and unchanged.
+
+`tests/python/test_mp2_dense_oracle_budget.py` compiles the actual native
+translation units, checks scoped requested-payload lifetimes, tests exact and
+one-byte-short admission, and compares values with an independent NumPy
+implementation on synthetic and committed PySCF Hamiltonians. This does not
+prove that retaining the dense representation is profitable or that other
+shell-stage materializations should be retained.
+
+### Production Execution
+
 ```text
 C / C++ / Python public prepare
   -> method registry -> Mp2Prepared
