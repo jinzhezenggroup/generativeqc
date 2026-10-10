@@ -219,6 +219,17 @@ int main(int argc, char** argv) {
       work_field("ccsd_accumulation_calls", result.solver.df_accumulation_calls);
       work_field("ccsd_accumulation_bytes", result.solver.df_accumulation_bytes);
       work_field("ccsd_contraction_terms", result.solver.df_contraction_terms);
+      field("ccsd_occupied_pairs", result.solver.df_occupied_pairs ? 1 : 0);
+      field("ccsd_pair_resource_refused", result.solver.df_pair_resource_refused ? 1 : 0);
+      field("ccsd_pair_initial_symmetry_refused",
+            result.solver.df_pair_initial_symmetry_refused ? 1 : 0);
+      work_field("ccsd_pair_evaluations", result.solver.df_pair_evaluations);
+      work_field("ccsd_pair_refusals", result.solver.df_pair_refusals);
+      work_field("ccsd_pair_projection_calls", result.solver.df_pair_projection_calls);
+      work_field("ccsd_pair_projection_bytes", result.solver.df_pair_projection_bytes);
+      work_field("ccsd_pair_geometry_elements", result.solver.df_pair_geometry_elements);
+      work_field("ccsd_pair_capacity_bytes", result.solver.df_pair_capacity_bytes);
+      work_field("ccsd_pair_binding_host_bytes", result.solver.df_pair_binding_host_bytes);
       work_field("ccsd_evaluations", result.solver.iteration_graph_calls);
       work_field("ccsd_capacity", result.solver.numeric_capacity_bytes);
       work_field("ccsd_device_bytes", result.solver.owned_device_bytes);

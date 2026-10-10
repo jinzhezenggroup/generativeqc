@@ -780,6 +780,8 @@ def _scf_domain_for_ir(method_ir: typing.Any) -> str:
 
 def scf_domain_for_method(method: typing.Any) -> str:
     """Return the exact native point-domain identity for one public KS method."""
+    if parse_automatic_libxc_selector(method) is not None:
+        return AUTOMATIC_SCF_DOMAIN
     method_ir, _ = resolve_ks_method(method)
     return _scf_domain_for_ir(method_ir)
 

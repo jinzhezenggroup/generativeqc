@@ -167,7 +167,14 @@ def test_snapshot_api_compiles_with_direct_capability_dependencies(
     tmp_path: Path, native_cxx: typing.Any
 ) -> None:
     """Compile the real CPU translation unit, without transitive-header stubs."""
+    from tools.generate_libxc_semilocal_cpu_registry import emit_header
+
     root = Path(__file__).resolve().parents[2]
+    # Use the production generator for this build-owned declaration dependency;
+    # keep the probe independent of an existing CMake build or handwritten stubs.
+    registry = tmp_path / "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+    registry.parent.mkdir()
+    registry.write_text(emit_header(), encoding="utf-8")
     native_cxx.compile_object(
         root / "src/api/c_api_ks_snapshot.cpp",
         tmp_path / "ks_snapshot.o",
@@ -180,5 +187,6 @@ def test_snapshot_api_compiles_with_direct_capability_dependencies(
             f"-I{root / 'src'}",
             f"-I{root / 'src/xtb/native'}",
             f"-I{root / 'src/xtb/native/src'}",
+            f"-I{tmp_path}",
         ),
     )

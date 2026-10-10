@@ -28,6 +28,7 @@ from generativeqc_compiler.tensor import (
     reduce_sum,
     transpose_program,
 )
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
 
 from .nonlocal_correlation import NonlocalCorrelationPrimitive
 from .spec import (
@@ -79,6 +80,7 @@ class StationaryMeanField:
         if self.point_model not in (
             "interior-v1",
             SCF_POINT_MODEL,
+            LIBXC_WORK_DOMAIN,
             "libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16",
         ):
             raise UnsupportedMethod("unsupported XC point-model contract")

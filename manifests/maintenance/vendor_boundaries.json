@@ -86,6 +86,7 @@
         "cublasDsyr2k_v2": 2,
         "cublasDsyrk": 1,
         "cublasDsyrk_v2": 2,
+        "cublasDtrsmBatched": 1,
         "cublasGetPointerMode": 1,
         "cublasGetPointerMode_v2": 2,
         "cublasGetProperty": 1,
