@@ -3,6 +3,8 @@
 import ast
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,15 @@ from generativeqc_compiler.common.paths import source_hashes
 from generativeqc_compiler.method import stationary_cuda
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _contract_dependency_selection(workflow: str) -> str:
+    selection = workflow.split("set(_generativeqc_stationary_contract_assets", 1)[1]
+    return (
+        "set(_generativeqc_stationary_contract_assets"
+        + selection.split("endforeach()", 1)[0]
+        + "endforeach()"
+    )
 
 
 def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
@@ -38,12 +49,7 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
         "explicit-resource-module"
     )
     workflow = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
-    selection = workflow.split("set(_generativeqc_stationary_contract_assets", 1)[1]
-    selection = (
-        "set(_generativeqc_stationary_contract_assets"
-        + selection.split("endforeach()", 1)[0]
-        + "endforeach()"
-    )
+    selection = _contract_dependency_selection(workflow)
     unrelated = ("tools/unrelated.py",)
     entries = "\n".join(f'  "{path}"' for path in (*expected, *unrelated))
     output = tmp_path / "dependencies.txt"
@@ -67,6 +73,75 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
         'GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/write_stationary_aot_manifest.py"'
         in workflow
     )
+
+
+@pytest.mark.parametrize(
+    "asset", ("residency_boundaries.hpp", "residency_observer.hpp")
+)
+def test_residency_asset_changes_regenerate_aot_identity(
+    asset: str, tmp_path: Path
+) -> None:
+    """Real CMake dependencies must rebuild the contract after a header edit."""
+    cmake = shutil.which("cmake")
+    if cmake is None:
+        pytest.skip("CMake is required for dependency evaluation")
+    relative = f"src/runtime/{asset}"
+    header = tmp_path / relative
+    header.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / relative, header)
+    unrelated = tmp_path / "unrelated.hpp"
+    unrelated.write_text("// not part of the contract\n")
+    build = tmp_path / "build"
+    output = build / "identity.txt"
+    runs = build / "runs.txt"
+    generator = tmp_path / "identity.py"
+    generator.write_text(
+        "import sys\nfrom pathlib import Path\n"
+        f"sys.path.insert(0, {str(ROOT / 'python')!r})\n"
+        "from generativeqc_compiler.common import paths\n"
+        "from generativeqc_compiler.method.stationary_cuda import stationary_aot_contract_identity\n"
+        "original = paths.asset_path\n"
+        f"paths.asset_path = lambda name: Path({str(header)!r}) if name == {relative!r} else original(name)\n"
+        f"Path({str(output)!r}).write_text(stationary_aot_contract_identity(0))\n"
+        f"with Path({str(runs)!r}).open('a') as stream: stream.write('run\\n')\n"
+    )
+    selection = _contract_dependency_selection(
+        (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
+    )
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.25)\nproject(identity_probe NONE)\n"
+        f'set(Python3_EXECUTABLE "{Path(sys.executable).as_posix()}")\n'
+        f'include("{ROOT.as_posix()}/cmake/GenerativeQCGenerated.cmake")\n'
+        f'set(_generativeqc_identity_inputs "{relative}" "unrelated.hpp")\n'
+        + selection
+        + "\ngenerativeqc_register_generated_sources(\n"
+        '  NAME identity_probe GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/identity.py"\n'
+        '  OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/identity.txt"\n'
+        "  DEPENDS ${_generativeqc_stationary_contract_inputs})\n"
+    )
+
+    def run(*args: str) -> None:
+        subprocess.run(
+            [cmake, *args], check=True, capture_output=True, text=True, timeout=30
+        )
+
+    run("-S", str(tmp_path), "-B", str(build))
+    command = ("--build", str(build), "--target", "identity_probe")
+    run(*command)
+    before = output.read_text()
+    run(*command)
+    assert runs.read_text() == "run\n"
+    # Keep the test reliable on filesystems with whole-second timestamps.
+    time.sleep(1.1)
+    unrelated.write_text("// unrelated edit must not regenerate the contract\n")
+    run(*command)
+    assert runs.read_text() == "run\n"
+    header.write_text(header.read_text() + "\n// identity dependency mutation\n")
+    run(*command)
+    assert output.read_text() != before
+    assert runs.read_text() == "run\nrun\n"
+    run(*command)
+    assert runs.read_text() == "run\nrun\n"
 
 
 @pytest.mark.parametrize("changed_scope", ["common", "stationary_resources"])
