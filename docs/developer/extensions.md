@@ -56,6 +56,13 @@ promotion, returns bounded resource requirements, and exposes the exact
 compiler-owned source/program `identity` that an equivalent explicit CPU JIT
 request will use. Unsupported target/mode/IR requests return no compile identity.
 The compiled artifact then adds toolchain-specific cache and binary provenance.
+For strict-FP64 CPU TensorIR JIT, the exact prepared graph and emitted C++ source
+determine the compilation identity. Descriptive user provenance (such as a custom
+method label or notebook origin) does not trigger redundant compilation when the
+source is otherwise identical. Explicit precision provenance, diagnostic pass
+bisection and order-preservation controls remain part of the codegen policy, so
+different execution contracts cannot silently reuse a compiled artifact. This
+does not make user TensorIR scientifically validated or activate JIT automatically.
 
 ## Current boundary
 
