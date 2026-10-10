@@ -95,6 +95,8 @@ the independent four-spin energy with PySCF UMP2 and qualifies the MO cotangents
 against four-spin gradients and fixed-orbital perturbations. Those two tests
 explicitly skip when PySCF is unavailable. Routine Linux reference CI installs
 that pinned dependency and includes new test files in its core shards.
+Its Python coverage artifacts also retain JUnit records so molecular gate
+success can be checked explicitly, including failure/skip status, at the tested head.
 
 These checks qualify this MO derivative slice, not reconverged nuclear forces,
 CUDA execution or a complete production force endpoint. Parent issue #1823
