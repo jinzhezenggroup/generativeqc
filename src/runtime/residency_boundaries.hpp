@@ -6,7 +6,7 @@
 #include <limits>
 #include <utility>
 
-#include "runtime/residency_observer.hpp"
+#include "residency_observer.hpp"
 
 namespace generativeqc::runtime {
 
