@@ -1,9 +1,10 @@
 # Independent task-parallel Direct Rys-K
 
-The qualified `sm_120` profile defaults to value-only `_rys_task` AOT variants
+Compiled non-portable CUDA profiles default to value-only `_rys_task` AOT variants
 for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`, `dpps` and `dspp`
-Direct exchange classes. Other classes and profiles retain the incumbent
-recurrence with the independently selected queue schedule. Selection freezes at provider
+Direct exchange classes when the target supports their packed-task schedule.
+Other classes and generic portable profiles retain the incumbent recurrence
+with the independently selected queue schedule. Selection freezes at provider
 preparation; it does not reselect the old component-lane `rys` experiment,
 select Coulomb J, or select analytic derivatives. Set
 `GENERATIVEQC_DIRECT_K_FOCK_LOWERING=incumbent` to disable task preference;
@@ -14,10 +15,12 @@ also set `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill` to roll back both promotions
 `integral/production_rys_tasks.py` intersects the compiled streaming-Fock
 inventory with `rys_task.py`'s bounded value capability. Eligibility requires
 one through three Rys roots, s/p/d shells, at most a p shell on the fourth center,
-and at most 64 Cartesian components. Capability and measured preference are
-separate: `preferred_rys_task_candidates` records the nine qualified classes
-only for the `sm_120` profile. Portable profiles and other architectures retain
-their incumbent until independently qualified.
+and at most 64 Cartesian components. `preferred_rys_task_candidates` uses the
+same nine-class algorithmic policy on any compiled non-portable target. The
+compiler validates the actual target's schedule and the runtime intersects
+enabled incumbent coverage. A target need not repeat the full scientific
+numerical matrix just because its compute capability differs. Performance
+results remain device-specific evidence, not an assumed cross-GPU speedup.
 
 `lowering/fock_rys_task.py` changes execution ownership: each lane in a
 128-thread packed CTA owns a complete admitted quartet. Its four 32-lane
@@ -56,7 +59,7 @@ substitute for measured occupancy or complete-endpoint performance.
 classes, using the existing comma-separated exact-class selection convention.
 Unset, empty, or `all` permits the compiled candidate inventory; `none` permits
 none. With the lowering selector unset or empty, this filter can only restrict
-the qualified nine-class preference, not expand it. Explicit `rys-task` selects
+the nine-class algorithmic preference, not expand it. Explicit `rys-task` selects
 the full permitted capability inventory (twelve classes on `sm_120`), which is
 an experiment rather than a generally faster configuration. Both selections
 intersect enabled incumbent Fock coverage and freeze in the prepared K owner.

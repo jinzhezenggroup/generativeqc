@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from generativeqc_compiler.common.cuda_target import cuda_target_info
+from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 
 from ..cuda_schedule import (
     ScheduleIR,
@@ -19,14 +19,9 @@ from .common import _specialize_dppp_identifiers
 from .dispatch import emit_shell_class_fused_cuda
 from .force_resident import _emit_ppps_resident_bra_rys3_force_consumer_cuda
 
-# This compatibility adapter predates explicit target plumbing. Keep its
-# historical source identity isolated here instead of letting generic APIs
-# silently select sm_120.
-_LEGACY_CUDA_TARGET = cuda_target_info("sm_120")
-
-
 def emit_ppps_resident_bra_rys3_cuda(
     *,
+    target: CudaTargetInfo,
     include_shared_definitions: bool = True,
     include_rys3_roots: bool = True,
     integral: IntegralIR | None = None,
@@ -37,6 +32,9 @@ def emit_ppps_resident_bra_rys3_cuda(
     capacity, while its task and bra-staging strides use the actual block
     dimension. Production can therefore compare 32/64/128/256-thread CTAs
     from one binary without changing scalar quartet ownership.
+
+    ``target`` is the explicit CUDA compilation target; no device-specific
+    fallback is inferred by this compatibility adapter.
 
     ``integral`` carries explicit derivative-center and translation-recovery
     metadata into both the ordinary shared-definition prefix and the resident
@@ -68,7 +66,7 @@ def emit_ppps_resident_bra_rys3_cuda(
         spec,
         integral=selected_integral,
         schedule=schedule,
-        target=_LEGACY_CUDA_TARGET,
+        target=target,
     )
     resident_tail = _emit_ppps_resident_bra_rys3_force_consumer_cuda(
         include_rys3_roots=include_rys3_roots,

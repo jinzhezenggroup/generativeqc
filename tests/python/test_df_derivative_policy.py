@@ -91,10 +91,10 @@ def test_work_model_boundaries_and_unknown_architecture(
     ]
     for (n, a, op, ap, rank, v, arch), selected in zip(rows, policy(rows), strict=True):
         assert selected == (
-            int(arch == 120 and n * n * a >= 2**18),
-            int(arch == 120 and v and op * op * ap >= 2**22),
+            int(arch != 0 and n * n * a >= 2**18),
+            int(arch != 0 and v and op * op * ap >= 2**22),
             int(
-                arch == 120
+                arch != 0
                 and rank > 0
                 and n >= 4
                 and rank <= n // 4
@@ -117,9 +117,10 @@ def test_packed_response_profile_generalizes_beyond_benchmark_tuples(
         (769, 900, 128, 256, 191, 1, 120),
         (769, 900, 128, 256, 193, 1, 120),
         (768, 768, 128, 256, 160, 1, 121),
+        (768, 768, 128, 256, 160, 1, 0),
     ]
     packed = [result[2] for result in policy(rows)]
-    assert packed == [0, 0, 1, 1, 1, 1, 0, 0]
+    assert packed == [0, 0, 1, 1, 1, 1, 0, 1, 0]
 
 
 def test_controls_restore_absent_and_present_variables_on_failure(

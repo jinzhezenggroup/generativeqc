@@ -1495,7 +1495,7 @@ def emit_ppps_resident_bra_benchmark_cuda(
     host = _specialize_dppp_identifiers(host, spec)
     return (
         _CUDA_PRELUDE
-        + emit_ppps_resident_bra_rys3_cuda()
+        + emit_ppps_resident_bra_rys3_cuda(target=target)
         + emit_uncached_primitive_geometry_cuda(spec)
         + _benchmark_unfused_kernel(spec, plan)
         + host

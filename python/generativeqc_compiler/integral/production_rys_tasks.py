@@ -1,4 +1,4 @@
-"""Task-parallel Rys-K inventory and explicitly qualified target preferences."""
+"""Task-parallel Rys-K inventory and capability-gated default preferences."""
 
 from __future__ import annotations
 
@@ -77,13 +77,14 @@ def direct_rys_task_candidates(
 def preferred_rys_task_candidates(
     profile: ResolvedProductionProfile,
 ) -> tuple[KernelSelection, ...]:
-    """Restrict default dispatch to the measured RTX 5090 profile and classes.
+    """Prefer the bounded Rys-K worker wherever its compiled capability exists.
 
-    This is target scheduling metadata, not method or molecule policy. Other
-    architectures and portable profiles need their own complete-endpoint
-    qualification before promotion; explicit experiments keep full capability.
+    Profile selection and schedule_candidates() already enforce the target's
+    resource/representation constraints. This selection is a reusable algorithm
+    policy, not a claim of identical speedups on different GPUs. Generic portable
+    profiles keep their incumbent and explicit experiments stay available.
     """
-    if profile.target.architecture != "sm_120" or profile.profile != "sm_120":
+    if profile.portable:
         return ()
     preferred = {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
     return tuple(
