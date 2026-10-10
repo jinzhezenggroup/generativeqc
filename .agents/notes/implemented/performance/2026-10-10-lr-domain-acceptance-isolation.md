@@ -103,3 +103,47 @@ promoting a changed production kernel or resource claim.
 - Issues #1855 and #1477; implementation PR #1861.
 - `benchmarks/experiments/issue1855-lr-domain/README.md`.
 - `tests/native/test_cuda_fock_provider.cpp`.
+
+## Acceptance evidence appended on 2026-10-10
+
+Review caught an additional runner-contract defect: the initial endpoint loop
+updated its warm density after every replay while declaring fixed post-cold and
+post-move density. Those populations remain historical, **not qualified**, even
+when the old runner serialized PASS. The corrected runner
+`38d67a8caebe33f9dce2b9b6d1e8ac9fe7d4b534` freezes each new post-cold/post-move
+state, validates the complete six-row oracle population per geometry before
+native execution, and journals failed item statuses before unchanged gate
+rejection. The later output-path guard is also satisfied by all actual ignored
+scratch destinations; it changes no scientific work or timing scope.
+
+Four fresh finite 75-minute allocations, Slurm 7102–7105, complete 0:0. The first
+three supply 72 clean complete E/F calls, independently paired 432 times; the
+fourth supplies 24 intrusive complete calls and 144 gates. Maximum E/F errors
+are 5.9117155615240335e-12 Eh / 1.099751401056892e-10 Eh/bohr, against unchanged
+1e-8 / 1e-7 limits. Every geometry's six observed class ledgers match exactly
+between the indexed and triangular arms. All 24 retained-owner inventories
+remain unchanged, with zero second retained index allocation.
+
+The indexed product count is 8,503 versus 10,731 triangular, but 16 candidate
+pages mean 137,408 actual drained claims versus 12,091, including the same
+1,360 terminating worker claims. Both arms launch 1,360 ×256 and execute the
+same post-screen integrals. Original geometry: 7,497,817 shell, 7,911,920 tile,
+335,167,456 AO and 767,930,390 primitive quartets. Moved: 7,497,904 / 7,912,007 /
+335,169,706 / 767,939,573. This is distribution evidence, not fewer surviving
+integrals, fewer launches or a spill/barrier cure.
+
+Matched physical-GPU timing shows a small consistent 1.28–1.84% warm/moved-warm
+endpoint benefit; cold is mixed/effectively flat and moved only 0.066–0.199%
+better. Preserve this scoped positive result without claiming universal gain or
+changing defaults. Keep the bounded triangular fallback. Do not pool unrelated
+GPU baselines or use the Long-specialized observer's seconds/registers/stack as
+production evidence.
+
+The current runner/schedule host suites pass 25 +3 cases, including missing,
+duplicate, failed and nonfinite oracle/native receipts and retained-output-path
+aliases. Full reproduction, hashes, paired distributions, class counters and
+owner inventories are retained in
+`benchmarks/experiments/issue1855-lr-domain/acceptance.json` and its README.
+The ignored raw mirror contains the strict machine validator and every failed
+or nonqualified pilot. The idle n2 was not substituted: the frozen ELF requires
+GLIBC 2.38 while n2 exposes 2.35; rebuilding would forfeit binary identity.
