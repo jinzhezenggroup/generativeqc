@@ -98,6 +98,7 @@ class QualifiedForceActiveAoProfile:
         if type(self.producer) is not str or self.producer not in (
             "sampled-jets",
             "pre-ao-envelope-native-csr",
+            "exact-jets-native-bitmask",
         ):
             raise ValueError("qualified force active-AO producer is unsupported")
         if type(self.max_active_fraction) not in (int, float) or not (
@@ -227,6 +228,29 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         cutoff=1e-16,
         cache_bytes=64 << 20,
         producer="pre-ao-envelope-native-csr",
+        max_active_fraction=0.8,
+    ),
+    # DF changes the integral provider, not the moving-grid AO derivative.
+    # Inspect every requested AO jet at the existing force cutoff; never reuse
+    # the SCF's order-one masks for an order-two force. Discovery, rebinding and
+    # optional storage are owned by the existing token-checked grid consumer.
+    QualifiedForceActiveAoProfile(
+        profile_id="fitted-exact-jet-bitmask-v1",
+        evidence=(
+            ".agents/notes/implemented/performance/2026-10-10-df-force-active-ao.md",
+        ),
+        compositions=("ordinary",),
+        derivative_orders=(1, 2),
+        spin_blocks=(1, 2),
+        density_fitted=True,
+        min_dense_point_ao_square_work=_SAMPLED_DENSE_WORK_CROSSOVER,
+        tile_policy="fixed",
+        tile_points=256,
+        min_device_bytes=512 << 20,
+        min_host_bytes=256 << 20,
+        cutoff=1e-16,
+        cache_bytes=64 << 20,
+        producer="exact-jets-native-bitmask",
         max_active_fraction=0.8,
     ),
 )

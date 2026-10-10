@@ -312,6 +312,9 @@ namespace generativeqc::scf::cuda_execution {
 /** Host-only selection shared by resource queries and prepared execution owners.
  * Unset or 0 retains the qualified serial reduction for the owner's lifetime. */
 bool incremental_diis_gram_requested();
+/** Consult only after incremental admission. Unset/cooperative preserves the
+ * incumbent reducer; ordered retains the serial FP64 accumulation order. */
+bool ordered_incremental_diis_gram_requested();
 
 }  // namespace generativeqc::scf::cuda_execution
 

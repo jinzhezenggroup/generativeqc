@@ -224,7 +224,12 @@ CUDA_MODULES["cuda_scf_kernels"] = (
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
-) + ("scf/cuda/matrix_index.", "tensor/cuda_history.cuh")
+) + (
+    "scf/cuda/matrix_index.",
+    "tensor/cuda_history.cuh",
+    "tensor/cuda_ring_gram.cuh",
+    "tensor/ring_gram.hpp",
+)
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
     "solver/cuda/symmetric_eigen_handles.hpp",

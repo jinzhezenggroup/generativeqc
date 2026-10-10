@@ -1,0 +1,8 @@
+{
+  "name": "scf_diis_ordered_cuda",
+  "outputs": [
+    "generated/generated_scf_diis_cuda.cuh"
+  ],
+  "owner": "python/generativeqc_compiler/tensor/scf.py",
+  "scope": "Build-time ordered FP64 CUDA scalar-dot lowering of the canonical DIIS Gram program. Native shared runtime maintains bounded physical-slot cache state; method code retains normalization, augmented solve, history retirement and Fock extrapolation. This does not qualify changed reduction order or the compact DF cooperative route."
+}

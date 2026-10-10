@@ -49,6 +49,16 @@ Prepared CUDA batches expose the provider's metric diagnostics. Whole-KS
 `estimate_resources`/resource-plan admission is rejected for DF until its
 combined inventory is qualified; conventional inventories must not describe DF.
 
+Large ordinary fitted CUDA force workloads may use the native active-AO bitmask
+consumer under the unchanged stationary force budgets. It examines all requested
+AO value/derivative jets at the existing `1e-16` force cutoff, including second
+derivatives where needed; SCF masks are not reused for a different derivative
+order. No grid points, weights or Becke response terms are pruned. Missing map
+capabilities, insufficient optional storage or excessive AO occupancy retain
+the dense bounded consumer. This admission does not include the separate DF
+response owner's memory or establish a whole-force peak-memory bound. See
+[stationary CUDA scheduling](../developer/stationary_cuda_scheduling.md).
+
 For a CUDA restricted fitted hybrid with method-owned integer occupations,
 automatic value storage keeps a fully resident dense owner when it fits. If
 dense storage would stream, the same planner may instead retain one symmetric

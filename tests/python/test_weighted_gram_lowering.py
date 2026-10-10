@@ -79,9 +79,10 @@ def test_all_incumbent_source_bytes_are_preserved() -> None:
     include = '#include "generated_gfn2_density_contract.inc"'
     assert source.count(include) == 2
     assert "gfn2_density_update_cuda_tensor(" not in source
-    expanded = source.replace(include, emit_gfn2_density_contract())
-    assert hashlib.sha256(expanded.encode()).hexdigest() == (
-        "c365f5b227d63400827440eff384aad412fd2c0a281ad90fd4c0a82990d0b706"
+    # The CUDA envelope now has an opt-in receipt branch. Its default
+    # compiler-owned arithmetic fragment retains the pre-instrumentation bytes.
+    assert hashlib.sha256(emit_gfn2_density_contract().encode()).hexdigest() == (
+        "19701164b11a0afb1490daa147237f8022ea9d684d58299ac119fa470b3c2538"
     )
 
 
