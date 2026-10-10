@@ -24,6 +24,7 @@ def _fake_toolchain(root: Path) -> Path:
         compiler,
         *(root / f"bin/{name}" for name in manifest.PROGRAMS),
         *(root / f"lib/{name}" for name in manifest.LINK_INPUTS),
+        root / "lib/liblto_plugin.so",
         root / "include/vector",
         root / "include/detail/config.hpp",
     ):
@@ -92,6 +93,53 @@ def test_manifest_is_relocation_independent_and_byte_sensitive(
 
     (relocated / "include/vector").write_text("changed header")
     assert manifest.inventory(relocated / "bin/g++") != before
+
+
+def test_linker_plugin_wrapper_and_dependencies_are_identity_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "host"
+    compiler = _fake_toolchain(root)
+    dependency = root / "lib/plugin-runtime.so"
+    dependency.write_text("plugin runtime")
+
+    monkeypatch.setattr(manifest, "_run", _fake_run)
+    monkeypatch.setattr(
+        manifest,
+        "_ldd",
+        lambda path: (dependency,) if path.name == "liblto_plugin.so" else (),
+    )
+    before = manifest.inventory(compiler)
+    roles = {entry["role"] for entry in before["entries"]}
+    assert "program:lto-wrapper" in roles
+    assert "linker-plugin:liblto_plugin.so" in roles
+    assert "dependency:linker-plugin:liblto_plugin.so:plugin-runtime.so" in roles
+
+    plugin = root / "lib/liblto_plugin.so"
+    plugin.write_text("changed plugin")
+    assert manifest.inventory(compiler) != before
+    plugin.write_text("liblto_plugin.so")
+
+    wrapper = root / "bin/lto-wrapper"
+    wrapper.write_text("changed wrapper")
+    assert manifest.inventory(compiler) != before
+    wrapper.write_text("lto-wrapper")
+
+    dependency.write_text("changed plugin runtime")
+    assert manifest.inventory(compiler) != before
+
+
+@pytest.mark.parametrize("missing", ["liblto_plugin.so", "lto-wrapper"])
+def test_missing_linker_plugin_inputs_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    compiler = _fake_toolchain(tmp_path / "host")
+    monkeypatch.setattr(manifest, "_run", _fake_run)
+    monkeypatch.setattr(manifest, "_ldd", lambda path: ())
+    location = "lib" if missing.endswith(".so") else "bin"
+    (compiler.parents[1] / location / missing).unlink()
+    with pytest.raises(FileNotFoundError, match="missing GCC host"):
+        manifest.inventory(compiler)
 
 
 @pytest.mark.parametrize("name", ["as", "ld"])

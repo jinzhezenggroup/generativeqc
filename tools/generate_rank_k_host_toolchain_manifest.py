@@ -12,8 +12,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-SCHEMA = "generativeqc.rank-k-host-toolchain.v1"
-PROGRAMS = ("cc1plus", "as", "collect2", "ld")
+SCHEMA = "generativeqc.rank-k-host-toolchain.v2"
+PROGRAMS = ("cc1plus", "as", "collect2", "ld", "lto-wrapper")
+LINKER_PLUGINS = ("liblto_plugin.so",)
 LINK_INPUTS = (
     "Scrt1.o",
     "crt1.o",
@@ -133,6 +134,14 @@ def inventory(compiler: Path) -> dict:
         add_file(f"program:{role}", path)
         for dependency in _ldd(path):
             add_file(f"dependency:{role}:{dependency.name}", dependency)
+
+    for name in LINKER_PLUGINS:
+        path = _link_input(compiler, name)
+        if path is None:
+            raise FileNotFoundError(f"missing GCC host linker plugin: {name}")
+        add_file(f"linker-plugin:{name}", path)
+        for dependency in _ldd(path):
+            add_file(f"dependency:linker-plugin:{name}:{dependency.name}", dependency)
 
     roots = _include_roots(compiler)
     for index, root in enumerate(roots):
