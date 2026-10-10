@@ -18,7 +18,7 @@ def _steps() -> dict[str, str]:
     return steps
 
 
-def test_probe_cache_is_separate_per_shard_and_saved_after_success() -> None:
+def test_probe_cache_is_separate_per_shard_and_preserved_after_tests() -> None:
     steps = _steps()
     names = list(steps)
     cache = steps["Restore native Python probes"]
@@ -36,12 +36,16 @@ def test_probe_cache_is_separate_per_shard_and_saved_after_success() -> None:
         < names.index("Save native Python probes")
         < names.index("Show post-test ccache statistics")
     )
-    # Explicit saves follow successful tests; default success() gating must stay.
+    # Tests can fail after valid compiler work; cleanup must still save that work.
     assert "uses: actions/cache/restore@" in cache
     assert "id: python_probe_ccache" in cache
     assert "uses: actions/cache/save@" in save
-    assert "always()" not in save and "failure()" not in save
-    assert "key: ${{ steps.python_probe_ccache.outputs.cache-primary-key }}" in save
+    assert "if: always() &&" in save
+    assert "timeout-minutes: 2" in save
+    assert "steps.python_tests.outcome == 'success'" in save
+    assert "steps.python_probe_ccache.outputs.cache-primary-key" in save
+    assert "format('{0}-partial-{1}-{2}'," in save
+    assert "github.run_id, github.run_attempt)" in save
     key = next(line.strip() for line in cache.splitlines() if "key:" in line)
     assert key.startswith(
         "key: ccache-python-probes-v2-${{ matrix.shard }}-${{ hashFiles("
@@ -76,11 +80,16 @@ def test_probe_cache_is_separate_per_shard_and_saved_after_success() -> None:
     "shard",
     ["core-a", "core-b", "compiler-heavy", "runtime-heavy", "posthf", "ecp-forces"],
 )
-@pytest.mark.parametrize("event", ["pull_request", "merge_group", "schedule"])
+@pytest.mark.parametrize(
+    "event", ["pull_request", "merge_group", "schedule", "workflow_dispatch"]
+)
 @pytest.mark.parametrize("cache_hit", ["true", "false", ""])
 @pytest.mark.parametrize("restore_succeeds", [True, False])
+@pytest.mark.parametrize(
+    "test_outcome", ["success", "failure", "cancelled", "skipped", ""]
+)
 def test_probe_cache_guards_preserve_queue_read_only_consumption(
-    shard: str, event: str, cache_hit: str, restore_succeeds: bool
+    shard: str, event: str, cache_hit: str, restore_succeeds: bool, test_outcome: str
 ) -> None:
     steps = _steps()
     consumes = shard in {"core-a", "core-b", "compiler-heavy", "runtime-heavy"}
@@ -92,12 +101,15 @@ def test_probe_cache_guards_preserve_queue_read_only_consumption(
             consumes
             and restore_succeeds
             and event != "merge_group"
-            and cache_hit != "true",
+            and cache_hit != "true"
+            and test_outcome not in {"skipped", ""},
         ),
     ):
         expression = steps[name].split("        if: ", 1)[1].splitlines()[0]
+        expression = expression.replace("always()", "true")
         for source, variable in (
             ("matrix.shard", "SHARD"),
+            ("steps.python_tests.outcome", "TEST_OUTCOME"),
             ("github.event_name", "EVENT"),
             ("steps.python_probe_ccache.outcome", "OUTCOME"),
             ("steps.python_probe_ccache.outputs.cache-hit", "CACHE_HIT"),
@@ -115,6 +127,7 @@ def test_probe_cache_guards_preserve_queue_read_only_consumption(
                 "EVENT": event,
                 "OUTCOME": outcome,
                 "CACHE_HIT": cache_hit,
+                "TEST_OUTCOME": test_outcome,
             },
             check=True,
             capture_output=True,
