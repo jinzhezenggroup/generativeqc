@@ -495,8 +495,6 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("MethodIR composition " + options.method_name + " is unavailable: " + why);
     }
   }
-  if (is_dft(options) && options.forces)
-    throw UsageError("native CLI DFT forces are not exposed by this command yet");
   return options;
 }
 
@@ -582,6 +580,13 @@ int run(const RunOptions& options) {
     }
     return composed.prepare(context, system, method);
   }();
+  // A method-family name alone never qualifies analytic forces. The exact
+  // prepared model, DF provider, backend and geometry own force admission.
+  if (options.forces &&
+      !(calculation.supported_properties() & GENERATIVEQC_PROPERTY_FORCES))
+    throw UsageError(is_dft(options)
+                         ? "native CLI DFT forces are not exposed for this prepared context"
+                         : "analytic forces are unavailable for this prepared context");
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
   const auto result = calculation.execute(requested);
