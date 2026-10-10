@@ -96,4 +96,6 @@ def preferred_rys_task_candidates(
             "qualified Rys-task Fock classes lack generated capability: "
             + ", ".join(sorted(missing))
         )
-    return tuple(candidate for candidate in candidates if candidate.spec.name in preferred)
+    return tuple(
+        candidate for candidate in candidates if candidate.spec.name in preferred
+    )
