@@ -29,11 +29,26 @@ struct MaterializedDirectPairWork {
   unsigned long long component_contractions{}, published_components{};
 };
 
+/** Canonical whole-shell owners use fewer idle lanes in small domains.
+ * These compile-time bounds cover every s/p/d/f composition, not just the
+ * most frequent shell class. Legacy packet consumers retain 256 lanes. */
+__host__ __device__ inline constexpr unsigned canonical_materialized_component_lanes(
+    unsigned order) {
+  return order >= 3 && order <= 5 ? 32 : 256;
+}
+__host__ __device__ inline constexpr unsigned canonical_materialized_component_slots(
+    unsigned order) {
+  const unsigned maximum = order == 3 ? 27 : order == 4 ? 81 : order == 5 ? 162 :
+                           order == 6 ? 324 : order == 7 ? 648 : order == 8 ? 1296 : 2160;
+  const unsigned lanes = canonical_materialized_component_lanes(order);
+  return (maximum + lanes - 1) / lanes;
+}
+
 /** One CTA-owned recurrence, bounded independently of primitive contraction
  * length. No primitive/AO quartet tensor or geometry-dependent global cache. */
 template <unsigned AngularOrder>
 struct MaterializedDirectPairRecurrence {
-  static_assert(AngularOrder >= 5 && AngularOrder <= kMaximumCoulombOrder);
+  static_assert(AngularOrder >= 3 && AngularOrder <= kMaximumCoulombOrder);
   using Pair = ShellPairHermiteCoefficients<double, kMaximumAngularMomentum,
                                             kMaximumAngularMomentum>;
   Pair bra[3], ket[3];
@@ -63,7 +78,8 @@ __device__ inline void prepare_materialized_direct_pair(
  * still participate in publication/retirement but never read an invalid AO.
  * All selected components consume one Coulomb recurrence per pair product.
  * J and K reuse each contracted ERI through the existing symmetry scatter. */
-template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1>
+template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1,
+          unsigned ComponentLanes = detail::kDirectQuartetTileSize>
 __device__ inline void contract_materialized_direct_pair_fock(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
@@ -98,13 +114,15 @@ __device__ inline void contract_materialized_direct_pair_fock(
   // quartet on the same precision/source route. The dddd stream supplies all
   // six possible packets; the incumbent packet queue supplies one.
   static_assert(ComponentSlots > 0);
+  static_assert(ComponentLanes >= 32 && ComponentLanes <= detail::kDirectQuartetTileSize &&
+                (ComponentLanes & (ComponentLanes - 1)) == 0);
   std::size_t i[ComponentSlots]{}, j[ComponentSlots]{}, k[ComponentSlots]{}, l[ComponentSlots]{};
   bool admitted[ComponentSlots]{};
   double value[ComponentSlots]{};
   bool any_admitted = false;
   for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
-    const std::size_t ordinal = (std::size_t(task.tile) + slot) * detail::kDirectQuartetTileSize +
-                                threadIdx.x;
+    const std::size_t ordinal = std::size_t(task.tile) * detail::kDirectQuartetTileSize +
+                                slot * ComponentLanes + threadIdx.x;
     admitted[slot] = ordinal < count &&
         decode_direct_tile_ao_ordinal(batch, task, ordinal, first_count, second_count,
                                       ao_begin, n, i[slot], j[slot], k[slot], l[slot]) &&
@@ -175,8 +193,8 @@ __device__ inline void contract_materialized_direct_pair_fock(
   }
   for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
     if (!admitted[slot]) continue;
-    const std::size_t ordinal = (std::size_t(task.tile) + slot) * detail::kDirectQuartetTileSize +
-                                threadIdx.x;
+    const std::size_t ordinal = std::size_t(task.tile) * detail::kDirectQuartetTileSize +
+                                slot * ComponentLanes + threadIdx.x;
     // Qualification may inspect each final component without affecting the
     // production storage contract, where this borrowed address is null.
     if (checked_components) checked_components[ordinal] = value[slot];
