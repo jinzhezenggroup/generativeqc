@@ -109,7 +109,7 @@ std::size_t sum(std::size_t a, std::size_t b) {
 struct KsStateStorage {
   double *hcore{}, *overlap{}, *x{}, *j{}, *exchange{}, *range_exchange{}, *density{}, *proposal{},
       *warm{}, *warm_orbitals{}, *fock{}, *residual{}, *tmp1{}, *tmp2{}, *effective{},
-      *fock_history{}, *residual_history{}, *gram{}, *weights{}, *eigenvalues{},
+      *fock_history{}, *residual_history{}, *gram{}, *gram_cache{}, *weights{}, *eigenvalues{},
       *final_coefficients{}, *final_eigenvalues{}, *cold_seed{}, *incremental_anchor_density{},
       *incremental_delta_density{}, *incremental_anchor_j{}, *incremental_anchor_exchange{},
       *incremental_anchor_range_exchange{}, *incremental_max_abs_delta_density{};
@@ -170,6 +170,7 @@ struct KsStateStorage {
     reserve(fock_history, product(history, elements));
     reserve(residual_history, product(history, elements));
     reserve(gram, product(history + 1, history + 1));
+    reserve(gram_cache, product(history, history));
     reserve(weights, history + 1);
     reserve(eigenvalues, product(spins, n));
     reserve(final_coefficients, elements);
@@ -1339,9 +1340,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     launch_subtract_matrix_batches_kernel(blocks, 128, 0, stream, 1, spins, n, tmp2, enabled,
                                           residual);
     check(cudaGetLastError());
-    launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
+    launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                               fock_history, residual_history, gram, weights, history_count,
-                              history_head, effective, true);
+                              history_head, effective, gram_cache, true);
     check(cudaGetLastError());
     multiply(effective, true, false, x, false, enabled, tmp1);
     multiply(x, false, true, tmp1, true, enabled, tmp2);
@@ -1864,9 +1865,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         check(cudaMemcpyAsync(effective, fock, elements * sizeof(double), cudaMemcpyDeviceToDevice,
                               stream));
       } else {
-        launch_update_diis_kernel(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
+        launch_update_diis_cached_gram(1, 32, 0, stream, 1, n, spins, history, fock, residual, enabled,
                                   fock_history, residual_history, gram, weights, history_count,
-                                  history_head, effective, true);
+                                  history_head, effective, gram_cache, true);
         check(cudaGetLastError());
       }
       if (stabilize_occupations) {

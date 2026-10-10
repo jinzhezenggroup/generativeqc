@@ -11,7 +11,7 @@
       "reason": "DIIS-specific circular live-history selection and deterministic residual Gram partials, including substitution of the pending current residual. This is not a generic reduction API."
     },
     {
-      "start": "template <bool CooperativeDots>",
+      "start": "template <bool CooperativeDots, bool CachedGram = false>",
       "stop": "void launch_update_diis_kernel(",
       "role": "scientific",
       "reason": "Native DIIS Gram assembly, normalization, augmented solve, dependent-history retirement and Fock extrapolation, including local state glue. Conservatively includes pre-existing arithmetic reclassified from runtime; this is not physical code growth or retirement."

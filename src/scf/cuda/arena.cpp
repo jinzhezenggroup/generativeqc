@@ -62,12 +62,15 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
   std::size_t history_matrices = 0;
   std::size_t diis_dimension = 0;
   std::size_t diis_linear_elements = 0;
+  std::size_t diis_gram_elements = 0;
   if (!generativeqc::runtime::checked_multiply(spin_matrices, diis_history, history_matrices) ||
       !generativeqc::runtime::checked_add(diis_history, 1, diis_dimension) ||
       !generativeqc::runtime::checked_multiply(diis_dimension, diis_dimension,
                                                diis_linear_elements) ||
       !generativeqc::runtime::checked_multiply(diis_linear_elements, batch_size,
-                                               diis_linear_elements))
+                                               diis_linear_elements) ||
+      !generativeqc::runtime::checked_multiply(diis_history, diis_history, diis_gram_elements) ||
+      !generativeqc::runtime::checked_multiply(diis_gram_elements, batch_size, diis_gram_elements))
     return false;
   generativeqc::runtime::WorkspaceLayout workspace;
   ArenaLayout made{};
@@ -313,6 +316,7 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
       !workspace.append<double>(history_matrices, made.fock_history) ||
       !workspace.append<double>(history_matrices, made.residual_history) ||
       !workspace.append<double>(diis_linear_elements, made.diis_linear_system) ||
+      !workspace.append<double>(diis_gram_elements, made.diis_gram_cache) ||
       !workspace.append<double>(batch_size * diis_dimension, made.diis_coefficients) ||
       !workspace.append<std::uint32_t>(batch_size, made.diis_count) ||
       !workspace.append<std::uint32_t>(batch_size, made.diis_head) ||

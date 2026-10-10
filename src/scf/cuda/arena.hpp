@@ -139,6 +139,7 @@ struct ArenaLayout {
   std::size_t fock_history{};
   std::size_t residual_history{};
   std::size_t diis_linear_system{};
+  std::size_t diis_gram_cache{};
   std::size_t diis_coefficients{};
   std::size_t diis_count{};
   std::size_t diis_head{};

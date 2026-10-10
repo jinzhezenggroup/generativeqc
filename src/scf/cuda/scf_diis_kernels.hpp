@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "tensor/ring_gram.hpp"
+
 namespace generativeqc::scf::cuda_execution {
 
 /** Form deterministic block partials for the history including the current
@@ -37,5 +39,24 @@ void launch_update_diis_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, 
                                std::uint32_t* history_head, double* effective_fock,
                                bool normalize_metric = false, bool cooperative_dots = false,
                                const double* dot_partials = nullptr, std::size_t parts = 0);
+
+/** Incremental ordered Gram route using caller-owned physical-slot storage.
+ * Lend batch*history_capacity^2 doubles independently of linear_system. Reset
+ * count/head together as on the legacy route; the cache needs no clearing.
+ * One 32-lane warp owns each system. Optional work records must be initialized
+ * by the caller and measure newly computed dots. The first insertion does no
+ * dots; the second also establishes the prior diagonal once after a reset.
+ * Normalization, chronological retirement, solve and Fock mixing are unchanged.
+ * Disabled/single-vector histories retain the original copy-only behavior and
+ * admit a null cache because they neither insert vectors nor compute dots.
+ */
+void launch_update_diis_cached_gram(
+    dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+    std::int32_t batch_size, std::int32_t nbf, std::int32_t matrices_per_system,
+    std::uint32_t history_capacity, const double* fock, const double* residual,
+    const std::uint8_t* active, double* fock_history, double* residual_history,
+    double* linear_system, double* coefficients, std::uint32_t* history_count,
+    std::uint32_t* history_head, double* effective_fock, double* gram_cache,
+    bool normalize_metric = false, tensor::RingGramWork* work = nullptr);
 
 }  // namespace generativeqc::scf::cuda_execution

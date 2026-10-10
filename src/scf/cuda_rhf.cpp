@@ -1506,6 +1506,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto fock_history = arena_pointer<double>(resources.arena_, layout.fock_history);
   auto residual_history = arena_pointer<double>(resources.arena_, layout.residual_history);
   auto diis_linear_system = arena_pointer<double>(resources.arena_, layout.diis_linear_system);
+  auto diis_gram_cache = arena_pointer<double>(resources.arena_, layout.diis_gram_cache);
   auto diis_coefficients = arena_pointer<double>(resources.arena_, layout.diis_coefficients);
   auto diis_count = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_count);
   auto diis_head = arena_pointer<std::uint32_t>(resources.arena_, layout.diis_head);
@@ -3115,12 +3116,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
     if (iteration_status != GENERATIVEQC_STATUS_SUCCESS) return iteration_status;
 
-    launch_update_diis_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
+    launch_update_diis_cached_gram(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
                               resources.stream_, static_cast<std::int32_t>(batch_size),
                               static_cast<std::int32_t>(nbf), unrestricted ? 2 : 1,
                               static_cast<std::uint32_t>(diis_history), fock, residual, active,
                               fock_history, residual_history, diis_linear_system, diis_coefficients,
-                              diis_count, diis_head, eigensystem);
+                              diis_count, diis_head, eigensystem, diis_gram_cache);
     if (unrestricted) {
       iteration_status =
           multiply_spin_matrices(eigensystem, true, false, orthogonalizer, false, temporary);

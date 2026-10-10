@@ -166,10 +166,16 @@ metric normalization, the augmented pivoted solve, dependent-history retirement,
 and fallback semantics remain native solver policy. The specialization preserves
 the historical FP64 reduction order.
 
-Resident CUDA SCF density and DIIS kernels retain their existing device ownership
-for now; moving those kernels requires separate stream/layout and performance
-qualification. Exposing the frontend as an experimental public facade does not
-change production execution ownership or add an Array API conformance claim.
+Ordinary resident CUDA HF/KS uses the same canonical residual-Gram TensorIR to
+generate an ordered FP64 dot helper. A shared tensor runtime refreshes only the
+new physical ring row/column and retains unnormalized old-old entries in a
+separate, explicitly charged `batch * history_capacity^2` double cache. Ring
+reset, normalization, dependent-history retirement, the destructive augmented
+solve and Fock mixing remain native solver policy. Disabled and single-vector
+histories preserve copy-only behavior; compact DF's cooperative-partial route
+remains separate. CUDA density and history extrapolation retain their existing
+device owners. This ownership/work change does not establish a whole-endpoint
+speedup or add an Array API conformance claim.
 
 ## Ownership
 
