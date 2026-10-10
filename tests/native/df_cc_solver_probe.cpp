@@ -21,6 +21,8 @@ int main(int argc, char* argv[]) {
     generativeqc::cc::SolverOptions options;
     // Probe-only opt-in leaves the existing binary protocol and defaults intact.
     options.diis_input_residual = argc > 1 && std::string_view(argv[1]) == "--input-residual";
+    if (argc > 2 && std::string_view(argv[2]) == "--batch-replay")
+      options.df_replay_auxiliary_batch = true;
     options.max_bytes = header[3];
     options.max_iterations = header[4];
     options.diis_size = header[5];
