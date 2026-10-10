@@ -124,6 +124,55 @@ def _emit_composed_point(code: int, semilocal: FunctionalSpec) -> str:
     )
 
 
+def _emit_restricted_point_capability(
+    functional: int, semilocal: FunctionalSpec | None
+) -> str:
+    """Describe mathematics, not runtime proof of an equal-spin producer.
+
+    Only the independently qualified unpolarized PBE0 semilocal composition
+    admits the bound entry. Identifiers never establish either this capability
+    or the generation-bound density/gradient equality required by its caller.
+    """
+    record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
+    capable = (
+        record is not None
+        and record["stationary_kernel"] == "pbe"
+        and semilocal is not None
+        and semilocal.spin == "unpolarized"
+        and dict(semilocal.components)
+        == {"GGA_X_PBE": Fraction(3, 4), "GGA_C_PBE": Fraction(1)}
+    )
+    declaration = [
+        f"constexpr bool stationary_pbe0_restricted_point_capable = {str(capable).lower()};",
+        "__device__ inline StationaryPointValue stationary_evaluate_restricted_point(",
+        "    const double rho[2], const double gradient[2][3], const double tau[2]) {",
+    ]
+    if not capable:
+        return "\n".join(
+            [
+                *declaration,
+                "  return stationary_evaluate_point(rho, gradient, tau);",
+                "}",
+            ]
+        )
+    return "\n".join(
+        [
+            *declaration,
+            "  const auto raw = generativeqc::dft::point::evaluate_pbe0_restricted_bound(rho[0], gradient[0]);",
+            "  StationaryPointValue out;",
+            "  out.energy = raw.energy;",
+            "  out.valid = raw.valid;",
+            "  for (unsigned spin = 0; spin < 2; ++spin) {",
+            "    out.rho[spin] = raw.rho[spin];",
+            "    for (unsigned axis = 0; axis < 3; ++axis)",
+            "      out.gradient[spin][axis] = raw.gradient[spin][axis];",
+            "  }",
+            "  return out;",
+            "}",
+        ]
+    )
+
+
 def _emit_stationary_point(
     functional: int, *, semilocal: FunctionalSpec | None = None
 ) -> str:
@@ -413,6 +462,7 @@ def emit_geometry_cuda(
             f"constexpr unsigned stationary_ao_jets = {len(lookup)};",
             f"constexpr unsigned stationary_coefficients = {coefficient_count};",
             _emit_stationary_point(code, semilocal=semilocal),
+            _emit_restricted_point_capability(code, semilocal),
             f"__device__ __constant__ unsigned stationary_shift[{len(domain)}][3] = {{{','.join(shifts)}}};",
             "__device__ void ao_pullback(const double* c, const double* w, double* out) {",
             *emitter.lines,

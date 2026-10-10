@@ -171,6 +171,23 @@ def _resolve_becke_primitive_policy(selection: bool | None = None) -> bool | int
     return mode == "coefficients"
 
 
+def _resolve_restricted_point_policy(selection: bool | None = None) -> bool:
+    """Keep the PBE0 point experiment off until complete-endpoint qualification.
+
+    This requests a schedule, not an equal-spin proof. Native mathematical,
+    generation and scratch admission gates still select the actual kernel.
+    Older stationary/grid artifacts retain the general point route.
+    """
+    if selection is not None:
+        if type(selection) is not bool:
+            raise TypeError("restricted point selection must be boolean or None")
+        return selection
+    mode = os.environ.get("GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT", "off")
+    if mode not in {"off", "on"}:
+        raise ValueError("PBE0 restricted point mode must be 'off' or 'on'")
+    return mode == "on"
+
+
 def _resolve_becke_zero_seed_policy() -> bool | None:
     """Allow a qualification opt-out without mutating an installed native owner.
 
@@ -568,12 +585,16 @@ class _CudaSources:
         phased_becke: bool | None = None,
         becke_primitive: bool | int | None = None,
         becke_normalize: bool | None = None,
+        restricted_point: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
         if becke_normalize is not None and type(becke_normalize) is not bool:
             raise TypeError("Becke normalization selection must be boolean or None")
         zero_seed = _resolve_becke_zero_seed_policy()
+        self.restricted_point_requested = _resolve_restricted_point_policy(
+            restricted_point
+        )
         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
         if type(becke_primitive) is not int or becke_primitive != 2:
             becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
@@ -752,6 +773,16 @@ class _CudaSources:
         lib.stationary_geometry_molecular_resident_weights_enqueue.argtypes = (
             molecular_resident_weight_args
         )
+        restricted_enqueue = getattr(
+            lib, "stationary_geometry_molecular_resident_weights_enqueue_v2", None
+        )
+        if restricted_enqueue is not None:
+            restricted_enqueue.argtypes = [
+                *molecular_resident_weight_args[:-2],
+                ct.c_uint64,
+                ct.c_uint64,
+                *tail,
+            ]
         resident_molecular_resident_weight_args = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -1397,7 +1428,33 @@ class _CudaSources:
                 functional=functional,
             )
             return
-        work = task.density_jets(_stationary_density_jet_count(functional))
+        jets = _stationary_density_jet_count(functional)
+        binding = getattr(task, "density_jets_binding", None)
+        restricted_enqueue = getattr(
+            self.library,
+            "stationary_geometry_molecular_resident_weights_enqueue_v2",
+            None,
+        )
+        if (
+            getattr(self, "restricted_point_requested", False)
+            and restricted_enqueue is not None
+            and binding is not None
+        ):
+            work, flags = binding(jets)
+            self._call(
+                "stationary_geometry_molecular_resident_weights_enqueue_v2",
+                self.handle,
+                ct.byref(view),
+                work,
+                owner_offset,
+                points_per_atom,
+                device_weights,
+                ct.cast(device_raw, _DOUBLE),
+                view.generation,
+                flags,
+            )
+            return
+        work = task.density_jets(jets)
         self._call(
             "stationary_geometry_molecular_resident_weights_enqueue",
             self.handle,
@@ -1663,6 +1720,18 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
+        point_metrics = getattr(
+            self.library, "stationary_point_binding_metrics_v1", None
+        )
+        point_values = (ct.c_uint64 * 5)()
+        if point_metrics is not None:
+            point_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            if point_metrics(self.handle, point_values, 5):
+                raise RuntimeError("stationary point binding metrics unavailable")
         zero_metrics = getattr(
             self.library, "stationary_becke_zero_seed_metrics_v1", None
         )
@@ -1709,6 +1778,23 @@ class _CudaSources:
                 values,
             )
         )
+        metrics["restricted_point_requested"] = int(
+            getattr(self, "restricted_point_requested", False)
+        )
+        if point_metrics is not None:
+            metrics.update(
+                zip(
+                    (
+                        "pbe0_restricted_point_capable",
+                        "restricted_point_batches",
+                        "restricted_point_count",
+                        "general_point_batches",
+                        "general_point_count",
+                    ),
+                    point_values,
+                    strict=True,
+                )
+            )
         metrics["primitive_batches"] = metrics["task_batches"]
         if zero_metrics is not None:
             metrics["becke_zero_seed_elision_enabled"] = bool(zero_values[0])
@@ -1984,6 +2070,7 @@ class PreparedStationaryCudaExecution:
                 "integral_terms": integral_terms,
                 "primitive_page_work_budget": page_work_budget,
                 "primitive_integral_derivatives": integral_derivatives,
+                "pbe0_restricted_point": _resolve_restricted_point_policy(),
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
                 "resident_ao_cutoff": resident_ao_cutoff,
                 "resident_ao_cache_bytes": resident_ao_cache_bytes,
@@ -2381,6 +2468,10 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "phased_becke_batches",
         "becke_primitive_batches",
         "becke_primitive_reverse_pair_visits",
+        "restricted_point_batches",
+        "restricted_point_count",
+        "general_point_batches",
+        "general_point_count",
         *_BECKE_PHASE_COUNTER_NAMES,
     ):
         if name in after and name in before:

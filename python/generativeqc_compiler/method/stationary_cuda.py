@@ -394,6 +394,7 @@ __global__ void validate_centers(const double* centers, size_t na, double tolera
           centers, na, tolerance, center_pairs, local_norm, local_ratio_geometry))
     atomicExch(error, 1);
 }
+template <bool restricted_point = false>
 __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     size_t p, size_t owner, size_t na,
     const double* raw, const double* external, size_t external_stride, size_t external_offset,
@@ -407,7 +408,14 @@ __device__ bool geometry_point_setup(generativeqc::dft::GridTaskView view,
     for (size_t s = 0; s < 2; ++s) tau[s] = view.features[(5 * s + 4) * np + p];
   // The exact shared SCF point model, including vacuum/spin boundaries.
   xc = StationaryPointValue{};
-  if (external) {
+  if constexpr (restricted_point) {
+    static_assert(!restricted_point || stationary_pbe0_restricted_point_capable);
+    if (external) {
+      atomicExch(error, 1);
+      return false;
+    }
+    xc = stationary_evaluate_restricted_point(rho, g, tau);
+  } else if (external) {
     // Nonlocal E supplies partials in total rho/sigma, explicit pair
     // coordinates and both weight legs. Device-resident callers may lend a
     // full-grid [6,stride] seed owner and select one tile by offset, avoiding
@@ -511,6 +519,7 @@ __device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const do
  * holds the point value; three grid-motion slots retain any external seed.
  * Admission guarantees these regions are disjoint, without another allocation.
  * The borrowed stream orders publication and the sticky status gates readers. */
+template <bool restricted_point = false>
 __global__ void geometry_point_kernel(generativeqc::dft::GridTaskView view,
     const int64_t* owners, size_t owner_offset, size_t points_per_atom, size_t na,
     const double* weights, const double* raw, const double* external,
@@ -533,7 +542,7 @@ __global__ void geometry_point_kernel(generativeqc::dft::GridTaskView view,
   for (size_t axis = 0; axis < 3; ++axis) ws[3 * na + 3 * owner + axis] = 0;
   StationaryPointValue xc;
   double seed = 0;
-  if (!geometry_point_setup(view, point, size_t(owner), na, raw, external,
+  if (!geometry_point_setup<restricted_point>(view, point, size_t(owner), na, raw, external,
                             external_stride, external_offset, ws, xc, seed, error)) return;
   *reinterpret_cast<StationaryPointValue*>(ws) = xc;
   phase_seeds[point] = seed;

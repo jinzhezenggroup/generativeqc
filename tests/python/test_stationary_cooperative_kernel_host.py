@@ -57,7 +57,7 @@ double* geometry_pair_storage;
         "  ++ao_evaluations;\n  for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];",
     )
     begin = _STATIONARY_SCIENTIFIC_KERNELS.index(
-        "__device__ bool geometry_point_setup("
+        "template <bool restricted_point = false>\n__device__ bool geometry_point_setup("
     )
     end = _STATIONARY_SCIENTIFIC_KERNELS.index(
         "}  // namespace generativeqc_stationary_cuda", begin

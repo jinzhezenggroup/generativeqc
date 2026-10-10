@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes as ct
 import os
 from dataclasses import replace
 from types import SimpleNamespace
@@ -268,6 +269,47 @@ def test_ao_layout_capabilities_dense_fallback_and_lease_lifetime() -> None:
     task._active = False
     with pytest.raises(RuntimeError, match="expired"):
         _ = task.layout
+
+
+@pytest.mark.parametrize("extension", [False, True])
+def test_density_binding_keeps_native_compatibility_and_task_generation(extension: bool) -> None:
+    """The native producer, not a caller's functional label, provides proof."""
+    values = (ct.c_double * 1)(7.0)
+    owner = SimpleNamespace(
+        _library=SimpleNamespace(), _handle=ct.c_void_p(1), generation=71,
+    )
+    if extension:
+        owner._library.grid_cuda_density_jets_v2 = object()
+    calls = []
+
+    def call(name: str, *args: object) -> None:
+        calls.append(name)
+        if args[1] != owner.generation:
+            raise RuntimeError("stale contracted AO generation")
+        ct.cast(args[3], ct.POINTER(ct.POINTER(ct.c_double)))[0] = ct.cast(
+            values, ct.POINTER(ct.c_double)
+        )
+        if name == "grid_cuda_density_jets_v2":
+            ct.cast(args[4], ct.POINTER(ct.c_uint64))[0] = 1
+
+    owner._call = call
+    task = DeviceGridTask(owner, GridTaskView(version=1, generation=71))
+    work, flags = task.density_jets_binding(4)
+    assert work[0] == 7.0 and flags == int(extension)
+    assert calls == [f"grid_cuda_density_jets_v{2 if extension else 1}"]
+    owner.generation += 1
+    with pytest.raises(RuntimeError, match="stale"):
+        task.density_jets_binding(4)
+    task._active = False
+    with pytest.raises(RuntimeError, match="expired"):
+        task.density_jets_binding(4)
+
+
+@pytest.mark.parametrize("jets", [True, 0, 2, 4.0])
+def test_density_binding_rejects_invalid_jet_domains_before_native_call(jets: object) -> None:
+    task = DeviceGridTask(SimpleNamespace(), GridTaskView(version=1, generation=1))
+    with pytest.raises(ValueError, match="one or four"):
+        task.density_jets_binding(jets)
 
 
 def test_typed_block_admission_checks_shape_basis_and_epochs_before_launch() -> None:

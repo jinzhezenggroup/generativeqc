@@ -349,6 +349,33 @@ preserves shared-science choices, measured evidence and remaining qualification.
 The [s/p/d shard decision](../../.agents/notes/implemented/architecture/2026-09-22-stationary-cuda-spd-derivative-shards.md)
 records the multicomponent lowering, compiler boundary and resource caps.
 
+## Restricted PBE0 point experiment
+
+`GENERATIVEQC_STATIONARY_PBE0_RESTRICTED_POINT=off|on` requests the private
+restricted geometry-point schedule; its default is `off`. It does not change
+the SCF policy, precision, functional weights, force assembly or public force
+capability, and a request alone does not prove fast-path execution.
+
+The compiler admits only explicitly unpolarized PBE components with exact
+semilocal weights 3/4 exchange and 1 correlation. The optional grid v2 getter
+lends a generation-bound identical-spin density-and-gradient witness from the
+owned density producer. The optional stationary resident-weight enqueue v2
+rejects stale generations and unknown flags before geometry work. Selection
+also requires precomputed phased storage, sufficient atom scratch and no
+external seed. Legacy artifacts, unproven producers and bounded nonphased
+plans retain the general point evaluator; the v1 task-view ABI is unchanged.
+
+Force-work diagnostics expose `pbe0_restricted_point_capable`,
+`restricted_point_requested`, `restricted_point_batches`,
+`restricted_point_count`, `general_point_batches` and `general_point_count`.
+Batch/point counts describe actual enqueues and are differenced per execution;
+capability and request are policy metadata, not semantic work counts. The
+specialized point retains the direct AO translation pullback and complete
+moving-grid/Becke terms. This private gate does not qualify general PBE, UKS,
+response or HVP numerics. The
+[producer-binding decision](../../.agents/notes/proposed/2026-10-10-rks-point-producer-binding.md)
+records the rationale and separate scientific/endpoint acceptance boundaries.
+
 ## Strict compilation environment
 
 The stationary CUDA compiler rejects nonempty `NVCC_PREPEND_FLAGS` and

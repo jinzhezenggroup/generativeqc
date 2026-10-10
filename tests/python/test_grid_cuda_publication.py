@@ -265,8 +265,33 @@ int check_panel_copy_failure() {
 }
 """
 
+BINDING_MAIN = r"""
+int check_density_binding(int mode) {
+  GridPlan p;
+  p.identical_spin_density = mode != 1;
+  if (mode == 2) p.feature_mask = 9;
+  if (mode == 3) p.use_orbitals = true;
+  if (mode == 4) p.view_ready = false;
+  if (mode == 5) p.density_jets_ready = false;
+  if (mode == 7) p.feature_mask = 3;
+  if (mode == 8) p.features_ready = false;
+  const auto generation = mode == 6 ? p.generation - 1 : p.generation;
+  const double* work = p.work + 1;
+  std::uint64_t flags = 99;
+  const int status = grid_cuda_density_jets_v2(&p,generation,4,&work,&flags,nullptr,0);
+  const bool admitted = mode <= 2;
+  if ((status == 0) != admitted) return 60;
+  if (!admitted && (work || flags)) return 61;
+  if (admitted && work != p.work) return 62;
+  if (admitted && flags != std::uint64_t(mode == 0)) return 63;
+  return 0;
+}
+"""
+
 MAIN = r"""
 int main(int argc,char** argv) {
+  if (argc == 3 && std::strcmp(argv[1],"binding") == 0)
+    return check_density_binding(std::atoi(argv[2]));
   if (argc == 6 && std::strcmp(argv[1],"spin") == 0)
     return check_spin_products(std::atoi(argv[2]),std::atoi(argv[3]),std::atoi(argv[4]),std::atoi(argv[5]));
   if (argc == 5 && std::strcmp(argv[1],"source") == 0)
@@ -356,7 +381,7 @@ def publication_probe(
     path, executable = directory / "probe.cpp", directory / "probe"
     path.write_text(
         emit_native_ao_grid_binding()
-        + f"{PREFIX}\n{setters}\n{body}\n{getter}\n{SPIN_MAIN}\n{MAIN}"
+        + f"{PREFIX}\n{setters}\n{body}\n{getter}\n{SPIN_MAIN}\n{BINDING_MAIN}\n{MAIN}"
     )
     native_cxx.build_executable(
         (path,),
@@ -366,6 +391,18 @@ def publication_probe(
         link_timeout=30,
     )
     return executable
+
+
+@pytest.mark.parametrize("mode", range(9))
+def test_density_binding_requires_current_owned_restricted_features(
+    publication_probe: Path, mode: int
+) -> None:
+    """Missing lineage falls back; stale or unavailable work clears the proof."""
+    process = subprocess.run(
+        [str(publication_probe), "binding", str(mode)], capture_output=True,
+        text=True, timeout=10, check=False,
+    )
+    assert process.returncode == 0, (mode, process.returncode, process.stderr)
 
 
 @pytest.mark.parametrize("mode", range(11))
