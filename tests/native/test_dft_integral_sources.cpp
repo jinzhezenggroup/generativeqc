@@ -196,8 +196,9 @@ void test_prepared_cpu_df_pbe_analytic_forces() {
   positive.prepare(GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE);
   negative.prepare(GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE);
   const double fd = -(positive.execute_energy() - negative.execute_energy()) / (2.0 * step);
-  require(std::isfinite(fd) && std::abs(fd - forces[5]) < 2e-3,
-          "native CPU DF-PBE force disagrees with reconverged finite difference");
+  if (!std::isfinite(fd) || std::abs(fd - forces[5]) >= 2e-3)
+    throw std::runtime_error("native CPU DF-PBE force disagrees with reconverged FD: FD=" +
+                             std::to_string(fd) + " force=" + std::to_string(forces[5]));
 
   environment.prepare(GENERATIVEQC_DENSITY_FITTING_NONE);
   available = 0;
