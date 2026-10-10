@@ -1681,8 +1681,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
    * This is intentionally not a second batch-specific DFT force equation. */
   void add_prepared_native_forces(Result& result) {
     if (!supports_native_pbe_force())
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "native DFT analytic forces are unqualified for this prepared context (#2151)");
+      throw MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "native DFT analytic forces are unqualified for this prepared context (#2151)");
     if (!result.convergence.converged) return;
     dft::CudaKsFinalStateToken token;
     dft::VerifiedKsFinalState frame;
@@ -1701,8 +1702,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     status = prepared_integral_gradient(token, frame.density, frame.weighted_density, integrals,
                                         kSourcePublicationBytes, work, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS)
-      throw MethodError(status,
-                        detail.empty() ? "native DFT integral force unavailable" : detail);
+      throw MethodError(status, detail.empty() ? "native DFT integral force unavailable" : detail);
 
     const auto xc = dft::stationary_pbe_xc_derivative(
         basis_, grid_, frame.density, options_.xc_tile_points, options_.semilocal_exchange_scale,
@@ -2109,13 +2109,13 @@ class KsPreparedBatch final : public PreparedBatch {
     // A native force request is admitted only when *every* prepared item has
     // the source-complete CPU DF-PBE/PBE0 owner. Mixed or missing contexts must
     // not quietly receive an energy-only result with an unfilled force buffer.
-    if (compute_forces &&
-        !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
+    if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
           return item.plan &&
                  (item.plan->supported_properties() & GENERATIVEQC_PROPERTY_FORCES) != 0;
         }))
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "KS batch analytic forces require individually qualified prepared contexts (#2151)");
+      throw MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "KS batch analytic forces require individually qualified prepared contexts (#2151)");
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("KS batch coordinates do not match system count");
     std::vector<BatchItemResult> results(size());

@@ -247,8 +247,8 @@ void test_prepared_cpu_df_pbe_batch_forces() {
   const generativeqc_system* systems[]{baseline.system, baseline.system};
   generativeqc_batch* batch = nullptr;
   require(generativeqc_batch_prepare(baseline.context, systems, 2, &method,
-                                     GENERATIVEQC_BATCH_ENABLE_WARM_STARTS, &batch) ==
-                  GENERATIVEQC_STATUS_SUCCESS &&
+                                     GENERATIVEQC_BATCH_ENABLE_WARM_STARTS,
+                                     &batch) == GENERATIVEQC_STATUS_SUCCESS &&
               batch != nullptr,
           "failed to prepare CPU DF-PBE native batch for forces");
 
@@ -271,8 +271,8 @@ void test_prepared_cpu_df_pbe_batch_forces() {
     return generativeqc_batch_execute(batch, inputs, count, outputs.data(), outputs.size());
   };
   const auto compare_reference = [&](std::size_t item, const double* forces, double energy) {
-    require(outputs[item].status == GENERATIVEQC_STATUS_SUCCESS &&
-                outputs[item].converged && std::isfinite(outputs[item].energy) &&
+    require(outputs[item].status == GENERATIVEQC_STATUS_SUCCESS && outputs[item].converged &&
+                std::isfinite(outputs[item].energy) &&
                 std::abs(outputs[item].energy - energy) < 1e-7,
             "native CPU DF-PBE batch energy differs from the single owner");
     const auto& actual = item == 0 ? first : second;
@@ -281,8 +281,7 @@ void test_prepared_cpu_df_pbe_batch_forces() {
               "native CPU DF-PBE batch force differs from the single owner");
   };
 
-  require(execute() == GENERATIVEQC_STATUS_SUCCESS,
-          "native CPU DF-PBE batch E+F execution failed");
+  require(execute() == GENERATIVEQC_STATUS_SUCCESS, "native CPU DF-PBE batch E+F execution failed");
   compare_reference(0, single_forces.data(), single.energy);
   compare_reference(1, single_forces.data(), single.energy);
   require(execute() == GENERATIVEQC_STATUS_SUCCESS,
@@ -326,10 +325,10 @@ void test_prepared_cpu_df_pbe_batch_forces() {
   require(execute(inputs.data(), inputs.size()) == GENERATIVEQC_STATUS_SUCCESS,
           "one invalid native DFT item incorrectly failed the whole batch");
   compare_reference(0, single_forces.data(), single.energy);
-  require(outputs[1].status == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
-              std::all_of(second.begin(), second.end(),
-                          [](double value) { return value == 2222.; }),
-          "invalid native DFT batch neighbor published partial forces");
+  require(
+      outputs[1].status == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+          std::all_of(second.begin(), second.end(), [](double value) { return value == 2222.; }),
+      "invalid native DFT batch neighbor published partial forces");
   require(execute() == GENERATIVEQC_STATUS_SUCCESS,
           "valid replay after a failed DFT batch neighbor did not recover");
   compare_reference(0, single_forces.data(), single.energy);
@@ -341,7 +340,8 @@ void test_prepared_cpu_df_pbe_batch_forces() {
   method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   batch = nullptr;
   require(generativeqc_batch_prepare(baseline.context, systems, 2, &method, 0, &batch) ==
-                  GENERATIVEQC_STATUS_SUCCESS && batch != nullptr,
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              batch != nullptr,
           "CPU Direct DFT batch negative-control preparation failed");
   reset_outputs();
   first.fill(1111.);
