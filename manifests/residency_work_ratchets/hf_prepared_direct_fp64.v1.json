@@ -1,0 +1,196 @@
+{
+  "schema": "generativeqc.observed-source-work-ratchet.v1",
+  "scope": "verified source copy/fence calls and observed CUPTI memcpy/blocking synchronization activity",
+  "profiles": [
+    {
+      "name": "prepared-rhf-direct-fp64-h2-water-h2-v1",
+      "workload_sha256": "e13d92e83f8cb80e7808b12a30da2eda5b3dc02ca74b8bd5a071bf007f34ab21",
+      "baseline": {
+        "source_tree": "549a3e89bf8ce8baf6ff290f089b5b4570ee52f2",
+        "library_sha256": "fe88aed090f749f45d1914ff5cc792b3b0ed113bdbf2c81aae5430cf0ecd8cfd",
+        "collector_sha256": "72d1fef064e9910c50f5dd45df5b6139c72cdb00a02ca768df7cec373913499b",
+        "slurm_job_id": "6933"
+      },
+      "regions": [
+        {
+          "name": "energy-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "iteration",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 2,
+                "h2d_bytes": 0,
+                "d2h_bytes": 8,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "h2d_bytes": 24,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 32,
+                "source_zero_byte_calls": 16,
+                "source_stream_fences": 2,
+                "h2d_bytes": 0,
+                "d2h_bytes": 549,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "force-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 4,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "h2d_bytes": 40,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 34,
+                "source_zero_byte_calls": 18,
+                "source_stream_fences": 2,
+                "h2d_bytes": 0,
+                "d2h_bytes": 714,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        }
+      ],
+      "unannotated_activity_limit": 0
+    },
+    {
+      "name": "prepared-uhf-direct-fp64-h2-water-h2-v1",
+      "workload_sha256": "e010c74886c4bce785625d54e5baba9956a9a4990c2ff84cfa4d297faa4bd3a7",
+      "baseline": {
+        "source_tree": "549a3e89bf8ce8baf6ff290f089b5b4570ee52f2",
+        "library_sha256": "fe88aed090f749f45d1914ff5cc792b3b0ed113bdbf2c81aae5430cf0ecd8cfd",
+        "collector_sha256": "72d1fef064e9910c50f5dd45df5b6139c72cdb00a02ca768df7cec373913499b",
+        "slurm_job_id": "6933"
+      },
+      "regions": [
+        {
+          "name": "energy-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "iteration",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 2,
+                "h2d_bytes": 0,
+                "d2h_bytes": 8,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 2,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "h2d_bytes": 24,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 32,
+                "source_zero_byte_calls": 16,
+                "source_stream_fences": 2,
+                "h2d_bytes": 0,
+                "d2h_bytes": 1005,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        },
+        {
+          "name": "force-warm",
+          "role": "replay",
+          "owner_roles": [
+            {
+              "owner": "hf_bucket",
+              "role": "prepare",
+              "max": {
+                "source_transfer_calls": 4,
+                "source_zero_byte_calls": 0,
+                "source_stream_fences": 0,
+                "h2d_bytes": 40,
+                "d2h_bytes": 0,
+                "d2d_bytes": 0,
+                "activity_sync_records": 0,
+                "activity_event_wait_records": 0
+              }
+            },
+            {
+              "owner": "hf_bucket",
+              "role": "publication",
+              "max": {
+                "source_transfer_calls": 34,
+                "source_zero_byte_calls": 18,
+                "source_stream_fences": 2,
+                "h2d_bytes": 0,
+                "d2h_bytes": 1170,
+                "d2d_bytes": 0,
+                "activity_sync_records": 2,
+                "activity_event_wait_records": 0
+              }
+            }
+          ]
+        }
+      ],
+      "unannotated_activity_limit": 0
+    }
+  ]
+}

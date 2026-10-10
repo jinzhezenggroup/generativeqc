@@ -16,10 +16,16 @@
 
 #include "posthf/raw_source.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/residency_cuda.cuh"
 #include "scf/cuda_density_fitting.hpp"
 
 namespace {
 using namespace generativeqc::scf;
+using generativeqc::runtime::ResidencyExecution;
+using generativeqc::runtime::ResidencyOwner;
+using generativeqc::runtime::ResidencyPayload;
+using generativeqc::runtime::ResidencyRole;
+using generativeqc::runtime::ResidencySite;
 void check(cudaError_t s) {
   if (s != cudaSuccess) throw std::runtime_error(cudaGetErrorString(s));
 }
@@ -40,7 +46,11 @@ struct DFSource {
     int previous = 0;
     cudaGetDevice(&previous);
     cudaSetDevice(device);
-    if (stream) cudaStreamSynchronize(stream.get());
+    if (stream) {
+      const ResidencyExecution execution(ResidencyOwner::posthf_df_source);
+      generativeqc::runtime::residency_stream_synchronize(
+          execution, ResidencyRole::lifetime, ResidencySite::posthf_df_release_fence, stream.get());
+    }
     tile.reset();
     begin.reset();
     end.reset();
@@ -146,6 +156,7 @@ int generativeqc_posthf_df_read_v1(void* pointer, int kind, const size_t* b, con
     if (product != elements || elements > p.capacity)
       throw std::invalid_argument("DF tile exceeds prepared capacity");
     if (!elements) return;
+    const ResidencyExecution execution(ResidencyOwner::posthf_df_source);
     std::string detail;
     const auto endpoint_begin = std::chrono::steady_clock::now();
     p.begin.record(p.stream.get());
@@ -156,13 +167,20 @@ int generativeqc_posthf_df_read_v1(void* pointer, int kind, const size_t* b, con
         throw std::runtime_error(detail);
     }
     p.end.record(p.stream.get());
-    p.end.synchronize();
+    generativeqc::runtime::cuda_resource_check(generativeqc::runtime::residency_event_synchronize(
+        execution, ResidencyRole::compatibility, ResidencySite::posthf_df_generation_fence,
+        p.end.get()));
     float milliseconds = p.end.elapsed_since(p.begin);
     p.generation_ms += milliseconds;
     p.begin.record(p.stream.get());
-    check(cudaMemcpyAsync(out, p.tile.get(), elements * 8, cudaMemcpyDeviceToHost, p.stream.get()));
+    check(generativeqc::runtime::residency_memcpy_async(
+        execution, ResidencyRole::compatibility, ResidencySite::posthf_df_raw_tile,
+        ResidencyPayload::df_raw_three_center, out, p.tile.get(), elements * 8,
+        cudaMemcpyDeviceToHost, p.stream.get()));
     p.end.record(p.stream.get());
-    p.end.synchronize();
+    generativeqc::runtime::cuda_resource_check(generativeqc::runtime::residency_event_synchronize(
+        execution, ResidencyRole::compatibility, ResidencySite::posthf_df_publication_fence,
+        p.end.get()));
     milliseconds = p.end.elapsed_since(p.begin);
     p.transfer_ms += milliseconds;
     p.d2h_bytes += elements * sizeof(double);
@@ -218,7 +236,12 @@ int generativeqc_posthf_df_rhf_jk_plan_create_v1(void* pointer, double threshold
     if (!p.source || p.device_handoff)
       throw std::runtime_error("generated DF source is not available for device handoff");
     check(cudaSetDevice(p.device));
-    if (p.stream) check(cudaStreamSynchronize(p.stream.get()));
+    if (p.stream) {
+      const ResidencyExecution execution(ResidencyOwner::posthf_df_source);
+      check(generativeqc::runtime::residency_stream_synchronize(
+          execution, ResidencyRole::prepare, ResidencySite::posthf_df_handoff_fence,
+          p.stream.get()));
+    }
     const auto before = cuda_density_fitting_integral_source_counters(p.source);
     p.generated_bytes_snapshot = before.generated_value_bytes;
     p.generated_tiles_snapshot = before.generated_value_tiles;

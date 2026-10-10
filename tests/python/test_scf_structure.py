@@ -14,6 +14,55 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize(
+    ("owner", "header"),
+    [
+        ("scf/cuda/eigensolver.cpp", "residency_cuda.cuh"),
+        ("scf/cuda/resources.cpp", "residency_cuda.cuh"),
+        ("scf/cuda/rhf_graph.cpp", "residency_cuda.cuh"),
+        ("scf/cuda/rhf_graph.hpp", "residency_observer.hpp"),
+        ("scf/cuda_rhf.cpp", "residency_cuda.cuh"),
+    ],
+)
+def test_residency_consumers_borrow_only_explicit_runtime_leaves(
+    tmp_path: Path, owner: str, header: str
+) -> None:
+    """Observation adds a narrow runtime edge, not an exemption for runtime owners."""
+    source = tmp_path / "src"
+    adapter = source / owner
+    adapter.parent.mkdir(parents=True)
+    runtime = source / "runtime"
+    runtime.mkdir()
+    (runtime / header).write_text("\n")
+    adapter.write_text(f'#include "runtime/{header}"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    (runtime / "unrelated_cuda.hpp").write_text("\n")
+    adapter.write_text('#include "runtime/unrelated_cuda.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["residency_boundaries.hpp", "residency_observer.hpp", "residency_cuda.cuh"],
+)
+def test_residency_observation_cannot_acquire_scientific_ownership(
+    tmp_path: Path, header: str
+) -> None:
+    """Collectors share leaf tags and callbacks, never scientific driver interfaces."""
+    source = tmp_path / "src"
+    runtime = source / "runtime"
+    runtime.mkdir(parents=True)
+    scf = source / "scf"
+    scf.mkdir()
+    (scf / "types.hpp").write_text("\n")
+    (runtime / header).write_text('#include "scf/types.hpp"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_residency_observation" in errors[0]
+
+
 @pytest.mark.parametrize("owner", ["direct_jk.cpp", "direct_jk_plan.hpp"])
 def test_md_j_host_borrows_interface_not_recurrence(tmp_path: Path, owner: str) -> None:
     """The default provider may borrow MD launch metadata, not device formulas."""
