@@ -1167,7 +1167,7 @@ PbeStationaryXcDerivative stationary_pbe_xc_derivative(
       const auto owner = static_cast<std::size_t>(owners[point]);
       if (owner >= atoms) throw std::invalid_argument("invalid stationary PBE grid owner");
       std::array<const double*, 10> jet{};
-      for (unsigned j = 0; j < jet.size(); ++j)
+      for (std::size_t j = 0; j < jet.size(); ++j)
         jet[j] = ao.data() + (j * count + local) * n;
       const std::array<const double*, 3> first{jet[1], jet[2], jet[3]};
       double rho[2]{}, grad_rho[2][3]{};
