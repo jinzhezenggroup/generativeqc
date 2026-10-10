@@ -49,8 +49,8 @@ THREAD_VARIABLES = (
     "NUMEXPR_NUM_THREADS",
 )
 MAX_PROFILE_BYTES = 512 * 1024 * 1024
-TOTAL_SECONDS = 33 * 60
-ARM_SECONDS = 8 * 60
+TOTAL_SECONDS = 56 * 60
+ARM_SECONDS = 12 * 60
 
 
 def run_bounded(
@@ -411,7 +411,7 @@ def execute(args: argparse.Namespace) -> int:
     ) -> None:
         timeout = min(seconds, deadline - time.monotonic())
         if timeout <= 0:
-            raise TimeoutError("paired diagnostic exhausted its 33-minute budget")
+            raise TimeoutError("paired diagnostic exhausted its 56-minute budget")
         with (artifact / log).open("w") as handle:
             run_bounded(
                 command,

@@ -528,3 +528,13 @@ def test_scanned_native_compiler_rule_requires_review(tmp_path: Path) -> None:
         )
     with pytest.raises(ValueError, match="scanned native"):
         pair.compiler_rules(tmp_path)
+
+
+def test_diagnostic_budget_covers_verified_slow_cpu_suite_and_fixed_abba() -> None:
+    # Exact-master job 114314463425: five tests 566.15s; complete action 590s.
+    # Four fixed arms, one cached baseline configure/build, bounded overhead.
+    assert pair.ARM_SECONDS == 12 * 60
+    assert pair.TOTAL_SECONDS == 56 * 60
+    assert pair.ARM_SECONDS > 590
+    assert len(pair.ARMS) == 4
+    assert pair.TOTAL_SECONDS >= 4 * pair.ARM_SECONDS + 120 + 300 + 60

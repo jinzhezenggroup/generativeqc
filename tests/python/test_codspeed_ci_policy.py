@@ -106,7 +106,7 @@ def test_paired_diagnostic_is_bounded_and_separate_from_qualified_upload() -> No
         "\n  upload-coverage:\n", 1
     )[0]
     assert (
-        "timeout-minutes: ${{ github.event_name == 'pull_request' && 40 || 15 }}" in job
+        "timeout-minutes: ${{ github.event_name == 'pull_request' && 65 || 15 }}" in job
     )
 
     def step(name: str) -> str:

@@ -1462,7 +1462,7 @@ jobs:
     runs-on: ubuntu-24.04
     # PR CPU mismatches may use one bounded, no-upload ABBA diagnostic. Other
     # events keep the single-suite budget; no retry loop is permitted.
-    timeout-minutes: ${{ github.event_name == 'pull_request' && 40 || 15 }}
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 65 || 15 }}
     env:
       # Non-PR events have no selector step to initialize the setup guard.
       GENERATIVEQC_CODSPEED_RUN: "1"

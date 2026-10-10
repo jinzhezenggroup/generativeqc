@@ -142,3 +142,26 @@ CPU/threshold gates or the four-arm budget; the performance question is still op
 
 Primary implementations: [CMake launcher binding](https://github.com/Kitware/CMake/blob/master/Source/cmNinjaTargetGenerator.cxx)
 and [Ninja extra tools](https://ninja-build.org/manual.html#_extra_tools).
+
+## Budget correction from a retained slow-host run
+
+Exact-master job [114314463425](https://github.com/jinzhezenggroup/generativeqc/actions/runs/38086656108/job/114314463425)
+ran the same five definitions in 566.15 seconds on Intel Xeon Platinum 8370C.
+Its complete CodSpeed action ran from 21:13:29 to 21:23:19 UTC on 2026-10-10,
+about 590 seconds. Its authenticated schema-v2 receipt is artifact 11682249789
+for `20dbc5c2577ca4cc59c82b971696c78a62e33483`, ZIP SHA256
+`0482fe4d580ca04466c0a50bf3649fc2fa9850616920d0b7219a9071a7c061be`.
+This existing observation exceeds the initial eight-minute arm limit; no new
+benchmark was needed to establish the mismatch.
+
+Superseding the initial duration settings above, each arm is now capped at
+12 minutes, about 23% above the observed complete action. The total diagnostic
+cap is 56 minutes: four 12-minute arms, the unchanged two-minute configure and
+five-minute cached control-build ceilings, and one minute of identity/switching/
+inspection overhead. The PR job ceiling is 65 minutes, leaving nine minutes for
+its normal head build/setup, instrument bootstrap, restoration and artifact save.
+Non-PR jobs retain 15 minutes. These are ceilings, not additional samples: ABBA,
+two independent pairs, five-case history, no-upload, all qualification/numerical/
+threshold gates and manual performance review remain unchanged. A normal
+qualified backend comparison remains preferable when the allocated CPU matches;
+this correction does not authorize replacing a pending run or repeating samples.
