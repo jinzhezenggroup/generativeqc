@@ -43,10 +43,10 @@ remain workload- and execution-environment-guarded.
 
 Additional elementwise fusion, broadcast/fusion and CC-like residual campaigns
 retained the deterministic baseline because one or more complete endpoint/noise
-gates did not pass. Those outcomes are summarized in `qualification.json`;
+gates did not pass. Those outcomes are summarized in `qualification.json.gz`;
 no threshold was weakened to manufacture a winner.
 
-`qualification.json` retains complete selected-candidate timing samples,
+`qualification.json.gz` retains complete selected-candidate timing samples,
 endpoint profiles, PTXAS resource facts, compile/resource calibration, promotion
 profiles, the compact candidate ledger and negative-gate summaries.
 
@@ -61,3 +61,12 @@ axes:
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
+
+## Lossless storage
+
+The qualification is deterministically gzip-compressed.
+`qualification-retention.json` binds the stored bytes and the exact original
+Git blob, byte count and SHA-256. Decompression restores every original byte,
+including all raw samples and rejected outcomes; this changes no scientific
+acceptance. Read it with `tools.generativeqc_validation.record.load_json`,
+or use `gzip -dc qualification.json.gz` to recover the original JSON.
