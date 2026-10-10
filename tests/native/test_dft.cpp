@@ -55,6 +55,52 @@ generativeqc::core::System h2() {
     throw std::runtime_error(detail);
   return system;
 }
+
+void stationary_pbe_xc_nuclear_finite_difference() {
+  const auto reference = h2();
+  const generativeqc::dft::GridSpec grid_spec{1, 8, 6, 12, 3, 1e-12};
+  const std::vector<double> restricted{0.9, 0.18, 0.18, 0.7};
+  const std::vector<double> alpha{0.52, 0.11, 0.11, 0.32};
+  const std::vector<double> beta{0.31, 0.035, 0.035, 0.39};
+  for (const auto& blocks : {std::vector<std::vector<double>>{restricted},
+                             std::vector<std::vector<double>>{alpha, beta}}) {
+    for (double exchange_scale : {1.0, 0.75}) {
+      const generativeqc::dft::AoBasis basis(reference);
+      const generativeqc::dft::MolecularGrid grid(reference, grid_spec);
+      const auto response = generativeqc::dft::stationary_pbe_xc_derivative(
+          basis, grid, blocks, 17, exchange_scale);
+      const auto energy = [&](const generativeqc::core::System& system) {
+        const generativeqc::dft::AoBasis displaced_basis(system);
+        const generativeqc::dft::MolecularGrid displaced_grid(system, grid_spec);
+        if (blocks.size() == 1)
+          return generativeqc::dft::integrate_pbe_rks_with_tail_scaled(
+                     displaced_basis, displaced_grid, blocks[0], 13, {}, exchange_scale, 1.0)
+              .energy;
+        return generativeqc::dft::integrate_pbe_uks_scaled(
+                   displaced_basis, displaced_grid, blocks[0], blocks[1], 13, exchange_scale, 1.0)
+            .energy;
+      };
+      require(std::abs(response.energy - energy(reference)) < 1e-9,
+              "stationary PBE XC value disagrees with SCF energy quadrature");
+      for (unsigned axis = 0; axis < 3; ++axis)
+        require(std::abs(response.gradient[axis] + response.gradient[3 + axis]) < 5e-9,
+                "stationary PBE XC violates rigid-translation invariance");
+      const double step = 2e-4;
+      for (std::size_t atom = 0; atom < 2; ++atom)
+        for (unsigned axis = 0; axis < 3; ++axis) {
+          auto plus = reference;
+          auto minus = reference;
+          plus.atoms[atom].position[axis] += step;
+          minus.atoms[atom].position[axis] -= step;
+          const double fd = (energy(plus) - energy(minus)) / (2.0 * step);
+          if (!std::isfinite(fd) ||
+              std::abs(fd - response.gradient[3 * atom + axis]) > 4e-5)
+            throw std::runtime_error(
+                "stationary PBE XC AO/grid/Becke nuclear finite difference mismatch");
+        }
+    }
+  }
+}
 }  // namespace
 
 int main() {
@@ -785,6 +831,7 @@ int main() {
       pbe_tail_rejected = true;
     }
     require(pbe_tail_rejected, "PBE tail-v1 accepted an out-of-domain density");
+    stationary_pbe_xc_nuclear_finite_difference();
     std::cout << "DFT GridSpec v1 and generated LDA fixed-density gates passed\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
