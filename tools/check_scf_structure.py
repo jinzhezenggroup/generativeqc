@@ -598,6 +598,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     # leaf sink with no dependency on any scientific provider or collector.
     "runtime/df_progress_trace.hpp",
     "runtime/cuda_component_trace.hpp",
+    "runtime/cuda_device_facts.hpp",
     "runtime/resource_cuda.cuh",
     "runtime/residency_cuda.cuh",
     "runtime/resource_usage.hpp",

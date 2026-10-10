@@ -28,6 +28,7 @@
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_component_trace.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/residency_cuda.cuh"
 #include "runtime/resource_cuda.cuh"
@@ -468,15 +469,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   plan.last_ppps_queue_profile.reset();
   plan.last_inactive_eigensolver_profile.reset();
 
-  cudaDeviceProp direct_device_properties{};
+  // Reuse the visibility-safe facts owner and its complete provider fallback.
+  // Unbatched HF does not need the unrelated full-property grid limits.
+  runtime::CudaTargetInfo direct_target{};
+  char direct_device_name[256]{};
   const cudaError_t direct_target_error =
-      cudaGetDeviceProperties(&direct_device_properties, device_id);
+      runtime::cuda_device_facts(device_id, direct_target, direct_device_name);
   if (direct_target_error != cudaSuccess) {
     fill_global_failure(outputs, cuda_status(direct_target_error));
     return outputs;
   }
-  const runtime::CudaTargetInfo direct_target =
-      runtime::cuda_target_info_from_properties(direct_device_properties);
   const cuda_policy::DirectJkSchedulePolicy direct_schedule =
       cuda_policy::resolve_direct_jk_schedule_policy(direct_target);
 
@@ -667,6 +669,20 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         first_setup ? requested_bounded_direct_streaming : plan.bounded_direct_streaming;
     total_shell_quartet_tiles =
         requested_bounded_direct_streaming ? 0 : plan.total_shell_quartet_tiles;
+  }
+  // Query the authoritative batched grid limit before any device geometry or
+  // retained plan state is changed. A provider error must leave a warm plan
+  // reusable at its previous geometry. Single-system and bounded-streaming
+  // plans never consume this property.
+  std::size_t maximum_compaction_grid_y = 0;
+  if (requested_quartet_direct && !requested_bounded_direct_streaming && batch_size > 1) {
+    cudaDeviceProp compaction_properties{};
+    const auto compaction_target_error = cudaGetDeviceProperties(&compaction_properties, device_id);
+    if (compaction_target_error != cudaSuccess) {
+      fill_global_failure(outputs, cuda_status(compaction_target_error));
+      return outputs;
+    }
+    maximum_compaction_grid_y = static_cast<std::size_t>(compaction_properties.maxGridSize[1]);
   }
   // Per-item mixed-capable tile census: the FP32-error budget is evaluated for
   // every system on its own count. Bounded streaming keeps zeros, which the
@@ -2028,8 +2044,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   dim3 direct_shell_quartet_compaction_grid(1U, 1U, 1U);
   if (requested_quartet_direct && !requested_bounded_direct_streaming) {
     direct_shell_quartet_compaction_grid = dim3(blocks_for(total_shell_quartets), 1U, 1U);
-    if (batch_size > 1 &&
-        batch_size <= static_cast<std::size_t>(direct_device_properties.maxGridSize[1])) {
+    if (batch_size > 1 && batch_size <= maximum_compaction_grid_y) {
       const std::int64_t first_count =
           host.system_shell_quartet_offsets[1] - host.system_shell_quartet_offsets[0];
       bool uniform_quartet_count = first_count > 0;
