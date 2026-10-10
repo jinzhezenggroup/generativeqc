@@ -222,8 +222,9 @@ std::size_t preliminary_numeric_capacity(const core::System& system,
   return bytes;
 }
 
-std::size_t preliminary_minao_numeric_capacity(
-    std::size_t target_aos, const std::int32_t* atomic_numbers, std::size_t atom_count) {
+std::size_t preliminary_minao_numeric_capacity(std::size_t target_aos,
+                                               const std::int32_t* atomic_numbers,
+                                               std::size_t atom_count) {
   if (!target_aos || !atomic_numbers || !atom_count ||
       atom_count > std::numeric_limits<std::uint32_t>::max())
     throw std::invalid_argument("invalid MINAO capacity query topology");

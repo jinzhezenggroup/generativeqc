@@ -160,4 +160,3 @@ Retained target and source workspace remain separately charged by the global
 resource planner; the bound does **not** represent allocator overhead or process
 RSS. Older native libraries lacking this additive private query keep the
 previous conservative Python compatibility estimate.
-

@@ -229,9 +229,7 @@ def test_native_minao_shape_query_is_authoritative(
     with pytest.raises(ValueError, match="H-Ar"):
         _minao_numeric_capacity(nbf, [19], library)
     output = ctypes.c_uint64(9876)
-    assert query(
-        nbf, (ctypes.c_int32 * 1)(19), 1, ctypes.byref(output)
-    ) != 0
+    assert query(nbf, (ctypes.c_int32 * 1)(19), 1, ctypes.byref(output)) != 0
     assert output.value == 9876
 
 

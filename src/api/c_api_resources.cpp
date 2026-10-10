@@ -462,9 +462,9 @@ int generativeqc_resource_df_source_bytes_v1(std::size_t batch, std::size_t atom
 /** Private additive shape query for the exact native MINAO preparation bound.
  * Output is transactional; this does not construct a system, SCF or GPU state.
  * Old binaries simply lack the symbol and retain legacy Python planning. */
-int generativeqc_resource_minao_numeric_capacity_v1(
-    std::size_t target_aos, const std::int32_t* atomic_numbers, std::size_t atom_count,
-    std::uint64_t* output) {
+int generativeqc_resource_minao_numeric_capacity_v1(std::size_t target_aos,
+                                                    const std::int32_t* atomic_numbers,
+                                                    std::size_t atom_count, std::uint64_t* output) {
   if (!output) return 1;
   try {
     const auto value = generativeqc::scf::initial_guess::preliminary_minao_numeric_capacity(
