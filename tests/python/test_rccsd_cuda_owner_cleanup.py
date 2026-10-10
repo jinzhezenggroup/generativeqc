@@ -169,6 +169,20 @@ constexpr int cudaStreamCaptureStatusNone=0;
 int cudaStreamIsCapturing(cudaStream_t, int* p) { *p=0; return step(); }
 int cublasGetVersion(cublasHandle_t, int* p) { *p=120900; return step(); }
 int cudaRuntimeGetVersion(int* p) { *p=12090; return step(); }
+namespace generativeqc::runtime {
+// Keep the extracted production owner on the same injected allocation APIs.
+int resource_cuda_malloc(void** pointer,std::size_t bytes,bool* host_oom) {
+  *host_oom=false; return cudaMalloc(pointer,bytes);
+}
+int resource_cuda_free(void* pointer) { return cudaFree(pointer); }
+struct CudaDeviceScope {
+  int previous;
+  template<class Check> CudaDeviceScope(int selected,Check check) {
+    check(cudaGetDevice(&previous)); check(cudaSetDevice(selected));
+  }
+  ~CudaDeviceScope() { (void)cudaSetDevice(previous); }
+};
+}
 namespace generativeqc_tensor {
 using ::cuda_check;
 using ::blas_check;

@@ -109,7 +109,8 @@ void error_text(char* p,std::size_t n,const char* s){if(p&&n)std::snprintf(p,n,"
 }
 namespace generativeqc::runtime {
 void cuda_resource_check(int s){generativeqc_tensor::cuda_check(s);}
-template <class T> int resource_cuda_malloc(T** p,std::size_t n){
+template <class T> int resource_cuda_malloc(T** p,std::size_t n,bool* host_oom=nullptr){
+  if(host_oom)*host_oom=false;
   return cudaMalloc(reinterpret_cast<void**>(p),n);
 }
 int resource_cuda_free(void* p){return cudaFree(p);}

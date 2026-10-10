@@ -61,6 +61,8 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "history-fallback",
         "conventional-fallback",
         "conventional-history-fallback",
+        "workspace-fallback",
+        "workspace-history-fallback",
     ],
 )
 def test_provider_release_waits_for_other_owner_measurement(
@@ -92,6 +94,8 @@ constexpr int cudaErrorMemoryAllocation=2;
 static std::promise<void> released;
 static std::promise<void> partial_freed;
 static bool fail_history=false;
+static bool workspace_enabled=false;
+static int workspace_releases=0;
 static int destroys=0, frees=0, allocations=0, cleared=0;
 int cudaStreamSynchronize(void*) { return 0; }
 int cublasDestroy(void*) { ++destroys; released.set_value(); return 0; }
@@ -110,6 +114,11 @@ constexpr std::size_t kContractionProviderAllowance=96ULL<<20;
 std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
 struct Contractions {
   void *handle=reinterpret_cast<void*>(2), *stream=reinterpret_cast<void*>(1);
+  std::size_t workspace_bytes() const { return workspace_enabled ? 4ULL<<20 : 0; }
+  bool release_workspace() {
+    std::lock_guard<std::mutex> lock(generativeqc::runtime::allocation_measurement_mutex);
+    workspace_enabled=false; ++workspace_releases; return true;
+  }
   void release_locked() {
     if (handle) {
       if (stream) cuda_check(cudaStreamSynchronize(stream));
@@ -156,9 +165,15 @@ MAIN = r"""
 int main(int argc,char** argv) {
   if(argc!=2) return 99;
   const auto operation=std::string(argv[1]);
-  fail_history=operation=="history-fallback" || operation=="conventional-history-fallback";
+  fail_history=operation=="history-fallback" || operation=="conventional-history-fallback" ||
+               operation=="workspace-history-fallback";
+  workspace_enabled=operation=="workspace-fallback" || operation=="workspace-history-fallback";
+  const bool optional_workspace=workspace_enabled;
   const bool fallback=operation!="cleanup";
   generativeqc::cc::Owner owner;
+  if(optional_workspace) {
+    owner.pairs_enabled=owner.replay_matrix=true; owner.plan.auxiliary_batch_size=32;
+  }
   if (operation=="conventional-fallback" || operation=="conventional-history-fallback") {
     owner.conventional_prepared=true;
     owner.plan.matrix_gemm=false;
@@ -180,12 +195,22 @@ int main(int argc,char** argv) {
   ready.wait();
   const bool released_during_measurement=release.wait_for(250ms)==std::future_status::ready;
   const bool freed_during_measurement=partial_release.wait_for(0ms)==std::future_status::ready;
+  const bool workspace_released_during_measurement=workspace_releases!=0;
   measurement.unlock();
   worker.join();
-  if(released_during_measurement || freed_during_measurement) {
+  if(released_during_measurement || freed_during_measurement || workspace_released_during_measurement) {
     std::cerr << "Provider released during another owner's allocation measurement: "
                  "a 96 MiB release can hide 160 MiB growth as 64 MiB.\n";
     return 1;
+  }
+  if(optional_workspace) {
+    if(destroys || !owner.contractions.handle || workspace_releases!=1 || workspace_enabled ||
+       owner.replans || !owner.pairs_enabled || !owner.replay_matrix ||
+       owner.plan.auxiliary_batch_size!=32 || owner.layout.total!=1024 ||
+       allocations!=(fail_history ? 4 : 2) || cleared!=(fail_history ? 2 : 1)) return 5;
+    owner.cleanup();
+    return owner.base || owner.history_base || owner.stream || destroys!=1 ||
+           frees!=(fail_history ? 3 : 2);
   }
   if(destroys!=1 || owner.contractions.handle) return 2;
   if(fallback) {

@@ -137,6 +137,15 @@ verifies all eight originals before writing. No accepted samples are lost,
 unrelated evidence deleted, cap raised or external archive/Release published.
 The prior rationale remains historical, with an appended recovery pointer.
 
+## Successor evidence retention
+
+The bounded-workspace successor migrates the six original files losslessly to
+existing merged commit `9f67e7806e3151454530baf0ee66ae8808d826f0` (#2197).
+The sibling `snapshot.manifest.json` pins all 19,127 bytes, and the shared offline
+restore tool verifies every original file before materializing it. This keeps
+all accepted samples and the fixed checkout budget. See
+`2026-10-10-df-cc-explicit-blas-workspace.md` for the successor decision.
+
 ## Revisit when
 
 A smaller-memory device, occupied-heavy shape or different bottleneck justifies
