@@ -108,16 +108,18 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `d8e5eaa9af430a6509ae635e50c6a736a1127817`, qz Job
-`i1877-rankk-h100-1010z11` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `1cd3a783d51ce173d8dc06ad76965b84ef069b86`, qz Job
+`i1877-rankk-h100-1010z12` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,581 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 13.26–21.42 µs for the generated
-route and 25.51–36.36 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 13.06–21.64 µs for the generated
+route and 25.06–80.93 µs for cuBLAS over the tested small panels. The 80.93 µs
+small-panel value is retained as observed timing noise rather than replaced by a
+more favorable rerun. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -173,11 +175,14 @@ exact tree `68de92cd3`. A later review found that `collect2` dynamically loads t
 driver-reported `liblto_plugin.so`, which the v1 host closure did not hash. The
 v2 closure binds that plugin, `lto-wrapper`, and their dynamic dependencies;
 upstream through `82d44319d` was merged into the same candidate before final
-qualification. Job `z11` source-matched the resulting `d8e5eaa9a` tree and is the
-accepted run. Its generated header, object, binary and raw hashes are in the
-compact receipt. Later receipt-only commits may reuse `z11` only while all
-qualified implementation blobs and modes remain identical and latest-head
-review verifies that boundary.
+qualification. Job `z11` source-matched the resulting `d8e5eaa9a` tree. Upstream
+then advanced through `4e85caa34` with additional source-inventory changes; the
+branch merged those commits without changing the rank-k implementation blobs.
+Job `z12` source-matched the resulting `1cd3a783d` tree and is the accepted run.
+Its generated header, object, binary and raw hashes are in the compact receipt.
+Later receipt-only commits may reuse `z12` only while all qualified
+implementation blobs and modes remain identical and latest-head review verifies
+that boundary.
 
 ## Revisit when
 
