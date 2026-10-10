@@ -5,6 +5,17 @@
 #include <stdexcept>
 
 namespace generativeqc::dft {
+/** The restricted provider contracts total D=2*Cocc*Cocc^T. Its signed K[D]
+ * coefficient is -alpha/2, not the positive physical exact-exchange fraction.
+ * Keep this composition check executable independently of the CUDA owner. */
+constexpr bool pbe0_rks_final_validation_composition(bool pbe_family,
+                                                     double fock_exchange_coefficient,
+                                                     double semilocal_exchange_scale,
+                                                     double semilocal_correlation_scale) noexcept {
+  return pbe_family && fock_exchange_coefficient == -0.125 && semilocal_exchange_scale == 0.75 &&
+         semilocal_correlation_scale == 1.0;
+}
+
 /** Promote the measured direct PBE0/RKS product owner, not every KS consumer.
  * The 384/768-AO endpoints qualify the lower size boundary. Larger owners use
  * the same nine-product schedule and bounded packets, with no new tile policy.

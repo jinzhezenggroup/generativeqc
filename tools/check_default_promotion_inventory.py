@@ -228,6 +228,9 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     ) or any(
         fragment not in policy
         for fragment in (
+            "fock_exchange_coefficient == -0.125",
+            "semilocal_exchange_scale == 0.75",
+            "semilocal_correlation_scale == 1.0",
             "if (!setting) return default_eligible;",
             'std::strcmp(setting, "0") == 0) return false;',
             'std::strcmp(setting, "1") == 0) return true;',
@@ -238,11 +241,11 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in source
         for fragment in (
+            "pbe0_rks_final_validation_composition(",
             "is_semilocal_family(functional, SemilocalFamily::Pbe)",
-            "has_exchange && exchange_coefficient == 0.25",
-            "options.semilocal_exchange_scale == 0.75",
-            "options.semilocal_correlation_scale == 1.0 && !fitted_coulomb",
-            "!fitted_exchange && !has_range_correction && !nonlocal_correlation",
+            "options.semilocal_exchange_scale, options.semilocal_correlation_scale",
+            "has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction",
+            "!nonlocal_correlation;",
             "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
             'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
             "final_validation_partial && matrix_products.library_enabled()",

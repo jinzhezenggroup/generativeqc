@@ -2260,11 +2260,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
-    const bool direct_pbe0 = is_semilocal_family(functional, SemilocalFamily::Pbe) &&
-                             has_exchange && exchange_coefficient == 0.25 &&
-                             options.semilocal_exchange_scale == 0.75 &&
-                             options.semilocal_correlation_scale == 1.0 && !fitted_coulomb &&
-                             !fitted_exchange && !has_range_correction && !nonlocal_correlation;
+    const bool direct_pbe0 =
+        pbe0_rks_final_validation_composition(
+            is_semilocal_family(functional, SemilocalFamily::Pbe), exchange_coefficient,
+            options.semilocal_exchange_scale, options.semilocal_correlation_scale) &&
+        has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction &&
+        !nonlocal_correlation;
     const bool default_device_validation = device_final_validation_default_eligible(
         n, spins, direct_pbe0, !precision_schedule.any_lower_precision());
     const bool device_validation = device_final_validation_requested(

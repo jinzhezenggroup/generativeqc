@@ -155,9 +155,9 @@ def test_native_xc_batch_defaults_are_audited(
             "if (!setting) return true;",
         ),
         (
-            "src/dft/cuda_ks.cpp",
-            "has_exchange && exchange_coefficient == 0.25",
-            "has_exchange && exchange_coefficient == 0.5",
+            "src/dft/cuda_ks_final_validation_policy.hpp",
+            "fock_exchange_coefficient == -0.125",
+            "fock_exchange_coefficient == -0.25",
         ),
         (
             "src/dft/cuda_ks.cpp",

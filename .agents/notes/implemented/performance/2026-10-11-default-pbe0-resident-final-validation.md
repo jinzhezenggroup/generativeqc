@@ -17,6 +17,9 @@ An unset selector automatically requests resident proof for exact-direct,
 full-precision PBE0/RKS with at least 384 AOs. The exact composition is PBE,
 0.75 semilocal exchange, unit correlation and 0.25 full-range exact exchange;
 no fitted provider, range correction or nonlocal composition is promoted.
+The native restricted Fock contracts total density, so its signed full-range
+exchange coefficient is `-0.25/2 = -0.125`; it is not the positive physical
+exact-exchange fraction. Production and the host probe share that matcher.
 Explicit `0` remains an opt-out and `1` retains the original experimental scope.
 All handle, charged-packet and published-scratch-lease checks remain independent
 of selector choice. Invalid evidence still fails the shared numerical gates;
@@ -47,6 +50,17 @@ The product implementation and all shared scientific gates are unchanged.
 Host policy tests execute production selection across size/spin/method/precision
 boundaries, strict parser values and both explicit selectors. Host staging probes
 retain both-spin/repeated-lease coverage for both selection outcomes.
+
+## Rejected first admission probe
+
+GPU job 7266 used source `4628029dd` and native library SHA256
+`4dd35c60b04ff286baf44f5e17c4ca9c5a54fccfd46185474675c4cd3b33af9d`.
+Both 384/768-AO unset-selector setup exports retained one drain and no added
+packet: the first matcher incorrectly compared the native Fock coefficient to
+positive `0.25`. The route assertion failed before timed samples. Both failed
+records are retained; neither supplies resident timing or numerical promotion.
+The corrected shared matcher checks signed restricted `-0.125`, and its host
+regression explicitly rejects positive `0.25` and unrestricted `-0.25`.
 
 ## Revisit when
 
