@@ -419,6 +419,31 @@ def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
     return {"initial-guess:df-rhf-preconvergence-auto": relative.as_posix()}
 
 
+def _discover_rhf_phase_values_default(root: Path) -> dict[str, str]:
+    """Keep automatic source construction tied to its qualified bounded domain."""
+    policy_relative = Path("src/scf/cuda/reference_eri_policy.hpp")
+    policy = _read(root / policy_relative)
+    required = (
+        '!value || std::string_view(value) == "auto"',
+        "if (!cold_reference)",
+        "maximum_angular != 3 || !generic_fock",
+        "nbf < 64 || direct_nbf < 128",
+        "maximum_iterations < 8",
+    )
+    owner_relative = Path("src/scf/cuda/rhf_resident_values.cpp")
+    owner = _read(root / owner_relative)
+    if any(fragment not in policy for fragment in required) or any(
+        fragment not in owner
+        for fragment in (
+            'std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES")',
+            "budget, 8ULL << 30",
+            "device_overhead, 256ULL << 20",
+        )
+    ):
+        raise ValueError("RHF phase-value auto default or admission domain drifted")
+    return {"hf-runtime:GENERATIVEQC_RHF_RESIDENT_VALUES": owner_relative.as_posix()}
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -436,6 +461,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_cc_options(root),
         _discover_response_options(root),
         _discover_df_rhf_preconvergence(root),
+        _discover_rhf_phase_values_default(root),
     ):
         overlap = set(result) & set(discovered)
         if overlap:

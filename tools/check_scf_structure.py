@@ -564,6 +564,21 @@ CUDA_ALLOWED["cuda_hf_graph"] = (
     "scf/cuda/rhf_graph.",
     "scf/types.hpp",
 )
+# A phase-local exact source borrows public Direct/assembly capabilities and
+# owns local graphs; it must not acquire bucket state or recurrence internals.
+CUDA_MODULES["cuda_rhf_resident_values"] = ("rhf_resident_values",)
+CUDA_ALLOWED["cuda_rhf_resident_values"] = (
+    "molecule/basis.hpp",
+    "posthf/capacity.hpp",
+    "runtime/df_progress_trace.hpp",
+    "runtime/resource_cuda.cuh",
+    "scf/cuda/df_scf_kernels.hpp",
+    "scf/cuda/reference_eri_policy.hpp",
+    "scf/cuda/rhf_graph.hpp",
+    "scf/cuda/rhf_resident_values.",
+    "scf/cuda/runtime_support.hpp",
+    "scf/cuda_direct_jk_device.hpp",
+)
 # The remaining host driver owns direct-HF numerical launch order, not bucket
 # admission/lifetime or CUDA Graph handles. Keep recurrence and kernel
 # implementation includes out of C++.
@@ -622,6 +637,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/resources.hpp",
     "scf/cuda/rhf_bucket_internal.hpp",
     "scf/cuda/rhf_policy.hpp",
+    "scf/cuda/rhf_resident_values.hpp",
     "scf/cuda/runtime_support.hpp",
     "scf/cuda/scf_convergence_kernels.hpp",
     "scf/cuda/scf_density_kernels.hpp",

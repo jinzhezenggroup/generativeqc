@@ -1,0 +1,95 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent numerical, ownership and bounded routing gates pass; complete source-matched timing is descriptive, not formal/global promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 5347,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "d1a2b65c5d05d2368126d0be62d74f8b53ccc925e41d86037b82fa33e6d0b5a5"
+    },
+    {
+      "bytes": 1979,
+      "path": "build.sh",
+      "role": "reproduction",
+      "sha256": "8026dd8cddd99143408778c6f0dfce9aa81e51ac37221e79fae0ef0ad726a358"
+    },
+    {
+      "bytes": 5799,
+      "path": "ethane230.input",
+      "role": "input",
+      "sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+    },
+    {
+      "bytes": 23403,
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "046249f2a9192c14b4bec07d9e7cbb1920cc5afd36a53bf9b5e1607c5092d246"
+    },
+    {
+      "bytes": 8578,
+      "path": "references/independent-pyscf-energy.json",
+      "role": "input",
+      "sha256": "284d694f56c8cd00d0919a34141eb0f64e0897f7dac68f36d6420b7d179c7a62"
+    },
+    {
+      "bytes": 7010,
+      "path": "references/retained-ethane230-force.json",
+      "role": "input",
+      "sha256": "9f97342ddadd1fd6d98290fedbe15ef5948b61de1519e1e6845aac692461fc49"
+    },
+    {
+      "bytes": 1602,
+      "path": "references/retained-independent-force-fd.json",
+      "role": "input",
+      "sha256": "a85b1ca5b2efb821d94b1d8a893ff0ac17f21e5eebfefafb0a2d5ad40c22bc9c"
+    },
+    {
+      "bytes": 2151,
+      "path": "run-abba.sh",
+      "role": "reproduction",
+      "sha256": "8fe93de092b05f708db4e3258c78286b263f41c708d07c6e47223d549ec4bb3b"
+    },
+    {
+      "bytes": 1082,
+      "path": "run-memcheck.sh",
+      "role": "reproduction",
+      "sha256": "cfc0cd3aeccfd1de08be8ccc4601c0f0e59d7a2a2f1f03799aef94bb897ddd18"
+    },
+    {
+      "bytes": 2369,
+      "path": "run-qualification.sh",
+      "role": "reproduction",
+      "sha256": "7c44eb6dfbaad3388d18c30e7f03e77e1831ba35a096a4a96668cf5e131eff62"
+    },
+    {
+      "bytes": 18505,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "28d665def855a951a2f71a30cbe6f5284be517b77a8a1ccaad2c174fe4071573"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=8",
+      "--mem=64G",
+      "--time=00:40:00",
+      "bash",
+      "run-abba.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "2db14f19fc1a460989785a0d2e21e45fa0a5dac5"
+  }
+}

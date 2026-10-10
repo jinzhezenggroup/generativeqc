@@ -53,6 +53,8 @@ struct CudaDirectJkPlan {
   int device_id{-1};
   cuda_execution::DeviceBatch batch{};
   cudaStream_t stream{};
+  /** A phase-local caller may lend its stream; metadata still belongs here. */
+  bool owns_stream{true};
   unsigned derivative_order{};
   std::size_t matrix_elements{}, coordinates_per_item{}, coordinate_elements{};
   double screening_tolerance{};

@@ -169,6 +169,36 @@ def test_rhf_bucket_allows_reference_policy_without_device_implementation(
     assert "forbidden cuda_hf_bucket dependency" in errors[0]
 
 
+@pytest.mark.parametrize(
+    "forbidden_header",
+    [
+        "scf/cuda/direct_jk_plan.hpp",
+        "scf/cuda/rhf_bucket_internal.hpp",
+        "scf/cuda/direct_native_cartesian.cuh",
+    ],
+)
+def test_rhf_phase_values_borrow_public_provider_without_private_state(
+    tmp_path: Path, forbidden_header: str
+) -> None:
+    """The driver consumes the lease; the lease cannot acquire provider/bucket internals."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    lease_header = source / "scf/cuda/rhf_resident_values.hpp"
+    provider = source / "scf/cuda_direct_jk_device.hpp"
+    provider.write_text("// Public Direct capability seam\n")
+    lease_header.write_text('#include "scf/cuda_direct_jk_device.hpp"\n')
+    driver = source / "scf/cuda_rhf.cpp"
+    driver.write_text('#include "scf/cuda/rhf_resident_values.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    (source / forbidden_header).write_text(
+        "// Private state or recurrence implementation\n"
+    )
+    lease_header.write_text(f'#include "{forbidden_header}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_rhf_resident_values dependency" in errors[0]
+
+
 def test_one_electron_mapping_uses_explicit_cuda_provider_capability() -> None:
     root = Path(__file__).resolve().parents[2]
     policy = (root / "src/scf/cuda/rhf_policy.cpp").read_text(encoding="utf-8")
