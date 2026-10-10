@@ -150,7 +150,19 @@ void independent() {
         std::array<double,count> weights{};
         if(target<count)weights[target]=1;
         else for(unsigned i=0;i<count;++i)weights[i]=std::sin(.7*i+.2);
-        const auto result=Order4SourceRoots<Class>::evaluate(g,weights.data());
+        double channel_weights[2][count]{};
+        for(unsigned component=0;component<count;++component) {
+          channel_weights[0][component]=weights[component];
+          channel_weights[1][component]=-.7*weights[component];
+        }
+        const bool active[2]={true,true};
+        weighted::IndependentGradient results[2]{};
+        if(!Order4SourceRoots<Class>::evaluate_channels(g,channel_weights,active,results))
+          std::exit(4);
+        const auto& result=results[0];
+        for(unsigned center=0;center<3;++center)for(unsigned axis=0;axis<3;++axis)
+          if(std::abs(results[1].center[center][axis]+.7*result.center[center][axis])>
+              3e-12*(1+std::abs(result.center[center][axis]))) std::exit(5);
         double gradient[4][3]{};
         for(unsigned i=0;i<3;++i)for(unsigned axis=0;axis<3;++axis) {
           gradient[i][axis]=result.center[i][axis];gradient[3][axis]-=result.center[i][axis];

@@ -1,7 +1,7 @@
 """Execute the native two-source scheduler against retained scalar workers.
 
 This host-only control checks indexing, zero-channel handling, reduction order
-and executed geometry/force call counts. It is not an independent scientific
+and executed geometry/recurrence call counts. It is not an independent scientific
 oracle or a GPU performance measurement; native CPU ERIs qualify those separately.
 """
 
@@ -27,13 +27,28 @@ def prepare_source_probe(directory: Path) -> Path:
     namespace = "namespace generativeqc::scf::generated_weighted_eri {"
     header = header.replace(
         namespace,
-        namespace + "\ninline unsigned long long geometry_calls = 0, force_calls = 0;",
+        namespace
+        + "\ninline unsigned long long geometry_calls = 0, force_calls = 0, channel_calls = 0;",
         1,
     )
     for symbol, counter in (
         ("make_direct_cached_geometry", "geometry_calls"),
         *(
             (name + "_force", "force_calls")
+            for name in (
+                "ssss",
+                "psss",
+                "psps",
+                "ppss",
+                "dsss",
+                "ppps",
+                "dsps",
+                "dpss",
+                "fsss",
+            )
+        ),
+        *(
+            (name + "_force_channels", "channel_calls")
             for name in (
                 "ssss",
                 "psss",
@@ -98,7 +113,7 @@ def test_two_sources_preserve_scalar_results_and_share_geometry(tmp_path: Path) 
         [str(executable)], capture_output=True, text=True, timeout=120, check=False
     )
     assert result.returncode == 0, result.stderr
-    assert "bitwise equal" in result.stdout
+    assert "shared recurrence gates PASS" in result.stdout
     print(result.stdout)
 
 
@@ -115,7 +130,17 @@ PROBE = r"""
 #include <vector>
 using namespace generativeqc::scf::cuda_execution;
 namespace weighted = generativeqc::scf::generated_weighted_eri;
-unsigned long long comparisons = 0, controls = 0, shared = 0, force_calls = 0;
+unsigned long long comparisons = 0, controls = 0, shared = 0, force_calls = 0, channel_calls = 0;
+double maximum_shared_error = 0.0;
+
+struct RejectedChannelsRoots : LowOrderSourceRoots<kPsssShellClass> {
+  template<unsigned ChannelCount>
+  static bool evaluate_channels(const weighted::Geometry&,
+      const double (&)[ChannelCount][component_count], const bool (&)[ChannelCount],
+      weighted::IndependentGradient (&)[ChannelCount]) {
+    return false;
+  }
+};
 
 struct Fixture {
   DeviceBatch batch{};
@@ -211,7 +236,7 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
   std::array<double,24> expected{}, actual{};
   const double* bounds = fixture.schwarz.data();
   const double* density = fixture.density.data();
-  weighted::geometry_calls = weighted::force_calls = 0;
+  weighted::geometry_calls = weighted::force_calls = weighted::channel_calls = 0;
   for (unsigned source = 0; source < 2; ++source) {
     const double source_j = source == 0 ? coulomb : 0;
     const double source_k = source == 1 ? exchange : 0;
@@ -237,13 +262,17 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
   }
   const auto control_geometry = weighted::geometry_calls;
   const auto control_forces = weighted::force_calls;
-  weighted::geometry_calls = weighted::force_calls = 0;
+  weighted::geometry_calls = weighted::force_calls = weighted::channel_calls = 0;
   contract_direct_force_precontracted_task<Unrestricted,DirectForceOutputMode::Separate>(
       batch,task,screening,bounds,density,&active,actual.data(),0,coulomb,exchange);
   for (std::size_t coordinate = 0; coordinate < actual.size(); ++coordinate) {
-    if (!std::isfinite(actual[coordinate]) ||
-        std::bit_cast<std::uint64_t>(actual[coordinate]) !=
-            std::bit_cast<std::uint64_t>(expected[coordinate])) {
+    const double error = std::abs(actual[coordinate] - expected[coordinate]);
+    maximum_shared_error = std::max(maximum_shared_error, error);
+    const bool equal = weighted::channel_calls
+        ? error <= 3e-12 * (1.0 + std::abs(expected[coordinate]))
+        : std::bit_cast<std::uint64_t>(actual[coordinate]) ==
+              std::bit_cast<std::uint64_t>(expected[coordinate]);
+    if (!std::isfinite(actual[coordinate]) || !equal) {
       std::fprintf(stderr,"class=%u spin=%u pairs=%u,%u coordinate=%zu: %.17g != %.17g\n",
                    shell_class,Unrestricted,task.first_pair,task.second_pair,coordinate,
                    actual[coordinate],expected[coordinate]);
@@ -251,7 +280,8 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
     }
     ++comparisons;
   }
-  if (control_forces != weighted::force_calls ||
+  if (control_forces != weighted::force_calls + 2 * weighted::channel_calls ||
+      weighted::geometry_calls != weighted::force_calls + weighted::channel_calls ||
       control_geometry != control_forces || weighted::geometry_calls > control_geometry ||
       (control_geometry == 32 && weighted::geometry_calls != 16) ||
       (control_geometry <= 16 && weighted::geometry_calls != control_geometry)) {
@@ -263,6 +293,7 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
   controls += control_geometry;
   shared += weighted::geometry_calls;
   force_calls += weighted::force_calls;
+  channel_calls += weighted::channel_calls;
 
   // An independent historical HF consumer checks the Combined layout. It
   // receives the original signed scales once, without a method-dependent
@@ -298,6 +329,14 @@ void check(Fixture& fixture, ActiveShellQuartetTile task, double screening,
     ++comparisons;
   }
   if (shell_class == kPsssShellClass) {
+    std::array<double,24> fallback{};
+    contract_two_electron_force_low_order_sources_task<Unrestricted,kPsssShellClass,false,
+        RejectedChannelsRoots,DirectForceOutputMode::Separate>(
+        batch,task,screening,bounds,density,&active,fallback.data(),coulomb,exchange);
+    if (fallback != expected) {
+      std::fprintf(stderr,"weight-first fallback does not preserve its source planes\n");
+      std::exit(5);
+    }
     // Resident p-s records are oriented exactly as in the immutable global
     // cache. Test every p-shell slot and a partial lease that must fall back.
     const bool first_is_bra =
@@ -354,8 +393,10 @@ void campaign() {
 int main() {
   campaign<false>();
   campaign<true>();
-  if (!(controls > shared && shared > 0 && controls == force_calls)) return 2;
-  std::printf("%llu coordinates bitwise equal; geometry %llu -> %llu; force calls %llu\n",
-               comparisons,controls,shared,force_calls);
+  if (!(controls > shared && shared > 0 && controls == force_calls + 2 * channel_calls &&
+        shared == force_calls + channel_calls && channel_calls > 0)) return 2;
+  std::printf("shared recurrence gates PASS; %llu coordinates; geometry/recurrences %llu -> %llu; "
+              "shared calls %llu; maximum error %.17g\n",
+               comparisons,controls,shared,channel_calls,maximum_shared_error);
 }
 """

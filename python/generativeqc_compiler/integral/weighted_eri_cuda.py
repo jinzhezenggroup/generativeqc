@@ -27,6 +27,10 @@ from .weighted_eri import (
     build_weighted_eri_ir,
     build_weighted_eri_kernel,
 )
+from .weighted_eri_channels import (
+    emit_weighted_eri_channel_function,
+    weighted_eri_geometry_bindings,
+)
 
 
 def emit_direct_shell_canonicalization_helper() -> str:
@@ -208,20 +212,7 @@ def emit_weighted_eri_function(
         name="weighted_single_use", inline_single_use=inline_single_use
     )
     plan = graph.materialization_plan(roots, policy, ordering, fusion)
-    variables = {
-        name: f"geometry.{name}"
-        for name in ("inverse_two_p", "inverse_two_q", "rho", "prefactor")
-    }
-    for axis, label in enumerate("xyz"):
-        variables[f"difference_{label}"] = f"geometry.difference[{axis}]"
-        for slot, prefix in enumerate(("pa", "pb", "qc", "qd")):
-            variables[f"{prefix}_{label}"] = f"geometry.shifts[{slot}][{axis}]"
-        for center, prefix in enumerate(("first", "second", "third", "fourth")):
-            variables[f"decay_{prefix}_{label}"] = f"geometry.decay[{center}][{axis}]"
-    for center, prefix in enumerate(("first", "second", "third", "fourth")):
-        variables[f"{prefix}_product_scale"] = f"geometry.product_scales[{center}]"
-    for order in range(kernel.integral.maximum_coulomb_order + 1):
-        variables[f"boys_{order}"] = f"geometry.boys[{order}]"
+    variables = weighted_eri_geometry_bindings(kernel)
     for packed, index in enumerate(kernel.component_indices):
         offset = packed if packed_weights else index
         variables[f"component_weight_{index}"] = f"component_weights[{offset}]"
@@ -314,7 +305,7 @@ def emit_psss_weighted_header(*, inline_single_use: typing.Any = False) -> str:
 
 
 def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> str:
-    """Generate native low-order helpers with force-only Direct-HF specializations."""
+    """Generate weight-first and shared-channel native low-order force helpers."""
     ssss = build_weighted_eri_kernel(build_weighted_eri_ir((0, 0, 0, 0)))
     psss = build_weighted_eri_kernel(build_weighted_eri_ir((1, 0, 0, 0)))
     psps = build_weighted_eri_kernel(build_weighted_eri_ir((1, 0, 1, 0)))
@@ -382,6 +373,17 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
         )
         for kernel, name in order3
     )
+    shared_channels = "".join(
+        emit_weighted_eri_channel_function(kernel, name)
+        for kernel, name in (
+            (ssss, "ssss_force"),
+            (psss, "psss_force"),
+            (psps, "psps_force"),
+            (ppss, "ppss_force"),
+            (dsss, "dsss_force"),
+            *order3,
+        )
+    )
     return (
         full[: -len(marker)]
         + specialized_result
@@ -391,6 +393,7 @@ def emit_low_order_weighted_header(*, inline_single_use: typing.Any = False) -> 
         + ssss_force
         + order2_force
         + order3_force
+        + shared_channels
         + marker
     )
 
@@ -409,11 +412,12 @@ def emit_order4_weighted_header() -> str:
 
 
 def emit_order5_weighted_header() -> str:
-    """Contract the complete s/p/d order-five cotangent before differentiation.
+    """Emit weight-first and shared-channel s/p/d order-five force contractions.
 
     All three classes exceed the bounded 64-component scalar lowering domain.
     Additive partitions retain global component weights and the same shared
-    scientific IR; no new recurrence or physical screening is introduced.
+    scientific IR, with derivative reuse across channels inside each partition.
+    No new recurrence or physical screening is introduced.
     """
     return _emit_weighted_force_classes(((2, 1, 1, 1), (2, 1, 2, 0), (2, 2, 1, 0)))
 
@@ -444,6 +448,7 @@ def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...])
                     ordering=AlgebraOrdering.PRESSURE_AWARE,
                 )
             )
+            functions.append(emit_weighted_eri_channel_function(kernel, part_name))
         if len(parts) > 1:
             calls = "\n".join(
                 f"  const auto part{index} = {part}(geometry, component_weights);"
@@ -461,6 +466,34 @@ __device__ __forceinline__ IndependentGradient {name}(
     for (unsigned axis = 0; axis < 3; ++axis)
       result.center[center][axis] = {terms};
   return result;
+}}
+""")
+            channel_calls = "\n".join(
+                f"  IndependentGradient part{index}[ChannelCount]{{}};\n"
+                f"  if (!{part}_channels(geometry, component_weights, active, part{index})) return false;"
+                for index, part in enumerate(parts)
+            )
+            channel_terms = " + ".join(
+                f"part{index}[channel].center[center][axis]"
+                for index in range(len(parts))
+            )
+            functions.append(f"""/** Each bounded partition shares its recurrence across channels. */
+template <unsigned ChannelCount>
+__device__ __forceinline__ bool {name}_channels(
+    const Geometry& geometry, const double (&component_weights)[ChannelCount][{count}],
+    const bool (&active)[ChannelCount], IndependentGradient (&output)[ChannelCount]) {{
+{channel_calls}
+  IndependentGradient candidate[ChannelCount]{{}};
+  for (unsigned channel = 0; channel < ChannelCount; ++channel)
+    for (unsigned center = 0; center < 3; ++center)
+      for (unsigned axis = 0; axis < 3; ++axis) {{
+        const double value = {channel_terms};
+        if (!std::isfinite(value)) return false;
+        candidate[channel].center[center][axis] = value;
+      }}
+  for (unsigned channel = 0; channel < ChannelCount; ++channel)
+    output[channel] = candidate[channel];
+  return true;
 }}
 """)
     return (

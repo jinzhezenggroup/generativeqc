@@ -1,0 +1,38 @@
+{
+  "base": "2daa0aceaf6d140389ac5a183ead8b0ac3d3cd4a",
+  "dirty": true,
+  "initial_allocation": "job=6939 visibility=1 hostname=node1",
+  "final_allocation": "job=6943 visibility=1 hostname=node1",
+  "initial_identity": [
+    "62eaaf1a40e2ea52279bae3764b6b395f9b641d163674fed7ba95244362c6635  /data/jzzeng/qc-shared-shell-performance-20261010/baseline/build/cuda-release-sm120/libgenerativeqc.so",
+    "8cbdc3c5c7eb1505d2be3ea1adeaed1b90ecabf2d21f9b0b48699aa0b3f48cc8  /data/jzzeng/qc-shared-shell-performance-20261010/baseline/build/cuda-release-sm120/libgenerativeqc_stationary_pbe0_rks_spd.so",
+    "a57eac3e11448be678c322ec87de04cf35b93f2fcaad75ea2dc2a807d3ef971d  /data/jzzeng/qc-shared-shell-performance-20261010/baseline/build/cuda-release-sm120/generativeqc_stationary_pbe0_rks_spd.json",
+    "537191c63c7b64c4720c30dc29270959ea1b67c4d3d204e6c51f0c27b47fc3db  /data/jzzeng/qc-shared-shell-performance-20261010/candidate/build/cuda-release-sm120/libgenerativeqc.so",
+    "8cbdc3c5c7eb1505d2be3ea1adeaed1b90ecabf2d21f9b0b48699aa0b3f48cc8  /data/jzzeng/qc-shared-shell-performance-20261010/candidate/build/cuda-release-sm120/libgenerativeqc_stationary_pbe0_rks_spd.so",
+    "480d4632b3213f65b91445ef9e5cb074377ac488d36c79b7840dee15668b9e83  /data/jzzeng/qc-shared-shell-performance-20261010/candidate/build/cuda-release-sm120/generativeqc_stationary_pbe0_rks_spd.json"
+  ],
+  "final_identity": [
+    "62eaaf1a40e2ea52279bae3764b6b395f9b641d163674fed7ba95244362c6635  /data/jzzeng/qc-shared-shell-performance-20261010/baseline/build/cuda-release-sm120/libgenerativeqc.so",
+    "8cbdc3c5c7eb1505d2be3ea1adeaed1b90ecabf2d21f9b0b48699aa0b3f48cc8  /data/jzzeng/qc-shared-shell-performance-20261010/baseline/build/cuda-release-sm120/libgenerativeqc_stationary_pbe0_rks_spd.so",
+    "a57eac3e11448be678c322ec87de04cf35b93f2fcaad75ea2dc2a807d3ef971d  /data/jzzeng/qc-shared-shell-performance-20261010/baseline/build/cuda-release-sm120/generativeqc_stationary_pbe0_rks_spd.json",
+    "4d13014d9cdec5118cd4040416d8c208d7ca88c8a35f8a0221c03a41ee4da9a5  /data/jzzeng/qc-shared-shell-performance-20261010/candidate/build/cuda-release-sm120/libgenerativeqc.so",
+    "8cbdc3c5c7eb1505d2be3ea1adeaed1b90ecabf2d21f9b0b48699aa0b3f48cc8  /data/jzzeng/qc-shared-shell-performance-20261010/candidate/build/cuda-release-sm120/libgenerativeqc_stationary_pbe0_rks_spd.so",
+    "0f5b60778e7154c31ff7985aa6be574101fe078e52b2038473706364e2f16fd0  /data/jzzeng/qc-shared-shell-performance-20261010/candidate/build/cuda-release-sm120/generativeqc_stationary_pbe0_rks_spd.json"
+  ],
+  "setup_failures": {
+    "6935": "Diagnostic wrapper patched the wrong normalization namespace; no endpoint ran.",
+    "6936": "CUDA_PATH missing for reference NVRTC headers; no native endpoint ran.",
+    "6937": "Native-only build omitted stationary PBE0 SPD artifact; no force output was produced.",
+    "6938": "Older common stationary artifact rejected by contract identity; no force output was produced. Both profiles were rebuilt without weakening the loader."
+  },
+  "initial_status": "Numerically passing but slower dual-channel complete endpoints; retained, not discarded.",
+  "optimization": "Strict-FP64 final transactional audit replaces redundant per-component finite tests; zero/inactive guards and bounded weight-first replay remain.",
+  "qualification": {
+    "core_tests": 13,
+    "adjacent_tests": 536,
+    "compiler_modules": 509,
+    "compiler_dependency_errors": 0,
+    "scf_modules": 224,
+    "scf_dependency_errors": 0
+  }
+}

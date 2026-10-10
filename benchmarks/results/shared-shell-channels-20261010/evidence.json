@@ -1,0 +1,1224 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Shared nuclear ERI channels: matched PBE0 complete endpoints",
+  "inputs_hash": "2509825f0ec6b6534d99480ee6266f6e57f3f963774e70440190397b4b861892",
+  "revision": "2daa0aceaf6d140389ac5a183ead8b0ac3d3cd4a",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "9bc2f354d5ed64398ea0278f927ba6f511a129ed464bbce7309666461d8d260c",
+    "schedule": null
+  },
+  "hash_reasons": {
+    "equation": "The unchanged method equations and explicit complete protocol are retained; a separate mathematical equation digest was not measured.",
+    "ir": "Independent derivative/component probes qualify the IR; this endpoint campaign does not serialize every generated IR.",
+    "schedule": "Exact generated inventories, source patches, and final binary resource receipts are retained instead of an invented whole-program schedule digest."
+  },
+  "device": "uuid, name, driver_version, power.limit [W]\nGPU-d0b9e1b7-2083-6198-da50-c3e55693691c, NVIDIA GeForce RTX 5090, 580.95.05, 600.00 W",
+  "toolchain": {
+    "cuda": "12.9.86",
+    "compiler_cache": "ccache 4.5.1",
+    "cuda_host_compiler": "/usr/bin/g++",
+    "architecture": "sm_120",
+    "build": "Release",
+    "stationary_fmad": false
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "protocols": [
+      {
+        "case": "water-3",
+        "atoms": 3,
+        "aos": 24,
+        "method": "PBE0/RKS",
+        "basis": "def2-SVP",
+        "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+        "representation": "spherical",
+        "geometries_bohr": [
+          [
+            [
+              "O",
+              [
+                -5.68695864870603,
+                -9.653477530875584,
+                -2.7688817211501036
+              ]
+            ],
+            [
+              "H",
+              [
+                -6.934741636687752,
+                -11.0488257295427,
+                -2.8921348693023314
+              ]
+            ],
+            [
+              "H",
+              [
+                -4.339681395600782,
+                -10.03509801091492,
+                -3.923524987977727
+              ]
+            ]
+          ],
+          [
+            [
+              "O",
+              [
+                -5.68695864870603,
+                -9.653477530875584,
+                -2.7688817211501036
+              ]
+            ],
+            [
+              "H",
+              [
+                -6.934741636687752,
+                -11.0488257295427,
+                -2.8911348693023315
+              ]
+            ],
+            [
+              "H",
+              [
+                -4.339681395600782,
+                -10.03509801091492,
+                -3.923524987977727
+              ]
+            ]
+          ]
+        ],
+        "grid": {
+          "radial_points": 48,
+          "angular_polar": 16,
+          "angular_azimuth": 32,
+          "element_radii": [],
+          "partition_iterations": 3,
+          "coincident_tolerance": 1e-12,
+          "version": 1,
+          "radial_rule": "rational-legendre",
+          "angular_rule": "legendre-trapezoid",
+          "partition": "becke-equal-radius",
+          "pruning": "none",
+          "units": "Bohr",
+          "ordering": "atom-radial-polar-azimuth"
+        },
+        "properties": [
+          "energy",
+          "forces"
+        ],
+        "force_return": "host_array_in_timed_endpoint",
+        "density_fitting": false,
+        "repeats": 1,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "reference_gradient_tolerance": 1e-10,
+        "screening_tolerance": 1e-12,
+        "reference_direct_scf_tolerance": 1e-14,
+        "reference_fock_policy": "full-density-rebuild",
+        "max_iterations": 100,
+        "energy_gate": 1e-08,
+        "force_gate": 1e-07,
+        "cold_definition": "preparation plus first synchronized energy/force endpoint",
+        "warm_definition": "1 fixed engine-local post-cold/post-move density replays",
+        "threads": {
+          "OMP_NUM_THREADS": "4",
+          "OPENBLAS_NUM_THREADS": "4",
+          "MKL_NUM_THREADS": "4"
+        }
+      },
+      {
+        "case": "water-12",
+        "atoms": 12,
+        "aos": 96,
+        "method": "PBE0/RKS",
+        "basis": "def2-SVP",
+        "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+        "representation": "spherical",
+        "geometries_bohr": [
+          [
+            [
+              "O",
+              [
+                -5.68695864870603,
+                -9.653477530875584,
+                -2.7688817211501036
+              ]
+            ],
+            [
+              "H",
+              [
+                -6.934741636687752,
+                -11.0488257295427,
+                -2.8921348693023314
+              ]
+            ],
+            [
+              "H",
+              [
+                -4.339681395600782,
+                -10.03509801091492,
+                -3.923524987977727
+              ]
+            ],
+            [
+              "O",
+              [
+                -9.653477530875584,
+                -13.210302597551673,
+                2.7688817211501036
+              ]
+            ],
+            [
+              "H",
+              [
+                -10.03509801091492,
+                -14.557579850656921,
+                3.923524987977727
+              ]
+            ],
+            [
+              "H",
+              [
+                -11.0488257295427,
+                -11.96251960956995,
+                2.8921348693023314
+              ]
+            ],
+            [
+              "O",
+              [
+                -13.112343224611836,
+                -9.496961557199665,
+                2.648657577077294
+              ]
+            ],
+            [
+              "H",
+              [
+                -13.553997598721192,
+                -9.398815932861053,
+                0.8661927624563385
+              ]
+            ],
+            [
+              "H",
+              [
+                -12.092024916334609,
+                -7.999127260240872,
+                2.9564098944273542
+              ]
+            ],
+            [
+              "O",
+              [
+                -9.400299689058038,
+                -13.112343224611836,
+                -2.648657577077294
+              ]
+            ],
+            [
+              "H",
+              [
+                -9.49844531339665,
+                -13.553997598721192,
+                -0.8661927624563385
+              ]
+            ],
+            [
+              "H",
+              [
+                -10.89813398601683,
+                -12.092024916334609,
+                -2.9564098944273542
+              ]
+            ]
+          ],
+          [
+            [
+              "O",
+              [
+                -5.68695864870603,
+                -9.653477530875584,
+                -2.7688817211501036
+              ]
+            ],
+            [
+              "H",
+              [
+                -6.934741636687752,
+                -11.0488257295427,
+                -2.8911348693023315
+              ]
+            ],
+            [
+              "H",
+              [
+                -4.339681395600782,
+                -10.03509801091492,
+                -3.923524987977727
+              ]
+            ],
+            [
+              "O",
+              [
+                -9.653477530875584,
+                -13.210302597551673,
+                2.7688817211501036
+              ]
+            ],
+            [
+              "H",
+              [
+                -10.03509801091492,
+                -14.557579850656921,
+                3.923524987977727
+              ]
+            ],
+            [
+              "H",
+              [
+                -11.0488257295427,
+                -11.96251960956995,
+                2.8921348693023314
+              ]
+            ],
+            [
+              "O",
+              [
+                -13.112343224611836,
+                -9.496961557199665,
+                2.648657577077294
+              ]
+            ],
+            [
+              "H",
+              [
+                -13.553997598721192,
+                -9.398815932861053,
+                0.8661927624563385
+              ]
+            ],
+            [
+              "H",
+              [
+                -12.092024916334609,
+                -7.999127260240872,
+                2.9564098944273542
+              ]
+            ],
+            [
+              "O",
+              [
+                -9.400299689058038,
+                -13.112343224611836,
+                -2.648657577077294
+              ]
+            ],
+            [
+              "H",
+              [
+                -9.49844531339665,
+                -13.553997598721192,
+                -0.8661927624563385
+              ]
+            ],
+            [
+              "H",
+              [
+                -10.89813398601683,
+                -12.092024916334609,
+                -2.9564098944273542
+              ]
+            ]
+          ]
+        ],
+        "grid": {
+          "radial_points": 48,
+          "angular_polar": 16,
+          "angular_azimuth": 32,
+          "element_radii": [],
+          "partition_iterations": 3,
+          "coincident_tolerance": 1e-12,
+          "version": 1,
+          "radial_rule": "rational-legendre",
+          "angular_rule": "legendre-trapezoid",
+          "partition": "becke-equal-radius",
+          "pruning": "none",
+          "units": "Bohr",
+          "ordering": "atom-radial-polar-azimuth"
+        },
+        "properties": [
+          "energy",
+          "forces"
+        ],
+        "force_return": "host_array_in_timed_endpoint",
+        "density_fitting": false,
+        "repeats": 1,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "reference_gradient_tolerance": 1e-10,
+        "screening_tolerance": 1e-12,
+        "reference_direct_scf_tolerance": 1e-14,
+        "reference_fock_policy": "full-density-rebuild",
+        "max_iterations": 100,
+        "energy_gate": 1e-08,
+        "force_gate": 1e-07,
+        "cold_definition": "preparation plus first synchronized energy/force endpoint",
+        "warm_definition": "1 fixed engine-local post-cold/post-move density replays",
+        "threads": {
+          "OMP_NUM_THREADS": "4",
+          "OPENBLAS_NUM_THREADS": "4",
+          "MKL_NUM_THREADS": "4"
+        }
+      }
+    ],
+    "allocation": "job=6943 visibility=1 hostname=node1",
+    "comparison_kind": "solver"
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": "Actual public CUDA execution in the retained finite Slurm allocation"
+  },
+  "stages": {
+    "representation": {
+      "status": "pass",
+      "reason": "Retained complete native endpoints, independent references and matched binary/source receipts"
+    },
+    "source": {
+      "status": "pass",
+      "reason": "Retained complete native endpoints, independent references and matched binary/source receipts"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": "Retained complete native endpoints, independent references and matched binary/source receipts"
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": "Retained complete native endpoints, independent references and matched binary/source receipts"
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": "Retained complete native endpoints, independent references and matched binary/source receipts"
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "No statistical/memory/compilation-budget performance promotion is requested"
+    }
+  },
+  "timings": [
+    {
+      "selection": "baseline",
+      "seconds": 7.848130155354738,
+      "workload": "energy-plus-force",
+      "inputs_hash": "dca849d65ea706bb94556cb4356e69e60250322db12decb55e40c1b6c9664384",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.7216825955308805e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8586181066930294,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e4ff2de6a9bcef665bf2dc068a350d68ba0f2b7f2c3bf05c49dfec49d7518ebc",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.721685572767938e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 4.468544960021973,
+      "workload": "energy-plus-force",
+      "inputs_hash": "bcca2c86435a162a9912acea5c4809d3b57479d1ba46d95061a8fc59dd0a0c0e",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.09099506510434e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8652376644313335,
+      "workload": "energy-plus-force",
+      "inputs_hash": "77235f26ca2de839aa51e8d0a02980c3463d10eccd45eccac8786b55a5ff899b",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.090997229561054e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 7.938984677195549,
+      "workload": "energy-plus-force",
+      "inputs_hash": "dca849d65ea706bb94556cb4356e69e60250322db12decb55e40c1b6c9664384",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.7216975450101046e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.8551208265125751,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e4ff2de6a9bcef665bf2dc068a350d68ba0f2b7f2c3bf05c49dfec49d7518ebc",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.721698261815383e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 4.54102186486125,
+      "workload": "energy-plus-force",
+      "inputs_hash": "bcca2c86435a162a9912acea5c4809d3b57479d1ba46d95061a8fc59dd0a0c0e",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.090870262729209e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.8693646378815174,
+      "workload": "energy-plus-force",
+      "inputs_hash": "77235f26ca2de839aa51e8d0a02980c3463d10eccd45eccac8786b55a5ff899b",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.090868492377676e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 7.905610993504524,
+      "workload": "energy-plus-force",
+      "inputs_hash": "dca849d65ea706bb94556cb4356e69e60250322db12decb55e40c1b6c9664384",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.721644662205419e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.8627970591187477,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e4ff2de6a9bcef665bf2dc068a350d68ba0f2b7f2c3bf05c49dfec49d7518ebc",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.721647418813131e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 4.550612203776836,
+      "workload": "energy-plus-force",
+      "inputs_hash": "bcca2c86435a162a9912acea5c4809d3b57479d1ba46d95061a8fc59dd0a0c0e",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.090952692006646e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.8697040937840939,
+      "workload": "energy-plus-force",
+      "inputs_hash": "77235f26ca2de839aa51e8d0a02980c3463d10eccd45eccac8786b55a5ff899b",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.090952392351896e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 7.866885654628277,
+      "workload": "energy-plus-force",
+      "inputs_hash": "dca849d65ea706bb94556cb4356e69e60250322db12decb55e40c1b6c9664384",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.7216373222259235e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8815915510058403,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e4ff2de6a9bcef665bf2dc068a350d68ba0f2b7f2c3bf05c49dfec49d7518ebc",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.721639207507803e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 4.598133891820908,
+      "workload": "energy-plus-force",
+      "inputs_hash": "bcca2c86435a162a9912acea5c4809d3b57479d1ba46d95061a8fc59dd0a0c0e",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.090985611898809e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8711264543235302,
+      "workload": "energy-plus-force",
+      "inputs_hash": "77235f26ca2de839aa51e8d0a02980c3463d10eccd45eccac8786b55a5ff899b",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.090986949667848e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 7.859734125435352,
+      "workload": "energy-plus-force",
+      "inputs_hash": "ffed54dca52363d9600ba93b69a3136ac444b286967aac6d0feb911c1ae059ea",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.721627283289351e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8752473928034306,
+      "workload": "energy-plus-force",
+      "inputs_hash": "25c37be56fb8d943c8d09a3a291c320884ae67bee220d196123abfbc7df7297b",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.7216306311556486e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 4.575502336025238,
+      "workload": "energy-plus-force",
+      "inputs_hash": "8e162bfdac6af90ffa5ef49e86ad28edd64566bca6d646715839280151db9e99",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.0909059377703835e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8827306851744652,
+      "workload": "energy-plus-force",
+      "inputs_hash": "c83d93a6c2c70335163b255ce758ae574c8ef1dc433efb3dd27fe246093efeb5",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.090905439403152e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 7.8875165693461895,
+      "workload": "energy-plus-force",
+      "inputs_hash": "ffed54dca52363d9600ba93b69a3136ac444b286967aac6d0feb911c1ae059ea",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.721744664241582e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.914381567388773,
+      "workload": "energy-plus-force",
+      "inputs_hash": "25c37be56fb8d943c8d09a3a291c320884ae67bee220d196123abfbc7df7297b",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.72174530493329e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 4.652413539588451,
+      "workload": "energy-plus-force",
+      "inputs_hash": "8e162bfdac6af90ffa5ef49e86ad28edd64566bca6d646715839280151db9e99",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.090902547841059e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.925415363162756,
+      "workload": "energy-plus-force",
+      "inputs_hash": "c83d93a6c2c70335163b255ce758ae574c8ef1dc433efb3dd27fe246093efeb5",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.09090011995028e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 7.917783852666616,
+      "workload": "energy-plus-force",
+      "inputs_hash": "ffed54dca52363d9600ba93b69a3136ac444b286967aac6d0feb911c1ae059ea",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.721712555086991e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.9196229614317417,
+      "workload": "energy-plus-force",
+      "inputs_hash": "25c37be56fb8d943c8d09a3a291c320884ae67bee220d196123abfbc7df7297b",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.7217105180787746e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 4.562524758279324,
+      "workload": "energy-plus-force",
+      "inputs_hash": "8e162bfdac6af90ffa5ef49e86ad28edd64566bca6d646715839280151db9e99",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.0910175089138395e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.9197987578809261,
+      "workload": "energy-plus-force",
+      "inputs_hash": "c83d93a6c2c70335163b255ce758ae574c8ef1dc433efb3dd27fe246093efeb5",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.091009866282315e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 7.897884324193001,
+      "workload": "energy-plus-force",
+      "inputs_hash": "ffed54dca52363d9600ba93b69a3136ac444b286967aac6d0feb911c1ae059ea",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 16,
+        "fock_builds": 16,
+        "physical_residual_rms": 6.721610016185949e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8711933307349682,
+      "workload": "energy-plus-force",
+      "inputs_hash": "25c37be56fb8d943c8d09a3a291c320884ae67bee220d196123abfbc7df7297b",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 6.721610496384732e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 4.519296817481518,
+      "workload": "energy-plus-force",
+      "inputs_hash": "8e162bfdac6af90ffa5ef49e86ad28edd64566bca6d646715839280151db9e99",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 4.090850763299001e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.8761881552636623,
+      "workload": "energy-plus-force",
+      "inputs_hash": "c83d93a6c2c70335163b255ce758ae574c8ef1dc433efb3dd27fe246093efeb5",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 4.090847958145343e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.8937994576990604,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0ef66f06708b62ff3fc66d6411f182d7c58df15b02f3ef1e423b95a948ac165a",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359424061999845e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.16185437515377998,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e8e085d01c63c7704606cf87c5801101f77e6dff0fe4284a2a3ab038c18b4f0d",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359452824822841e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 1.3573329448699951,
+      "workload": "energy-plus-force",
+      "inputs_hash": "b173577d53e5336ccef49194855b7bb4849184a44cf03fadd30b857347e6a636",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.804438356078641e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.1572553813457489,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0d008031c467705a516204a60f0e0e3c708b370dab416d051b3aae01460163c4",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.804437071877912e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 3.7682231180369854,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0ef66f06708b62ff3fc66d6411f182d7c58df15b02f3ef1e423b95a948ac165a",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359147894010132e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.16163484379649162,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e8e085d01c63c7704606cf87c5801101f77e6dff0fe4284a2a3ab038c18b4f0d",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359157055859236e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 1.287721410393715,
+      "workload": "energy-plus-force",
+      "inputs_hash": "b173577d53e5336ccef49194855b7bb4849184a44cf03fadd30b857347e6a636",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.804336104341491e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.1564638800919056,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0d008031c467705a516204a60f0e0e3c708b370dab416d051b3aae01460163c4",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.804337481248637e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 3.7651670537889004,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0ef66f06708b62ff3fc66d6411f182d7c58df15b02f3ef1e423b95a948ac165a",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.35933410020913e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.16161754727363586,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e8e085d01c63c7704606cf87c5801101f77e6dff0fe4284a2a3ab038c18b4f0d",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359333986484976e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 1.289114736020565,
+      "workload": "energy-plus-force",
+      "inputs_hash": "b173577d53e5336ccef49194855b7bb4849184a44cf03fadd30b857347e6a636",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.804497029120635e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.1565847285091877,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0d008031c467705a516204a60f0e0e3c708b370dab416d051b3aae01460163c4",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.804495823615475e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.8748354092240334,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0ef66f06708b62ff3fc66d6411f182d7c58df15b02f3ef1e423b95a948ac165a",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359472068530487e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.16279387474060059,
+      "workload": "energy-plus-force",
+      "inputs_hash": "e8e085d01c63c7704606cf87c5801101f77e6dff0fe4284a2a3ab038c18b4f0d",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359471255122549e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 1.3557632081210613,
+      "workload": "energy-plus-force",
+      "inputs_hash": "b173577d53e5336ccef49194855b7bb4849184a44cf03fadd30b857347e6a636",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.804310196962095e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.16540046408772469,
+      "workload": "energy-plus-force",
+      "inputs_hash": "0d008031c467705a516204a60f0e0e3c708b370dab416d051b3aae01460163c4",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.804311952785379e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.8708059303462505,
+      "workload": "energy-plus-force",
+      "inputs_hash": "4e51f94ccd4b5734b2d77c2cccd209c52f8c55ec999f44dde15365e0617f8d4d",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359261997687357e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.170165054500103,
+      "workload": "energy-plus-force",
+      "inputs_hash": "2b359b32c6cc5797c4db3bc392a368d18203082fa18e60ffca0643b338cd7531",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359247391604041e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 1.3696547485888004,
+      "workload": "energy-plus-force",
+      "inputs_hash": "277a5dcf54bac10520c33ad31b1e316e7235143e49bf74daff24d51944eb98b6",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.804387954780246e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.16510626673698425,
+      "workload": "energy-plus-force",
+      "inputs_hash": "99ce233e61ff082c76a32091f97b38bb7290abe0a17aa70bd53ee813ef386c77",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.8043891861305945e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 3.7746546752750874,
+      "workload": "energy-plus-force",
+      "inputs_hash": "4e51f94ccd4b5734b2d77c2cccd209c52f8c55ec999f44dde15365e0617f8d4d",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359338867934013e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.19702356308698654,
+      "workload": "energy-plus-force",
+      "inputs_hash": "2b359b32c6cc5797c4db3bc392a368d18203082fa18e60ffca0643b338cd7531",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.3593246108068215e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 1.3274572230875492,
+      "workload": "energy-plus-force",
+      "inputs_hash": "277a5dcf54bac10520c33ad31b1e316e7235143e49bf74daff24d51944eb98b6",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.804431270719085e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.19468260556459427,
+      "workload": "energy-plus-force",
+      "inputs_hash": "99ce233e61ff082c76a32091f97b38bb7290abe0a17aa70bd53ee813ef386c77",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.804430952867691e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 3.7938028387725353,
+      "workload": "energy-plus-force",
+      "inputs_hash": "4e51f94ccd4b5734b2d77c2cccd209c52f8c55ec999f44dde15365e0617f8d4d",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359486957617424e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.1944967657327652,
+      "workload": "energy-plus-force",
+      "inputs_hash": "2b359b32c6cc5797c4db3bc392a368d18203082fa18e60ffca0643b338cd7531",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359490857416794e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 1.3317508101463318,
+      "workload": "energy-plus-force",
+      "inputs_hash": "277a5dcf54bac10520c33ad31b1e316e7235143e49bf74daff24d51944eb98b6",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.80450804036641e-12
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 0.1945461370050907,
+      "workload": "energy-plus-force",
+      "inputs_hash": "99ce233e61ff082c76a32091f97b38bb7290abe0a17aa70bd53ee813ef386c77",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.8044941580967714e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.896732348948717,
+      "workload": "energy-plus-force",
+      "inputs_hash": "4e51f94ccd4b5734b2d77c2cccd209c52f8c55ec999f44dde15365e0617f8d4d",
+      "diagnostics": {
+        "phase": "cold",
+        "iterations": 12,
+        "fock_builds": 12,
+        "physical_residual_rms": 5.359222117682207e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.16800645738840103,
+      "workload": "energy-plus-force",
+      "inputs_hash": "2b359b32c6cc5797c4db3bc392a368d18203082fa18e60ffca0643b338cd7531",
+      "diagnostics": {
+        "phase": "warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 5.359239433110769e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 1.3684374578297138,
+      "workload": "energy-plus-force",
+      "inputs_hash": "277a5dcf54bac10520c33ad31b1e316e7235143e49bf74daff24d51944eb98b6",
+      "diagnostics": {
+        "phase": "moved",
+        "iterations": 10,
+        "fock_builds": 10,
+        "physical_residual_rms": 3.8045583529926784e-12
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 0.1695983186364174,
+      "workload": "energy-plus-force",
+      "inputs_hash": "99ce233e61ff082c76a32091f97b38bb7290abe0a17aa70bd53ee813ef386c77",
+      "diagnostics": {
+        "phase": "moved-warm",
+        "iterations": 1,
+        "fock_builds": 1,
+        "physical_residual_rms": 3.804558282866782e-12
+      }
+    }
+  ],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "not measured"
+  },
+  "residuals": {},
+  "block_errors": {
+    "all_endpoint_energies": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 3.126388037344441e-12,
+      "max_scaled_error": 0.0003126388037344441,
+      "rms_error": 2.242321068084193e-12,
+      "shape": [
+        64
+      ]
+    },
+    "all_endpoint_force_coordinates": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.6278090814457755e-11,
+      "max_scaled_error": 0.00026278090814457755,
+      "rms_error": 8.50681410020404e-12,
+      "shape": [
+        1440
+      ]
+    }
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Every public residual history and solver/Fock count is preserved in samples.json.gz; native force primitive/recurrence census is unavailable.",
+  "attachments": [],
+  "performance": {
+    "status": "not-run",
+    "reason": "Two repeats per side are observational; allocator peak and comparable compilation cost are not qualified. Initial slower samples remain retained."
+  }
+}

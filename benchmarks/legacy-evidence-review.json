@@ -167,6 +167,11 @@
       "reason": "Reviewed retained large evidence for Direct-native extraction validation. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/scf-direct-native-rtx5090/README.md"
     },
+    "shared-shell-channels-20261010": {
+      "owner": "direct force shared-shell derivative channel qualification",
+      "reason": "Lossless complete samples retain both frozen-source campaigns, every endpoint repeat and force coordinate, independent references, solver histories and semantic work including unavailable counters. Numerical gates pass, but measured dual-channel performance regresses and promotion is withheld. The exact gzip sample identity below is storage-reviewed under unchanged per-file, aggregate and change-review budgets; no profiler traces, binaries, policy exception or external archive are added.",
+      "review_document": "benchmarks/results/shared-shell-channels-20261010/README.md"
+    },
     "spatial-density-sources": {
       "owner": "spatial-density-sources",
       "reason": "Reviewed retained large evidence for Prepared spatial density sources (#235 C1 / #299). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -419,22 +424,6 @@
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     },
     {
-      "bytes": 391121,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "544255203a137fa646e65b0304ccecf820ba8b56ac1511c8b8a8c651007a4e05"
-    },
-    {
-      "bytes": 577110,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/isolated.json",
-      "role": "scientific-record",
-      "sha256": "8fc91a883b9fe2ca723f84cc6a1b9a49bb30f45902e0d9a8bcebe1d9cde6f18a"
-    },
-    {
       "bytes": 162452,
       "classification": "required-compact-accepted-evidence",
       "family": "generated-df-values-142",
@@ -681,6 +670,14 @@
       "path": "benchmarks/results/scf-direct-native-rtx5090/validation.json",
       "role": "decision-or-audit-record",
       "sha256": "af85685a1e73345ce5baa046faf84a86f1be88c473eb07cbb4d6b9b4d2fcdffd"
+    },
+    {
+      "bytes": 526916,
+      "classification": "required-compact-accepted-evidence",
+      "family": "shared-shell-channels-20261010",
+      "path": "benchmarks/results/shared-shell-channels-20261010/samples.json.gz",
+      "role": "complete-endpoint-samples-numerical-only-negative-performance",
+      "sha256": "7347ea4898fff865a88cf16ebf28f06d1bb3c1c6711056f8259f34b47a6caf2d"
     },
     {
       "bytes": 169698,

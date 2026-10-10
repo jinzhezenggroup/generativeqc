@@ -36,6 +36,24 @@ struct Order4SourceRoots {
       return generated_weighted_eri::ddss_force(geometry, weights);
     }
   }
+
+  /** Bounded component partitions each share one derivative DAG across channels. */
+  template <unsigned ChannelCount>
+  __device__ static __forceinline__ bool evaluate_channels(
+      const generated_weighted_eri::Geometry& geometry,
+      const double (&weights)[ChannelCount][component_count], const bool (&active)[ChannelCount],
+      generated_weighted_eri::IndependentGradient (&output)[ChannelCount]) {
+#define GENERATIVEQC_ORDER4_CHANNEL_ROOT(Class, Name) \
+  if constexpr (ShellClass == Class)                  \
+  return generated_weighted_eri::Name##_force_channels(geometry, weights, active, output)
+    GENERATIVEQC_ORDER4_CHANNEL_ROOT(kPpppShellClass, pppp);
+    GENERATIVEQC_ORDER4_CHANNEL_ROOT(kDsppShellClass, dspp);
+    GENERATIVEQC_ORDER4_CHANNEL_ROOT(kDsdsShellClass, dsds);
+    GENERATIVEQC_ORDER4_CHANNEL_ROOT(kDppsShellClass, dpps);
+    GENERATIVEQC_ORDER4_CHANNEL_ROOT(kDdssShellClass, ddss);
+#undef GENERATIVEQC_ORDER4_CHANNEL_ROOT
+    return false;
+  }
 };
 
 /** Contract separate or combined J/K sources with one shell-pair geometry and

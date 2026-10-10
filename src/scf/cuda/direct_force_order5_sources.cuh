@@ -28,6 +28,22 @@ struct Order5SourceRoots {
       return generated_weighted_eri::ddps_force(geometry, weights);
     }
   }
+
+  /** Bounded component partitions each share one derivative DAG across channels. */
+  template <unsigned ChannelCount>
+  __device__ static __forceinline__ bool evaluate_channels(
+      const generated_weighted_eri::Geometry& geometry,
+      const double (&weights)[ChannelCount][component_count], const bool (&active)[ChannelCount],
+      generated_weighted_eri::IndependentGradient (&output)[ChannelCount]) {
+#define GENERATIVEQC_ORDER5_CHANNEL_ROOT(Class, Name) \
+  if constexpr (ShellClass == Class)                  \
+  return generated_weighted_eri::Name##_force_channels(geometry, weights, active, output)
+    GENERATIVEQC_ORDER5_CHANNEL_ROOT(kDpppShellClass, dppp);
+    GENERATIVEQC_ORDER5_CHANNEL_ROOT(kDpdsShellClass, dpds);
+    GENERATIVEQC_ORDER5_CHANNEL_ROOT(kDdpsShellClass, ddps);
+#undef GENERATIVEQC_ORDER5_CHANNEL_ROOT
+    return false;
+  }
 };
 
 /** Contract separate or combined J/K sources with one shell-pair geometry and

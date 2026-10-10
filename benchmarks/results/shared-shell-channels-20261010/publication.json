@@ -1,0 +1,125 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All-repeat independent complete energy/force gates pass. Performance is observational, not a default promotion; initial regressions and resource increases remain visible.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 6895,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "5fee001d7d8b463cddbc66e75ed67a386d2f22a32847eade93ba6c56ece1f008"
+    },
+    {
+      "bytes": 1447,
+      "path": "analyze.py.gz",
+      "role": "reproduction",
+      "sha256": "66439688a5452505b5c4b880409cbc049adb235ea3ec94ad559347833f6b31bf"
+    },
+    {
+      "bytes": 628,
+      "path": "build-aux.sh.gz",
+      "role": "reproduction",
+      "sha256": "a13e8e240ad978026aa38f22444ef22d44e440fe12f20eee447043e9b1f012fe"
+    },
+    {
+      "bytes": 885,
+      "path": "build.sh.gz",
+      "role": "reproduction",
+      "sha256": "3297beaf08cba718ee90f42673bbd0259f4ff0aa632c267dbba0a669c26f3974"
+    },
+    {
+      "bytes": 561,
+      "path": "cuda-qualification.json",
+      "role": "summary",
+      "sha256": "d3d0137637fe06da5176e635a83fe7b016424702f3e4397f190dcfaed3f9333c"
+    },
+    {
+      "bytes": 36845,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "b751dac6bc986e998bbab7c51c13c3a7ada27e0f9240c3407384b1685fea9861"
+    },
+    {
+      "bytes": 6578,
+      "path": "initial-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "12946c8898c133b065b460a5848e86e4db84ca6d0263d377784a8a80b1ddcfd2"
+    },
+    {
+      "bytes": 662,
+      "path": "measure.py.gz",
+      "role": "reproduction",
+      "sha256": "21bafb198fab818a33b74c6502d49502fb306dec5c67a57566726fe168ffe956"
+    },
+    {
+      "bytes": 6584,
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "7fa94acd81d742a47ebc16172c590b6395ed8ff5a49327dede9d8c4bf6a9abe6"
+    },
+    {
+      "bytes": 1438,
+      "path": "probe.cu.gz",
+      "role": "summary",
+      "sha256": "313f1da39a864b8f3910bb3fe421f3c170db1c852a9f5670cfec4bd78932c15d"
+    },
+    {
+      "bytes": 3508,
+      "path": "provenance.json",
+      "role": "summary",
+      "sha256": "49fe503fda589c82863276e5f4f1b1f648331080dce1ab6ba6dc6ee2e6ca9c87"
+    },
+    {
+      "bytes": 505,
+      "path": "rebuild-candidate.sh.gz",
+      "role": "reproduction",
+      "sha256": "76a16fc82cb073ce7a8c01f1c45664beb1f1758e4f22a78675cfbb5b621b3748"
+    },
+    {
+      "bytes": 8019,
+      "path": "resources.json.gz",
+      "role": "summary",
+      "sha256": "f104a623f5f81f47dc7c84e24beb18369f98c21b4fd9b3c003816a1cf160d40b"
+    },
+    {
+      "bytes": 1572,
+      "path": "run.sh.gz",
+      "role": "reproduction",
+      "sha256": "5cf02d1cebc7737ec54708fc1fb1ab775b6fa931d9e641dedfec899886592986"
+    },
+    {
+      "bytes": 526916,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "7347ea4898fff865a88cf16ebf28f06d1bb3c1c6711056f8259f34b47a6caf2d"
+    },
+    {
+      "bytes": 28332,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "bd9f572d5a701717c977715051fd323d96228c933660c592b6ae27889dc081b4"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=4",
+      "--time=00:40:00",
+      "bash",
+      "run.sh"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "2daa0aceaf6d140389ac5a183ead8b0ac3d3cd4a"
+  }
+}

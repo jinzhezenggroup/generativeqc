@@ -1,0 +1,899 @@
+{
+  "cases": [
+    {
+      "atoms": 3,
+      "aos": 24,
+      "reduction": "separate",
+      "phases": [
+        {
+          "phase": "cold",
+          "seconds": {
+            "baseline": [
+              3.8708059303462505,
+              3.896732348948717
+            ],
+            "candidate": [
+              3.7746546752750874,
+              3.7938028387725353
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 3.883769139647484,
+            "candidate": 3.7842287570238113
+          },
+          "speedup": 1.0263040077688004,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 8.100187187665142e-13,
+          "maximum_independent_force_error": 2.626655837278946e-11,
+          "maximum_candidate_baseline_energy_delta": 2.842170943040401e-14,
+          "maximum_candidate_baseline_force_delta": 2.017830347256222e-14
+        },
+        {
+          "phase": "warm",
+          "seconds": {
+            "baseline": [
+              0.170165054500103,
+              0.16800645738840103
+            ],
+            "candidate": [
+              0.19702356308698654,
+              0.1944967657327652
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.16908575594425201,
+            "candidate": 0.19576016440987587
+          },
+          "speedup": 0.8637393437728531,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 8.100187187665142e-13,
+          "maximum_independent_force_error": 2.6267488184572585e-11,
+          "maximum_candidate_baseline_energy_delta": 2.842170943040401e-14,
+          "maximum_candidate_baseline_force_delta": 1.887379141862766e-14
+        },
+        {
+          "phase": "moved",
+          "seconds": {
+            "baseline": [
+              1.3696547485888004,
+              1.3684374578297138
+            ],
+            "candidate": [
+              1.3274572230875492,
+              1.3317508101463318
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 1.3690461032092571,
+            "candidate": 1.3296040166169405
+          },
+          "speedup": 1.0296645362825192,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 1.0089706847793423e-12,
+          "maximum_independent_force_error": 1.149430550739794e-11,
+          "maximum_candidate_baseline_energy_delta": 2.842170943040401e-14,
+          "maximum_candidate_baseline_force_delta": 1.4030443473700416e-14
+        },
+        {
+          "phase": "moved-warm",
+          "seconds": {
+            "baseline": [
+              0.16510626673698425,
+              0.1695983186364174
+            ],
+            "candidate": [
+              0.19468260556459427,
+              0.1945461370050907
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.16735229268670082,
+            "candidate": 0.1946143712848425
+          },
+          "speedup": 0.8599174438241244,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 1.0089706847793423e-12,
+          "maximum_independent_force_error": 1.1495651652815297e-11,
+          "maximum_candidate_baseline_energy_delta": 2.842170943040401e-14,
+          "maximum_candidate_baseline_force_delta": 1.8443579996585413e-14
+        }
+      ]
+    },
+    {
+      "atoms": 3,
+      "aos": 24,
+      "reduction": "combined",
+      "phases": [
+        {
+          "phase": "cold",
+          "seconds": {
+            "baseline": [
+              3.8937994576990604,
+              3.8748354092240334
+            ],
+            "candidate": [
+              3.7682231180369854,
+              3.7651670537889004
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 3.884317433461547,
+            "candidate": 3.766695085912943
+          },
+          "speedup": 1.0312269363104276,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 8.100187187665142e-13,
+          "maximum_independent_force_error": 2.6274982189988805e-11,
+          "maximum_candidate_baseline_energy_delta": 4.263256414560601e-14,
+          "maximum_candidate_baseline_force_delta": 2.0872192862952943e-14
+        },
+        {
+          "phase": "warm",
+          "seconds": {
+            "baseline": [
+              0.16185437515377998,
+              0.16279387474060059
+            ],
+            "candidate": [
+              0.16163484379649162,
+              0.16161754727363586
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.16232412494719028,
+            "candidate": 0.16162619553506374
+          },
+          "speedup": 1.004318170144487,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 8.100187187665142e-13,
+          "maximum_independent_force_error": 2.6278090814457755e-11,
+          "maximum_candidate_baseline_energy_delta": 4.263256414560601e-14,
+          "maximum_candidate_baseline_force_delta": 2.3092638912203256e-14
+        },
+        {
+          "phase": "moved",
+          "seconds": {
+            "baseline": [
+              1.3573329448699951,
+              1.3557632081210613
+            ],
+            "candidate": [
+              1.287721410393715,
+              1.289114736020565
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 1.3565480764955282,
+            "candidate": 1.28841807320714
+          },
+          "speedup": 1.0528788013030572,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 10,
+                "fock_builds": 10,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 1.0089706847793423e-12,
+          "maximum_independent_force_error": 1.1513678899177648e-11,
+          "maximum_candidate_baseline_energy_delta": 2.842170943040401e-14,
+          "maximum_candidate_baseline_force_delta": 7.549516567451064e-15
+        },
+        {
+          "phase": "moved-warm",
+          "seconds": {
+            "baseline": [
+              0.1572553813457489,
+              0.16540046408772469
+            ],
+            "candidate": [
+              0.1564638800919056,
+              0.1565847285091877
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.1613279227167368,
+            "candidate": 0.15652430430054665
+          },
+          "speedup": 1.0306892813717068,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 1.0089706847793423e-12,
+          "maximum_independent_force_error": 1.1514567077597349e-11,
+          "maximum_candidate_baseline_energy_delta": 2.842170943040401e-14,
+          "maximum_candidate_baseline_force_delta": 1.1102230246251565e-14
+        }
+      ]
+    },
+    {
+      "atoms": 12,
+      "aos": 96,
+      "reduction": "separate",
+      "phases": [
+        {
+          "phase": "cold",
+          "seconds": {
+            "baseline": [
+              7.859734125435352,
+              7.897884324193001
+            ],
+            "candidate": [
+              7.8875165693461895,
+              7.917783852666616
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 7.878809224814177,
+            "candidate": 7.902650211006403
+          },
+          "speedup": 0.9969831657031939,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.069544618483633e-12,
+          "maximum_independent_force_error": 2.130545739831291e-11,
+          "maximum_candidate_baseline_energy_delta": 5.684341886080802e-14,
+          "maximum_candidate_baseline_force_delta": 1.0011436124557349e-13
+        },
+        {
+          "phase": "warm",
+          "seconds": {
+            "baseline": [
+              0.8752473928034306,
+              0.8711933307349682
+            ],
+            "candidate": [
+              0.914381567388773,
+              0.9196229614317417
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.8732203617691994,
+            "candidate": 0.9170022644102573
+          },
+          "speedup": 0.9522554040046837,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.069544618483633e-12,
+          "maximum_independent_force_error": 2.129192655520029e-11,
+          "maximum_candidate_baseline_energy_delta": 5.684341886080802e-14,
+          "maximum_candidate_baseline_force_delta": 1.2952139361033232e-13
+        },
+        {
+          "phase": "moved",
+          "seconds": {
+            "baseline": [
+              4.575502336025238,
+              4.519296817481518
+            ],
+            "candidate": [
+              4.652413539588451,
+              4.562524758279324
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 4.547399576753378,
+            "candidate": 4.6074691489338875
+          },
+          "speedup": 0.9869625665981054,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.126388037344441e-12,
+          "maximum_independent_force_error": 1.7079324066138213e-11,
+          "maximum_candidate_baseline_energy_delta": 0.0,
+          "maximum_candidate_baseline_force_delta": 2.7985946893238633e-13
+        },
+        {
+          "phase": "moved-warm",
+          "seconds": {
+            "baseline": [
+              0.8827306851744652,
+              0.8761881552636623
+            ],
+            "candidate": [
+              0.925415363162756,
+              0.9197987578809261
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.8794594202190638,
+            "candidate": 0.922607060521841
+          },
+          "speedup": 0.9532329177294911,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.126388037344441e-12,
+          "maximum_independent_force_error": 1.7076257075032686e-11,
+          "maximum_candidate_baseline_energy_delta": 0.0,
+          "maximum_candidate_baseline_force_delta": 2.799427356592332e-13
+        }
+      ]
+    },
+    {
+      "atoms": 12,
+      "aos": 96,
+      "reduction": "combined",
+      "phases": [
+        {
+          "phase": "cold",
+          "seconds": {
+            "baseline": [
+              7.848130155354738,
+              7.866885654628277
+            ],
+            "candidate": [
+              7.938984677195549,
+              7.905610993504524
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 7.8575079049915075,
+            "candidate": 7.922297835350037
+          },
+          "speedup": 0.9918218259771262,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 16,
+                "fock_builds": 16,
+                "warm_start_used": false,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.0127011996228248e-12,
+          "maximum_independent_force_error": 2.12692086165589e-11,
+          "maximum_candidate_baseline_energy_delta": 1.1368683772161603e-13,
+          "maximum_candidate_baseline_force_delta": 6.88338275267597e-14
+        },
+        {
+          "phase": "warm",
+          "seconds": {
+            "baseline": [
+              0.8586181066930294,
+              0.8815915510058403
+            ],
+            "candidate": [
+              0.8551208265125751,
+              0.8627970591187477
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.8701048288494349,
+            "candidate": 0.8589589428156614
+          },
+          "speedup": 1.0129760405046104,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.0127011996228248e-12,
+          "maximum_independent_force_error": 2.126876452734905e-11,
+          "maximum_candidate_baseline_energy_delta": 1.1368683772161603e-13,
+          "maximum_candidate_baseline_force_delta": 6.039613253960852e-14
+        },
+        {
+          "phase": "moved",
+          "seconds": {
+            "baseline": [
+              4.468544960021973,
+              4.598133891820908
+            ],
+            "candidate": [
+              4.54102186486125,
+              4.550612203776836
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 4.53333942592144,
+            "candidate": 4.545817034319043
+          },
+          "speedup": 0.9972551450479854,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 12,
+                "fock_builds": 12,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.069544618483633e-12,
+          "maximum_independent_force_error": 1.6898926702424433e-11,
+          "maximum_candidate_baseline_energy_delta": 5.684341886080802e-14,
+          "maximum_candidate_baseline_force_delta": 4.907185768843192e-14
+        },
+        {
+          "phase": "moved-warm",
+          "seconds": {
+            "baseline": [
+              0.8652376644313335,
+              0.8711264543235302
+            ],
+            "candidate": [
+              0.8693646378815174,
+              0.8697040937840939
+            ]
+          },
+          "medians_seconds": {
+            "baseline": 0.8681820593774319,
+            "candidate": 0.8695343658328056
+          },
+          "speedup": 0.9984447923986551,
+          "all_independent_gates_passed": true,
+          "work_counts": {
+            "baseline": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ],
+            "candidate": [
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              },
+              {
+                "iterations": 1,
+                "fock_builds": 1,
+                "warm_start_used": true,
+                "warm_start_fallback": false
+              }
+            ]
+          },
+          "work_counts_matched": true,
+          "maximum_independent_energy_error": 3.069544618483633e-12,
+          "maximum_independent_force_error": 1.6906032129782034e-11,
+          "maximum_candidate_baseline_energy_delta": 5.684341886080802e-14,
+          "maximum_candidate_baseline_force_delta": 5.3290705182007514e-14
+        }
+      ]
+    }
+  ],
+  "numerical_passed": true,
+  "work_counts_matched": true,
+  "scope": "Two fresh processes per side in ABBA order, each containing complete cold, frozen-density warm, moved, and moved-warm PBE0 energy-plus-force endpoints. Native primitive/recurrence counts are not exported; retained host census is separate evidence, not a measured endpoint census. No statistical speedup or occupancy/allocator-peak claim follows from these two repeats."
+}

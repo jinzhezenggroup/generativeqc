@@ -1,0 +1,7 @@
+{
+  "allocation_and_results": "job=6944 visibility=1\nactual-generated CUDA shared shell channels PASS; coordinates=1224 maximum_error=5.5511151231257827e-16\n========= COMPUTE-SANITIZER\nactual-generated CUDA shared shell channels PASS; coordinates=1224 maximum_error=5.5511151231257827e-16\n========= ERROR SUMMARY: 0 errors\n",
+  "exit_status": 0,
+  "comparisons": 1224,
+  "maximum_error": 5.551115123125783e-16,
+  "scope": "Actual generated all-17-class probe against retained weighted scalar roots; independent Hermite and molecular gates are separate."
+}

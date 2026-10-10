@@ -1,0 +1,22 @@
+{
+  "files": [
+    {
+      "bytes": 36223,
+      "decoded_bytes": 391121,
+      "decoded_sha256": "544255203a137fa646e65b0304ccecf820ba8b56ac1511c8b8a8c651007a4e05",
+      "path": "endpoints.json.gz",
+      "role": "samples",
+      "sha256": "bac806c56e0912ea4fd7d9eb3e40c4a3d3c4a790ee9656beeaddb4a895d6374b"
+    },
+    {
+      "bytes": 66298,
+      "decoded_bytes": 577110,
+      "decoded_sha256": "8fc91a883b9fe2ca723f84cc6a1b9a49bb30f45902e0d9a8bcebe1d9cde6f18a",
+      "path": "isolated.json.gz",
+      "role": "samples",
+      "sha256": "0d3484febb8b5fc5d0161f8fbc37366e9e590f103f3e60700af2c79cb37e3dd5"
+    }
+  ],
+  "schema": "generativeqc.evidence-storage-compaction.v1",
+  "scope": "Lossless storage-only compaction; historical scientific acceptance and decoded bytes are unchanged."
+}

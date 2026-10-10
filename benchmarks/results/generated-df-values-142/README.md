@@ -129,10 +129,27 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
   env -u VIBEQC_DF_VALUES -u VIBEQC_DF_VALUE_MAPPING \
   build/cuda-release/vibeqc_density_fitting_tests
 
-python tools/summarize_df_promotion.py \
-  --directory benchmarks/results/generated-df-values-142
+mkdir -p build/df-values-142-review
+cp benchmarks/results/generated-df-values-142/{source,automatic}.json \
+  build/df-values-142-review/
+gzip -cd benchmarks/results/generated-df-values-142/isolated.json.gz \
+  > build/df-values-142-review/isolated.json
+gzip -cd benchmarks/results/generated-df-values-142/endpoints.json.gz \
+  > build/df-values-142-review/endpoints.json
+python tools/summarize_df_promotion.py --directory build/df-values-142-review
 ```
 
 The full Python suite passed 659 tests (74 skipped), all nine native CPU suites
 passed, and the native CUDA DF suite passed under Slurm. Full GPU matrix jobs
 were 8965 (isolated), 8971 (source), and 8974 (corrected endpoints).
+
+## Lossless storage compaction
+
+The isolated and endpoint reports are retained as deterministic gzip companions
+to make room for the shared-shell-channel negative-result publication under the
+unchanged checkout budget. Their decoded bytes are identical to the original
+577,110-byte and 391,121-byte records, respectively. `storage.json` pins both the
+stored and decoded identities; this is a storage receipt, not a new scientific
+acceptance or rerun. All observations and the original `promotion.json` input
+hashes remain unchanged. The reproduction command extracts these reports into
+a scratch directory rather than rewriting the historical evidence.

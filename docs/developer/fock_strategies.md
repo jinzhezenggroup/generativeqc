@@ -145,6 +145,49 @@ Complete endpoint median ratios are 1.0077 on CPU and 1.0028 on CUDA. The
 retained raw/provider and alignment experiments explain and resolve a CPU DF
 code-layout regression without changing its arithmetic.
 
+### Shared nuclear two-electron channels
+
+The retained CUDA shell force adapter folds all requested J/K weights in one
+canonical AO symmetry-orbit traversal. The compiler emits both this weight map
+and the shared derivative consumer from the existing scientific owners; native
+code supplies shell orientation, normalized component weights, primitive pairs,
+source activity, and final atom scatter.
+
+For two active full-range channels, each primitive shell subset evaluates its
+unweighted component derivatives once and immediately contracts them into both
+source outputs. `weighted_eri_channels.py` obtains these derivatives by AD with
+respect to the fixed cotangents of the existing weighted ERI DAG. A single scalar
+CSE state spans the subset; there is no channel-indexed integral recurrence or
+materialized molecular derivative tensor. The low-order classes and admitted
+s/p/d order-four/five owners use the same interface. Larger classes keep their
+64-component additive partitions, with reuse across channels inside each part.
+
+Separate J/K outputs retain independent activity, including cancellation of
+their sum. Combined and single-active-channel requests retain weight-first
+evaluation. If an active unweighted intermediate or shared contraction is
+nonfinite, the generated helper leaves its output unchanged and the adapter
+replays the retained weight-first evaluator. Existing final-result audits remain
+responsible for rejecting any nonfinite fallback. Coefficients, normalization,
+screening, primitive summation order, translation recovery and source-major force
+layout are unchanged. Component contraction reassociation is intentional; it is
+numerically gated rather than required to be bitwise identical for shared channels.
+The transactional audit checks final channel sums instead of every component:
+under strict FP64, an active nonfinite contribution cannot regain a finite sum.
+Exact-zero component weights and inactive channels still skip multiplication.
+
+No new retained numeric allocation is introduced, but generated source size and
+device register/local-memory demand can increase. Recurrence sharing alone is
+not a complete energy-plus-force speedup claim. The rationale, independent
+derivative gates and semantic work census are recorded in the
+[shared-channel decision](../../.agents/notes/implemented/performance/2026-10-10-direct-force-shared-channels.md).
+
+Complete PBE0 qualification builds both `generativeqc` and
+`generativeqc_stationary_pbe0_rks_spd_manifest`; building only the native library
+does not provide the packaged stationary force owner. Compare the default
+`GENERATIVEQC_DIRECT_FORCE_REDUCTION=combined` control with the explicit
+`separate` source export using `benchmarks/readme_pbe0.py`, including preparation,
+fixed-density warm replays, moved geometries, and independent force gates.
+
 The sections below preserve the baseline audit; they describe the coupling
 before these implementation changes.
 

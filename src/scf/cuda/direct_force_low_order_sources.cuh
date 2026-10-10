@@ -61,14 +61,36 @@ struct LowOrderSourceRoots {
       return generated_weighted_eri::fsss_force(geometry, weights);
     }
   }
+
+  /** Reuse each component derivative for every active external-weight channel. */
+  template <unsigned ChannelCount>
+  __device__ static __forceinline__ bool evaluate_channels(
+      const generated_weighted_eri::Geometry& geometry,
+      const double (&weights)[ChannelCount][component_count], const bool (&active)[ChannelCount],
+      generated_weighted_eri::IndependentGradient (&output)[ChannelCount]) {
+#define GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(Class, Name) \
+  if constexpr (ShellClass == Class)                     \
+  return generated_weighted_eri::Name##_force_channels(geometry, weights, active, output)
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kSsssShellClass, ssss);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kPsssShellClass, psss);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kPspsShellClass, psps);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kPpssShellClass, ppss);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kDsssShellClass, dsss);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kPppsShellClass, ppps);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kDspsShellClass, dsps);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kDpssShellClass, dpss);
+    GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT(kFsssShellClass, fsss);
+#undef GENERATIVEQC_LOW_ORDER_CHANNEL_ROOT
+    return false;
+  }
 };
 
 /**
  * Consume one screened shell task into full-range J/K or one LR exchange force.
  *
- * Only immutable shell geometry, AO traversal and radial moments are shared. Each
- * source retains its own density weights, generated force evaluation and
- * primitive reduction order. Output mode changes only the coefficient/output
+ * Immutable shell geometry, radial moments and component derivatives are shared.
+ * Each source retains its own density weights and primitive reduction order.
+ * Output mode changes only the coefficient/output
  * layout; Combined and Separate consume the same shell and primitive traversal.
  * Optional resident storage contains the canonical bra's complete primitive
  * domain. A missing or mismatched lease falls back to the global pair cache.
@@ -137,6 +159,15 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
       direct_shell_ao_quartet_layout(batch, first_pair, second_pair);
   double weights[source_count][Roots::component_count]{};
   bool source_active[source_count]{};
+  double coulomb_coefficients[source_count]{}, exchange_coefficients[source_count]{};
+#pragma unroll
+  for (unsigned source = 0; source < source_count; ++source) {
+    const auto coefficients =
+        LongRange ? DirectForceSourceCoefficients{0.0, exchange_coefficient}
+                  : Sources::coefficients(source, coulomb_coefficient, exchange_coefficient);
+    coulomb_coefficients[source] = coefficients.coulomb;
+    exchange_coefficients[source] = coefficients.exchange;
+  }
   for (std::size_t ordinal = 0; ordinal < layout.quartet_count; ++ordinal) {
     std::size_t raw_ao[4];
     decode_shell_ao_quartet(batch, first_pair, second_pair, layout, ordinal, system_ao_begin,
@@ -156,17 +187,16 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
       output = output * component_count[center] + component;
     }
     if (output >= Roots::component_count) return;
+    double density_coefficients[source_count]{};
+    direct_force_density_channels_scaled<Unrestricted>(
+        dimension, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2],
+        raw_ao[3], coulomb_coefficients, exchange_coefficients, density_coefficients);
 #pragma unroll
     for (unsigned source = 0; source < source_count; ++source) {
-      const auto coefficients =
-          LongRange ? DirectForceSourceCoefficients{0.0, exchange_coefficient}
-                    : Sources::coefficients(source, coulomb_coefficient, exchange_coefficient);
-      const double coulomb = coefficients.coulomb;
-      const double exchange = coefficients.exchange;
+      const double coulomb = coulomb_coefficients[source];
+      const double exchange = exchange_coefficients[source];
       if (coulomb == 0.0 && exchange == 0.0) continue;
-      const double coefficient = direct_force_density_coefficient_scaled<Unrestricted>(
-          dimension, physical_offset, spin_offset, density, raw_ao[0], raw_ao[1], raw_ao[2],
-          raw_ao[3], coulomb, exchange);
+      const double coefficient = density_coefficients[source];
       if constexpr (ShellClass != kPsssShellClass) {
         if (coefficient == 0.0) continue;
       }
@@ -235,15 +265,28 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
       } else {
         boys_values<Roots::angular_order + 1U>(boys_argument, geometry.boys);
       }
+      generated_weighted_eri::IndependentGradient primitive[source_count]{};
+      bool shared_derivatives = false;
+      if constexpr (source_count > 1U) {
+        if (source_active[0] && source_active[1])
+          shared_derivatives =
+              Roots::evaluate_channels(geometry, weights, source_active, primitive);
+      }
+      // Weight-first evaluation preserves the single-source schedule and handles
+      // geometries where unweighted intermediates overflow before contraction.
+      if (!shared_derivatives) {
+#pragma unroll
+        for (unsigned source = 0; source < source_count; ++source)
+          if (source_active[source]) primitive[source] = Roots::evaluate(geometry, weights[source]);
+      }
 #pragma unroll
       for (unsigned source = 0; source < source_count; ++source) {
         if (!source_active[source]) continue;
-        const auto primitive = Roots::evaluate(geometry, weights[source]);
 #pragma unroll
         for (unsigned center = 0; center < 3; ++center) {
 #pragma unroll
           for (unsigned axis = 0; axis < 3; ++axis) {
-            result[source].center[center][axis] += primitive.center[center][axis];
+            result[source].center[center][axis] += primitive[source].center[center][axis];
           }
         }
       }

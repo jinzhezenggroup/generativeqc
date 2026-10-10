@@ -102,35 +102,9 @@ __device__ __forceinline__ void {function_name}(
 """
 
 
-def emit_direct_force_density_coefficient() -> str:
-    """Emit the symmetry-reduced Direct force density contraction.
-
-    The scaled form is the method-neutral primitive used by composed mean-field
-    methods. The compatibility wrapper preserves the historical HF convention.
-    """
-
-    return """template <bool Unrestricted>
-__device__ __forceinline__ double direct_force_density_coefficient_scaled(
-    std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
-    const double* density,
-    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
-    double coulomb_coefficient, double exchange_coefficient) {
-  const std::size_t matrix_size = n * n;
-  double coefficient = 0.0;
-  for (unsigned permutation = 0; permutation < 8; ++permutation) {
-    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) {
-      continue;
-    }
-    std::size_t a = 0;
-    std::size_t b = 0;
-    std::size_t c = 0;
-    std::size_t d = 0;
-    eri_symmetry_permutation(permutation, i, j, k, l, a, b, c, d);
-    const std::size_t ab = matrix_index(a, b, n);
-    const std::size_t ac = matrix_index(a, c, n);
-    const std::size_t cd = matrix_index(c, d, n);
-    const std::size_t bd = matrix_index(b, d, n);
-    if (coulomb_coefficient != 0.0) {
+def _direct_force_density_contributions() -> str:
+    """Keep the per-orbit RHF/UHF equations identical for scalar/channel lowering."""
+    return """    if (coulomb_coefficient != 0.0) {
       if constexpr (Unrestricted) {
         const double total_ab =
             density[spin_offset + ab] + density[spin_offset + matrix_size + ab];
@@ -154,6 +128,36 @@ __device__ __forceinline__ double direct_force_density_coefficient_scaled(
                        density[physical_offset + ac] * density[physical_offset + bd];
       }
     }
+"""
+
+
+def emit_direct_force_density_coefficient() -> str:
+    """Emit method-neutral scaled weights and the historical HF wrapper."""
+    return (
+        """template <bool Unrestricted>
+__device__ __forceinline__ double direct_force_density_coefficient_scaled(
+    std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
+    const double* density,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    double coulomb_coefficient, double exchange_coefficient) {
+  const std::size_t matrix_size = n * n;
+  double coefficient = 0.0;
+  for (unsigned permutation = 0; permutation < 8; ++permutation) {
+    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) {
+      continue;
+    }
+    std::size_t a = 0;
+    std::size_t b = 0;
+    std::size_t c = 0;
+    std::size_t d = 0;
+    eri_symmetry_permutation(permutation, i, j, k, l, a, b, c, d);
+    const std::size_t ab = matrix_index(a, b, n);
+    const std::size_t ac = matrix_index(a, c, n);
+    const std::size_t cd = matrix_index(c, d, n);
+    const std::size_t bd = matrix_index(b, d, n);
+"""
+        + _direct_force_density_contributions()
+        + """\
   }
   return coefficient;
 }
@@ -167,6 +171,44 @@ __device__ __forceinline__ double direct_force_density_coefficient(
   return direct_force_density_coefficient_scaled<Unrestricted>(
       n, physical_offset, spin_offset, density, i, j, k, l, 1.0, exchange_coefficient);
 }
+"""
+    )
+
+
+def emit_direct_force_density_channels() -> str:
+    """Fold independent source weights in one orbit visit, without reassociation.
+
+    Like the scalar native adapter, indices must be a canonical AO quartet.
+    Only bindings change from the scalar equation. Each channel still adds J
+    then K in the original permutation order, and absent terms do not read or
+    form unused spin sums/products that can overflow.
+    """
+    contribution = (
+        _direct_force_density_contributions()
+        .replace("coulomb_coefficient", "coulomb_coefficients[channel]")
+        .replace("exchange_coefficient", "exchange_coefficients[channel]")
+        .replace("coefficient +=", "coefficients[channel] +=")
+    )
+    body = "\n".join("  " + line for line in contribution.splitlines())
+    return f"""template <bool Unrestricted, unsigned ChannelCount>
+__device__ __forceinline__ void direct_force_density_channels_scaled(
+    std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
+    const double* density, std::size_t i, std::size_t j, std::size_t k, std::size_t l,
+    const double (&coulomb_coefficients)[ChannelCount],
+    const double (&exchange_coefficients)[ChannelCount], double (&coefficients)[ChannelCount]) {{
+  const std::size_t matrix_size = n * n;
+  for (unsigned channel = 0; channel < ChannelCount; ++channel) coefficients[channel] = 0.0;
+  for (unsigned permutation = 0; permutation < 8; ++permutation) {{
+    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) continue;
+    std::size_t a = 0, b = 0, c = 0, d = 0;
+    eri_symmetry_permutation(permutation, i, j, k, l, a, b, c, d);
+    const std::size_t ab = matrix_index(a, b, n), ac = matrix_index(a, c, n);
+    const std::size_t cd = matrix_index(c, d, n), bd = matrix_index(b, d, n);
+    for (unsigned channel = 0; channel < ChannelCount; ++channel) {{
+{body}
+    }}
+  }}
+}}
 """
 
 
@@ -300,6 +342,7 @@ namespace generativeqc::scf::cuda_execution {{
 
 {function}
 {emit_direct_force_density_coefficient()}
+{emit_direct_force_density_channels()}
 {emit_direct_force_component_weight()}
 {emit_direct_bilinear_density_coefficient()}
 }}  // namespace generativeqc::scf::cuda_execution
