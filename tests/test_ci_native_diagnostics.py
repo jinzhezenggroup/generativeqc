@@ -257,9 +257,14 @@ def test_workflow_keeps_diagnostics_in_failure_artifacts() -> None:
     source = (ROOT / ".github/workflows/ci.yml").read_text()
     assert '--native-diagnostics-dir="$PWD/.artifacts/native-diagnostics"' in source
     assert "path: .artifacts/" in source and "retention-days: 14" in source
+    preparation = source.split("      - name: Prepare bounded native diagnostics\n", 1)[
+        1
+    ].split("      - name:", 1)[0]
+    assert "        if: matrix.shard == 'core-b'\n" in preparation
+    assert "ccache --version" in preparation
     assert (
-        'if [[ "${{ matrix.shard }}" == "core-b" ]]; then\n            ccache --version'
-        in source
+        ".venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q"
+        in preparation
     )
     assert '"${diagnostic_args[@]}"' in source
     wheels = (ROOT / ".github/workflows/wheels.yml").read_text()
@@ -376,3 +381,27 @@ def test_cleanup_preserves_a_later_installed_handler(
     assert result.returncode == 0, result.stderr
     assert result.stderr.count("PRIOR") == 1
     assert "returned" in result.stdout
+
+
+def test_interpolated_python_step_respects_github_expression_budget() -> None:
+    # GitHub rewrites a mixed scalar as format('escaped literal', expressions).
+    # Runner ExpressionConstants.MaxLength is 21000. Raw YAML length misses
+    # quote/brace escaping and format-call/placeholder overhead.
+    # https://github.com/actions/runner/blob/main/src/Sdk/DTObjectTemplating/ObjectTemplating/TemplateReader.cs
+    source = (ROOT / ".github/workflows/ci.yml").read_text()
+    step = source.split("      - name: Run Python tests with coverage\n", 1)[1].split(
+        "\n      - name:", 1
+    )[0]
+    literal = step.split("        run: |\n", 1)[1]
+    script = "\n".join(line[10:] for line in literal.splitlines()) + "\n"
+    # Conservative upper bound: count every quote/brace, even inside expressions,
+    # plus four characters per placeholder/argument and the format wrapper.
+    upper_bound = (
+        len(script.encode("utf-16-le")) // 2
+        + script.count("'")
+        + script.count("{")
+        + script.count("}")
+        + 4 * script.count("${{")
+        + len("format('')")
+    )
+    assert upper_bound <= 21000

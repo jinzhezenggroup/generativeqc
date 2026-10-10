@@ -966,6 +966,18 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
+      - name: Prepare bounded native diagnostics
+        if: matrix.shard == 'core-b'
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
+        run: |
+          ccache --version
+          ccache cc -std=c11 -fPIC -O2 -Wall -Wextra -Werror \
+            -c tools/native_fault_record.c -o "$RUNNER_TEMP/native-fault-record.o"
+          ccache cc -shared "$RUNNER_TEMP/native-fault-record.o" \
+            -o "$RUNNER_TEMP/libnative-fault-record.so"
+          .venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q
       - name: Run Python tests with coverage
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
@@ -1377,12 +1389,6 @@ jobs:
           esac
           diagnostic_args=()
           if [[ "${{ matrix.shard }}" == "core-b" ]]; then
-            ccache --version
-            ccache cc -std=c11 -fPIC -O2 -Wall -Wextra -Werror \
-              -c tools/native_fault_record.c -o "$RUNNER_TEMP/native-fault-record.o"
-            ccache cc -shared "$RUNNER_TEMP/native-fault-record.o" \
-              -o "$RUNNER_TEMP/libnative-fault-record.so"
-            .venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q
             diagnostic_args+=(
               -p tools.pytest_native_diagnostics
               --native-diagnostics-dir="$PWD/.artifacts/native-diagnostics"
