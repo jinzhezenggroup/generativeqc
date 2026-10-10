@@ -48,8 +48,8 @@ inputs using reserved rank-k binding names fail closed before composition.
 Focused interpreter tests compare both roots with an independent
 upper-authoritative oracle over both storage orders, signed beta, poisoned lower
 cells, and zero-beta no-read. Collision and request-identity regressions fail
-closed. qz Job `i1877-rankk-h100-1010z12` compiled exact commit
-`1cd3a783d51ce173d8dc06ad76965b84ef069b86` and passed all 16 H100 cases for the
+closed. qz Job `i1877-rankk-h100-1010z13` compiled exact commit
+`7ff494c7ecfb9a538f9ea0c77ace788e66c7d1b3` and passed all 16 H100 cases for the
 emitted reader and both providers. This remains qualification-only and is not a
 production caller or complete method endpoint.
 

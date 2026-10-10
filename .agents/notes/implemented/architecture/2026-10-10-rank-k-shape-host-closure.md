@@ -62,8 +62,8 @@ directly compiled native harness is a separate fixed-recipe identity input.
 Mutation/missing-input tests cover CUDA and staged host manifests. Shape tests
 require distinct request/scientific identities for `3x5` and `17x9`. qz Job
 `i1877-rankk-host-1010z11h3` generated a 3,672-role GCC closure; Job
-`i1877-rankk-h100-1010z12` regenerated the same manifest from the final PATH,
-compiled exact commit `1cd3a783d51ce173d8dc06ad76965b84ef069b86`, and passed the
+`i1877-rankk-h100-1010z13` regenerated the same manifest from the final PATH,
+compiled exact commit `7ff494c7ecfb9a538f9ea0c77ace788e66c7d1b3`, and passed the
 complete H100 matrix with distinct identities for every weighted/shape family.
 That source also binds the constructor to the request's exact flattened prefix
 count and includes the directly compiled native harness in compilation identity
