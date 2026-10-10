@@ -47,7 +47,7 @@ _TOOLCHAIN_FILES = (
 
 def _host_toolchain_identity(host_compiler: Path, manifest: Path) -> dict:
     data = json.loads(manifest.read_text(encoding="utf-8"))
-    if data.get("schema") != "generativeqc.rank-k-host-toolchain.v1":
+    if data.get("schema") != "generativeqc.rank-k-host-toolchain.v2":
         raise ValueError("unsupported rank-k host-toolchain manifest")
     entries = data.get("entries")
     if not isinstance(entries, list) or not entries:
@@ -75,6 +75,8 @@ def _host_toolchain_identity(host_compiler: Path, manifest: Path) -> dict:
         "program:as",
         "program:collect2",
         "program:ld",
+        "program:lto-wrapper",
+        "linker-plugin:liblto_plugin.so",
         "config:gcc-specs",
         "config:ld-default-script",
         "link-input:libstdc++.so",

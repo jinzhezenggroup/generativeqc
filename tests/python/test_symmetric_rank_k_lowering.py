@@ -206,6 +206,8 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
         "program:as",
         "program:collect2",
         "program:ld",
+        "program:lto-wrapper",
+        "linker-plugin:liblto_plugin.so",
         "config:gcc-specs",
         "config:ld-default-script",
         "link-input:libstdc++.so",
@@ -217,7 +219,7 @@ def test_rank_k_generator_bootstraps_checkout_and_binds_toolchain(
     host_manifest.write_text(
         json.dumps(
             {
-                "schema": "generativeqc.rank-k-host-toolchain.v1",
+                "schema": "generativeqc.rank-k-host-toolchain.v2",
                 "compiler_sha256": host_digest,
                 "target": "x86_64-linux-gnu",
                 "version": "11.4.0",
