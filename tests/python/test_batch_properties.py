@@ -1,12 +1,15 @@
 """Output selection must skip response work and survive later force replays."""
 
+import ctypes
 import json
 import os
 import typing
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from generativeqc import Calculator
+from generativeqc import Calculator, _native
+from generativeqc.batch import PreparedBatch
 
 SYSTEMS = [
     [(1, (0.0, 0.0, -0.7)), (1, (0.0, 0.0, 0.7))],
@@ -120,3 +123,92 @@ def test_unqualified_dft_basis_rejects_forces_before_execution(
         monkeypatch.setattr(batch._library, "generativeqc_batch_execute", forbidden)
         with pytest.raises(ValueError, match="does not support properties: forces"):
             batch.execute(properties=("energy", "forces"))
+
+
+def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist() -> None:
+    seen: list[int] = []
+
+    def qualified(
+        owner: object, index: int, output: object
+    ) -> int:
+        seen.append(index)
+        value = _native.PROPERTY_ENERGY | _native.PROPERTY_FORCES
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))[0] = value
+        return _native.STATUS_SUCCESS
+
+    holder = SimpleNamespace(
+        _library=SimpleNamespace(
+            generativeqc_ks_batch_supported_properties_v1=qualified
+        ),
+        _batch=object(),
+        _context=None,
+        _systems=(SYSTEMS[0], SYSTEMS[1]),
+    )
+    assert PreparedBatch._native_dft_force_eligible(holder)
+    assert seen == [0, 1]
+    assert holder._library.generativeqc_ks_batch_supported_properties_v1.argtypes == [
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+
+    def second_unqualified(
+        owner: object, index: int, output: object
+    ) -> int:
+        ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))[0] = (
+            _native.PROPERTY_ENERGY | (_native.PROPERTY_FORCES if index == 0 else 0)
+        )
+        return _native.STATUS_SUCCESS
+
+    holder._library.generativeqc_ks_batch_supported_properties_v1 = second_unqualified
+    assert not PreparedBatch._native_dft_force_eligible(holder)
+
+    def unavailable(owner: object, index: int, output: object) -> int:
+        return _native.STATUS_NOT_IMPLEMENTED
+
+    holder._library.generativeqc_ks_batch_supported_properties_v1 = unavailable
+    assert not PreparedBatch._native_dft_force_eligible(holder)
+    holder._library = SimpleNamespace()
+    assert not PreparedBatch._native_dft_force_eligible(holder)
+
+
+def test_cpu_df_pbe_python_api_consumes_qualified_native_batch_forces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    options = {
+        "method": "pbe-rks",
+        "basis": "sto-3g",
+        "device": "cpu",
+        "density_fitting": "cpu",
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "screening_tolerance": 1e-14,
+    }
+    with (
+        Calculator(**options).prepare_batch(SYSTEMS[:1]) as native_batch,
+        Calculator(**options).prepare_batch(SYSTEMS[:1]) as python_batch,
+    ):
+        if not hasattr(
+            native_batch._library, "generativeqc_ks_batch_supported_properties_v1"
+        ):
+            pytest.skip("current native prepared batch force query is not installed")
+
+        def forbidden_python_force(*args: typing.Any, **kwargs: typing.Any) -> None:
+            pytest.fail("CPU DF-PBE fell back to the Python stationary force driver")
+
+        monkeypatch.setattr(native_batch, "_public_dft_cpu_force", forbidden_python_force)
+        monkeypatch.setattr(
+            python_batch, "_native_dft_force_eligible", lambda: False
+        )
+        native = native_batch.execute(
+            strict=True, properties=("energy", "forces")
+        ).items[0]
+        reference = python_batch.execute(
+            strict=True, properties=("energy", "forces")
+        ).items[0]
+        assert native.forces is not None and reference.forces is not None
+        np.testing.assert_allclose(native.energy, reference.energy, atol=1e-8, rtol=0)
+        np.testing.assert_allclose(
+            native.forces, reference.forces, atol=1e-4, rtol=0
+        )
+        assert np.all(np.isfinite(native.forces))
