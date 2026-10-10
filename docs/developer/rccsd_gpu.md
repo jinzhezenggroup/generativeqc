@@ -157,7 +157,7 @@ once. Across iterations it retains current/trial amplitudes, physical residuals,
 DIIS vectors/errors, Gram/system scratch and reduction buffers inside the exact
 #146 reservation. The resident post-run action computes R1/R2 max norms on the
 same stream. Host control reads only the correlation energy and two residual
-maxima; trial residual tensors feed GPU DIIS directly and are never staged to
+maxima; physical residual tensors feed GPU DIIS directly and are never staged to
 the host. `src/cc/cuda_state.cuh` supplies the shared Gram solve support plus
 history compaction and slice extrapolation for separately pinned T1/T2 spans.
 
@@ -185,7 +185,8 @@ singular and exact-zero Grams, poisoned unused rows, and a modified old-old Gram
 sentinel that a full rebuild would overwrite. Run real-device coverage only in
 a finite Slurm allocation with `GENERATIVEQC_CC_DIIS_RING_CUDA_TEST=1`.
 
-The control sequence preserves the CPU solver's semantics:
+The default internal and conventional/response control sequence preserves the
+CPU solver's semantics:
 
 1. run the exact physical equations at the current amplitudes;
 2. check energy-change and physical residual gates from scalar diagnostics;
@@ -203,6 +204,26 @@ An arithmetic or solver failure never invokes the host-staged CC solver. The
 last finite device amplitudes are retained separately and downloaded only for a
 failure/result record. `diis_size=0` is supported as resident Jacobi rather than
 a backend switch.
+
+### Incoming-residual mixing for CUDA DF energies
+
+The native CUDA DF energy owner selects `SolverOptions::diis_input_residual`;
+the option defaults to false for supplied problems, CPU, conventional and
+force/Lambda/response owners. With this option, history stores `(G(T), R(T))`,
+where `G(T)` is the damped Jacobi map and `R(T)` is the incoming unshifted
+physical residual. Minimizing combinations of these residuals and combining
+the outgoing maps implements diagonally weighted Anderson fixed-point mixing:
+the validated shifted diagonal and damping are fixed throughout the solve.
+This is not same-state trial/residual DIIS and changes the nonlinear trajectory.
+
+The incoming residual remains live after the amplitude update and is inserted
+without another equation evaluation. Even an unchanged first/singular history
+cannot carry it as the outgoing state's residual: every next/final observation
+evaluates its actual amplitudes afresh. Energy-change gates, iteration-budget
+publication and the independent expanded physical replay remain unchanged.
+No precision, equation, history storage, resource admission or CPU-oracle work
+is introduced; `diis_size=0` retains the same Jacobi-only path. The legacy
+trial-residual path remains available through the internal option.
 
 The internal energy facade accepts `backend="cuda-resident"`. It remains
 energy-only. Slice C now additionally exposes the production native owner through

@@ -40,6 +40,10 @@ struct SolverOptions {
   // Internal storage option, initially opt-in. Supplied asymmetric initial
   // amplitudes use full history; iteration rounding is independently gated.
   bool packed_diis{false};
+  // Weighted Anderson mixing stores (damped Jacobi map, incoming physical
+  // residual). Default callers retain same-state trial/residual DIIS; only
+  // qualified CUDA DF energy endpoints opt in, not CPU or response owners.
+  bool diis_input_residual{false};
 };
 
 enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
