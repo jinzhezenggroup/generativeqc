@@ -124,6 +124,218 @@ def native() -> SimpleNamespace:
     return SimpleNamespace(cupy=cupy, library=library, call=call)
 
 
+@pytest.mark.parametrize("atoms", [3, 4, 48])
+@pytest.mark.parametrize("phased", [False, True])
+def test_restricted_point_binding_preserves_sources_and_reports_actual_selection(
+    native: SimpleNamespace, atoms: int, phased: bool
+) -> None:
+    """Qualify synthetic equal-spin owner routing, not a molecular endpoint.
+
+    The small-atom and nonphased cases must retain the general kernel despite
+    a valid proof. Independent point references and real producer publication
+    are separate gates; these supplied features/work panels are explicit mocks.
+    """
+    library = native.library
+    enqueue = getattr(
+        library, "stationary_geometry_molecular_resident_weights_enqueue_v2", None
+    )
+    counters = getattr(library, "stationary_point_binding_metrics_v1", None)
+    if enqueue is None or counters is None:
+        pytest.skip("artifact predates restricted point binding")
+    enqueue.argtypes = [
+        ct.c_void_p,
+        ct.POINTER(GridTaskView),
+        ct.c_void_p,
+        ct.c_size_t,
+        ct.c_size_t,
+        ct.c_void_p,
+        ct.c_void_p,
+        ct.c_uint64,
+        ct.c_uint64,
+        ct.c_char_p,
+        ct.c_size_t,
+    ]
+    counters.argtypes = [ct.c_void_p, ct.POINTER(ct.c_uint64), ct.c_size_t]
+    cupy = native.cupy
+    rng = np.random.default_rng(702900 + atoms)
+    centers = rng.normal(size=(atoms, 3)) * 3
+    primitives = np.array([[1.0, 1.0]] * 4)
+    ranges = np.column_stack((np.arange(4), np.ones(4))).astype(np.int64)
+    norms = np.ones(4)
+    ao_atoms = np.array([0, 1, atoms - 2, atoms - 1], dtype=np.int64)
+    capacity, points = 31, atoms * 3
+    plan = plan_stationary_cuda_resources(
+        atoms=atoms,
+        aos=4,
+        primitives=4,
+        points=capacity,
+        tasks=1,
+        spins=1,
+        sources=8,
+        target=cuda_target_info("sm_120"),
+        budget_bytes=256 << 20,
+        phased_becke=phased,
+    )
+    handle = ct.c_void_p()
+    native.call(
+        "stationary_create",
+        0,
+        12,
+        0,
+        atoms,
+        4,
+        4,
+        capacity,
+        1,
+        1,
+        1,
+        plan.allocation_bytes,
+        plan.geometry_lanes,
+        plan.geometry_threads,
+        ct.byref(handle),
+    )
+    stream = cupy.cuda.Stream(non_blocking=True)
+
+    def metrics() -> tuple[int, ...]:
+        values = (ct.c_uint64 * 5)()
+        assert counters(handle, values, 5) == 0
+        return tuple(values)
+
+    try:
+        if metrics()[0] != 1:
+            pytest.skip("artifact is not the qualified unpolarized PBE0 composition")
+        native.call(
+            "stationary_configure_becke",
+            handle,
+            plan.becke_threads_per_point,
+            plan.becke_shared_bytes,
+        )
+        if plan.phased_becke_bytes:
+            native.call(
+                "stationary_configure_phased_becke_v1", handle, plan.phased_becke_bytes
+            )
+        native.call(
+            "stationary_topology",
+            handle,
+            primitives.ctypes.data,
+            ranges.ctypes.data,
+            norms.ctypes.data,
+            ao_atoms.ctypes.data,
+        )
+        point_owners = np.arange(points) // 3
+        xyz = centers[point_owners] + rng.normal(size=(points, 3)) * 0.3
+        features = rng.random((5, points)) * 0.1
+        features[0] += 0.2
+        features = np.tile(features, (2, 1))
+        ao = rng.normal(size=(10, points, 4)) * 0.2
+        work = np.tile(rng.normal(size=(4, points, 4)) * 0.1, (2, 1, 1))
+        results = []
+        counts = []
+        for proof in (None, 0, 1):
+            native.call("stationary_geometry_reset", handle, centers.ctypes.data, 1e-12)
+            before = metrics()
+            for begin in range(0, points, capacity):
+                end = min(points, begin + capacity)
+                with stream:
+                    device = {
+                        "points": cupy.asarray(xyz[begin:end]),
+                        "features": cupy.asarray(
+                            np.ascontiguousarray(features[:, begin:end])
+                        ),
+                        "ao": cupy.asarray(np.ascontiguousarray(ao[:, begin:end])),
+                        "work": cupy.asarray(np.ascontiguousarray(work[:, begin:end])),
+                        "weights": cupy.full(end - begin, 0.4),
+                        "raw": cupy.full(end - begin, 0.7),
+                        "error": cupy.zeros(1, dtype=np.int32),
+                    }
+                    view = GridTaskView(
+                        1,
+                        17,
+                        end - begin,
+                        4,
+                        4,
+                        10,
+                        None,
+                        device["points"].data.ptr,
+                        device["ao"].data.ptr,
+                        device["features"].data.ptr,
+                        None,
+                        None,
+                        stream.ptr,
+                        device["error"].data.ptr,
+                    )
+                    arguments = [
+                        handle,
+                        ct.byref(view),
+                        device["work"].data.ptr,
+                        begin,
+                        3,
+                        device["weights"].data.ptr,
+                        device["raw"].data.ptr,
+                    ]
+                    if proof is None:
+                        native.call(
+                            "stationary_geometry_molecular_resident_weights_enqueue",
+                            *arguments,
+                        )
+                    else:
+                        native.call(
+                            "stationary_geometry_molecular_resident_weights_enqueue_v2",
+                            *arguments,
+                            17,
+                            proof,
+                        )
+                stream.synchronize()
+            output = np.empty((8, atoms, 3))
+            native.call("stationary_finish", handle, output.ctypes.data, output.size)
+            results.append(output)
+            delta = tuple(
+                after - earlier
+                for after, earlier in zip(metrics()[1:], before[1:], strict=True)
+            )
+            selected = proof == 1 and bool(plan.phased_becke_bytes) and atoms >= 4
+            batches = (points + capacity - 1) // capacity
+            assert delta == (
+                (batches, points, 0, 0) if selected else (0, 0, batches, points)
+            )
+            counts.append(delta)
+        for output in results[1:]:
+            np.testing.assert_allclose(output, results[0], rtol=5e-12, atol=2e-11)
+        for generation, proof in ((16, 1), (17, 2)):
+            native.call("stationary_geometry_reset", handle, centers.ctypes.data, 1e-12)
+            before = metrics()
+            with pytest.raises(RuntimeError, match="density binding proof"):
+                native.call(
+                    "stationary_geometry_molecular_resident_weights_enqueue_v2",
+                    *arguments,
+                    generation,
+                    proof,
+                )
+            assert metrics() == before
+        evidence = os.environ.get("GENERATIVEQC_RESTRICTED_POINT_EVIDENCE")
+        if evidence:
+            with Path(evidence).open("a") as output:
+                output.write(
+                    json.dumps(
+                        {
+                            "scope": "synthetic owner routing and source parity, not endpoint performance",
+                            "atoms": atoms,
+                            "phased_requested": phased,
+                            "phased": bool(plan.phased_becke_bytes),
+                            "points": points,
+                            "point_counts": counts,
+                            "max_source_error": float(
+                                np.max(np.abs(results[2] - results[0]))
+                            ),
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n"
+                )
+    finally:
+        library.stationary_destroy(handle)
+
+
 @pytest.mark.parametrize("atoms", [48, 96, 128])
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
