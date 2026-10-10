@@ -196,6 +196,14 @@ owner budget and provider dimension limits fit. A limit of one retains the
 matrix one-Q schedule. Allocation rejection retries one-Q before the existing
 scalar fallback. Independent expanded replay remains one-Q.
 
+The complete `run_df_ccsdt_native` endpoint uses `ccsd_batch_limit=0` to request
+its endpoint-specific default: a cap of 32 for energy-only calls and eight for
+forces. The benchmark's omitted CCSD cap also requests this automatic policy.
+Positive limits remain explicit overrides, and actual tiles still obey the
+same dimension, complete-owner budget and allocation fallbacks. Standalone
+`SolverOptions` and force/response defaults remain unchanged; this selector
+does not change precision or the independent expanded replay.
+
 CUDA can separately pack that original expanded one-Q virtual graph into FP64
 matrix contractions. Replay consumes the original factors and accepted amplitudes,
 never primal cuts or previous audit outputs, and preserves ascending Q

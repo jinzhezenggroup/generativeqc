@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
     if (argc < 4 || argc > 28)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
+          "[CCSD_Q_BATCH_LIMIT_OR_AUTO_0 "
           "[ORBITAL_SCHWARZ "
           "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     const auto diis_history = unsigned_argument(8, 6);
     if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
-    const auto ccsd_batch_limit = unsigned_argument(9, 8);
+    const auto ccsd_batch_limit = unsigned_argument(9, 0);
     generativeqc::hf::RHFFrameResponseOptions frame_options;
     const std::string screening_argument = argc > 10 ? argv[10] : "0";
     std::size_t screening_consumed = 0;

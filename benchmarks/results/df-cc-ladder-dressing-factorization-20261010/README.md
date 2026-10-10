@@ -1,19 +1,13 @@
-# One-sided DF ladder dressing
+# Recover #2191 evidence
 
-Four fresh energy-only ethane230/o9/v221/Q488 endpoints run ABBA in Slurm
-2814: FP64, Q8, full DIIS8, 64 GiB. Baseline: frozen copy-elided #2184,
-not latest master. Complete wall includes RHF/source/replay/(T)/teardown.
+All eight original files remain in existing merged commit
+`f81640c8cd7531be60c1d9a4d2323e90934e1d1c`; the manifest pins every size/SHA-256.
 
-Median complete wall: 160.801392 -> 157.290694 s (**−2.18%**).
-Complete CCSD: 64.686691 -> 61.154653 s (**−5.46%**).
-Two samples/selection: no statistical/global or force/response promotion.
+```bash
+python tools/restore_retained_evidence.py --all \
+  --manifest benchmarks/results/df-cc-ladder-dressing-factorization-20261010/snapshot.manifest.json \
+  --output .artifacts/df-cc-ladder-evidence-restored
+```
 
-`validation.json.gz`: provenance, identities, work, gates and qualification.
-`samples.json.gz`: every ABBA sample. Use the shared publication reader.
-
-Reconstruct the frozen parent; apply the pinned baseline patch, then this
-`measured-source.patch.gz` with `git apply --unidiff-zero`. Recipes require roots
-and fresh pilot provenance/binary hashes for new runs. Use finite Slurm and
-assigned visibility. No Release/archive is published.
-
-Rationale and fallback policy: the implemented Agent Note.
+Every Git blob verifies before writing. No sample is discarded, cap raised or
+archive published. New evidence: `../df-cc-energy-q32-default-20261010/`.
