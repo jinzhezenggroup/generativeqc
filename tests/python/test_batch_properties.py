@@ -125,12 +125,12 @@ def test_unqualified_dft_basis_rejects_forces_before_execution(
             batch.execute(properties=("energy", "forces"))
 
 
-def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist() -> None:
+def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist() -> (
+    None
+):
     seen: list[int] = []
 
-    def qualified(
-        _owner: object, index: int, output: object
-    ) -> int:
+    def qualified(_owner: object, index: int, output: object) -> int:
         seen.append(index)
         value = _native.PROPERTY_ENERGY | _native.PROPERTY_FORCES
         ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))[0] = value
@@ -152,9 +152,7 @@ def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist()
         ctypes.POINTER(ctypes.c_uint32),
     ]
 
-    def second_unqualified(
-        owner: object, index: int, output: object
-    ) -> int:
+    def second_unqualified(owner: object, index: int, output: object) -> int:
         ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))[0] = (
             _native.PROPERTY_ENERGY | (_native.PROPERTY_FORCES if index == 0 else 0)
         )
@@ -196,10 +194,10 @@ def test_cpu_df_pbe_python_api_consumes_qualified_native_batch_forces(
         def forbidden_python_force(*_args: typing.Any, **_kwargs: typing.Any) -> None:
             pytest.fail("CPU DF-PBE fell back to the Python stationary force driver")
 
-        monkeypatch.setattr(native_batch, "_public_dft_cpu_force", forbidden_python_force)
         monkeypatch.setattr(
-            python_batch, "_native_dft_force_eligible", lambda: False
+            native_batch, "_public_dft_cpu_force", forbidden_python_force
         )
+        monkeypatch.setattr(python_batch, "_native_dft_force_eligible", lambda: False)
         native = native_batch.execute(
             strict=True, properties=("energy", "forces")
         ).items[0]
@@ -208,7 +206,5 @@ def test_cpu_df_pbe_python_api_consumes_qualified_native_batch_forces(
         ).items[0]
         assert native.forces is not None and reference.forces is not None
         np.testing.assert_allclose(native.energy, reference.energy, atol=1e-8, rtol=0)
-        np.testing.assert_allclose(
-            native.forces, reference.forces, atol=1e-4, rtol=0
-        )
+        np.testing.assert_allclose(native.forces, reference.forces, atol=1e-4, rtol=0)
         assert np.all(np.isfinite(native.forces))

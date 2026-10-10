@@ -1085,9 +1085,7 @@ class PreparedBatch:
             raise RuntimeError(
                 "prepared basis/model identity changed; prepare a new batch before reusing densities or Fock/DIIS state"
             )
-        native_dft_forces = (
-            public_dft_forces and self._native_dft_force_eligible()
-        )
+        native_dft_forces = public_dft_forces and self._native_dft_force_eligible()
         public_dft_forces = public_dft_forces and not native_dft_forces
         native_compute_forces = compute_forces and not public_dft_forces
         if compute_forces and self._output_aware_cpu_forces:
