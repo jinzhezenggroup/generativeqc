@@ -412,6 +412,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   // Resolve legacy internal callers once per prepared execution, before any
   // device setup. Fock kernels and final exact force assembly share this guard.
   ScfOptions execution_options = requested_options;
+  bool incremental_diis_gram = false, ordered_diis_gram = false;
   try {
     const FockSpin spin = unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted;
     if (!execution_options.resolved_fock_build.has_value()) {
@@ -423,6 +424,9 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
         execution_options.screening_tolerance) {
       throw std::invalid_argument("CUDA screening differs from its resolved Fock strategy");
     }
+    incremental_diis_gram =
+        execution_options.diis_history >= 2 && incremental_diis_gram_requested();
+    ordered_diis_gram = incremental_diis_gram && ordered_incremental_diis_gram_requested();
   } catch (const std::invalid_argument&) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
@@ -479,6 +483,8 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
            bounded_direct_primary_streaming_fock_mask_requested().value_or(0U) ||
        (*plan)->graph_native_eigensolver_override != graph_native_eigensolver_override ||
        (*plan)->reuse_converged_fock != reuse_converged_fock ||
+       (*plan)->incremental_diis_gram != incremental_diis_gram ||
+       (*plan)->ordered_diis_gram != ordered_diis_gram ||
        (*plan)->one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        (*plan)->mixed_precision_fock != mixed_precision_fock ||
        (*plan)->mixed_precision_fock_threshold != mixed_precision_fock_threshold)) {
