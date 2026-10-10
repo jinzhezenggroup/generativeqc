@@ -38,9 +38,18 @@ def test_fock_claim_metadata_follows_the_selected_value_schedule() -> None:
         header = emit_registry_header((selection,))
         simple_rows = header.split("kFockShellKernels", 1)[1].split("}};", 1)[0]
         assert f'{{"psss", 1U, 1U, 32U, 1U, 3U, {width}U}}' in simple_rows
-        source = emit_multi_registry_source(
-            (replace(profile, selections=(selection,)),)
+        # Keep qualification metadata within this one-class fixture's inventory.
+        assert profile.preferred_rys_task_fock_shell_classes is not None
+        reduced = replace(
+            profile,
+            selections=(selection,),
+            preferred_rys_task_fock_shell_classes=tuple(
+                name
+                for name in profile.preferred_rys_task_fock_shell_classes
+                if name == selection.spec.name
+            ),
         )
+        source = emit_multi_registry_source((reduced,))
         profile_rows = source.split("kFockNames0", 1)[1].split("}};", 1)[0]
         assert f'{{"psss", 1U, 1U, 32U, 1U, 3U, {width}U}}' in profile_rows
 
@@ -76,7 +85,16 @@ def test_profiled_fock_materialization_reaches_generated_registry(
         in single_source
     )
 
-    selected_profile = replace(resolved, selections=(psss,))
+    assert resolved.preferred_rys_task_fock_shell_classes is not None
+    selected_profile = replace(
+        resolved,
+        selections=(psss,),
+        preferred_rys_task_fock_shell_classes=tuple(
+            name
+            for name in resolved.preferred_rys_task_fock_shell_classes
+            if name == psss.spec.name
+        ),
+    )
     multi_source = emit_multi_registry_source((selected_profile,))
     assert (
         "std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept {"

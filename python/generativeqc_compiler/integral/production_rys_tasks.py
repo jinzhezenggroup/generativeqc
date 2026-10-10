@@ -77,18 +77,26 @@ def direct_rys_task_candidates(
 def preferred_rys_task_candidates(
     profile: ResolvedProductionProfile,
 ) -> tuple[KernelSelection, ...]:
-    """Prefer the bounded Rys-K worker wherever its compiled capability exists.
+    """Use shared capability defaults unless an exact tuned profile overrides them.
 
-    Profile selection and schedule_candidates() already enforce the target's
-    resource/representation constraints. This selection is a reusable algorithm
-    policy, not a claim of identical speedups on different GPUs. Generic portable
-    profiles keep their incumbent and explicit experiments stay available.
+    Overrides replace the shared classes, including an empty explicit opt-out.
+    They never transfer through compatibility. Missing override capability is a
+    manifest error; unsupported shared defaults retain the incumbent instead.
     """
     if profile.portable:
         return ()
     preferred = {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
+    override = profile.preferred_rys_task_fock_shell_classes if profile.tuned else None
+    candidates = direct_rys_task_candidates(profile)
+    if override is not None:
+        preferred = set(override)
+        available = {candidate.spec.name for candidate in candidates}
+        missing = preferred - available
+        if missing:
+            raise ValueError(
+                "qualified Rys-task Fock classes lack generated capability: "
+                + ", ".join(sorted(missing))
+            )
     return tuple(
-        candidate
-        for candidate in direct_rys_task_candidates(profile)
-        if candidate.spec.name in preferred
+        candidate for candidate in candidates if candidate.spec.name in preferred
     )

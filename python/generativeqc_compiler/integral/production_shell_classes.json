@@ -6,6 +6,17 @@
       "kind": "tuned",
       "cuda_toolkit": "12.9.1",
       "generator_abi": 1,
+      "preferred_rys_task_fock_shell_classes": [
+        "psps",
+        "ppps",
+        "dsss",
+        "dpss",
+        "dsps",
+        "ddss",
+        "dsds",
+        "dpps",
+        "dspp"
+      ],
       "target": {
         "compute_capability": "12.0",
         "warp_size": 32,

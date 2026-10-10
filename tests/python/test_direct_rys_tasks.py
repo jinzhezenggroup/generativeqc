@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,7 +21,10 @@ from generativeqc_compiler.integral.lowering.fock_tiled import (
     _packed_restricted_k_block,
 )
 from generativeqc_compiler.integral.production_emission import emit_production_shard
-from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_profile import (
+    ProfileMatch,
+    resolve_production_profile,
+)
 from generativeqc_compiler.integral.production_registry import (
     emit_multi_registry_source,
     emit_registry_source,
@@ -179,6 +184,7 @@ def test_compiled_target_reuses_rys_k_preference(architecture: str) -> None:
         PROFILE,
         target=cuda_target_info(architecture),
         profile=architecture,
+        preferred_rys_task_fock_shell_classes=None,
         selections=tuple(
             replace(item, architecture=architecture, profile=architecture)
             for item in PROFILE.selections
@@ -195,6 +201,150 @@ def test_compiled_target_reuses_rys_k_preference(architecture: str) -> None:
         "dpps",
         "dspp",
     }
+
+
+def test_qualified_rys_task_preference_is_not_tied_to_an_sm_name() -> None:
+    """An equivalently qualified target uses its own capability, not a CUDA label."""
+    other = replace(PROFILE, target=cuda_target_info("sm_90"), profile="measured_gpu")
+    assert {item.spec.name for item in preferred_rys_task_candidates(other)} == {
+        item.spec.name for item in preferred_rys_task_candidates(PROFILE)
+    }
+    assert {
+        item.spec.name
+        for item in preferred_rys_task_candidates(replace(other, tuned=False))
+    } == {item.spec.name for item in preferred_rys_task_candidates(PROFILE)}
+
+
+def test_qualified_rys_task_preference_must_be_compiled() -> None:
+    """A stale tuning entry fails closed, rather than silently dropping a class."""
+    invalid = replace(PROFILE, preferred_rys_task_fock_shell_classes=("dddd",))
+    with pytest.raises(ValueError, match="lack generated capability"):
+        preferred_rys_task_candidates(invalid)
+
+
+@pytest.mark.parametrize("invalid", (["psps", "psps"], ["psps", 10], "psps"))
+def test_qualified_rys_task_preference_manifest_validation(
+    invalid: object, tmp_path: Path
+) -> None:
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    profile = payload["architectures"]["sm_120"]
+    profile["preferred_rys_task_fock_shell_classes"] = invalid
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises((TypeError, ValueError), match="Rys-task Fock classes"):
+        resolve_production_profile(path, "sm_120")
+
+
+@pytest.mark.parametrize("architecture", ("sm_80", "sm_90", "sm_120"))
+@pytest.mark.parametrize("override", (None, [], ["psps"], ["ssss"]))
+def test_exact_profile_override_replaces_shared_default(
+    architecture: str, override: list[str] | None, tmp_path: Path
+) -> None:
+    """Absence inherits shared policy; explicit empty/subsets replace it."""
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    target = copy.deepcopy(payload["architectures"]["sm_120"])
+    target.pop("target", None)
+    key = "preferred_rys_task_fock_shell_classes"
+    if override is None:
+        target.pop(key)
+    else:
+        target[key] = override
+    payload["architectures"][architecture] = target
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    resolved = resolve_production_profile(path, architecture)
+    assert resolved.match == ProfileMatch.EXACT
+    assert resolved.tuned
+    assert resolved.preferred_rys_task_fock_shell_classes == (
+        None if override is None else tuple(override)
+    )
+    expected = (
+        set(PROFILE.preferred_rys_task_fock_shell_classes or ())
+        if override is None
+        else set(override)
+    )
+    assert {
+        item.spec.name for item in preferred_rys_task_candidates(resolved)
+    } == expected
+
+
+@pytest.mark.parametrize("override", ([], ["psps"], ["dddd"]))
+@pytest.mark.parametrize("requested_profile", ("auto", "sm_120"))
+def test_compatible_profile_drops_override_but_retains_shared_default(
+    override: list[str], requested_profile: str, tmp_path: Path
+) -> None:
+    """Compatibility transfers capability, not exact-target preferences."""
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    target = payload["architectures"]["sm_120"]
+    target["compatible_architectures"] = ["sm_90"]
+    target["preferred_rys_task_fock_shell_classes"] = override
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    resolved = resolve_production_profile(path, "sm_90", requested_profile)
+    assert resolved.match == ProfileMatch.COMPATIBLE
+    assert not resolved.tuned
+    assert resolved.preferred_rys_task_fock_shell_classes is None
+    assert {item.spec.name for item in preferred_rys_task_candidates(resolved)} == {
+        item.spec.name for item in preferred_rys_task_candidates(PROFILE)
+    }
+
+
+@pytest.mark.parametrize("override", ((), ("psps",), ("dddd",)))
+def test_non_tuned_profile_ignores_inapplicable_override(
+    override: tuple[str, ...],
+) -> None:
+    """Even a replaced profile cannot apply foreign override metadata."""
+    profile = replace(
+        PROFILE, tuned=False, preferred_rys_task_fock_shell_classes=override
+    )
+    assert {item.spec.name for item in preferred_rys_task_candidates(profile)} == {
+        item.spec.name for item in preferred_rys_task_candidates(PROFILE)
+    }
+
+
+def test_portable_profile_never_acquires_override_preference(tmp_path: Path) -> None:
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    payload["architectures"]["portable_cuda"][
+        "preferred_rys_task_fock_shell_classes"
+    ] = ["psps"]
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    portable = resolve_production_profile(path, "sm_120", "portable_cuda")
+    assert portable.preferred_rys_task_fock_shell_classes is None
+    assert preferred_rys_task_candidates(portable) == ()
+    assert (
+        preferred_rys_task_candidates(replace(PROFILE, match=ProfileMatch.PORTABLE))
+        == ()
+    )
+
+
+@pytest.mark.parametrize("unsupported", ("resources", "missing_class"))
+def test_shared_default_falls_back_but_explicit_override_rejects_unsupported(
+    unsupported: str,
+) -> None:
+    profile = replace(PROFILE, preferred_rys_task_fock_shell_classes=None)
+    if unsupported == "resources":
+        profile = replace(profile, target=replace(profile.target, warp_size=64))
+    else:
+        profile = replace(
+            profile,
+            selections=tuple(
+                item for item in profile.selections if item.spec.name != "psps"
+            ),
+        )
+    assert "psps" not in {
+        item.spec.name for item in preferred_rys_task_candidates(profile)
+    }
+    with pytest.raises(ValueError, match="lack generated capability: psps"):
+        preferred_rys_task_candidates(
+            replace(profile, preferred_rys_task_fock_shell_classes=("psps",))
+        )
+    assert (
+        preferred_rys_task_candidates(
+            replace(profile, preferred_rys_task_fock_shell_classes=())
+        )
+        == ()
+    )
 
 
 def test_larger_local_contraction_does_not_expand_old_block_candidates() -> None:
