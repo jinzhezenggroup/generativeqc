@@ -9,7 +9,7 @@ import statistics
 from pathlib import Path
 
 import pytest
-from generativeqc_compiler.common.evidence import block_error, canonical_hash
+from generativeqc_compiler.common.evidence import block_error
 
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_publication_record
@@ -40,9 +40,15 @@ def test_force_domain_publication_pins_dirty_source_and_scoped_abba() -> None:
     assert evidence["stages"]["production"]["status"] == "not-run"
     patch = gzip.decompress(files["measured-source.patch.gz"])
     assert hashlib.sha256(patch).hexdigest() == provenance["patch_sha256"]
-    assert (
-        canonical_hash(provenance["production_inputs"]) == evidence["hashes"]["source"]
-    )
+    assert provenance["production_inputs_manifest_hash"] == evidence["hashes"]["source"]
+    assert provenance["production_input_count"] == 1513
+    assert set(provenance["changed_production_inputs"]) == {
+        "cmake/GenerativeQCCuda.cmake",
+        "src/scf/cuda/direct_bounded_fallback.cu",
+        "src/scf/cuda/direct_force_class_domains.cu",
+        "src/scf/cuda/direct_force_class_domains.hpp",
+        "src/scf/cuda/direct_force_class_pages.cuh",
+    }
     for path in provenance["patch_paths"]:
         assert f"diff --git a/{path} b/{path}\n".encode() in patch
     for path, expected in evidence["reference_identities"].items():
