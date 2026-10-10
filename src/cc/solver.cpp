@@ -549,23 +549,31 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
           current = std::move(trial);
           return std::nullopt;
         }
-        auto trial_in = inputs(p, trial.data(), trial.data() + n1);
-        const auto trial_started = std::chrono::steady_clock::now();
-        const auto trial_out = run_iteration(trial_in);
-        result.diagnostic.iteration_seconds +=
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
-        ++result.diagnostic.iteration_graph_calls;
-        if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
+        auto history_out = out;
+        if (!options.diis_input_residual) {
+          auto trial_in = inputs(p, trial.data(), trial.data() + n1);
+          const auto trial_started = std::chrono::steady_clock::now();
+          history_out = run_iteration(trial_in);
+          result.diagnostic.iteration_seconds +=
+              std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started)
+                  .count();
+          ++result.diagnostic.iteration_graph_calls;
+          if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
+        }
         std::vector<double> error;
         error.reserve(elements);
-        error.insert(error.end(), trial_out.r1, trial_out.r1 + n1);
-        error.insert(error.end(), trial_out.r2, trial_out.r2 + n2);
+        // The fixed shifted diagonal and damping make R(T) a weighted
+        // fixed-point error for G(T). Mix outgoing maps, not incoming states.
+        error.insert(error.end(), history_out.r1, history_out.r1 + n1);
+        error.insert(error.end(), history_out.r2, history_out.r2 + n2);
         const auto diis_started = std::chrono::steady_clock::now();
         auto update = diis.update_with_status(std::move(trial), std::move(error));
         current = std::move(update.vector);
         result.diagnostic.diis_seconds +=
             std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started).count();
-        if (!update.modified) return trial_out;
+        // An incoming residual is never valid for the newly updated state,
+        // even when the first/singular history leaves its Jacobi map unchanged.
+        if (!options.diis_input_residual && !update.modified) return history_out;
         return std::nullopt;
       },
       [&]() {

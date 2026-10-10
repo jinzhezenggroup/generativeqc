@@ -1068,6 +1068,10 @@ RccsdNativeState run_rccsd_native_state(
   solver_options.df_auxiliary_batch_limit = df_auxiliary_batch_limit;
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;
+  // A changed nonlinear trajectory is qualified for CUDA DF energies only;
+  // force/Lambda owners and conventional/CPU callers retain trial-state DIIS.
+  solver_options.diis_input_residual =
+      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
   auto reference = reference_options(descriptor, phase_budget);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;

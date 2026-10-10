@@ -1110,6 +1110,17 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
                 .count();
         ++owner.diagnostic.update_calls;
         if (owner.history.capacity()) {
+          if (options.diis_input_residual) {
+            // advance changes pinned T only; incoming R remains live until
+            // the next graph. Store (G(T), R(T)) for weighted Anderson mixing.
+            const auto diis_started = std::chrono::steady_clock::now();
+            run_diis(owner, options, output);
+            owner.diagnostic.diis_seconds +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - diis_started)
+                    .count();
+            // Never carry R(T) as a residual of G(T) or its extrapolation.
+            return std::nullopt;
+          }
           const auto trial_diis_started = std::chrono::steady_clock::now();
           cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
           const auto trial = owner.iteration(options.residual_tolerance);

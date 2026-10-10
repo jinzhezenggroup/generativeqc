@@ -182,8 +182,13 @@ Its retained states are validation artifacts, not production inputs.
 `cc::Problem::naux`, `df_bov` and `df_bvv` select an explicit factorized
 virtual representation. `ovvv` and `vvvv` must be empty; retained smaller
 blocks must describe the same fitted Hamiltonian. The native CPU/CUDA solver
-reuses the conventional DIIS and physical convergence policy. It accumulates
-all Q slices for every current/trial/replay amplitude state. The compiler derives
+retains the conventional physical convergence gates and fresh expanded replay.
+CUDA DF energy calls use the
+[incoming-residual mixing policy](rccsd_gpu.md#incoming-residual-mixing-for-cuda-df-energies),
+while supplied-problem defaults and force/Lambda/response calls keep trial-state
+DIIS. All Q slices are accumulated for each actually evaluated amplitude state;
+incoming-residual mixing does not evaluate a separate outgoing Jacobi trial.
+The compiler derives
 the primary schedule in `cc/df_hoist.py` from the shared RCCSD inventory: prepare
 amplitude-only tau once, accumulate the virtual contributions to Lvv, Wvoov,
 Wvovo and Xv, then contract the complete sums with T2. The virtual ladder remains

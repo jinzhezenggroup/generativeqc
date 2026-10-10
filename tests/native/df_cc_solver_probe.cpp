@@ -5,11 +5,12 @@
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "cc/solver.hpp"
 
-int main() {
+int main(int argc, char* argv[]) {
   try {
     std::array<std::uint64_t, 7> header{};
     std::cin.read(reinterpret_cast<char*>(header.data()), sizeof(header));
@@ -18,6 +19,8 @@ int main() {
     p.nvir = header[1];
     p.naux = header[2];
     generativeqc::cc::SolverOptions options;
+    // Probe-only opt-in leaves the existing binary protocol and defaults intact.
+    options.diis_input_residual = argc > 1 && std::string_view(argv[1]) == "--input-residual";
     options.max_bytes = header[3];
     options.max_iterations = header[4];
     options.diis_size = header[5];
