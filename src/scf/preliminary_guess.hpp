@@ -1,6 +1,8 @@
 #ifndef GENERATIVEQC_SCF_PRELIMINARY_GUESS_HPP
 #define GENERATIVEQC_SCF_PRELIMINARY_GUESS_HPP
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <optional>
 
