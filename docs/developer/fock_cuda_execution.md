@@ -20,6 +20,17 @@ are prepared on the owning stream; replay contracts the total density into
 Hermite coefficients and projects the Coulomb potential back to public AOs.
 Normal generated/canonical K, XC, SCF and finalization owners are unchanged.
 
+Uniform primitive pairs with both pair-angular totals at most two use a
+compiler-owned reciprocal source tile. One canonical `fill_coulomb` evaluation
+feeds both independently admitted density consumers; higher angular classes
+and the partially screened source retain their original routes. The tile has
+64 source lanes and strided publication covers every Hermite component,
+including the 80 output slots of an angular-two tile. Shared reductions bound
+publication to one FP64 atomic per tile/output component rather than one per
+primitive product. The persistent worker inventory is capped at 4096 blocks
+and borrows the existing stream-owned source cursor without another retained
+queue or tensor.
+
 The public-AO Schwarz mask remains authoritative. Uniformly accepted shell
 quartets use the Hermite contraction, while partially screened quartets retain
 per-orientation AO eligibility in bounded source pages. Nonsymmetric and UKS
@@ -40,6 +51,26 @@ that every request uses that route.
 no enable flag is needed for the default. `GENERATIVEQC_MD_J_COUNTS=1` reports
 native execution and geometry-candidate censuses when the owner is released.
 Candidate counts are upper bounds on probes, not executed primitive products.
+
+`GENERATIVEQC_MD_J_RECIPROCAL=0` selects the incumbent oriented contraction at
+plan creation; unset/1 selects reciprocal tiles. Other values reject an active
+MD request. The selector is frozen with the resident owner, not polled during
+replay. The same optional-storage admission and normal-J fallback still apply.
+
+`GENERATIVEQC_MD_J_WORK_COUNTS=1` requests a per-replay diagnostic census at
+plan creation. Its 1200-byte owner-local buffer is charged within the same
+128-MiB allowance. It reports actual uniform radial evaluations, independent
+density directions and Hermite summands, plus tested/admitted residual shell
+tasks and contracted primitive products. Counters aggregate locally rather
+than adding per-product global atomics. The diagnostic download/fence is
+intrusive and must not be included in clean performance samples. Unset/0 adds
+no counter storage or diagnostic fence and uses uninstrumented kernels.
+
+The public host `FockPlan.evaluate` uses a retained compatibility evaluator;
+its preparation schedule is not proof that resident MD kernels ran. Raw MD
+qualification uses the test-only resident adapter in
+`tests/native/md_j_resident_probe.cpp`, the same prepared device value seam as
+native KS, with an independent libcint oracle and actual execution censuses.
 
 `benchmarks/md_j_normal_cold.py` requires three alternating pairs of fresh
 processes, identical native library/input/device identities, actual native

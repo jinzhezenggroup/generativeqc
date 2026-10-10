@@ -84,6 +84,8 @@ struct MdJHost {
   std::vector<std::uint32_t> ordered;
   std::array<std::size_t, 6> class_offsets{};
   std::size_t transforms{}, hermites{}, bytes{};
+  bool work_counts{};
+  bool reciprocal{};
 
   bool prepare(const HostBatch& host, std::size_t available) {
     const char* disabled = std::getenv("GENERATIVEQC_DISABLE_MD_J");
@@ -93,11 +95,17 @@ struct MdJHost {
             [](unsigned angular) { return angular > 2; }))
       return false;
     available = std::min<std::size_t>(available, kMdJResidentCap);
+    const char* counts = std::getenv("GENERATIVEQC_MD_J_WORK_COUNTS");
+    work_counts = counts && std::strcmp(counts, "1") == 0;
+    const char* reuse = std::getenv("GENERATIVEQC_MD_J_RECIPROCAL");
+    if (reuse && std::strcmp(reuse, "0") != 0 && std::strcmp(reuse, "1") != 0)
+      throw std::invalid_argument("GENERATIVEQC_MD_J_RECIPROCAL must be 0 or 1");
+    reciprocal = !reuse || std::strcmp(reuse, "1") == 0;
     const auto total_pairs = host.shell_pair_first.size();
     if (total_pairs > std::numeric_limits<std::uint32_t>::max() ||
         host.shell_pair_primitive_offsets.back() > std::numeric_limits<std::int32_t>::max())
       return false;
-    bytes = kMdSourceFixedBytes +
+    bytes = kMdSourceFixedBytes + (work_counts ? sizeof(MdJWorkCounts) : 0) +
             direct_jk_product(total_pairs,
                               sizeof(MdJPair) + 3 * sizeof(double) + sizeof(std::uint32_t));
     bytes += direct_jk_product(host.shell_pair_primitive_offsets.back(),
@@ -877,6 +885,9 @@ generativeqc_status create_cuda_direct_jk_plan(
             md.active_count = reinterpret_cast<std::uint32_t*>(scratch(sizeof(std::uint32_t)));
             md.source_cursor =
                 reinterpret_cast<unsigned long long*>(scratch(sizeof(unsigned long long)));
+            if (md_host.work_counts)
+              md.work_counts = reinterpret_cast<MdJWorkCounts*>(scratch(sizeof(MdJWorkCounts)));
+            md.reciprocal = md_host.reciprocal;
             md.transforms = scratch(md_host.transforms * sizeof(double));
             md.density = scratch(md_host.hermites * sizeof(double));
             md.potential = scratch(md_host.hermites * sizeof(double));
@@ -1261,6 +1272,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     // K; a range-K fallback must not pull a qualified full-range J into it.
     if (md_coulomb) {
       ++plan->md_j_calls;
+      if (plan->md_j.work_counts)
+        direct_jk_check(cudaMemsetAsync(plan->md_j.work_counts, 0, sizeof(MdJWorkCounts),
+                                       plan->stream));
       direct_jk_check(cudaMemsetAsync(coulomb, 0, bytes, plan->stream));
       launch_md_j_density_bounds(plan->stream, plan->batch, plan->md_j, 0,
                                  plan->diagnostic.batch_size, unrestricted, density, beta);
@@ -1272,6 +1286,22 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
       launch_md_j(plan->stream, plan->batch, plan->md_j, 0, plan->diagnostic.batch_size,
                   unrestricted, plan->screening_tolerance, density, beta, coulomb);
       direct_jk_check(cudaGetLastError());
+      if (plan->md_j.work_counts) {
+        // This opt-in fence/download is explicitly diagnostic, not clean timing.
+        MdJWorkCounts counts;
+        direct_jk_check(cudaMemcpyAsync(&counts, plan->md_j.work_counts, sizeof(counts),
+                                        cudaMemcpyDeviceToHost, plan->stream));
+        direct_jk_check(cudaStreamSynchronize(plan->stream));
+        for (unsigned angular = 0; angular < 25; ++angular)
+          std::fprintf(stderr,
+                       "MD_J_WORK fock=%zu bra=%u ket=%u uniform_roots=%llu "
+                       "uniform_directions=%llu uniform_summands=%llu "
+                       "residual_candidates=%llu residual_tasks=%llu residual_roots=%llu\n",
+                       plan->md_j_calls, angular / 5, angular % 5,
+                       counts.uniform_roots[angular], counts.uniform_directions[angular],
+                       counts.uniform_summands[angular], counts.residual_candidates[angular],
+                       counts.residual_tasks[angular], counts.residual_roots[angular]);
+      }
     }
     if (dispatch.generated_coulomb) {
       if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
