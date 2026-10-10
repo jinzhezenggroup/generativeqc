@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import shutil
 from typing import TYPE_CHECKING
 
@@ -156,29 +157,63 @@ def test_fixture_copies_registered_sources_outside_the_audited_scope(
 
 
 @pytest.mark.parametrize(
-    "before,after",
+    "relative,before,after",
     [
         (
-            'profile.target.architecture != "sm_120"',
-            'profile.target.architecture != "sm_90"',
+            "production_rys_tasks.py",
+            "if not profile.tuned:",
+            "if False:",
         ),
-        ('profile.profile != "sm_120"', 'profile.profile != "portable_cuda"'),
         (
-            '"dpps", "dspp"}',
-            '"dpps", "dspp", "ssss"}',
+            "production_profile.py",
+            "match == ProfileMatch.EXACT",
+            "match != ProfileMatch.PORTABLE",
+        ),
+        (
+            "production_profile.py",
+            "return tuple(raw) if tuned else ()",
+            "return tuple(raw)",
         ),
     ],
 )
 def test_rys_task_default_admission_requires_renewed_qualification(
-    tmp_path: Path, before: str, after: str
+    tmp_path: Path, relative: str, before: str, after: str
 ) -> None:
-    """Preference must not expand beyond the independently measured domain."""
+    """Preference must not transfer to an unqualified compatible profile."""
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
-    source = tmp_path / "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    source = tmp_path / "python/generativeqc_compiler/integral" / relative
     original = source.read_text()
     assert before in original
     source.write_text(original.replace(before, after))
+    assert any(
+        "Rys-task default target/class admission drifted" in error
+        for error in validate_inventory(payload, root=tmp_path)
+    )
+
+
+@pytest.mark.parametrize("mutation", ("class", "target", "duplicate", "invalid"))
+def test_rys_task_manifest_preferences_require_renewed_qualification(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Moving admission to manifest data preserves the measured-domain ratchet."""
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = (
+        tmp_path / "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
+    manifest = json.loads(source.read_text())
+    profiles = manifest["architectures"]
+    classes = profiles["sm_120"]["preferred_rys_task_fock_shell_classes"]
+    if mutation == "class":
+        classes.append("ssss")
+    elif mutation == "target":
+        profiles["sm_90"] = copy.deepcopy(profiles["sm_120"])
+    elif mutation == "duplicate":
+        classes.append(classes[0])
+    else:
+        classes.append(None)
+    source.write_text(json.dumps(manifest))
     assert any(
         "Rys-task default target/class admission drifted" in error
         for error in validate_inventory(payload, root=tmp_path)

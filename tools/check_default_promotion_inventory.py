@@ -244,13 +244,52 @@ def _discover_rys_task_default(root: Path) -> dict[str, str]:
         "python/generativeqc_compiler/integral/production_rys_tasks.py"
     )
     preference = _read(root / preference_relative)
-    preferred = re.search(r"preferred\s*=\s*(\{[^}]+\})", preference)
+    manifest_relative = Path(
+        "python/generativeqc_compiler/integral/production_shell_classes.json"
+    )
+    profile_relative = Path(
+        "python/generativeqc_compiler/integral/production_profile.py"
+    )
+    manifest = json.loads(_read(root / manifest_relative))
+    profiles = manifest.get("architectures")
+    qualified: dict[str, set[str]] = {}
+    if not isinstance(profiles, dict):
+        raise TypeError("Rys-task default target/class admission drifted")
+    for name, profile in profiles.items():
+        if not isinstance(profile, dict):
+            raise TypeError("Rys-task default target/class admission drifted")
+        classes = profile.get("preferred_rys_task_fock_shell_classes", [])
+        if (
+            not isinstance(classes, list)
+            or any(not isinstance(item, str) or not item for item in classes)
+            or len(classes) != len(set(classes))
+        ):
+            raise ValueError("Rys-task default target/class admission drifted")
+        if classes:
+            qualified[name] = set(classes)
+    resolution = _read(root / profile_relative)
     if (
-        preferred is None
-        or ast.literal_eval(preferred.group(1))
-        != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
-        or 'profile.target.architecture != "sm_120" or profile.profile != "sm_120"'
+        qualified
+        != {
+            "sm_120": {
+                "psps",
+                "ppps",
+                "dsss",
+                "dpss",
+                "dsps",
+                "ddss",
+                "dsds",
+                "dpps",
+                "dspp",
+            }
+        }
+        or "if not profile.tuned:" not in preference
+        or "preferred = frozenset(profile.preferred_rys_task_fock_shell_classes)"
         not in preference
+        or "missing = preferred - available" not in preference
+        or "match == ProfileMatch.EXACT" not in resolution
+        or '_profile_kind(profile_name, profile_payload) == "tuned"' not in resolution
+        or "return tuple(raw) if tuned else ()" not in resolution
     ):
         raise ValueError("Rys-task default target/class admission drifted")
     lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
@@ -580,7 +619,7 @@ def validate_inventory(
 
     try:
         discovered = discover_controls(root)
-    except (SyntaxError, ValueError) as exc:
+    except (SyntaxError, TypeError, ValueError) as exc:
         return errors + [f"control discovery failed: {exc}"]
 
     missing = sorted(set(discovered) - set(registered))

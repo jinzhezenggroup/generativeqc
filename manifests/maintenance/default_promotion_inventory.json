@@ -29,6 +29,8 @@
       "src/scf/cuda/reference_eri_policy.hpp",
       "src/scf/cuda/rhf_resident_values.cpp",
       "python/generativeqc_compiler/integral/production_rys_tasks.py",
+      "python/generativeqc_compiler/integral/production_profile.py",
+      "python/generativeqc_compiler/integral/production_shell_classes.json",
       "python/generativeqc_compiler/integral/production_registry.py",
       "src/scf/fock_build.hpp",
       "src/scf/types.hpp"
@@ -966,6 +968,8 @@
       "sources": [
         "src/scf/cuda/direct_fock_lowering.hpp",
         "python/generativeqc_compiler/integral/production_rys_tasks.py",
+        "python/generativeqc_compiler/integral/production_profile.py",
+        "python/generativeqc_compiler/integral/production_shell_classes.json",
         "python/generativeqc_compiler/integral/production_registry.py"
       ],
       "rationale": "Only the qualified sm_120 profile prefers psps, ppps, dsss, dpss, dsps, ddss, dsds, dpps and dspp quartet-parallel Rys-K; other classes and profiles retain incumbent recurrence with the independently selected work/fill schedule. Three-root classes use one-word 64-bit component masks and bounded local contraction, with generic scatter beyond its private footprint. Construction freezes selection and coverage filters cannot broaden preference. Lowering incumbent disables task preference; also select task fill to roll back both promotions. A separately identified joint campaign qualifies task Work companions with independent matrices/sanitizers, complete cold E+F mean/median gains against both standalone policies and retained actual Fock counts. Historical separate promotions and rejected cohorts remain independently labeled rather than relabeled as joint qualification.",
