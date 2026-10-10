@@ -73,6 +73,7 @@
 #include "scf/cuda/resources.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/cuda/rhf_policy.hpp"
+#include "scf/cuda/rhf_resident_values.hpp"
 #include "scf/cuda/runtime_support.hpp"
 #include "scf/cuda/scf_convergence_kernels.hpp"
 #include "scf/cuda/scf_density_kernels.hpp"
@@ -448,6 +449,7 @@ void fill_global_failure(std::vector<RhfBucketItem>& outputs, generativeqc_statu
 namespace {
 
 std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const HostBatch& host,
+                                                  const std::vector<core::System>& systems,
                                                   const ScfOptions& options, int device_id,
                                                   bool unrestricted, bool shell_class_profiling,
                                                   bool inactive_eigensolver_profiling) {
@@ -1987,6 +1989,35 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       persistent_eri = true;
     }
   }
+  // Geometry-bound optional values are an execution lease, never bucket state.
+  // Their local graphs are recaptured even on a reused bucket; the lease drains
+  // and retires those graphs before freeing source values on every exit.
+  std::unique_ptr<RhfResidentValues> resident_values;
+  const auto resident_value_selection =
+      reference_resident_values_selection(std::getenv("GENERATIVEQC_RHF_RESIDENT_VALUES"));
+  const bool resident_value_requested =
+      resident_value_selection != ReferenceResidentValuesSelection::disabled;
+  if (resident_value_requested && options.export_physical_reference && quartet_direct &&
+      !mixed_precision_fock && !incremental_direct_jk && !separate_fock_jk &&
+      !shell_class_profiling && !bounded_fock_class_timing && !direct_tile_validation &&
+      !bounded_direct_fock_only_diagnostic && !bounded_direct_count_diagnostic &&
+      !bounded_direct_aot_only_diagnostic) {
+    resident_values = std::make_unique<RhfResidentValues>(resources.stream_);
+    const auto resident_status = resident_values->prepare(
+        device_id, systems, options.max_iterations, direct_nbf, resources.reference_peak_bytes_,
+        options.reference_memory_budget_bytes, first_setup,
+        host_uncovered_fock_shell_class_mask != 0);
+    if (resident_status != GENERATIVEQC_STATUS_SUCCESS) {
+      fill_global_failure(outputs, resident_status);
+      return outputs;
+    }
+  }
+  // Automatic refusal must retain reusable ordinary graphs, not recapture a
+  // phase graph on every warm call. Active leases alone borrow local graphs.
+  const bool phase_resident_active = resident_values && resident_values->active();
+  auto& iteration_graphs = phase_resident_active ? resident_values->graphs : plan.graphs;
+  const auto reference_phase_peak = posthf::checked_add(
+      resources.reference_peak_bytes_, resident_values ? resident_values->capacity_bytes() : 0);
   const int lwork = plan.lwork;
 
   constexpr unsigned threads = kCaptureSafeKernelThreads;
@@ -2601,6 +2632,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // of that same operator; retain their fused standard-HF kernel ownership.
   const auto launch_fock_builder = [&](const double* density_input, bool allow_mixed_precision,
                                        bool track_incremental_work) -> cudaError_t {
+    if (resident_values && resident_values->active()) {
+      const auto resident_status = resident_values->enqueue(density_input, hcore, fock);
+      if (resident_status == GENERATIVEQC_STATUS_SUCCESS) return cudaSuccess;
+      return resident_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY ? cudaErrorMemoryAllocation
+                                                                  : cudaErrorUnknown;
+    }
     const double* quartet_density = transformed_direct ? direct_density : density_input;
     double* quartet_fock = transformed_direct ? direct_fock : fock;
     if (resources.reference_fock_correction_) {
@@ -3326,10 +3363,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     return cuda_status(cudaPeekAtLastError());
   };
 
-  if (first_setup) {
+  if (first_setup || phase_resident_active || !iteration_graphs.has_iteration()) {
     // The graph owner handles capture/instantiate/upload mechanics; this driver
     // supplies only the exact numerical launch order for each captured stage.
-    const auto iteration_capture = plan.graphs.capture_iteration(
+    const auto iteration_capture = iteration_graphs.capture_iteration(
         resources.device_id_, resources.stream_, !split_provider_iteration,
         [&]() -> generativeqc_status {
           status = launch_iteration_pre_eigensolver(true);
@@ -3352,7 +3389,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       return outputs;
     }
     if (split_provider_iteration) {
-      const auto post_capture = plan.graphs.capture_post_eigensolver(
+      const auto post_capture = iteration_graphs.capture_post_eigensolver(
           resources.device_id_, resources.stream_, [&]() -> generativeqc_status {
             status = launch_iteration_post_eigensolver(false, true);
             return status;
@@ -3395,11 +3432,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   if (cuda_error == cudaSuccess && split_provider_iteration) {
     std::vector<std::uint8_t> host_active(batch_size, 1U);
     ::generativeqc::solver::run_bounded_iterations(options.max_iterations, [&](unsigned) {
-      cuda_error = plan.graphs.launch_iteration(resources.stream_);
+      cuda_error = iteration_graphs.launch_iteration(resources.stream_);
       if (cuda_error != cudaSuccess) return false;
       status = launch_iteration_eigensolver(ordinary_eigensolver_family);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return false;
-      cuda_error = plan.graphs.launch_post_eigensolver(resources.stream_);
+      cuda_error = iteration_graphs.launch_post_eigensolver(resources.stream_);
       if (cuda_error == cudaSuccess) {
         cuda_error = runtime::residency_memcpy_async(
             residency_execution, SourceRole::iteration, SourceSite::hf_active,
@@ -3420,7 +3457,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       return outputs;
     }
   } else if (cuda_error == cudaSuccess) {
-    cuda_error = plan.graphs.launch_iteration(resources.stream_);
+    cuda_error = iteration_graphs.launch_iteration(resources.stream_);
   }
   if (cuda_error == cudaSuccess && direct_tile_validation &&
       resources.direct_tile_validation_ != nullptr) {
@@ -4085,8 +4122,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   if (options.export_physical_reference) {
     const auto download_reference = [&]() {
+      if (resident_values) {
+        const auto resident_status = resident_values->audit();
+        if (resident_status != GENERATIVEQC_STATUS_SUCCESS) return resident_status;
+      }
       return reference_detail::download(
-          resources.stream_, nbf, host.occupied[0], resources.reference_peak_bytes_,
+          resources.stream_, nbf, host.occupied[0], reference_phase_peak,
           {overlap, hcore, fock, coefficients, density}, eigenvalues,
           {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
     };
@@ -4193,11 +4234,24 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           "resident_eri_contractions",
           persistent_eri && geometry_changed ? pair_count * (pair_count + 1) / 2 : 0);
       runtime::df_progress::Scope::number("reference_peak_bytes", resources.reference_peak_bytes_);
+      runtime::df_progress::Scope::number("reference_phase_peak_bytes", reference_phase_peak);
+      if (resident_values)
+        resident_values->observe_completed(outputs[0].scf.iterations +
+                                           post_scf_physical_fock_builds);
+      else {
+        runtime::df_progress::Scope::label("resident_value_admission", "disabled or ineligible");
+        runtime::df_progress::Scope::number("phase_resident_value_bytes", 0);
+        runtime::df_progress::Scope::number("phase_resident_values_built", 0);
+        runtime::df_progress::Scope::number("phase_resident_fock_actions", 0);
+        runtime::df_progress::Scope::number("phase_additional_numeric_capacity_bytes", 0);
+      }
       runtime::df_progress::Scope::number("quartet_direct", quartet_direct);
       runtime::df_progress::Scope::number("bounded_quartet_streaming", bounded_direct_streaming);
       runtime::df_progress::Scope::number("shell_pair_count", total_shell_pairs);
-      runtime::df_progress::Scope::number("shell_quartet_candidates_per_fock",
-                                          quartet_direct ? total_shell_quartets : 0);
+      runtime::df_progress::Scope::number(
+          "shell_quartet_candidates_per_fock",
+          quartet_direct && !(resident_values && resident_values->active()) ? total_shell_quartets
+                                                                            : 0);
     }
     return outputs;
   }
@@ -5360,14 +5414,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
 
 }  // namespace
 
-std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan,
-                                                         const cuda_execution::HostBatch& host,
-                                                         const ScfOptions& options, int device_id,
-                                                         bool unrestricted,
-                                                         bool shell_class_profiling,
-                                                         bool inactive_eigensolver_profiling) {
-  return execute_hf_cuda_bucket(plan, host, options, device_id, unrestricted, shell_class_profiling,
-                                inactive_eigensolver_profiling);
+std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(
+    CudaRhfBucketPlan& plan, const cuda_execution::HostBatch& host,
+    const std::vector<core::System>& systems, const ScfOptions& options, int device_id,
+    bool unrestricted, bool shell_class_profiling, bool inactive_eigensolver_profiling) {
+  return execute_hf_cuda_bucket(plan, host, systems, options, device_id, unrestricted,
+                                shell_class_profiling, inactive_eigensolver_profiling);
 }
 
 generativeqc_status contract_cuda_weighted_eri_primitives(

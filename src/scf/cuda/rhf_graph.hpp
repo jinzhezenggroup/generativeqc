@@ -35,6 +35,13 @@ class RhfIterationGraphs {
   RhfIterationGraphs& operator=(const RhfIterationGraphs&) = delete;
   ~RhfIterationGraphs();
 
+  /** Retire captured borrowers after their stream has been drained. */
+  void reset() noexcept;
+  /** A phase-local execution may initialize the bucket without a retained graph. */
+  bool has_iteration() const noexcept { return iteration_graph_exec_ != nullptr; }
+  /** Read-only lifetime identity for verifying replay without exposing handles. */
+  std::uint64_t iteration_generation() const noexcept { return iteration_generation_; }
+
   RhfGraphCaptureResult capture_iteration(int device_id, cudaStream_t stream, bool device_launch,
                                           const std::function<generativeqc_status()>& body);
   RhfGraphCaptureResult capture_post_eigensolver(int device_id, cudaStream_t stream,

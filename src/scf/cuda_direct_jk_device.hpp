@@ -19,6 +19,16 @@ cudaStream_t cuda_direct_jk_stream(const CudaDirectJkPlan* plan);
 /** Device ordinal in the current process's visibility namespace; null returns -1. */
 int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept;
 
+/** Prepare the ordinary exact provider on a non-null caller-owned stream.
+ * Preparation completes its uploads before returning. Destruction drains but
+ * never destroys this stream. The caller must retire captured borrowers before
+ * destroying the plan, and keep the stream alive until destruction completes.
+ */
+generativeqc_status create_cuda_direct_jk_plan_on_stream(
+    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
+    double screening_tolerance, std::size_t device_budget_bytes, cudaStream_t stream,
+    CudaDirectJkPlan** output, CudaDirectJkDiagnostic& diagnostic, std::string& detail);
+
 /** Inventory for an optional unscreened full-range canonical source lease.
  * Zero denotes an unavailable domain. This query neither evaluates integrals
  * nor initializes CUDA; the immutable Direct plan remains its scientific owner.

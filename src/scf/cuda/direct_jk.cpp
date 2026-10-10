@@ -37,7 +37,7 @@ CudaDirectJkPlan::~CudaDirectJkPlan() {
   generated_exchange.reset();
   generated_coulomb.reset();  // Release borrowers before their stream/metadata.
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
-  if (stream) (void)cudaStreamDestroy(stream);
+  if (stream && owns_stream) (void)cudaStreamDestroy(stream);
 }
 
 namespace {
@@ -378,10 +378,10 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t batch, std::size_t nao,
   return bytes;
 }
 
-generativeqc_status create_cuda_direct_jk_plan(
+static generativeqc_status create_cuda_direct_jk_plan_impl(
     int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
     double screening_tolerance, std::size_t budget, CudaDirectJkPlan** output,
-    CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail, cudaStream_t caller_stream) {
   if (output) *output = nullptr;
   diagnostic = {};
   return direct_jk_guard(nullptr, detail, [&] {
@@ -482,7 +482,12 @@ generativeqc_status create_cuda_direct_jk_plan(
     plan->batch.direct_nbf = static_cast<std::int32_t>(host.direct_nbf);
     plan->batch.total_atoms = static_cast<std::int64_t>(host.atomic_numbers.size());
     plan->batch.total_shells = static_cast<std::int64_t>(host.shell_atoms.size());
-    direct_jk_check(cudaStreamCreateWithFlags(&plan->stream, cudaStreamNonBlocking));
+    if (caller_stream) {
+      plan->stream = caller_stream;
+      plan->owns_stream = false;
+    } else {
+      direct_jk_check(cudaStreamCreateWithFlags(&plan->stream, cudaStreamNonBlocking));
+    }
     auto upload = [&](const void* values, std::size_t bytes) -> void* {
       void* pointer{};
       const auto status = source_upload(*plan, values, bytes, &pointer, detail);
@@ -964,6 +969,28 @@ generativeqc_status create_cuda_direct_jk_plan(
     diagnostic = info;
     *output = plan.release();
   });
+}
+
+generativeqc_status create_cuda_direct_jk_plan(
+    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
+    double screening_tolerance, std::size_t budget, CudaDirectJkPlan** output,
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+  return create_cuda_direct_jk_plan_impl(device_id, systems, derivative_order, screening_tolerance,
+                                         budget, output, diagnostic, detail, nullptr);
+}
+
+generativeqc_status create_cuda_direct_jk_plan_on_stream(
+    int device_id, const std::vector<core::System>& systems, unsigned derivative_order,
+    double screening_tolerance, std::size_t budget, cudaStream_t stream, CudaDirectJkPlan** output,
+    CudaDirectJkDiagnostic& diagnostic, std::string& detail) {
+  if (!stream) {
+    if (output) *output = nullptr;
+    diagnostic = {};
+    detail = "borrowed Direct J/K stream must be non-null";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  return create_cuda_direct_jk_plan_impl(device_id, systems, derivative_order, screening_tolerance,
+                                         budget, output, diagnostic, detail, stream);
 }
 
 void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept { delete plan; }
@@ -1613,6 +1640,8 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
     direct_jk_check(allocation);
     direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
     std::size_t value_offset = 0;
+    plan->diagnostic.resident_values_submitted = 0;
+    plan->diagnostic.resident_values_completed = 0;
     for (std::size_t item = 0; item < plan->diagnostic.batch_size; ++item) {
       const auto& offsets = plan->canonical_pair_offsets[item];
       for (unsigned first = 0; first < 7U; ++first)
@@ -1629,6 +1658,7 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
           value_offset +=
               canonical_bucket_values(offsets[first + 1U] - offsets[first],
                                       offsets[second + 1U] - offsets[second], first == second);
+          plan->diagnostic.resident_values_submitted = value_offset;
         }
     }
     direct_jk_require(value_offset == required / sizeof(double), "resident Direct inventory drift");
@@ -1640,6 +1670,7 @@ generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* pla
     direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
                                     cudaMemcpyDeviceToHost, plan->stream));
     fence.complete();
+    plan->diagnostic.resident_values_completed = value_offset;
     if (failure)
       throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                             "nonfinite resident Direct source values"};
