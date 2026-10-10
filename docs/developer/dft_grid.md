@@ -436,7 +436,7 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:10:00 \
 
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00 \
   env PYTHONPATH=.:python GENERATIVEQC_LIBRARY=$PWD/build/cpu/libgenerativeqc.so \
-  OMP_NUM_THREADS=1 python tools/validate_grid.py --cuda --output /tmp/grid-evidence
+  OMP_NUM_THREADS=1 python tools/validate_grid.py --cuda --cuda-target sm_120 --output /tmp/grid-evidence
 ```
 
 Here the CPU library supplies normalization; the explicitly compiled artifact

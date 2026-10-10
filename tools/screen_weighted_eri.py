@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from generativeqc_compiler.common.cuda_target import normalize_cuda_architecture
 from generativeqc_compiler.common.evidence import file_hash
 from generativeqc_compiler.integral.shell_class import (
     build_weighted_shell_contraction_kernel,
@@ -38,11 +39,16 @@ from generativeqc_compiler.integral.weighted_eri_cuda import emit_psss_weighted_
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--nvcc", type=Path, required=True)
+    parser.add_argument(
+        "--cuda-target", required=True, help="explicit CUDA target (e.g. sm_90)"
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    target = normalize_cuda_architecture(args.cuda_target)
     args.output.mkdir(parents=True, exist_ok=True)
     report = {
         "nvcc": subprocess.check_output([str(args.nvcc), "--version"], text=True),
+        "cuda_target": target,
         "candidates": [],
     }
     integral = build_weighted_eri_ir((1, 0, 0, 0))
@@ -73,7 +79,7 @@ extern "C" __global__ void weighted_screen(const Geometry* geometry,
             str(args.nvcc),
             "-O3",
             "-std=c++20",
-            "-arch=sm_120",
+            f"-arch={target}",
             "-Xptxas=-v",
             "-c",
             str(source),
