@@ -1,8 +1,10 @@
 # Independent task-parallel Direct Rys-K
 
-The qualified `sm_120` profile defaults to value-only `_rys_task` AOT variants
-for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`, `dpps` and `dspp`
-Direct exchange classes. Other classes and profiles retain the incumbent
+The currently qualified `sm_120` profile records value-only `_rys_task` AOT
+preferences for `psps`, `ppps`, `dsss`, `dpss`, `dsps`, `ddss`, `dsds`,
+`dpps` and `dspp` Direct exchange classes in the **production manifest**.
+The compiler does not use a hard-coded architecture-name allowlist: each exact,
+tuned profile may declare its independently measured preferred classes. Other classes and profiles retain the incumbent
 recurrence with the independently selected queue schedule. Selection freezes at provider
 preparation; it does not reselect the old component-lane `rys` experiment,
 select Coulomb J, or select analytic derivatives. Set
@@ -15,9 +17,15 @@ also set `GENERATIVEQC_DIRECT_K_TASK_SCHEDULE=fill` to roll back both promotions
 inventory with `rys_task.py`'s bounded value capability. Eligibility requires
 one through three Rys roots, s/p/d shells, at most a p shell on the fourth center,
 and at most 64 Cartesian components. Capability and measured preference are
-separate: `preferred_rys_task_candidates` records the nine qualified classes
-only for the `sm_120` profile. Portable profiles and other architectures retain
-their incumbent until independently qualified.
+separate: `preferred_rys_task_candidates` reads the exact tuned profile's
+`preferred_rys_task_fock_shell_classes` manifest metadata and checks each
+entry against the candidate inventory. The `sm_120` profile currently carries
+nine independently qualified classes; additional architectures can publish their
+own preferences **without editing compiler selection code**. Portable or
+compatible-but-not-exact profiles do not inherit performance preferences. Class
+capability alone never promotes an untested target: first use the independent
+matrix/sanitizer checks and paired complete PBE0 E+F benchmarks, then update
+that target's measured profile.
 
 `lowering/fock_rys_task.py` changes execution ownership: each lane in a
 128-thread packed CTA owns a complete admitted quartet. Its four 32-lane
