@@ -55,6 +55,7 @@ from generativeqc_compiler.tensor.iteration_reuse import (
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_arena import (
     SymbolicArenaPlan,
+    analyze_native_copy_roundtrips,
     plan_symbolic_arena,
 )
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
@@ -1901,6 +1902,7 @@ def _cuda_program(
     prepared_contractions: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
+    elide_native_copy_roundtrips: bool = False,
     parallel_scalar_reductions: bool = False,
     reuse_plan: IterationReusePlan | None = None,
     reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
@@ -1911,6 +1913,23 @@ def _cuda_program(
     retained = () if reuse_plan is None else reuse_plan.invariant_nodes
     retained_ids = {id(node) for node in retained}
     arena_plan = _arena_plan(program, retained_nodes=retained)
+    if elide_native_copy_roundtrips and (
+        reuse_plan is not None or not emit_kernels or kernel_prefix is not None
+    ):
+        raise ValueError(
+            "native copy roundtrips require the complete original kernel schedule"
+        )
+    elided_nodes = (
+        frozenset(
+            analyze_native_copy_roundtrips(
+                program,
+                dimension_symbol=_dim,
+                execution_nodes=_execution_nodes(program),
+            ).elided_nodes
+        )
+        if elide_native_copy_roundtrips
+        else frozenset()
+    )
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
     kernel_name = prefix if kernel_prefix is None else kernel_prefix
@@ -1992,6 +2011,8 @@ def _cuda_program(
         if reuse_phase is not None and (
             (id(node) in retained_ids) != (reuse_phase == "prepare")
         ):
+            continue
+        if number in elided_nodes:
             continue
         sources = [names[x._emit_index] for x in node.inputs]
         gemm = _packed_matrix_gemm(node) if prepared_contractions else None

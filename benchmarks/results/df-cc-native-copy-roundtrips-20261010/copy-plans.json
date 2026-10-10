@@ -1,0 +1,64 @@
+{
+  "auxiliary_packed": {
+    "program_hash": "bf07a24dfa3b6b9a04d9a30af0252430db37c486c40743b0d3df400136906fcd",
+    "arena_hash": "e7f426cfcdf45195036e04e0f5ade2992e027c423f7a0be9101aad70d84afc3d",
+    "copy_plan_hash": "cb71e66ac2a3d404276c141d0f937ca5f9abb8d5944b2bacae6cacd0c884b501",
+    "triples": [
+      [
+        32,
+        33,
+        34
+      ],
+      [
+        36,
+        37,
+        38
+      ],
+      [
+        40,
+        41,
+        42
+      ]
+    ],
+    "elided_nodes": [
+      33,
+      34,
+      37,
+      38,
+      41,
+      42
+    ],
+    "cuda_operations": 52
+  },
+  "auxiliary_batched": {
+    "program_hash": "5b0c313fbee6b33714661a05cd0b3eb94a2171e2405f97594254ef574ca0f952",
+    "arena_hash": "ef16b1ad4d71f9fae5cc4f7986d825137a5a62a4538e2c55385253da27697161",
+    "copy_plan_hash": "23ba11f0c6a3fcc5a6954227a672086dfa5440103ac235ce3f3e0f75df6e6494",
+    "triples": [
+      [
+        32,
+        33,
+        34
+      ],
+      [
+        36,
+        37,
+        38
+      ],
+      [
+        41,
+        42,
+        43
+      ]
+    ],
+    "elided_nodes": [
+      33,
+      34,
+      37,
+      38,
+      42,
+      43
+    ],
+    "cuda_operations": 57
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "d4b44b06489d44a517d3dfaecc6b7269f5b89b7a",
+    "dirty": true
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Bounded original-slot proof, targeted native checks and four complete independent numerical gates pass; endpoint timing observations do not promote global performance or forces."
+  },
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node2",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=8",
+      "--time=00:20:00",
+      "bash",
+      "measure-gpu.sh"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 7754,
+      "sha256": "f1cfce8f47434b3a657d7d96b82eca8cd7335f0374363b06f0c9d3d592b3c038"
+    },
+    {
+      "path": "build.sh.gz",
+      "role": "reproduction",
+      "bytes": 1274,
+      "sha256": "aa96444017473624283db9cc72b8468efe75b3e85662c2bd68f76d50528d821a"
+    },
+    {
+      "path": "copy-plans.json",
+      "role": "summary",
+      "bytes": 1176,
+      "sha256": "b35040c7aff72d34a0cf99abb64c8a7b9583e58edfba3c9342d5656cc962492d"
+    },
+    {
+      "path": "measure-gpu.sh.gz",
+      "role": "reproduction",
+      "bytes": 387,
+      "sha256": "9281c5465defa3b7918d0ee768b8767fe8c27711c95ae9c985289ba5906b0774"
+    },
+    {
+      "path": "measure.py.gz",
+      "role": "reproduction",
+      "bytes": 2801,
+      "sha256": "8867fbadd4758cfd9d9e1b12c2c702fa3ded8f1460c10d0a9e93b7a55a196d3f"
+    },
+    {
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "bytes": 5331,
+      "sha256": "508eec940057aacf67eddc7a01735c44a9706efa6fce251f10aaae7ad7892433"
+    },
+    {
+      "path": "profile-diagnostic.json",
+      "role": "summary",
+      "bytes": 1087,
+      "sha256": "e95af557fceff8626665e8d11558947abd98a60edcd2ebd30f877a8e304f59a1"
+    },
+    {
+      "path": "provenance.json",
+      "role": "summary",
+      "bytes": 1568,
+      "sha256": "3c8718592d0c09887de73279e3f7fd03a0b3ed92277eb3c94592812ae72eecc6"
+    },
+    {
+      "path": "qualify-bits.sh.gz",
+      "role": "reproduction",
+      "bytes": 562,
+      "sha256": "d748f8828f62c55110d69087e6711b4a726bed989f5209a44baaba2e234ad027"
+    },
+    {
+      "path": "resume-qualification.sh.gz",
+      "role": "reproduction",
+      "bytes": 1068,
+      "sha256": "e56a9169140d869e833040373df9d7d0f1954fdd11d7c977cf2a112f42f619ef"
+    },
+    {
+      "path": "samples.json.gz",
+      "role": "samples",
+      "bytes": 2988,
+      "sha256": "e1f7b59380656525780d080d9a7da06fef8501761b99ff082f4e55d7ea2a693d"
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "bytes": 3634,
+      "sha256": "b4d7324e2134879c1cc7d504dc111acb183144462b2c00169a2955cd50ceac60"
+    },
+    {
+      "path": "validation.json",
+      "role": "evidence",
+      "bytes": 10275,
+      "sha256": "f1a3d26a481b60b0e96728093f904c093f97fb7f36b241b6a5fdb5e48e445a42"
+    }
+  ],
+  "archives": []
+}
