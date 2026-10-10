@@ -251,7 +251,7 @@
     "profile_file": "profile-summary.json",
     "qualification": "task matched-ablation requirement, not general performance promotion",
     "repetitions_per_configuration": 2,
-    "sample_file": "samples.json"
+    "sample_file": "samples.json.gz"
   },
   "solver_iterations": [],
   "solver_trace_reason": "Final iterations/actions and exact residuals are retained; the complete native endpoint does not export every solver iteration.",

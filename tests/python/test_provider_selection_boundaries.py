@@ -9,6 +9,7 @@ import pytest
 
 from tools.check_provider_selection_boundaries import (
     MANIFEST,
+    ROOT,
     audit_provider_selection_boundaries,
 )
 
@@ -48,6 +49,30 @@ def _fixture(
 
 def test_repository_provider_selection_inventory_is_complete() -> None:
     assert audit_provider_selection_boundaries()["errors"] == []
+
+
+def test_rhf_mask_workspace_uses_keep_exact_migration_classification(
+    tmp_path: Path,
+) -> None:
+    path = "src/scf/cuda_rhf.cpp"
+    manifest = json.loads((ROOT / MANIFEST).read_text())
+    entry = manifest["files"][path]
+    # The two new references reserve and borrow the charged masked-output span
+    # using the already-resolved route. They do not add a provider decision.
+    assert entry["classification"] == "migration"
+    assert entry["contract"] == "#1890"
+    assert entry["selectors"] == {"use_cublas": 14, "use_cusolver": 4}
+
+    source = (ROOT / path).read_text()
+    file = _fixture(tmp_path, source, path=path)
+    (tmp_path / MANIFEST).write_text(json.dumps({"schema": 1, "files": {path: entry}}))
+    assert audit_provider_selection_boundaries(tmp_path)["errors"] == []
+    file.write_text(source + "\nconst bool unclassified_copy = use_cublas;\n")
+    errors = audit_provider_selection_boundaries(tmp_path)["errors"]
+    assert len(errors) == 1 and "count 15 != classified 14" in errors[0]
+    file.write_text(source.replace("use_cublas", "renamed_route", 1))
+    errors = audit_provider_selection_boundaries(tmp_path)["errors"]
+    assert len(errors) == 1 and "count 13 != classified 14" in errors[0]
 
 
 @pytest.mark.parametrize(

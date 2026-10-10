@@ -8,18 +8,21 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-bool make_layout(
-    std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
-    std::size_t shell_count, std::size_t shell_pair_count, std::size_t shell_pair_block_count,
-    std::size_t bounded_generated_task_capacity, std::size_t shell_pair_primitive_count,
-    std::size_t psss_resident_task_count, std::size_t psss_resident_ket_pair_count,
-    std::size_t shell_quartet_tile_count, std::size_t fp32_shell_quartet_tile_count,
-    std::size_t generated_shell_task_capacity, std::size_t ppps_resident_ket_task_capacity,
-    std::size_t generic_order5_tile_capacity, std::size_t primitives, std::size_t diis_history,
-    std::size_t eigensolver_profile_capacity, std::size_t spin_count, bool persistent_eri,
-    bool transformed_direct, bool shell_class_profiling, bool inactive_eigensolver_profiling,
-    bool bounded_fock_class_timing, bool bounded_direct_streaming, bool mixed_precision_fock,
-    bool incremental_direct_jk, ArenaLayout& layout, bool incremental_diis_gram) {
+bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
+                 std::size_t shell_count, std::size_t shell_pair_count,
+                 std::size_t shell_pair_block_count, std::size_t bounded_generated_task_capacity,
+                 std::size_t shell_pair_primitive_count, std::size_t psss_resident_task_count,
+                 std::size_t psss_resident_ket_pair_count, std::size_t shell_quartet_tile_count,
+                 std::size_t fp32_shell_quartet_tile_count,
+                 std::size_t generated_shell_task_capacity,
+                 std::size_t ppps_resident_ket_task_capacity,
+                 std::size_t generic_order5_tile_capacity, std::size_t primitives,
+                 std::size_t diis_history, std::size_t eigensolver_profile_capacity,
+                 std::size_t spin_count, bool persistent_eri, bool transformed_direct,
+                 bool shell_class_profiling, bool inactive_eigensolver_profiling,
+                 bool bounded_fock_class_timing, bool bounded_direct_streaming,
+                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout,
+                 bool incremental_diis_gram, bool matrix_library_workspace) {
   std::size_t matrix_size = 0;
   std::size_t eri_size = 0;
   std::size_t matrices = 0;
@@ -281,6 +284,8 @@ bool make_layout(
       !workspace.append<double>(batch_size, made.nuclear_repulsion) ||
       !workspace.append<double>(matrices, made.orthogonalizer) ||
       !workspace.append<double>(spin_matrices, made.temporary) ||
+      !workspace.append<double>(matrix_library_workspace ? spin_matrices : 0,
+                                made.masked_matrix_output) ||
       !workspace.append<double>(spin_matrices, made.eigensystem) ||
       !workspace.append<double>(spin_matrices, made.coefficients) ||
       !workspace.append<double>(batch_size * spin_count * nbf, made.eigenvalues) ||

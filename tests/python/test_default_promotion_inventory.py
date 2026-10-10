@@ -446,6 +446,27 @@ def test_scientific_model_and_projection_choices_remain_explicit() -> None:
     )
 
 
+def test_cc_batched_replay_registration_records_scoped_automatic_use() -> None:
+    """One-slice internal initialization must not hide the CUDA energy owner."""
+    entry = next(
+        item
+        for item in _payload()["entries"]
+        if "cc-option:df_replay_auxiliary_batch" in item["controls"]
+    )
+    assert entry["classification"] == "already-default"
+    assert {
+        "src/cc/solver.hpp",
+        "src/cc/cuda_solver.cu",
+        "src/methods/rccsd_method.cpp",
+        "tools/generate_df_ccsd_native.py",
+    } <= set(entry["sources"])
+    assert "tests/python/test_df_cc_batched_replay.py" in entry["evidence"]
+    assert (
+        "benchmarks/results/df-cc-batched-replay-20261010/publication.json"
+        in entry["evidence"]
+    )
+
+
 def test_cc_input_residual_registration_records_scoped_automatic_use() -> None:
     """An internal false initializer must not hide the qualified automatic owner."""
     entry = next(

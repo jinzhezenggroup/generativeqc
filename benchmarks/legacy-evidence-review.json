@@ -482,14 +482,6 @@
       "sha256": "4afc40f038cc07ff8fc22a7ef52d73ea948ffb84bc0329a9666b052d33609e37"
     },
     {
-      "bytes": 311536,
-      "classification": "required-compact-accepted-evidence",
-      "family": "issue206-metric-gemv",
-      "path": "benchmarks/results/issue206-metric-gemv/summary.json",
-      "role": "decision-or-audit-record",
-      "sha256": "cd1221cbef74564eaa89943c405f0110f43c05418a2c8c094464ecaf9307a714"
-    },
-    {
       "bytes": 202268,
       "classification": "required-compact-accepted-evidence",
       "family": "issue206-stable-response",

@@ -135,7 +135,7 @@ def matrix_probe(
     header = header[header.index(namespace) : header.index("/** Use the resolved")]
     source = source[
         source.index(namespace) : source.index(
-            "generativeqc_status launch_matrix_product("
+            "namespace {", source.index(namespace) + len(namespace)
         )
     ]
     unit = folder / "probe.cpp"

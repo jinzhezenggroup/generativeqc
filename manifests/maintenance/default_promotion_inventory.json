@@ -847,6 +847,30 @@
       ]
     },
     {
+      "id": "cc.df-batched-physical-replay",
+      "classification": "already-default",
+      "controls": [
+        "cc-option:df_replay_auxiliary_batch"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "src/cc/solver.hpp",
+        "src/cc/cuda_solver.cu",
+        "src/methods/rccsd_method.cpp",
+        "tools/generate_df_ccsd_native.py"
+      ],
+      "rationale": "The internal option defaults to false; only CUDA DF energy owners without retained response automatically request up to 16 Q lanes for fresh expanded physical replay. Admission follows existing primal/pair choices and never grows device scratch. Ordered accumulation preserves each Q addition and its finite check; budget, dimensions or optional binding refusal retain the original one-Q replay. CPU, conventional and force/Lambda/response defaults remain unchanged.",
+      "revisit_condition": "Broaden the consumer or increase the scratch ceiling only with independent numerical and complete endpoint evidence; keep physical replay independent of hoisted primal cuts.",
+      "evidence": [
+        ".agents/notes/implemented/performance/2026-10-10-df-cc-batched-physical-replay.md",
+        "benchmarks/results/df-cc-batched-replay-20261010/publication.json",
+        "tests/python/test_df_cc_batched_replay.py",
+        "docs/developer/rccsd_gpu.md"
+      ]
+    },
+    {
       "id": "cc.packed-diis",
       "classification": "guarded-promotion-candidate",
       "controls": [

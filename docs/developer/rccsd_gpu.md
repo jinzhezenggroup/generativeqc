@@ -225,6 +225,25 @@ No precision, equation, history storage, resource admission or CPU-oracle work
 is introduced; `diis_size=0` retains the same Jacobi-only path. The legacy
 trial-residual path remains available through the internal option.
 
+### Bounded batches for independent physical replay
+
+`SolverOptions::df_replay_auxiliary_batch` defaults to false for internal
+callers. Native CUDA DF energy owners without retained response request up to
+16 auxiliary lanes for the final expanded virtual graph. This is an independent
+lowering of the original equations: it consumes the final amplitudes and every
+original factor, not the hoisted primal's intermediates or cached residuals.
+The expanded core remains fresh and unchanged.
+
+Admission follows the existing primal, one-Q replay and occupied-pair schedules.
+The batch must fit their already admitted device scratch; its bounded prepared
+host descriptors enter complete numeric capacity. Budget, dimension or optional
+binding refusal retains the original one-Q replay, without displacing an
+existing provider or primal tile. Each accumulator lane visits Q in order and
+checks every addition for finiteness, rather than forming tile subtotals that
+could hide overflow. Ordinary iteration fallback and CPU, conventional,
+force/Lambda/response defaults remain unbatched. Work counters include the
+actual batched graph, packing and fused ordered accumulation.
+
 The internal energy facade accepts `backend="cuda-resident"`. It remains
 energy-only. Slice C now additionally exposes the production native owner through
 `GENERATIVEQC_METHOD_RCCSD` / `Calculator(method="rccsd")`; force requests remain

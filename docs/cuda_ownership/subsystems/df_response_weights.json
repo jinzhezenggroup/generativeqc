@@ -8,7 +8,7 @@
   "evidence": [
     "tests/python/test_df_response_weights_cuda.py",
     "benchmarks/results/issue206-metric-gemv/README.md",
-    "benchmarks/results/issue206-metric-gemv/summary.json",
+    "benchmarks/results/issue206-metric-gemv/summary.json.gz",
     "benchmarks/results/issue308-shell-schedules/summary.json",
     "tests/python/test_df_resident_response_cuda.py",
     "benchmarks/results/issue308-768ao-response/README.md",

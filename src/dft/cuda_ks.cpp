@@ -114,10 +114,11 @@ struct KsStateStorage {
   scf::cuda_df::ValidationPartial* final_validation_partial{};
   double *hcore{}, *overlap{}, *x{}, *j{}, *exchange{}, *range_exchange{}, *density{}, *proposal{},
       *warm{}, *warm_orbitals{}, *fock{}, *residual{}, *tmp1{}, *tmp2{}, *effective{},
-      *fock_history{}, *residual_history{}, *gram{}, *raw_gram{}, *weights{}, *eigenvalues{},
-      *final_coefficients{}, *final_eigenvalues{}, *cold_seed{}, *incremental_anchor_density{},
-      *incremental_delta_density{}, *incremental_anchor_j{}, *incremental_anchor_exchange{},
-      *incremental_anchor_range_exchange{}, *incremental_max_abs_delta_density{};
+      *masked_matrix_output{}, *fock_history{}, *residual_history{}, *gram{}, *raw_gram{},
+      *weights{}, *eigenvalues{}, *final_coefficients{}, *final_eigenvalues{}, *cold_seed{},
+      *incremental_anchor_density{}, *incremental_delta_density{}, *incremental_anchor_j{},
+      *incremental_anchor_exchange{}, *incremental_anchor_range_exchange{},
+      *incremental_max_abs_delta_density{};
   std::int32_t* occupied{};
   std::uint8_t *enabled{}, *spin_enabled{};
   std::uint32_t *history_count{}, *history_head{};
@@ -170,6 +171,9 @@ struct KsStateStorage {
     for (auto** pointer :
          {&density, &proposal, &warm, &warm_orbitals, &fock, &residual, &tmp1, &tmp2, &effective})
       reserve(*pointer, elements);
+    // Exact numeric capacity is shared with the public dry-run inventory.
+    reserve(masked_matrix_output,
+            MatrixLibraryOwner::provider_allowance(static_cast<int>(n)) ? elements : 0);
     // The generated cold guess stays resident across cold retries. It cannot
     // alias proposal/warm storage, which changes during every SCF trajectory.
     reserve(cold_seed, elements);
@@ -313,19 +317,19 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
                        const std::uint8_t* active, double* output) {
-    check(
-        launch_matrix_product(matrix_products.view(), 1, static_cast<int>(n), left, transpose_left,
-                              right, active, output, matrix_products.library_enabled(), 1.0),
-        "CUDA KS matrix product failed");
+    check(launch_matrix_product(matrix_products.view(masked_matrix_output, elements), 1,
+                                static_cast<int>(n), left, transpose_left, right, active, output,
+                                matrix_products.library_enabled(), 1.0),
+          "CUDA KS matrix product failed");
   }
 
   void multiply_spin(unsigned spin_count, const double* left, bool left_is_spin,
                      bool transpose_left, const double* right, bool right_is_spin,
                      const std::uint8_t* active, double* output) {
-    check(launch_spin_matrix_product(matrix_products.view(), 1, static_cast<int>(spin_count),
-                                     static_cast<int>(n), left, left_is_spin, transpose_left, right,
-                                     right_is_spin, active, output,
-                                     matrix_products.library_enabled()),
+    check(launch_spin_matrix_product(matrix_products.view(masked_matrix_output, elements), 1,
+                                     static_cast<int>(spin_count), static_cast<int>(n), left,
+                                     left_is_spin, transpose_left, right, right_is_spin, active,
+                                     output, matrix_products.library_enabled()),
           "CUDA KS spin matrix product failed");
   }
 

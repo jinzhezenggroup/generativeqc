@@ -103,6 +103,7 @@ def native_probe(
 #define __host__
 #define __device__
 #include "scf/cuda/direct_md_j.hpp"
+#include "scf/cuda/matrix_library.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/resident_final_validation.hpp"
 #include "scf/cuda_direct_jk.hpp"
