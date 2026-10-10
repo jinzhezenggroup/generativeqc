@@ -84,7 +84,9 @@ def test_minao_resource_inventory_is_explicit() -> None:
     # must own the production planner's MINAO inventory when available.
     observed = []
 
-    def native_minao_capacity(n, atomic_numbers, count, output):
+    def native_minao_capacity(
+        n: int, atomic_numbers: typing.Sequence[int], count: int, output: object
+    ) -> int:
         observed.append((n, tuple(atomic_numbers[i] for i in range(count))))
         ctypes.cast(output, ctypes.POINTER(ctypes.c_uint64))[0] = 32768
         return 0
@@ -234,7 +236,7 @@ def test_native_minao_shape_query_is_authoritative(
 
 
 def test_native_minao_query_failure_does_not_fall_back_to_python() -> None:
-    def reject(*_):
+    def reject(*_: object) -> int:
         return 1
 
     library = SimpleNamespace(generativeqc_resource_minao_numeric_capacity_v1=reject)
