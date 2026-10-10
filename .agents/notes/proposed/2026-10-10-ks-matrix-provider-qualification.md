@@ -78,6 +78,14 @@ profile may select another binary; a requested path hash alone cannot establish
 which binary executed. Retain a public endpoint row before reading its snapshot
 or oracle so a postprocessing failure cannot erase the endpoint observation.
 
+The executed `cases.txt` bytes must equal the canonical protocol regenerated
+from the validated manifest, including provider, Graph, order and scale fields.
+Bind this digest into the manifest, arithmetic receipt and build identity, and
+recheck manifest/raw/protocol hashes when attaching identity. Manifest labels
+and input hashes alone could attribute native/no-Graph output to a changed
+library/Graph command. Mutation regressions retain this independent review
+finding as a fail-closed gate.
+
 ## Rejected alternatives
 
 Do not duplicate production arithmetic in a host probe, use a production formula

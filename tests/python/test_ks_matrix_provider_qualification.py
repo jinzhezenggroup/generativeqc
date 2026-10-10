@@ -126,6 +126,51 @@ def test_tampered_fixture_is_rejected(tiny_manifest: Path) -> None:
         qualification.collect(tiny_manifest)
 
 
+@pytest.mark.parametrize("field", ["provider", "graph", "scale", "missing", "extra"])
+def test_changed_executed_protocol_is_rejected(tiny_manifest: Path, field: str) -> None:
+    case = sample()
+    # A correct native/no-Graph result must not be attributed to altered commands.
+    left, right, active = qualification.inputs(case)
+    output = qualification.oracle(case, left, right, active).astype(float)
+    (tiny_manifest / "0.output").write_bytes(qualification.encode(output) * 2)
+    write_observations(tiny_manifest, [{"kind": "case", "id": 0, "status": 0}])
+    protocol = tiny_manifest / "cases.txt"
+    fields = protocol.read_text().split()
+    if field == "provider":
+        fields[9] = "0" if fields[9] == "1" else "1"
+    elif field == "graph":
+        fields[8] = "0" if fields[8] == "1" else "1"
+    elif field == "scale":
+        fields[10] = "3.0"
+    protocol.write_text(
+        ""
+        if field == "missing"
+        else (" ".join(fields) + "\n") * (2 if field == "extra" else 1)
+    )
+    with pytest.raises(ValueError, match="command protocol"):
+        qualification.collect(tiny_manifest)
+
+
+def test_long_double_receipt_scalars_are_serializable(tmp_path: Path) -> None:
+    path = tmp_path / "receipt.json"
+    qualification.write_json(
+        path, {"limit": np.longdouble("1e-12"), "error": np.longdouble("nan")}
+    )
+    receipt = json.loads(path.read_text())
+    assert receipt["limit"] == 1e-12
+    assert receipt["error"] == {"nonfinite": "nan"}
+
+
+def test_forged_protocol_digest_is_rejected(tiny_manifest: Path) -> None:
+    path = tiny_manifest / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["command_protocol_sha256"] = "0" * 64
+    path.write_text(json.dumps(manifest))
+    write_observations(tiny_manifest, [])
+    with pytest.raises(ValueError, match="command protocol"):
+        qualification.collect(tiny_manifest)
+
+
 def test_shortened_coverage_cannot_claim_pass(tiny_manifest: Path) -> None:
     manifest = json.loads((tiny_manifest / "manifest.json").read_text())
     manifest["rows"] = []

@@ -631,7 +631,7 @@ def assess(
         )
     )
     # Fixed gate, not fitted to observations. O(n) accumulation of bounded inputs.
-    limit = 64 * np.finfo(np.float64).eps * case.n * max(1.0, abs(case.scale))
+    limit = float(64 * np.finfo(np.float64).eps * case.n * max(1.0, abs(case.scale)))
     return {
         "status": "PASS" if finite and mask_ok and error <= limit else "FAIL",
         "active_finite": finite,
@@ -649,6 +649,8 @@ def write_json(path: Path, payload: dict) -> None:
     def safe(value: object) -> object:
         if isinstance(value, np.ndarray):
             return safe(value.tolist())
+        if isinstance(value, np.floating):
+            return safe(float(value))
         if isinstance(value, np.generic):
             return safe(value.item())
         if isinstance(value, float) and not np.isfinite(value):
@@ -731,6 +733,16 @@ def build_identity(folder: Path, compiler: Path, cuda: Path, cache: Path) -> dic
         for path in folder.glob(pattern)
     }
     artifacts.add((folder / "matrix-qualification").resolve())
+    for name in (
+        "cases.txt",
+        "manifest.json",
+        "device.jsonl",
+        "process.json",
+        "loaded-maps.txt",
+    ):
+        path = folder / "run" / name
+        if path.is_file():
+            artifacts.add(path.resolve())
     files = {
         str(path): sha256(path)
         for path in sorted(dependencies | tools | libraries | artifacts)
@@ -759,6 +771,9 @@ def build_identity(folder: Path, compiler: Path, cuda: Path, cache: Path) -> dic
             and dependencies
             and process["driver_sha256"] == sha256(folder / "matrix-qualification")
             and process["exit_code"] == 0
+            and receipt["command_protocol_sha256"] == sha256(folder / "run/cases.txt")
+            and receipt["manifest_sha256"] == sha256(folder / "run/manifest.json")
+            and receipt["raw_sha256"] == sha256(folder / "run/device.jsonl")
         )
         receipt["build_identity_sha256"] = sha256(folder / "build-identity.json")
         receipt["source_matched_identity_available"] = source_matched
@@ -771,18 +786,10 @@ def build_identity(folder: Path, compiler: Path, cuda: Path, cache: Path) -> dic
     return payload
 
 
-def prepare(folder: Path) -> dict:
-    """Save inputs and immutable expected case identities before a GPU run."""
-    folder.mkdir(parents=True, exist_ok=False)
-    rows = cases()
+def command_protocol(rows: tuple[Case, ...]) -> bytes:
+    """One canonical byte protocol for the validated case order and route fields."""
     commands = []
-    identities = []
     for index, case in enumerate(rows):
-        left, right, active = inputs(case)
-        prefix = folder / str(index)
-        Path(f"{prefix}.input").write_bytes(
-            encode(left) + encode(right) + active.tobytes()
-        )
         commands.append(
             " ".join(
                 str(int(value))
@@ -801,6 +808,20 @@ def prepare(folder: Path) -> dict:
             )
             + f" {case.scale}\n"
         )
+    return "".join(commands).encode("ascii")
+
+
+def prepare(folder: Path) -> dict:
+    """Save inputs and immutable expected case identities before a GPU run."""
+    folder.mkdir(parents=True, exist_ok=False)
+    rows = cases()
+    identities = []
+    for index, case in enumerate(rows):
+        left, right, active = inputs(case)
+        prefix = folder / str(index)
+        Path(f"{prefix}.input").write_bytes(
+            encode(left) + encode(right) + active.tobytes()
+        )
         identities.append(
             {
                 "id": index,
@@ -808,10 +829,11 @@ def prepare(folder: Path) -> dict:
                 "input_sha256": sha256(Path(f"{prefix}.input")),
             }
         )
-    (folder / "cases.txt").write_text("".join(commands), encoding="ascii")
+    (folder / "cases.txt").write_bytes(command_protocol(rows))
     payload = {
         "schema": "ks-matrix-primitive-v1",
         "rows": identities,
+        "command_protocol_sha256": sha256(folder / "cases.txt"),
         "wide_oracle": bool(np.finfo(np.longdouble).nmant > np.finfo(np.float64).nmant),
         "oracle_mantissa_bits": int(np.finfo(np.longdouble).nmant),
         "complete_endpoint_qualified": False,
@@ -829,6 +851,11 @@ def collect(folder: Path) -> dict:
     declared = [{"id": row["id"], "case": row["case"]} for row in manifest["rows"]]
     if declared != protocol:
         raise ValueError("manifest does not cover the fixed protocol")
+    commands = folder / "cases.txt"
+    if commands.read_bytes() != command_protocol(
+        tuple(Case(**row["case"]) for row in declared)
+    ) or manifest.get("command_protocol_sha256") != sha256(commands):
+        raise ValueError("executed command protocol differs from the fixed manifest")
     raw = [
         json.loads(line) for line in (folder / "device.jsonl").read_text().splitlines()
     ]
@@ -897,6 +924,7 @@ def collect(folder: Path) -> dict:
         "rows": results,
         "raw_sha256": sha256(folder / "device.jsonl"),
         "manifest_sha256": sha256(folder / "manifest.json"),
+        "command_protocol_sha256": sha256(commands),
         "pass_count": sum(row["status"] == "PASS" for row in results),
         "fail_count": sum(row["status"] == "FAIL" for row in results),
         "incomplete_count": sum(row["status"] == "INCOMPLETE" for row in results),
