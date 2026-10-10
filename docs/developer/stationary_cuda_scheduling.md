@@ -6,6 +6,8 @@ byte-budget planner instead of a fixed 256-point grid tile. The consumer prefers
 tiles. Every candidate must fit the simultaneous grid, tensor, stationary source,
 resident AO and native integral owners. The ordinary public budgets remain
 512 MiB device and 256 MiB host; selecting a larger tile does not raise them.
+Known native fitted providers prefer 256 points on large grids so the existing
+Becke phase cache can coexist with their separately bounded integral consumers.
 
 The shared compiler planner accepts `preferred_tile_points` as an execution
 preference, not an admission override. Its default remains 1024 for other owners,
@@ -17,8 +19,16 @@ Changing a tile never changes the scientific grid or reduces whole-grid storage.
 
 Budget-admitted ordinary tiles retain the same active-AO producer selection as
 explicit 256-point callers. The existing continuous dense-work crossover,
-derivative/spin domains, resident-grid requirement, density-fitting exclusion,
-cutoffs, cache budgets and occupancy gates still apply. Selection is not a promise
+derivative/spin domains, resident-grid requirement, integral-provider domains,
+cutoffs, cache budgets and occupancy gates still apply to direct profiles.
+Fitted ordinary forces above the same dense point-times-AO-squared crossover
+instead inspect every requested AO jet with the native bitmask producer. They
+retain the existing `1e-16` force AO cutoff, a 64 MiB optional map allowance and
+an 80% average active-fraction admission gate. This is a sampled AO-jet cutoff,
+not a density or grid-weight cutoff; "exact" describes the selected labels at
+that explicit cutoff, not unscreened mathematics. Order-two forces discover
+their own order-two labels rather than borrowing order-one SCF masks.
+Selection is not a promise
 that every individual AO union fits: existing capacity and occupancy misses
 retain the bounded dense fallback.
 
