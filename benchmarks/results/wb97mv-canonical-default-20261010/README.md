@@ -52,7 +52,7 @@ Separate instrumented complete 3-atom execution records 90 materialized launches
 with no legacy HF selector set and an independent physical E/F gate passing.
 The trace is not a clean timing arm.
 
-The [machine-readable evidence](evidence.json) retains complete times, actual
+The [machine-readable evidence](evidence.json.gz) retains complete times, actual
 iteration/Fock counts, AO/force work and traffic, source/binary identities,
 raw-artifact checksums and unavailable larger gates as null.
 

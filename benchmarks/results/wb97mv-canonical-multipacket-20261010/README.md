@@ -144,7 +144,7 @@ separate from clean timings.
 
 ## Retention and reproduction
 
-The [compact machine-readable receipt](evidence.json) records source/library
+The [compact machine-readable receipt](evidence.json.gz) records source/library
 identities, exact endpoint times, scoped work/traffic, selected-source resource
 attributes, matrix hashes, qualification hashes and unavailable 96-atom physical
 gates as null. Large raw matrices and traces are not expanded into the Git diff.

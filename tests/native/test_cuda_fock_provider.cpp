@@ -1397,7 +1397,7 @@ void canonical_screened_values(bool materialized = false, bool mixed_orders = tr
                    ? unsetenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES")
                    : setenv("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES", "0", 1)) == 0,
               "cannot test automatic admission without the legacy HF opt-in");
-      // Exercise every order-five-through-seven block, including equal-bucket
+      // Exercise every order-five-through-nine block, including equal-bucket
       // triangles, packet tails, signed/diffuse contractions and moved geometry.
       if (mixed_orders) {
         system.shells.push_back({0, 1, {{0.7, 0.8}, {0.12, -0.2}}});
@@ -1544,7 +1544,7 @@ void canonical_screened_values(bool materialized = false, bool mixed_orders = tr
 }
 
 /** The shell index cannot displace an incumbent geometry/cache owner. */
-void materialized_optional_budget_fallback() {
+void materialized_optional_budget_fallback(bool high_order_only = false) {
   namespace runtime = generativeqc::runtime;
   struct LedgerScope {
     std::shared_ptr<runtime::DeviceResourceLedger> ledger;
@@ -1561,6 +1561,9 @@ void materialized_optional_budget_fallback() {
   system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
   system.shells = {
       {0, 0, {{0.8, 1.0}}}, {1, 1, {{0.7, 1.0}}}, {0, 2, {{0.3, 1.0}}}, {1, 3, {{0.5, 1.0}}}};
+  // A d-only owner has order eight but no order-five-through-seven bucket.
+  // Admission must discover the newly supported domain, not the old seed.
+  if (high_order_only) system.shells = {{0, 2, {{0.3, 0.8}, {0.09, -0.2}}}, {1, 2, {{0.5, 1.0}}}};
   system.electron_count = 2;
   system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   std::string detail;
@@ -2822,6 +2825,7 @@ int main(int argc, char** argv) {
       canonical_screened_values(true, false);
       if (std::string(argv[1]) == "--canonical-materialized-only") canonical_value_provider();
       materialized_optional_budget_fallback();
+      materialized_optional_budget_fallback(true);
       materialized_incumbent_md_budget();
       if (std::string(argv[1]) == "--canonical-materialized-only")
         spd_optional_allocation_fallback();

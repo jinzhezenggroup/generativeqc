@@ -861,7 +861,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
       const bool has_materialized_order = std::any_of(
           plan->canonical_pair_offsets.begin(), plan->canonical_pair_offsets.end(),
           [](const auto& offsets) {
-            for (unsigned order = 5; order <= 7; ++order)
+            for (unsigned order = 5; order <= 9; ++order)
               for (unsigned second = order > 6 ? order - 6 : 0; second <= order / 2; ++second) {
                 const unsigned first = order - second;
                 if (offsets[first + 1] > offsets[first] && offsets[second + 1] > offsets[second])
@@ -908,7 +908,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                                                        static_cast<int>(largest), workspace_bytes));
               const auto key_bytes = direct_jk_product(order.size(), sizeof(double));
               const auto order_bytes = direct_jk_product(order.size(), sizeof(std::int32_t));
-              const auto row_bytes = direct_jk_product(order.size(), 4 * sizeof(std::uint64_t));
+              const auto row_bytes = direct_jk_product(order.size(), 5 * sizeof(std::uint64_t));
               const auto offset_bytes = direct_jk_product(segments.size(), sizeof(int));
               const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
               const auto matrix = direct_jk_product(dimension, dimension);
@@ -948,11 +948,11 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                   static_cast<int>(order.size()), static_cast<int>(systems.size() * 7),
                   device_segments, input_keys, input_order, sorted_keys, sorted_order, workspace,
                   workspace_bytes));
-              // Orders five through seven share four bounded prefix
+              // Orders five through nine share five bounded prefix
               // planes: a (first, second) angular block has exactly one order.
               // Equal angular buckets own only their sorted triangles.
               for (const auto& offsets : plan->materialized_pair_offsets)
-                for (unsigned angular_order = 5; angular_order <= 7; ++angular_order)
+                for (unsigned angular_order = 5; angular_order <= 9; ++angular_order)
                   for (unsigned second = angular_order > 6 ? angular_order - 6 : 0;
                        second <= angular_order / 2; ++second) {
                     const unsigned first = angular_order - second;
@@ -1499,7 +1499,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                   plan->resident_values + value_offset, plan->canonical_density,
                   plan->canonical_coulomb, plan->canonical_exchange,
                   census ? census : plan->canonical_work_count, correction, exchange_correction);
-            else if (first + second >= 5 && first + second <= 7 && plan->materialized_pair_order &&
+            else if (first + second >= 5 && first + second <= 9 && plan->materialized_pair_order &&
                      !correction && !fixed &&
                      (!dispatch.canonical_coulomb || !dispatch.canonical_exchange ||
                       spec.exchange.op == FockOperator::FullRange)) {

@@ -95,9 +95,15 @@ __global__ void materialized_canonical_jk_kernel(
   __shared__ MaterializedDirectPairRecurrence<AngularOrder> shared;
   // With s/p/d/f shells, these are the exact maximum packet counts for each
   // admitted total order. No component may be left for a second CTA owner.
-  static_assert(AngularOrder >= 5 && AngularOrder <= 7);
+  static_assert(AngularOrder >= 5 && AngularOrder <= 9);
   static_assert(kMaximumAngularMomentum == 3);
-  constexpr unsigned component_slots = AngularOrder <= 5 ? 1 : AngularOrder == 6 ? 2 : 3;
+  // Order-nine fddd has 2160 components, exceeding ffdp's 1800. These
+  // complete-domain bounds must not depend on the most common shell class.
+  constexpr unsigned component_slots = AngularOrder == 5   ? 1
+                                       : AngularOrder == 6 ? 2
+                                       : AngularOrder == 7 ? 3
+                                       : AngularOrder == 8 ? 6
+                                                           : 9;
   const auto count = rows.prefix[first_count - 1];
   // Every lane visits the same task and participates in all publication and
   // retirement barriers. Only the helper's original AO predicate admits work.
@@ -850,6 +856,8 @@ void launch_materialized_canonical_jk_kernel(
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(5);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(6);
     GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(7);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(8);
+    GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER(9);
   }
 #undef GENERATIVEQC_MATERIALIZED_CANONICAL_ORDER
 }

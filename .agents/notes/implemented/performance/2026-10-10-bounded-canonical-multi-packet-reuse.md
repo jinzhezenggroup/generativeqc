@@ -1,5 +1,9 @@
 # Decision: extend automatic canonical reuse to bounded multi-packet orders
 
+The [order-eight/nine decision](2026-10-11-automatic-canonical-orders-eight-nine.md)
+extends the default bounds after new qualification; this note retains the
+source-matched six/seven evidence and rejected lower-order prototype.
+
 Status: implemented
 Date: 2026-10-10
 

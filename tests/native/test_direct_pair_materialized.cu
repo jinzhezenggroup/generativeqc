@@ -168,9 +168,14 @@ __global__ void shared_components(
     MaterializedDirectPairWork* work, double* values,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full) {
   __shared__ MaterializedDirectPairRecurrence<Order> shared;
-  // Canonical orders six/seven use their production two/three-slot ownership;
-  // forty slots retain the independent whole-shell through-f qualification.
-  constexpr unsigned whole_slots = Order <= 5 ? 1 : Order == 6 ? 2 : Order == 7 ? 3 : 40;
+  // Match complete-domain production ownership through order nine, including
+  // the maximum fddd domain. Higher orders retain independent qualification.
+  constexpr unsigned whole_slots = Order <= 5   ? 1
+                                   : Order == 6 ? 2
+                                   : Order == 7 ? 3
+                                   : Order == 8 ? 6
+                                   : Order == 9 ? 9
+                                                : 40;
   contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? whole_slots : 1>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
       channel == 1, channel == 2 || channel == 3, values, channel == 3, range, 0.37);
@@ -595,8 +600,31 @@ void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold,
     throw std::runtime_error("zero-density materialized derivative prepared recurrence");
 }
 
+/** Qualify the production six/nine-slot bounds, not the legacy forty-slot CTA. */
+void qualify_high_canonical_orders() {
+  for (auto range :
+       {generativeqc::integrals::CoulombRange::Full, generativeqc::integrals::CoulombRange::Short,
+        generativeqc::integrals::CoulombRange::Long}) {
+    qualify<2, 2, 2, 2, false, true>(false, false, 0.0, range);
+    qualify<2, 2, 2, 2, true, true>(true, true, 0.8, range);
+    qualify<3, 2, 2, 1, true, true>(false, false, 0.8, range);
+    qualify<3, 3, 2, 0, false, true>(false, true, 0.8, range);
+    qualify<3, 3, 1, 1, false, true>(false, false, 0.0, range);
+    qualify<3, 2, 2, 2, false, true>(false, false, 0.0, range);
+    qualify<3, 2, 2, 2, true, true>(false, true, 0.8, range);
+    qualify<3, 3, 2, 1, true, true>(false, false, 0.8, range);
+    qualify<3, 3, 3, 0, false, true>(false, false, 0.0, range);
+    qualify<3, 2, 2, 2, false, true>(false, false, 2.0, range);
+  }
+  std::cout << "canonical order-eight/nine production slots and exact work PASS\n";
+}
+
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--canonical-high-orders") == 0) {
+      qualify_high_canonical_orders();
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--derivatives") == 0) {
       qualify_derivatives<false>(0, false, 0.0);
       qualify_derivatives<true>(1, false, 0.8);
@@ -652,6 +680,7 @@ int main(int argc, char** argv) {
       qualify<2, 2, 2, 1, true, true>(false, false, 0.0, range);
       qualify<3, 2, 1, 1, false, true>(false, false, 0.8, range);
     }
+    qualify_high_canonical_orders();
     qualify<2, 1, 1, 1, false>(false, false, 0.0);
     qualify<2, 1, 1, 1, true>(false, true, 0.8);
     // Range moments share precisely the same lifetime and work contract as
