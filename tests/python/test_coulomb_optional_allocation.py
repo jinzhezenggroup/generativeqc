@@ -239,7 +239,9 @@ int main(int argc,char** argv) {
 """
 
 
-def compile_cached_probe(cpp: Path, binary: Path) -> None:
+def compile_cached_probe(
+    cpp: Path, binary: Path, *, include_dirs: tuple[Path, ...] = ()
+) -> None:
     """Compile source-executing host fixtures with the same cache policy as builds."""
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
@@ -251,6 +253,7 @@ def compile_cached_probe(cpp: Path, binary: Path) -> None:
             cache,
             compiler,
             "-std=c++17",
+            *(f"-I{directory}" for directory in include_dirs),
             "-I",
             str(ROOT / "src"),
             "-c",

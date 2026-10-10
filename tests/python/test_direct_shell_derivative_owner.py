@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from _cpp_source_support import cpp_function_definition
 
 if TYPE_CHECKING:
     from conftest import NativeCxx
@@ -399,8 +400,9 @@ def test_canonical_screening_fixture_preserves_default_and_opt_in_coverage() -> 
     source = _source("tests/native/test_cuda_fock_provider.cpp")
 
     def body(name: str) -> str:
-        begin = source.index(f"void {name}(")
-        return source[begin : source.index("\n}\n", begin)]
+        # The native fixture may gain optional arguments without changing its
+        # scientific oracle; extract the actual function rather than "void f()".
+        return cpp_function_definition(source, name)
 
     screened = body("canonical_screened_values")
     override = "plan->bounded_value_opt_in = false;"

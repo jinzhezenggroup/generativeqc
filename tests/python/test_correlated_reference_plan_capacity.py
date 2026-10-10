@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _cpp_source_support import cpp_function_declaration, cpp_record_definition
 from _eigen_handle_test_support import empty_eigen_owner_units
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -77,13 +78,15 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "      // Download has synchronized",
     )
     # Exercise every declared numeric vector, including capacity retained at size zero.
-    topology = between(
-        (ROOT / "src/scf/cuda/topology.hpp").read_text(), "struct HostBatch {", "\n};"
+    topology = cpp_record_definition(
+        (ROOT / "src/scf/cuda/topology.hpp").read_text(), "HostBatch"
     )
-    owner = between(
-        (ROOT / "src/scf/cuda/rhf_bucket_internal.hpp").read_text(),
-        "struct CudaRhfBucketPlan {",
-        "\n};",
+    bucket_header = (ROOT / "src/scf/cuda/rhf_bucket_internal.hpp").read_text()
+    owner = cpp_record_definition(bucket_header, "CudaRhfBucketPlan")
+    # Derive the fake driver's complete ABI from the production declaration.
+    # New optional driver arguments must not silently break every host probe.
+    driver_signature = cpp_function_declaration(
+        bucket_header, "execute_hf_cuda_bucket_driver"
     )
     fields = re.findall(r"std::vector<[^>]+> (\w+);", topology)
     fields.remove("ecp_systems")
@@ -102,7 +105,8 @@ def capacity_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         + "namespace generativeqc::scf::reference_detail {\n"
         + capacity
         + "}\n"
-        + DRIVER.replace("@PEAK@", peak)
+        + DRIVER.replace("@DRIVER_SIGNATURE@", driver_signature)
+        .replace("@PEAK@", peak)
         .replace("@SNAPSHOT@", snapshot)
         .replace("@DIIS_POLICY@", diis_policy)
         + MAIN.replace("@FILL@", fill)
@@ -247,10 +251,7 @@ void require_exact_direct_strategy(const ResolvedFockBuild&,FockSpin,FockBackend
 
 DRIVER = r"""
 namespace generativeqc::scf {
-std::vector<RhfBucketItem> execute_hf_cuda_bucket_driver(CudaRhfBucketPlan& plan,
-    const HostBatch& host,const std::vector<core::System>&,
-    const ScfOptions& options,int device_id,bool unrestricted,
-    bool shell_class_profiling,bool inactive_eigensolver_profiling) {
+@DRIVER_SIGNATURE@ {
   const bool first_setup=!plan.initialized;
 @DIIS_POLICY@
   // Preserve the real driver's exact-option invariant after lifecycle admission.
