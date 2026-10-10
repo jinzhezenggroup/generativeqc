@@ -108,6 +108,22 @@ def _check_host_values(value: object) -> frozenset[str]:
     return frozenset(kinds)
 
 
+def _probe_array_like_without_copy(value: object) -> np.ndarray:
+    """Inspect one host array-like while preserving a strict no-copy request."""
+    protocol = getattr(value, "__array__", None)
+    if not callable(protocol):
+        return np.array(value, copy=False)
+    try:
+        array = protocol(None, copy=False)
+    except TypeError as error:
+        raise TypeError(
+            "copy=False array-like inputs require __array__ support for copy=False"
+        ) from error
+    if not isinstance(array, np.ndarray):
+        raise TypeError("__array__ must return a NumPy array")
+    return array
+
+
 def _eager_data_array(value: object) -> np.ndarray:
     # Reuse the public host boundary before NumPy can invoke foreign array hooks.
     array = asarray(value)
@@ -699,7 +715,9 @@ def asarray(
     if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
         raise TypeError("mixed bool/real host values are unsupported")
     source_array = (
-        np.asarray(value) if source_kinds == frozenset(("unknown",)) else None
+        (_probe_array_like_without_copy(value) if copy is False else np.asarray(value))
+        if source_kinds == frozenset(("unknown",))
+        else None
     )
     if source_array is not None and source_array.dtype.hasobject:
         source_kinds = _check_host_values(source_array)
@@ -719,7 +737,7 @@ def asarray(
     elif source_kinds:
         source_is_bool = source_kinds == frozenset(("bool",))
     else:
-        source_is_bool = np.asarray(value).dtype.name == "bool"
+        source_is_bool = target == "bool" if target is not None else False
     if target is not None and (target == "bool") != source_is_bool:
         raise TypeError("cross-kind bool/real input conversion is unsupported")
     source = value if source_array is None else source_array

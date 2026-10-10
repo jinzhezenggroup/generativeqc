@@ -246,6 +246,36 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     assert object_mixed.calls == 1
 
 
+def test_host_array_like_copy_false_probes_without_copying() -> None:
+    class NoCopyArrayLike:
+        def __init__(self) -> None:
+            self.storage = np.asarray([0.25, 0.5], dtype=np.float64)
+            self.calls: list[builtins.bool | None] = []
+
+        def __array__(
+            self, dtype: object = None, copy: builtins.bool | None = None
+        ) -> np.ndarray:
+            assert dtype is None
+            self.calls.append(copy)
+            if copy is False:
+                return self.storage
+            return self.storage.copy()
+
+    source = NoCopyArrayLike()
+    actual = xp.asarray(source, copy=False)
+    assert source.calls == [False]
+    assert actual is source.storage
+
+
+@pytest.mark.parametrize("value,shape", (([], (0,)), ([[]], (1, 0))))
+def test_empty_host_container_uses_explicit_boolean_kind(
+    value: object, shape: tuple[int, ...]
+) -> None:
+    actual = xp.asarray(value, dtype=xp.bool)
+    assert actual.dtype == xp.bool
+    assert actual.shape == shape
+
+
 def test_tensor_facade_exports_comparison_factory() -> None:
     x = ir.input_tensor("x", TensorSpec(dtype="float64", role="input"))
     predicate = tensor_compare("equal", x, x)
