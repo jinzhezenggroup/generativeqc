@@ -108,16 +108,16 @@ explicitly resolves its cuBLAS and CUDA runtime libraries, pins the inventoried
 host compiler, and wraps both compile and link with sccache. The 12.8 probe is
 historical evidence, not a source-matched supported-toolchain acceptance.
 
-At commit `c4b561f9957f696d9c43ed4a9ce4407efc6f5742`, qz Job
-`i1877-rankk-h100-1010z8` completed all 16 cases on H100 with CUDA 12.9.86.
+At commit `c2ab6a57ed43cb7bd8f7a877fe6f4e10926ef062`, qz Job
+`i1877-rankk-h100-1010z9` completed all 16 cases on H100 with CUDA 12.9.86.
 The tracked compact record and all 16 accepted case rows are retained in
 `benchmarks/results/rank-k-1877-20261010/`. Full raw JSONL, source/artifact
 hashes, 1,581 file checks, cache receipts and negative trials remain at the
 task-owned qz result path; pre-`j` raw receipts are also in Git history at commit
 `9ec7fc52e408c062802db6e68de0f31eca7eff1f`. They are not implied to have been
 independently retrieved merely because their hashes and locations are recorded.
-The complete prepared device endpoint measured 13.09–20.74 µs for the generated
-route and 25.52–35.70 µs for cuBLAS over the tested small panels. Those receipts
+The complete prepared device endpoint measured 13.02–21.32 µs for the generated
+route and 25.99–35.94 µs for cuBLAS over the tested small panels. Those receipts
 qualify executable alternatives, not a full method endpoint or a profitable
 production library default.
 
@@ -162,11 +162,14 @@ also required exact invocation `n/k` and flattened batch/spin prefix,
 an overwrite-specific semantic formula, and accurate timing language for the
 device reset. The flattened batch/spin prefix is also exact, not a capacity
 subset. After upstream #2170 changed the full source inventory, the branch merged
-latest master and Job `z8` source-matched that exact `c4b561f99` tree. Job `z8`
-is the accepted run. Its generated header, object, binary and raw hashes are in
-the compact receipt. Later receipt-only commits may reuse `z8` only while all
-qualified implementation blobs and modes remain identical and latest-head review
-verifies that boundary.
+latest master and Job `z8` source-matched that exact `c4b561f99` tree. Subsequent
+review bound the constructor to the exact request prefix, included the directly
+compiled harness in compilation identity schema v4, and aligned bare GCC child
+resolution with the final compilation PATH. Job `z9` source-matched the resulting
+`c2ab6a57e` tree and is the accepted run. Its generated header, object, binary
+and raw hashes are in the compact receipt. Later receipt-only commits may reuse
+`z9` only while all qualified implementation blobs and modes remain identical
+and latest-head review verifies that boundary.
 
 ## Revisit when
 
