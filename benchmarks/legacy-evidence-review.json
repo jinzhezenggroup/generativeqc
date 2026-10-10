@@ -424,22 +424,6 @@
       "sha256": "ee05ceb98b288ff5724daa5be0ea83bd912f6e64e2330534863e2e3f18e68fa5"
     },
     {
-      "bytes": 391121,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/endpoints.json",
-      "role": "endpoint-or-numerical-samples",
-      "sha256": "544255203a137fa646e65b0304ccecf820ba8b56ac1511c8b8a8c651007a4e05"
-    },
-    {
-      "bytes": 577110,
-      "classification": "required-compact-accepted-evidence",
-      "family": "generated-df-values-142",
-      "path": "benchmarks/results/generated-df-values-142/isolated.json",
-      "role": "scientific-record",
-      "sha256": "8fc91a883b9fe2ca723f84cc6a1b9a49bb30f45902e0d9a8bcebe1d9cde6f18a"
-    },
-    {
       "bytes": 162452,
       "classification": "required-compact-accepted-evidence",
       "family": "generated-df-values-142",

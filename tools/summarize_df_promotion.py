@@ -14,6 +14,8 @@ _compiler_sys.path.insert(
 )
 
 import argparse
+import gzip
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -23,17 +25,25 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from generativeqc_compiler.common.evidence import file_hash
-
 from tools.generativeqc_validation.f_shell_numerics import numerical_error
 
 
 def summarize(directory: Path) -> dict:
-    """Require raw, endpoint, rank, fixed-geometry, budget, and memory gates."""
-    reports = {
-        name: json.loads((directory / f"{name}.json").read_text())
-        for name in ("isolated", "source", "endpoints", "automatic")
-    }
+    """Check complete gates from plain or losslessly gzip-stored JSON reports.
+
+    Input identities bind original decoded bytes, preserving measured promotion
+    provenance when only the repository's transport representation changes.
+    Fresh plain validator outputs take precedence over archived companions.
+    """
+    payloads = {}
+    for name in ("isolated", "source", "endpoints", "automatic"):
+        path = directory / f"{name}.json"
+        payloads[name] = (
+            path.read_bytes()
+            if path.exists()
+            else gzip.decompress(path.with_suffix(".json.gz").read_bytes())
+        )
+    reports = {name: json.loads(data) for name, data in payloads.items()}
     if not all(report["passed"] for report in reports.values()):
         raise ValueError("all input validation reports must pass")
     endpoints = reports["endpoints"]["runs"]
@@ -43,7 +53,7 @@ def summarize(directory: Path) -> dict:
         "version": 1,
         "selected_mapping": "primitive",
         "input_hashes": {
-            name: file_hash(directory / f"{name}.json") for name in reports
+            name: hashlib.sha256(data).hexdigest() for name, data in payloads.items()
         },
         "isolated_count": reports["isolated"]["fixture_count"],
         "source_count": len(reports["source"]["runs"]),

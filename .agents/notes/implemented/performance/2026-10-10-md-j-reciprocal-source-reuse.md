@@ -82,6 +82,24 @@ substitute for the complete endpoint gate. All retained arrays, histories,
 source/binary receipts, per-sample errors and statistical descriptors are in
 [the publication](../../../../benchmarks/results/md-j-reciprocal-cold-20261010/README.md).
 
+## Evidence retention integration
+
+PR 2199 initially exceeded the unchanged 64-MiB result-tree budget and retained
+four compact oracle/sanitizer logs without hash-pinned scientific exceptions.
+The correction keeps every reciprocal-J sample, force vector, SCF history and
+receipt unchanged. Four exact-byte exceptions document actual oracle/sanitizer
+coverage, including racecheck's two selected tests and fourteen deselections.
+
+Only transport changes for two older generated-DF scientific records: their
+deterministic gzip payloads decode byte-for-byte to the originals, saving
+865,710 bytes. Stored/decoded hashes and lengths are bound in that campaign's
+`storage.json`; its remaining promotion/source/resource evidence is untouched.
+No policy budget is increased, old measurement is requalified, history is
+rewritten, Release is published or external backup is created. Original bytes
+also remain recoverable from existing master Git history and ignored local
+artifacts. Updating the retention review removes only the now-subthreshold
+plain-file entries, not scientific data.
+
 ## Revisit when
 
 Extend angular coverage only with corresponding publication-capacity,

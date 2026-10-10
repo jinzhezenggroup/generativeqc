@@ -141,6 +141,42 @@ void replay(int n) { for (int i = 0; i < n; ++i) inner(n); }
         audit_native(source, max_call_depth=9)
 
 
+@pytest.mark.parametrize("prefix", ["runtime", "generativeqc::runtime"])
+def test_source_observation_wrappers_preserve_static_boundary_inventory(
+    prefix: str,
+) -> None:
+    """A source annotation is not an exemption or runtime scientific proof."""
+    source = f"""
+void replay(int count) {{
+  for (int tile = 0; tile < count; ++tile) {{
+    {prefix}::residency_memcpy_async(execution, role, site, payload, host, device, bytes, kind, stream);
+    {prefix}::residency_memcpy(execution, role, site, payload, host, device, bytes, kind);
+    {prefix}::residency_upload(execution, role, site, payload, device, host, bytes, stream);
+    {prefix}::residency_stream_synchronize(execution, role, site, stream);
+  }}
+}}
+"""
+    assert rules(source) == [
+        "loop-transfer",
+        "loop-transfer",
+        "loop-transfer",
+        "loop-synchronization",
+    ]
+
+
+def test_unrelated_namespace_is_not_guessed_as_an_observed_cuda_wrapper() -> None:
+    source = """
+void replay(int count) {
+  for (int tile = 0; tile < count; ++tile) {
+    unrelated::residency_memcpy_async(host, device, bytes);
+    unrelated::residency_upload(device, host, bytes, stream);
+    unrelated::residency_stream_synchronize(stream);
+  }
+}
+"""
+    assert not audit_native(source)
+
+
 def test_scalar_call_reuse_is_not_proved_without_cpp_binding_analysis() -> None:
     source = "double producer(double x){return std::exp(x);} void f(int n,const double x){for(int i=0;i<n;++i) consume(producer(x));}"
     assert not audit_native(source)
