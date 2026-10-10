@@ -32,15 +32,12 @@ namespace generativeqc::dft {
 inline generativeqc_status compose_mixed_rsh_df_integral_sources(
     std::span<const double> fitted_four, std::span<const double> direct_lr_correction,
     std::size_t coordinates, double fitted_exchange_coefficient,
-    double correction_exchange_coefficient, std::vector<double>& output,
-    std::string& detail) {
+    double correction_exchange_coefficient, std::vector<double>& output, std::string& detail) {
   output.clear();
   if (!coordinates || coordinates > std::numeric_limits<std::size_t>::max() / 5 ||
-      fitted_four.size() != 4 * coordinates ||
-      direct_lr_correction.size() != coordinates ||
+      fitted_four.size() != 4 * coordinates || direct_lr_correction.size() != coordinates ||
       !std::isfinite(fitted_exchange_coefficient) ||
-      !std::isfinite(correction_exchange_coefficient) ||
-      correction_exchange_coefficient == 0.0) {
+      !std::isfinite(correction_exchange_coefficient) || correction_exchange_coefficient == 0.0) {
     detail = "mixed RSH-DF source shape or resolved exchange identity is invalid";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }

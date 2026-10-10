@@ -24,8 +24,7 @@ void verify_spin(double factor) {
   std::vector<double> sources;
   std::string detail;
   require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(
-              fitted, lr, 2, primary, correction, sources, detail) ==
-              GENERATIVEQC_STATUS_SUCCESS,
+              fitted, lr, 2, primary, correction, sources, detail) == GENERATIVEQC_STATUS_SUCCESS,
           "valid mixed source composition was rejected");
   require(sources.size() == 10 && detail.empty(), "canonical five-row layout not published");
   for (std::size_t i = 0; i < 6; ++i)
@@ -38,31 +37,36 @@ void verify_spin(double factor) {
          "full DF plus exact LR correction identity");
   }
   sources = {123.};
-  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(
-              fitted, lr, 2, primary, 0.0, sources, detail) ==
-              GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
-              sources.empty(), "zero LR correction silently became a canonical source");
+  require(
+      generativeqc::dft::compose_mixed_rsh_df_integral_sources(
+          fitted, lr, 2, primary, 0.0, sources, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+          sources.empty(),
+      "zero LR correction silently became a canonical source");
   require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(
               fitted, {lr.data(), 1}, 2, primary, correction, sources, detail) ==
-              GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
-              sources.empty(), "truncated LR source was admitted");
-  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(
-              fitted, lr, 0, primary, correction, sources, detail) ==
-              GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
-              sources.empty(), "empty coordinate source was admitted");
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              sources.empty(),
+          "truncated LR source was admitted");
+  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(fitted, lr, 0, primary,
+                                                                   correction, sources, detail) ==
+                  GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+              sources.empty(),
+          "empty coordinate source was admitted");
   auto invalid = fitted;
   invalid[0] = std::numeric_limits<double>::quiet_NaN();
-  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(
-              invalid, lr, 2, primary, correction, sources, detail) ==
-              GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
-              sources.empty(), "nonfinite DF source was published");
+  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(invalid, lr, 2, primary,
+                                                                   correction, sources, detail) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              sources.empty(),
+          "nonfinite DF source was published");
   invalid = fitted;
   auto invalid_lr = lr;
   invalid_lr[0] = std::numeric_limits<double>::infinity();
-  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(
-              invalid, invalid_lr, 2, primary, correction, sources, detail) ==
-              GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
-              sources.empty(), "nonfinite LR source was published");
+  require(generativeqc::dft::compose_mixed_rsh_df_integral_sources(invalid, invalid_lr, 2, primary,
+                                                                   correction, sources, detail) ==
+                  GENERATIVEQC_STATUS_NUMERICAL_FAILURE &&
+              sources.empty(),
+          "nonfinite LR source was published");
 }
 }  // namespace
 
