@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.integral.cuda_schedule import ScheduleKind
 from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.k_block import (
@@ -184,6 +186,36 @@ def test_only_qualified_profile_prefers_the_selected_classes(architecture: str) 
         }
     source = emit_multi_registry_source((profile,))
     assert "UINT64_C(0), UINT64_C(0)" in source
+
+
+def test_qualified_rys_task_preference_is_not_tied_to_an_sm_name() -> None:
+    """An equivalently qualified target uses its own capability, not a CUDA label."""
+    other = replace(PROFILE, target=cuda_target_info("sm_90"), profile="measured_gpu")
+    assert {item.spec.name for item in preferred_rys_task_candidates(other)} == {
+        item.spec.name for item in preferred_rys_task_candidates(PROFILE)
+    }
+    assert preferred_rys_task_candidates(replace(other, tuned=False)) == ()
+
+
+def test_qualified_rys_task_preference_must_be_compiled() -> None:
+    """A stale tuning entry fails closed, rather than silently dropping a class."""
+    invalid = replace(PROFILE, preferred_rys_task_fock_shell_classes=("dddd",))
+    with pytest.raises(ValueError, match="lack generated capability"):
+        preferred_rys_task_candidates(invalid)
+
+
+@pytest.mark.parametrize(
+    "invalid", (["psps", "psps"], ["psps", 10], "psps")
+)
+def test_qualified_rys_task_preference_manifest_validation(
+    invalid: object, tmp_path: Path
+) -> None:
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    payload["architectures"]["sm_120"]["preferred_rys_task_fock_shell_classes"] = invalid
+    path = tmp_path / "profile.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises((TypeError, ValueError), match="Rys-task Fock classes"):
+        resolve_production_profile(path, "sm_120")
 
 
 def test_larger_local_contraction_does_not_expand_old_block_candidates() -> None:
