@@ -34,6 +34,10 @@ verified against `SourceVariant`; registration provenance remains separate.
 - Depfile means complete: ignores downstream toolchain and namespace state.
 - Automatically trusting companion-program or `ldd` discovery: those are useful
   minimum evidence, not a full toolchain manifest.
+- Generic shell/C backslash unescaping: GCC's `libcpp/mkdeps.cc` `munge` preserves
+  ordinary backslashes and uses GNU make's 2N+1 quoting only before whitespace.
+  Real integration includes a literal backslash followed by a space to preserve
+  this compiler-emitted path contract; ambiguous trailing names fail closed.
 - Retrofitting today's dependencies onto an existing probe object: cannot prove
   which bytes its compilation consumed.
 - Modifying runtime JIT, CUDA, object storage or production packaging: expands

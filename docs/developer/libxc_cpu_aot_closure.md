@@ -19,7 +19,9 @@ domain, not a general build-system interface.
 
 GCC `-M` includes system headers as well as nested user headers. The collector
 parses its fixed-target make rule, hashes each resolved file, repeats dependency
-discovery, and rechecks source, compiler, header and manifest bytes. It binds the
+discovery, and rechecks source, compiler, header and manifest bytes. Path parsing
+preserves ordinary literal backslashes and decodes GNU make's odd backslash runs
+before whitespace; ambiguous trailing-backslash names fail closed. It binds the
 exact source/ABI emission identity, source bytes and physical path, ordered flags,
 compiler path/bytes/version, native target, resolved downstream programs,
 preprocessor output (including non-including `__has_include` branches), emitted

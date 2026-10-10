@@ -84,7 +84,8 @@ class CpuClosureResult:
 def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     """Parse one fixed-target GCC -M rule; reject unsupported make syntax.
 
-    GCC escapes spaces, tabs, # and literal backslashes and doubles dollars.
+    GCC escapes spaces/tabs and #, doubles dollars, and preserves backslashes
+    except for GNU make's 2N+1 backslash quoting before whitespace.
     The target is forced to ``closure`` so colons in file paths are unambiguous.
     Empty rules, extra rules, unescaped comments and dangling escapes fail closed.
     """
@@ -100,13 +101,23 @@ def parse_gcc_dependencies(text: str) -> tuple[str, ...]:
     while index < len(body):
         char = body[index]
         if char == "\\":
-            index += 1
+            begin = index
+            while index < len(body) and body[index] == "\\":
+                index += 1
             if index == len(body):
                 raise ValueError("dangling dependency escape")
+            count = index - begin
             escaped = body[index]
-            if escaped not in " \t#\\":
-                raise ValueError("unsupported dependency escape")
-            word += escaped
+            if escaped in " \t":
+                if count % 2 == 0:
+                    raise ValueError("ambiguous trailing dependency backslashes")
+                word += "\\" * (count // 2) + escaped
+            elif escaped == "#":
+                word += "\\" * (count - 1) + "#"
+            else:
+                word += "\\" * count
+                # The following character still needs ordinary make decoding.
+                continue
         elif char == "$":
             index += 1
             if index == len(body) or body[index] != "$":

@@ -47,7 +47,8 @@ def dependency(path: Path) -> bulk_aot_cache.CacheDependency:
     [
         ("closure: /a.c /usr/include/x.h\n", ("/a.c", "/usr/include/x.h")),
         ("closure: /a\\ b.c \\\n /h\\#1.h /d$$x.h\n", ("/a b.c", "/d$x.h", "/h#1.h")),
-        ("closure: /a\\\\b.c /a\\\\b.c\n", ("/a\\b.c",)),
+        ("closure: /a\\\\b.c /a\\\\b.c\n", ("/a\\\\b.c",)),
+        ("closure: /a\\q.c /a\\\\\\ b.h\n", ("/a\\ b.h", "/a\\q.c")),
         ("closure: /a.c \\\r\n\t/b.h\r\n", ("/a.c", "/b.h")),
     ],
 )
@@ -64,7 +65,7 @@ def test_parser(text: str, expected: tuple[str, ...]) -> None:
         "closure: /a$(x)",
         "closure: /a #comment",
         "closure: /a\nother: /b",
-        "closure: /a\\q",
+        "closure: /a\\\\ /b.h",
     ],
 )
 def test_unsupported_make_syntax(text: str) -> None:
@@ -119,7 +120,7 @@ def fake_gcc(
         else:
 
             def escape(path: Path) -> str:
-                return str(path).replace("\\", "\\\\").replace(" ", "\\ ")
+                return str(path).replace(" ", "\\ ")
 
             text = "closure: " + escape(source) + " " + escape(header)
         return CompileResult(0, False, 0.001, text, "")
@@ -342,11 +343,11 @@ def test_real_gcc_identity_headers_and_store(
     compiler, manifest = real_gcc
     root = tmp_path / "headers with spaces"
     root.mkdir()
-    nested = root / "nested #$ header.h"
+    nested = root / "nested \\ #$ header.h"
     nested.write_text("#define VALUE 1\n", encoding="utf-8")
     outer = root / "outer.h"
     outer.write_text(
-        '#include "nested #$ header.h"\n#include <stddef.h>\n#include <stdint.h>\n',
+        f'#include "{nested.name}"\n#include <stddef.h>\n#include <stdint.h>\n',
         encoding="utf-8",
     )
     source = root / "same source.c"
