@@ -1738,6 +1738,15 @@ GENERATIVEQC_API generativeqc_status generativeqc_calculation_prepare(
  */
 GENERATIVEQC_API void generativeqc_calculation_destroy(generativeqc_calculation* calculation);
 
+/** Query property support of this exact prepared system, model, backend and
+ * approximation. Unlike method_get_capabilities, this query may advertise
+ * explicitly qualified DFT forces without changing the global method manifest.
+ * No SCF or response work is performed; output is unchanged on failure.
+ * Serialize it with execution/destruction of the same context and calculation.
+ */
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_supported_properties_v1(
+    const generativeqc_calculation* calculation, generativeqc_property_flags* properties);
+
 /**
  * Execute synchronously. To request forces, the caller owns result->forces and
  * provides at least 3 * atom_count doubles. A NULL pointer with force_count=0
