@@ -22,6 +22,17 @@ inputs, and complete returned energy/force cold, warm, moved and moved-warm
 populations. Count all iterations, retries and failures without normalizing time
 by iterations. Each source-matched arm must pass independent references.
 
+`endpoints.py` validates the complete independent reference population before
+native execution: one cold/moved row plus five uniquely identified replays for
+each exact geometry, with successful finite, shape-correct E/F results. Every
+native row is paired with all six same-geometry oracle rows, retaining their
+row indices. Native warm replays freeze the corresponding post-cold/post-move
+density, matching the declared reference protocol. Failed native item statuses,
+SCF work and elapsed time are journaled before the unchanged numerical gate
+rejects them; nonfinite failure diagnostics are explicit strings in strict JSON.
+Prior runner receipts remain historical evidence under their original runner
+identity. Do not relabel them as passing these population or fixed-density gates.
+
 With that variable set to a writable JSONL path, the LR launch instantiates the
 **existing** bounded kernel and its **existing** post-screen shell-class
 profiler from `direct_bounded_fallback.cu`. The instrumentation uses separate

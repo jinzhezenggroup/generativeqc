@@ -29,6 +29,74 @@ from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_omol25 import OMOL25, check_record, protocol
 
 
+def validated_oracle_rows(
+    reference: dict[str, Any], scientific: dict[str, Any]
+) -> list[list[tuple[int, dict[str, Any]]]]:
+    """Require each exact-geometry cold/moved and fixed-density reference replay."""
+    geometries = scientific["geometries_bohr"]
+    expected = {
+        (geometry, phase, repeat)
+        for geometry in range(len(geometries))
+        for phase, repeat in [
+            ("cold" if geometry == 0 else "moved", 0),
+            *[
+                ("warm" if geometry == 0 else "moved-warm", repeat)
+                for repeat in range(scientific["repeats"])
+            ],
+        ]
+    }
+    grouped: list[list[tuple[int, dict[str, Any]]]] = [[] for _ in geometries]
+    records = reference.get("records")
+    if not isinstance(records, list):
+        raise TypeError("independent oracle records must be a complete list")
+    for index, row in enumerate(records):
+        if not isinstance(row, dict):
+            raise TypeError("independent oracle row must be an endpoint record")
+        geometry, phase, repeat = (
+            row.get(key) for key in ("geometry", "phase", "repeat")
+        )
+        if (
+            type(geometry) is not int
+            or type(repeat) is not int
+            or not isinstance(phase, str)
+        ):
+            raise ValueError("independent oracle population identity is invalid")
+        key = (geometry, phase, repeat)
+        if key not in expected:
+            raise ValueError(
+                "independent oracle contains a duplicate or unexpected endpoint"
+            )
+        expected.remove(key)
+        try:
+            valid = (
+                np.asarray(row["forces"]).shape == (len(geometries[geometry]), 3)
+                and check_record(row, row)["gate"]
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                "independent oracle contains an invalid endpoint"
+            ) from error
+        if not valid:
+            raise ValueError("independent oracle contains a failed or invalid endpoint")
+        grouped[geometry].append((index, row))
+    if expected:
+        raise ValueError(
+            "independent oracle is missing required geometry/replay endpoints"
+        )
+    return grouped
+
+
+def journal_value(value: Any) -> Any:
+    """Preserve nonfinite failure diagnostics as explicit strings in strict JSON."""
+    if isinstance(value, dict):
+        return {key: journal_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [journal_value(item) for item in value]
+    if isinstance(value, float) and not np.isfinite(value):
+        return str(value)
+    return value
+
+
 def main() -> None:
     """Retain complete returned E/F calls and every same-geometry oracle pairing."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -67,6 +135,7 @@ def main() -> None:
         raise ValueError(
             "independent oracle does not match the exact scientific protocol"
         )
+    oracle_rows = validated_oracle_rows(reference, scientific)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schema": "generativeqc.lr-domain-acceptance.v1",
@@ -93,7 +162,9 @@ def main() -> None:
     }
 
     def save() -> None:
-        args.output.write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
+        args.output.write_text(
+            json.dumps(journal_value(payload), indent=2, allow_nan=False) + "\n"
+        )
 
     original_force = PreparedCompositeStationaryCudaGradient.execute
 
@@ -143,13 +214,14 @@ def main() -> None:
                 ) as batch:
                     for geometry, atoms in enumerate(scientific["geometries_bohr"]):
                         coordinates = np.asarray([xyz for _, xyz in atoms])
+                        batch.set_warm_start_updates(True)
                         for replay in range(6):
                             if geometry or replay:
                                 started = time.perf_counter()
                             item = batch.execute(
                                 coordinates=[coordinates],
                                 properties=("energy", "forces"),
-                                strict=True,
+                                strict=False,
                             ).items[0]
                             elapsed = time.perf_counter() - started
                             phase = (
@@ -186,19 +258,21 @@ def main() -> None:
                             }
                             payload["records"].append(row)
                             save()
-                            for oracle in reference["records"]:
-                                if oracle["geometry"] == geometry:
-                                    gate = check_record(row, oracle)
-                                    payload["independent_pairs"].append(
-                                        {
-                                            "native_row": len(payload["records"]) - 1,
-                                            "gate": gate,
-                                        }
+                            for oracle_index, oracle in oracle_rows[geometry]:
+                                gate = check_record(row, oracle)
+                                payload["independent_pairs"].append(
+                                    {
+                                        "native_row": len(payload["records"]) - 1,
+                                        "oracle_row": oracle_index,
+                                        "gate": gate,
+                                    }
+                                )
+                                if not gate["gate"]:
+                                    raise RuntimeError(
+                                        f"independent E/F gate failed: {gate}"
                                     )
-                                    if not gate["gate"]:
-                                        raise RuntimeError(
-                                            f"independent E/F gate failed: {gate}"
-                                        )
+                            if replay == 0:
+                                batch.set_warm_start_updates(False)
                             save()
                             print(mode, repeat, phase, replay, elapsed, flush=True)
         payload["status"] = "PASS"
