@@ -13,6 +13,25 @@
 
 namespace generativeqc::dft {
 
+/** Reserve the mixed bridge's derivative-only LR owner before preparation.
+ * It remains additional to energy-only SCF storage even when reused. The
+ * remaining allowance is for transient one-electron device work; compact
+ * host publication keeps its independent original bound. DF J/K response
+ * storage is not represented by this deliberately partial source budget. */
+inline generativeqc_status mixed_rsh_df_primary_device_allowance(std::size_t maximum_bytes,
+                                                                 std::size_t derivative_bytes,
+                                                                 std::size_t& primary_bytes,
+                                                                 std::string& detail) {
+  primary_bytes = 0;
+  if (!derivative_bytes || derivative_bytes >= maximum_bytes) {
+    detail = "mixed RSH-DF LR derivative owner exceeds its additional device budget";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  primary_bytes = maximum_bytes - derivative_bytes;
+  detail.clear();
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 /** Recompose a fitted full-range primary and an exact Direct LR correction.
  *
  * Input rows are already multiplied by their *physical Fock-energy*

@@ -1240,7 +1240,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const std::vector<scf::reference::Matrix>& density,
       const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
-      bool allow_mixed_rsh_primary = false) {
+      bool allow_mixed_rsh_primary = false,
+      std::optional<std::size_t> one_electron_device_maximum_bytes = std::nullopt) {
     output.clear();
     work = {};
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
@@ -1309,7 +1310,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
           return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
         }
         const auto one_status = scf::execute_cuda_stationary_one_electron_pair(
-            resident_weights.device_id, system_, {}, {}, 0, maximum_bytes, hcore, pulay, detail,
+            resident_weights.device_id, system_, {}, {}, 0,
+            one_electron_device_maximum_bytes.value_or(maximum_bytes), hcore, pulay, detail,
             &one_electron, resident_weights.density, resident_weights.weighted_density);
         if (one_status == GENERATIVEQC_STATUS_SUCCESS) {
           resident_one_electron = true;
@@ -1614,11 +1616,20 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // The independent value-side range owner remains untouched; the
     // derivative-only lease is a separate, lazy provider with identical
     // operator/omega/spin/geometry and a charged direct-workspace budget.
+    // This derivative owner was not paid for by the energy-only SCF plan.
+    // Charge it on every call, including reuse, before creating any storage;
+    // maximum_bytes independently bounds compact host and additional device use.
+    const auto derivative_device_bytes =
+        range_derivative_correction_ ? range_derivative_correction_->diagnostic().device_bytes
+                                     : ks_provider_bytes(system_, backend_, 1U);
+    std::size_t primary_device_bytes{};
+    status = dft::mixed_rsh_df_primary_device_allowance(maximum_bytes, derivative_device_bytes,
+                                                        primary_device_bytes, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     if (!range_derivative_correction_) {
       try {
         range_derivative_correction_ = std::make_unique<scf::PreparedFockPlan>(
-            system_, nullptr, *range_strategy_, resident.device_id,
-            ks_provider_bytes(system_, backend_, 1U), 1U);
+            system_, nullptr, *range_strategy_, resident.device_id, derivative_device_bytes, 1U);
       } catch (const std::bad_alloc&) {
         detail = "mixed RSH-DF LR derivative source exceeded its provider budget";
         return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
@@ -1631,14 +1642,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
         scf::prepared_cuda_direct_derivative_binding(*range_derivative_correction_);
     if (!lr_binding || lr_binding.device_id != resident.device_id || lr_binding.nbf != nbf ||
         range_derivative_correction_->strategy() != correction ||
-        !range_derivative_correction_->matches_system(system_)) {
+        !range_derivative_correction_->matches_system(system_) ||
+        lr_binding.retained_device_bytes > derivative_device_bytes) {
       detail = "mixed RSH-DF independent LR source lacks a matching first-order lease";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
 
     std::vector<double> fitted_four;
     status = density_fitted_integral_gradient(expected, *cached_density, *cached_weighted_density,
-                                              fitted_four, maximum_bytes, work, detail, true);
+                                              fitted_four, maximum_bytes, work, detail, true,
+                                              primary_device_bytes);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
 
     // The KS final D is produced on its own stream. The isolated LR gradient
@@ -1674,12 +1687,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
     status = dft::compose_mixed_rsh_df_integral_sources(
         fitted_four, direct_lr, nc, full_coefficient, c.exchange.coefficient, output, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    if (work[0] > std::numeric_limits<std::uint64_t>::max() - lr_binding.retained_device_bytes) {
+    // Slot 2 is the mixed bridge's additional-device peak: its lazy LR
+    // owner coexists with one-electron staging. DF J/K response resources
+    // remain outside this deliberately partial nine-slot resource scope.
+    if (work[2] > maximum_bytes || lr_binding.retained_device_bytes > maximum_bytes - work[2]) {
       output.clear();
-      detail = "mixed RSH-DF retained derivative byte count overflowed";
+      detail = "mixed RSH-DF additional derivative storage exceeds its device budget";
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
-    work[0] += lr_binding.retained_device_bytes;
+    // Slot 0 remains the primary SCF-owned bytes; do not double-charge LR.
+    work[2] += lr_binding.retained_device_bytes;
     work[3] = std::max<std::uint64_t>(work[3], 10U * nc * sizeof(double));
     dft::CudaKsFinalStateToken current;
     status = final_state_token(current, detail);

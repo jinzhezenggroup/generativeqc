@@ -14,6 +14,29 @@ void require(bool accepted, const char* reason) {
 void near(double actual, double expected, const char* reason) {
   require(std::abs(actual - expected) < 1.0e-13, reason);
 }
+void verify_device_allowance() {
+  std::size_t primary = 123;
+  std::string detail;
+  for (const std::size_t maximum : {0U, 239U, 4095U, 4096U}) {
+    require(generativeqc::dft::mixed_rsh_df_primary_device_allowance(
+                maximum, 4096, primary, detail) == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                primary == 0 && !detail.empty(),
+            "lazy LR storage bypassed the caller's additional-device allowance");
+  }
+  require(generativeqc::dft::mixed_rsh_df_primary_device_allowance(4097, 4096, primary, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              primary == 1 && detail.empty(),
+          "LR reservation did not subtract its complete retained capacity");
+  require(generativeqc::dft::mixed_rsh_df_primary_device_allowance(
+              std::numeric_limits<std::size_t>::max(), std::numeric_limits<std::size_t>::max() - 1,
+              primary, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+              primary == 1,
+          "LR reservation overflowed near the capacity limit");
+  require(generativeqc::dft::mixed_rsh_df_primary_device_allowance(4097, 0, primary, detail) ==
+                  GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+              primary == 0,
+          "an unaccounted LR derivative owner was admitted");
+}
 void verify_spin(double factor) {
   // WB97M-V c_short=0.15, c_long=1.0. Fock coefficients include
   // -1/2 in RKS and -1 in UKS; the source algebra is spin-agnostic.
@@ -72,6 +95,7 @@ void verify_spin(double factor) {
 
 int main() {
   try {
+    verify_device_allowance();
     verify_spin(0.5);
     verify_spin(1.0);
     std::cout << "mixed RSH-DF source algebra passed\n";
