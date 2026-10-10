@@ -74,7 +74,7 @@ void require_cpu_exact_consumer(const ResolvedFockBuild& strategy) {
   require(strategy.spec.version == 1 && valid(strategy.spec.spin) &&
               strategy.spec.derivative_order <= 1 && strategy.backend == FockBackend::Cpu &&
               strategy.schedule == FockSchedule::CpuReference &&
-              strategy.precision == FockPrecision::Float64 && !strategy.legacy_density_fitting,
+              strategy.precision == FockPrecision::Float64,
           "exact raw Fock consumer requires a resolved CPU exact strategy");
   for (const auto* term : {&strategy.spec.coulomb, &strategy.spec.exchange}) {
     if (!term->present) continue;
@@ -346,17 +346,14 @@ ResolvedFockBuild resolve_fock_build(FockBuildSpec spec, FockBackend backend,
   result.backend = backend;
   const bool fitted_hf = standard_hf_terms(result.spec, FockApproximation::DensityFitted);
   if (backend == FockBackend::Cuda)
-    result.schedule = fitted_hf ? FockSchedule::LegacyDensityFitting
+    result.schedule = fitted_hf ? FockSchedule::CudaDfResident
                       : standard_hf_terms(result.spec, FockApproximation::Exact)
                           ? FockSchedule::CudaFused
                           : FockSchedule::CudaIndependent;
   else
-    result.schedule = fitted || cosx ? (fitted_hf ? FockSchedule::LegacyDensityFitting
-                                                  : FockSchedule::CpuIndependent)
-                                     : FockSchedule::CpuReference;
+    result.schedule = fitted || cosx ? FockSchedule::CpuIndependent : FockSchedule::CpuReference;
   result.screening_tolerance = screening_tolerance;
   result.metric_relative_threshold = fitted ? metric_relative_threshold : 0.0;
-  result.legacy_density_fitting = fitted_hf;
   return result;
 }
 
@@ -372,7 +369,6 @@ void require_exact_direct_strategy(const ResolvedFockBuild& strategy, FockSpin s
   require(valid(spin) && valid(backend) && strategy.spec.version == 1 &&
               strategy.spec.spin == spin && strategy.backend == backend &&
               strategy.spec.derivative_order == 1 && strategy.precision == FockPrecision::Float64 &&
-              !strategy.legacy_density_fitting &&
               standard_hf_terms(strategy.spec, FockApproximation::Exact) &&
               strategy.schedule == (backend == FockBackend::Cpu ? FockSchedule::CpuReference
                                                                 : FockSchedule::CudaFused) &&

@@ -1,0 +1,32 @@
+{
+  "parent": "d4b44b06489d44a517d3dfaecc6b7269f5b89b7a",
+  "master_observed_before_measurement": "ee0ca19d5cade2eddcbd05585af2739ebe3f7619",
+  "qualification_base": "frozen pair-enabled PR #2178; not latest-master qualification",
+  "slurm_job": "2810",
+  "visibility": "0",
+  "device": {
+    "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+    "cuda_driver_api": 13020,
+    "cuda_runtime": 12090
+  },
+  "input_sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+  "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+  "source_archives": {
+    "parent.tar.gz": "e53f626b35e0e104ddbba2893855d3c7e3321bc6825d4f775df1faff51834be1",
+    "overlay.tar.gz": "548b5cce842474eea82a9c76f21540a815b623d0c7a47631d3e596bc86bf8873"
+  },
+  "libraries": {
+    "base": "1c9eecba3b1a1a7ebee232172852ebe81cc8bfd312e0a96a706421571cc847b2",
+    "candidate": "aa2132a7cd44faeca288a4db53e4609bd922511d675d6f27317fc317f991ec3f"
+  },
+  "executables": {
+    "base": "6054e6c5b341821ebab95cd3cad5cf62de872a0da5eb3a1d392da4a09ea3d67b",
+    "candidate": "c1e88825e9caea0f985c052b2971fc412bbcd7abe42887a239bb49fc2c48fe54"
+  },
+  "timing_boundary": "fresh process: native molecular RHF, DF source, CCSD including admission/projection, independent expanded replay, FP64 (T), and owner teardown",
+  "forces_requested": false,
+  "precision": "FP64, pedantic matrix GEMMs, unchanged ascending-Q accumulation",
+  "packed_diis": false,
+  "copy_elisions_per_primary_q_tile": 6
+}

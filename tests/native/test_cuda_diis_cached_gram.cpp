@@ -73,7 +73,7 @@ void one_case(unsigned basis, unsigned spins, unsigned history, bool normalized)
   active.write({1, 0});
   unsigned long long expected_dots = 0;
   bool saw_retirement = false;
-  for (unsigned step = 0; step < 32; ++step) {
+  for (unsigned step = 0; step < 3 * history + 32; ++step) {
     if (step == 13 || step == 23) {
       legacy.count.write({0, 0});
       legacy.head.write({0, 0});
@@ -127,7 +127,8 @@ void one_case(unsigned basis, unsigned spins, unsigned history, bool normalized)
             std::abs(actual - expected) > 3e-12L * (1 + std::abs(expected)))
           throw std::runtime_error("cached Gram differs from independent dot oracle");
       }
-    for (std::size_t element = history * history; element < gram.size(); ++element)
+    for (std::size_t element = static_cast<std::size_t>(history) * history; element < gram.size();
+         ++element)
       if (!std::isnan(gram[element])) throw std::runtime_error("inactive Gram was mutated");
     const auto work = cached.work.read();
     if (work[0].dots != expected_dots || work[0].vector_elements != expected_dots * vector_size ||
@@ -142,6 +143,42 @@ void one_case(unsigned basis, unsigned spins, unsigned history, bool normalized)
             << " vector_elements=" << work.vector_elements << '\n';
 }
 }  // namespace
+
+void invalid_history_state() {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned history = 4;
+  constexpr std::size_t vector_size = 9;
+  for (bool invalid_head : {false, true}) {
+    State state(history, vector_size);
+    Device<double> fock(2 * vector_size, 2.5), residual(2 * vector_size, 1.0);
+    Device<std::uint8_t> active(2, 1);
+    state.count.write({invalid_head ? 0U : history + 1, 0});
+    state.head.write({invalid_head ? history : 0U, 0});
+    const auto prior_fock = state.fock_history.read();
+    const auto prior_residual = state.residual_history.read();
+    const auto prior_cache = state.cache.read();
+    launch_update_diis_cached_gram(2, 32, 0, nullptr, 2, 3, 1, history, fock.data, residual.data,
+                                   active.data, state.fock_history.data,
+                                   state.residual_history.data, state.matrix.data,
+                                   state.coefficients.data, state.count.data, state.head.data,
+                                   state.effective.data, state.cache.data, true, state.work.data);
+    check(cudaGetLastError());
+    if (state.count.read() != std::vector<std::uint32_t>{0, 1} ||
+        state.head.read() != std::vector<std::uint32_t>{0, 1})
+      throw std::runtime_error("invalid ordered history did not reset independently");
+    identical(state.effective.read(), fock.read());
+    const auto after_fock = state.fock_history.read();
+    const auto after_residual = state.residual_history.read();
+    if (std::memcmp(prior_fock.data(), after_fock.data(), history * vector_size * sizeof(double)) ||
+        std::memcmp(prior_residual.data(), after_residual.data(),
+                    history * vector_size * sizeof(double)))
+      throw std::runtime_error("invalid history was accessed before reset");
+    identical(prior_cache, state.cache.read());
+    for (const auto& work : state.work.read())
+      if (work.dots || work.vector_elements)
+        throw std::runtime_error("invalid or singleton history performed dot work");
+  }
+}
 
 void disabled_history(unsigned history) {
   using namespace generativeqc::scf::cuda_execution;
@@ -170,11 +207,12 @@ void disabled_history(unsigned history) {
 int main() {
   if (!std::getenv("SLURM_JOB_ID")) return 77;
   try {
+    invalid_history_state();
     disabled_history(0);
     disabled_history(1);
     for (unsigned basis : {3U, 17U, 67U})
       for (unsigned spins : {1U, 2U})
-        for (unsigned history : {2U, 3U, 8U})
+        for (unsigned history : {2U, 3U, 8U, 32U, 33U, 64U})
           for (bool normalized : {false, true}) one_case(basis, spins, history, normalized);
     std::cout << "incremental ordered DIIS Gram contracts passed\n";
   } catch (const std::exception& error) {

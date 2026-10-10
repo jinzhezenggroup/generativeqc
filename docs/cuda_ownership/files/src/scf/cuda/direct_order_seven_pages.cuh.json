@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_order_seven_pages.cuh",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Monotonic address decoder for bounded same-system dd x dp pages over immutable class offsets. Owns queue/domain scheduling only; no integral recurrence, density screening criterion or source contraction.",
+  "regions": []
+}

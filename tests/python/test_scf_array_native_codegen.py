@@ -15,6 +15,7 @@ from generativeqc_compiler.array_api.scf import (
 from generativeqc_compiler.tensor.scf import (
     diis_extrapolation_program,
     diis_gram_program,
+    diis_new_row_program,
     hf_force_program,
 )
 
@@ -37,10 +38,14 @@ def test_array_scf_native_template_identity_is_shape_independent() -> None:
 
     small_gram = diis_gram_program(1, 2, 3)
     large_gram = diis_gram_program(4, 7, 5, spin_count=2)
+    small_new_row = diis_new_row_program(1, 2, 3)
+    large_new_row = diis_new_row_program(4, 7, 5, spin_count=2)
     small_extrapolation = diis_extrapolation_program(1, 2, 3)
     large_extrapolation = diis_extrapolation_program(4, 7, 5, spin_count=2)
 
     assert template_hash(small_gram) == template_hash(large_gram)
+    assert template_hash(small_new_row) == template_hash(large_new_row)
+    assert template_hash(small_new_row) != template_hash(small_gram)
     assert template_hash(small_extrapolation) == template_hash(large_extrapolation)
     assert template_hash(small_gram) != template_hash(small_extrapolation)
 
@@ -51,6 +56,7 @@ def test_generated_header_records_frontend_tensorir_templates() -> None:
     weighted_hash = template_hash(weighted_density_program(1, 3, orbital_count=2))
     force_hash = template_hash(hf_force_program(1, 2, spin_count=2))
     gram_hash = template_hash(diis_gram_program(1, 3, 2, spin_count=2))
+    new_row_hash = template_hash(diis_new_row_program(1, 3, 2, spin_count=2))
     extrapolation_hash = template_hash(
         diis_extrapolation_program(1, 3, 2, spin_count=2)
     )
@@ -59,6 +65,8 @@ def test_generated_header_records_frontend_tensorir_templates() -> None:
     assert weighted_hash in header
     assert force_hash in header
     assert gram_hash in header
+    assert new_row_hash in header
+    assert "struct DiisNewRowStep" in header
     assert extrapolation_hash in header
     assert "density_from_orbitals" in header
     assert "weighted_density_from_orbitals" in header
@@ -143,7 +151,8 @@ def test_fixed_native_specialization_rejects_changed_hf_force_topology(
 
 
 @pytest.mark.parametrize(
-    "builder_name", ("diis_gram_program", "diis_extrapolation_program")
+    "builder_name",
+    ("diis_gram_program", "diis_new_row_program", "diis_extrapolation_program"),
 )
 def test_fixed_native_specialization_rejects_changed_diis_topology(
     monkeypatch: pytest.MonkeyPatch, builder_name: str

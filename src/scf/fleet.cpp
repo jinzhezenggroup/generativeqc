@@ -165,7 +165,7 @@ FleetPlan::FleetPlan(std::vector<core::System> systems, generativeqc_method meth
       (strategy.metric_relative_threshold != 0.0 &&
        strategy.metric_relative_threshold != options_.density_fitting_relative_threshold) ||
       (backend == FockBackend::Cuda && strategy.schedule != FockSchedule::CudaIndependent &&
-       strategy.legacy_density_fitting != cuda_density_fitting_enabled_))
+       (strategy.schedule == FockSchedule::CudaDfResident) != cuda_density_fitting_enabled_))
     throw std::invalid_argument("fleet options disagree with the resolved Fock strategy");
   if (strategy.schedule == FockSchedule::CudaIndependent &&
       (shell_class_profiling_enabled_ || inactive_eigensolver_profiling_enabled_))

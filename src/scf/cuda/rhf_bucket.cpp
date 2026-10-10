@@ -70,10 +70,16 @@ bool small_hf_cuda_resource_layout(std::size_t nbf, std::size_t direct_nbf, std:
       detail::bounded_direct_queue_refill_count(pairs, detail::kBoundedDirectShellPairBlockSize);
   // The public resource ABI predates #990 and carries no incremental-policy bit.
   // Reserve the retained ΔD anchors unconditionally so this remains a safe upper bound.
+  bool incremental_diis_gram = false;
+  try {
+    incremental_diis_gram = diis_history >= 2 && incremental_diis_gram_requested();
+  } catch (const std::invalid_argument&) {
+    return false;
+  }
   ArenaLayout layout{};
   if (!make_layout(1, nbf, direct_nbf, atoms, shells, pairs, blocks, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                    primitives, std::max<std::size_t>(1, diis_history), 0, spins, true, false, false,
-                   false, false, false, false, true, layout))
+                   false, false, false, false, true, layout, incremental_diis_gram))
     return false;
   arena_bytes = layout.bytes;
   plan_object_bytes = sizeof(CudaRhfBucketPlan);
@@ -113,6 +119,13 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   const auto small_hf_profitability =
       cuda_policy::resolve_small_hf_profitability(runtime::CudaTargetInfo{}, small_hf_workload);
   if (small_hf_profitability.use_cublas) return false;
+
+  bool incremental_diis_gram = false;
+  try {
+    incremental_diis_gram = diis_history >= 2 && incremental_diis_gram_requested();
+  } catch (const std::invalid_argument&) {
+    return false;
+  }
 
   std::vector<std::uint8_t> shell_angular(shell_angular_values, shell_angular_values + shells);
   std::vector<std::int64_t> shell_direct_ao_offsets(shells + 1, 0);
@@ -197,7 +210,7 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   if (!make_layout(1, nbf, direct_nbf, atoms, shells, shell_pair_count, shell_pair_block_count, 0,
                    shell_pair_primitive_count, 0, 0, 0, 0, 0, 0, 0, primitive_count,
                    std::max<std::size_t>(1, diis_history), 0, spins, true, false, false, false,
-                   false, false, false, true, energy_layout)) {
+                   false, false, false, true, energy_layout, incremental_diis_gram)) {
     return false;
   }
 
@@ -238,7 +251,8 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
                    fp32_shell_quartet_tile_count, generated_shell_task_capacity,
                    ppps_resident_ket_task_capacity, generic_order5_tile_capacity, primitive_count,
                    std::max<std::size_t>(1, diis_history), 0, spins, false, direct_nbf != nbf,
-                   false, false, false, false, mixed_precision_fock, true, force_layout)) {
+                   false, false, false, false, mixed_precision_fock, true, force_layout,
+                   incremental_diis_gram)) {
     return false;
   }
 
@@ -398,6 +412,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   // Resolve legacy internal callers once per prepared execution, before any
   // device setup. Fock kernels and final exact force assembly share this guard.
   ScfOptions execution_options = requested_options;
+  bool incremental_diis_gram = false, ordered_diis_gram = false;
   try {
     const FockSpin spin = unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted;
     if (!execution_options.resolved_fock_build.has_value()) {
@@ -409,6 +424,9 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
         execution_options.screening_tolerance) {
       throw std::invalid_argument("CUDA screening differs from its resolved Fock strategy");
     }
+    incremental_diis_gram =
+        execution_options.diis_history >= 2 && incremental_diis_gram_requested();
+    ordered_diis_gram = incremental_diis_gram && ordered_incremental_diis_gram_requested();
   } catch (const std::invalid_argument&) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
@@ -465,6 +483,8 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
            bounded_direct_primary_streaming_fock_mask_requested().value_or(0U) ||
        (*plan)->graph_native_eigensolver_override != graph_native_eigensolver_override ||
        (*plan)->reuse_converged_fock != reuse_converged_fock ||
+       (*plan)->incremental_diis_gram != incremental_diis_gram ||
+       (*plan)->ordered_diis_gram != ordered_diis_gram ||
        (*plan)->one_electron_value_mapping != cuda_policy::one_electron_value_mapping_requested() ||
        (*plan)->mixed_precision_fock != mixed_precision_fock ||
        (*plan)->mixed_precision_fock_threshold != mixed_precision_fock_threshold)) {

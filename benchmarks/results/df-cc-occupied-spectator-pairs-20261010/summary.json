@@ -1,0 +1,72 @@
+{
+  "provenance": {
+    "parent": "2daa0aceaf6d140389ac5a183ead8b0ac3d3cd4a",
+    "slurm_job": "2805",
+    "visibility": "0",
+    "device": {
+      "name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+      "cuda_driver_api": 13020,
+      "cuda_runtime": 12090
+    },
+    "input_sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e",
+    "oracle_sha256": "ba40ed0b759eb27a9f3909377a6da0795fd292019a9b079e58c82929941a059b",
+    "overlay_sha256": "6acefa88c56ecf706ce733ad7fbc4e0d2bc5cbecba8059ce1429754dbd9983e9",
+    "libraries": {
+      "base": "505f2722643dc640c29ea161ba4106809df526c8b60a9dcb61b1ef8cb0d20de7",
+      "candidate": "1c9eecba3b1a1a7ebee232172852ebe81cc8bfd312e0a96a706421571cc847b2"
+    },
+    "executables": {
+      "base": "99d33e3e4b016218bbaadf1f8e2da5a0b02aec1e78a633692c3b43bc64fddbbc",
+      "candidate": "6054e6c5b341821ebab95cd3cad5cf62de872a0da5eb3a1d392da4a09ea3d67b"
+    },
+    "timing_boundary": "fresh process: native molecular RHF, DF source, CCSD including per-state admission/projection, independent expanded replay, FP64 (T), and owner teardown",
+    "forces_requested": false,
+    "precision": "FP64, pedantic matrix GEMMs, original ordered Q accumulation",
+    "packed_diis": false,
+    "saved_auxiliary_summands_per_admitted_primary_q": 872104896
+  },
+  "medians": {
+    "base": {
+      "native_seconds": 187.14249815,
+      "reference_seconds": 87.0211287905,
+      "source_seconds": 3.559807042,
+      "ccsd_seconds": 91.362928088,
+      "triples_seconds": 5.1671405335,
+      "ccsd_iteration_seconds": 81.54845796157812,
+      "ccsd_replay_seconds": 9.6756813335,
+      "ccsd_diis_seconds": 0.06191717592187418,
+      "ccsd_update_seconds": 0.001117185,
+      "ccsd_packing_bytes": 6263154422624.0,
+      "ccsd_capacity": 4381900502.0,
+      "ccsd_q_operations": 186538.0,
+      "ccsd_gemm_calls": 59498.0,
+      "ccsd_gemm_summands": 43573243985856.0,
+      "ccsd_contraction_terms": 44063663429680.0,
+      "complete_process_wall_seconds": 187.49529616045766
+    },
+    "candidate": {
+      "native_seconds": 165.3204044055,
+      "reference_seconds": 87.13497952450001,
+      "source_seconds": 3.564322734,
+      "ccsd_seconds": 69.422902437,
+      "triples_seconds": 5.1669684995,
+      "ccsd_iteration_seconds": 59.540564623128915,
+      "ccsd_replay_seconds": 9.673095146,
+      "ccsd_diis_seconds": 0.06200156637109289,
+      "ccsd_update_seconds": 0.001148816,
+      "ccsd_packing_bytes": 3961001679968.0,
+      "ccsd_capacity": 4717423790.0,
+      "ccsd_q_operations": 186538.0,
+      "ccsd_gemm_calls": 59498.0,
+      "ccsd_gemm_summands": 27400930794432.0,
+      "ccsd_contraction_terms": 27891350238256.0,
+      "complete_process_wall_seconds": 165.6574671268463
+    }
+  },
+  "complete_process_wall_speedup": 1.1318252017996255,
+  "ccsd_speedup": 1.3160344047976122,
+  "all_scientific_gates_passed": true,
+  "all_contraction_deltas_exact": true,
+  "interpretation": "two fresh samples per selection in ABBA order, scoped numerical qualification and observed endpoint timing, not formal/global performance or force promotion"
+}

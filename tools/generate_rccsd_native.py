@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 import typing
-from collections import defaultdict
-from dataclasses import dataclass, replace
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,16 +53,50 @@ from generativeqc_compiler.tensor.iteration_reuse import (
     analyze_iteration_reuse,
 )
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.native_arena import (
+    SymbolicArenaPlan,
+    analyze_native_copy_roundtrips,
+    plan_symbolic_arena,
+)
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from generativeqc_compiler.tensor import Node
     from generativeqc_compiler.tensor.types import Index, TensorSpec
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)
+
+
+def contraction_query(
+    program: Program,
+    name: str,
+    *,
+    batch_dim: bool = False,
+    nodes: Iterable[Node] | None = None,
+) -> str:
+    """Query exact scalar summands, not hardware FLOPs or measured traffic."""
+    terms: Counter[tuple[str, ...]] = Counter()
+    for node in program.live_nodes if nodes is None else nodes:
+        if node.op == "einsum":
+            terms[tuple(sorted(_label_dims(node).values()))] += 1
+    lines = [
+        f"inline std::size_t {name}(std::size_t o,std::size_t v{',std::size_t q' if batch_dim else ''}) {{",
+        "  std::size_t total=0;",
+    ]
+    if any("n" in dimensions for dimensions in terms):
+        lines.append("  const auto n=checked_add(o,v);")
+    if any("occupied_pairs" in dimensions for dimensions in terms):
+        lines.append(_occupied_pair_declaration(checked=True))
+    for dimensions, count in sorted(terms.items()):
+        factors = ",".join((str(count), *dimensions))
+        lines.append(f"  total=checked_add(total,checked_product({{{factors}}}));")
+    return "\n".join([*lines, "  return total;", "}"])
 
 
 def _prepare_production(
@@ -183,6 +217,13 @@ def _dim(index: Index) -> str:
         return "o" if _kind(index) == "occupied" else "v"
     if index.space.kind == "batch":
         return "q"
+    if (
+        index.space.kind == "pair"
+        and index.space.name == "occupied_pairs"
+        and index.start == 0
+        and index.stop == index.space.size
+    ):
+        return "occupied_pairs"
     if index.space.kind == "orbital" and index.space.size == REPRESENTATIVE_ORBITALS:
         bounds = (index.start, index.stop)
         if bounds == (0, REPRESENTATIVE[0]):
@@ -192,6 +233,26 @@ def _dim(index: Index) -> str:
         if bounds == (0, REPRESENTATIVE_ORBITALS):
             return "n"
     raise ValueError(f"unsupported runtime-shape RCCSD index domain: {index}")
+
+
+def _uses_occupied_pairs(program: Program) -> bool:
+    return any(
+        index.space.kind == "pair"
+        and index.space.name == "occupied_pairs"
+        and _dim(index) == "occupied_pairs"
+        for node in program.live_nodes
+        for index in node.spec.indices
+    )
+
+
+def _occupied_pair_declaration(*, checked: bool) -> str:
+    """Divide before multiplying, admitting the triangular extent without wrap."""
+    extent = (
+        "o%2?checked_mul(o,o/2+1):checked_mul(o/2,checked_add(o,1))"
+        if checked
+        else "o%2?o*(o/2+1):(o/2)*(o+1)"
+    )
+    return f"  const std::size_t occupied_pairs={extent};"
 
 
 def _size(spec: TensorSpec) -> str:
@@ -213,30 +274,59 @@ def ordered_batch_accumulation(
     output_type: str,
     batch_expression: str,
     fields: dict[str, str] | None = None,
+    *,
+    source_program: Program | None = None,
+    element_offsets: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     """Emit one fused consumer of typed Q-major outputs in their original order.
 
     This shared primal/adjoint lowering never builds a Q subtotal: every output
     lane starts from its retained accumulator, checks each individual addition,
     and visits Q in increasing order. Thus tile boundaries cannot regroup the
-    reduction or hide overflow before a later cancelling contribution. Output
-    extents and optional Q strides come solely from the supplied TensorIR.
+    reduction or hide overflow before a later cancelling contribution.
+    Target extents and optional Q strides come solely from the supplied
+    TensorIR. A separately typed source may use storage coordinates with an
+    explicit element-offset mapping; their mathematical admission belongs to
+    its compiler transform and native consumer, not this storage lowering.
     """
     fields = fields or {key: key for key in program.outputs}
-    sizes, device_sizes, strides = {}, {}, {}
+    source_program = program if source_program is None else source_program
+    element_offsets = {} if element_offsets is None else element_offsets
+    if set(element_offsets) - set(fields):
+        raise ValueError("ordered accumulation has an unknown output offset")
+    sizes, device_sizes, strides, offsets = {}, {}, {}, {}
     for key, field in fields.items():
         spec = program.outputs[key].spec
         batched = bool(spec.indices and spec.indices[0].space.kind == "batch")
         if batched:
             spec = replace(spec, indices=spec.indices[1:], symmetries=())
         sizes[field], device_sizes[field] = _size(spec), _device_size(spec)
-        strides[field] = device_sizes[field] if batched else "0"
+        source_spec = source_program.outputs[key].spec
+        source_batched = bool(
+            source_spec.indices and source_spec.indices[0].space.kind == "batch"
+        )
+        if source_batched:
+            source_spec = replace(
+                source_spec, indices=source_spec.indices[1:], symmetries=()
+            )
+        if (
+            tuple(map(_dim, source_spec.indices)) != tuple(map(_dim, spec.indices))
+            and key not in element_offsets
+        ):
+            raise ValueError("ordered accumulation requires a storage-coordinate map")
+        strides[field] = _device_size(source_spec) if source_batched else "0"
+        offsets[field] = element_offsets.get(key, "x")
     targets = ", ".join("double* target_" + field for field in fields.values())
     declaration = (
         f"void accumulate_{name}_cuda({state_type}& s, {output_type} values, {targets})"
     )
     lines = [
         f"__global__ void accumulate_{name}_kernel({output_type} values,{targets},std::size_t o,std::size_t v,std::size_t q,int* error) {{",
+        *(
+            [_occupied_pair_declaration(checked=False)]
+            if _uses_occupied_pairs(program) or _uses_occupied_pairs(source_program)
+            else []
+        ),
         "  std::size_t limit=0;",
         *(f"  if ({size}>limit) limit={size};" for size in device_sizes.values()),
         "  for(std::size_t x=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;x<limit;x+=std::size_t(blockDim.x)*gridDim.x){",
@@ -245,7 +335,7 @@ def ordered_batch_accumulation(
         lines += [
             f"    if(x<{device_sizes[field]}){{",
             f"      double value=target_{field}[x];",
-            f"      for(std::size_t Q=0;Q<q;++Q) value=generativeqc_tensor::finite(value+values.{field}[Q*({strides[field]})+x],error,1);",
+            f"      for(std::size_t Q=0;Q<q;++Q) value=generativeqc_tensor::finite(value+values.{field}[Q*({strides[field]})+{offsets[field]}],error,1);",
             f"      target_{field}[x]=value; }}",
         ]
     lines += [
@@ -253,6 +343,11 @@ def ordered_batch_accumulation(
         "}",
         declaration + " {",
         "  const auto o=s.o,v=s.v;",
+        *(
+            [_occupied_pair_declaration(checked=True)]
+            if _uses_occupied_pairs(program)
+            else []
+        ),
         "  const auto count=std::max({" + ",".join(sizes.values()) + "});",
         f"  accumulate_{name}_kernel<<<generativeqc_tensor::blocks(count,256),256,0,s.stream>>>(values,"
         + ",".join("target_" + field for field in fields.values())
@@ -416,27 +511,6 @@ def _canonical_d2_consumer(node: typing.Any) -> bool:
     )
 
 
-@dataclass(frozen=True)
-class ArenaPlan:
-    """Shape-symbolic storage shared by admission and CPU/CUDA emission.
-
-    Slots are reused only after their last reader and only for an identical
-    product of runtime extents. This is valid for every o/v/q, including equal
-    concrete extents; no representative-shape size comparison is involved.
-    Program outputs remain live through return because callers borrow pointers.
-    """
-
-    slots: tuple[tuple[str, ...], ...]
-    node_slots: dict[int, int]
-
-    @property
-    def sizes(self) -> tuple[str, ...]:
-        return tuple(
-            "checked_product({" + ",".join(shape) + "})" if shape else "1"
-            for shape in self.slots
-        )
-
-
 def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
     """Declare the conventional solver's immutable reference inputs explicitly.
 
@@ -456,53 +530,14 @@ def _iteration_reuse_plan(program: Program) -> IterationReusePlan:
 
 def _arena_plan(
     program: Program, *, retained_nodes: tuple[typing.Any, ...] = ()
-) -> ArenaPlan:
-    """Color last-use intervals without aliasing a node with its own inputs.
-
-    All emitted operations write their entire output. Reusing a dead slot needs
-    no clearing or extra arithmetic. CUDA launches use one ordered stream, so
-    the same intervals apply to queued kernels and captured graph replays.
-    """
-    nodes = _execution_nodes(program)
-    numbers = {id(node): number for number, node in enumerate(nodes)}
-    last_use = list(range(len(nodes)))
-    for number, node in enumerate(nodes):
-        for source in node.inputs:
-            last_use[numbers[id(source)]] = number
-    for node in program.outputs.values():
-        last_use[numbers[id(node)]] = len(nodes)
-
-    releases: dict[int, list[int]] = defaultdict(list)
-    available: dict[tuple[str, ...], list[int]] = defaultdict(list)
-    slots: list[tuple[str, ...]] = []
-    node_slots = {}
-    # Retained values are prepared before the dynamic traversal. Their slots
-    # must be exclusive even *before* their original position in that traversal;
-    # merely extending each last-use interval would alias early dynamic writes.
-    for node in retained_nodes:
-        number = numbers.get(id(node))
-        if number is None or node.op == "input" or number in node_slots:
-            raise ValueError("invalid retained native arena node")
-        if node.spec.dtype != "float64":
-            raise ValueError("native RCCSD arena requires FP64 intermediates")
-        node_slots[number] = len(slots)
-        slots.append(tuple(sorted(_dim(index) for index in node.spec.indices)))
-    for number, node in enumerate(nodes):
-        for slot in releases[number]:
-            available[slots[slot]].append(slot)
-        if node.op == "input" or number in node_slots:
-            continue
-        if node.spec.dtype != "float64":
-            raise ValueError("native RCCSD arena requires FP64 intermediates")
-        shape = tuple(sorted(_dim(index) for index in node.spec.indices))
-        if available[shape]:
-            slot = available[shape].pop()
-        else:
-            slot = len(slots)
-            slots.append(shape)
-        node_slots[number] = slot
-        releases[last_use[number] + 1].append(slot)
-    return ArenaPlan(tuple(slots), node_slots)
+) -> SymbolicArenaPlan:
+    """Bind RCCSD runtime extents to the shared TensorIR storage schedule."""
+    return plan_symbolic_arena(
+        program,
+        dimension_symbol=_dim,
+        execution_nodes=_execution_nodes(program),
+        retained_nodes=retained_nodes,
+    )
 
 
 def _cpu_node(
@@ -819,6 +854,11 @@ def _cpu_function(
     lines = [
         f"inline {output_type} {function_name}({dimensions},{signature},double* arena,std::size_t arena_elements){{",
         "  const std::size_t n=checked_add(o,v);",
+        *(
+            [_occupied_pair_declaration(checked=True)]
+            if _uses_occupied_pairs(program)
+            else []
+        ),
         "  std::size_t cursor=0;",
         "  auto allocate=[&](std::size_t count)->double*{",
         "    const auto next=checked_add(cursor,count);",
@@ -929,9 +969,14 @@ def _required_function(
     dimensions = "std::size_t o,std::size_t v"
     if batch_dim:
         dimensions += ",std::size_t q"
+    pair_extent = (
+        _occupied_pair_declaration(checked=True)
+        if _uses_occupied_pairs(program)
+        else ""
+    )
     return (
         f"inline std::size_t {name}({dimensions}){{"
-        f"[[maybe_unused]] const std::size_t n=checked_add(o,v);{body}return required;}}"
+        f"[[maybe_unused]] const std::size_t n=checked_add(o,v);{pair_extent}{body}return required;}}"
     )
 
 
@@ -1516,9 +1561,15 @@ def _cuda_kernel(
         for spec in (node.spec, *(source.spec for source in node.inputs))
         for index in spec.indices
     )
+    uses_occupied_pairs = any(
+        _dim(index) == "occupied_pairs"
+        for spec in (node.spec, *(source.spec for source in node.inputs))
+        for index in spec.indices
+    )
     lines = [
         f"__global__ void {prefix}_node_{number}({','.join(arguments)}){{",
         *(["  const std::size_t n=o+v;"] if uses_complete_orbital else []),
+        *([_occupied_pair_declaration(checked=False)] if uses_occupied_pairs else []),
         f"  const std::size_t count={size};",
         "  for(std::size_t flat=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;flat<count;flat+=std::size_t(blockDim.x)*gridDim.x){",
     ]
@@ -1851,6 +1902,7 @@ def _cuda_program(
     prepared_contractions: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
+    elide_native_copy_roundtrips: bool = False,
     parallel_scalar_reductions: bool = False,
     reuse_plan: IterationReusePlan | None = None,
     reuse_phase: typing.Literal["prepare", "dynamic"] | None = None,
@@ -1861,6 +1913,23 @@ def _cuda_program(
     retained = () if reuse_plan is None else reuse_plan.invariant_nodes
     retained_ids = {id(node) for node in retained}
     arena_plan = _arena_plan(program, retained_nodes=retained)
+    if elide_native_copy_roundtrips and (
+        reuse_plan is not None or not emit_kernels or kernel_prefix is not None
+    ):
+        raise ValueError(
+            "native copy roundtrips require the complete original kernel schedule"
+        )
+    elided_nodes = (
+        frozenset(
+            analyze_native_copy_roundtrips(
+                program,
+                dimension_symbol=_dim,
+                execution_nodes=_execution_nodes(program),
+            ).elided_nodes
+        )
+        if elide_native_copy_roundtrips
+        else frozenset()
+    )
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
     kernel_name = prefix if kernel_prefix is None else kernel_prefix
@@ -1892,6 +1961,7 @@ def _cuda_program(
         if node.op != "input"
         for index in node.spec.indices
     )
+    uses_occupied_pairs = _uses_occupied_pairs(program)
     lines = kernels + [
         f"static {output_type} run_{prefix}({state_type}& s){{",
         "  auto* arena=s."
@@ -1907,6 +1977,7 @@ def _cuda_program(
         )
         + ";",
         "  const auto o=s.o,v=s.v;",
+        *([_occupied_pair_declaration(checked=True)] if uses_occupied_pairs else []),
         *(["  const auto q=s.q;"] if batch_dim else []),
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
@@ -1940,6 +2011,8 @@ def _cuda_program(
         if reuse_phase is not None and (
             (id(node) in retained_ids) != (reuse_phase == "prepare")
         ):
+            continue
+        if number in elided_nodes:
             continue
         sources = [names[x._emit_index] for x in node.inputs]
         gemm = _packed_matrix_gemm(node) if prepared_contractions else None
@@ -1996,6 +2069,11 @@ def _cuda_program(
             f"static void bind_{prefix}({state_type}& s,generativeqc::tensor::CudaContractionContext& context,",
             "    std::size_t q,std::size_t& calls,std::size_t& summands){",
             "  const auto o=s.o,v=s.v;",
+            *(
+                [_occupied_pair_declaration(checked=True)]
+                if uses_occupied_pairs
+                else []
+            ),
             *(["  const auto n=checked_add(o,v);"] if uses_complete_orbital else []),
             f"  {prepared_contractions}.add(o,v,q,{{",
             ",\n".join(bindings),

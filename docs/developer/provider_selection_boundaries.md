@@ -44,7 +44,8 @@ The initial debt contains three families:
   schedule-search/artifact identity. This is owned by #1886/#1889: the semantic
   reduction schedule should remain in the planner, while generated/CUB choice
   moves to shared lowering candidates and a prepared binding.
-- CC/DF-CCSD(T) still carries `matrix_gemm`, `df_matrix_gemm`, and
+- CC/DF-CCSD(T) still carries `matrix_gemm`, `df_matrix_gemm`,
+  the internal expanded-replay ablation/diagnostic `df_replay_matrix_gemm`, and
   `lambda_matrix_gemm` through method/solver surfaces. This is migration debt
   under #1890.
 - RHF/SCF still carries `use_cublas` through policy and prepared execution.

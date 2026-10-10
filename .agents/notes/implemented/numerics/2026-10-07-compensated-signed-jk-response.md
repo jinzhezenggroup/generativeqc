@@ -1,5 +1,9 @@
 # Decision: compensate exported RHF references and signed J/K response scatter
 
+The generated-ABI routing limitation below is superseded by the
+[2026-10-09 generated Fock sink follow-up](2026-10-09-generated-fock-compensation.md).
+The original compensation and response decisions remain in force.
+
 Status: implemented
 Date: 2026-10-07 (UTC; node2 evidence directories use Asia/Shanghai dates)
 

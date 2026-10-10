@@ -87,7 +87,10 @@ def test_cuda_ks_incremental_storage_is_explicitly_budgeted() -> None:
     ks = _source("src/dft/cuda_ks.cpp")
 
     assert "bool incremental_direct_jk = false" in header
-    assert "bool incremental_direct_jk, void* storage" in ks
+    assert (
+        "bool incremental_direct_jk,\n"
+        "                        bool incremental_diis_gram, void* storage" in ks
+    )
     assert "reserve(incremental_anchor_density, elements);" in ks
     assert "reserve(incremental_delta_density, elements);" in ks
     assert "reserve(incremental_anchor_j, matrix);" in ks

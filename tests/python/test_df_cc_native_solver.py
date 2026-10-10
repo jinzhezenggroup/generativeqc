@@ -14,6 +14,7 @@ import pytest
 from tools import generate_df_ccsd_core as core
 from tools import generate_df_ccsd_hoisted as hoisted
 from tools import generate_df_ccsd_native as actions
+from tools import generate_df_ccsd_spectator_pairs as pairs
 from tools import generate_rccsd_native as conventional
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds
 
@@ -136,6 +137,17 @@ COLUMNS = (
     "diis_metric_weight_terms",
     "diis_pack_calls",
     "diis_maximum_pair_asymmetry",
+    "replay_matrix",
+    "occupied_pairs",
+    "pair_resource_refused",
+    "pair_initial_symmetry_refused",
+    "pair_evaluations",
+    "pair_refusals",
+    "pair_projection_calls",
+    "pair_projection_bytes",
+    "pair_geometry_elements",
+    "pair_capacity_bytes",
+    "pair_binding_host_bytes",
 )
 
 
@@ -199,6 +211,9 @@ def solver_probe(
         ("generated_df_ccsd_hoisted_cpu.hpp", hoisted.cpu_header),
         ("generated_df_ccsd_hoisted_cuda.cuh", hoisted.cuda_header),
         ("generated_df_ccsd_hoisted_cuda.cu", hoisted.cuda_source),
+        ("generated_df_ccsd_spectator_pairs_cpu.hpp", pairs.cpu_header),
+        ("generated_df_ccsd_spectator_pairs_cuda.cuh", pairs.cuda_header),
+        ("generated_df_ccsd_spectator_pairs_cuda.cu", pairs.cuda_source),
     ):
         (directory / name).write_text(producer())
     sources = [ROOT / "src/cc/solver.cpp", ROOT / "tests/native/df_cc_solver_probe.cpp"]
@@ -212,6 +227,7 @@ def solver_probe(
                     "generated_df_ccsd_cuda.cu",
                     "generated_df_ccsd_core_cuda.cu",
                     "generated_df_ccsd_hoisted_cuda.cu",
+                    "generated_df_ccsd_spectator_pairs_cuda.cu",
                 )
             ],
         ]
@@ -288,6 +304,8 @@ def _stream(
     canonical_eps: np.ndarray | None = None,
     level_shift: float = 0.0,
     packed_diis: bool = False,
+    replay_matrix: bool = True,
+    occupied_pairs: bool = True,
     max_iterations: int = 100,
 ) -> bytes:
     o, v = arrays["t1"].shape
@@ -305,6 +323,8 @@ def _stream(
             | (0 if matrix else 8)
             | (16 if canonical_eps is not None else 0)
             | (32 if packed_diis else 0)
+            | (0 if replay_matrix else 64)
+            | (0 if occupied_pairs else 128)
             | (batch_limit << 8),
         ],
         dtype=np.uint64,
@@ -675,13 +695,109 @@ def test_matrix_schedule_matches_scalar_and_budget_fallback(
     np.testing.assert_allclose(t2, s2, atol=2e-11, rtol=0)
     admitted, _, _ = _run(solver_probe, arrays, budget=int(fast["capacity"]))
     assert admitted["matrix_gemm"] == 1
-    one_q, _, _ = _run(solver_probe, arrays, batch_limit=1)
+    one_q, _, _ = _run(
+        solver_probe, arrays, batch_limit=1, replay_matrix=False, occupied_pairs=False
+    )
     for budget in (int(one_q["capacity"]) - 1, int(scalar["capacity"])):
         bounded, b1, b2 = _run(solver_probe, arrays, budget=budget)
         assert bounded["matrix_gemm"] == 0 and bounded["hoisted_evaluations"] > 0
         assert bounded["capacity"] <= budget
         np.testing.assert_allclose(b1, s1, atol=2e-11, rtol=0)
         np.testing.assert_allclose(b2, s2, atol=2e-11, rtol=0)
+
+
+@pytest.mark.parametrize("batch", [1, 3])
+def test_occupied_pairs_preserve_endpoint_and_last_resource_priority(
+    solver_probe: tuple[Path, bool], batch: int
+) -> None:
+    """Default folding reports actual work and yields before replay/tile admission."""
+    if not solver_probe[1]:
+        pytest.skip("occupied spectator pairs are a CUDA matrix execution option")
+    _, _, arrays = _case(2, 3, 5)
+    original, reference_t1, reference_t2 = _run(
+        solver_probe, arrays, batch_limit=batch, occupied_pairs=False
+    )
+    selected, actual_t1, actual_t2 = _run(solver_probe, arrays, batch_limit=batch)
+    assert selected["occupied_pairs"] and not original["occupied_pairs"]
+    assert selected["pair_projection_calls"] == selected["hoisted_evaluations"]
+    assert (
+        selected["pair_evaluations"] + selected["pair_refusals"]
+        == selected["pair_projection_calls"]
+    )
+    assert selected["pair_evaluations"] > 0
+    assert (
+        selected["pair_projection_bytes"] > 0 and selected["pair_geometry_elements"] > 0
+    )
+    assert (
+        selected["pair_capacity_bytes"] > 0 and selected["pair_binding_host_bytes"] > 0
+    )
+    assert selected["contraction_terms"] < original["contraction_terms"]
+    assert selected["iterations"] == original["iterations"]
+    assert selected["replays_called"] == original["replays_called"]
+    assert selected["hoisted_evaluations"] == original["hoisted_evaluations"]
+    from test_df_cc_spectator_pairs import _summands
+
+    original_terms = _summands(hoisted.packed_programs()["auxiliary"], 2, 3)
+    paired_terms = _summands(pairs.programs()["auxiliary_packed"], 2, 3)
+    assert original["contraction_terms"] - selected["contraction_terms"] == (
+        5 * selected["pair_evaluations"] * (original_terms - paired_terms)
+    )
+    np.testing.assert_allclose(actual_t1, reference_t1, atol=2e-11, rtol=0)
+    np.testing.assert_allclose(actual_t2, reference_t2, atol=2e-11, rtol=0)
+    for budget in (int(selected["capacity"]) - 1, int(original["capacity"])):
+        refused, bounded_t1, bounded_t2 = _run(
+            solver_probe, arrays, batch_limit=batch, budget=budget
+        )
+        assert refused["pair_resource_refused"] and not refused["occupied_pairs"]
+        assert refused["pair_projection_calls"] == 0
+        assert refused["batch_size"] == original["batch_size"]
+        assert refused["replay_matrix"] == original["replay_matrix"]
+        assert refused["capacity"] <= budget
+        np.testing.assert_allclose(bounded_t1, reference_t1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(bounded_t2, reference_t2, atol=2e-11, rtol=0)
+
+
+def test_occupied_pairs_initial_and_per_state_refusals(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """Supplied asymmetry and unbounded projection retain original physical states."""
+    if not solver_probe[1]:
+        pytest.skip("occupied spectator pairs are a CUDA matrix execution option")
+    _, _, arrays = _case(2, 3, 4)
+    for initial in (True, False):
+        changed = {name: value.copy() for name, value in arrays.items()}
+        if initial:
+            changed["t2"][0, 1, 0, 1] = np.nextafter(changed["t2"][0, 1, 0, 1], 1.0)
+        else:
+            changed["d2"][0, 1, 0, 1] *= 1.1
+        original, reference_t1, reference_t2 = _run(
+            solver_probe, changed, occupied_pairs=False
+        )
+        selected, actual_t1, actual_t2 = _run(solver_probe, changed)
+        if initial:
+            assert (
+                selected["pair_initial_symmetry_refused"]
+                and not selected["occupied_pairs"]
+            )
+            assert selected["pair_projection_calls"] == 0
+        else:
+            assert selected["occupied_pairs"] and selected["pair_refusals"] > 0
+        assert selected["status"] == original["status"] == 0
+        np.testing.assert_allclose(actual_t1, reference_t1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(actual_t2, reference_t2, atol=2e-11, rtol=0)
+
+
+def test_single_occupied_block_skips_pair_admission(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """No spectator work is removed for o=1, so allocate/project nothing."""
+    if not solver_probe[1]:
+        pytest.skip("occupied spectator pairs are a CUDA matrix execution option")
+    _, _, arrays = _case(1, 3, 4)
+    actual, _, _ = _run(solver_probe, arrays)
+    assert not actual["occupied_pairs"]
+    assert actual["pair_projection_calls"] == actual["pair_capacity_bytes"] == 0
+    assert actual["pair_geometry_elements"] == 0
 
 
 @pytest.mark.parametrize("batch", [1, 2, 4, 8])
@@ -711,10 +827,52 @@ def test_auxiliary_tiles_preserve_tail_and_budget(
         assert tiled["accumulation_bytes"] < one["accumulation_bytes"]
         for budget in (int(tiled["capacity"]) - 1, int(one["capacity"])):
             short, b1, b2 = _run(solver_probe, arrays, batch_limit=batch, budget=budget)
-            assert short["batch_size"] < tiled["batch_size"]
+            assert (
+                short["batch_size"] < tiled["batch_size"]
+                or (tiled["replay_matrix"] and not short["replay_matrix"])
+                or (tiled["occupied_pairs"] and not short["occupied_pairs"])
+            )
             assert short["capacity"] <= budget
             np.testing.assert_allclose(b1, s1, atol=2e-11, rtol=0)
             np.testing.assert_allclose(b2, s2, atol=2e-11, rtol=0)
+
+
+def test_expanded_matrix_replay_ablation_and_optional_capacity(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """Audit storage is optional and cannot displace an admitted primal tile."""
+    if not solver_probe[1]:
+        pytest.skip("matrix replay is a CUDA execution plan")
+    _, _, arrays = _case(2, 3, 5)
+    original, reference_t1, reference_t2 = _run(
+        solver_probe, arrays, replay_matrix=False, occupied_pairs=False
+    )
+    selected, actual_t1, actual_t2 = _run(solver_probe, arrays, occupied_pairs=False)
+    assert selected["replay_matrix"] and not original["replay_matrix"]
+    assert selected["gemm_calls"] > original["gemm_calls"]
+    assert selected["iterations"] == original["iterations"]
+    assert selected["replays_called"] == original["replays_called"]
+    assert selected["q_calls"] == original["q_calls"]
+    assert selected["accumulations"] == original["accumulations"]
+    assert (
+        original["contraction_terms"] - selected["contraction_terms"]
+        == 5 * 2 * 3 * 3 * selected["replays_called"]
+    )
+    np.testing.assert_allclose(actual_t1, reference_t1, atol=2e-11, rtol=0)
+    np.testing.assert_allclose(actual_t2, reference_t2, atol=2e-11, rtol=0)
+    exact, _, _ = _run(
+        solver_probe, arrays, budget=int(selected["capacity"]), occupied_pairs=False
+    )
+    assert exact["replay_matrix"] and exact["capacity"] <= selected["capacity"]
+    for budget in (int(selected["capacity"]) - 1, int(original["capacity"])):
+        refused, bounded_t1, bounded_t2 = _run(
+            solver_probe, arrays, budget=budget, occupied_pairs=False
+        )
+        assert not refused["replay_matrix"] and refused["matrix_gemm"]
+        assert refused["batch_size"] == original["batch_size"]
+        assert refused["capacity"] <= budget
+        np.testing.assert_allclose(bounded_t1, reference_t1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(bounded_t2, reference_t2, atol=2e-11, rtol=0)
 
 
 @pytest.mark.parametrize("o,v,q", [(2, 3, 4), (4, 1, 1), (2, 6, 1)])

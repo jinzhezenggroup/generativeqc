@@ -4,9 +4,9 @@
     "python/generativeqc_compiler/method/df_hf_response_cuda.py": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "HF response equations still submit or emit vendor contractions; retain equations while moving submission to shared bindings.",
+      "reason": "HF response emits the existing direct-NT panel charge and the TensorIR-qualified direct-NN retained-factor charge/metric-root vector contraction. Both borrow the response owner's handle and workspace; shared-binding migration remains #1890 debt.",
       "references": {
-        "cublasDgemm": 1
+        "cublasDgemm": 2
       }
     },
     "python/generativeqc_compiler/method/df_occupied_response_cuda.py": {
@@ -86,6 +86,7 @@
         "cublasDsyr2k_v2": 2,
         "cublasDsyrk": 1,
         "cublasDsyrk_v2": 2,
+        "cublasDtrsmBatched": 1,
         "cublasGetPointerMode": 1,
         "cublasGetPointerMode_v2": 2,
         "cublasGetProperty": 1,

@@ -65,7 +65,7 @@ def prepare_case(case: str, destination: Path) -> None:
             lines[0] = " ".join(dimensions)
         destination.write_text("\n".join(lines) + "\n")
         return
-    if case != "propane322":
+    if case not in {"propane322", "butane414", "methane34", "ethane58", "ethane144"}:
         raise ValueError("unknown qualification case")
     from pyscf import df, gto
 
@@ -82,8 +82,49 @@ def prepare_case(case: str, destination: Path) -> None:
         ("H", (1.29, 1.52, 0.88)),
         ("H", (1.29, 1.52, -0.88)),
     ]
-    mol = gto.M(atom=atoms, basis="aug-cc-pvtz", unit="Angstrom", verbose=0)
-    auxiliary = df.addons.make_auxmol(mol, "aug-cc-pvtz-ri")
+    orbital_basis, auxiliary_basis, unit = "aug-cc-pvtz", "aug-cc-pvtz-ri", "Angstrom"
+    if case == "butane414":
+        atoms = [
+            ("C", (-1.89, 0.44, 0)),
+            ("C", (-0.63, -0.44, 0)),
+            ("C", (0.63, 0.44, 0)),
+            ("C", (1.89, -0.44, 0)),
+            ("H", (-2.80, -0.12, 0)),
+            ("H", (-1.89, 1.07, 0.89)),
+            ("H", (-1.89, 1.07, -0.89)),
+            ("H", (-0.63, -1.07, 0.89)),
+            ("H", (-0.63, -1.07, -0.89)),
+            ("H", (0.63, 1.07, 0.89)),
+            ("H", (0.63, 1.07, -0.89)),
+            ("H", (2.80, 0.12, 0)),
+            ("H", (1.89, -1.07, 0.89)),
+            ("H", (1.89, -1.07, -0.89)),
+        ]
+    elif case == "methane34":
+        atoms = [
+            ("C", (0, 0, 0)),
+            ("H", (0.6293, 0.6293, 0.6293)),
+            ("H", (-0.6293, -0.6293, 0.6293)),
+            ("H", (-0.6293, 0.6293, -0.6293)),
+            ("H", (0.6293, -0.6293, -0.6293)),
+        ]
+        orbital_basis, auxiliary_basis = "cc-pvdz", "cc-pvdz-ri"
+    elif case in {"ethane58", "ethane144"}:
+        source = (
+            Path(__file__).resolve().parent
+            / "results/df-lambda-gemm-20261004/ethane230.input"
+        )
+        original = read_molecule(source)
+        atoms = list(
+            zip(
+                [original.atom_symbol(index) for index in range(original.natm)],
+                original.atom_coords(),
+            )
+        )
+        orbital_basis = "cc-pvdz" if case == "ethane58" else "cc-pvtz"
+        auxiliary_basis, unit = orbital_basis + "-ri", "Bohr"
+    mol = gto.M(atom=atoms, basis=orbital_basis, unit=unit, verbose=0)
+    auxiliary = df.addons.make_auxmol(mol, auxiliary_basis)
 
     def shells(system: Mole) -> list:
         """Separate general contractions into the native input's one-contraction shells."""
@@ -476,7 +517,17 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     geometry = commands.add_parser("prepare-case")
     geometry.add_argument(
-        "--case", choices=("moved", "budget8", "propane322"), required=True
+        "--case",
+        choices=(
+            "moved",
+            "budget8",
+            "propane322",
+            "butane414",
+            "methane34",
+            "ethane58",
+            "ethane144",
+        ),
+        required=True,
     )
     geometry.add_argument("--output", type=raw_output_path, required=True)
     prepare = commands.add_parser("prepare-jk")

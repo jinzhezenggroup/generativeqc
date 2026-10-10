@@ -275,6 +275,36 @@ __global__ void shell_warp_gradient(OneElectronDeviceView batch, OneElectronWeig
   }
 }
 
+/** Decode the complete triangular AO domain without retaining its index list.
+ * Floating-point sqrt only estimates an integer address; exact inequalities
+ * repair boundary rounding before any basis access, including large ordinals.
+ */
+__device__ std::size_t implicit_pair_first(std::size_t ordinal, std::size_t nbf) {
+  auto first = static_cast<std::size_t>((sqrt(8.0 * ordinal + 1.0) - 1.0) * 0.5);
+  if (first >= nbf) first = nbf - 1;
+  while (first * (first + 1) / 2 > ordinal) --first;
+  while ((first + 1) * (first + 2) / 2 <= ordinal) ++first;
+  return first;
+}
+
+__global__ void implicit_nucleus_cooperative_gradient(OneElectronDeviceView batch,
+                                                      std::size_t count,
+                                                      OneElectronWeightView weights,
+                                                      const std::uint8_t* active, double sign,
+                                                      double* gradient) {
+  __shared__ generated::PairGeometry shared_pairs[kCooperativeGroups];
+  const std::size_t warp = (std::size_t{blockIdx.x} * blockDim.x + threadIdx.x) / kCooperativeLanes;
+  if (warp >= static_cast<std::size_t>(batch.batch_size) * count) return;
+  const auto system = warp / count;
+  if (active && !active[system]) return;
+  const auto ordinal = warp % count;
+  const auto first = implicit_pair_first(ordinal, batch.nbf);
+  const auto second = ordinal - first * (first + 1) / 2;
+  const auto base = system * batch.nbf;
+  contract_pair_nucleus_cooperative(batch, base + first, base + second, weights, sign, gradient,
+                                    shared_pairs + threadIdx.x / kCooperativeLanes);
+}
+
 __global__ void serial_gradient(OneElectronDeviceView batch, OneElectronWeightView weights,
                                 const std::uint8_t* active, double sign, double* gradient) {
   const std::size_t system = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
@@ -299,8 +329,11 @@ cudaError_t launch_generated_one_electron_gradient(
   const unsigned threads = schedule == NucleusCooperativeSchedule::schedule_code
                                ? NucleusCooperativeSchedule::block_threads
                                : kDerivativeThreads;
+  const bool implicit_cooperative = schedule == NucleusCooperativeSchedule::schedule_code &&
+                                    !pair_first && !pair_second && pair_count == 0;
   const bool ao_pair_schedule =
-      schedule == 0 || schedule == NucleusCooperativeSchedule::schedule_code;
+      schedule == 0 ||
+      (schedule == NucleusCooperativeSchedule::schedule_code && !implicit_cooperative);
   if (ao_pair_schedule && (!pair_first || !pair_second || pair_count == 0))
     return cudaErrorInvalidValue;
   // Validate products before task/grid calculations or matrix offset indexing.
@@ -310,12 +343,16 @@ cudaError_t launch_generated_one_electron_gradient(
   if (n > maximum / n || systems > maximum / (n * n) ||
       (ao_pair_schedule && pair_count > maximum / systems))
     return cudaErrorInvalidValue;
-  if (schedule == 1 && (!batch.shell_pair_first || !batch.shell_pair_second))
+  if (schedule == 1 &&
+      (!batch.shell_pair_first || !batch.shell_pair_second || !batch.shell_ao_offsets))
     return cudaErrorInvalidValue;
+  if (implicit_cooperative && (!batch.atom_offsets || !batch.ao_shells))
+    return cudaErrorInvalidValue;
+  const auto implicit_pairs = n * (n + 1) / 2;
   const std::size_t tasks = schedule == 2 ? static_cast<std::size_t>(batch.batch_size)
                             : schedule == 1
                                 ? batch.shell_pair_count
-                                : static_cast<std::size_t>(batch.batch_size) * pair_count;
+                                : systems * (implicit_cooperative ? implicit_pairs : pair_count);
   const unsigned per_block = schedule == NucleusCooperativeSchedule::schedule_code
                                  ? NucleusCooperativeSchedule::groups_per_block
                              : schedule == 1 ? threads / kWarpThreads
@@ -328,6 +365,9 @@ cudaError_t launch_generated_one_electron_gradient(
   else if (schedule == 1)
     shell_warp_gradient<<<blocks, threads, 0, stream>>>(batch, weights, active, output_sign,
                                                         gradient);
+  else if (implicit_cooperative)
+    implicit_nucleus_cooperative_gradient<<<blocks, threads, 0, stream>>>(
+        batch, implicit_pairs, weights, active, output_sign, gradient);
   else if (schedule == NucleusCooperativeSchedule::schedule_code)
     nucleus_cooperative_gradient<<<blocks, threads, 0, stream>>>(
         batch, pair_first, pair_second, pair_count, weights, active, output_sign, gradient);

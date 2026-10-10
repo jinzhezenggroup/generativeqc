@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/compensated_output.hpp",
+  "reason": "Host/device launch value for runtime-owned sum and correction planes; no operator, spin, integral, method, allocation or provider equations.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

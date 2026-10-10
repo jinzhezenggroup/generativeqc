@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
@@ -11,6 +12,7 @@
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/one_electron_derivatives.cuh"
 #include "scf/cuda/one_electron_view.hpp"
+#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 
 namespace generativeqc::scf {
@@ -82,7 +84,7 @@ HostView pack(const core::System& system, unsigned schedule) {
         host.shell_second.push_back(sj);
       }
   }
-  if (schedule == 0 || schedule == 3)
+  if (schedule == 0)
     for (std::int32_t i = 0; i < static_cast<std::int32_t>(host.ao_shells.size()); ++i)
       for (std::int32_t j = 0; j <= i; ++j) {
         host.pair_first.push_back(i);
@@ -227,8 +229,9 @@ generativeqc_status execute_cuda_one_electron_gradient(
     runtime::cuda_trace::trace_counter("atom_coordinates", 3 * atoms);
     preparation.finish();
     runtime::cuda_trace::TraceRegion derivatives("one_electron_and_overlap_pulay", arena.stream);
-    check(launch_generated_one_electron_gradient(view, first, second, n * (n + 1) / 2, weights,
-                                                 nullptr, schedule, 1.0, output, arena.stream));
+    check(launch_generated_one_electron_gradient(view, first, second, host.pair_first.size(),
+                                                 weights, nullptr, schedule, 1.0, output,
+                                                 arena.stream));
     derivatives.finish();
     runtime::cuda_trace::TraceRegion output_transfer("one_electron_output_and_synchronization",
                                                      arena.stream);
@@ -358,10 +361,10 @@ generativeqc_status execute_cuda_stationary_one_electron_pair(
     preparation.finish();
 
     runtime::cuda_trace::TraceRegion derivatives("one_electron_pair_derivatives", arena.stream);
-    check(launch_generated_one_electron_gradient(view, first, second, n * (n + 1) / 2,
+    check(launch_generated_one_electron_gradient(view, first, second, host.pair_first.size(),
                                                  hcore_weights, nullptr, schedule, 1.0,
                                                  hcore_output, arena.stream));
-    check(launch_generated_one_electron_gradient(view, first, second, n * (n + 1) / 2,
+    check(launch_generated_one_electron_gradient(view, first, second, host.pair_first.size(),
                                                  pulay_weights, nullptr, schedule, 1.0,
                                                  pulay_output, arena.stream));
     derivatives.finish();
@@ -472,17 +475,25 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     OneElectronWeightView hcore_weights{nullptr, resident_density, resident_density};
     OneElectronWeightView pulay_weights{resident_weighted_density, nullptr, nullptr};
     pulay_weights.overlap_scale = -1.0;
-    constexpr unsigned schedule = 1;
+    // The resident owner has shell metadata but no triangular AO-pair list.
+    // Explicit cooperative selection uses implicit AO addresses; its joint
+    // force endpoint is qualified, but Hcore alone has not passed promotion.
+    // Preserve the old prepared default and overlap-only Pulay component lanes.
+    const unsigned hcore_schedule =
+        std::getenv("GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_MAPPING") != nullptr &&
+                cuda_policy::one_electron_derivative_mapping_requested() == 3
+            ? 3U
+            : 1U;
     const auto output_bytes = 3 * atoms * sizeof(double);
 
     check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
     check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, hcore_weights, nullptr,
-                                                 schedule, 1.0, output, source->stream));
+                                                 hcore_schedule, 1.0, output, source->stream));
     check(cudaMemcpyAsync(hcore_result.data(), output, output_bytes, cudaMemcpyDeviceToHost,
                           source->stream));
     check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
     check(launch_generated_one_electron_gradient(view, nullptr, nullptr, 0, pulay_weights, nullptr,
-                                                 schedule, 1.0, output, source->stream));
+                                                 1, 1.0, output, source->stream));
     check(cudaMemcpyAsync(pulay_result.data(), output, output_bytes, cudaMemcpyDeviceToHost,
                           source->stream));
     derivatives.finish();

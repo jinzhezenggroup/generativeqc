@@ -264,9 +264,9 @@
       "role": "summary"
     },
     {
-      "path": "validation.json",
-      "bytes": 21469,
-      "sha256": "3a118e3cde7ab653b2acb9ee38e4c07bb936f550ac3ce1aff02b5478b216b5b1",
+      "path": "validation.json.gz",
+      "bytes": 3617,
+      "sha256": "5394b28370e051ca628a7fd8cc376f95934bcc4b3dae57706de5faf90f30f8a4",
       "role": "evidence"
     },
     {

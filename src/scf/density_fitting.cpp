@@ -1300,10 +1300,44 @@ DensityFittingTilePlan plan_packed_density_fitting_tiles(std::size_t batch, std:
   }
 }
 
+DfResolvedBudget resolve_method_owned_df_resident_budget(const DfResolvedBudget& budget,
+                                                         std::size_t nbf, std::size_t naux,
+                                                         std::size_t restricted_rank,
+                                                         std::size_t source_device_bytes) {
+  if (!budget.feasible || !budget.live_resource || budget.requested_bytes ||
+      !budget.response_bytes || !restricted_rank || restricted_rank > nbf)
+    return budget;
+  const long double basis_count = nbf, auxiliary_count = naux, occupied_rank = restricted_rank;
+  // The generated singleton response stages four metric matrices, density/AO
+  // temporaries, two all-Q occupied projections, and a bounded 64-Q W panel.
+  // It does not retain 3*Natoms copies of the complete derivative tensors.
+  // Metadata has different packing from the value source; keep two copies and
+  // a conservative fixed margin. Native response allocation still enforces
+  // the resulting cap, including optional diagnostic allocations.
+  const auto response_floor = df_budget_ceiling(
+      64.0L * 1024 * 1024 + 2.0L * source_device_bytes +
+      sizeof(double) *
+          (4.0L * auxiliary_count * auxiliary_count + 69.0L * basis_count * basis_count +
+           2.0L * auxiliary_count + 2.0L * auxiliary_count * occupied_rank * occupied_rank));
+  const auto response = std::max(response_floor, budget.total_bytes / 5);
+  if (response >= budget.response_bytes || response >= budget.total_bytes) return budget;
+  const auto value = budget.total_bytes - response;
+  try {
+    (void)plan_packed_density_fitting_tiles(1, nbf, naux, restricted_rank, value,
+                                            source_device_bytes, 0, false);
+  } catch (const DensityFittingBudgetError&) {
+    return budget;
+  }
+  auto result = budget;
+  result.value_bytes = value;
+  result.response_bytes = response;
+  return result;
+}
+
 DensityFittingTilePlan plan_requested_density_fitting_tiles(
     DfPairStorageRequest request, std::size_t batch, std::size_t nbf, std::size_t naux,
     std::size_t occupied, std::size_t packed_rank_capacity, std::size_t budget, std::size_t fixed,
-    bool generated_source, std::size_t automatic_rhf_rank) {
+    bool generated_source, std::size_t automatic_rhf_rank, bool allow_method_owned_packing) {
   const auto dense = [&] {
     return plan_density_fitting_tiles(batch, nbf, naux, occupied, budget, fixed, generated_source,
                                       automatic_rhf_rank);
@@ -1326,10 +1360,11 @@ DensityFittingTilePlan plan_requested_density_fitting_tiles(
       break;
   }
 
-  // Current promoted evidence covers the physical singleton RHF route. Keep
-  // batch/UHF/general-density callers on the existing dense policy until they
-  // have their own endpoint qualification.
-  if (!generated_source || batch != 1 || automatic_rhf_rank == 0) return dense();
+  // A method-owned restricted reservation qualifies the same capacity crossover
+  // without creating an RHF SCF owner or inferring occupations from dimensions.
+  // Batch/UHF/general-density callers retain their existing dense policy.
+  if (!generated_source || batch != 1 || (!automatic_rhf_rank && !allow_method_owned_packing))
+    return dense();
 
   try {
     auto dense_plan = dense();

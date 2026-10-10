@@ -24,10 +24,10 @@
       "sha256": "86a7f3cc6461e4d90b76c1804c188be663b594bf1f6dabf728806541d54d2020"
     },
     {
-      "path": "evidence.json",
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "bytes": 122502,
-      "sha256": "c973c45ebd78a953c8bdbfb2f579e71a907c4eaec47385d8d5a21707cfbc5e3c"
+      "bytes": 13498,
+      "sha256": "127a7830652e34dd1f50bef2502c33be0761852e8ee01ac6c51b3990de07309d"
     },
     {
       "path": "verify.py",

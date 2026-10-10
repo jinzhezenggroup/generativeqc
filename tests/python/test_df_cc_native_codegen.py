@@ -99,7 +99,13 @@ def df_native_probe(
         )
         objects.append(str(obj))
     subprocess.run(
-        [compiler, *objects, "-o", str(executable)],
+        [
+            compiler,
+            *objects,
+            *(["-lcublas"] if backend == "cuda" else []),
+            "-o",
+            str(executable),
+        ],
         check=True,
         capture_output=True,
         text=True,

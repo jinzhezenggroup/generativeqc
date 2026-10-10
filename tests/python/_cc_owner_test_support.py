@@ -22,10 +22,12 @@ root, target = map(Path, sys.argv[1:])
 sys.path[:0] = [str(root), str(root / 'python')]
 from tools import generate_df_ccsd_native as actions, generate_df_ccsd_core as core
 from tools import generate_df_ccsd_hoisted as hoisted, generate_rccsd_native as conventional
+from tools import generate_df_ccsd_spectator_pairs as pairs
 if not (target / 'generated_rccsd_cpu.hpp').exists():
     (target / 'generated_rccsd_cpu.hpp').write_text(conventional.cpu_header())
 for name, module in [('generated_df_ccsd', actions), ('generated_df_ccsd_core', core),
-                     ('generated_df_ccsd_hoisted', hoisted)]:
+                     ('generated_df_ccsd_hoisted', hoisted),
+                     ('generated_df_ccsd_spectator_pairs', pairs)]:
     (target / (name + '_cpu.hpp')).write_text(module.cpu_header())
 """
     subprocess.run(

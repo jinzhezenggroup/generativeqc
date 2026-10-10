@@ -1,0 +1,40 @@
+{
+  "purpose": "kernel attribution only; traced timing is never promotion evidence",
+  "slurm_job": "2807",
+  "profiler_version": "NVIDIA Nsight Systems version 2025.1.3.140-251335620677v0",
+  "baseline_library_sha256": "1c9eecba3b1a1a7ebee232172852ebe81cc8bfd312e0a96a706421571cc847b2",
+  "copy_kernels": [
+    {
+      "node": 33,
+      "instances": 2318,
+      "diagnostic_total_nanoseconds": 757125050
+    },
+    {
+      "node": 34,
+      "instances": 2318,
+      "diagnostic_total_nanoseconds": 806388458
+    },
+    {
+      "node": 37,
+      "instances": 2318,
+      "diagnostic_total_nanoseconds": 764178012
+    },
+    {
+      "node": 38,
+      "instances": 2318,
+      "diagnostic_total_nanoseconds": 806709108
+    },
+    {
+      "node": 42,
+      "instances": 2318,
+      "diagnostic_total_nanoseconds": 761853446
+    },
+    {
+      "node": 43,
+      "instances": 2318,
+      "diagnostic_total_nanoseconds": 807018082
+    }
+  ],
+  "diagnostic_copy_seconds": 4.703272156,
+  "warning": "Nsight emitted its default CUDA-event-trace warning; no traced performance claims are made."
+}

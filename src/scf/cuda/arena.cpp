@@ -8,20 +8,18 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
-                 std::size_t shell_count, std::size_t shell_pair_count,
-                 std::size_t shell_pair_block_count, std::size_t bounded_generated_task_capacity,
-                 std::size_t shell_pair_primitive_count, std::size_t psss_resident_task_count,
-                 std::size_t psss_resident_ket_pair_count, std::size_t shell_quartet_tile_count,
-                 std::size_t fp32_shell_quartet_tile_count,
-                 std::size_t generated_shell_task_capacity,
-                 std::size_t ppps_resident_ket_task_capacity,
-                 std::size_t generic_order5_tile_capacity, std::size_t primitives,
-                 std::size_t diis_history, std::size_t eigensolver_profile_capacity,
-                 std::size_t spin_count, bool persistent_eri, bool transformed_direct,
-                 bool shell_class_profiling, bool inactive_eigensolver_profiling,
-                 bool bounded_fock_class_timing, bool bounded_direct_streaming,
-                 bool mixed_precision_fock, bool incremental_direct_jk, ArenaLayout& layout) {
+bool make_layout(
+    std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf, std::size_t atoms,
+    std::size_t shell_count, std::size_t shell_pair_count, std::size_t shell_pair_block_count,
+    std::size_t bounded_generated_task_capacity, std::size_t shell_pair_primitive_count,
+    std::size_t psss_resident_task_count, std::size_t psss_resident_ket_pair_count,
+    std::size_t shell_quartet_tile_count, std::size_t fp32_shell_quartet_tile_count,
+    std::size_t generated_shell_task_capacity, std::size_t ppps_resident_ket_task_capacity,
+    std::size_t generic_order5_tile_capacity, std::size_t primitives, std::size_t diis_history,
+    std::size_t eigensolver_profile_capacity, std::size_t spin_count, bool persistent_eri,
+    bool transformed_direct, bool shell_class_profiling, bool inactive_eigensolver_profiling,
+    bool bounded_fock_class_timing, bool bounded_direct_streaming, bool mixed_precision_fock,
+    bool incremental_direct_jk, ArenaLayout& layout, bool incremental_diis_gram) {
   std::size_t matrix_size = 0;
   std::size_t eri_size = 0;
   std::size_t matrices = 0;
@@ -62,15 +60,17 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
   std::size_t history_matrices = 0;
   std::size_t diis_dimension = 0;
   std::size_t diis_linear_elements = 0;
-  std::size_t diis_gram_elements = 0;
+  std::size_t diis_raw_gram_elements = 0;
   if (!generativeqc::runtime::checked_multiply(spin_matrices, diis_history, history_matrices) ||
       !generativeqc::runtime::checked_add(diis_history, 1, diis_dimension) ||
       !generativeqc::runtime::checked_multiply(diis_dimension, diis_dimension,
                                                diis_linear_elements) ||
       !generativeqc::runtime::checked_multiply(diis_linear_elements, batch_size,
                                                diis_linear_elements) ||
-      !generativeqc::runtime::checked_multiply(diis_history, diis_history, diis_gram_elements) ||
-      !generativeqc::runtime::checked_multiply(diis_gram_elements, batch_size, diis_gram_elements))
+      !generativeqc::runtime::checked_multiply(diis_history, diis_history,
+                                               diis_raw_gram_elements) ||
+      !generativeqc::runtime::checked_multiply(diis_raw_gram_elements, batch_size,
+                                               diis_raw_gram_elements))
     return false;
   generativeqc::runtime::WorkspaceLayout workspace;
   ArenaLayout made{};
@@ -316,7 +316,8 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
       !workspace.append<double>(history_matrices, made.fock_history) ||
       !workspace.append<double>(history_matrices, made.residual_history) ||
       !workspace.append<double>(diis_linear_elements, made.diis_linear_system) ||
-      !workspace.append<double>(diis_gram_elements, made.diis_gram_cache) ||
+      !workspace.append<double>(incremental_diis_gram ? diis_raw_gram_elements : 0,
+                                made.diis_raw_gram) ||
       !workspace.append<double>(batch_size * diis_dimension, made.diis_coefficients) ||
       !workspace.append<std::uint32_t>(batch_size, made.diis_count) ||
       !workspace.append<std::uint32_t>(batch_size, made.diis_head) ||

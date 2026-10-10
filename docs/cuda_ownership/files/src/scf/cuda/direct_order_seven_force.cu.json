@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_order_seven_force.cu",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Bounded class-major dd x dp force producer and launch dispatch. Borrows existing topology, delegates exact screening and unchanged compiler-owned cooperative derivative algebra, canonicalizes physical pair IDs and publishes existing profile/output channels; no integral recurrence or source equations.",
+  "regions": []
+}

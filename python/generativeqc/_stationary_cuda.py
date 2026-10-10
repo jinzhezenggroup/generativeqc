@@ -2581,10 +2581,24 @@ def _plan_stationary_cuda_tile(
     # a tighter geometry budget cannot disable or OOM an already-admitted
     # prepared integral path. If the old remainder was itself too small, keep
     # all of it and leave that existing provider decision unchanged. The fitted
-    # provider has a separate resource contract, so preserve its full allowance
-    # rather than borrowing the Direct provider's one-electron estimate.
+    # provider has a separate response contract. Only its known snapshot
+    # provider can bound the additional one-electron/publication consumer;
+    # unknown providers retain their full previously admitted allowance.
     native_geometry_reserve = (
-        max(0, available - sum(value.peak_bytes for value in tensor_plans.values()))
+        min(
+            max(
+                0, available - sum(value.peak_bytes for value in tensor_plans.values())
+            ),
+            state._source.stationary_integral_device_reserve(
+                atoms=na, aos=n, primitives=basis.nprimitive
+            ),
+        )
+        if not ecp
+        and bool(getattr(state._source, "density_fitted", False))
+        and callable(getattr(state._source, "stationary_integral_device_reserve", None))
+        else max(
+            0, available - sum(value.peak_bytes for value in tensor_plans.values())
+        )
         if not ecp and bool(getattr(state._source, "density_fitted", False))
         else min(
             max(
@@ -2951,11 +2965,22 @@ def _complete_rks_cuda_gradient_diagnostic(
         return layout, work
 
     requested_tile_points = tile_points
+    # Large fitted grids need the admitted pair-phase cache more than a larger
+    # AO tile. A 512-point tile can fit while leaving only the slow tiled Becke
+    # route; 256 points retains point concurrency and the existing phased math.
+    # Explicit caller tiles and unknown providers keep their original policy.
+    preferred_tile_points = (
+        256
+        if na >= _AUTO_PHASED_BECKE_MIN_ATOMS
+        and bool(getattr(state._source, "density_fitted", False))
+        and callable(getattr(state._source, "stationary_integral_device_reserve", None))
+        else 512
+    )
     layout, grid_work = plan_stationary_cuda_grid_schedule(
         grid_points=len(state.grid.points),
         tile_points=tile_points,
         admit=admit_tile,
-        preferred_tile_points=512,
+        preferred_tile_points=preferred_tile_points,
     )
     grid_plan = layout.grid_plan
     tensor_plans = layout.tensor_plans
@@ -3226,6 +3251,14 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "Direct derivative fallback would change the Hamiltonian"
             )
         native_complete_integrals = native_integral_components is not None
+        if (
+            use_fitted_integrals
+            and int(native_integral_resources.get("one_electron_device_peak_bytes", 0))
+            > layout.native_geometry_reserve
+        ):
+            raise RuntimeError(
+                "fitted stationary device staging exceeds admitted reserve"
+            )
         if (
             not use_fitted_integrals
             and int(native_integral_resources.get("one_electron_host_peak_bytes", 0))

@@ -13,6 +13,7 @@ from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import (
     cuda_target_info,
 )
+from generativeqc_compiler.common.paths import asset_path
 
 from ..batch_benchmark import parse_ptxas_resources
 
@@ -48,7 +49,11 @@ def _compile_trial(
         target=cuda_target_info(architecture),
         compile_timeout=compile_timeout,
     )
-    result = compiler.compile(source, obj)
+    result = compiler.compile(
+        source,
+        obj,
+        includes=(asset_path("src/runtime/compensated_atomic.cuh").parents[1],),
+    )
     diagnostics = result.stdout + result.stderr
     marker = f"{trial.symbol_prefix}_shell_class_{trial.consumer.value}_"
     return {

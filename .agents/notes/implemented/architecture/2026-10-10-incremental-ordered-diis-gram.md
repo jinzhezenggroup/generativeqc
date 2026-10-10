@@ -127,3 +127,36 @@ CUDA ownership shard and generated-dot family. Its 156 host tests, SCF/compiler
 structure, ownership inventory and focused formatting gates pass. These later
 host/inventory checks do not assign historical combined-tree GPU measurements
 to the isolated PR head or qualify the still-unimplemented reconciliation.
+
+
+## Reconciled endpoint boundary (2026-10-10)
+
+The identities, Slurm jobs, binaries and measured results above describe the
+original implementation and its historical combined source trees. They are
+retained as historical evidence, not fresh qualification of the reconciled
+implementation. In particular, none of those measurements is reassigned to an
+upstream-based integration by preserving this note.
+
+The integration preserves merged #2159's serial default and existing cooperative
+incremental opt-in. `GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM=1` still enables the
+existing charged raw Gram cache. With
+`GENERATIVEQC_SCF_INCREMENTAL_DIIS_GRAM_REDUCTION` unset or `cooperative`, the
+pending-row route is unchanged. Explicit `ordered` selection reaches the ordered
+in-kernel refresh through HF and both KS endpoint paths, using that same cache.
+The subordinate selector is ignored when incremental DIIS is disabled or history
+capacity is below two. No unconditional cache allocation or default promotion is
+introduced.
+
+Reducer identity is part of prepared-state ownership. HF rebuilds its cached plan
+when either DIIS selection changes; KS retains its constructor-selected reducer.
+A route change requires fresh count=head=0 state, because an ordered singleton's
+norm is deliberately absent and old-old values can have a different reduction
+identity. The ordered entry now preserves the incumbent invalid-state reset
+handling and rejects exact cache/solve aliasing and invalid launch/storage shapes.
+
+The reconciled source has independent source review and focused host arithmetic,
+selector, dispatch and resource-accounting checks. It has no fresh CUDA compilation,
+device endpoint, graph-replay or performance qualification. Its reachable endpoint
+integration must not be confused with the earlier test-only reconciliation sketch.
+The current decision and evidence boundaries are recorded in
+[the endpoint integration note](2026-10-10-ordered-diis-endpoint-integration.md).

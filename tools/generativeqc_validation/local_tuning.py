@@ -23,7 +23,7 @@ from generativeqc_compiler.integral.fused_schedule import build_fused_shell_plan
 from generativeqc_compiler.integral.ir import KernelConsumer
 from generativeqc_compiler.integral.shell_spec import FUSED_SHELL_SPEC_BY_NAME
 
-from .f_shell import cuobjdump_resources
+from .f_shell import ROOT, cuobjdump_resources, runtime_header_hashes
 from .f_shell_cuda import emit_numerical_driver
 from .f_shell_numerics import (
     class_fixtures,
@@ -90,12 +90,14 @@ def validate_schedule(
         if production_source is not None:
             raise ValueError("a production source requires its compiled object")
         path.write_text(source)
-        compiled = compiler.compile(path, obj)
+        compiled = compiler.compile(path, obj, includes=(ROOT / "src",))
         (directory / "ptxas.txt").write_text(compiled.stdout + compiled.stderr)
         if compiled.returncode:
             raise ValueError("isolated production-wrapper compilation failed")
     driver.write_text(driver_source)
-    linked = compiler.link(driver, [obj], executable, timeout=timeout)
+    linked = compiler.link(
+        driver, [obj], executable, timeout=timeout, includes=(ROOT / "src",)
+    )
     if linked.returncode:
         (directory / "link.txt").write_text(linked.stdout + linked.stderr)
         raise ValueError("isolated production-wrapper link failed")
@@ -170,6 +172,7 @@ def validate_schedule(
     return {
         "passed": all(e["passed"] for e in errors.values()),
         "source_hash": file_hash(path),
+        "runtime_headers": runtime_header_hashes(),
         "schedule_hash": canonical_hash(schedule_payload(schedule)),
         "fixture_hashes": [fixture.inputs_hash for fixture in fixtures],
         "errors": errors,

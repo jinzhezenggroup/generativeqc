@@ -1,9 +1,11 @@
-"""Independent fixed-density CUDA gates for standalone Direct Rys artifacts.
+"""Independent fixed-density CUDA gates for Direct Rys artifacts.
 
-The qualification build emits the ordinary compiler production shard for the
-six value-IR classes in test_direct_rys_values. It supplies that ccache-built
-library through GENERATIVEQC_RYS_VALUE_LIBRARY; this test never uses NVRTC or
-loads a native reference recurrence as its oracle.
+Qualification supplies a ccache-built production bundle or standalone shard
+through GENERATIVEQC_RYS_VALUE_LIBRARY. The test covers the complete compiled
+task/value inventory and never uses NVRTC or a native recurrence as its oracle.
+
+GENERATIVEQC_RYS_VALUE_SYMBOL_PREFIX also permits testing the actual production
+bundle (for example, sm120_rys_task_generated) instead of a standalone shard.
 """
 
 import ctypes
@@ -14,6 +16,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_rys_tasks import (
+    direct_rys_task_candidates,
+)
 from generativeqc_compiler.integral.production_rys_values import (
     direct_rys_value_candidates,
 )
@@ -22,7 +27,11 @@ from generativeqc_compiler.integral.production_rys_values import (
 # arithmetic fixtures as a production class allowlist.
 CLASSES = tuple(
     item.spec.name
-    for item in direct_rys_value_candidates(
+    for item in (
+        direct_rys_task_candidates
+        if os.environ.get("GENERATIVEQC_RYS_VALUE_FAMILY") == "task"
+        else direct_rys_value_candidates
+    )(
         resolve_production_profile(
             Path(__file__).resolve().parents[2]
             / "python/generativeqc_compiler/integral/production_shell_classes.json",
@@ -58,6 +67,7 @@ class ShellTask(ctypes.Structure):
 
 @pytest.fixture(
     scope="module",
+    ids=lambda case: "-".join(case),
     params=tuple(
         product(
             CLASSES,
@@ -90,12 +100,16 @@ def quartet_case(request: pytest.FixtureRequest) -> tuple:
 
 @pytest.mark.parametrize("unrestricted", (False, True))
 @pytest.mark.parametrize("consumer", ("combined", "j", "k", "hf-k"))
+@pytest.mark.parametrize("task_count", (1, 33, 129))
+@pytest.mark.parametrize("compensated", (False, True))
 def test_value_rys_fixed_density_matrices_match_libcint(
     quartet_case: tuple,
     unrestricted: bool,
     consumer: str,
+    task_count: int,
+    compensated: bool,
 ) -> None:
-    """Execute one fused queue task, including empty CTA and component tails."""
+    """Exercise task tails with ordinary and compensated Fock output planes."""
     import cupy as cp
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
@@ -116,7 +130,7 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         fixture.reversed_mask | {"combined": 0, "j": 4, "k": 8, "hf-k": 12}[consumer]
     )
     arrays = [
-        cp.asarray(np.frombuffer(bytes(task), dtype=np.uint8)),
+        cp.asarray(np.frombuffer(bytes(task) * task_count, dtype=np.uint8)),
         cp.asarray([0], dtype=cp.uint32),
         cp.asarray([0, fixture.pair_split, len(fixture.pairs)], dtype=cp.int64),
         cp.asarray(fixture.pairs),
@@ -126,15 +140,24 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     density = fixture.spin_density if unrestricted else fixture.density[None]
     device_density = cp.asarray(np.concatenate([d.ravel(order="F") for d in density]))
     output = cp.zeros(device_density.size, dtype=cp.float64)
-    count, head = cp.asarray([1], dtype=cp.uint32), cp.zeros(1, dtype=cp.uint32)
+    count = cp.asarray([task_count], dtype=cp.uint32)
+    head = cp.zeros(1, dtype=cp.uint32)
+    correction = cp.zeros_like(output) if compensated else None
     library = ctypes.CDLL(os.environ["GENERATIVEQC_RYS_VALUE_LIBRARY"])
-    launch = getattr(library, f"generativeqc_launch_generated_{name}_fock")
+    prefix = os.environ.get("GENERATIVEQC_RYS_VALUE_SYMBOL_PREFIX", "generated")
+    launch = getattr(library, f"generativeqc_launch_{prefix}_{name}_fock")
     pointer = ctypes.c_void_p
+
+    class ScatterOutput(ctypes.Structure):
+        """The private launch ABI carries sum and optional residual planes."""
+
+        _fields_ = [("sum", pointer), ("correction", pointer)]
+
     launch.argtypes = (
         [pointer, ctypes.c_bool, ctypes.c_uint]
         + [pointer] * 6
         + [ctypes.c_double]
-        + [pointer] * 5
+        + [pointer, pointer, ScatterOutput, pointer, pointer]
     )
     launch.restype = ctypes.c_int
     stream = cp.cuda.get_current_stream()
@@ -146,13 +169,15 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         0.0,
         None,
         device_density.data.ptr,
-        output.data.ptr,
+        ScatterOutput(output.data.ptr, correction.data.ptr if compensated else None),
         count.data.ptr,
         head.data.ptr,
     )
     assert status == 0
     stream.synchronize()
     raw = cp.asnumpy(output)
+    if correction is not None:
+        raw += cp.asnumpy(correction)
     actual = np.stack(
         [
             raw[s * n * n : (s + 1) * n * n].reshape((n, n), order="F")
@@ -170,4 +195,4 @@ def test_value_rys_fixed_density_matrices_match_libcint(
         if consumer == "j"
         else j[None] - (1.0 if unrestricted else 0.5) * k
     )
-    np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=2e-10)
+    np.testing.assert_allclose(actual, task_count * expected, atol=2e-11, rtol=2e-10)

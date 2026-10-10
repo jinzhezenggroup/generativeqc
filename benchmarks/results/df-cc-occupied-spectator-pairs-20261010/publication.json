@@ -1,0 +1,101 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "2daa0aceaf6d140389ac5a183ead8b0ac3d3cd4a",
+    "dirty": true
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Independent physical/energy gates, bounded fallbacks and exact executed work deltas pass; observed four-sample complete-endpoint gain is retained without shared formal/global or force promotion."
+  },
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node2",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=2",
+      "--time=00:16:00",
+      "bash",
+      "measure-gpu.sh"
+    ]
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 6730,
+      "sha256": "ef51e0ba83d053750f456dbb565d2cc403fb32d671ed2ca2b3c4352c1d69560c"
+    },
+    {
+      "path": "build.sh.gz",
+      "role": "reproduction",
+      "bytes": 957,
+      "sha256": "2c8471b1e8551063e26c98f936c602c2676a47cbfece31274e64d5452ad6e25a"
+    },
+    {
+      "path": "measure-gpu.sh.gz",
+      "role": "reproduction",
+      "bytes": 414,
+      "sha256": "1c1a92fa9fd756265b57ff4965e5b4b7eddd76e4628173349cd36ab30ee9c86e"
+    },
+    {
+      "path": "measure.py.gz",
+      "role": "reproduction",
+      "bytes": 2796,
+      "sha256": "a1041cd73daab75fb64d868ce790be585369641d7d6b150993aaf446712cd1c9"
+    },
+    {
+      "path": "measured-source.patch.gz",
+      "role": "source-patch",
+      "bytes": 40690,
+      "sha256": "3a9c1d9c4d9cceec3b60f93df869f4898dbf7f37ffa17232ad0f895998308296"
+    },
+    {
+      "path": "provenance.json",
+      "role": "summary",
+      "bytes": 1307,
+      "sha256": "5e7323ac6b592cbdfdccc576b38dcc1bee2c5bc8e5f68a755837f51327acb3e7"
+    },
+    {
+      "path": "qualify.sh.gz",
+      "role": "reproduction",
+      "bytes": 656,
+      "sha256": "c2aa93ca1828246576f5ab4e80d3bedc6d8f1074bf4da933dd39bc21aee46d28"
+    },
+    {
+      "path": "rebuild.sh.gz",
+      "role": "reproduction",
+      "bytes": 486,
+      "sha256": "4bc5f74457ec3e95c9942d061d54ea8e71d00630dcea4ccbee25b9b990a374fa"
+    },
+    {
+      "path": "samples.json.gz",
+      "role": "samples",
+      "bytes": 3056,
+      "sha256": "84b1d21271797f9d7ed8a2023f992fb5a002d52933037c80128a7ea61f9d578f"
+    },
+    {
+      "path": "summary.json",
+      "role": "summary",
+      "bytes": 3168,
+      "sha256": "540b60e90a1dd0c581d2d598bb2d5efb823891bd69c9c9f1720bbf7143cc730a"
+    },
+    {
+      "path": "validation.json",
+      "role": "evidence",
+      "bytes": 8466,
+      "sha256": "dcb1e8358653b37021b2aa32da5e29da3bf6e7fedf793a120ca3f5df7c9aaf6d"
+    },
+    {
+      "path": "visible-device.cpp.gz",
+      "role": "reproduction",
+      "bytes": 363,
+      "sha256": "7bdfdbfab82ae8cc8b03d9330ddfefb9fee923d60689aec847a822872444073e"
+    }
+  ],
+  "archives": []
+}

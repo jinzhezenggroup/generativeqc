@@ -1086,13 +1086,14 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain, bool separate_sources) {
+    detail::BoundedDirectBlockDomain block_domain, bool separate_sources,
+    const GeneratedShellPairStream* force_topology) {
   return launch_bounded_direct_shell_quartet_kernel_scaled(
       unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
       batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
       shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
       density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient,
-      separate_sources, block_domain);
+      separate_sources, block_domain, force_topology);
 }
 
 cudaError_t launch_bounded_shell_angular_energy_derivative(

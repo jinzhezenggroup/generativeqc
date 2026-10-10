@@ -213,7 +213,12 @@ CUDA_MODULES["cuda_scf_kernels"] = (
 )
 CUDA_ALLOWED["cuda_scf_kernels"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_scf_kernels"]
-) + ("scf/cuda/matrix_index.", "tensor/cuda_ring_gram.cuh", "tensor/ring_gram.hpp")
+) + (
+    "scf/cuda/matrix_index.",
+    "tensor/cuda_history.cuh",
+    "tensor/cuda_ring_gram.cuh",
+    "tensor/ring_gram.hpp",
+)
 CUDA_MODULES["cuda_resources"] = ("resources",)
 CUDA_ALLOWED["cuda_resources"] = (
     "solver/cuda/symmetric_eigen_handles.hpp",
@@ -275,8 +280,11 @@ CUDA_EXACT_ALLOWED = {
     "cuda_direct_consumers": ("runtime/compensated_atomic.cuh",),
 }
 # The shared sink must not acquire scientific, provider, or host-plan state.
-CUDA_MODULES["cuda_compensated_atomic"] = ("runtime/compensated_atomic.cuh",)
-CUDA_ALLOWED["cuda_compensated_atomic"] = ()
+CUDA_MODULES["cuda_compensated_atomic"] = (
+    "runtime/compensated_atomic.cuh",
+    "runtime/compensated_output.hpp",
+)
+CUDA_ALLOWED["cuda_compensated_atomic"] = ("runtime/compensated_output.hpp",)
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (
@@ -424,6 +432,8 @@ CUDA_ALLOWED["cuda_direct_force_sources"] = ()
 # The borrowed resident lease exposes metadata only, never device execution.
 CUDA_MODULES["cuda_direct_force_schedule"] = ("direct_force_schedule.hpp",)
 CUDA_ALLOWED["cuda_direct_force_schedule"] = ("scf/cuda/direct_metadata.hpp",)
+CUDA_MODULES["cuda_direct_order_seven_pages"] = ("direct_order_seven_pages.cuh",)
+CUDA_ALLOWED["cuda_direct_order_seven_pages"] = ()
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -459,6 +469,7 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "scf/cuda/direct_screening.cuh",
         "scf/cuda/direct_task_encoding.cuh",
         "scf/cuda/direct_page_screening.cuh",
+        "scf/cuda/direct_order_seven_pages.cuh",
         "scf/cuda/direct_queue_profile.cuh",
         "scf/cuda/matrix_index.cuh",
         "scf/cuda/device_timer.cuh",
@@ -472,6 +483,7 @@ CUDA_MODULES["cuda_direct_consumers"] = (
     "direct_reference_force.cu",
     "direct_bounded_dddd.cu",
     "direct_bounded_exact_force.cu",
+    "direct_order_seven_force.cu",
     "direct_bounded_fallback.cu",
     "direct_angular_force.cu",
     "direct_jk_kernels.cu",
@@ -495,6 +507,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_reference_force.hpp",
     "direct_bounded_dddd.hpp",
     "direct_bounded_exact_force.hpp",
+    "direct_order_seven_force.hpp",
     "direct_bounded_fallback.hpp",
     "direct_angular_force.hpp",
     "weighted_eri_kernels.hpp",

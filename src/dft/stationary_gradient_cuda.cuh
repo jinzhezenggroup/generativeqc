@@ -194,6 +194,13 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs,
                                 int* error);
+__global__ void geometry_point_kernel(generativeqc::dft::GridTaskView view, const int64_t* owners,
+                                      size_t owner_offset, size_t points_per_atom, size_t na,
+                                      const double* weights, const double* raw,
+                                      const double* external, size_t external_stride,
+                                      size_t external_offset, double* scratch, double* phase_seeds,
+                                      int* error);
+template <bool precomputed_point>
 __global__ void geometry_cooperative_kernel(
     generativeqc::dft::GridTaskView view, const double* work, const int64_t* ao_atoms,
     const int64_t* owners, size_t owner_offset, size_t points_per_atom, const double* centers,
@@ -226,13 +233,36 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     phased.partial = partial;
     phased.error = error;
   }
-  if (owner.becke_threads_per_point > 1)
-    geometry_cooperative_kernel<<<geometry_lanes, owner.becke_threads_per_point,
-                                  owner.becke_shared_bytes - stationary_becke_control_bytes,
-                                  stream>>>(view, work, ao_atoms, owners, owner_offset,
-                                            points_per_atom, centers, na, weights, raw, external,
-                                            external_stride, external_offset, geometry_lanes,
-                                            partial, scratch, center_pairs, error, phased.seeds);
+  // Only phased, one-point-per-lane geometry may lend its unused inline scratch
+  // to the bulk point producer. Keep small atom counts and all bounded/nonphased
+  // routes on the original evaluator; no new resident-storage requirement.
+  static_assert(alignof(StationaryPointValue) <= alignof(double));
+  const bool precomputed_point =
+      owner.phased_storage &&
+      na >= (sizeof(StationaryPointValue) + 3 * sizeof(double) - 1) / (3 * sizeof(double));
+  if (precomputed_point) {
+    // Preserve incoming launch status and stop before any consumer can observe
+    // scratch from a failed producer. Peeking neither clears nor synchronizes.
+    cuda_check(cudaPeekAtLastError());
+    geometry_point_kernel<<<blocks(view.npoint, 128), 128, 0, stream>>>(
+        view, owners, owner_offset, points_per_atom, na, weights, raw, external, external_stride,
+        external_offset, scratch, phased.seeds, error);
+    cuda_check(cudaPeekAtLastError());
+    ++owner.launches;
+    geometry_cooperative_kernel<true>
+        <<<geometry_lanes, owner.becke_threads_per_point,
+           owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
+            view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
+            external, external_stride, external_offset, geometry_lanes, partial, scratch,
+            center_pairs, error, phased.seeds);
+    cuda_check(cudaPeekAtLastError());
+  } else if (owner.becke_threads_per_point > 1)
+    geometry_cooperative_kernel<false>
+        <<<geometry_lanes, owner.becke_threads_per_point,
+           owner.becke_shared_bytes - stationary_becke_control_bytes, stream>>>(
+            view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
+            external, external_stride, external_offset, geometry_lanes, partial, scratch,
+            center_pairs, error, phased.seeds);
   else
     geometry_kernel<<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0,
                       stream>>>(view, work, ao_atoms, owners, owner_offset, points_per_atom,

@@ -42,6 +42,7 @@ SELECTOR_IDENTIFIERS = frozenset(
         "reduction_provider",
         "matrix_gemm",
         "df_matrix_gemm",
+        "df_replay_matrix_gemm",
         "lambda_matrix_gemm",
         "conventional_matrix_gemm",
         "use_cublas",

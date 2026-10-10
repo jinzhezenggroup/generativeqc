@@ -147,9 +147,11 @@ def test_generated_shell_and_native_scatter_share_spin_semantics() -> None:
         in native
     )
     assert (
-        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double>"
+        "template <bool Unrestricted, bool MixedProduct = false, typename Integral = double,"
         in generated
     )
+    assert "typename Output = double*" in generated
+    assert "Output fock" in generated
     for coefficient in (
         "exchange_only ? 1.0 : -0.5",
         "exchange_only ? 1.0 : -1.0",

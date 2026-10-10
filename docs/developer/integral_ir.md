@@ -136,12 +136,15 @@ no generated symbol, runtime layout, registry, or source changes are necessary.
 Existing profile loaders still reject incompatible generator ABIs.
 
 The [compatibility fixture](../../tests/reference_data/integral_ir_legacy_artifacts.json)
-records baseline revision `2414c57`, the manifest hash, catalog ordering, and
-SHA-256 hashes of all ten generated artifacts for `sm_120` and portable `sm_90`.
-The test regenerates these bundles using the existing four-shard mechanism and
-requires byte identity. There is no generated-source diff. Future intentional
-changes to the manifest or generator must update this fixture with reviewed
-source differences and the appropriate ABI/version decision.
+pins the manifest hash, catalog ordering, and SHA-256 hashes of all ten generated
+artifacts for `sm_120` and portable `sm_90`. The test regenerates these bundles
+using the existing four-shard mechanism and requires byte identity. It also
+separately pins incumbent, old Rys-value and old K-block mathematical source
+bytes, so adding the independent [Rys task variants](direct_rys_tasks.md) cannot
+silently change retained implementations. Intentional bundle or registry
+changes require reviewed source differences, a fixture correction record and
+an explicit ABI/version decision; new alternative symbols alone do not change
+the public generator ABI.
 
 ## Reproducible examples
 

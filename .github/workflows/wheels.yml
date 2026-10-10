@@ -36,10 +36,10 @@ jobs:
   build_wheels:
     name: Build CUDA manylinux wheel
     runs-on: ubuntu-24.04
-    # A cold cache must be able to finish once so actions/cache can seed the
-    # normalized v2 compiler cache; warm runs should return well below this cap.
-    # Keep enough margin for repair, installed-wheel smoke testing, and cache save.
-    timeout-minutes: 60
+    # Cold qualification reached only 275/637 build tasks at the former 60m cap.
+    # Bound compilation separately, reserving time to save completed cache entries
+    # even on a build failure. Keep all repair, smoke and payload checks required.
+    timeout-minutes: 180
     env:
       CCACHE_MAXSIZE: 3G
     steps:
@@ -49,11 +49,14 @@ jobs:
           persist-credentials: false
 
       - name: Restore ccache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: wheel_ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-wheel-v3-manylinux_x86_64-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          # Immutable run snapshots let a later attempt retain additional entries.
+          key: ccache-wheel-v3-manylinux_x86_64-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            ccache-wheel-v3-manylinux_x86_64-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
             ccache-wheel-v3-manylinux_x86_64-
             ccache-wheel-v2-manylinux_x86_64-
 
@@ -66,6 +69,7 @@ jobs:
             cibw-${{ runner.os }}-manylinux_x86_64-
 
       - name: Build and test wheel
+        timeout-minutes: 150
         uses: pypa/cibuildwheel@1828c10ab37f080699c7b81cea34097c684a7074 # v4.2
         env:
           CIBW_CACHE_PATH: ${{ runner.temp }}/cibw-cache
@@ -87,6 +91,17 @@ jobs:
           package-dir: .
           output-dir: wheelhouse
           extras: "uv"
+
+      # ccache stores completed compiler outputs, so retain useful entries after
+      # a compile failure/step timeout. Tool environments retain success-only saves.
+      # Unique snapshots use existing Actions cache scope and eviction, not artifacts.
+      - name: Save completed compiler cache entries
+        if: ${{ always() && steps.wheel_ccache.outputs.cache-primary-key != '' }}
+        timeout-minutes: 10
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ${{ steps.wheel_ccache.outputs.cache-primary-key }}
 
       - name: Verify wheel payload and CUDA linkage
         shell: bash

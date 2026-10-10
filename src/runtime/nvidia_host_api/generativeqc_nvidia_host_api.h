@@ -41,6 +41,8 @@ typedef enum {
   CUBLAS_FILL_MODE_UPPER = 1,
   CUBLAS_FILL_MODE_FULL = 2,
 } cublasFillMode_t;
+typedef enum { CUBLAS_SIDE_LEFT = 0, CUBLAS_SIDE_RIGHT = 1 } cublasSideMode_t;
+typedef enum { CUBLAS_DIAG_NON_UNIT = 0, CUBLAS_DIAG_UNIT = 1 } cublasDiagType_t;
 typedef enum { CUBLAS_POINTER_MODE_HOST = 0, CUBLAS_POINTER_MODE_DEVICE = 1 } cublasPointerMode_t;
 typedef enum { CUBLAS_DEFAULT_MATH = 0, CUBLAS_PEDANTIC_MATH = 2 } cublasMath_t;
 
@@ -99,6 +101,11 @@ cublasStatus_t cublasDgeam(cublasHandle_t handle, cublasOperation_t transa,
                            cublasOperation_t transb, int m, int n, const double* alpha,
                            const double* a, int lda, const double* beta, const double* b, int ldb,
                            double* c, int ldc);
+cublasStatus_t cublasDtrsmBatched(cublasHandle_t handle, cublasSideMode_t side,
+                                  cublasFillMode_t uplo, cublasOperation_t trans,
+                                  cublasDiagType_t diag, int m, int n, const double* alpha,
+                                  const double* const* a, int lda, double* const* b, int ldb,
+                                  int batch_count);
 
 #define cublasCreate cublasCreate_v2
 #define cublasDestroy cublasDestroy_v2

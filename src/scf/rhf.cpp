@@ -1932,6 +1932,7 @@ ScfResult run_rhf_density_fitting_cuda_impl(const core::System& system,
                                             const std::vector<double>* initial_density,
                                             initial_guess::OverlapOrthogonalizer* overlap_cache) {
   host_trace::Region endpoint_trace("run_rhf_density_fitting_cuda_impl");
+  reject_cuda_df_preliminary_guess(options);
   if (options.hooks || options.strict_initial_density)
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
 
@@ -2060,6 +2061,7 @@ ScfResult run_uhf_density_fitting_cuda_impl(const core::System& system,
                                             const std::vector<double>* initial_density,
                                             initial_guess::OverlapOrthogonalizer* overlap_cache) {
   host_trace::Region endpoint_trace("run_uhf_density_fitting_cuda_impl");
+  reject_cuda_df_preliminary_guess(options);
   if (options.hooks || options.strict_initial_density)
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
 
@@ -2194,6 +2196,7 @@ std::vector<RhfBucketItem> run_rhf_density_fitting_cuda_bucket_impl(
     std::vector<std::optional<DensityFittingScfData>>* prepared_cache,
     const std::vector<initial_guess::OverlapOrthogonalizer*>* overlap_caches) {
   host_trace::Region endpoint_trace("run_rhf_density_fitting_cuda_bucket_impl");
+  reject_cuda_df_preliminary_guess(options);
   if (overlap_caches && (overlap_caches->size() != systems.size() ||
                          std::any_of(overlap_caches->begin(), overlap_caches->end(),
                                      [](auto* cache) { return !cache; })))
@@ -2693,6 +2696,7 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_impl(
     std::vector<std::optional<DensityFittingScfData>>* prepared_cache,
     const std::vector<initial_guess::OverlapOrthogonalizer*>* overlap_caches) {
   host_trace::Region endpoint_trace("run_uhf_density_fitting_cuda_bucket_impl");
+  reject_cuda_df_preliminary_guess(options);
   if (overlap_caches && (overlap_caches->size() != systems.size() ||
                          std::any_of(overlap_caches->begin(), overlap_caches->end(),
                                      [](auto* cache) { return !cache; })))

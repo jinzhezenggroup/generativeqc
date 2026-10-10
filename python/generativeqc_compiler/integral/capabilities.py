@@ -28,6 +28,7 @@ from .ir import (
     OperatorFamily,
     build_integral_ir,
 )
+from .rys_task import task_parallel_rys_eligible
 from .shell_spec import FUSED_SHELL_SPECS, ShellClassSpec
 
 if typing.TYPE_CHECKING:
@@ -316,7 +317,10 @@ def query_integral_capability(
                 "CUDA direct Rys values require a value-only Fock contraction"
             )
         elif isinstance(integral.spec, ShellClassSpec) and (
-            integral.required_rys_roots not in (2, 3, 4, 5)
+            (
+                integral.required_rys_roots not in (2, 3, 4, 5)
+                and not task_parallel_rys_eligible(integral)
+            )
             or max(integral.spec.angular) > 2
             or integral.spec.angular[3] > 1
         ):

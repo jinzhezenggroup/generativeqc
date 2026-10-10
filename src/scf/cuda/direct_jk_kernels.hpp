@@ -167,7 +167,8 @@ cudaError_t launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true);
+    detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true,
+    const GeneratedShellPairStream* force_topology = nullptr);
 
 /** Qualification-only angular partition behind the provider launch boundary.
  * Full publishes separate J/K channels; Long publishes one K channel. Short

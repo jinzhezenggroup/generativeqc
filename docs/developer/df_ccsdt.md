@@ -196,6 +196,20 @@ owner budget and provider dimension limits fit. A limit of one retains the
 matrix one-Q schedule. Allocation rejection retries one-Q before the existing
 scalar fallback. Independent expanded replay remains one-Q.
 
+CUDA can separately pack that original expanded one-Q virtual graph into FP64
+matrix contractions. Replay consumes the original factors and accepted amplitudes,
+never primal cuts or previous audit outputs, and preserves ascending Q
+accumulation and the original expanded core replay. The optional replay table
+shares the already admitted provider context; its descriptor storage and the
+larger of primal/replay scratch are charged only after primal tile selection.
+Budget, dimension or allocation rejection drops replay packing before reducing
+the primal tile. The original scalar replay remains the bounded fallback.
+`SolverOptions::df_replay_matrix_gemm=false` retains it for internal ablation;
+`SolverDiagnostic::df_replay_matrix_gemm` reports the selected lowering.
+Packing deduplicates one common contraction, saving `nocc*nvir*nvir` scalar
+summands per replay Q slice; diagnostics count this exact change, all replay
+matrix calls and explicit layout-copy traffic.
+
 One generated kernel accumulates all six primal cuts per tile. For each output
 element it starts from the retained sum and adds each Q contribution in the
 original ascending order, checking every addition. It does not form a tile

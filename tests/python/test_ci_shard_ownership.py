@@ -3,6 +3,7 @@
 import shutil
 import subprocess
 import textwrap
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -32,19 +33,43 @@ def _selection(event: str, shard: str) -> tuple[str, list[str], list[str]]:
 
 
 @pytest.mark.parametrize(
-    "event", ("pull_request", "push", "schedule", "workflow_dispatch")
+    "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 def test_every_python_test_file_has_exactly_one_ci_shard(event: str) -> None:
     selections = {shard: _selection(event, shard) for shard in SHARDS}
-    for test in sorted((ROOT / "tests/python").glob("test_*.py")):
-        relative = test.relative_to(ROOT).as_posix()
-        owners = []
-        for shard, (_, targets, arguments) in selections.items():
-            selected = "tests/python" in targets or relative in targets
-            ignored = f"--ignore={relative}" in arguments
-            if selected and not ignored:
-                owners.append(shard)
-        assert len(owners) == 1, (relative, owners)
+    expected = Counter(
+        test.relative_to(ROOT).as_posix()
+        for test in (ROOT / "tests/python").rglob("test_*.py")
+    )
+    selected = Counter(
+        target
+        for _, targets, arguments in selections.values()
+        for target in targets
+        if f"--ignore={target}" not in arguments
+    )
+    # Also reject duplicate entries within one shard and nonexistent paths.
+    assert selected == expected
+
+
+@pytest.mark.parametrize("event", ("pull_request", "merge_group", "schedule"))
+def test_native_codegen_tail_keeps_expensive_module_fixtures_local(event: str) -> None:
+    distribution, targets, _ = _selection(event, "compiler-heavy")
+    assert distribution == "loadfile"
+    for filename in (
+        "test_native_contraction_binding.py",
+        "test_rccsd_arena_liveness.py",
+        "test_cc_cuda_scalar_reduction_codegen.py",
+        "test_rccsd_response_admission.py",
+        "test_rccsd_iteration_reuse.py",
+        "test_stationary_cuda_lowering.py",
+        "test_rccsdt_native_triples_response_owner.py",
+        "test_becke_normalize_cooperative.py",
+        "test_rccsd_numeric_capacity.py",
+        "test_stationary_aot_generation.py",
+        "test_cc_shared_iteration_driver.py",
+        "test_rccsd_codegen_no_numpy.py",
+    ):
+        assert f"tests/python/{filename}" in targets
 
 
 @pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))

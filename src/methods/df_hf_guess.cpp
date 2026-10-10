@@ -12,6 +12,9 @@
 #include "methods/df_hf_guess_basis.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
+#include "scf/density_fitting.hpp"
+#include "scf/df_preparation_budget.hpp"
 #include "scf/mean_field.hpp"
 
 namespace generativeqc::methods::detail {
@@ -28,7 +31,7 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
   if (!enabled || device_id < 0) return guess;
   guess.outcome = DFHFGuessOutcome::Ineligible;
   const auto functions = molecule::ao_count(system);
-  if (functions < 200 || functions > 400 ||
+  if (!functions || system.atoms.empty() ||
       system.basis_representation != GENERATIVEQC_BASIS_SPHERICAL || system.multiplicity != 1 ||
       system.charge != 0 || !system.ecp_terms.empty() ||
       std::any_of(system.shells.begin(), system.shells.end(),
@@ -37,6 +40,38 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
         return atom.atomic_number != 1 && atom.atomic_number != 6;
       }))
     return guess;
+  const auto maximum_angular = std::max_element(
+      system.shells.begin(), system.shells.end(), [](const auto& left, const auto& right) {
+        return left.angular_momentum < right.angular_momentum;
+      });
+  guess.outcome = DFHFGuessOutcome::CacheSkipped;
+  if (!scf::cuda_execution::reference_quartet_direct(functions, maximum_angular->angular_momentum))
+    return guess;
+
+  constexpr unsigned preliminary_iterations = 32;
+  std::size_t auxiliary_shells{};
+  std::size_t auxiliary_cartesian{};
+  for (const auto& atom : system.atoms) {
+    for (const auto& entry : df_hf_guess_basis) {
+      if (entry.atomic_number != atom.atomic_number) continue;
+      auxiliary_shells = posthf::checked_add(auxiliary_shells, 1);
+      guess.auxiliary_functions =
+          posthf::checked_add(guess.auxiliary_functions, 2 * entry.angular_momentum + 1);
+      auxiliary_cartesian = posthf::checked_add(auxiliary_cartesian,
+                                                molecule::cartesian_count(entry.angular_momentum));
+    }
+  }
+  guess.cartesian_functions = molecule::cartesian_ao_count(system);
+  // This deliberately conservative dense-volume screen is a performance heuristic,
+  // not a measured crossover or an integral/Fock census. Normalize the full four-
+  // center Cartesian volume by the maximum provisional three-center sweep volume;
+  // the existing 32-cycle work cap supplies the amortization horizon, not an AO cutoff.
+  const long double cartesian = guess.cartesian_functions;
+  guess.work_amortization_ratio = static_cast<double>(
+      cartesian * cartesian /
+      (preliminary_iterations * static_cast<long double>(guess.auxiliary_functions)));
+  guess.outcome = DFHFGuessOutcome::WorkSkipped;
+  if (guess.work_amortization_ratio < 1.0) return guess;
   const auto requested = descriptor.correlation_memory_budget_bytes;
   if (requested > static_cast<std::uint64_t>(INT64_MAX) ||
       requested > std::numeric_limits<std::size_t>::max())
@@ -46,6 +81,42 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
       posthf::checked_add(retained_bytes, posthf::source_capacity(correlation_auxiliary));
   guess.outcome = DFHFGuessOutcome::BudgetSkipped;
   if (outside >= budget || budget - outside < (256ULL << 20)) return guess;
+  guess.value_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
+  std::size_t orbital_primitives{};
+  for (const auto& shell : system.shells)
+    orbital_primitives = posthf::checked_add(orbital_primitives, shell.primitives.size());
+  guess.preparation_peak_bytes =
+      scf::df_preparation_storage({guess.cartesian_functions, functions, system.atoms.size(),
+                                   system.shells.size(), orbital_primitives, auxiliary_shells,
+                                   auxiliary_shells, false, true})
+          .peak_bytes;
+  if (guess.preparation_peak_bytes > guess.value_budget_bytes) return guess;
+
+  // Streaming is memory-bounded, not work-bounded: the 414-AO qualification
+  // spent more on provisional DF than it saved in exact Focks. Query the same
+  // source-backed dense/packed planner as native SCF before generating factors.
+  // Match its orbital/auxiliary/dummy metadata and lazy DIIS reservations;
+  // preparation remains a separate peak rather than being charged twice.
+  const auto diis_history = descriptor.diis_history ? descriptor.diis_history : 8;
+  const auto source_bytes = scf::density_fitting_source_metadata_bytes(
+      1, system.atoms.size(),
+      posthf::checked_add(posthf::checked_add(system.shells.size(), auxiliary_shells), 1),
+      posthf::checked_add(posthf::checked_add(guess.cartesian_functions, auxiliary_cartesian), 1),
+      posthf::checked_add(posthf::checked_add(orbital_primitives, auxiliary_shells), 1),
+      posthf::checked_add(posthf::checked_mul(guess.cartesian_functions, functions),
+                          posthf::checked_mul(auxiliary_cartesian, guess.auxiliary_functions)));
+  const auto fixed_bytes = posthf::checked_add(
+      source_bytes, scf::density_fitting_scf_diis_device_bytes(1, functions, diis_history));
+  const auto occupied = std::max<std::size_t>(1, system.electron_count / 2);
+  try {
+    const auto plan = scf::plan_requested_density_fitting_tiles(
+        scf::requested_df_pair_storage_request(), 1, functions, guess.auxiliary_functions, occupied,
+        occupied, guess.value_budget_bytes, fixed_bytes, true, occupied);
+    guess.resident_plan_peak_bytes = plan.peak_workspace_bytes;
+    if (!plan.stores_full_three_center) return guess;
+  } catch (const scf::DensityFittingBudgetError&) {
+    return guess;
+  }
 
   const auto started = std::chrono::steady_clock::now();
   guess.outcome = DFHFGuessOutcome::Failed;
@@ -68,10 +139,9 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
     std::string detail;
     if (molecule::validate_and_normalize(auxiliary, detail) != GENERATIVEQC_STATUS_SUCCESS)
       throw std::invalid_argument(detail);
-    guess.auxiliary_functions = molecule::ao_count(auxiliary);
     scf::ScfOptions options;
-    options.max_iterations = 32;
-    options.diis_history = descriptor.diis_history ? descriptor.diis_history : 8;
+    options.max_iterations = preliminary_iterations;
+    options.diis_history = diis_history;
     options.energy_tolerance = 1e-4;
     options.density_tolerance = 1e-4;
     options.screening_tolerance = 0;
@@ -80,7 +150,7 @@ DFHFGuess prepare_df_hf_guess(const core::System& system, const core::System& co
     options.export_physical_reference = false;
     options.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
     options.density_fitting_host_retry = false;
-    options.reference_memory_budget_bytes = std::min<std::size_t>(budget - outside, 512ULL << 20);
+    options.reference_memory_budget_bytes = guess.value_budget_bytes;
     options.density_fitting_memory_budget_bytes = options.reference_memory_budget_bytes;
     auto preliminary = scf::run_rhf_density_fitting_cuda(system, auxiliary, options, device_id);
     guess.iterations = preliminary.iterations;

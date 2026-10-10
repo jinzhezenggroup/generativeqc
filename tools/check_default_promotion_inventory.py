@@ -238,6 +238,67 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
     }
 
 
+def _discover_rys_task_default(root: Path) -> dict[str, str]:
+    """Require renewed qualification when the target/class guard is broadened."""
+    preference_relative = Path(
+        "python/generativeqc_compiler/integral/production_rys_tasks.py"
+    )
+    preference = _read(root / preference_relative)
+    preferred = re.search(r"preferred\s*=\s*(\{[^}]+\})", preference)
+    if (
+        preferred is None
+        or ast.literal_eval(preferred.group(1))
+        != {"psps", "ppps", "dsss", "dpss", "dsps", "ddss", "dsds", "dpps", "dspp"}
+        or 'profile.target.architecture != "sm_120" or profile.profile != "sm_120"'
+        not in preference
+    ):
+        raise ValueError("Rys-task default target/class admission drifted")
+    lowering_relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
+    lowering = _read(root / lowering_relative)
+    registry_relative = Path(
+        "python/generativeqc_compiler/integral/production_registry.py"
+    )
+    registry = _read(root / registry_relative)
+    if (
+        '"GENERATIVEQC_DIRECT_K_FOCK_LOWERING"' not in lowering
+        or "return exchange ? DirectFockLowering::Default : DirectFockLowering::Incumbent;"
+        not in lowering
+        or "case DirectFockLowering::Default:\n"
+        "      selection.rys_task_fock_mask = generated::preferred_rys_task_fock_shell_class_mask();"
+        not in lowering
+        or "selection.rys_task_fock_mask &= class_mask;" not in lowering
+        or 'std::strcmp(value, "rys-task") == 0' not in lowering
+        or '"GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES"' not in registry
+        or "kernels->preferred_rys_task_fock_mask\n"
+        "      & enabled_rys_task_fock_shell_class_mask();"
+        not in registry
+    ):
+        raise ValueError("Rys-task default selection/filter guard drifted")
+    return {
+        "dft-policy:rys-task-k-default": preference_relative.as_posix(),
+        "dft-policy:GENERATIVEQC_DIRECT_K_FOCK_LOWERING": lowering_relative.as_posix(),
+        "dft-policy:GENERATIVEQC_AOT_RYS_TASK_FOCK_SHELL_CLASSES": registry_relative.as_posix(),
+    }
+
+
+def _discover_direct_k_work_default(root: Path) -> dict[str, str]:
+    """Keep work-default promotion separate from qualified Rys-task preference."""
+    relative = Path("src/scf/cuda/direct_fock_lowering.hpp")
+    source = _read(root / relative)
+    if (
+        'std::getenv("GENERATIVEQC_DIRECT_K_TASK_SCHEDULE")' not in source
+        or not re.search(
+            r'if \(value == nullptr \|\| \*value == \'\\0\' \|\| std::strcmp\(value, "work"\) == 0\)\s*'
+            r"return detail::GeneratedExchangeTaskSchedule::Work;",
+            source,
+        )
+        or "selection.task_schedule = prepare_direct_exchange_task_schedule();"
+        not in source
+    ):
+        raise ValueError("Direct K work schedule default/selection guard drifted")
+    return {"dft-policy:GENERATIVEQC_DIRECT_K_TASK_SCHEDULE": relative.as_posix()}
+
+
 def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
 
@@ -339,9 +400,15 @@ def _discover_df_rhf_preconvergence(root: Path) -> dict[str, str]:
     required = (
         'std::getenv("GENERATIVEQC_DF_CCSDT_REFERENCE_GUESS")',
         'value != "direct" && value != "auto"',
-        "functions < 200 || functions > 400",
+        "reference_quartet_direct(functions, maximum_angular->angular_momentum)",
+        "guess.work_amortization_ratio < 1.0",
+        "cartesian * cartesian",
+        "guess.preparation_peak_bytes > guess.value_budget_bytes",
+        "scf::plan_requested_density_fitting_tiles(",
+        "!plan.stores_full_three_center",
         "system.charge != 0",
-        "options.max_iterations = 32",
+        "preliminary_iterations = 32",
+        "options.max_iterations = preliminary_iterations",
         "options.energy_tolerance = 1e-4",
         "options.density_tolerance = 1e-4",
         "options.export_physical_reference = false",
@@ -363,6 +430,8 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_force_active_ao(root),
         _discover_xc_point_batching(root),
         _discover_md_j_default(root),
+        _discover_rys_task_default(root),
+        _discover_direct_k_work_default(root),
         _discover_explicit_model_and_guess_choices(root),
         _discover_cc_options(root),
         _discover_response_options(root),
