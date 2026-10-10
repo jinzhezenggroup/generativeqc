@@ -272,11 +272,15 @@ def test_ao_layout_capabilities_dense_fallback_and_lease_lifetime() -> None:
 
 
 @pytest.mark.parametrize("extension", [False, True])
-def test_density_binding_keeps_native_compatibility_and_task_generation(extension: bool) -> None:
+def test_density_binding_keeps_native_compatibility_and_task_generation(
+    extension: bool,
+) -> None:
     """The native producer, not a caller's functional label, provides proof."""
     values = (ct.c_double * 1)(7.0)
     owner = SimpleNamespace(
-        _library=SimpleNamespace(), _handle=ct.c_void_p(1), generation=71,
+        _library=SimpleNamespace(),
+        _handle=ct.c_void_p(1),
+        generation=71,
     )
     if extension:
         owner._library.grid_cuda_density_jets_v2 = object()
@@ -306,7 +310,9 @@ def test_density_binding_keeps_native_compatibility_and_task_generation(extensio
 
 
 @pytest.mark.parametrize("jets", [True, 0, 2, 4.0])
-def test_density_binding_rejects_invalid_jet_domains_before_native_call(jets: object) -> None:
+def test_density_binding_rejects_invalid_jet_domains_before_native_call(
+    jets: object,
+) -> None:
     task = DeviceGridTask(SimpleNamespace(), GridTaskView(version=1, generation=1))
     with pytest.raises(ValueError, match="one or four"):
         task.density_jets_binding(jets)

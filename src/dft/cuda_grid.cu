@@ -1049,8 +1049,7 @@ int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned 
                               const double** output, std::uint64_t* flags, char* error,
                               size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !output || !flags)
-      throw std::invalid_argument("null contracted AO binding");
+    if (!pointer || !output || !flags) throw std::invalid_argument("null contracted AO binding");
     *output = nullptr;
     *flags = 0;
     auto& p = *static_cast<GridPlan*>(pointer);
@@ -1061,8 +1060,7 @@ int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned 
         (jets == 4 && !(p.feature_mask & 8)))
       throw std::invalid_argument("contracted AO jets are unavailable");
     *output = p.work;
-    if (p.identical_spin_density && (p.feature_mask & 3) == 3)
-      *flags = 1;
+    if (p.identical_spin_density && (p.feature_mask & 3) == 3) *flags = 1;
   });
 }
 

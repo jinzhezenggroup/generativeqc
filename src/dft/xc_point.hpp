@@ -190,8 +190,8 @@ GENERATIVEQC_XC_HD inline ExchangeValue<Scalar> exchange_value(bool pbe, const S
         // At exact zero gradient rho^(4/3) can underflow although its
         // directional ratio is finite. Factor the division before forming
         // that product; ordinary nonzero-gradient value arithmetic is intact.
-        const bool factored = primal(rho43) == 0.0 ||
-                              (StableSubnormalRatio && primal(rho43) < DBL_MIN);
+        const bool factored =
+            primal(rho43) == 0.0 || (StableSubnormalRatio && primal(rho43) < DBL_MIN);
         u[k] = factored ? (gradient[k] / rho) / rho13 : gradient[k] / rho43;
         u2 = u2 + u[k] * u[k];
       }
@@ -370,8 +370,8 @@ GENERATIVEQC_XC_HD inline Value evaluate(bool pbe, const double rho[2], const do
  * avoids division by a quantized subnormal rho^(4/3); existing entries and
  * response algebra keep their original arithmetic and fallback behavior.
  */
-GENERATIVEQC_XC_HD inline Value evaluate_pbe0_restricted_bound(
-    double spin_density, const double spin_gradient[3]) {
+GENERATIVEQC_XC_HD inline Value evaluate_pbe0_restricted_bound(double spin_density,
+                                                               const double spin_gradient[3]) {
   const double rho[2]{spin_density, spin_density};
   double gradient[2][3];
   for (unsigned axis = 0; axis < 3; ++axis)

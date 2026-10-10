@@ -399,8 +399,11 @@ def test_density_binding_requires_current_owned_restricted_features(
 ) -> None:
     """Missing lineage falls back; stale or unavailable work clears the proof."""
     process = subprocess.run(
-        [str(publication_probe), "binding", str(mode)], capture_output=True,
-        text=True, timeout=10, check=False,
+        [str(publication_probe), "binding", str(mode)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
     )
     assert process.returncode == 0, (mode, process.returncode, process.stderr)
 

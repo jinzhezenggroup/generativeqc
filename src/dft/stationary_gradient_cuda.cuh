@@ -1228,10 +1228,11 @@ int stationary_geometry_molecular_resident_weights_enqueue(
 int stationary_geometry_molecular_resident_weights_enqueue_v2(
     void* pointer, const generativeqc::dft::GridTaskView* view, const double* work,
     size_t owner_offset, size_t points_per_atom, const double* device_weights,
-    const double* device_raw, uint64_t generation, uint64_t binding_flags, char* error, size_t size) {
+    const double* device_raw, uint64_t generation, uint64_t binding_flags, char* error,
+    size_t size) {
   return stationary_geometry_molecular_resident_weights_enqueue_impl(
-      pointer, view, work, owner_offset, points_per_atom, device_weights, device_raw, true, generation,
-      binding_flags, error, size);
+      pointer, view, work, owner_offset, points_per_atom, device_weights, device_raw, true,
+      generation, binding_flags, error, size);
 }
 
 int stationary_point_binding_metrics_v1(void* pointer, uint64_t* output, size_t count) {
