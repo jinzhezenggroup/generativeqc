@@ -244,14 +244,119 @@ __device__ MatrixPair matrix_pair(std::int64_t packed) {
   return {row, packed - previous};
 }
 
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+struct DensityThreadWork {
+  std::uint64_t pairs = 0;
+  std::uint64_t plain_visits = 0;
+  std::uint64_t plain_completed = 0;
+  std::uint64_t weighted_visits = 0;
+  std::uint64_t weighted_completed = 0;
+  std::uint64_t failures = 0;
+  std::uint64_t published = 0;
+};
+
+__device__ void record_density_receipt(Gfn2DensityDeviceWorkspace workspace,
+                                       std::int64_t system, std::uint32_t channel,
+                                       std::uint32_t tile, std::uint32_t status,
+                                       std::uint64_t cycles,
+                                       const DensityThreadWork& work,
+                                       std::int64_t orbital_count = 0,
+                                       std::int64_t pair_count = 0,
+                                       std::uint32_t spin_channels = 0) {
+  if (workspace.diagnostic_receipt_count == nullptr) return;
+  const auto slot = atomicAdd(
+      reinterpret_cast<unsigned long long*>(workspace.diagnostic_receipt_count), 1ULL);
+  if (slot >= static_cast<std::uint64_t>(workspace.diagnostic_receipt_capacity)) return;
+  Gfn2DensityDeviceReceipt receipt{};
+  receipt.slot = slot;
+  receipt.cta_cycles = cycles;
+  receipt.pairs_visited = work.pairs;
+  receipt.plain_visits = work.plain_visits;
+  receipt.plain_completed = work.plain_completed;
+  receipt.weighted_visits = work.weighted_visits;
+  receipt.weighted_completed = work.weighted_completed;
+  receipt.failed_pairs = work.failures;
+  receipt.published_pairs = work.published;
+  receipt.system = system;
+  receipt.orbital_count = orbital_count;
+  receipt.pair_count = pair_count;
+  receipt.spin_channels = spin_channels;
+  receipt.channel = channel;
+  receipt.tile = tile;
+  receipt.status = status;
+  workspace.diagnostic_receipts[slot] = receipt;
+}
+
+__device__ void finish_density_receipt(Gfn2DensityDeviceWorkspace workspace,
+                                       std::int64_t system, std::uint32_t channel,
+                                       std::uint64_t start_cycles,
+                                       const DensityThreadWork& work,
+                                       std::int64_t orbital_count,
+                                       std::int64_t pair_count,
+                                       std::uint32_t spin_channels) {
+  __shared__ DensityThreadWork block_work[kThreadsPerBlock];
+  __shared__ std::uint64_t end_cycles;
+  __syncthreads();
+  if (threadIdx.x == 0) end_cycles = clock64();
+  block_work[threadIdx.x] = work;
+  __syncthreads();
+  if (threadIdx.x != 0) return;
+  DensityThreadWork total{};
+  for (unsigned lane = 0; lane < blockDim.x; ++lane) {
+    total.pairs += block_work[lane].pairs;
+    total.plain_visits += block_work[lane].plain_visits;
+    total.plain_completed += block_work[lane].plain_completed;
+    total.weighted_visits += block_work[lane].weighted_visits;
+    total.weighted_completed += block_work[lane].weighted_completed;
+    total.failures += block_work[lane].failures;
+    total.published += block_work[lane].published;
+  }
+  record_density_receipt(workspace, system, channel, blockIdx.z,
+                         total.failures == 0 ? kDensityContractCompleted
+                                             : kDensityLocalArithmeticFailure,
+                         end_cycles - start_cycles, total, orbital_count, pair_count,
+                         spin_channels);
+}
+#endif
+
 __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceInput input,
                                 Gfn2DensityDeviceWorkspace workspace, std::uint32_t* system_errors,
                                 std::uint32_t* device_error) {
   const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  __shared__ std::uint32_t density_skip_status;
+  if (threadIdx.x == 0) {
+    const std::uint8_t state = input.active[system];
+    density_skip_status =
+        atomicAdd(workspace.sequence_active, 0u) == 0u ? kDensitySequenceClosed
+        : state == 0u ? kDensityInactiveMember
+        : state != 1u ? kDensityInvalidActiveMask
+        : !system_is_valid(system_errors, system) ? kDensityPriorSystemError
+                                                   : kDensityContractCompleted;
+  }
+  __syncthreads();
+  if (density_skip_status != kDensityContractCompleted) {
+    if (threadIdx.x == 0) {
+      record_density_receipt(workspace, system, 0u, blockIdx.z, density_skip_status, 0u, {});
+    }
+    return;
+  }
+  __shared__ std::uint64_t density_start_cycles;
+  if (threadIdx.x == 0) density_start_cycles = clock64();
+  __syncthreads();
+  std::uint64_t density_pairs_visited = 0;
+  std::uint64_t density_plain_visits = 0;
+  std::uint64_t density_plain_completed = 0;
+  std::uint64_t density_weighted_visits = 0;
+  std::uint64_t density_weighted_completed = 0;
+  std::uint64_t density_failed_pairs = 0;
+  std::uint64_t density_published_pairs = 0;
+#else
   if (atomicAdd(workspace.sequence_active, 0u) == 0u || input.active[system] != 1u ||
       !system_is_valid(system_errors, system)) {
     return;
   }
+#endif
   const std::int64_t orbital_begin = batch.orbital_offsets[system];
   const std::int64_t orbital_end = batch.orbital_offsets[system + 1];
   const std::int64_t matrix_begin = batch.matrix_offsets[system];
@@ -259,7 +364,16 @@ __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceI
   const std::int64_t pair_count = triangle_inclusive(count);
   // Tile independent matrix outputs, retaining the full ordered orbital
   // reduction and its finite-range checks within each original thread.
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+#include "generated_gfn2_density_contract_receipt.inc"
+  finish_density_receipt(workspace, system, 0u, density_start_cycles,
+                         {density_pairs_visited, density_plain_visits, density_plain_completed,
+                          density_weighted_visits, density_weighted_completed,
+                          density_failed_pairs, density_published_pairs},
+                         count, pair_count, 1u);
+#else
 #include "generated_gfn2_density_contract.inc"
+#endif
 }
 
 __global__ void trace_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceInput input,
@@ -534,16 +648,59 @@ __global__ void spin_contract_kernel(Gfn2DensityDeviceBatch batch,
                                      std::uint32_t* system_errors, std::uint32_t* device_error) {
   const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
   const std::int32_t channel = static_cast<std::int32_t>(blockIdx.y);
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  __shared__ std::uint32_t density_skip_status;
+  if (threadIdx.x == 0) {
+    const std::uint8_t state = input.active[system];
+    density_skip_status =
+        atomicAdd(workspace.sequence_active, 0u) == 0u ? kDensitySequenceClosed
+        : state == 0u ? kDensityInactiveMember
+        : state != 1u ? kDensityInvalidActiveMask
+        : !system_is_valid(system_errors, system) ? kDensityPriorSystemError
+        : channel >= layout.spin_channels[system] ? kDensityUnusedChannel
+                                                    : kDensityContractCompleted;
+  }
+  __syncthreads();
+  if (density_skip_status != kDensityContractCompleted) {
+    if (threadIdx.x == 0) {
+      record_density_receipt(workspace, system, static_cast<std::uint32_t>(channel),
+                             blockIdx.z, density_skip_status, 0u, {});
+    }
+    return;
+  }
+  __shared__ std::uint64_t density_start_cycles;
+  if (threadIdx.x == 0) density_start_cycles = clock64();
+  __syncthreads();
+  std::uint64_t density_pairs_visited = 0;
+  std::uint64_t density_plain_visits = 0;
+  std::uint64_t density_plain_completed = 0;
+  std::uint64_t density_weighted_visits = 0;
+  std::uint64_t density_weighted_completed = 0;
+  std::uint64_t density_failed_pairs = 0;
+  std::uint64_t density_published_pairs = 0;
+#else
   if (atomicAdd(workspace.sequence_active, 0u) == 0u || input.active[system] != 1u ||
       !system_is_valid(system_errors, system) || channel >= layout.spin_channels[system]) {
     return;
   }
+#endif
   const std::int64_t count = batch.orbital_offsets[system + 1] - batch.orbital_offsets[system];
   const std::int64_t matrix_count = count * count;
   const std::int64_t matrix_begin = layout.spin_matrix_offsets[system] + channel * matrix_count;
   const std::int64_t orbital_begin = layout.spin_orbital_offsets[system] + channel * count;
   const std::int64_t pair_count = triangle_inclusive(count);
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+#include "generated_gfn2_density_contract_receipt.inc"
+  finish_density_receipt(workspace, system, static_cast<std::uint32_t>(channel),
+                         density_start_cycles,
+                         {density_pairs_visited, density_plain_visits, density_plain_completed,
+                          density_weighted_visits, density_weighted_completed,
+                          density_failed_pairs, density_published_pairs},
+                         count, pair_count,
+                         static_cast<std::uint32_t>(layout.spin_channels[system]));
+#else
 #include "generated_gfn2_density_contract.inc"
+#endif
 }
 
 __global__ void spin_trace_kernel(Gfn2DensityDeviceBatch batch, Gfn2WavefunctionLayoutView layout,
@@ -803,6 +960,39 @@ bool disjoint_sets(const std::array<AddressRange, FirstCount>& first,
   return true;
 }
 
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+template <std::size_t Reads, std::size_t Writes>
+bool validate_density_receipt_sink(const Gfn2DensityDeviceWorkspace& workspace,
+                                   const std::array<AddressRange, Reads>& reads,
+                                   const std::array<AddressRange, Writes>& writes,
+                                   const AddressRange& active) noexcept {
+  if (workspace.diagnostic_receipts == nullptr &&
+      workspace.diagnostic_receipt_count == nullptr &&
+      workspace.diagnostic_receipt_capacity == 0) return true;
+  constexpr std::size_t kMaximumReceiptBytes = 64u * 1024u * 1024u;
+  if (workspace.diagnostic_receipts == nullptr ||
+      workspace.diagnostic_receipt_count == nullptr ||
+      workspace.diagnostic_receipt_capacity <= 0 ||
+      static_cast<std::uint64_t>(workspace.diagnostic_receipt_capacity) >
+          (kMaximumReceiptBytes - sizeof(std::uint64_t)) /
+              sizeof(Gfn2DensityDeviceReceipt) ||
+      !is_aligned(workspace.diagnostic_receipts, alignof(Gfn2DensityDeviceReceipt)) ||
+      !is_aligned(workspace.diagnostic_receipt_count, alignof(std::uint64_t))) {
+    return false;
+  }
+  std::array<AddressRange, 2> sink{};
+  if (!make_range(workspace.diagnostic_receipts, workspace.diagnostic_receipt_capacity,
+                  sizeof(Gfn2DensityDeviceReceipt), &sink[0]) ||
+      !make_range(workspace.diagnostic_receipt_count, 1, sizeof(std::uint64_t),
+                  &sink[1]) ||
+      !pairwise_disjoint(sink) || !disjoint_sets(sink, reads) ||
+      !disjoint_sets(sink, writes)) {
+    return false;
+  }
+  return !ranges_overlap(sink[0], active) && !ranges_overlap(sink[1], active);
+}
+#endif
+
 bool validate_restricted_launch(const Gfn2DensityDeviceBatch& batch,
                                 const Gfn2DensityDeviceInput& input,
                                 const Gfn2DensityDeviceResults& results,
@@ -915,6 +1105,9 @@ bool validate_restricted_launch(const Gfn2DensityDeviceBatch& batch,
       return false;
     }
   }
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  if (!validate_density_receipt_sink(workspace, reads, writes, active_range)) return false;
+#endif
   return true;
 }
 
@@ -1084,6 +1277,9 @@ bool validate_spin_launch(const Gfn2DensityDeviceBatch& batch,
       return false;
     }
   }
+#if defined(GENERATIVEQC_GFN2_DENSITY_WORK_DIAGNOSTICS)
+  if (!validate_density_receipt_sink(workspace, reads, writes, active_range)) return false;
+#endif
   return true;
 }
 

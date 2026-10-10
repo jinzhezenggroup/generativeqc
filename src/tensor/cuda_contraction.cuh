@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <new>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -22,19 +23,25 @@ namespace generativeqc::tensor {
 
 /** Shared native provider resources, prepared once outside iteration/capture.
  * The conservative retained allowance is charged by the enclosing arena owner;
- * observed handle growth is bounded as well. No implicit BLAS workspace is
- * allowed. Allocation failure alone admits the caller's scalar schedule.
+ * observed handle plus optional workspace growth is bounded as well. No implicit
+ * BLAS workspace is allowed. Allocation failure alone admits a bounded fallback.
  */
 class CudaContractionContext {
  public:
   static constexpr std::size_t kProviderAllowance = 96ULL << 20;
+  static constexpr std::size_t kOptionalWorkspaceBytes = 4ULL << 20;
   CudaContractionContext() = default;
   CudaContractionContext(const CudaContractionContext&) = delete;
   CudaContractionContext& operator=(const CudaContractionContext&) = delete;
   ~CudaContractionContext() { reset(); }
 
-  bool prepare(cudaStream_t stream) {
+  /** Own optional storage within the existing provider allowance, never on replay.
+   * Zero preserves existing callers. Device OOM or excess observed growth drops
+   * the workspace before refusing the provider; host bookkeeping errors escape. */
+  bool prepare(cudaStream_t stream, std::size_t workspace_bytes = 0) {
     if (handle_ || prepared_) throw std::logic_error("contraction context is already prepared");
+    if (workspace_bytes > kOptionalWorkspaceBytes)
+      throw std::invalid_argument("optional contraction workspace exceeds its fixed bound");
     cudaStreamCaptureStatus capture{};
     generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
     if (capture != cudaStreamCaptureStatusNone)
@@ -56,9 +63,27 @@ class CudaContractionContext {
       generativeqc_tensor::blas_check(cublasSetPointerMode(handle_, CUBLAS_POINTER_MODE_HOST));
       generativeqc_tensor::blas_check(cublasSetMathMode(handle_, CUBLAS_PEDANTIC_MATH));
       generativeqc_tensor::blas_check(cublasSetWorkspace(handle_, nullptr, 0));
+      if (workspace_bytes) {
+        bool host_oom = false;
+        const auto allocation =
+            runtime::resource_cuda_malloc(&workspace_, workspace_bytes, &host_oom);
+        if (host_oom) throw std::bad_alloc();
+        if (allocation == cudaErrorMemoryAllocation) {
+          (void)cudaGetLastError();
+        } else {
+          generativeqc_tensor::cuda_check(allocation);
+          workspace_bytes_ = workspace_bytes;
+          generativeqc_tensor::blas_check(
+              cublasSetWorkspace(handle_, workspace_, workspace_bytes_));
+        }
+      }
       generativeqc_tensor::blas_check(cublasGetVersion(handle_, &provider_version_));
       generativeqc_tensor::cuda_check(cudaRuntimeGetVersion(&runtime_version_));
       generativeqc_tensor::cuda_check(cudaMemGetInfo(&after, &total));
+      if (before > after && before - after > kProviderAllowance && workspace_) {
+        discard_workspace_locked();
+        generativeqc_tensor::cuda_check(cudaMemGetInfo(&after, &total));
+      }
       retained_bytes_ = before > after ? before - after : 0;
       if (before > after && before - after > kProviderAllowance) {
         release_locked();
@@ -99,6 +124,18 @@ class CudaContractionContext {
     reset_locked();
   }
 
+  /** Drop optional storage before the arena owner sacrifices its numeric plan.
+   * Drain the prepared device/stream and invalidate old tables, including a
+   * default-stream binding. Repeated zero-workspace releases change nothing. */
+  bool release_workspace() {
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+    if (!workspace_) return false;
+    runtime::CudaDeviceScope guard(device_, generativeqc_tensor::cuda_check);
+    discard_workspace_locked();
+    ++generation_;
+    return true;
+  }
+
   // Optional-resource fallback is a live operation, unlike destructor cleanup:
   // a driver or destroy failure must propagate instead of admitting a retry.
   // The caller holds allocation_measurement_mutex and the prepared device.
@@ -106,7 +143,11 @@ class CudaContractionContext {
     if (handle_) {
       if (stream_) generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream_));
       generativeqc_tensor::blas_check(cublasDestroy(handle_));
+      handle_ = nullptr;
     }
+    if (workspace_) generativeqc_tensor::cuda_check(runtime::resource_cuda_free(workspace_));
+    workspace_ = nullptr;
+    workspace_bytes_ = 0;
     handle_ = nullptr;
     stream_ = nullptr;
     prepared_ = false;
@@ -117,15 +158,18 @@ class CudaContractionContext {
   // The arena owner already holds allocation_measurement_mutex when releasing
   // all retained storage together. This avoids recursively taking that lock.
   void reset_locked() noexcept {
-    if (handle_) {
+    if (handle_ || workspace_) {
       int previous = device_;
       (void)cudaGetDevice(&previous);
       (void)cudaSetDevice(device_);
       if (stream_) (void)cudaStreamSynchronize(stream_);
-      (void)cublasDestroy(handle_);
+      if (handle_) (void)cublasDestroy(handle_);
+      if (workspace_) (void)runtime::resource_cuda_free(workspace_);
       (void)cudaSetDevice(previous);
     }
     handle_ = nullptr;
+    workspace_ = nullptr;
+    workspace_bytes_ = 0;
     stream_ = nullptr;
     prepared_ = false;
     retained_bytes_ = 0;
@@ -139,10 +183,21 @@ class CudaContractionContext {
   int runtime_version() const noexcept { return runtime_version_; }
   std::size_t generation() const noexcept { return generation_; }
   std::size_t retained_bytes() const noexcept { return retained_bytes_; }
+  std::size_t workspace_bytes() const noexcept { return workspace_bytes_; }
   bool prepared() const noexcept { return prepared_; }
 
  private:
+  void discard_workspace_locked() {
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream_));
+    generativeqc_tensor::blas_check(cublasSetWorkspace(handle_, nullptr, 0));
+    generativeqc_tensor::cuda_check(runtime::resource_cuda_free(workspace_));
+    workspace_ = nullptr;
+    workspace_bytes_ = 0;
+  }
+
   cublasHandle_t handle_{};
+  void* workspace_{};
+  std::size_t workspace_bytes_{};
   cudaStream_t stream_{};
   int device_{}, provider_version_{}, runtime_version_{};
   std::size_t generation_{};

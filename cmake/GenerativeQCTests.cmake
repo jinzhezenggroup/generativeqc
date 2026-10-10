@@ -447,6 +447,8 @@ macro(generativeqc_add_native_tests)
   endif()
 
   generativeqc_native_test(generativeqc_dft_api_tests tests/native/test_dft_api.cpp NO_SRC_INCLUDE)
+  generativeqc_native_test(generativeqc_dft_integral_sources_tests
+                       tests/native/test_dft_integral_sources.cpp)
   generativeqc_native_test(generativeqc_scf_diagnostic_tests tests/native/test_scf_diagnostic.cpp)
   generativeqc_native_test(generativeqc_dft_density_source_tests tests/native/test_dft_density_source.cpp)
   generativeqc_native_test(generativeqc_uks_tests tests/native/test_uks.cpp)

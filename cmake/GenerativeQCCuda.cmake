@@ -337,6 +337,8 @@ macro(generativeqc_configure_cuda_backend target)
       "src/runtime/cuda_resources.cuh"
       "src/runtime/resource_cuda.cuh"
       "src/runtime/resource_ledger.hpp"
+      "src/runtime/residency_boundaries.hpp"
+      "src/runtime/residency_observer.hpp"
       "src/tensor/cuda_error.hpp"
       "src/tensor/metrics.hpp"
       "src/runtime/allocation_measurement.hpp"

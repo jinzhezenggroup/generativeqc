@@ -359,7 +359,7 @@
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1,
-        "cublasSetWorkspace": 1,
+        "cublasSetWorkspace": 3,
         "cublasSgemm": 1,
         "cublasSgemmStridedBatched": 1,
         "cutensorGetVersion": 1

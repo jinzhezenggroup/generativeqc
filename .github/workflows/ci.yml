@@ -979,6 +979,18 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
         run: ccache --zero-stats
+      - name: Prepare bounded native diagnostics
+        if: matrix.shard == 'core-b'
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
+        run: |
+          ccache --version
+          ccache cc -std=c11 -fPIC -O2 -Wall -Wextra -Werror \
+            -c tools/native_fault_record.c -o "$RUNNER_TEMP/native-fault-record.o"
+          ccache cc -shared "$RUNNER_TEMP/native-fault-record.o" \
+            -o "$RUNNER_TEMP/libnative-fault-record.so"
+          .venv/bin/python -m pytest tests/test_ci_native_diagnostics.py -q
       - name: Run Python tests with coverage
         id: python_tests
         timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
@@ -1390,10 +1402,19 @@ jobs:
               exit 2
               ;;
           esac
+          diagnostic_args=()
+          if [[ "${{ matrix.shard }}" == "core-b" ]]; then
+            diagnostic_args+=(
+              -p tools.pytest_native_diagnostics
+              --native-diagnostics-dir="$PWD/.artifacts/native-diagnostics"
+              --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
+            )
+          fi
           .venv/bin/python -m pytest "${test_targets[@]}" -q \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
+            "${diagnostic_args[@]}" \
             "${extra_args[@]}"
       # ccache only retains successful compiler outputs, even if a later test
       # fails or times out. Partial snapshots must not freeze the complete key.

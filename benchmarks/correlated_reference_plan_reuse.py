@@ -13,6 +13,7 @@ import json
 import math
 import statistics
 import time
+from dataclasses import asdict
 from typing import Any
 
 from generativeqc import Calculator
@@ -27,6 +28,10 @@ WATER = [
     ("H", (0.0, 1.43233673, 1.10715266)),
     ("H", (0.0, -1.43233673, 1.10715266)),
 ]
+CASES = {
+    "water": WATER,
+    "h2": [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))],
+}
 
 
 def _sample(
@@ -44,17 +49,41 @@ def _sample(
         raise RuntimeError("correlated endpoint did not publish diagnostics")
     if result.warm_start_used:
         raise RuntimeError("benchmark must not use a retained HF density")
+    if (
+        not result.succeeded
+        or not result.converged
+        or result.executed_backend != "cuda"
+    ):
+        raise RuntimeError("benchmark requires a converged production CUDA endpoint")
+    if "forces" in properties and result.forces is None:
+        raise RuntimeError("force endpoint did not publish complete analytic forces")
     return {
         "seconds": elapsed,
         "energy": result.energy,
         "plan_reused": diagnostic.reference_execution_plan_reused,
         "plan_owned_device_bytes": diagnostic.reference_execution_plan_owned_device_bytes,
         "numeric_capacity_bytes": diagnostic.numeric_capacity_bytes,
+        "forces": result.forces.tolist() if result.forces is not None else None,
+        "scf_iterations": result.iterations,
+        "fock_builds": result.fock_builds,
+        "energy_change": result.energy_change,
+        "density_rms": result.density_rms,
+        "physical_residual_rms": result.physical_residual_rms,
+        "warm_start_used": result.warm_start_used,
+        "warm_start_fallback": result.warm_start_fallback,
+        "correlation": asdict(diagnostic),
+        "cc_performance": (
+            asdict(result.cc_performance) if result.cc_performance is not None else None
+        ),
     }
 
 
 def _run_method(
-    method: str, repeats: int, properties: tuple[str, ...], budget: int
+    method: str,
+    repeats: int,
+    properties: tuple[str, ...],
+    budget: int,
+    case: str = "water",
 ) -> dict[str, Any]:
     calculator = Calculator(
         method=method,
@@ -68,12 +97,13 @@ def _run_method(
         ccsd_energy_tolerance=1e-13,
         ccsd_residual_tolerance=1e-11,
     )
-    moved = [list(xyz) for _, xyz in WATER]
+    atoms = CASES[case]
+    moved = [list(xyz) for _, xyz in atoms]
     moved[1][2] += 0.01
 
     records: list[dict[str, Any]] = []
     for _ in range(repeats):
-        with calculator.prepare_batch([WATER], warm_start=False) as batch:
+        with calculator.prepare_batch([atoms], warm_start=False) as batch:
             cold = _sample(batch, properties=properties)
             stationary = _sample(batch, properties=properties)
             changed = _sample(batch, coordinates=moved, properties=properties)
@@ -100,6 +130,9 @@ def _run_method(
     changed = median("changed_geometry")
     return {
         "method": method,
+        "case": case,
+        "atoms": atoms,
+        "changed_coordinates": moved,
         "properties": properties,
         "repeats": repeats,
         "cold_median_seconds": cold,
@@ -116,6 +149,7 @@ def main() -> None:
     parser.add_argument("--methods", nargs="+", default=["mp2", "rccsd", "ccsd(t)"])
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--forces", action="store_true")
+    parser.add_argument("--case", choices=tuple(CASES), default="water")
     parser.add_argument("--budget-bytes", type=int, default=8 << 30)
     parser.add_argument("--output", type=raw_output_path)
     args = parser.parse_args()
@@ -128,7 +162,7 @@ def main() -> None:
         "warm_density_reuse": False,
         "timing_scope": "complete prepared correlated execute call",
         "methods": [
-            _run_method(method, args.repeats, properties, args.budget_bytes)
+            _run_method(method, args.repeats, properties, args.budget_bytes, args.case)
             for method in args.methods
         ],
     }

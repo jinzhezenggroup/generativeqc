@@ -197,6 +197,8 @@ def compile_weighted_eri(
                 "src/runtime/cuda_resources.cuh",
                 "src/runtime/resource_cuda.cuh",
                 "src/runtime/resource_ledger.hpp",
+                "src/runtime/residency_boundaries.hpp",
+                "src/runtime/residency_observer.hpp",
             )
         )
     headers = tuple(asset_path(name) for name in names)

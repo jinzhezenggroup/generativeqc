@@ -16,6 +16,17 @@ struct GridTaskView;
 }
 
 extern "C" {
+/** Private, explicitly partial #2151 native single-system derivative bridge.
+ * Only a successfully executed prepared KS calculation with a current verified
+ * final state may provide source-major [H', Pulay, J', K'] +dE/dR blocks.
+ * Source size is exactly 4*3*Natom doubles; work has exactly nine uint64 slots.
+ * CPU DF and qualified CUDA DF/Direct are admitted; CPU Direct and ECP/range/
+ * nonlocal/dispersion domains fail closed. Caller output is unchanged on
+ * failure. XC/Becke/nuclear terms are absent; this is NOT an analytic force. */
+generativeqc_status generativeqc_ks_calculation_integral_sources_v1(
+    generativeqc_calculation* calculation, double* values, std::size_t count,
+    std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+
 generativeqc_status generativeqc_ks_snapshot_create_v1(generativeqc_batch* batch, std::size_t index,
                                                        generativeqc_ks_snapshot** output,
                                                        std::uint64_t* metadata,
