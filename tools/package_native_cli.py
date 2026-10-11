@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Package an installed Python-free CUDA CLI without the native SDK headers.
 
 The GenerativeQC core is statically linked in the distribution preset. CUDA
@@ -74,26 +73,28 @@ def _copy_runtime_tree(prefix: Path, staging: Path) -> list[str]:
 def _archive_tree(source: Path, destination: Path, epoch: int) -> None:
     # Fixed metadata and gzip headers make identical installation trees
     # reproducible across workflow attempts (without copying archive-sized RAM).
-    with destination.open("wb") as output:
-        with gzip.GzipFile(
+    with (
+        destination.open("wb") as output,
+        gzip.GzipFile(
             fileobj=output, mode="wb", filename="", mtime=epoch
-        ) as compressed:
-            with tarfile.open(
-                fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT
-            ) as archive:
-                entries = [source, *sorted(source.rglob("*"))]
-                for path in entries:
-                    info = archive.gettarinfo(
-                        str(path), arcname=str(path.relative_to(source.parent))
-                    )
-                    info.uid = info.gid = 0
-                    info.uname = info.gname = ""
-                    info.mtime = epoch
-                    if info.isfile():
-                        with path.open("rb") as stream:
-                            archive.addfile(info, stream)
-                    else:
-                        archive.addfile(info)
+        ) as compressed,
+        tarfile.open(
+            fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT
+        ) as archive,
+    ):
+        entries = [source, *sorted(source.rglob("*"))]
+        for path in entries:
+            info = archive.gettarinfo(
+                str(path), arcname=str(path.relative_to(source.parent))
+            )
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            info.mtime = epoch
+            if info.isfile():
+                with path.open("rb") as stream:
+                    archive.addfile(info, stream)
+            else:
+                archive.addfile(info)
 
 
 def package_native_cli(
