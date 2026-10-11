@@ -2,6 +2,7 @@
 // The linked scientific runtime remains next to generativeqc/bin/generativeqc,
 // where the executable's $ORIGIN RPATH resolves the packaged native library.
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
