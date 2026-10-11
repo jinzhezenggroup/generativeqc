@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from generativeqc import tune_cli
 
 

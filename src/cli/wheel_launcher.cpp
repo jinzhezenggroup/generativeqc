@@ -15,6 +15,7 @@
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
+
 #include <vector>
 #endif
 #if defined(__linux__) || defined(__APPLE__)
@@ -94,8 +95,7 @@ int main(int /*argc*/, char* argv[]) {
     if (candidates.size() != 1) {
       std::cerr << "generativeqc: expected exactly one packaged native CLI adjacent "
                    "to this wheel installation; found "
-                << candidates.size()
-                << ". Reinstall the matching GenerativeQC wheel/SDK.\n";
+                << candidates.size() << ". Reinstall the matching GenerativeQC wheel/SDK.\n";
       return 127;
     }
     const std::string binary = candidates.begin()->string();

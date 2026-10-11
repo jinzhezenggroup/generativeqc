@@ -19,8 +19,12 @@ def parser() -> argparse.ArgumentParser:
         description="Compile and qualify workload-specific CUDA kernel candidates",
     )
     modes = root.add_mutually_exclusive_group()
-    modes.add_argument("--quick", action="store_true", help="bounded hotspot search (default)")
-    modes.add_argument("--full", action="store_true", help="broader class and schedule coverage")
+    modes.add_argument(
+        "--quick", action="store_true", help="bounded hotspot search (default)"
+    )
+    modes.add_argument(
+        "--full", action="store_true", help="broader class and schedule coverage"
+    )
     root.add_argument("input", type=Path, help="representative XYZ workload")
     root.add_argument("--basis", default="def2-svp")
     root.add_argument("--method", choices=("rhf", "uhf"), default="rhf")
@@ -68,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
         args.max_classes if args.max_classes is not None else (55 if args.full else 8)
     )
     args.max_candidates = (
-        args.max_candidates if args.max_candidates is not None else (16 if args.full else 4)
+        args.max_candidates
+        if args.max_candidates is not None
+        else (16 if args.full else 4)
     )
     if (
         not 0 < args.coverage <= 1

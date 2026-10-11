@@ -1047,7 +1047,6 @@ int profile_command(int argc, char** argv) {
   throw UsageError("unknown profile operation: " + std::string(operation));
 }
 
-
 }  // namespace
 
 int main(int argc, char** argv) {

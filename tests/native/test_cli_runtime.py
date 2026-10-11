@@ -700,7 +700,6 @@ class RuntimeTests(unittest.TestCase):
         path.write_text(json.dumps(basis))
         self.assertNotEqual(self.resources("--basis", str(path)).returncode, 0)
 
-
     def test_retired_autotune_aliases_are_not_runtime_commands(self) -> None:
         for arguments in (
             ("autotune", "unused.xyz"),
