@@ -17,11 +17,13 @@ provider selections before an explicit force replay. Failed requests or replays
 do not replace its previously accepted plan. Other contexts, including ECP,
 retain their existing defaults and conservative capacity reservations.
 
-Qualified CPU Direct PBE/PBE0 requests use the source-complete prepared C++
+Qualified CPU Direct PBE/PBE0/B3LYP requests use the source-complete prepared C++
 owner described in the [native SDK derivative contract](../user/native_cpp.md#density-fitting-and-derivative-boundary),
 not this Python scientific scheduler. `StationaryGradientPlan` still owns the
 integral adjoint weights: `generate_stationary_integral_weights.py` specializes
-that same TensorIR AD into portable scalar bindings. The native streamed
+that same TensorIR AD into portable scalar bindings, including the B3LYP-specific
+exchange coefficient. The XC geometry response shares the analytic GGA AO/Becke
+pullback while evaluating B3LYP's own generated semilocal point program. The native streamed
 shell contraction consumes compiler-owned center/axis dispatch metadata for
 the existing packaged first-derivative kernels; it shares J/K primitive work
 and retains the independent reference recurrence for oracle/legacy consumers.
