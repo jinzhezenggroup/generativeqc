@@ -73,7 +73,8 @@ int main() {
     std::cout << pbe::one_electron(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe::overlap_pulay(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
               << pbe::coulomb(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
-              << pbe0::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << ' '\n              << b3lyp::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << '\\n';
+              << pbe0::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << ' '
+              << b3lyp::exact_exchange(density.data(), weighted_density.data(), nbf, indices.data()) << '\\n';
   }
   return std::cin.eof() ? 0 : 1;
 }
