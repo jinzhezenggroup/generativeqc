@@ -140,6 +140,8 @@ struct GeneratedCoulombPlan {
   std::uint32_t* heads{};
   const std::uint32_t* pair_order{};
   const std::uint32_t* pair_class_offsets{};
+  const std::int32_t* projection_spans{};
+  std::size_t projection_span_elements{}, projection_dense_elements{};
   GeneratedShellPairStream* topology{};
   ~GeneratedCoulombPlan();
 };
@@ -201,6 +203,10 @@ int main(int argc,char** argv) {
   injected_stage=0;
   auto recovered=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
   assert(recovered && live_allocations>0);
+  assert(recovered->projection_spans);
+  assert(recovered->projection_spans[0]==0 && recovered->projection_spans[1]==1);
+  assert(recovered->projection_spans[2]==0 && recovered->projection_spans[3]==1);
+  assert(recovered->projection_span_elements==2 && recovered->projection_dense_elements==2);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
   assert(recovered->batch.direct_hermite_convolution==hermite);
   assert(recovered->batch.direct_pair_materialized_values==pair_materialized);

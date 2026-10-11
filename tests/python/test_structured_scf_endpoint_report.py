@@ -136,6 +136,23 @@ def test_foreign_trace_cannot_qualify_this_endpoint() -> None:
     assert report.compare(baseline, candidate, 127, [foreign])["profitable"] is None
 
 
+@pytest.mark.parametrize("invalid_field", ["mask", "library_operations"])
+def test_malformed_observation_revokes_positive_timing_decision(
+    invalid_field: str,
+) -> None:
+    baseline, candidate = pairs()
+    malformed = observation()
+    if invalid_field == "mask":
+        malformed.pop("mask")
+    else:
+        malformed["library_operations"] = None
+    result = report.compare(baseline, candidate, 127, [malformed])
+    assert result["timing_profitable"] is True
+    assert result["profitable"] is None
+    assert result["default_promoted"] is False
+    assert result["reason"]
+
+
 def trace(execution: str = "stream") -> dict:
     return {
         "operation": "structured_gram",

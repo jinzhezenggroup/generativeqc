@@ -221,6 +221,7 @@ def compare(
                 "HF retains determinant-consistent P F(P) P; signed Gram is not executed"
             )
     except (KeyError, TypeError, ValueError) as error:
+        result["profitable"] = None
         result["reason"] = str(error)
     return result
 
