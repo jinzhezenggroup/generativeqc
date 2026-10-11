@@ -168,6 +168,16 @@ cleared or sloppified.
   non-interactive SSH on 2026-10-11 (vlab "connection closed" after banner);
   no favorable machine-code artifact was selected and no cache was cleared
   to obtain any number.
+- Rebase control after upstream #2236: a fresh record run on the rebased
+  head measured an identity byte-identical to the committed ledger
+  (shard source, preprocessed identity, headers, flags, toolchain, and all
+  86 kernel resource rows), so #2236's owner/grid changes did not alter
+  shard-6 static resources and the ledger was retained unchanged.
+- Windows-local caveat: the Windows checkout's CRLF line endings leak into
+  locally generated shard bytes, so shard hashes generated on a Windows
+  checkout are not comparable to the CI (LF) identity. Only CI-measured
+  identities may be compared against the ledger; a local hash difference is
+  not evidence of drift.
 
 ## Consequences
 
