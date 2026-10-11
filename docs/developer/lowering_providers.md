@@ -37,6 +37,31 @@ two affine scans, excluding padding. Diagnostics charge one driver submission
 and both semantic products/summands. `tests/native/test_native_contraction_pair_cuda.cu`
 qualifies only this API, independently of the ordinary provider matrix tests.
 
+## HF/KS Matrix Products
+
+HF and ordinary KS square matrix products use immutable
+`tensor::CudaMatrixProductBinding` metadata on the existing prepared resource
+owner. The compiler describes column-major products, left transposition,
+system/spin broadcasting and uniform scalar scaling as TensorIR regions.
+Ten bounded sites share strict-FP64 portfolios; providers cannot infer lower
+precision. Actual CUDA device/runtime and borrowed provider versions are recorded
+at preparation, alongside the resolved shape bound.
+
+`launch_matrix_product` and `launch_spin_matrix_product` accept no implementation
+switch. A view must match the prepared stream, handle, matrix dimension and
+system/spin bounds. Nonfinite scale fails before submission. Library execution
+stays in the shared tensor backend; SCF owns the existing device-mask publication
+and caller-precharged scratch, preserving inactive bytes on ordinary execution
+and Graph replay. Singleton systems use ordinary GEMM; multiple systems use
+strided batching, with one submission per broadcast spin.
+
+HF/KS capacity reports include a bounded 16 KiB preparation-host envelope. The
+binding acquires no handle or device storage, and retains the existing generated
+small-shape/resource fallback or borrowed FP64 library incumbent without
+inventing missing endpoint costs. RHF's upstream profitability/resource/retry
+selectors remain classified migration debt. This adapter migration does not
+qualify complete energy/force endpoints, a new crossover, or shell-span transforms.
+
 ## Prepared Scientific Sites
 
 COSX value assembly requests `AO * D`, `seed + AO^T * potential` and the
