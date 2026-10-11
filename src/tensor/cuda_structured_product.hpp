@@ -30,6 +30,13 @@ class CudaStructuredProductBinding {
   static constexpr std::size_t kPreparationHostBytes = 32U << 10;
   /** Primitive evidence cannot promote a new scientific endpoint by default. */
   static constexpr bool production_library_qualified = false;
+  /** Preparation-only resource fact. Diagnostic ablations are compiled only
+   * into test builds; existing bindings never observe later hook changes. */
+  static bool basis_workspace_required() noexcept;
+  /** Frozen workspace use; unlike preparation hooks this is lifetime-stable. */
+  bool basis_workspace_enabled() const;
+  /** Diagnostic dense ablations may bypass span optimization, never production. */
+  bool diagnostic_dense_basis(StructuredOperation operation) const;
   CudaStructuredProductBinding(cudaStream_t stream, cublasHandle_t handle, int dimension,
                                int direct_dimension, int systems, int spins);
   bool compatible(cudaStream_t stream, cublasHandle_t handle, int dimension, int systems,
@@ -60,7 +67,8 @@ class CudaStructuredProductBinding {
   cudaStream_t stream_{};
   cublasHandle_t handle_{};
   int dimension_{}, direct_dimension_{}, systems_{}, spins_{};
-  bool primitive_qualification_{};
+  unsigned qualification_mask_{};
+  bool diagnostic_{};
   std::array<runtime::NativeLoweringCandidate, 7> sites_{};
 };
 

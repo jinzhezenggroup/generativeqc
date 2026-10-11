@@ -319,6 +319,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_jk_plan.",
     "scf/cuda/direct_coulomb.",
     "scf/cuda/basis_transform_kernels.hpp",
+    "scf/cuda/structured_matrix.hpp",
     "scf/cuda/df_jk_kernels.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",

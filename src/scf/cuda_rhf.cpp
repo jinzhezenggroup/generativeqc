@@ -904,7 +904,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
             bounded_fock_class_timing, requested_bounded_direct_streaming,
             requested_mixed_precision_fock, requested_incremental_direct_jk, plan.layout,
             requested_incremental_diis_gram, use_cublas,
-            tensor::CudaStructuredProductBinding::production_library_qualified)) {
+            tensor::CudaStructuredProductBinding::basis_workspace_required())) {
       fill_global_failure(outputs, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
       return outputs;
     }
@@ -1341,8 +1341,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   auto direct_transform_temporary =
       arena_pointer<double>(resources.arena_, layout.direct_transform_temporary);
   auto basis_matrix_scratch =
-      resources.blas_ && transformed_direct &&
-              tensor::CudaStructuredProductBinding::production_library_qualified
+      resources.structured_binding_ && transformed_direct &&
+              resources.structured_binding_->basis_workspace_enabled()
           ? arena_pointer<double>(resources.arena_, layout.basis_matrix_scratch)
           : nullptr;
   auto shell_pair_bounds = arena_pointer<double>(resources.arena_, layout.shell_pair_bounds);

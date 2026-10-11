@@ -215,7 +215,8 @@ generativeqc_status launch_structured_basis(MatrixLibraryResources resources, Op
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   if (operation < Operation::DensityRight || operation > Operation::FockRight)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  if (shell_spans || !resources.structured_binding_->library(operation)) {
+  if ((shell_spans && !resources.structured_binding_->diagnostic_dense_basis(operation)) ||
+      !resources.structured_binding_->library(operation)) {
     const auto grid = static_cast<unsigned>((count * states + 127) / 128);
     if (operation == Operation::DensityRight)
       launch_transform_density_to_direct_right_kernel(grid, 128, 0, resources.stream_, systems,

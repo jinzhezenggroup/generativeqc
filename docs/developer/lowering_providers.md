@@ -527,6 +527,29 @@ for validation and integration boundaries.
 
 ## Borrowed structured SCF regions
 
+Complete endpoint diagnostics use preparation-only region ablations in native
+test builds. `tensor_structured_scf_qualification_for_test_v1` accepts a seven-bit
+semantic region mask; changing it cannot mutate an existing binding or captured
+Graph. Production builds do not export this hook. The native HF endpoint probe
+and `benchmarks/structured_scf_endpoint_qualification.py` compare source-matched
+RHF/UHF/RKS/UKS energy, density, physical Fock and analytic forces against pinned
+PySCF/Libxc. KS force references reconverge the basis and explicit moving Becke
+grid at two finite-difference steps. Diagnostic snapshots/downloads are outside
+clean endpoint timing; rejected reference/final states cannot supply profitability
+evidence. Preserve generated defaults until complete, matched endpoint evidence
+admits each region, not merely its isolated primitive.
+
+KS Direct J/K transform submissions borrow the KS matrix owner's frozen context
+only for the call; the longer-lived integral source stores no borrowed binding.
+The physical Cartesian dimension is explicit, including spherical public bases.
+Dead J/K output planes supply density-stage scratch, and dead transformed-density
+planes supply projection scratch after contraction. Subsequent value/derivative
+calls reconstruct density before reuse. Generated source owners charge exact
+shell-span metadata and report the span-envelope/dense-envelope ratio through
+component tracing. Production sparse spans stay native; diagnostic dense
+ablations alone may bypass this optimization. Canonical/RSH compositions without
+a compatible borrowed context retain their existing bounded native route.
+
 `tensor.structured_scf` defines seven strict-FP64 regions: occupied Gram,
 signed weighted Gram, inverse-root overlap reconstruction, and the four
 public/direct basis stages. Gram regions reuse the canonical rank-k recognizer;

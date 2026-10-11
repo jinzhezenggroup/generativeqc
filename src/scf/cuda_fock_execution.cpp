@@ -43,7 +43,8 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
     if (!source) return {};
     const auto diagnostic = cuda_direct_jk_plan_diagnostic(source);
     if (!diagnostic.nbf) return {};
-    return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf};
+    return {cuda_direct_jk_device(source), cuda_direct_jk_stream(source), source, diagnostic.nbf,
+            diagnostic.direct_nbf};
   }
 
   const bool fitted =
@@ -273,12 +274,12 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
       derivatives, detail, separate_sources, allow_spatial_default);
 }
 
-generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
-                                               const double* beta, std::size_t matrix_elements,
-                                               double* coulomb, double* alpha_exchange,
-                                               double* beta_exchange, int* numerical_error,
-                                               bool mixed_coulomb, std::string& detail,
-                                               std::uint64_t* mixed_coulomb_work_count) {
+generativeqc_status enqueue_prepared_cuda_fock(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, bool mixed_coulomb, std::string& detail,
+    std::uint64_t* mixed_coulomb_work_count,
+    const cuda_execution::MatrixLibraryResources* matrix_resources) {
   if (!mixed_coulomb && mixed_coulomb_work_count) {
     detail = "prepared CUDA Fock received a mixed-work counter for strict execution";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -302,7 +303,8 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                mixed_coulomb_work_count)
                          : enqueue_cuda_direct_jk_device(exact, plan.strategy().spec, density, beta,
                                                          matrix_elements, coulomb, alpha_exchange,
-                                                         beta_exchange, numerical_error, detail);
+                                                         beta_exchange, numerical_error, detail,
+                                                         nullptr, matrix_resources);
   }
 
   if (!fitted) {

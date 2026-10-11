@@ -11,6 +11,10 @@
 
 namespace generativeqc::scf {
 
+namespace cuda_execution {
+struct MatrixLibraryResources;
+}
+
 /** Borrow the provider's ordinary nonblocking stream. Density producers,
  * XC and matrix consumers can enqueue on it without an intervening host
  * transfer or fence. The plan must outlive all borrowers; destruction drains
@@ -102,12 +106,11 @@ generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::si
  * resets only the supplied error slot, allowing independent item owners.
  * This value-only seam does not advertise device force/derivative support.
  */
-generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                                  const double* density, const double* beta,
-                                                  std::size_t matrix_elements, double* coulomb,
-                                                  double* alpha_exchange, double* beta_exchange,
-                                                  int* numerical_error, std::string& detail,
-                                                  std::uint64_t* census = nullptr);
+generativeqc_status enqueue_cuda_direct_jk_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
+    std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, std::string& detail, std::uint64_t* census = nullptr,
+    const cuda_execution::MatrixLibraryResources* matrix_resources = nullptr);
 
 /** Whether an ordinary value action has complete canonical census coverage.
  * Generated/generic channels do not silently report zero as measured work. */

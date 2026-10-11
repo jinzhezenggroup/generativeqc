@@ -17,6 +17,8 @@ struct CudaDirectJkPlan;
  */
 struct CudaDirectJkDiagnostic {
   std::size_t batch_size{}, nbf{}, coordinates_per_item{};
+  /** Physical Cartesian transform extent, independent of public AO count. */
+  std::size_t direct_nbf{};
   std::size_t device_bytes{}, host_bytes{}, host_preparation_bytes{};
   std::size_t resident_value_count{}, resident_value_bytes{};
   /** Last optional construction: submitted values and stream-completed values,

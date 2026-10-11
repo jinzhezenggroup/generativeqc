@@ -12,6 +12,10 @@
 
 namespace generativeqc::scf {
 
+namespace cuda_execution {
+struct MatrixLibraryResources;
+}
+
 /** Device-resident execution binding for one prepared Fock owner.
  *
  * Method consumers use this seam instead of borrowing a concrete Direct-J/K
@@ -25,6 +29,7 @@ struct PreparedCudaFockBinding {
   cudaStream_t stream{};
   const void* source_identity{};
   std::size_t nbf{};
+  std::size_t direct_nbf{};
 
   explicit operator bool() const noexcept {
     return device_id >= 0 && stream != nullptr && source_identity != nullptr && nbf != 0;
@@ -173,12 +178,12 @@ generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_de
  * for actually evaluated mixed Coulomb AO-ERI recurrences. Supplying it for a
  * strict execution fails closed.
  */
-generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, const double* density,
-                                               const double* beta, std::size_t matrix_elements,
-                                               double* coulomb, double* alpha_exchange,
-                                               double* beta_exchange, int* numerical_error,
-                                               bool mixed_coulomb, std::string& detail,
-                                               std::uint64_t* mixed_coulomb_work_count = nullptr);
+generativeqc_status enqueue_prepared_cuda_fock(
+    const PreparedFockPlan& plan, const double* density, const double* beta,
+    std::size_t matrix_elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, bool mixed_coulomb, std::string& detail,
+    std::uint64_t* mixed_coulomb_work_count = nullptr,
+    const cuda_execution::MatrixLibraryResources* matrix_resources = nullptr);
 
 /** Enqueue the prepared primary full-range J/K plus one compatible exact
  * SR/LR exchange correction through a single Direct density-preparation pass.

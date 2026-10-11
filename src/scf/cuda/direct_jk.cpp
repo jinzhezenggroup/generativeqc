@@ -1092,6 +1092,7 @@ static generativeqc_status create_cuda_direct_jk_plan_impl(
                       runtime::vector_capacities(plan->materialized_pair_offsets);
     // HostBatch may reserve direct-HF queue metadata while reusing the common packer.
     // Include those temporary capacities even though this provider uploads only AO data.
+    info.direct_nbf = host.direct_nbf;
     info.host_preparation_bytes =
         info.host_bytes + sizeof(host) + span_host_preparation_bytes +
         canonical_host_preparation_bytes +
@@ -1369,7 +1370,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, bool mixed_j, std::uint64_t* mixed_coulomb_work_count,
     double fixed_threshold, std::uint64_t* census, std::string& detail,
-    double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true) {
+    double* correction = nullptr, std::size_t correction_elements = 0, bool allow_resident = true,
+    const MatrixLibraryResources* matrix_resources = nullptr) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
     const bool fixed = fixed_threshold >= 0;
@@ -1537,14 +1539,16 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     if (dispatch.generated_coulomb) {
       if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
         direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted, density,
-                                                  beta, coulomb));
+                                                  beta, coulomb, matrix_resources));
       else
-        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb,
+                                                  matrix_resources));
     }
     if (dispatch.generated_exchange)
       direct_jk_check(enqueue_generated_exchange(
           *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
-          direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0));
+          direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0,
+          matrix_resources));
     if (dispatch.canonical_coulomb || dispatch.canonical_exchange) {
       const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
       const auto matrix = direct_jk_product(dimension, dimension);
@@ -1793,15 +1797,14 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
   });
 }
 
-generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBuildSpec spec,
-                                                  const double* density, const double* beta,
-                                                  std::size_t elements, double* coulomb,
-                                                  double* alpha_exchange, double* beta_exchange,
-                                                  int* numerical_error, std::string& detail,
-                                                  std::uint64_t* census) {
-  return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
-                                            alpha_exchange, beta_exchange, numerical_error, false,
-                                            nullptr, -1.0, census, detail);
+generativeqc_status enqueue_cuda_direct_jk_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
+    std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
+    int* numerical_error, std::string& detail, std::uint64_t* census,
+    const cuda_execution::MatrixLibraryResources* matrix_resources) {
+  return enqueue_cuda_direct_jk_device_impl(
+      plan, spec, density, beta, elements, coulomb, alpha_exchange, beta_exchange, numerical_error,
+      false, nullptr, -1.0, census, detail, nullptr, 0, true, matrix_resources);
 }
 
 bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,
