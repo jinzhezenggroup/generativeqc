@@ -46,9 +46,14 @@ zero, multiple attempts, incomplete/exceptional work, overlap, unmatched
 completion, the exact uint64 limit, overflow and fresh-execution independence.
 Existing publication/invalidation probes retain legacy fail-closed controls.
 Three focused executable host tests pass. Opt-in scheduled-GPU tests exercise
-curated RKS/UKS real nonconvergence/cold retry, exception/cold retry, subsequent
-replay, failed-to-converge physical counts and unsupported schedule controls.
+curated RKS/UKS real nonconvergence/cold retry, driver-error invalidation and
+explicit replay, failed-to-converge physical counts and unsupported schedule controls.
 They have not yet been qualified against this exact phase source.
+
+The existing scheduler retries seed-related nonconvergence, numerical failure
+and invalid seed arguments, not resource/driver errors. The one-shot runtime
+fault therefore verifies unavailable failed-execution work and last-good
+explicit recovery, not an invented driver-error cold retry policy.
 
 ## Consequences
 

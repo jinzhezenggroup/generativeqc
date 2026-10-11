@@ -41,7 +41,7 @@ def run_nonconverged_warm_retry(spins: int, method: str) -> None:
         basis="sto-3g",
         device="cuda",
         precision="fp64",
-        density_fitting=True,
+        density_fitting="cuda",
         initial_guess=None,
         max_iterations=2,
         ks_options=KsOptions(
@@ -179,7 +179,7 @@ def test_nonconvergence_and_uninventoried_schedule_keep_distinct_contracts(
         basis="sto-3g",
         device="cuda",
         precision="fp64",
-        density_fitting=True,
+        density_fitting="cuda",
         initial_guess=None,
         max_iterations=1 if ordinary else 50,
         ks_options=KsOptions(
@@ -204,12 +204,13 @@ def test_nonconvergence_and_uninventoried_schedule_keep_distinct_contracts(
 
 
 @pytest.mark.parametrize("spins", (1, 2))
-def test_exceptional_warm_retry_keeps_target_count_unavailable(spins: int) -> None:
-    """A converged retry cannot repair an exceptional attempt's missing census.
+def test_exceptional_warm_attempt_keeps_target_count_unavailable(spins: int) -> None:
+    """A driver error revokes work and preserves the last-good explicit replay.
 
     The native one-shot fault is injected in begin(), after attempt ownership
-    starts. Its returned cold retry remains observable, but is not the complete
-    execution count. A subsequent execute owns a fresh, independently valid total.
+    starts. Driver/resource errors are deliberately not auto-retried. The failed
+    execution has no complete count or returned-state diagnostic. A subsequent
+    explicit execute owns a fresh, independently valid total.
     """
     assert os.environ.get("SLURM_JOB_ID") and os.environ.get("CUDA_VISIBLE_DEVICES")
     calculator = Calculator(
@@ -217,7 +218,7 @@ def test_exceptional_warm_retry_keeps_target_count_unavailable(spins: int) -> No
         basis="sto-3g",
         device="cuda",
         precision="fp64",
-        density_fitting=True,
+        density_fitting="cuda",
         initial_guess=None,
         ks_options=KsOptions(
             grid=GridSpec(radial_points=12, angular_polar=6, angular_azimuth=12),
@@ -231,13 +232,13 @@ def test_exceptional_warm_retry_keeps_target_count_unavailable(spins: int) -> No
         inject.argtypes = []
         inject.restype = None
         inject()
-        retried = batch.execute(properties=("energy",), strict=True).items[0]
-        assert retried.succeeded and retried.converged
-        assert retried.warm_start_used and retried.warm_start_fallback
-        assert retried.ks_diagnostic.fock_builds > 0
-        assert retried.fock_builds is None
-        assert retried.energy == pytest.approx(cold.energy, abs=1e-10)
+        failed = batch.execute(properties=("energy",), strict=False).items[0]
+        assert failed.status == _native.STATUS_CUDA_ERROR
+        assert not failed.succeeded
+        assert failed.fock_builds is None
+        assert failed.ks_diagnostic is None and failed.precision is None
         replay = batch.execute(properties=("energy",), strict=True).items[0]
         assert replay.succeeded and replay.converged
         assert replay.warm_start_used and not replay.warm_start_fallback
         assert replay.fock_builds == replay.ks_diagnostic.fock_builds
+        assert replay.energy == pytest.approx(cold.energy, abs=1e-10)
