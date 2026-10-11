@@ -170,7 +170,7 @@ def test_dft_prepared_native_force_query_fails_closed_without_method_whitelist()
     assert not PreparedBatch._native_dft_force_eligible(holder)
 
 
-@pytest.mark.parametrize("method", ["pbe-rks", "pbe0-rks"])
+@pytest.mark.parametrize("method", ["pbe-rks", "pbe0-rks", "b3lyp-rks"])
 @pytest.mark.parametrize("fitting", ["cpu", "none"])
 def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
     monkeypatch: pytest.MonkeyPatch,
@@ -186,7 +186,7 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
         "density_tolerance": 1e-10,
         "screening_tolerance": 1e-14,
     }
-    if method == "pbe0-rks":
+    if method in {"pbe0-rks", "b3lyp-rks"}:
         options["ks_options"] = KsOptions(grid=GridSpec(24, 8, 16))
     with (
         Calculator(**options).prepare_batch(SYSTEMS[:1]) as native_batch,
@@ -198,7 +198,7 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
             pytest.skip("current native prepared batch force query is not installed")
 
         def forbidden_python_force(*_args: typing.Any, **_kwargs: typing.Any) -> None:
-            pytest.fail("CPU PBE/PBE0 fell back to the Python stationary force driver")
+            pytest.fail("native CPU GGA forces fell back to Python orchestration")
 
         monkeypatch.setattr(
             native_batch, "_public_dft_cpu_force", forbidden_python_force
@@ -227,7 +227,6 @@ def test_cpu_pbe_python_api_consumes_qualified_native_batch_forces(
     [
         "lda-rks",
         "pbe-uks",
-        "b3lyp-rks",
         "r2scan-rks",
         "wb97m-v-rks",
         "pbe-d4-rks",
