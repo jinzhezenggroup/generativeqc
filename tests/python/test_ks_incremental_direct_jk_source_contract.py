@@ -54,9 +54,8 @@ def test_cuda_ks_incremental_direct_jk_preserves_full_finalization() -> None:
         in ks
     )
     assert (
-        "const bool strict_final_closure =\n"
-        "        incremental_direct_jk || spins == 2 || !provider.system().ecp_terms.empty();"
-        in ks
+        "const bool strict_final_closure = automatic_program || incremental_direct_jk || "
+        "spins == 2 || !provider.system().ecp_terms.empty();" in " ".join(ks.split())
     )
     assert "++output.incremental_direct_jk.post_scf_full_builds;" in ks
     assert "incremental_anchor_range_exchange" in ks

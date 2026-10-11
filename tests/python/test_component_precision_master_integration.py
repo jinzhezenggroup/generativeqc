@@ -75,6 +75,7 @@ struct Owner {
   struct { CudaXcFastPathCapabilities fast_paths; } xc_layout;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
   bool device_nonlocal{}, incremental_direct_jk{};
+  const void* automatic_program{};
   void* nonlocal_correlation{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   unsigned spins{1}, functional{semilocal_family_code(SemilocalFamily::Pbe)}, width{2};
@@ -108,6 +109,9 @@ int main() {
       p.options.semilocal_exchange_scale = hybrid ? 0.75 : 1.0;
       assert(p.chunk() == (!coulomb && !density));
       assert(p.replay() == (!coulomb && !density && !hybrid));
+      p.automatic_program = &p;
+      assert(!p.chunk());
+      p.automatic_program = nullptr;
       p.incremental_direct_jk = true;
       assert(!p.chunk());
       p.incremental_direct_jk = false;
@@ -122,6 +126,10 @@ int main() {
     assert(p.chunk());
     assert(p.replay() == (capability == CudaXcCapability::Qualified));
   }
+  Owner automatic;
+  automatic.automatic_program = &automatic;
+  automatic.xc_layout.fast_paths.graph_replay = CudaXcCapability::QualificationRequired;
+  assert(!automatic.chunk() && !automatic.replay());
   for (int excluded = 0; excluded != 7; ++excluded) {
     Owner p;
     if (excluded == 0) p.fitted_coulomb = true;

@@ -144,14 +144,19 @@ void allocate(const DensityFittingTilePlan& tiles) {
     unit += prepared[call_start:call_end]
     unit += "}\n}\nusing namespace generativeqc;\n"
     unit += r"""
-struct NativeKsExecutionPlan { unsigned spin_channels=1; bool range_exchange=false; };
+struct NativeKsExecutionPlan {
+  unsigned spin_channels=1;
+  bool range_exchange=false;
+  const void* automatic_program{};
+};
 """
     unit += definition(
         method,
         "scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(",
     )
     unit += r"""
-unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend) {
+unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild&, generativeqc_backend,
+                                    const NativeKsExecutionPlan&) {
   assert(false); return 0;
 }
 std::size_t ks_provider_bytes(const core::System&, generativeqc_backend, unsigned) {
@@ -222,10 +227,12 @@ int main(int argc, char** argv) {
   } else if (mode == "forwarding") {
     const auto method=method_prepare(system,execution,strategy);
     assert(method.impl_->projection_reservation == reserved);
+    assert(method.impl_->retained_fitted_derivative_order == 1);
     auto rsh=execution;
     rsh.range_exchange=true;
     const auto rsh_method=method_prepare(system,rsh,strategy);
     assert(rsh_method.impl_->projection_reservation == reserved);
+    assert(rsh_method.impl_->retained_fitted_derivative_order == 1);
     const Capture generic(system,nullptr,strategy,0);
     assert(!generic.impl_->projection_reservation.restricted_rank);
     assert(generic.matches(system,nullptr,strategy,0,0));
@@ -251,6 +258,19 @@ int main(int argc, char** argv) {
       catch (const std::invalid_argument&) { rejected=true; }
       assert(rejected);
     }
+  } else if (mode == "automatic") {
+    // Automatic energy-only KS is J-only and must not retain force staging.
+    strategy.spec.exchange.present=false;
+    const auto curated=method_prepare(system,execution,strategy);
+    assert(!curated.impl_->projection_reservation.restricted_rank);
+    assert(curated.impl_->retained_fitted_derivative_order == 1);
+    execution.automatic_program=&execution;
+    const auto automatic=method_prepare(system,execution,strategy);
+    assert(!automatic.impl_->projection_reservation.restricted_rank);
+    assert(automatic.impl_->retained_fitted_derivative_order == 0);
+    assert(automatic.impl_->requested_budget == 1U<<30);
+    assert(automatic.matches(system,nullptr,strategy,0,1U<<30,0,0));
+    assert(!automatic.matches(system,nullptr,strategy,0,1U<<30,0,1));
   } else if (mode == "planning") {
     const auto packed=DfPairStorage::SymmetricLowerSingle;
     const auto generic=plan_values_for({},packed,24,24,1U<<30);
@@ -312,7 +332,9 @@ int main(int argc, char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("mode", ["authorization", "forwarding", "planning"])
+@pytest.mark.parametrize(
+    "mode", ["authorization", "forwarding", "automatic", "planning"]
+)
 def test_method_owned_projection_reservation(
     reservation_probe: Path, mode: str
 ) -> None:

@@ -70,7 +70,8 @@ struct Consumer {
       *incremental_max_abs_delta_density=&maximum,*j=&jv,*incremental_anchor_j=&ja,
       *exchange=&kv,*incremental_anchor_exchange=&ka,*range_exchange=&rv,
       *incremental_anchor_range_exchange=&ra;
-  Consumer() {
+  explicit Consumer(bool automatic=false) {
+    const void* automatic_program=automatic ? this : nullptr;
     options.incremental_direct_jk=true;
     options.screening_tolerance=0.0;
     options.incremental_direct_jk_rebuild_interval=0;
@@ -108,6 +109,16 @@ struct Consumer {
 int main(int argc,char** argv) {
   if(argc!=2)return 99;
   try {
+    if(std::string(argv[1])=="automatic") {
+      bool rejected=false;
+      try { Consumer probe(true); }
+      catch(const std::invalid_argument& error) {
+        rejected=std::string(error.what())==
+            "automatic CUDA KS has no incremental Direct-J qualification";
+      }
+      require(rejected,"automatic program inherited incremental Direct-J qualification");
+      return 0;
+    }
     if(std::string(argv[1])=="refinement") {
       Consumer probe;
       probe.build(false);
@@ -202,6 +213,19 @@ def test_stationary_density_refines_full_energy_without_relaxing_its_gate(
     """Blocked delta energy must not prevent full-operator convergence work."""
     result = subprocess.run(
         [str(controller_probe), "refinement"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_automatic_program_rejects_incremental_direct_jk(
+    controller_probe: Path,
+) -> None:
+    result = subprocess.run(
+        [str(controller_probe), "automatic"],
         check=False,
         capture_output=True,
         text=True,
