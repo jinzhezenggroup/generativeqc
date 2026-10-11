@@ -1234,11 +1234,6 @@ jobs:
             tests/python/test_rccsdt_native_codegen_dependencies.py
             tests/python/test_df_cc_native_codegen.py
           )
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Full WB97M-V reconverged finite differences dominate the core
-            # long tail. Move the whole file only in nightly/manual CI.
-            slow_paths+=(tests/python/test_wb97mv_complete.py)
-          fi
           # PR #1934 / run 37238512811 still left the broad core shards with
           # a large measured long tail. Keep these newly measured files out of
           # worksteal, but count them in the existing core parity before
@@ -1268,6 +1263,11 @@ jobs:
             tests/python/test_cc_shared_iteration_driver.py
             tests/python/test_rccsd_codegen_no_numpy.py
           )
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Count WB97M-V in the original core-file parity, then transfer
+            # its complete FD module. Do not reshuffle unrelated core owners.
+            rebalance_paths+=(tests/python/test_wb97mv_complete.py)
+          fi
           # Keep module-scoped Hessian state on one worker and move the full
           # nightly oracle suite off the correlated-gradient critical path.
           nightly_hessian_paths=(
