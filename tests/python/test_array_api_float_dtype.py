@@ -164,18 +164,18 @@ def test_finfo_preserves_machine_limits(dtype: object) -> None:
 
 def test_dtype_admission_fails_closed() -> None:
     values = np.ones(2, dtype=np.float64)
+    assert xp.astype(values, np.int32).dtype == xp.int32
     with pytest.raises(TypeError, match="float32/float64"):
-        xp.astype(values, np.int32)
+        xp.compile(lambda x: xp.astype(x, np.int32)).lower(values)
     with pytest.raises(TypeError, match="bool"):
         xp.astype(values, xp.float32, copy=0)
-    with pytest.raises(ValueError, match="device=None"):
+    with pytest.raises(ValueError, match="device"):
         xp.astype(values, xp.float64, device="cuda:0")
     with pytest.raises(TypeError, match="array or dtype"):
         xp.result_type(1.0, 2.0)
-    with pytest.raises(ValueError, match="unsupported dtype kind"):
+    with pytest.raises(ValueError, match="kind"):
         xp.isdtype(xp.float32, "floating")
-    with pytest.raises(TypeError, match="float32/float64"):
-        xp.can_cast(np.dtype("int32"), xp.float64)
+    assert isinstance(xp.can_cast(np.dtype("int32"), xp.float64), bool)
 
     class Foreign:
         def __dlpack_device__(self) -> tuple[int, int]:
@@ -188,10 +188,11 @@ def test_dtype_admission_fails_closed() -> None:
         xp.finfo(Foreign())
 
 
-def test_capability_report_keeps_nonconformance_explicit() -> None:
+def test_capability_report_distinguishes_standard_eager_and_bounded_compiler() -> None:
     report = xp.capabilities()
-    assert report["array_api_version"] is None
-    assert report["array_namespace_protocol"] is False
+    assert report["array_api_version"] == "2025.12"
+    assert report["array_namespace_protocol"] is True
+    assert report["compiled_array_namespace_protocol"] is False
     assert report["dtype_promotion"] == "generic-float32-float64-explicit-cast"
     assert report["scientific_dtype_promotion"] is False
     for operation in ("astype", "can_cast", "finfo", "isdtype", "result_type"):

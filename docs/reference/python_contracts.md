@@ -62,8 +62,9 @@ of every Array API dtype, device or dynamic shape.
 Tensor `SCHEMA_VERSION` versions serialized programs and `PRIMITIVE_VERSION`
 versions primitive semantics. Preserve these when reading/writing artifacts;
 do not use a package version as an interchangeable identity. The experimental
-array `bool`, `float32` and `float64` exports are NumPy dtype objects, not
-conversion functions or device selectors. `ExactScalar` and XC `Coefficient`
+array dtype exports are NumPy scalar-type tokens, including Boolean, signed and
+unsigned integers, real floating and complex floating families; use `asarray` or
+`astype` for standard conversion, not the tokens as device selectors. `ExactScalar` and XC `Coefficient`
 are type aliases for `int | str | Fraction`. Their consuming constructors
 validate rational spelling and reject unsupported float/bool coefficients; the
 alias itself performs no validation.
@@ -359,10 +360,13 @@ promotes an arbitrary graph into a built-in method/property domain.
 (python-array-values)=
 ## Experimental array shapes and dtypes
 
-The [experimental array guide](../user/experimental_array_api.md) defines the
-versioned subset. Generic arrays use static shape/broadcasting and float32/float64
-promotion. Finite real comparisons produce genuine Boolean arrays; Boolean data
-is distinct from floating data and integer TensorIR controls. Scientific
+The [experimental array guide](../user/experimental_array_api.md) defines CPU
+eager Array API 2025.12 support and the separate bounded compiler subset. Eager
+arrays support all thirteen standard dtypes, IEEE values and data-dependent
+shapes; array operators and functions return protocol-aware `Array` objects.
+Eager `T` requires rank two, `mT` swaps the last two axes, and Python scalar
+conversions require rank zero. Boolean data is distinct from numeric arithmetic.
+Scientific
 `VibeArray` values retain full TensorSpec index identities and require explicit
 compatible operations. `trace`/`input_array` build symbolic graphs; `compile`
 captures a callable for `backend="reference"` execution. Static creation supports
@@ -373,12 +377,14 @@ reverses all axes; `mT` swaps only the last two and requires rank at least two.
 Both properties build new symbolic transpose nodes and preserve scientific
 index metadata, rather than returning a stored scalar attribute.
 
-Eager mathematical operations use NumPy host arrays. There is no chemistry-unit
+Eager mathematical operations use explicit NumPy-backed CPU storage through
+array-api-compat. There is no chemistry-unit
 conversion; the mathematical caller supplies consistent units. `DLPackDevice`
 records `(device_type, device_id)` and `DLPackImport` records the verified array,
-source/target device and copy-control contract. `bool`, `float32` and `float64`
-are dtype tokens. Boolean/real casts and promotion, integer/complex dtypes and
-additional device domains are not part of this slice.
+source/target device and copy-control contract. Explicit eager dtype conversion
+supports Boolean/numeric casts. Complex-to-real conversion must first select
+`real` or `imag`. Compilation still admits only bool/float32/float64 inputs and
+qualified float32/float64 arithmetic, without implicit Boolean/numeric promotion.
 
 (python-array-errors)=
 ## Experimental array failures
@@ -386,8 +392,10 @@ additional device domains are not part of this slice.
 Invalid shape/axes, unsafe dtype requests, unsupported devices or symbolic
 Python control flow fail closed with the operation's TypeError/ValueError or
 backend error. Symbolic Boolean values, including comparison results, cannot be
-used as a dynamic Python branch. Comparison operands are finite real values;
-non-finite comparison semantics remain unsupported. Capture/interpreter execution
+used as a dynamic Python branch. Compiled comparison operands must be finite
+real values; eager comparisons instead use standard IEEE semantics. Unsupported
+capture operations raise `NotImplementedError` without executing eager work.
+Capture/interpreter execution
 enforces the bounded finite/domain checks. A failed capture or execution does not
 publish a successful compiled result. Foreign device arrays
 are rejected before hidden host conversion, including nested host containers.
@@ -412,9 +420,11 @@ writes across consumers. Device relocation needs a separate explicit copy.
 (python-array-backends)=
 ## Experimental array backend boundary
 
-Eager and reference compiled-call paths admit CPU/NumPy bool/float32/float64 with
-`device=None`; comparisons consume finite real operands and return detached bool
-outputs. `xp.asarray` does not silently stage a foreign CUDA/DLPack array to host.
+Eager standard operations admit CPU storage, `device=None` or `device="cpu"`, all
+standard dtypes and the linalg/fft extensions. `xp.asarray` does not silently stage
+a foreign CUDA/DLPack array to host; CPU `from_dlpack` is an explicit handoff.
+Reference compiled calls admit only CPU bool/float32/float64 arrays; comparisons
+consume finite real operands and return checked bool outputs.
 The experimental `compile` accepts only `backend="reference"`; native TensorIR
 backends reject live Boolean data and comparisons instead of reinterpreting their
 storage. Unsupported backends fail rather than falling back. Capability

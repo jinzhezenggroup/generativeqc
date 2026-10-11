@@ -70,14 +70,12 @@ def test_astype_coverage_matches_eager_and_captured_admission() -> None:
         values.astype(np.float64),
     )
     mask = np.asarray([True, False])
-    for function in (
-        lambda x: xp.astype(x, xp.bool),
-        xp.compile(lambda x: xp.astype(x, xp.bool)),
-    ):
-        with pytest.raises(TypeError, match="float32/float64"):
-            function(mask)
+    np.testing.assert_array_equal(xp.astype(mask, xp.bool), mask)
+    with pytest.raises(TypeError, match="float32/float64"):
+        xp.compile(lambda x: xp.astype(x, xp.bool))(mask)
+    np.testing.assert_array_equal(xp.astype(values, xp.float32, device="cpu"), values)
     with pytest.raises(ValueError, match="device=None"):
-        xp.astype(values, xp.float32, device="cpu")
+        xp.compile(lambda x: xp.astype(x, xp.float32, device="cpu"))(values)
 
 
 @pytest.mark.parametrize("name", ("reshape", "broadcast_to"))

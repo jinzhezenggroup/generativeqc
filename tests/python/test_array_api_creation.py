@@ -119,22 +119,20 @@ def test_capture_context_is_always_restored_on_trace_error() -> None:
 def test_explicit_unknown_device_is_not_silently_accepted(
     create: object, args: tuple[object, ...]
 ) -> None:
-    with pytest.raises(ValueError, match="device=None"):
+    with pytest.raises(ValueError, match="device"):
         create(*args, device="cuda:0")
-    with pytest.raises(ValueError, match="device=None"):
+    with pytest.raises(ValueError, match="device"):
         xp.zeros_like(np.ones(2, dtype=np.float64), device="cuda:0")
 
 
-def test_uniform_creation_rejects_unsupported_implicit_integer_and_dtype() -> None:
-    with pytest.raises(TypeError, match="not supported"):
-        xp.full((2,), 3)
-    with pytest.raises(TypeError, match="float32/float64"):
-        xp.ones((2,), dtype=np.int32)
-    with pytest.raises(TypeError, match="float32/float64"):
-        xp.full_like(np.ones(2), 2, dtype=np.int32)
-    with pytest.raises(TypeError, match="nonnegative"):
+def test_standard_eager_creation_supports_integers_and_nonfinite_values() -> None:
+    assert xp.full((2,), 3).dtype == xp.int64
+    assert xp.ones((2,), dtype=np.int32).dtype == xp.int32
+    assert xp.full_like(np.ones(2), 2, dtype=np.int32).dtype == xp.int32
+    with pytest.raises((TypeError, ValueError)):
         xp.zeros((-1,))
-    with pytest.raises(TypeError, match="nonnegative"):
+    with pytest.raises((TypeError, ValueError)):
         xp.zeros((True,))
-    with pytest.raises(ValueError, match="finite"):
-        xp.full((2,), float("inf"), dtype=xp.float64)
+    assert bool(xp.all(xp.isinf(xp.full((2,), float("inf"), dtype=xp.float64))))
+    with pytest.raises(TypeError, match="not supported"):
+        xp.compile(lambda x: x + xp.full((2,), 3)).lower(np.ones(2))

@@ -7,20 +7,30 @@ system. The compiler owner remains `generativeqc_compiler.array_api`, while
 advanced users access the curated experimental facade at
 `generativeqc.experimental.array_api`.
 
-The frontend does **not** currently claim Array API conformance. The public
-facade is an Array-API-shaped experimental preview and fails closed outside the
-declared subset. In particular, `VibeArray` deliberately does not implement
-`__array_namespace__` yet: the Array API standard uses that method as a
-compliance discovery signal and requires the returned namespace to provide the
-standard's top-level API. Advertising the protocol for this bounded subset
-would therefore misidentify a preview object as conforming.
+The public eager namespace implements Array API 2025.12 on CPU. Concrete `Array`
+objects are NumPy storage views with standard discovery, scalar/index/operator
+semantics, all thirteen dtypes and the `linalg`/`fft` extensions. The
+`array-api-compat` adapter supplies standardized NumPy function semantics; local
+adapters implement Python-valued `finfo` attributes and the IEEE exceptional
+cases where NumPy differs. It is an execution dependency, not an independent
+scientific oracle. Upstream qualification is described in the
+[conformance gate](../maintainer/array_api_conformance.md).
+
+The **symbolic compiler is not a conforming namespace**. `VibeArray` deliberately
+does not implement `__array_namespace__`, and capture cannot fall through to
+NumPy for unsupported functions, including no-operand creation calls. Generic
+eager conformance must not weaken exact scientific constants, domain identity,
+finite interpreter gates, native dtype admission or resource limits.
 
 ## Layering
 
 ```text
 generativeqc.experimental.array_api
-        |
-        v
+        |                  |
+        v                  v
+CPU Array / NumPy       symbolic capture
+        |                  |
+array-api-compat            v
 compiler-owned VibeArray / namespace
         |
         v
@@ -53,14 +63,16 @@ captured by `compile`. Scientifically annotated arrays keep TensorIR domain iden
 equal numerical shapes do not make AO/occupied/virtual/auxiliary domains
 compatible.
 
-## Initial capability subset
+## Bounded compiler subset
+
+The following contracts describe capture, not the standard eager surface.
 
 | Surface | Initial contract |
 | --- | --- |
 | `+ - * /` | Generic arrays use shape broadcasting; scientific arrays require compatible TensorIR domains |
 | unary `-` | Exact coefficient lowering |
 | `pow/exp/log/sqrt` | Existing TensorIR real-valued contracts |
-| `sum` | Explicit reduction, `keepdims=False`, no implicit dtype conversion |
+| `sum` | Explicit reduction, generic `keepdims`, no implicit dtype conversion |
 | `permute_dims`, `.T`, `.mT` | Array-style axis and matrix transpose, including 2025.12 signed axis positions |
 | `reshape` | Shape-only for generic arrays, including one `-1`; scientific arrays require explicit target metadata |
 | `expand_dims/squeeze` | Static singleton axis insertion/removal (including signed and multiple axes); scientific dimensions need explicit typed TensorIR metadata |
@@ -70,10 +82,10 @@ compatible.
 | indexing | Generic integer/slice/newaxis/ellipsis; scientific mode retains strict rank-preserving slices |
 | `take` | Static integer gather along one axis |
 | `matmul`, `@` | Vector/matrix/batched generic arrays; scientific annotated path remains strict |
-| `asarray` | CPU/NumPy float32/float64 eager arrays; no silent external-device transfer |
+| `asarray` | CPU bool/float32/float64 compiler inputs; no silent external-device transfer |
 | `astype` | Explicit float32/float64 conversion through an existing TensorIR `cast` (or NumPy eager); native physical copy/alias guarantees are not independently claimed |
-| `can_cast/result_type/isdtype/finfo` | Limited real-floating subset; no integer/bool/complex families or their dtype rules |
-| `zeros/ones/full` | Static shapes, finite float32/float64 values; symbolic creation uses one exact scalar + TensorIR broadcast; integer/bool default `full` dtypes remain unsupported |
+| `can_cast/result_type/isdtype/finfo` | Limited real-floating and Boolean-identity queries; no integer/complex families or Boolean/numeric promotion |
+| `zeros/ones/full` | Static shapes, finite float32/float64 or Boolean values; symbolic creation uses one exact scalar + TensorIR broadcast; integer defaults remain unsupported |
 | `zeros_like/ones_like/full_like` | Generic arrays only, preserve shape/dtype by default; scientifically annotated axes require an explicit typed TensorIR construction |
 | `compile` | Shape/dtype-specialized public TensorIR capture with reference execution; differentiable inputs are explicit |
 | `einsum` | GenerativeQC extension lowered to existing TensorIR einsum |
@@ -88,21 +100,17 @@ does not require special coefficient spelling. Negative-zero float literals
 fail closed because the exact rational constant representation cannot preserve
 their sign.
 
-The eager namespace admits operands through the same CPU/NumPy float32/float64
-boundary as `asarray`, before calling NumPy or a foreign array hook. This guard
-also checks nested containers and advertised DLPack/CUDA array protocols. Exact scalar
-literals are materialized in the array operand dtype. For generic arrays,
-float32/float64 mixed operands promote via an explicit TensorIR cast, while
-scientific annotated TensorIR domains continue rejecting implicit precision
-changes. A pure `astype` may deliberately insert a precision conversion in
-either mode. The existing backend/reference interpreter is still responsible
-for execution and floating accuracy checks. Eager reductions and static selection retain the same bounded
-controls as capture: no reduction dtype/keepdims extension, nonnegative
-in-bounds `take` indices, and one valid half-open `slice` range per axis.
-Real-valued eager execution rejects nonfinite inputs/results and enforces the
-TensorIR `log`/`pow` positive-input and `sqrt` nonnegative-input domains. Eager
-`einsum` validates its equation and label extents through the canonical frontend,
-retaining explicit outputs, no ellipses, and no implicit label broadcasting.
+Eager functions and array operators reject implicit foreign DLPack/CUDA transfers
+before calling array hooks, including nested host containers. CPU `from_dlpack`
+is an explicit standard handoff; the existing `import_dlpack` extension retains
+its same-device consumer-owned contract. Eager functions support standard IEEE
+domains and reduction dtype/copy controls. TensorIR capture and its interpreter
+retain their finite/domain checks, static gathers and exact scalar rules.
+Eager `einsum` and `slice` are nonstandard scientific extensions and retain the
+bounded compiler contract rather than broadening their existing notation/domain
+semantics. Generic float32/float64 captured operands promote through explicit
+TensorIR casts, while scientific annotated domains reject implicit precision
+changes.
 
 Generic public inputs are assigned compiler-owned anonymous array dimensions
 whose identity is intentionally shape-based. This lets ordinary broadcasting,
@@ -195,10 +203,12 @@ speedup or add an Array API conformance claim.
 `generativeqc_compiler.array_api` remains the compiler owner above
 `generativeqc_compiler.tensor`. Its dependency direction is deliberately one-way:
 the frontend may import TensorIR, while TensorIR cannot import the frontend.
-`generativeqc.experimental.array_api` is only a curated public facade over that
-owner. This keeps TensorIR usable by hand-built/generated equations, avoids a
-second array implementation, and keeps array syntax out of mathematical IR
-identity.
+`generativeqc.experimental.array_api` owns public dispatch and the explicit CPU
+eager adapter. Its private symbolic adapter forwards to that compiler owner;
+no new mathematical IR or native backend is introduced. Capability inspection
+separates `eager_functions`/`eager_dtypes` from `compiled_functions` and the
+compiler-owned operation matrix. TensorIR remains usable by hand-built/generated
+equations, and eager storage/protocol changes stay out of mathematical IR identity.
 
 The design rationale, rejected alternatives and invariants are retained in the
 [Array API frontend architecture note](../../.agents/notes/implemented/architecture/2026-09-20-array-api-tensorir-frontend.md).

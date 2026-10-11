@@ -11,6 +11,7 @@ Keep the distinction clear: the current rules and qualification procedures live 
 :caption: Core workflows
 
 validation
+array_api_conformance
 oh_uhf_comparison
 performance_engineering
 gfn2_density_work_diagnostics

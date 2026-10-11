@@ -1,9 +1,9 @@
-"""Experimental public Array-API-shaped frontend over canonical TensorIR.
+"""Array API 2025.12 on CPU, with an explicitly bounded TensorIR compiler.
 
-The ordinary path is shape/dtype based and deliberately hides TensorIR metadata.
-Advanced users may still call ``trace`` with explicit scientific index spaces.
-This preview does not implement ``__array_namespace__`` and does not claim Array
-API conformance.
+Eager arrays use NumPy-owned CPU storage and implement standardized discovery,
+dtypes, IEEE behavior, data-dependent shapes, linalg and fft. Symbolic arrays
+retain scientific index metadata and reject operations outside TensorIR's
+qualified subset; eager conformance does not imply native CPU/CUDA compilation.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import builtins
 import functools
 import inspect
 import typing
-from fractions import Fraction
 
 import numpy as np
 from generativeqc_compiler.array_api import (
@@ -41,506 +40,945 @@ from generativeqc_compiler.tensor import (
     TensorSpec,
 )
 from generativeqc_compiler.tensor import (
-    cast as _cast,
-)
-from generativeqc_compiler.tensor import (
     execute as _execute,
 )
 
+from . import _array_api_eager as _eager
+from . import _array_api_symbolic as _symbolic_backend
+from ._array_api_eager import Array
+
 API_VERSION = 1
+__array_api_version__ = "2025.12"
 
-float32 = np.dtype("float32")
-float64 = np.dtype("float64")
-_HOST_CONTAINER_MAX_DEPTH = 64
-_HOST_CONTAINER_MAX_ITEMS = 1_000_000
+bool = np.bool_
+int8 = np.int8
+int16 = np.int16
+int32 = np.int32
+int64 = np.int64
+uint8 = np.uint8
+uint16 = np.uint16
+uint32 = np.uint32
+uint64 = np.uint64
+float32 = np.float32
+float64 = np.float64
+complex64 = np.complex64
+complex128 = np.complex128
+
+e = np.e
+pi = np.pi
+inf = np.inf
+nan = np.nan
+newaxis = None
+
+_symbolic_functions = {
+    name: getattr(_symbolic_backend, name, None) for name in _eager.FUNCTION_NAMES
+}
 
 
-def _symbolic(*values: object) -> builtins.bool:
-    return any(isinstance(value, VibeArray) for value in values)
-
-
-def _check_host_values(value: object) -> frozenset[str]:
-    """Reject hidden devices and classify bounded host leaves before coercion."""
-    pending = [(value, 0)]
+def _contains_symbolic(values: object) -> builtins.bool:
+    """Find symbolic operands inside standard nested array argument lists."""
+    pending = [(values, 0)]
     seen: set[int] = set()
-    kinds: set[str] = set()
     inspected = 0
     while pending:
-        item, depth = pending.pop()
+        value, depth = pending.pop()
         inspected += 1
-        if inspected > _HOST_CONTAINER_MAX_ITEMS:
+        if inspected > 1_000_000:
             raise ValueError("host container inspection exceeds 1000000 items")
-        if isinstance(item, np.ndarray):
-            if not item.dtype.hasobject:
-                kinds.add("bool" if item.dtype == np.dtype("bool") else "real")
-                continue
-            children = item.flat
-            child_count = item.size
-        else:
-            if callable(getattr(item, "__dlpack_device__", None)) or (
-                inspect.getattr_static(item, "__cuda_array_interface__", None)
-                is not None
-            ):
-                raise TypeError(
-                    "asarray does not perform implicit external-device transfer; "
-                    "use import_dlpack for an explicit handoff"
-                )
-            if not isinstance(item, (list, tuple)):
-                if type(item) is builtins.bool or isinstance(item, np.bool_):
-                    kinds.add("bool")
-                elif type(item) in (int, float, complex, str, Fraction) or isinstance(
-                    item, np.generic
-                ):
-                    kinds.add("real")
-                else:
-                    kinds.add("unknown" if depth == 0 else "unknown-nested")
-                continue
-            children = item
-            child_count = len(item)
-        identity = id(item)
-        if identity not in seen:
-            if child_count and depth >= _HOST_CONTAINER_MAX_DEPTH:
+        if isinstance(value, VibeArray):
+            return True
+        if isinstance(value, (list, tuple)) and id(value) not in seen:
+            if depth >= 64:
                 raise ValueError("host container nesting exceeds 64 levels")
-            if inspected + len(pending) + child_count > _HOST_CONTAINER_MAX_ITEMS:
-                raise ValueError("host container inspection exceeds 1000000 items")
-            seen.add(identity)
-            pending.extend((child, depth + 1) for child in children)
-    return frozenset(kinds)
+            seen.add(id(value))
+            pending.extend((item, depth + 1) for item in value)
+    return False
 
 
-def _probe_array_like_without_copy(value: object) -> np.ndarray:
-    """Inspect one host array-like while preserving a strict no-copy request."""
-    protocol = getattr(value, "__array__", None)
-    if not callable(protocol):
-        return np.array(value, copy=False)
-    try:
-        array = protocol(None, copy=False)
-    except TypeError as error:
-        raise TypeError(
-            "copy=False array-like inputs require __array__ support for copy=False"
-        ) from error
-    if not isinstance(array, np.ndarray):
-        raise TypeError("__array__ must return a NumPy array")
-    return array
+def _dispatch(name: str, *args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+    """Keep standard eager execution out of the symbolic capture boundary."""
+    if _active_capture() or _contains_symbolic((*args, *kwargs.values())):
+        symbolic = _symbolic_functions.get(name)
+        if symbolic is None:
+            raise NotImplementedError(f"{name} is not supported by TensorIR capture")
+        accepted = inspect.signature(symbolic).parameters
+        for key in tuple(kwargs):
+            if key not in accepted:
+                if kwargs[key] is not None:
+                    raise NotImplementedError(f"TensorIR {name} does not support {key}")
+                del kwargs[key]
+        return symbolic(*args, **kwargs)
+    return _eager.call(name, *args, **kwargs)
 
 
-def _eager_data_array(value: object) -> np.ndarray:
-    # Reuse the public host boundary before NumPy can invoke foreign array hooks.
-    array = asarray(value)
-    assert isinstance(array, np.ndarray)
-    return _finite_eager(array)
+def __array_namespace_info__() -> typing.Any:
+    """Inspect CPU devices, dtype defaults and standard eager capabilities."""
+    return _eager.namespace_info()
 
 
-def _eager_array(value: object) -> np.ndarray:
-    array = _eager_data_array(value)
-    if array.dtype not in (float32, float64):
-        raise TypeError("floating arithmetic requires real float32 or float64 arrays")
-    return array
-
-
-def _finite_eager(value: typing.Any) -> typing.Any:
-    if not np.all(np.isfinite(value)):
-        raise ValueError("eager TensorIR reference values must be finite")
-    return value
-
-
-def _eager_compute(
-    operation: typing.Callable[..., typing.Any],
-    *operands: object,
-    **kwargs: typing.Any,
-) -> typing.Any:
-    with np.errstate(all="ignore"):
-        result = operation(*operands, **kwargs)
-    return _finite_eager(result)
-
-
-def _eager_scalar(value: object, dtype: np.dtype, name: str) -> np.ndarray:
-    factor = _namespace._generic_scalar(value, name)
-    with np.errstate(all="ignore"):
-        return _finite_eager(np.asarray(float(factor), dtype=dtype))
-
-
-def _eager_operands(
-    *values: object, scalars: builtins.bool = False
-) -> tuple[np.ndarray, ...]:
-    arrays = tuple(
-        None
-        if scalars and type(value) in (int, float, str, Fraction)
-        else _eager_array(value)
-        for value in values
-    )
-    dtype = (
-        float64
-        if any(array is not None and array.dtype == float64 for array in arrays)
-        else float32
-        if any(array is not None for array in arrays)
-        else float64
-    )
-    return tuple(
-        _eager_scalar(value, dtype, "arithmetic scalar")
-        if array is None
-        else np.asarray(array, dtype=dtype)
-        for value, array in zip(values, arrays, strict=True)
-    )
-
-
-def add(x1: object, x2: object) -> typing.Any:
-    """Add two arrays elementwise, with eager NumPy or symbolic TensorIR dispatch.
-
-    Host scalar operands must be exact arithmetic values; array dtypes must agree.
-    """
-    if _symbolic(x1, x2):
-        return _namespace.add(x1, x2)
-    return _eager_compute(np.add, *_eager_operands(x1, x2, scalars=True))
-
-
-def subtract(x1: object, x2: object) -> typing.Any:
-    """Subtract the second array from the first elementwise.
-
-    Use symbolic values to build TensorIR; concrete inputs execute on the host.
-    """
-    if _symbolic(x1, x2):
-        return _namespace.subtract(x1, x2)
-    return _eager_compute(np.subtract, *_eager_operands(x1, x2, scalars=True))
-
-
-def multiply(x1: object, x2: object) -> typing.Any:
-    """Multiply two arrays elementwise without implicit dtype promotion."""
-    if _symbolic(x1, x2):
-        return _namespace.multiply(x1, x2)
-    return _eager_compute(np.multiply, *_eager_operands(x1, x2, scalars=True))
-
-
-def divide(x1: object, x2: object) -> typing.Any:
-    """Divide the first array by the second elementwise.
-
-    Non-finite eager results raise ValueError instead of being returned silently.
-    """
-    if _symbolic(x1, x2):
-        return _namespace.divide(x1, x2)
-    return _eager_compute(np.divide, *_eager_operands(x1, x2, scalars=True))
-
-
-def _compare(op: str, x1: object, x2: object) -> typing.Any:
-    """Keep the finite-only reference boundary before forming bool results."""
-    if _symbolic(x1, x2):
-        return getattr(_namespace, op)(x1, x2)
-    if all(type(value) in (int, float, str, Fraction) for value in (x1, x2)):
-        raise TypeError(f"{op} requires at least one array operand")
-    return _eager_compute(getattr(np, op), *_eager_operands(x1, x2, scalars=True))
-
-
-def equal(x1: object, x2: object) -> typing.Any:
-    """Compare finite real operands elementwise for equality."""
-    return _compare("equal", x1, x2)
-
-
-def not_equal(x1: object, x2: object) -> typing.Any:
-    """Compare finite real operands elementwise for inequality."""
-    return _compare("not_equal", x1, x2)
-
-
-def greater(x1: object, x2: object) -> typing.Any:
-    """Compare whether each finite real element is greater than its peer."""
-    return _compare("greater", x1, x2)
-
-
-def greater_equal(x1: object, x2: object) -> typing.Any:
-    """Compare whether each finite real element is at least its peer."""
-    return _compare("greater_equal", x1, x2)
-
-
-def less(x1: object, x2: object) -> typing.Any:
-    """Compare whether each finite real element is less than its peer."""
-    return _compare("less", x1, x2)
-
-
-def less_equal(x1: object, x2: object) -> typing.Any:
-    """Compare whether each finite real element is at most its peer."""
-    return _compare("less_equal", x1, x2)
-
-
-def negative(x: object) -> typing.Any:
-    """Negate each element of a host or symbolic array."""
-    if isinstance(x, VibeArray):
-        return _namespace.negative(x)
-    return _eager_compute(np.negative, _eager_array(x))
-
-
-def pow(x: object, exponent: object) -> typing.Any:
-    """Raise an array to an exact scalar exponent.
-
-    Inputs must be strictly positive; unrepresentable exponents are rejected.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.pow(x, exponent)
-    array = _eager_array(x)
-    if np.any(array <= 0):
-        raise ValueError("tensor power domain requires strictly positive input")
-    factor = _namespace._generic_scalar(exponent, "exponent")
-    rounded = _eager_scalar(factor, array.dtype, "exponent")
-    if factor and rounded == 0:
-        raise ValueError("power exponent is not representable")
-    return _eager_compute(np.power, array, rounded)
-
-
-def exp(x: object) -> typing.Any:
-    """Apply the exponential function elementwise to host or symbolic input."""
-    if isinstance(x, VibeArray):
-        return _namespace.exp(x)
-    return _eager_compute(np.exp, _eager_array(x))
-
-
-def log(x: object) -> typing.Any:
-    """Take the elementwise natural logarithm of strictly positive values."""
-    if isinstance(x, VibeArray):
-        return _namespace.log(x)
-    array = _eager_array(x)
-    if np.any(array <= 0):
-        raise ValueError("tensor log domain requires strictly positive input")
-    return _eager_compute(np.log, array)
-
-
-def sqrt(x: object) -> typing.Any:
-    """Take the elementwise square root of nonnegative values."""
-    if isinstance(x, VibeArray):
-        return _namespace.sqrt(x)
-    array = _eager_array(x)
-    if np.any(array < 0):
-        raise ValueError("tensor sqrt domain requires nonnegative input")
-    return _eager_compute(np.sqrt, array)
-
-
-def square(x: object) -> typing.Any:
-    """Return elementwise squares for an eager or symbolic array."""
-    if isinstance(x, VibeArray):
-        return _namespace.square(x)
-    return _eager_compute(np.square, _eager_array(x))
-
-
-def reciprocal(x: object) -> typing.Any:
-    """Return elementwise reciprocals for an eager or symbolic array."""
-    if isinstance(x, VibeArray):
-        return _namespace.reciprocal(x)
-    return _eager_compute(np.reciprocal, _eager_array(x))
-
-
-def reshape(
-    x: object,
-    shape: tuple[int, ...],
+def arange(
+    start: typing.Any,
+    /,
+    stop: typing.Any = None,
+    step: typing.Any = 1,
     *,
-    indices: tuple[Index, ...] | None = None,
+    dtype: typing.Any = None,
+    device: typing.Any = None,
 ) -> typing.Any:
-    """Reshape an array, preserving its element count.
+    """Execute standard arange on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("arange", start, stop, step, dtype=dtype, device=device)
 
-    Explicit TensorIR indices are only supported for symbolic arrays.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.reshape(x, shape, indices=indices)
-    if indices is not None:
-        raise ValueError("explicit TensorIR indices require a symbolic array")
-    array = _eager_data_array(x)
-    return np.reshape(array, _namespace._reshape_shape(shape, array.size))
+
+def asarray(
+    obj: typing.Any,
+    /,
+    *,
+    dtype: typing.Any = None,
+    device: typing.Any = None,
+    copy: builtins.bool | None = None,
+) -> typing.Any:
+    """Execute standard asarray on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("asarray", obj, dtype=dtype, device=device, copy=copy)
+
+
+def empty(
+    shape: typing.Any, *, dtype: typing.Any = None, device: typing.Any = None
+) -> typing.Any:
+    """Execute standard empty on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("empty", shape, dtype=dtype, device=device)
+
+
+def empty_like(
+    x: typing.Any, /, *, dtype: typing.Any = None, device: typing.Any = None
+) -> typing.Any:
+    """Execute standard empty_like on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("empty_like", x, dtype=dtype, device=device)
+
+
+def eye(
+    n_rows: typing.Any,
+    n_cols: typing.Any = None,
+    /,
+    *,
+    k: typing.Any = 0,
+    dtype: typing.Any = None,
+    device: typing.Any = None,
+) -> typing.Any:
+    """Execute standard eye on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("eye", n_rows, n_cols, k=k, dtype=dtype, device=device)
+
+
+def from_dlpack(
+    x: typing.Any, /, *, device: typing.Any = None, copy: builtins.bool | None = None
+) -> typing.Any:
+    """Execute standard from_dlpack on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("from_dlpack", x, device=device, copy=copy)
+
+
+def full(
+    shape: typing.Any,
+    fill_value: typing.Any,
+    *,
+    dtype: typing.Any = None,
+    device: typing.Any = None,
+) -> typing.Any:
+    """Execute standard full on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("full", shape, fill_value, dtype=dtype, device=device)
+
+
+def full_like(
+    x: typing.Any,
+    /,
+    fill_value: typing.Any,
+    *,
+    dtype: typing.Any = None,
+    device: typing.Any = None,
+) -> typing.Any:
+    """Execute standard full_like on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("full_like", x, fill_value, dtype=dtype, device=device)
+
+
+def linspace(
+    start: typing.Any,
+    stop: typing.Any,
+    /,
+    num: typing.Any,
+    *,
+    dtype: typing.Any = None,
+    device: typing.Any = None,
+    endpoint: typing.Any = True,
+) -> typing.Any:
+    """Execute standard linspace on CPU, or its bounded TensorIR lowering."""
+    return _dispatch(
+        "linspace", start, stop, num, dtype=dtype, device=device, endpoint=endpoint
+    )
+
+
+def meshgrid(*arrays: typing.Any, indexing: typing.Any = "xy") -> typing.Any:
+    """Execute standard meshgrid on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("meshgrid", *arrays, indexing=indexing)
+
+
+def ones(
+    shape: typing.Any, *, dtype: typing.Any = None, device: typing.Any = None
+) -> typing.Any:
+    """Execute standard ones on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("ones", shape, dtype=dtype, device=device)
+
+
+def ones_like(
+    x: typing.Any, /, *, dtype: typing.Any = None, device: typing.Any = None
+) -> typing.Any:
+    """Execute standard ones_like on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("ones_like", x, dtype=dtype, device=device)
+
+
+def tril(x: typing.Any, /, *, k: typing.Any = 0) -> typing.Any:
+    """Execute standard tril on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("tril", x, k=k)
+
+
+def triu(x: typing.Any, /, *, k: typing.Any = 0) -> typing.Any:
+    """Execute standard triu on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("triu", x, k=k)
+
+
+def zeros(
+    shape: typing.Any, *, dtype: typing.Any = None, device: typing.Any = None
+) -> typing.Any:
+    """Execute standard zeros on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("zeros", shape, dtype=dtype, device=device)
+
+
+def zeros_like(
+    x: typing.Any, /, *, dtype: typing.Any = None, device: typing.Any = None
+) -> typing.Any:
+    """Execute standard zeros_like on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("zeros_like", x, dtype=dtype, device=device)
+
+
+def astype(
+    x: typing.Any,
+    dtype: typing.Any,
+    /,
+    *,
+    copy: builtins.bool = True,
+    device: typing.Any = None,
+) -> typing.Any:
+    """Execute standard astype on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("astype", x, dtype, copy=copy, device=device)
+
+
+def can_cast(from_: typing.Any, to: typing.Any, /) -> builtins.bool:
+    """Execute standard can_cast on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("can_cast", from_, to)
+
+
+def finfo(type: typing.Any, /) -> typing.Any:
+    """Execute standard finfo on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("finfo", type)
+
+
+def iinfo(type: typing.Any, /) -> typing.Any:
+    """Execute standard iinfo on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("iinfo", type)
+
+
+def isdtype(dtype: typing.Any, kind: typing.Any) -> builtins.bool:
+    """Execute standard isdtype on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("isdtype", dtype, kind)
+
+
+def result_type(*arrays_and_dtypes: typing.Any) -> typing.Any:
+    """Execute standard result_type on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("result_type", *arrays_and_dtypes)
+
+
+def abs(x: typing.Any, /) -> typing.Any:
+    """Execute standard abs on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("abs", x)
+
+
+def acos(x: typing.Any, /) -> typing.Any:
+    """Execute standard acos on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("acos", x)
+
+
+def acosh(x: typing.Any, /) -> typing.Any:
+    """Execute standard acosh on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("acosh", x)
+
+
+def add(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard add on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("add", x1, x2)
+
+
+def asin(x: typing.Any, /) -> typing.Any:
+    """Execute standard asin on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("asin", x)
+
+
+def asinh(x: typing.Any, /) -> typing.Any:
+    """Execute standard asinh on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("asinh", x)
+
+
+def atan(x: typing.Any, /) -> typing.Any:
+    """Execute standard atan on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("atan", x)
+
+
+def atan2(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard atan2 on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("atan2", x1, x2)
+
+
+def atanh(x: typing.Any, /) -> typing.Any:
+    """Execute standard atanh on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("atanh", x)
+
+
+def bitwise_and(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard bitwise_and on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("bitwise_and", x1, x2)
+
+
+def bitwise_left_shift(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard bitwise_left_shift on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("bitwise_left_shift", x1, x2)
+
+
+def bitwise_invert(x: typing.Any, /) -> typing.Any:
+    """Execute standard bitwise_invert on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("bitwise_invert", x)
+
+
+def bitwise_or(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard bitwise_or on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("bitwise_or", x1, x2)
+
+
+def bitwise_right_shift(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard bitwise_right_shift on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("bitwise_right_shift", x1, x2)
+
+
+def bitwise_xor(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard bitwise_xor on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("bitwise_xor", x1, x2)
+
+
+def ceil(x: typing.Any, /) -> typing.Any:
+    """Execute standard ceil on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("ceil", x)
+
+
+def clip(
+    x: typing.Any, /, min: typing.Any = None, max: typing.Any = None
+) -> typing.Any:
+    """Execute standard clip on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("clip", x, min, max)
+
+
+def conj(x: typing.Any, /) -> typing.Any:
+    """Execute standard conj on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("conj", x)
+
+
+def copysign(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard copysign on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("copysign", x1, x2)
+
+
+def cos(x: typing.Any, /) -> typing.Any:
+    """Execute standard cos on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("cos", x)
+
+
+def cosh(x: typing.Any, /) -> typing.Any:
+    """Execute standard cosh on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("cosh", x)
+
+
+def divide(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard divide on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("divide", x1, x2)
+
+
+def equal(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard equal on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("equal", x1, x2)
+
+
+def exp(x: typing.Any, /) -> typing.Any:
+    """Execute standard exp on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("exp", x)
+
+
+def expm1(x: typing.Any, /) -> typing.Any:
+    """Execute standard expm1 on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("expm1", x)
+
+
+def floor(x: typing.Any, /) -> typing.Any:
+    """Execute standard floor on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("floor", x)
+
+
+def floor_divide(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard floor_divide on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("floor_divide", x1, x2)
+
+
+def greater(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard greater on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("greater", x1, x2)
+
+
+def greater_equal(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard greater_equal on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("greater_equal", x1, x2)
+
+
+def hypot(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard hypot on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("hypot", x1, x2)
+
+
+def imag(x: typing.Any, /) -> typing.Any:
+    """Execute standard imag on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("imag", x)
+
+
+def isfinite(x: typing.Any, /) -> typing.Any:
+    """Execute standard isfinite on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("isfinite", x)
+
+
+def isinf(x: typing.Any, /) -> typing.Any:
+    """Execute standard isinf on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("isinf", x)
+
+
+def isnan(x: typing.Any, /) -> typing.Any:
+    """Execute standard isnan on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("isnan", x)
+
+
+def less(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard less on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("less", x1, x2)
+
+
+def less_equal(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard less_equal on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("less_equal", x1, x2)
+
+
+def log(x: typing.Any, /) -> typing.Any:
+    """Execute standard log on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("log", x)
+
+
+def log1p(x: typing.Any, /) -> typing.Any:
+    """Execute standard log1p on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("log1p", x)
+
+
+def log2(x: typing.Any, /) -> typing.Any:
+    """Execute standard log2 on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("log2", x)
+
+
+def log10(x: typing.Any, /) -> typing.Any:
+    """Execute standard log10 on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("log10", x)
+
+
+def logaddexp(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard logaddexp on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("logaddexp", x1, x2)
+
+
+def logical_and(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard logical_and on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("logical_and", x1, x2)
+
+
+def logical_not(x: typing.Any, /) -> typing.Any:
+    """Execute standard logical_not on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("logical_not", x)
+
+
+def logical_or(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard logical_or on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("logical_or", x1, x2)
+
+
+def logical_xor(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard logical_xor on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("logical_xor", x1, x2)
+
+
+def maximum(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard maximum on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("maximum", x1, x2)
+
+
+def minimum(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard minimum on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("minimum", x1, x2)
+
+
+def multiply(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard multiply on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("multiply", x1, x2)
+
+
+def negative(x: typing.Any, /) -> typing.Any:
+    """Execute standard negative on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("negative", x)
+
+
+def nextafter(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard nextafter on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("nextafter", x1, x2)
+
+
+def not_equal(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard not_equal on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("not_equal", x1, x2)
+
+
+def positive(x: typing.Any, /) -> typing.Any:
+    """Execute standard positive on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("positive", x)
+
+
+def pow(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard pow on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("pow", x1, x2)
+
+
+def real(x: typing.Any, /) -> typing.Any:
+    """Execute standard real on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("real", x)
+
+
+def reciprocal(x: typing.Any, /) -> typing.Any:
+    """Execute standard reciprocal on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("reciprocal", x)
+
+
+def remainder(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard remainder on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("remainder", x1, x2)
+
+
+def round(x: typing.Any, /) -> typing.Any:
+    """Execute standard round on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("round", x)
+
+
+def sign(x: typing.Any, /) -> typing.Any:
+    """Execute standard sign on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("sign", x)
+
+
+def signbit(x: typing.Any, /) -> typing.Any:
+    """Execute standard signbit on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("signbit", x)
+
+
+def sin(x: typing.Any, /) -> typing.Any:
+    """Execute standard sin on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("sin", x)
+
+
+def sinh(x: typing.Any, /) -> typing.Any:
+    """Execute standard sinh on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("sinh", x)
+
+
+def square(x: typing.Any, /) -> typing.Any:
+    """Execute standard square on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("square", x)
+
+
+def sqrt(x: typing.Any, /) -> typing.Any:
+    """Execute standard sqrt on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("sqrt", x)
+
+
+def subtract(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard subtract on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("subtract", x1, x2)
+
+
+def tan(x: typing.Any, /) -> typing.Any:
+    """Execute standard tan on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("tan", x)
+
+
+def tanh(x: typing.Any, /) -> typing.Any:
+    """Execute standard tanh on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("tanh", x)
+
+
+def trunc(x: typing.Any, /) -> typing.Any:
+    """Execute standard trunc on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("trunc", x)
+
+
+def take(
+    x: typing.Any, indices: typing.Any, /, *, axis: typing.Any = None
+) -> typing.Any:
+    """Execute standard take on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("take", x, indices, axis=axis)
+
+
+def take_along_axis(
+    x: typing.Any, indices: typing.Any, /, *, axis: typing.Any = -1
+) -> typing.Any:
+    """Execute standard take_along_axis on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("take_along_axis", x, indices, axis=axis)
+
+
+def matmul(x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard matmul on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("matmul", x1, x2)
+
+
+def matrix_transpose(x: typing.Any, /) -> typing.Any:
+    """Execute standard matrix_transpose on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("matrix_transpose", x)
+
+
+def tensordot(x1: typing.Any, x2: typing.Any, /, *, axes: typing.Any = 2) -> typing.Any:
+    """Execute standard tensordot on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("tensordot", x1, x2, axes=axes)
+
+
+def vecdot(x1: typing.Any, x2: typing.Any, /, *, axis: typing.Any = -1) -> typing.Any:
+    """Execute standard vecdot on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("vecdot", x1, x2, axis=axis)
+
+
+def broadcast_arrays(*arrays: typing.Any) -> typing.Any:
+    """Execute standard broadcast_arrays on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("broadcast_arrays", *arrays)
+
+
+def broadcast_shapes(*shapes: typing.Any) -> typing.Any:
+    """Execute standard broadcast_shapes on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("broadcast_shapes", *shapes)
 
 
 def broadcast_to(
-    x: object,
-    shape: tuple[int, ...],
+    x: typing.Any,
+    /,
+    shape: typing.Any,
     *,
-    indices: tuple[Index, ...] | None = None,
-    axes: tuple[int, ...] | None = None,
+    indices: typing.Any = None,
+    axes: typing.Any = None,
 ) -> typing.Any:
-    """Broadcast an array to a requested shape.
-
-    Explicit indices and axes are reserved for symbolic TensorIR values.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.broadcast_to(x, shape, indices=indices, axes=axes)
-    if indices is not None or axes is not None:
-        raise ValueError(
-            "explicit TensorIR broadcast metadata requires a symbolic array"
-        )
-    return np.broadcast_to(
-        _eager_data_array(x), _namespace._shape(shape, "broadcast_to")
-    )
+    """Execute standard broadcast_to on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("broadcast_to", x, shape, indices=indices, axes=axes)
 
 
-def broadcast_shapes(*shapes: tuple[int, ...]) -> tuple[int, ...]:
-    """Return the common broadcast shape without creating arrays."""
-    return _namespace.broadcast_shapes(*shapes)
+def concat(arrays: typing.Any, /, *, axis: typing.Any = 0) -> typing.Any:
+    """Execute standard concat on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("concat", arrays, axis=axis)
 
 
-def broadcast_arrays(*arrays: object) -> tuple[typing.Any, ...]:
-    """Broadcast eager arrays or generic symbolic arrays to one common shape.
-
-    Preserve each input dtype. Symbolic inputs must all be VibeArray values
-    with generic index spaces; an empty argument list returns an empty tuple.
-    """
-    if not arrays:
-        return ()
-    if any(isinstance(value, VibeArray) for value in arrays):
-        return _namespace.broadcast_arrays(*arrays)
-    values = tuple(_eager_data_array(value) for value in arrays)
-    return tuple(np.broadcast_arrays(*values))
+def expand_dims(x: typing.Any, /, axis: typing.Any) -> typing.Any:
+    """Execute standard expand_dims on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("expand_dims", x, axis)
 
 
-def expand_dims(x: object, axis: int | tuple[int, ...]) -> typing.Any:
-    """Insert singleton dimensions at unique signed axes in eager or generic symbolic arrays."""
-    if isinstance(x, VibeArray):
-        return _namespace.expand_dims(x, axis)
-    array = _eager_data_array(x)
-    _namespace._expand_shape(array.shape, axis)
-    return np.expand_dims(array, axis)
-
-
-def squeeze(x: object, axis: int | tuple[int, ...]) -> typing.Any:
-    """Remove the specified singleton axes from an eager or generic symbolic array."""
-    if isinstance(x, VibeArray):
-        return _namespace.squeeze(x, axis)
-    array = _eager_data_array(x)
-    _namespace._squeezed_shape(array.shape, axis)
-    return np.squeeze(array, axis=axis)
+def flip(x: typing.Any, /, *, axis: typing.Any = None) -> typing.Any:
+    """Execute standard flip on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("flip", x, axis=axis)
 
 
 def moveaxis(
-    x: object, source: int | tuple[int, ...], destination: int | tuple[int, ...]
+    x: typing.Any, source: typing.Any, destination: typing.Any, /
 ) -> typing.Any:
-    """Move selected axes to matching destinations, preserving the order of the others."""
-    if isinstance(x, VibeArray):
-        return _namespace.moveaxis(x, source, destination)
-    array = _eager_data_array(x)
-    order = _namespace._moveaxis_order(array.ndim, source, destination)
-    return np.transpose(array, order)
+    """Execute standard moveaxis on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("moveaxis", x, source, destination)
 
 
-def flip(x: object, *, axis: int | tuple[int, ...] | None = None) -> typing.Any:
-    """Reverse the selected axes, or all axes when axis is None.
-
-    Symbolic inputs require generic index spaces and at most 65,536 elements
-    along each flipped axis to bound the static gather maps.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.flip(x, axis=axis)
-    array = _eager_data_array(x)
-    axes = (
-        tuple(range(array.ndim))
-        if axis is None
-        else _namespace._normalized_axes(axis, array.ndim, "flip")
-    )
-    return np.flip(array, axis=axes)
+def permute_dims(x: typing.Any, /, axes: typing.Any) -> typing.Any:
+    """Execute standard permute_dims on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("permute_dims", x, axes)
 
 
-def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
-    """Select a half-open (start, stop) range along every input axis.
-
-    Ranges must lie inside the input shape; slicing never changes the axis rank.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.slice(x, ranges)
-    array = _eager_data_array(x)
-    if not isinstance(ranges, tuple) or any(
-        not isinstance(bounds, tuple)
-        or len(bounds) != 2
-        or any(type(bound) is not int for bound in bounds)
-        for bounds in ranges
-    ):
-        raise TypeError("slice ranges must be a static tuple of (start, stop) pairs")
-    if len(ranges) != array.ndim:
-        raise ValueError("slice requires one half-open range per axis")
-    if any(
-        not 0 <= start <= stop <= extent
-        for (start, stop), extent in zip(ranges, array.shape, strict=True)
-    ):
-        raise ValueError("slice range is outside its input axis")
-    return array[tuple(builtins.slice(start, stop) for start, stop in ranges)]
+def repeat(
+    x: typing.Any, repeats: typing.Any, /, *, axis: typing.Any = None
+) -> typing.Any:
+    """Execute standard repeat on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("repeat", x, repeats, axis=axis)
 
 
-def take(x: object, indices: tuple[int, ...], *, axis: int) -> typing.Any:
-    """Gather a static tuple of in-range positions along the selected axis."""
-    if isinstance(x, VibeArray):
-        return _namespace.take(x, indices, axis=axis)
-    array = _eager_data_array(x)
-    normalized_axis = _namespace._axis(axis, array.ndim, "take")
-    if not isinstance(indices, tuple) or any(
-        type(index) is not int for index in indices
-    ):
-        raise TypeError("take indices must be a static tuple of integers")
-    if any(not 0 <= index < array.shape[normalized_axis] for index in indices):
-        raise ValueError("gather position is outside its input axis")
-    return np.take(array, indices, axis=normalized_axis)
-
-
-def sum(
-    x: object,
+def reshape(
+    x: typing.Any,
+    /,
+    shape: typing.Any,
     *,
-    axis: int | tuple[int, ...] | None = None,
-    dtype: object = None,
-    keepdims: builtins.bool = False,
+    copy: builtins.bool | None = None,
+    indices: typing.Any = None,
 ) -> typing.Any:
-    """Reduce over selected axes without retaining reduced dimensions.
+    """Execute standard reshape on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("reshape", x, shape, copy=copy, indices=indices)
 
-    Dtype conversion and keepdims=True are not supported in this preview.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.sum(x, axis=axis, dtype=dtype, keepdims=keepdims)
-    array = _eager_array(x)
-    if dtype is not None:
-        raise ValueError("frontend sum does not insert dtype conversions")
-    if type(keepdims) is not builtins.bool:
-        raise TypeError("keepdims must be a bool")
-    axes = _namespace._reduction_axes(axis, array.ndim, "sum")
-    return _eager_compute(np.sum, array, axis=axes, keepdims=keepdims)
+
+def roll(x: typing.Any, /, shift: typing.Any, *, axis: typing.Any = None) -> typing.Any:
+    """Execute standard roll on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("roll", x, shift, axis=axis)
+
+
+def squeeze(x: typing.Any, /, axis: typing.Any) -> typing.Any:
+    """Execute standard squeeze on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("squeeze", x, axis)
+
+
+def stack(arrays: typing.Any, /, *, axis: typing.Any = 0) -> typing.Any:
+    """Execute standard stack on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("stack", arrays, axis=axis)
+
+
+def tile(x: typing.Any, repetitions: typing.Any, /) -> typing.Any:
+    """Execute standard tile on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("tile", x, repetitions)
+
+
+def unstack(x: typing.Any, /, *, axis: typing.Any = 0) -> typing.Any:
+    """Execute standard unstack on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("unstack", x, axis=axis)
+
+
+def argmax(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard argmax on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("argmax", x, axis=axis, keepdims=keepdims)
+
+
+def argmin(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard argmin on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("argmin", x, axis=axis, keepdims=keepdims)
+
+
+def count_nonzero(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard count_nonzero on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("count_nonzero", x, axis=axis, keepdims=keepdims)
+
+
+def nonzero(x: typing.Any, /) -> typing.Any:
+    """Execute standard nonzero on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("nonzero", x)
+
+
+def searchsorted(
+    x1: typing.Any,
+    x2: typing.Any,
+    /,
+    *,
+    side: typing.Any = "left",
+    sorter: typing.Any = None,
+) -> typing.Any:
+    """Execute standard searchsorted on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("searchsorted", x1, x2, side=side, sorter=sorter)
+
+
+def where(condition: typing.Any, x1: typing.Any, x2: typing.Any, /) -> typing.Any:
+    """Execute standard where on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("where", condition, x1, x2)
+
+
+def isin(
+    x1: typing.Any, x2: typing.Any, /, *, invert: typing.Any = False
+) -> typing.Any:
+    """Execute standard isin on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("isin", x1, x2, invert=invert)
+
+
+def unique_all(x: typing.Any, /) -> typing.Any:
+    """Execute standard unique_all on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("unique_all", x)
+
+
+def unique_counts(x: typing.Any, /) -> typing.Any:
+    """Execute standard unique_counts on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("unique_counts", x)
+
+
+def unique_inverse(x: typing.Any, /) -> typing.Any:
+    """Execute standard unique_inverse on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("unique_inverse", x)
+
+
+def unique_values(x: typing.Any, /) -> typing.Any:
+    """Execute standard unique_values on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("unique_values", x)
+
+
+def argsort(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = -1,
+    descending: builtins.bool = False,
+    stable: builtins.bool = True,
+) -> typing.Any:
+    """Execute standard argsort on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("argsort", x, axis=axis, descending=descending, stable=stable)
+
+
+def sort(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = -1,
+    descending: builtins.bool = False,
+    stable: builtins.bool = True,
+) -> typing.Any:
+    """Execute standard sort on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("sort", x, axis=axis, descending=descending, stable=stable)
+
+
+def cumulative_prod(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = None,
+    dtype: typing.Any = None,
+    include_initial: builtins.bool = False,
+) -> typing.Any:
+    """Execute standard cumulative_prod on CPU, or its bounded TensorIR lowering."""
+    return _dispatch(
+        "cumulative_prod", x, axis=axis, dtype=dtype, include_initial=include_initial
+    )
+
+
+def cumulative_sum(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = None,
+    dtype: typing.Any = None,
+    include_initial: builtins.bool = False,
+) -> typing.Any:
+    """Execute standard cumulative_sum on CPU, or its bounded TensorIR lowering."""
+    return _dispatch(
+        "cumulative_sum", x, axis=axis, dtype=dtype, include_initial=include_initial
+    )
+
+
+def max(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard max on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("max", x, axis=axis, keepdims=keepdims)
 
 
 def mean(
-    x: object,
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard mean on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("mean", x, axis=axis, keepdims=keepdims)
+
+
+def min(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard min on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("min", x, axis=axis, keepdims=keepdims)
+
+
+def prod(
+    x: typing.Any,
+    /,
     *,
-    axis: int | tuple[int, ...] | None = None,
+    axis: typing.Any = None,
+    dtype: typing.Any = None,
     keepdims: builtins.bool = False,
 ) -> typing.Any:
-    """Average selected axes, optionally retaining singleton reduced dimensions.
-
-    Support eager and symbolic arrays; reject reductions over zero elements.
-    """
-    if isinstance(x, VibeArray):
-        return _namespace.mean(x, axis=axis, keepdims=keepdims)
-    array = _eager_array(x)
-    if type(keepdims) is not builtins.bool:
-        raise TypeError("keepdims must be a bool")
-    axes = _namespace._reduction_axes(axis, array.ndim, "mean")
-    count = 1
-    for position in axes:
-        count *= array.shape[position]
-    if count == 0:
-        raise ValueError("mean of an empty reduction is unsupported")
-    return _eager_compute(np.mean, array, axis=axes, keepdims=keepdims)
+    """Execute standard prod on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("prod", x, axis=axis, dtype=dtype, keepdims=keepdims)
 
 
-def permute_dims(x: object, axes: tuple[int, ...]) -> typing.Any:
-    """Reorder the axes of a host or symbolic array."""
-    if isinstance(x, VibeArray):
-        return _namespace.permute_dims(x, axes)
-    array = _eager_data_array(x)
-    return np.transpose(array, _namespace._permutation(axes, array.ndim))
+def std(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = None,
+    correction: typing.Any = 0.0,
+    keepdims: builtins.bool = False,
+) -> typing.Any:
+    """Execute standard std on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("std", x, axis=axis, correction=correction, keepdims=keepdims)
 
 
-def matrix_transpose(x: object) -> typing.Any:
-    """Swap the last two axes of a host or symbolic matrix-like array."""
-    if isinstance(x, VibeArray):
-        return _namespace.matrix_transpose(x)
-    array = _eager_data_array(x)
-    if array.ndim < 2:
-        raise ValueError(
-            "matrix_transpose requires an array with at least two dimensions"
-        )
-    return np.swapaxes(array, -1, -2)
+def sum(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = None,
+    dtype: typing.Any = None,
+    keepdims: builtins.bool = False,
+) -> typing.Any:
+    """Execute standard sum on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("sum", x, axis=axis, dtype=dtype, keepdims=keepdims)
 
 
-def matmul(x1: object, x2: object) -> typing.Any:
-    """Multiply matrices using the preview's eager or symbolic dispatch."""
-    if _symbolic(x1, x2):
-        return _namespace.matmul(x1, x2)
-    return _eager_compute(np.matmul, *_eager_operands(x1, x2))
+def var(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = None,
+    correction: typing.Any = 0.0,
+    keepdims: builtins.bool = False,
+) -> typing.Any:
+    """Execute standard var on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("var", x, axis=axis, correction=correction, keepdims=keepdims)
+
+
+def all(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard all on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("all", x, axis=axis, keepdims=keepdims)
+
+
+def any(
+    x: typing.Any, /, *, axis: typing.Any = None, keepdims: builtins.bool = False
+) -> typing.Any:
+    """Execute standard any on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("any", x, axis=axis, keepdims=keepdims)
+
+
+def diff(
+    x: typing.Any,
+    /,
+    *,
+    axis: typing.Any = -1,
+    n: typing.Any = 1,
+    prepend: typing.Any = None,
+    append: typing.Any = None,
+) -> typing.Any:
+    """Execute standard diff on CPU, or its bounded TensorIR lowering."""
+    return _dispatch("diff", x, axis=axis, n=n, prepend=prepend, append=append)
+
+
+def slice(x: object, ranges: tuple[tuple[int, int], ...]) -> typing.Any:
+    """GenerativeQC extension: exact static half-open scientific slices."""
+    return _eager.wrap(_symbolic_backend.slice(x, ranges))
 
 
 def einsum(
@@ -548,331 +986,10 @@ def einsum(
     *operands: object,
     coefficient: ExactScalar = 1,
 ) -> typing.Any:
-    """Evaluate an Einstein-summation expression with an exact coefficient.
-
-    Concrete operands follow the NumPy eager reference implementation.
-    """
-    if _symbolic(*operands):
-        return _namespace.einsum(equation, *operands, coefficient=coefficient)
-    arrays = _eager_operands(*operands)
-    # Validate notation and repeated-label extents through the canonical frontend.
-    # These inputs carry metadata only; eager numerical work still runs in NumPy.
-    _namespace.einsum(
-        equation,
-        *(
-            input_array(
-                f"operand_{position}", _generic_spec(array, differentiable=False)
-            )
-            for position, array in enumerate(arrays)
-        ),
-        coefficient=coefficient,
+    """GenerativeQC extension: explicit-output finite scientific contractions."""
+    return _eager.wrap(
+        _symbolic_backend.einsum(equation, *operands, coefficient=coefficient)
     )
-    factor = _namespace._exact(coefficient, "einsum coefficient")
-    result = _eager_compute(np.einsum, equation, *arrays, optimize=False)
-    return _eager_compute(
-        np.multiply, result, _eager_scalar(factor, result.dtype, "einsum coefficient")
-    )
-
-
-def _dtype_name(dtype: object) -> str:
-    try:
-        name = np.dtype(dtype).name
-    except TypeError as exc:
-        raise TypeError("dtype must describe float32 or float64") from exc
-    if name not in ("float32", "float64"):
-        raise TypeError("experimental Array API currently supports float32/float64")
-    return name
-
-
-def _data_dtype_name(dtype: object) -> str:
-    """Admit Boolean data without widening the existing real arithmetic helpers."""
-    try:
-        name = np.dtype(dtype).name
-    except TypeError as exc:
-        raise TypeError("dtype must describe bool, float32 or float64") from exc
-    if name not in ("bool", "float32", "float64"):
-        raise TypeError(
-            "experimental Array API supports bool and real float32/float64 data"
-        )
-    return name
-
-
-def _dtype_of(value: object) -> np.dtype:
-    """Read an admitted data dtype without converting external array objects."""
-    if isinstance(value, VibeArray):
-        return np.dtype(_data_dtype_name(value.dtype))
-    if isinstance(value, np.ndarray):
-        _check_host_values(value)
-        return np.dtype(_data_dtype_name(value.dtype))
-    _check_host_values(value)
-    return np.dtype(_data_dtype_name(value))
-
-
-def astype(
-    x: object,
-    dtype: object,
-    /,
-    *,
-    copy: builtins.bool = True,
-    device: object = None,
-) -> typing.Any:
-    """Explicit float32/float64 conversion with no implicit device transfer."""
-    if type(copy) is not builtins.bool:
-        raise TypeError("astype copy must be a bool")
-    if device is not None:
-        raise ValueError("astype currently supports device=None only")
-    target = _dtype_name(dtype)
-    if isinstance(x, VibeArray):
-        return _namespace.astype(x, target, copy=copy)
-    array = _eager_array(x)
-    if not copy and array.dtype.name == target:
-        return array
-    return _eager_compute(np.array, array, dtype=np.dtype(target), copy=True)
-
-
-def can_cast(from_: object, to: object, /) -> builtins.bool:
-    """Check Boolean identity or safe promotion in the real-float dtype lattice."""
-    source, target = _dtype_of(from_), _dtype_of(to)
-    return source == target or (source == float32 and target == float64)
-
-
-def finfo(type: object, /) -> np.finfo:
-    """Describe IEEE machine limits for the admitted real floating-point dtypes."""
-    return np.finfo(np.dtype(_dtype_name(_dtype_of(type))))
-
-
-def isdtype(dtype: object, kind: object) -> builtins.bool:
-    """Inspect admitted dtypes using the standard dtype category vocabulary."""
-    source = _dtype_of(dtype)
-    categories = {
-        "bool",
-        "signed integer",
-        "unsigned integer",
-        "integral",
-        "real floating",
-        "complex floating",
-        "numeric",
-    }
-
-    def matches(value: object) -> builtins.bool:
-        if isinstance(value, str):
-            if value not in categories:
-                raise ValueError(f"unsupported dtype kind {value!r}")
-            if source == np.dtype("bool"):
-                return value == "bool"
-            return value in ("real floating", "numeric")
-        return source == _dtype_of(value)
-
-    if isinstance(kind, tuple):
-        return any(matches(item) for item in kind)
-    return matches(kind)
-
-
-def result_type(*arrays_and_dtypes: object) -> np.dtype:
-    """Infer Boolean identity or a real-float common dtype with weak scalars."""
-    dtypes: list[np.dtype] = []
-    weak_numeric = False
-    for value in arrays_and_dtypes:
-        if type(value) in (int, float):
-            weak_numeric = True
-            continue
-        dtypes.append(_dtype_of(value))
-    if not dtypes:
-        raise TypeError("result_type requires at least one array or dtype")
-    if np.dtype("bool") in dtypes:
-        if weak_numeric or any(dtype != np.dtype("bool") for dtype in dtypes):
-            raise TypeError("bool and real dtype promotion is unsupported")
-        return np.dtype("bool")
-    return float64 if float64 in dtypes else float32
-
-
-def asarray(
-    value: object,
-    *,
-    dtype: object = None,
-    copy: builtins.bool | None = None,
-) -> typing.Any:
-    """Convert a host value or preserve/cast one symbolic array.
-
-    Concrete conversion is intentionally CPU/NumPy-only in this preview. Objects
-    advertising DLPack are never silently copied from another array runtime; use
-    ``import_dlpack`` for that explicit handoff.
-    """
-    if copy not in (None, True, False):
-        raise TypeError("copy must be True, False, or None")
-    if isinstance(value, VibeArray):
-        if dtype is None:
-            return value
-        name = _data_dtype_name(dtype)
-        if name == value.dtype:
-            return value
-        if name == "bool" or value.dtype == "bool":
-            raise TypeError("cross-kind bool/real TensorIR casts are unsupported")
-        return VibeArray(_cast(value.node, name))
-    source_kinds = _check_host_values(value)
-    if "unknown-nested" in source_kinds:
-        raise TypeError("nested host containers require scalar or NumPy array leaves")
-    if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
-        raise TypeError("mixed bool/real host values are unsupported")
-    source_array = (
-        (_probe_array_like_without_copy(value) if copy is False else np.asarray(value))
-        if source_kinds == frozenset(("unknown",))
-        else None
-    )
-    if source_array is not None and source_array.dtype.hasobject:
-        source_kinds = _check_host_values(source_array)
-        if "unknown-nested" in source_kinds:
-            raise TypeError(
-                "host array-like object data require scalar or NumPy array leaves"
-            )
-        if "bool" in source_kinds and source_kinds != frozenset(("bool",)):
-            raise TypeError("mixed bool/real host values are unsupported")
-    target = None if dtype is None else _data_dtype_name(dtype)
-    if not source_kinds:
-        source_is_bool = target == "bool" if target is not None else False
-    elif source_array is not None:
-        source_is_bool = (
-            source_kinds == frozenset(("bool",))
-            if source_array.dtype.hasobject
-            else source_array.dtype.name == "bool"
-        )
-    else:
-        source_is_bool = source_kinds == frozenset(("bool",))
-    if target is not None and (target == "bool") != source_is_bool:
-        raise TypeError("cross-kind bool/real input conversion is unsupported")
-    source = value if source_array is None else source_array
-    if copy is True:
-        array = np.array(source, dtype=target, copy=True)
-    elif copy is False:
-        array = np.array(source, dtype=target, copy=False)
-    else:
-        array = np.asarray(source, dtype=target)
-    if array.dtype.name not in ("bool", "float32", "float64"):
-        raise TypeError(
-            "experimental Array API runtime inputs must have bool, float32 or float64 dtype"
-        )
-    return array
-
-
-def _creation_dtype(dtype: object) -> str:
-    return "float64" if dtype is None else _data_dtype_name(dtype)
-
-
-def _creation_device(device: object) -> None:
-    if device is not None:
-        raise ValueError(
-            "experimental creation only admits device=None (CPU reference); "
-            "device selection requires a qualified backend"
-        )
-
-
-def full(
-    shape: int | tuple[int, ...],
-    fill_value: object,
-    *,
-    dtype: object = None,
-    device: object = None,
-) -> typing.Any:
-    """Create a uniform Boolean or finite real array with an exact constant."""
-    _creation_device(device)
-    target = _namespace._creation_shape(shape)
-    name = (
-        "bool"
-        if dtype is None and type(fill_value) is builtins.bool
-        else _creation_dtype(dtype)
-    )
-    if dtype is None and type(fill_value) is int:
-        raise TypeError(
-            "full with an integer fill_value requires an integer dtype "
-            "not supported by this preview; specify a floating dtype explicitly"
-        )
-    if name == "bool":
-        if type(fill_value) is not builtins.bool:
-            raise TypeError("bool full requires a bool fill value")
-        factor = fill_value
-    else:
-        factor = _namespace._generic_scalar(fill_value, "full fill value")
-    if _active_capture():
-        return _namespace.full(target, factor, dtype=name)
-    return _eager_compute(
-        np.full,
-        target,
-        factor if name == "bool" else float(factor),
-        dtype=np.dtype(name),
-    )
-
-
-def zeros(
-    shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
-) -> typing.Any:
-    """Create real or Boolean zeros on the CPU reference path."""
-    name = _creation_dtype(dtype)
-    return full(shape, False if name == "bool" else 0, dtype=name, device=device)
-
-
-def ones(
-    shape: int | tuple[int, ...], *, dtype: object = None, device: object = None
-) -> typing.Any:
-    """Create real or Boolean ones on the CPU reference path."""
-    name = _creation_dtype(dtype)
-    return full(shape, True if name == "bool" else 1, dtype=name, device=device)
-
-
-def full_like(
-    x: object,
-    fill_value: object,
-    *,
-    dtype: object = None,
-    device: object = None,
-) -> typing.Any:
-    """Create a uniform generic array inheriting the input's shape/dtype."""
-    _creation_device(device)
-    if isinstance(x, VibeArray):
-        name = x.dtype if dtype is None else _data_dtype_name(dtype)
-        if name == "bool":
-            if type(fill_value) is not builtins.bool:
-                raise TypeError("bool full_like requires a bool fill value")
-            factor = fill_value
-        else:
-            factor = _namespace._generic_scalar(fill_value, "full_like fill value")
-        return _namespace.full_like(x, factor, dtype=name)
-    array = _finite_eager(asarray(x))
-    assert isinstance(array, np.ndarray)
-    name = array.dtype.name if dtype is None else _data_dtype_name(dtype)
-    if name == "bool":
-        if type(fill_value) is not builtins.bool:
-            raise TypeError("bool full_like requires a bool fill value")
-        factor = fill_value
-    else:
-        factor = _namespace._generic_scalar(fill_value, "full_like fill value")
-    return _eager_compute(
-        np.full_like,
-        array,
-        factor if name == "bool" else float(factor),
-        dtype=np.dtype(name),
-    )
-
-
-def _like_dtype(x: object, dtype: object) -> str:
-    if dtype is not None:
-        return _data_dtype_name(dtype)
-    if isinstance(x, VibeArray):
-        return x.dtype
-    return _data_dtype_name(asarray(x).dtype)
-
-
-def zeros_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
-    """Create zeros with the input shape and dtype unless dtype is specified."""
-    _creation_device(device)
-    name = _like_dtype(x, dtype)
-    return full_like(x, False if name == "bool" else 0, dtype=name, device=device)
-
-
-def ones_like(x: object, *, dtype: object = None, device: object = None) -> typing.Any:
-    """Create ones with the input shape and dtype unless dtype is specified."""
-    _creation_device(device)
-    name = _like_dtype(x, dtype)
-    return full_like(x, True if name == "bool" else 1, dtype=name, device=device)
 
 
 def _generic_spec(array: np.ndarray, *, differentiable: builtins.bool) -> TensorSpec:
@@ -906,19 +1023,24 @@ class CompiledFunction:
             raise ValueError(
                 "experimental compile currently supports backend='reference'"
             )
-        signature = inspect.signature(function)
+        symbolic = _symbolic_functions.get(getattr(function, "__name__", ""))
+        signature = inspect.signature(
+            symbolic
+            if symbolic is not None and function is globals().get(function.__name__)
+            else function
+        )
         unsupported = {
             inspect.Parameter.POSITIONAL_ONLY,
             inspect.Parameter.VAR_POSITIONAL,
             inspect.Parameter.VAR_KEYWORD,
         }
-        if any(
+        if builtins.any(
             parameter.kind in unsupported for parameter in signature.parameters.values()
         ):
             raise TypeError(
                 "compiled array functions require named, non-variadic parameters"
             )
-        if not isinstance(differentiable, tuple) or any(
+        if not isinstance(differentiable, tuple) or builtins.any(
             not isinstance(name, str) for name in differentiable
         ):
             raise TypeError("differentiable must be a tuple of parameter names")
@@ -928,7 +1050,11 @@ class CompiledFunction:
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(f"unknown differentiable parameter(s): {names}")
-        self._function = function
+        self._function = (
+            symbolic
+            if symbolic is not None and function is globals().get(function.__name__)
+            else function
+        )
         self._signature = signature
         self._backend = backend
         self._differentiable = frozenset(differentiable)
@@ -944,10 +1070,14 @@ class CompiledFunction:
         specs: dict[str, TensorSpec] = {}
         key_rows = []
         for name, value in bound.arguments.items():
-            array = asarray(value)
+            array = _symbolic_backend.asarray(value)
             if isinstance(array, VibeArray):
                 raise TypeError("compiled runtime arguments must be concrete arrays")
             assert isinstance(array, np.ndarray)
+            if array.dtype.name not in ("bool", "float32", "float64"):
+                raise TypeError(
+                    "TensorIR compilation supports bool, float32 or float64 inputs"
+                )
             feeds[name] = array
             specs[name] = _generic_spec(
                 array, differentiable=name in self._differentiable
@@ -979,8 +1109,8 @@ class CompiledFunction:
         program, feeds = self._prepare(*args, **kwargs)
         execution = _execute(program, feeds)
         if tuple(program.outputs) == ("output",):
-            return execution.outputs["output"]
-        return execution.outputs
+            return _eager.wrap(execution.outputs["output"])
+        return {name: _eager.wrap(value) for name, value in execution.outputs.items()}
 
 
 @typing.overload
@@ -1018,49 +1148,54 @@ def compile(
 
 
 def capabilities() -> dict[str, object]:
-    """Return the detached capability contract for this public preview."""
+    """Report eager standard support separately from compiler qualification.
+
+    Compiler metadata and operation_matrix describe only the bounded symbolic
+    subset. Eager dtypes/functions/devices and namespace discovery describe CPU
+    execution; no GPU transfer, native lowering or scientific AD is implied.
+    """
     report = _compiler_capabilities()
-    functions = set(typing.cast("tuple[str, ...]", report["functions"]))
-    functions.update(
-        {
-            "asarray",
-            "compile",
-            "matrix_transpose",
-            "can_cast",
-            "finfo",
-            "isdtype",
-            "result_type",
-        }
-    )
     report.update(
         {
+            "compiled_functions": report["functions"],
+            "compiled_array_namespace_protocol": False,
             "public_api_version": API_VERSION,
-            "surface": "array-api-shaped-experimental-public-preview",
+            "surface": "array-api-standard-eager-with-bounded-tensorir-capture",
             "stability": "experimental",
             "import_path": "generativeqc.experimental.array_api",
-            "functions": tuple(sorted(functions)),
+            "array_api_version": __array_api_version__,
+            "array_namespace_protocol": True,
+            "functions": tuple(
+                sorted(
+                    set(_eager.FUNCTION_NAMES) | {"compile", "trace", "einsum", "slice"}
+                )
+            ),
             "implicit_broadcast": True,
             "reshape_requires_explicit_indices": False,
             "broadcast_requires_explicit_indices_and_axes": False,
             "scientific_metadata_requires_explicit_indices": True,
             "compiled_call": "shape-dtype-specialized-tensorir-reference",
             "compiled_differentiability": "explicit-parameter-names",
-            "namespace_dispatch": "numpy-eager-or-symbolic-tensorir",
-            "runtime_array": "numpy-host-bool-float32-float64",
+            "namespace_dispatch": "array-api-cpu-eager-or-symbolic-tensorir",
+            "runtime_array": "numpy-backed-array-api-cpu",
+            "eager_dtypes": _eager.DTYPE_NAMES,
+            "eager_functions": tuple(_eager.FUNCTION_NAMES),
+            "eager_device": "cpu",
+            "eager_extensions": ("linalg", "fft"),
         }
     )
     return report
 
 
-# Keep the standard dtype object while using builtins.bool for Python type checks.
-bool = np.dtype("bool")
-
+from . import _array_api_fft as fft
+from . import _array_api_linalg as linalg
 
 __all__ = [
     "API_VERSION",
     "DLPACK_INTEROP_VERSION",
     "FRONTEND_VERSION",
     "SUPPORTED_FUNCTIONS",
+    "Array",
     "CompiledFunction",
     "DLPackDevice",
     "DLPackImport",
@@ -1071,58 +1206,169 @@ __all__ = [
     "Program",
     "TensorSpec",
     "VibeArray",
+    "__array_api_version__",
+    "__array_namespace_info__",
+    "abs",
+    "acos",
+    "acosh",
     "add",
+    "all",
+    "any",
+    "arange",
+    "argmax",
+    "argmin",
+    "argsort",
     "asarray",
+    "asin",
+    "asinh",
     "astype",
+    "atan",
+    "atan2",
+    "atanh",
+    "bitwise_and",
+    "bitwise_invert",
+    "bitwise_left_shift",
+    "bitwise_or",
+    "bitwise_right_shift",
+    "bitwise_xor",
     "bool",
     "broadcast_arrays",
     "broadcast_shapes",
     "broadcast_to",
     "can_cast",
     "capabilities",
+    "ceil",
+    "clip",
     "compile",
+    "complex64",
+    "complex128",
+    "concat",
+    "conj",
+    "copysign",
+    "cos",
+    "cosh",
+    "count_nonzero",
+    "cumulative_prod",
+    "cumulative_sum",
+    "diff",
     "divide",
     "dlpack_device",
+    "e",
     "einsum",
+    "empty",
+    "empty_like",
     "equal",
     "exp",
     "expand_dims",
+    "expm1",
+    "eye",
+    "fft",
     "finfo",
     "flip",
     "float32",
     "float64",
+    "floor",
+    "floor_divide",
+    "from_dlpack",
     "full",
     "full_like",
     "greater",
     "greater_equal",
+    "hypot",
+    "iinfo",
+    "imag",
     "import_dlpack",
+    "inf",
     "input_array",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
     "isdtype",
+    "isfinite",
+    "isin",
+    "isinf",
+    "isnan",
     "less",
     "less_equal",
+    "linalg",
+    "linspace",
     "log",
+    "log1p",
+    "log2",
+    "log10",
+    "logaddexp",
+    "logical_and",
+    "logical_not",
+    "logical_or",
+    "logical_xor",
     "matmul",
     "matrix_transpose",
+    "max",
+    "maximum",
     "mean",
+    "meshgrid",
+    "min",
+    "minimum",
     "moveaxis",
     "multiply",
+    "nan",
     "negative",
+    "newaxis",
+    "nextafter",
+    "nonzero",
     "not_equal",
     "ones",
     "ones_like",
     "permute_dims",
+    "pi",
+    "positive",
     "pow",
+    "prod",
+    "real",
     "reciprocal",
+    "remainder",
+    "repeat",
     "reshape",
     "result_type",
+    "roll",
+    "round",
+    "searchsorted",
+    "sign",
+    "signbit",
+    "sin",
+    "sinh",
     "slice",
+    "sort",
     "sqrt",
     "square",
     "squeeze",
+    "stack",
+    "std",
     "subtract",
     "sum",
     "take",
+    "take_along_axis",
+    "tan",
+    "tanh",
+    "tensordot",
+    "tile",
     "trace",
+    "tril",
+    "triu",
+    "trunc",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+    "unique_all",
+    "unique_counts",
+    "unique_inverse",
+    "unique_values",
+    "unstack",
+    "var",
+    "vecdot",
+    "where",
     "zeros",
     "zeros_like",
 ]

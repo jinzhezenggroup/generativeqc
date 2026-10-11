@@ -202,22 +202,23 @@ def test_generic_broadcasting_and_exact_scalar_operators_match_numpy() -> None:
     np.testing.assert_allclose(expression(matrix, vector), expected)
 
 
-def test_public_preview_declares_experimental_nonconformance() -> None:
+def test_public_namespace_declares_eager_standard_and_bounded_capture() -> None:
     assert EXPERIMENTAL_API_VERSION == 1
     assert xp.API_VERSION == 1
     report = xp.capabilities()
     assert report["public_api_version"] == 1
-    assert report["surface"] == "array-api-shaped-experimental-public-preview"
+    assert report["surface"] == "array-api-standard-eager-with-bounded-tensorir-capture"
     assert report["stability"] == "experimental"
     assert report["import_path"] == "generativeqc.experimental.array_api"
-    assert report["array_api_version"] is None
-    assert report["array_namespace_protocol"] is False
+    assert report["array_api_version"] == "2025.12"
+    assert report["array_namespace_protocol"] is True
+    assert report["compiled_array_namespace_protocol"] is False
     assert report["implicit_broadcast"] is True
     assert report["reshape_requires_explicit_indices"] is False
     assert report["scientific_metadata_requires_explicit_indices"] is True
     assert report["compiled_call"] == "shape-dtype-specialized-tensorir-reference"
     assert report["compiled_differentiability"] == "explicit-parameter-names"
-    assert report["namespace_dispatch"] == "numpy-eager-or-symbolic-tensorir"
+    assert report["namespace_dispatch"] == "array-api-cpu-eager-or-symbolic-tensorir"
 
     value = xp.input_array("x", _vector_spec())
     assert isinstance(value, xp.VibeArray)
@@ -290,14 +291,13 @@ def test_square_and_reciprocal_eager_compiled_negative_values(dtype: object) -> 
         np.testing.assert_allclose(compiled, expected)
 
 
-def test_mean_empty_reduction_is_explicitly_unsupported() -> None:
+def test_mean_empty_reduction_is_eager_nan_but_capture_is_unsupported() -> None:
     values = np.empty((0, 2), dtype=np.float64)
     for operation in (
         lambda x: xp.mean(x, axis=0),
         lambda x: xp.mean(x, keepdims=True),
     ):
-        with pytest.raises(ValueError, match="empty reduction"):
-            operation(values)
+        assert np.all(np.isnan(operation(values)))
         with pytest.raises(ValueError, match="empty reduction"):
             xp.compile(operation).lower(values)
 
@@ -392,11 +392,11 @@ def test_eager_namespace_rejects_foreign_arrays_before_conversion(
 
 
 @pytest.mark.parametrize("operation", _EAGER_ARRAY_OPERATIONS)
-@pytest.mark.parametrize("dtype", (np.int64, np.float16, np.complex64, object))
+@pytest.mark.parametrize("dtype", (np.float16, object))
 def test_eager_namespace_rejects_unsupported_array_dtypes(
     operation: object, dtype: object
 ) -> None:
-    with pytest.raises(TypeError, match="float32 or float64"):
+    with pytest.raises(TypeError):
         operation(np.ones((2, 2), dtype=dtype))
 
 
@@ -479,13 +479,12 @@ def test_eager_namespace_promotes_generic_real_array_dtypes(
 @pytest.mark.parametrize(
     "operation", (xp.add, xp.subtract, xp.multiply, xp.divide, xp.pow)
 )
-def test_eager_and_compiled_reject_unrepresentable_scalar_literals(
+def test_eager_ieee_literals_remain_outside_compiled_exact_constants(
     scalar: float, operation: object
 ) -> None:
     values = np.ones(2, dtype=np.float64)
     match = "negative-zero" if scalar == 0 else "finite"
-    with pytest.raises(ValueError, match=match):
-        operation(values, scalar)
+    assert isinstance(operation(values, scalar), xp.Array)
     with pytest.raises(ValueError, match=match):
         xp.compile(lambda x: operation(x, scalar)).lower(values)
 
@@ -542,12 +541,10 @@ def test_finite_float_scalar_arithmetic_preserves_opt_in_ad(dtype: object) -> No
         lambda x: xp.permute_dims(x, (-1, -1)),
     ),
 )
-def test_eager_and_compiled_reject_unsupported_static_controls(
+def test_compiled_rejects_controls_outside_its_static_subset(
     operation: object,
 ) -> None:
     values = np.ones((2, 2), dtype=np.float64)
-    with pytest.raises((TypeError, ValueError)):
-        operation(values)
     with pytest.raises((TypeError, ValueError)):
         xp.compile(lambda x: operation(x)).lower(values)
 
@@ -590,13 +587,12 @@ def test_eager_and_compiled_preserve_supported_static_controls(
         (xp.negative, [float("inf")]),
     ),
 )
-def test_eager_and_compiled_reject_invalid_real_domains_and_nonfinite_results(
+def test_eager_ieee_domains_do_not_widen_compiled_scientific_domains(
     dtype: object, operation: object, values: object
 ) -> None:
     with np.errstate(all="ignore"):
         array = np.asarray(values, dtype=dtype)
-        with pytest.raises(ValueError):
-            operation(array)
+        assert isinstance(operation(array), xp.Array)
         with pytest.raises(ValueError):
             xp.compile(lambda x: operation(x))(array)
 
@@ -619,12 +615,11 @@ def test_eager_einsum_exact_coefficient_matches_compiled(dtype: object) -> None:
 
 
 @pytest.mark.parametrize("exponent", (1.0e-100, -1.0e-100, 1.0e100))
-def test_eager_and_compiled_reject_unrepresentable_float32_power_exponents(
+def test_compiled_rejects_unrepresentable_float32_power_exponents(
     exponent: float,
 ) -> None:
     values = np.asarray([2.0], dtype=np.float32)
-    with pytest.raises(ValueError):
-        xp.pow(values, exponent)
+    assert xp.pow(values, exponent).dtype == xp.float32
     with pytest.raises(ValueError):
         xp.compile(lambda x: xp.pow(x, exponent)).lower(values)
 

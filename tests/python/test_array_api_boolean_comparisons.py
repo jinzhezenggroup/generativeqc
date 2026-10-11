@@ -145,29 +145,28 @@ def test_public_bool_admission_and_bounded_creation() -> None:
     program = compiled.lower(mask)
     assert program.outputs["output"].spec.dtype == "bool"
     np.testing.assert_array_equal(compiled(mask), [True, True])
-    with pytest.raises(TypeError, match="bool fill"):
-        xp.full((2,), 1, dtype=xp.bool)
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(mask, dtype=xp.float64)
+    np.testing.assert_array_equal(xp.full((2,), 1, dtype=xp.bool), [True, True])
+    np.testing.assert_array_equal(xp.asarray(mask, dtype=xp.float64), [1.0, 0.0])
     with pytest.raises(TypeError, match="floating arithmetic"):
         xp.add(mask, mask)
     with pytest.raises(TypeError, match="array operand"):
         xp.equal(1.0, 2.0)
 
 
-def test_mixed_bool_real_host_containers_fail_before_numpy_promotion() -> None:
+def test_mixed_host_containers_convert_eagerly_but_fail_compiler_admission() -> None:
     mixed_values = (
         [True, 0.5],
         [[True, False], [0.25, 0.75]],
         [np.asarray([True, False]), np.asarray([0.25, 0.75])],
     )
     for value in mixed_values:
+        np.testing.assert_array_equal(xp.asarray(value), np.asarray(value))
+        np.testing.assert_array_equal(
+            xp.asarray(value, dtype=xp.float64), np.asarray(value, dtype=np.float64)
+        )
         with pytest.raises(TypeError, match="mixed bool/real"):
-            xp.asarray(value)
-        with pytest.raises(TypeError, match="mixed bool/real"):
-            xp.asarray(value, dtype=xp.float64)
-    with pytest.raises(TypeError, match="mixed bool/real"):
-        xp.add([True, 0.5], np.ones(2, dtype=np.float64))
+            xp.compile(lambda x: x)(value)
+    np.testing.assert_array_equal(xp.add([True, 0.5], np.ones(2)), [2.0, 1.5])
 
     np.testing.assert_array_equal(
         xp.asarray([True, False], dtype=xp.bool), [True, False]
@@ -197,8 +196,7 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     source = BooleanArrayLike()
     np.testing.assert_array_equal(xp.asarray(source), [True, False])
     np.testing.assert_array_equal(xp.asarray(source, dtype=xp.bool), [True, False])
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(source, dtype=xp.float64)
+    np.testing.assert_array_equal(xp.asarray(source, dtype=xp.float64), [1.0, 0.0])
 
     class RealArrayLike:
         def __array__(
@@ -215,8 +213,7 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     np.testing.assert_array_equal(
         xp.asarray(real_source, dtype=xp.float64), [0.25, 0.5]
     )
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(real_source, dtype=xp.bool)
+    np.testing.assert_array_equal(xp.asarray(real_source, dtype=xp.bool), [True, True])
     with pytest.raises(TypeError, match="nested host"):
         xp.asarray([source], dtype=xp.bool)
 
@@ -237,12 +234,14 @@ def test_host_array_like_uses_its_unforced_source_kind() -> None:
     np.testing.assert_array_equal(xp.asarray(object_bool, dtype=xp.bool), [True, False])
     assert object_bool.calls == 1
     object_bool_to_real = ObjectArrayLike([True, False])
-    with pytest.raises(TypeError, match="cross-kind"):
-        xp.asarray(object_bool_to_real, dtype=xp.float64)
+    np.testing.assert_array_equal(
+        xp.asarray(object_bool_to_real, dtype=xp.float64), [1.0, 0.0]
+    )
     assert object_bool_to_real.calls == 1
     object_mixed = ObjectArrayLike([True, 0.5])
-    with pytest.raises(TypeError, match="mixed bool/real"):
-        xp.asarray(object_mixed, dtype=xp.float64)
+    np.testing.assert_array_equal(
+        xp.asarray(object_mixed, dtype=xp.float64), [1.0, 0.5]
+    )
     assert object_mixed.calls == 1
 
 
@@ -264,7 +263,7 @@ def test_host_array_like_copy_false_probes_without_copying() -> None:
     source = NoCopyArrayLike()
     actual = xp.asarray(source, copy=False)
     assert source.calls == [False]
-    assert actual is source.storage
+    assert np.shares_memory(actual, source.storage)
 
 
 def test_empty_object_array_like_uses_explicit_boolean_kind() -> None:
@@ -526,8 +525,7 @@ def test_boolean_ad_and_nonfinite_inputs_reject_explicitly() -> None:
         with pytest.raises(ValueError, match="non-differentiable"):
             operation()
     bad = np.asarray([np.nan, 1.0], dtype=np.float64)
-    with pytest.raises(ValueError, match="finite"):
-        xp.greater(bad, array)
+    np.testing.assert_array_equal(xp.greater(bad, array), [False, False])
     with pytest.raises(ValueError, match="non-finite"):
         xp.compile(lambda x, y: x > y)(bad, array)
 
