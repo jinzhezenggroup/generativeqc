@@ -684,7 +684,7 @@ class TestProductionCompile:
             ("ignore_options", "-O*"),
             ("sloppiness", "time_macros"),
             ("hash_dir", "false"),
-            ("run_second_cpp", "false"),
+            ("inode_cache", "false"),
             ("prefix_command", "/path/wrapper"),
             ("prefix_command_cpp", "/path/cpp-wrapper"),
             ("extra_files_to_hash", "/tmp/extra"),
@@ -722,9 +722,36 @@ class TestProductionCompile:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         expected = validator.qualified_ccache_policy(tmp_path)
-        output = "".join(
-            f"(fixture) {name} = {setting}\n" for name, setting in expected.items()
-        )
+        # Independent Linux ccache 4.14 --show-config contract: do not generate
+        # this fixture from the policy under test. The removed cpp_extension
+        # and run_second_cpp options are absent; inode_cache defaults to true.
+        output = f"""\
+(environment) base_dir = {tmp_path.resolve()}
+(default) compiler =
+(default) compiler_check = mtime
+(default) compiler_type = auto
+(default) depend_mode = false
+(default) direct_mode = true
+(default) disable = false
+(default) extra_files_to_hash =
+(default) hash_dir = true
+(default) ignore_headers_in_manifest =
+(default) ignore_options =
+(default) inode_cache = true
+(default) keep_comments_cpp = false
+(default) path =
+(default) pch_external_checksum = false
+(default) prefix_command =
+(default) prefix_command_cpp =
+(default) read_only = false
+(default) read_only_direct = false
+(default) recache = false
+(default) remote_only = false
+(default) remote_storage =
+(default) reshare = false
+(default) sloppiness =
+(default) stats = true
+"""
         monkeypatch.setattr(
             validator.subprocess,
             "run",
