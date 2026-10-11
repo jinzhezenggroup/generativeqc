@@ -27,6 +27,7 @@ For the rationale and pinned historical receipts, see the
 | Optional exact-reference value lease | `src/scf/cuda/rhf_resident_values.*` | One-call admission, common Direct provider borrowing, local graphs and retirement before correlation |
 | Coupled direct CUDA execution | `src/scf/cuda_rhf.cpp` and bounded `src/scf/cuda/direct_*` owners | Host launch/dataflow orchestration is separate from scientific device kernels |
 | CUDA generic numeric services | `src/scf/cuda/eigensolver.*`, `src/solver/cuda/symmetric_eigen_handles.*` and `src/scf/cuda/resources.*` | Solver/library/stream/workspace lifetime; borrowers retain their method-specific policies |
+| CUDA structured matrix execution | `src/scf/cuda/structured_matrix.*`, `src/tensor/cuda_structured_product.hpp` | Borrowed immutable Gram/inverse-root/basis bindings; device masks, charged scratch and publication, not method/provider selection policy |
 | CUDA density fitting | `src/scf/cuda/df_plan*`, `df_source*`, `df_jk*`, `df_rhf_scf.*`, `df_uhf_scf.*` | Separate source preparation, plan lifetime, J/K, response and persistent iteration |
 | Direct work preparation | `src/scf/cuda/queue_plan.*` and `direct_*` task/queue owners | Bounded ranges, compaction, launch descriptors and diagnostics, not duplicated HF equations |
 

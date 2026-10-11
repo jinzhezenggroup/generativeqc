@@ -92,6 +92,14 @@ cublasStatus_t cublasDgemm(cublasHandle_t h, cublasOperation_t opa, cublasOperat
                                    0, 1);
 }
 
+cublasStatus_t cublasDsyrk(cublasHandle_t handle, cublasFillMode_t, cublasOperation_t operation,
+                           int dimension, int reduction, const double* alpha,
+                           const double* coefficients, int leading, const double* beta,
+                           double* output, int output_leading) {
+  return cublasDgemm(handle, operation, CUBLAS_OP_T, dimension, dimension, reduction, alpha,
+                     coefficients, leading, coefficients, leading, beta, output, output_leading);
+}
+
 // Implemented by the test-generated host execution of the unchanged production
 // copy_selected_matrices_kernel body. CUDA block scheduling is not modeled.
 void host_selected_copy(dim3, dim3, int, int, int, const std::uint8_t*, const double*, double*);

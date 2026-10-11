@@ -485,9 +485,10 @@
       "contract": "python/generativeqc_compiler/tensor/matrix_product.py",
       "reason": "Shared immutable matrix-product binding selects canonical strict-FP64 portfolios and owns singleton/strided GEMM submissions through a borrowed prepared context. Activity and resources stay with the enclosing executor.",
       "references": {
-        "cublasDgemm": 1,
+        "cublasDgemm": 6,
         "cublasDgemmStridedBatched": 1,
-        "cublasGetVersion": 1
+        "cublasGetVersion": 1,
+        "cublasDsyrk": 1
       }
     },
     "src/tensor/cuda_vector_contraction.cpp": {

@@ -16,12 +16,13 @@ namespace generativeqc::scf::cuda_execution {
 MatrixLibraryOwner::~MatrixLibraryOwner() { reset(); }
 
 generativeqc_status MatrixLibraryOwner::prepare(cudaStream_t stream, int nbf, int systems,
-                                                int spins) {
+                                                int spins, int direct_nbf) {
   if (systems <= 0 || spins <= 0) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   const auto status = prepare_provider(stream, nbf);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   try {
     binding_.emplace(stream_, blas_, nbf, systems, spins);
+    structured_binding_.emplace(stream_, blas_, nbf, direct_nbf, systems, spins);
   } catch (const std::bad_alloc&) {
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   } catch (const tensor::CudaMatrixProductBinding::PreparationFailure& failure) {
@@ -98,6 +99,7 @@ generativeqc_status MatrixLibraryOwner::prepare_provider(cudaStream_t stream, in
 void MatrixLibraryOwner::reset() noexcept {
   if (!prepared_) return;
   binding_.reset();
+  structured_binding_.reset();
   std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
   int previous = device_;
   (void)cudaGetDevice(&previous);

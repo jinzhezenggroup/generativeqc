@@ -75,6 +75,10 @@ int cublasDgemmStridedBatched(cublasHandle_t,cublasOperation_t,cublasOperation_t
                             const double*,double*,int,long long,int) {
   assert(false); return 0;
 }
+int cublasDsyrk(cublasHandle_t,cublasFillMode_t,cublasOperation_t,int,int,const double*,
+               const double*,int,const double*,double*,int) {
+  assert(false); return 0;
+}
 namespace generativeqc::scf::cuda_execution {
 int cuda_status(int s) {return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;}
 int blas_status(int s) {return s ? GENERATIVEQC_STATUS_CUDA_ERROR : 0;}
@@ -124,6 +128,28 @@ int main(int argc,char** argv) {
   const bool enabled=mode=="admit" || fail_destroy || binding_error;
   assert(owner.library_enabled()==enabled);
   assert((owner.view().binding_!=nullptr)==(status==GENERATIVEQC_STATUS_SUCCESS));
+  if (status==GENERATIVEQC_STATUS_SUCCESS) {
+    using generativeqc::tensor::StructuredOperation;
+    const auto* structured=owner.view().structured_binding_;
+    assert(structured && structured->dimension()==n && structured->direct_dimension()==n);
+    assert(structured->systems()==1 && structured->spins()==2);
+    assert(structured->compatible(stream,owner.view().blas_,n,1,1));
+    assert(!structured->compatible(stream,owner.view().blas_,n,2,1));
+    for (std::size_t slot=0; slot<7; ++slot) {
+      const auto operation=static_cast<StructuredOperation>(slot);
+      assert(!structured->library(operation));
+      const auto offers=structured->candidates(operation);
+      assert(offers[0].provider=="generated.cuda" && offers[0].rejection.empty());
+      assert(offers[1].provider_bytes==96ULL<<20);
+      assert(offers[1].host_bytes==structured->kPreparationHostBytes);
+      assert(offers[1].temporary_bytes==n*std::size_t(n)*2*sizeof(double)*(slot<3 ? slot==1 ? 3 : 2 : 1));
+      assert(offers[1].rejection==(enabled ? "structured scientific endpoint qualification remains open" :
+                                           "borrowed provider context unavailable"));
+      assert(!offers[1].cost.measured && !offers[1].cost.kernel_ns);
+      assert(!offers[3].rejection.empty());
+      if (slot) assert(offers[2].rejection=="SYRK requires an unsigned Gram domain");
+    }
+  }
   assert(live==(enabled?1:0));
   if (fail_destroy) assert(destroys==1 && owner.view().blas_!=nullptr);
   if (mode=="oversized") assert(destroys==1 && owner.retained_bytes()==0);
