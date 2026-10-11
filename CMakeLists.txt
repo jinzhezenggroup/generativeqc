@@ -461,7 +461,8 @@ if(GENERATIVEQC_BUILD_CLI)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
     COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
-  target_link_libraries(generativeqc_cli PRIVATE generativeqc nlohmann_json::nlohmann_json
+  generativeqc_link_cli_core(generativeqc_cli)
+  target_link_libraries(generativeqc_cli PRIVATE nlohmann_json::nlohmann_json
                         OpenSSL::Crypto LibArchive::LibArchive ${CMAKE_DL_LIBS})
   target_include_directories(generativeqc_cli PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
