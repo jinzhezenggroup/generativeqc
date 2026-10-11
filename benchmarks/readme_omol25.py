@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from generativeqc.elements import atomic_number
@@ -35,6 +35,9 @@ from benchmarks.compare_gpu4pyscf_batch import (
 )
 from benchmarks.readme_hf_scaling import scaling_cases
 from benchmarks.readme_wb97mv import reference_engine, reference_vv10_domain
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 SIZES = (3, 6, 12, 24, 48, 96)
 SCHEMA = "generativeqc.readme-omol25.v3"
@@ -257,6 +260,17 @@ def reference_xc_backend(engine: Any, *, spin: int = 0) -> dict[str, Any]:
     elif all(flag is True for flag in flags):
         record["backend"] = "cuda-libxc"
     return record
+
+
+def reference_endpoint_seconds(
+    *,
+    started: float,
+    synchronize: Callable[[], None],
+    clock: Callable[[], float] = perf_counter,
+) -> float:
+    """Stop the GPU endpoint clock only after outstanding device work completes."""
+    synchronize()
+    return clock() - started
 
 
 def force_execution_options(
@@ -488,8 +502,10 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         gradient = engine.nuc_grad_method()
                         gradient.grid_response = True
                         forces = cp.asnumpy(-gradient.kernel())
-                        cp.cuda.Stream.null.synchronize()
-                        seconds = perf_counter() - started
+                        seconds = reference_endpoint_seconds(
+                            started=started,
+                            synchronize=cp.cuda.Stream.null.synchronize,
+                        )
                         convergence = gpu_convergence_payload(
                             [engine], [work["tracker"]]
                         )[0]
