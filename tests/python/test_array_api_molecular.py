@@ -17,6 +17,15 @@ if TYPE_CHECKING:
 COORDINATES = np.asarray([[0.0, 0.0, -0.7], [0.0, 0.0, 0.7]])
 
 
+def test_molecular_public_api_has_one_entry_not_a_rhf_alias() -> None:
+    """Only the unified method-neutral source is public."""
+    assert xp.MolecularModel.__name__ == "MolecularModel"
+    assert not hasattr(xp, "RHF")
+    assert xp.capabilities()["compiled"]["molecular_operators"] == (
+        "MolecularModel",
+    )
+
+
 def _require_scheduled_cuda() -> None:
     """Remote Slurm names differ from SSH aliases; node3 stays excluded."""
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests must run through srun"
