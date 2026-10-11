@@ -210,19 +210,19 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
-    """Keep default selection separate from explicit experimental admission."""
+    """Audit algebraic full-range hybrid admission and strict opt-out."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = re.sub(r"\s+", " ", _read(root / relative))
     policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in policy
         for fragment in (
-            "fock_exchange_coefficient == -0.125",
-            "semilocal_exchange_scale == 0.75",
-            "semilocal_correlation_scale == 1.0",
+            "std::isfinite(coefficient)",
+            "coefficient < 0.0",
+            "coefficient >= -0.5",
             "if (!setting) return default_eligible;",
             'std::strcmp(setting, "0") == 0) return false;',
             'std::strcmp(setting, "1") == 0) return true;',
@@ -233,13 +233,17 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in source
         for fragment in (
-            "pbe0_rks_final_validation_composition(",
-            "is_semilocal_family(functional, SemilocalFamily::Pbe)",
-            "options.semilocal_exchange_scale, options.semilocal_correlation_scale",
-            "has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction",
-            "!nonlocal_correlation;",
-            "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
-            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
+            "restricted_global_hybrid_exchange_coefficient(exchange_coefficient)",
+            "!fitted_coulomb && !fitted_exchange && !has_range_correction",
+            "!nonlocal_correlation &&",
+            "!incremental_direct_jk && provider.system().ecp_terms.empty()",
+            "atom.ecp_core != 0",
+            "final_spec.coulomb.approximation == scf::FockApproximation::Exact",
+            "final_spec.coulomb.op == scf::FockOperator::FullRange",
+            "final_spec.exchange.approximation == scf::FockApproximation::Exact",
+            "final_spec.exchange.op == scf::FockOperator::FullRange",
+            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision()",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
             "final_validation_partial && matrix_products.library_enabled()",
             "!final_stationary_weights_ready;",
         )
@@ -271,14 +275,14 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
 
 
 def _discover_spatial_force_default(root: Path) -> dict[str, str]:
-    """Audit method-owned scope without conflating explicit cache requests with auto."""
+    """Audit exact Direct capabilities, not a functional-name whitelist."""
     relative = Path("src/dft/cuda_spd_force_policy.hpp")
     policy = _read(root / relative)
     schedule = re.sub(
         r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
     )
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in schedule
@@ -295,7 +299,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in owner
         for fragment in (
-            "dft::pbe0_rks_final_validation_composition(",
+            "dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient)",
             "spec.coulomb.approximation == scf::FockApproximation::Exact",
             "spec.exchange.approximation == scf::FockApproximation::Exact",
             "spec.coulomb.op == scf::FockOperator::FullRange",
@@ -304,7 +308,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
             "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
             "system_.ecp_terms.empty()",
-            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
         )
     ):
         raise ValueError("Spatial force default method authentication drifted")

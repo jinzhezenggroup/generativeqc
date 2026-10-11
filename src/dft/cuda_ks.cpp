@@ -2484,14 +2484,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
-    const bool direct_pbe0 =
-        pbe0_rks_final_validation_composition(
-            is_semilocal_family(functional, SemilocalFamily::Pbe), exchange_coefficient,
-            options.semilocal_exchange_scale, options.semilocal_correlation_scale) &&
-        has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction &&
-        !nonlocal_correlation;
+    // The final-state product proof is shared by every prepared full-range
+    // global hybrid; the semilocal XC family does not change its matrix algebra.
+    const auto& final_spec = provider.strategy().spec;
+    const bool direct_global_hybrid =
+        has_exchange && restricted_global_hybrid_exchange_coefficient(exchange_coefficient) &&
+        !fitted_coulomb && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
+        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        final_spec.derivative_order == 0 && final_spec.coulomb.present &&
+        final_spec.coulomb.coefficient == 1.0 &&
+        final_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        final_spec.coulomb.op == scf::FockOperator::FullRange && final_spec.exchange.present &&
+        final_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        final_spec.exchange.op == scf::FockOperator::FullRange;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_pbe0, !precision_schedule.any_lower_precision());
+        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision());
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&

@@ -1497,16 +1497,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
-  /** Only this method owner can authenticate the full PBE0 composition.
-   * Generic/HF/RSH derivative consumers do not infer it from a K coefficient. */
+  /** Authenticate the complete restricted Direct global-hybrid derivative
+   * capability, not a functional name or isolated K coefficient. */
   bool qualified_spatial_force_default() const {
     const auto& strategy = fock_.strategy();
     const auto& spec = strategy.spec;
-    const bool direct_pbe0 =
-        dft::pbe0_rks_final_validation_composition(
-            execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe,
-            spec.exchange.coefficient, options_.semilocal_exchange_scale,
-            options_.semilocal_correlation_scale) &&
+    const bool direct_global_hybrid =
+        dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient) &&
         strategy.backend == scf::FockBackend::Cuda && spec.derivative_order == 0 &&
         spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
         spec.coulomb.approximation == scf::FockApproximation::Exact &&
@@ -1520,7 +1517,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
         std::none_of(system_.atoms.begin(), system_.atoms.end(),
                      [](const auto& atom) { return atom.ecp_core != 0; });
     return dft::spatial_spd_force_default_eligible(
-        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0,
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid,
         options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
   }
 
