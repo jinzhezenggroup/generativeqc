@@ -1,0 +1,37 @@
+{
+  "baseline_commit": "637466c624c4c4c4dd4eb7c511a2c88675744325",
+  "exact_LF_baseline_archive_sha256": "af2baa707ed021c7287e6942173e25e3141b5c7154e0fdcfdd115001ed7d6afd",
+  "qualified_files": {
+    "src/posthf/mp2_derivative_common.cpp": "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657",
+    "src/posthf/mp2_derivative_common.hpp": "877332e87e8889570b2056be8bb23de18a8f47a9d611e843d0d92191a15b50a9",
+    "tests/native/mp2_derivative_pullback_probe.cpp": "a66370233c5c437d6bf84fd62e69293659489722f5d28fdb48c91b04efbf612a",
+    "tests/python/test_mp2_derivative_pullback_probe.py": "ee63166c4450f7aded511f01993ee059b80c384fe7da0f9f7d54befa90f8d1af"
+  },
+  "published_files": {
+    "src/posthf/mp2_derivative_common.cpp": "7cf56330b2c57adc4b4ab93ec992207da42c2befd119a19765333d11eeae1657",
+    "src/posthf/mp2_derivative_common.hpp": "877332e87e8889570b2056be8bb23de18a8f47a9d611e843d0d92191a15b50a9",
+    "tests/native/mp2_derivative_pullback_probe.cpp": "a66370233c5c437d6bf84fd62e69293659489722f5d28fdb48c91b04efbf612a",
+    "tests/python/test_mp2_derivative_pullback_probe.py": "ecc301e7f5d62a3cd355f3819ac880c9340f069ed3c1132f649c1d1d4d44bb0b"
+  },
+  "post_qualification_delta": "Only Python test type annotations changed among the four qualified files; common C++/header/native probe are byte-identical. Disposition metadata was restored to canonical LF source bindings, without modifying production or scientific inputs. Broader endpoints remain in progress.",
+  "source_inventory": "cmake/GenerativeQCSourceIdentity.json",
+  "measurement_scope": "CPU host common transform and H2 public E+F; no CUDA device execution. Raw original public qualification status/resource gate remain FAIL.",
+  "checks": {
+    "native_probe": "32 baseline / 48 candidate PASS",
+    "build": "both verified-sccache CPU CMake builds exit0",
+    "static": "63 PASS",
+    "canonical_materialization": "PASS; six retained sites",
+    "lint": "PASS"
+  },
+  "artifacts": {
+    "common-receipts.json": "3f257b09bf8adea9aa864f2e18f681b9ba194c31ef0a86748e34dea858e743d3",
+    "endpoint.py": "e3c632692d3ad43a11c4723b0f7ed9b3d0d2973cdc13a13f478ca4608ccfb109",
+    "h2-records.json.gz": "33293a9c9cf781e885dc5dbd0294d19cc8d614fbf58438bc3bb9fa52ddfa58f4",
+    "payload.cpp": "f38cb4761a689c8452cd86ad9fd988efb97528c9f121f4cada454928da01cb14"
+  },
+  "tracker": {
+    "source_sha256": "f38cb4761a689c8452cd86ad9fd988efb97528c9f121f4cada454928da01cb14",
+    "loaded_shared_library_sha256": "454d1a127aa7283309b3a3ce34c4380d9b188e81bd442f8208c836ec7f38a0e4",
+    "scope": "ordinary global C++ new/new[] only; untracked timing is separate"
+  }
+}

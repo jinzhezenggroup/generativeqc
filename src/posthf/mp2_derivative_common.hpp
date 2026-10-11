@@ -17,6 +17,8 @@ struct PhysicalReference;
 
 namespace generativeqc::mp2::detail {
 
+enum class FactorizedFirstLayout { automatic, staged };
+
 using OneElectronDerivativeContract =
     std::function<std::vector<double>(std::span<const double>, std::span<const double>)>;
 using EriShellDerivativeContract = std::function<std::array<double, 12>(
@@ -33,12 +35,13 @@ std::vector<double> conventional_derivative_accumulate(
     const core::System& system, const hf::PhysicalReference& reference,
     const LagrangianWeights& weights, const OneElectronDerivativeContract& one_electron,
     const EriShellDerivativeAccumulate& eri_shell,
-    const std::function<void(std::span<double>)>& finalize = {});
+    const std::function<void(std::span<double>)>& finalize = {},
+    FactorizedFirstLayout first_layout = FactorizedFirstLayout::automatic);
 
-std::vector<double> conventional_derivative(const core::System& system,
-                                            const hf::PhysicalReference& reference,
-                                            const LagrangianWeights& weights,
-                                            const OneElectronDerivativeContract& one_electron,
-                                            const EriShellDerivativeContract& eri_shell);
+std::vector<double> conventional_derivative(
+    const core::System& system, const hf::PhysicalReference& reference,
+    const LagrangianWeights& weights, const OneElectronDerivativeContract& one_electron,
+    const EriShellDerivativeContract& eri_shell,
+    FactorizedFirstLayout first_layout = FactorizedFirstLayout::automatic);
 
 }  // namespace generativeqc::mp2::detail

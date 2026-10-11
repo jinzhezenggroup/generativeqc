@@ -117,6 +117,32 @@ zero without introducing a zero denominator. The correlation consumer never
 allocates complete molecular T2 or AO ERIs. CPU RHF preparation uses dense AO
 ERIs with a checked capacity; CUDA RHF uses the bounded matrix-direct route.
 
+## Conventional factorized derivative staging
+
+The common host pullback stores the first factorized shell stage as separate
+Coulomb, exchange and correlation regions. With shell width `di`, `N` orbitals,
+`O` occupied orbitals and `V=N-O`, it uses `di*O*(2*N+V^2)` doubles when this is
+smaller than the admitted legacy `di*N^3` buffer. Its internal explicit staged
+layout remains available for bounded comparison. The second transform omits
+structurally zero slots and preserves the original occupied exchange / virtual
+correlation reduction order, including the overlapping Coulomb diagonal.
+
+Dense weights retain the original eightfold projection and staged layout.
+Second, third and shell-local buffers, ordered factorized callbacks and atom
+scatter remain unchanged. The production resource plan conservatively admits
+the legacy first buffer; this representation change supplies no measured
+endpoint telemetry and does not retire the remaining materializations in
+[#1626](https://github.com/jinzhezenggroup/generativeqc/issues/1626).
+
+`tests/python/test_mp2_derivative_pullback_probe.py` compares the actual common
+translation unit with an independent direct tensor oracle, the explicit staged
+layout and expanded dense weights. Synthetic and independent PySCF molecular
+ERI center derivatives cover all four slots, repeated atoms, Cartesian d and
+spherical d/f shells. Source-bound accumulation counters and allocation
+lifetimes qualify this host transform; complete endpoint and device evidence
+must be assessed separately. See the
+[decision note](../../.agents/notes/implemented/performance/2026-10-11-compact-factorized-mp2-first-stage.md).
+
 ## Native path and placement
 
 ### Dense Native Orbital Oracle Admission

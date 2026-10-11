@@ -1,7 +1,7 @@
 {
   "candidates": [
     {
-      "candidate_id": "fde808f21a8b686a71b405301dede47b522a021590a854295f9ca1741fc2e5ca",
+      "candidate_id": "d0159759b0cf418d07aa0bc75dd0f9cb60cbcb33dbb5d0c1e91b2439676334d9",
       "consumers": [
         {
           "path": "src/posthf/mp2_derivative_common.cpp",
@@ -24,13 +24,13 @@
       "residency": "Host std::vector<double>, di*dj*N^2 elements",
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
-        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
-        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
+        "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
-      "candidate_id": "0e33bd360ae328981e5467913ff41d4b0e30d719ff210c8b793ce4b264628442",
+      "candidate_id": "b16f75ec5d9b03c21c9ecf85e38494cb0e021eb520baf05492de4e861f28aba4",
       "consumers": [
         {
           "path": "src/posthf/mp2_derivative_common.cpp",
@@ -53,13 +53,13 @@
       "residency": "Host std::vector<double>, di*dj*dk*N elements",
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
-        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
-        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
+        "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
-      "candidate_id": "b7e67d34cd7ff0b42cd9520d21026a7b7be99520031b79849bdd9df2030a9ac5",
+      "candidate_id": "60ff8ee6119f67bdde0d313fd30f4602da3913e2a53b8b9aa9ccd1601d44d075",
       "consumers": [
         {
           "path": "src/posthf/mp2_derivative_common.cpp",
@@ -101,15 +101,15 @@
       "source_bindings": {
         "src/integrals/s_integrals.cpp": "7b95b42e7d8aa94d916ff7b53e4b9ba66bbb017c9200ea417205591acf77ad91",
         "src/posthf/cuda_derivative.cpp": "3b7eda15d228119b5da075f628f0c88134547404cf56c0a5e23750098f9a1275",
-        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
-        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
+        "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
         "src/posthf/mp2_derivative_cuda.cpp": "3e70a1765a10b77b3e563f4d118c9c94f183212560e45044b55b380baba53aae",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
-      "candidate_id": "36f71f24929ac7f849287cf0a3ee45deb0c7149e756e4b9565dc36b20c951c18",
+      "candidate_id": "1c58014c042de80de0218e5c36fc91fecc38afd7e3aeaf4e1793e580d8d28da1",
       "consumers": [
         {
           "path": "src/posthf/mp2_derivative_common.cpp",
@@ -134,15 +134,15 @@
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
         "src/cc/rccsdt_force.cpp": "b76df21995b58c617ae25e85cabdc18c2ade75733e996612e8a6221fbbc3de63",
-        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
-        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
+        "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_derivative_cpu.cpp": "284b97b0f4f557a63c95f005166f1c4850c419b32873b0b0612f51b84c565554",
         "src/posthf/mp2_derivative_cuda.cpp": "3e70a1765a10b77b3e563f4d118c9c94f183212560e45044b55b380baba53aae",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
     {
-      "candidate_id": "d4c967d06f59f19958c9bbec51f2f088c00d5db9a22099f64c6b68fa67301a5e",
+      "candidate_id": "689d5ea48509491dd0ab0de1981e0b1d113a4e84fe07c1c81980f23dc6c70cd8",
       "consumers": [
         {
           "path": "src/posthf/mp2_derivative_common.cpp",
@@ -151,9 +151,9 @@
       ],
       "disposition": "retained-pending-evidence",
       "evidence_gaps": [
-        "Design and measure structured Fock/ijab producer fusion into the next transform.",
-        "Retain an explicit bounded fallback and verify independent derivative parity.",
-        "Compare complete endpoint timing, executed work, and peak live storage."
+        "Measure complete-endpoint profitability beyond the qualified bounded CPU cases, including selected CUDA consumers.",
+        "Compare compact correlation reuse versus producer-consumer fusion across sj.",
+        "Remaining second/third/local staging, dense pullback and dense orbital RHS are separate #1626 work."
       ],
       "label": "MP2 factorized correlation first stage",
       "lifetime": "One si shell iteration; reused across remaining shell transforms",
@@ -162,12 +162,12 @@
         "path": "src/posthf/mp2_derivative_common.cpp",
         "symbol": "conventional_derivative_accumulate: factors.fock / correlation_iajb -> first"
       },
-      "reason": "Actionable producer-fusion candidate: the factorized producer still fills first before the next shell transform. Production global N^4 removal did not remove this staging.",
-      "residency": "Host std::vector<double>, di*N^3 elements populated by factorized weights",
+      "reason": "The automatic factorized route compacts exact Coulomb/exchange/correlation regions and omits known-zero second-transform terms while preserving original reduction order. The correlation producer still materializes a compact first region reused across sj; full producer-consumer fusion and remaining staging retirement remain open.",
+      "residency": "Host std::vector<double>, di*O*(2*N+V^2) elements when smaller than di*N^3; explicit staged fallback remains",
       "resource_owner": "MP2 conventional derivative host staging and the selected derivative consumer; checked sizes bound allocations but do not establish profitability or a common host/device admission plan.",
       "source_bindings": {
-        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
-        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
+        "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
     },
@@ -196,8 +196,8 @@
       "residency": "Host OrbitalRhs::two_electron vector, N^4 elements",
       "resource_owner": "OrbitalRhs::two_electron is allocated by initial_orbital_weights after dense_orbital_rhs_plan admission, owned by canonical_orbital_rhs and retained for dense rotation-gradient, multiplier and subsequent Lagrangian consumption. dense_lagrangian_weights_plan separately admits the relaxed caller's complete owned numeric peak. Both plans exclude borrowed inputs, allocator rounding and exception storage; they do not establish complete endpoint/RSS admission or a retention profitability decision.",
       "source_bindings": {
-        "src/posthf/mp2_derivative_common.cpp": "c0ea074bcf7ce8615b43b93e0c5531b82c42b40bfe7c320a2a695a8f38492749",
-        "src/posthf/mp2_derivative_common.hpp": "3c57a894ead1e2f780c73ea6fb5bc86984ef86d919340c2b54ff4d348ec1fec9",
+        "src/posthf/mp2_derivative_common.cpp": "22fe5561514ef25c95bf33583b435d181422e1ea519f26ea7744b1f2eb4e6009",
+        "src/posthf/mp2_derivative_common.hpp": "0a269d634d30c25bb1bd0682f17edf17246b8dd28296b876c4ca9f86442f7721",
         "src/posthf/mp2_gradient.cpp": "1a775cc0eb06a4c6c6a13b6150a33c82d9fed952016e9f8a299d1610189bb92a",
         "src/posthf/mp2_gradient.hpp": "1a6bc8175e052c74d155ce9ba7d2f6fd81195113987fb619635577435a4918cb"
       }
