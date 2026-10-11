@@ -317,6 +317,144 @@ def test_molecular_publication_checks_apply_to_eager_and_compiled_calls(
     compiled.close()
 
 
+@pytest.mark.parametrize(
+    "elements, method, multiplicity",
+    [
+        (("H",), "uhf", 2),
+        (("H", "H"), "pbe-rks", 1),
+        (("H", "H"), "pbe0-rks", 1),
+    ],
+)
+def test_method_neutral_source_dispatch_and_analytic_chain_rule(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    elements: tuple[str, ...],
+    method: str,
+    multiplicity: int,
+) -> None:
+    """A method's native gradient composes without a per-functional AD rule."""
+    calls: list[dict[str, Any]] = []
+    owners: list[Any] = []
+
+    class NativeEndpoint:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def singlepoint(self, atoms: Any, **kwargs: Any) -> Any:
+            coordinates = np.asarray([position for _, position in atoms])
+            calls.append(dict(kwargs))
+            return SimpleNamespace(
+                energy=float(np.sum(coordinates**2)),
+                forces=-2 * coordinates,
+                converged=True,
+                executed_backend="cpu_reference",
+                iterations=2,
+                energy_change=0.0,
+                density_rms=0.0,
+                basis_metadata={"model_identity": "fake-method-owner"},
+            )
+
+        def clear_cache(self) -> None:
+            self.closed = True
+
+    def fake_calculator(**kwargs: Any) -> Any:
+        assert kwargs["method"] == method
+        assert kwargs["precision"] == "fp64"
+        owner = NativeEndpoint()
+        owners.append(owner)
+        return owner
+
+    monkeypatch.setattr("generativeqc.Calculator", fake_calculator)
+    model = xp.MolecularModel(elements, method=method, multiplicity=multiplicity)
+    coordinates = np.asarray(COORDINATES[: len(elements)])
+    compiled = xp.value_and_grad(
+        lambda geometry: model(geometry) * 2, cache=tmp_path
+    )
+    try:
+        source = compiled.lower(coordinates).provenance["molecular_sources"][0]
+        assert source["native_method"] == method
+        assert source["multiplicity"] == multiplicity
+        value, gradient = compiled(coordinates)
+        np.testing.assert_allclose(value, 2 * np.sum(coordinates**2))
+        np.testing.assert_allclose(gradient, 4 * coordinates)
+        assert calls == [
+            {"charge": 0, "multiplicity": multiplicity, "properties": ("energy", "forces")}
+        ]
+        assert compiled.compilation_info()["molecular_calls"][0]["method"] == method
+    finally:
+        compiled.close()
+    assert owners[0].closed
+
+
+def test_method_neutral_source_fails_closed_on_missing_analytic_force(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No finite differences or frozen gradient substitution are allowed."""
+    class MissingForce:
+        def singlepoint(self, *args: Any, **kwargs: Any) -> Any:
+            return SimpleNamespace(
+                energy=1.0, forces=None, converged=True, executed_backend="cpu_reference"
+            )
+
+        def clear_cache(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        xp.MolecularModel, "_calculator", lambda self: MissingForce()
+    )
+    model = xp.MolecularModel(("H", "H"), method="pbe-rks")
+    compiled = xp.value_and_grad(lambda geometry: model(geometry), cache=tmp_path)
+    try:
+        with pytest.raises(ArithmeticError, match="analytic nuclear gradient"):
+            compiled(COORDINATES)
+        assert not compiled.compilation_info()["molecular_calls"]
+    finally:
+        compiled.close()
+
+
+def test_molecular_source_phase_profiling_is_opt_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    polynomial_source: list[Any],
+) -> None:
+    monkeypatch.setenv("GENERATIVEQC_ARRAY_API_PROFILE", "1")
+    model = xp.RHF(("H", "H"))
+    compiled = xp.value_and_grad(lambda geometry: model(geometry), cache=tmp_path)
+    try:
+        compiled(COORDINATES)
+        info = compiled.compilation_info()
+        assert info["molecular_profile_enabled"] is True
+        for stage in (
+            "tensor_snapshot_binding",
+            "molecular_dispatch",
+            "tensor_execute",
+            "source_geometry",
+            "source_native_singlepoint",
+            "source_result_publication",
+            "source_diagnostics",
+        ):
+            assert info["molecular_profile_ns"][stage] >= 0
+            assert info["molecular_profile_counts"][stage] >= 1
+        assert polynomial_source[0].calls == 1
+    finally:
+        compiled.close()
+
+
+@pytest.mark.parametrize(
+    "options, message",
+    [
+        ({"method": ""}, "nonempty"),
+        ({"method": "uhf", "multiplicity": 2}, "multiplicity"),
+        ({"method": "pbe-rks", "density_fitting": "invented"}, "density_fitting"),
+        ({"method": "pbe-rks", "auxiliary_basis": "def2-svp"}, "auxiliary_basis"),
+    ],
+)
+def test_method_neutral_static_admission_rejects_invalid_configuration(
+    options: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        xp.MolecularModel(("H", "H"), **options)
+
+
 @pytest.fixture
 def native_library() -> None:
     """Require an actual CPU library; never replace absent science with a mock."""
