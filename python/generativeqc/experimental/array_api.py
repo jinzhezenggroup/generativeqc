@@ -44,7 +44,7 @@ from generativeqc_compiler.tensor import (
 from . import _array_api_eager as _eager
 from . import _array_api_symbolic as _symbolic_backend
 from ._array_api_eager import Array
-from ._array_api_molecular import MolecularModel, RHF
+from ._array_api_molecular import RHF, MolecularModel
 
 API_VERSION = 1
 __array_api_version__ = "2025.12"
@@ -1181,12 +1181,8 @@ class CompiledFunction:
                 for record in self._execution.molecular.diagnostics.values()
             ),
             "molecular_profile_enabled": self._execution.molecular.profile_enabled,
-            "molecular_profile_ns": dict(
-                self._execution.molecular.profile_totals_ns
-            ),
-            "molecular_profile_counts": dict(
-                self._execution.molecular.profile_counts
-            ),
+            "molecular_profile_ns": dict(self._execution.molecular.profile_totals_ns),
+            "molecular_profile_counts": dict(self._execution.molecular.profile_counts),
         }
 
     def close(self) -> None:
@@ -1396,7 +1392,6 @@ __all__ = [
     "DLPACK_INTEROP_VERSION",
     "FRONTEND_VERSION",
     "RHF",
-    "MolecularModel",
     "SUPPORTED_FUNCTIONS",
     "Array",
     "CompiledFunction",
@@ -1406,6 +1401,7 @@ __all__ = [
     "ExactScalar",
     "Index",
     "IndexSpace",
+    "MolecularModel",
     "Program",
     "TensorSpec",
     "VibeArray",

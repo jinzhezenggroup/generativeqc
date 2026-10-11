@@ -367,9 +367,7 @@ def test_method_neutral_source_dispatch_and_analytic_chain_rule(
     monkeypatch.setattr("generativeqc.Calculator", fake_calculator)
     model = xp.MolecularModel(elements, method=method, multiplicity=multiplicity)
     coordinates = np.asarray(COORDINATES[: len(elements)])
-    compiled = xp.value_and_grad(
-        lambda geometry: model(geometry) * 2, cache=tmp_path
-    )
+    compiled = xp.value_and_grad(lambda geometry: model(geometry) * 2, cache=tmp_path)
     try:
         source = compiled.lower(coordinates).provenance["molecular_sources"][0]
         assert source["native_method"] == method
@@ -378,7 +376,11 @@ def test_method_neutral_source_dispatch_and_analytic_chain_rule(
         np.testing.assert_allclose(value, 2 * np.sum(coordinates**2))
         np.testing.assert_allclose(gradient, 4 * coordinates)
         assert calls == [
-            {"charge": 0, "multiplicity": multiplicity, "properties": ("energy", "forces")}
+            {
+                "charge": 0,
+                "multiplicity": multiplicity,
+                "properties": ("energy", "forces"),
+            }
         ]
         assert compiled.compilation_info()["molecular_calls"][0]["method"] == method
     finally:
@@ -390,18 +392,20 @@ def test_method_neutral_source_fails_closed_on_missing_analytic_force(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No finite differences or frozen gradient substitution are allowed."""
+
     class MissingForce:
         def singlepoint(self, *args: Any, **kwargs: Any) -> Any:
             return SimpleNamespace(
-                energy=1.0, forces=None, converged=True, executed_backend="cpu_reference"
+                energy=1.0,
+                forces=None,
+                converged=True,
+                executed_backend="cpu_reference",
             )
 
         def clear_cache(self) -> None:
             pass
 
-    monkeypatch.setattr(
-        xp.MolecularModel, "_calculator", lambda self: MissingForce()
-    )
+    monkeypatch.setattr(xp.MolecularModel, "_calculator", lambda self: MissingForce())
     model = xp.MolecularModel(("H", "H"), method="pbe-rks")
     compiled = xp.value_and_grad(lambda geometry: model(geometry), cache=tmp_path)
     try:
@@ -413,7 +417,8 @@ def test_method_neutral_source_fails_closed_on_missing_analytic_force(
 
 
 def test_molecular_source_phase_profiling_is_opt_in(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     polynomial_source: list[Any],
 ) -> None:
     monkeypatch.setenv("GENERATIVEQC_ARRAY_API_PROFILE", "1")

@@ -185,7 +185,9 @@ class RHF:
         # Compiled TensorIR already returns NumPy arrays on this host-staged
         # boundary. Avoid a redundant eager Array API conversion on that path.
         coordinates = (
-            value if isinstance(value, np.ndarray) else np.asarray(eager.call("asarray", value))
+            value
+            if isinstance(value, np.ndarray)
+            else np.asarray(eager.call("asarray", value))
         )
         if coordinates.dtype != np.float64:
             raise TypeError("RHF coordinates must be float64")
@@ -247,12 +249,11 @@ class RHF:
                 self._atoms(coordinates),
                 charge=self._charge,
                 multiplicity=self._multiplicity,
-                properties=("energy",)
+                properties=("energy",),
             )
             return eager.wrap(self._result_values(result, coordinates, False)[0])
         finally:
             calculator.clear_cache()
-
 
 
 @dataclass(frozen=True, init=False)
@@ -293,7 +294,11 @@ class MolecularModel(RHF):
         if not isinstance(method, str) or not method.strip():
             raise ValueError("molecular method must be a nonempty native selector")
         if not isinstance(density_fitting, str) or density_fitting.lower() not in (
-            "none", "auto", "cpu", "cpu_reference", "cuda"
+            "none",
+            "auto",
+            "cpu",
+            "cpu_reference",
+            "cuda",
         ):
             raise ValueError("unsupported molecular density_fitting mode")
         density_fitting = density_fitting.lower()
@@ -324,7 +329,9 @@ class MolecularModel(RHF):
             or multiplicity > electrons + 1
             or (electrons - multiplicity + 1) % 2
         ):
-            raise ValueError("molecular spin multiplicity is incompatible with electrons")
+            raise ValueError(
+                "molecular spin multiplicity is incompatible with electrons"
+            )
         if method == "rhf" and multiplicity != 1:
             raise ValueError("RHF requires singlet multiplicity")
         object.__setattr__(self, "_method", method)
@@ -477,7 +484,9 @@ class _MolecularRuntime:
         """Collect opt-in inclusive CPU wall times; never claim GPU kernel timing."""
         if not self.profile_enabled:
             return
-        self.profile_totals_ns[stage] = self.profile_totals_ns.get(stage, 0) + elapsed_ns
+        self.profile_totals_ns[stage] = (
+            self.profile_totals_ns.get(stage, 0) + elapsed_ns
+        )
         self.profile_counts[stage] = self.profile_counts.get(stage, 0) + 1
 
     def register(self, sources: list[_MolecularSource]) -> None:
@@ -552,7 +561,9 @@ class _MolecularRuntime:
                 calculator = source.operator._calculator()
                 self.calculators[source.energy] = calculator
             if profiling:
-                self.record_profile("source_calculator_lookup", time.perf_counter_ns() - mark)
+                self.record_profile(
+                    "source_calculator_lookup", time.perf_counter_ns() - mark
+                )
             derivative = bool({source.gradient, source.snapshot} & needed)
             mark = time.perf_counter_ns() if profiling else 0
             result = calculator.singlepoint(
@@ -562,7 +573,9 @@ class _MolecularRuntime:
                 properties=("energy", "forces") if derivative else ("energy",),
             )
             if profiling:
-                self.record_profile("source_native_singlepoint", time.perf_counter_ns() - mark)
+                self.record_profile(
+                    "source_native_singlepoint", time.perf_counter_ns() - mark
+                )
             mark = time.perf_counter_ns() if profiling else 0
             energy, gradient = source.operator._result_values(
                 result, geometry, derivative
@@ -573,7 +586,9 @@ class _MolecularRuntime:
             if gradient is not None:
                 feeds[source.gradient] = np.array(gradient, copy=True)
             if profiling:
-                self.record_profile("source_result_publication", time.perf_counter_ns() - mark)
+                self.record_profile(
+                    "source_result_publication", time.perf_counter_ns() - mark
+                )
             mark = time.perf_counter_ns() if profiling else 0
             previous = self.diagnostics.get(source.energy, {})
             self.diagnostics[source.energy] = {

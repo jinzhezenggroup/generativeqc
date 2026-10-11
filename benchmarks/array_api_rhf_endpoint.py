@@ -58,7 +58,8 @@ def main() -> None:
     parser.add_argument("--backend", choices=("cpu", "cuda"), default="cpu")
     parser.add_argument("--method", default="rhf", help="native Calculator selector")
     parser.add_argument(
-        "--profile-molecular", action="store_true",
+        "--profile-molecular",
+        action="store_true",
         help="measure opt-in source/tensor phases; timing is instrumented",
     )
     parser.add_argument("--molecule", choices=("h2", "water"), default="water")
@@ -123,7 +124,9 @@ def main() -> None:
             np.max(np.abs(np.asarray(transformed[1]) + reference.forces))
         )
         if energy_error > 1e-10 or gradient_error > 1e-8:
-            raise RuntimeError("complete molecular endpoint failed numerical acceptance")
+            raise RuntimeError(
+                "complete molecular endpoint failed numerical acceptance"
+            )
         cold_profile = dict(compiled.compilation_info()["molecular_profile_ns"])
         cold_counts = dict(compiled.compilation_info()["molecular_profile_counts"])
         samples: dict[str, list[float]] = {"native": [], "array_api": []}
@@ -191,14 +194,16 @@ def main() -> None:
             "array_api_over_native": ratio,
             "observed_5pct_timing_target_met": (
                 matching_work and ratio <= 1.05
-                if not arguments.profile_molecular else None
+                if not arguments.profile_molecular
+                else None
             ),
             "profile_instrumented": arguments.profile_molecular,
             "warm_phase_profile": warm_profile,
             "profile_note": (
                 "CPU wall-clock phase timers include Python/native dispatch and "
                 "are not CUDA kernel timings; instrumented runs are not parity gates."
-                if arguments.profile_molecular else None
+                if arguments.profile_molecular
+                else None
             ),
             "energy_error_hartree": energy_error,
             "gradient_error_hartree_per_bohr": gradient_error,
