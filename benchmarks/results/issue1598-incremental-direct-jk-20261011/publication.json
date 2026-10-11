@@ -18,6 +18,12 @@
  },
  "files": [
   {
+   "path": "README.md",
+   "bytes": 3345,
+   "sha256": "134d17956f9e1155414f75c30d23cb55d4a68bdee7287ebe8d2f0cdbce65d03c",
+   "role": "reproduction"
+  },
+  {
    "path": "new/rhf/direct-24-incremental-1.outcome.gz",
    "bytes": 95,
    "sha256": "2f47164641068e3d3965a8ae9b16cac92771d0be2a279f7f30114e90ae6c0e8f",
@@ -172,12 +178,6 @@
    "bytes": 74,
    "sha256": "053a61df0a6ca27314a4af5c5e580d0e9233de0a9bd906ba1e29529cd5dfae8d",
    "role": "samples"
-  },
-  {
-   "path": "README.md",
-   "bytes": 11520,
-   "sha256": "f61fff9ee4e09a304b8aeb17dfe5bdfecd9e8bc8d9859395cac304e09cb28d79",
-   "role": "reproduction"
   },
   {
    "path": "verify.py",
