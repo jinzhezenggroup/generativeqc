@@ -84,7 +84,9 @@ void launch_assemble_rhf_fock_kernel(unsigned, unsigned, std::size_t, cudaStream
 #include "scf/cuda/rhf_resident_values.hpp"
 #include "molecule/basis.hpp"
 using namespace generativeqc;
-static int allocations=0, plans=0, fences=0, creates=0, mode=0, mallocs=0, pending=0;
+static int allocations=0, plans=0, fences=0, creates=0, mode=0, mallocs=0, pending=0, assemblies=0;
+static int layout_queries=0;
+static int memory_queries=0;
 static std::size_t direct_dimension=64;
 static bool graph_live=false;
 static std::vector<int> teardown;
@@ -94,6 +96,13 @@ int cudaStreamSynchronize(cudaStream_t value) {
   require(value==stream); ++fences; return mode==15 || mode==19 ? 999 : 0;
 }
 int cudaMemGetInfo(std::size_t* available, std::size_t* total) {
+  ++memory_queries;
+  if(mode==26 || mode==27 || mode==28) {
+    const auto initial=(256ULL<<20)+5120+4*64*64*sizeof(double)+20+400;
+    *available=*total=initial-(memory_queries==2 ? 4096 : 0);
+    if(mode==28 && memory_queries==2) *available-=625;
+    return mode==27 && memory_queries==2 ? 999 : 0;
+  }
   *available=*total=mode==1 ? 0 : 16ULL<<30; return mode==2 ? 999 : 0;
 }
 int cudaGetLastError() { const auto value=pending; pending=0; return value; }
@@ -123,11 +132,13 @@ FockBuildSpec make_hf_fock_spec(FockSpin spin, FockApproximation approximation) 
 }
 std::size_t cuda_direct_coulomb_device_bytes(std::size_t,std::size_t,std::size_t,
                                             std::size_t,std::size_t,unsigned,bool) { return 4096; }
-generativeqc_status create_cuda_direct_jk_plan_on_stream(
-    int, const std::vector<core::System>& systems, unsigned order, double screening,
-    std::size_t, cudaStream_t value, CudaDirectJkPlan** output,
+generativeqc_status create_cuda_direct_jk_resident_plan_on_stream(
+    int, const std::vector<core::System>& systems, double screening,
+    std::size_t budget, cudaStream_t value, CudaDirectJkPlan** output,
     CudaDirectJkDiagnostic& diagnostic, std::string&) {
-  require(value==stream && order==0 && screening==0 && systems.size()==1);
+  const bool screened=mode==21 || mode>=26;
+  require(value==stream && screening==(screened ? 1e-12 : 0.0) && systems.size()==1);
+  require(budget==(screened ? 5120 : 4096));
   ++creates;
   if(mode==5) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   // Real provider metadata/scratch cudaMalloc failures leave last-error pending.
@@ -151,6 +162,21 @@ void destroy_cuda_direct_jk_plan(CudaDirectJkPlan* plan) noexcept {
 std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan*) { return 800; }
 std::size_t cuda_direct_jk_selected_resident_value_bytes(const CudaDirectJkPlan*, std::uint32_t mask) {
   return !mask ? 0 : mask==(1U<<28)-1 ? 800 : 400;
+}
+generativeqc_status cuda_direct_jk_resident_layout_device_bytes(
+    std::size_t, std::size_t, std::size_t& bytes, std::string&) {
+  ++layout_queries;
+  bytes=1024;
+  if(mode==22) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  if(mode==23) return GENERATIVEQC_STATUS_CUDA_ERROR;
+  if(mode==24 || mode==25) {
+    pending=mode==24 ? 2 : 999;
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  }
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+generativeqc_status prepare_cuda_direct_jk_resident_layout(CudaDirectJkPlan*, std::string&) {
+  return GENERATIVEQC_STATUS_SUCCESS;
 }
 std::size_t cuda_direct_jk_compensation_elements(const CudaDirectJkPlan*) {
   return 2*direct_dimension*direct_dimension;
@@ -185,7 +211,8 @@ generativeqc_status enqueue_cuda_direct_jk_compensated_device(
     double*, double*, double*, std::size_t correction, int* error, double threshold,
     std::uint64_t* census, std::string&, bool resident) {
   require(plan->resident && resident && spec.derivative_order==0 && elements==64*64 &&
-          correction==2*64*64 && threshold==0);
+          correction==2*64*64 && threshold==((mode==20 || mode==21) ? 1e-12 : 0.0));
+  if(mode==20) require(spec.exchange.coefficient==-0.125);
   *error=mode==9; census[0]=mode==10 ? 99 : 100;
   census[1]=plan->mask==(1U<<28)-1 ? mode==11 : mode==11 ? 49 : 50;
   return GENERATIVEQC_STATUS_SUCCESS;
@@ -198,7 +225,7 @@ void RhfIterationGraphs::reset() noexcept { graph_live=false; teardown.push_back
 namespace generativeqc::scf::cuda_df {
 void launch_assemble_rhf_fock_kernel(unsigned,unsigned,std::size_t,cudaStream_t value,
                                     std::size_t,const double*,const double*,const double*,double*) {
-  require(value==stream);
+  require(value==stream); ++assemblies;
 }
 }
 int main(int argc, char** argv) {
@@ -301,15 +328,106 @@ int main(int argc, char** argv) {
     }
   }
   setenv("GENERATIVEQC_RHF_RESIDENT_VALUES","1",1);
+  setenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK","1",1);
+  mode=0;
+  direct_dimension=64;
+  {
+    const auto before=creates;
+    scf::cuda_execution::DirectJkSourceLease screened_partial(stream);
+    require(screened_partial.prepare(0,systems,100,64,1000,16ULL<<30,"1","partial-refusal",
+                                     false,false,1e-12,16ULL<<30,true,
+                                     scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,1)
+            ==GENERATIVEQC_STATUS_SUCCESS);
+    require(!screened_partial.active() && creates==before);
+  }
+  mode=20;
+  direct_dimension=64;
+  {
+    scf::cuda_execution::DirectJkSourceLease source(stream);
+    require(source.prepare(0,systems,100,64,1000,16ULL<<30,"1","generic-test")
+            ==GENERATIVEQC_STATUS_SUCCESS && source.active());
+    const auto before_assembly=assemblies;
+    auto spec=scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+    spec.derivative_order=0; spec.exchange.coefficient=-0.125;
+    double matrix[64*64]{}; int error=0; std::string detail;
+    require(source.enqueue(spec,matrix,source.coulomb(),source.exchange(),&error,1e-12,detail)
+            ==GENERATIVEQC_STATUS_SUCCESS);
+    require(source.audit()==GENERATIVEQC_STATUS_SUCCESS && assemblies==before_assembly);
+  }
+  unsetenv("GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK");
+  for(mode=21;mode<=25;++mode) {
+    scf::cuda_execution::DirectJkSourceLease screened(stream);
+    const auto before_queries=layout_queries;
+    const auto before_creates=creates;
+    const auto status=screened.prepare(0,systems,100,64,1000,16ULL<<30,"1","screened-test",
+                                       false,false,1e-12,16ULL<<30);
+    require(layout_queries==before_queries+1);
+    require((status==GENERATIVEQC_STATUS_SUCCESS)==(mode!=23 && mode!=25));
+    require(screened.active()==(mode==21) && creates==before_creates+(mode==21));
+    require(pending==0);
+  }
+  require(allocations==0 && plans==0);
+  for(mode=26;mode<=28;++mode) {
+    memory_queries=0;
+    scf::cuda_execution::DirectJkSourceLease bounded_live(stream);
+    const auto status=bounded_live.prepare(0,systems,100,64,1000,16ULL<<30,"1","live-memory-test",
+                                          false,false,1e-12,16ULL<<30);
+    require(memory_queries==2 && bounded_live.active()==(mode==26));
+    require((status==GENERATIVEQC_STATUS_SUCCESS)==(mode!=27));
+  }
+  require(allocations==0 && plans==0);
+  mode=29;
+  {
+    scf::cuda_execution::DirectJkSourceLease borrowed_outputs(stream);
+    require(borrowed_outputs.prepare(0,systems,100,64,1000,16ULL<<30,"1","borrowed-output-test",
+                                     false,false,1e-12,16ULL<<30,false)
+            ==GENERATIVEQC_STATUS_SUCCESS && borrowed_outputs.active());
+    require(borrowed_outputs.coulomb()==nullptr && borrowed_outputs.exchange()==nullptr);
+    require(borrowed_outputs.device_bytes()==2*64*64*sizeof(double)+sizeof(int)+2*sizeof(std::uint64_t));
+  }
+  require(allocations==0 && plans==0);
+  mode=21;
+  direct_dimension=128;
+  systems.front().shells.front().angular_momentum=2;
+  for(const auto context:{0,1,2,3,4,5,6}) {
+    const auto before_creates=creates;
+    const auto before_queries=layout_queries;
+    const auto before_memory=memory_queries;
+    {
+      scf::cuda_execution::DirectJkSourceLease automatic(stream);
+      require(automatic.prepare(0,systems,context==4 ? 7 : 100,context==3 ? 127 : 128,
+                                1000,context==5 ? 1000 : 16ULL<<30,"auto","ks-auto-test",
+                                context!=1,false,context==2 ? 0.0 : 1e-12,16ULL<<30,false,
+                                context==6 ? scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f
+                                           : scf::cuda_execution::DirectJkSourceAutoPolicy::screened_cold)
+              ==GENERATIVEQC_STATUS_SUCCESS);
+      require(automatic.active()==(context==0));
+      require(creates==before_creates+(context==0));
+      if(context!=0 && context!=5)
+        require(layout_queries==before_queries && memory_queries==before_memory);
+    }
+    require(allocations==0 && plans==0);
+  }
+  direct_dimension=64;
+  mode=0;
   RhfResidentValues refused(stream);
   const auto before=creates;
   require(refused.prepare(0,systems,100,64,1000,1000)==GENERATIVEQC_STATUS_SUCCESS);
   require(!refused.active() && creates==before);
+  mode=12;
+  scf::cuda_execution::DirectJkSourceLease discarded(stream);
+  require(discarded.prepare(0,systems,100,64,1000,16ULL<<30,"1","discarded-test")
+          ==GENERATIVEQC_STATUS_SUCCESS);
+  require(!discarded.active() && discarded.completed_value_count()==100);
 }
 """)
     executable = tmp_path / "probe"
     native_cxx.build_executable(
-        [ROOT / "src/scf/cuda/rhf_resident_values.cpp", harness],
+        [
+            ROOT / "src/scf/cuda/rhf_resident_values.cpp",
+            ROOT / "src/scf/cuda/direct_jk_source_lease.cpp",
+            harness,
+        ],
         executable,
         compile_args=(
             "-std=c++20",

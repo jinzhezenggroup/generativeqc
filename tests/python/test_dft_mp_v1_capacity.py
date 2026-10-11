@@ -317,7 +317,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
+            "038dcd55175e305001d264203391147a79e0e98238cdfe64df5f581e1a4e38fb"
         ),
         "global_hybrid_force_predicate_sha256": (
             "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -1963,6 +1963,7 @@ def test_spherical_ao_count_fails_closed_when_native_count_moves(
     "guard,occurrence",
     [
         ("self._automatic_libxc_name is None", 0),
+        ("cpu_direct_semilocal_force", 0),
         ("self._ks_options is not None", 0),
         ("self._ks_options.coefficients == (1.0, 1.0, 0.0)", 0),
         ('self._device_name == "cuda"', 0),

@@ -216,6 +216,7 @@ def tune_cuda(
     schedules: typing.Any = None,
     search_space: TensorScheduleSpace | None = None,
     precision_programs: typing.Any = None,
+    prepare_lowering: typing.Callable[[TensorPlan], TensorPlan] | None = None,
     search_limits: TensorSearchLimits = DEFAULT_SEARCH_LIMITS,
     screening: TensorScreeningPolicy | None = DEFAULT_SCREENING_POLICY,
     repeats: int = 8,
@@ -235,6 +236,8 @@ def tune_cuda(
     Precision variants are opt-in typed TensorIR programs that must preserve
     the baseline ABI and scientific source identity; they use this same search,
     compilation cache, numerical gate, and endpoint evidence path.
+    prepare_lowering may install precomputed recipes below semantic scheduling;
+    it follows plan_schedule_search's pure, bindings-only callback contract.
     """
     if baseline.precision != "fp64":
         raise ValueError(
@@ -292,6 +295,7 @@ def tune_cuda(
         schedules,
         search_limits,
         precision_programs=precision_programs,
+        prepare_lowering=prepare_lowering,
     )
     compile_shortlist = _static_compile_shortlist(
         search, search_limits.maximum_compilations
@@ -351,6 +355,11 @@ def tune_cuda(
             "minimum_speedup": minimum_speedup,
             "numerical_gate": {"atol": 1e-11, "rtol": 1e-10},
         }
+        if prepare_lowering is not None:
+            identity["prepared_plans"] = [
+                proposal.plan.identity if proposal.plan is not None else None
+                for proposal in search
+            ]
         key = canonical_hash(identity)
         # First-kernel JIT remains separate from warmed selection samples.
         startup = []

@@ -28,9 +28,9 @@ class RangeExchangeExecutor:
     adapter determines whether the generated weighted-ERI provider executes on
     CPU or CUDA. Packaged AOT selection is also backend/operator based and does
     not inspect a functional or method name. This stationary-consumer binding
-    currently admits only s/p public AOs. For l < 2 Cartesian and
-    real-spherical public functions are identical, so each packed NativeAO
-    record maps one-to-one to a normalized Cartesian component.
+    uses a bounded shared Cartesian/AD recurrence on CPU through f, including
+    real-spherical expansions. The explicit-subset CUDA diagnostic retains
+    its s/p contract; the public CUDA endpoint uses its resident shell owner.
     """
 
     def __init__(
@@ -55,9 +55,10 @@ class RangeExchangeExecutor:
             raise ValueError("RSH stationary CUDA device ordinal must fit int32")
         if backend == "cpu" and device_id != 0:
             raise ValueError("CPU RSH stationary gradients require device_id=0")
-        if any(shell.angular_momentum > 1 for shell in basis.shells):
+        maximum_angular = 3 if backend == "cpu" else 1
+        if any(shell.angular_momentum > maximum_angular for shell in basis.shells):
             raise NotImplementedError(
-                "RSH stationary gradients currently support s/p bases only"
+                f"{backend} RSH stationary gradients support angular momentum <= {maximum_angular}"
             )
         start = 3 * basis.natom
         self.primitives = basis.packed[start : start + 2 * basis.nprimitive].reshape(
@@ -65,18 +66,20 @@ class RangeExchangeExecutor:
         )
         self.aos = basis.packed[start + 2 * basis.nprimitive :].reshape(-1, 16)
         self.centers = basis.packed[:start].reshape(-1, 3)
-        if any(int(row[3]) != 1 for row in self.aos):
+        if backend == "cuda" and any(int(row[3]) != 1 for row in self.aos):
             raise NotImplementedError(
                 "RSH stationary gradients require one Cartesian component per public AO"
             )
         self.cache = Path(cache)
+        self.basis = basis
         self.primitive_tile = primitive_tile
         self.compiler = compiler
         self.backend = backend
         self.device_id = device_id
         self.aot_library = aot_library
-        self._plans: dict[tuple[typing.Any, ...], PreparedWeightedEri] = {}
+        self._plans: dict[tuple[typing.Any, ...], typing.Any] = {}
         self.records = 0
+        self.recurrence_evaluations = 0
         self.packaged_aot_plans = 0
         self.runtime_compilations = 0
 
@@ -115,6 +118,16 @@ class RangeExchangeExecutor:
         weight: typing.Any,
     ) -> typing.Any:
         rows = self.aos[list(indices)]
+        if self.backend == "cpu" and (
+            self.aot_library is None
+            or any(shell.angular_momentum > 1 for shell in self.basis.shells)
+        ):
+            result, visits, evaluations = self._cpu_plan(primitive).execute(
+                (indices,), (weight,), independent_slots=True
+            )
+            self.records += visits
+            self.recurrence_evaluations += evaluations
+            return [int(row[0]) for row in rows], result
         angular_and_component = tuple(self._component(row) for row in rows)
         angular = tuple(item[0] for item in angular_and_component)
         shape = tuple(len(cartesian_components(value)) for value in angular)
@@ -136,6 +149,13 @@ class RangeExchangeExecutor:
                 else self.compiler.target.architecture
             ),
         )
+        if self.backend == "cpu" and aot_selection is None:
+            result, visits, evaluations = self._cpu_plan(primitive).execute(
+                (indices,), (weight,), independent_slots=True
+            )
+            self.records += visits
+            self.recurrence_evaluations += evaluations
+            return [int(row[0]) for row in rows], result
         key = (
             (
                 radial.family.value,
@@ -184,7 +204,34 @@ class RangeExchangeExecutor:
         )
         result = plan.raw(primitives, centers, (component,))
         self.records += int(result.diagnostics["records"])
+        self.recurrence_evaluations += int(result.diagnostics["records"])
         return owners, float(weight) * result.values[0, 1:].reshape(4, 3)
+
+    def _cpu_plan(self, primitive: typing.Any) -> typing.Any:
+        """Retain one scalar schedule per frozen radial operator, not per AO."""
+        from ._stationary_range_cpu import PreparedCpuRangeExchange
+
+        radial = self._kernel(primitive)
+        key = (radial.family.value, radial.omega)
+        if key not in self._plans:
+            self._plans[key] = PreparedCpuRangeExchange(
+                self.basis, radial, self.compiler, self.cache
+            )
+            self.runtime_compilations += 1
+        return self._plans[key]
+
+    def integral_batch(
+        self, primitive: typing.Any, indices: typing.Any, weights: typing.Any
+    ) -> typing.Any:
+        """Contract a bounded quartet tile directly into physical atoms on CPU."""
+        if self.backend != "cpu":
+            raise ValueError("compact host quartet batches require the CPU backend")
+        output, visits, evaluations = self._cpu_plan(primitive).execute(
+            indices, weights
+        )
+        self.records += visits
+        self.recurrence_evaluations += evaluations
+        return output
 
     def close(self) -> None:
         for plan in self._plans.values():

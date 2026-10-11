@@ -162,7 +162,7 @@ generativeqc_status execute_prepared_cuda_direct_long_range_derivatives_device(
 generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
     const PreparedFockPlan& plan, const double* density, const double* beta,
     std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail,
-    bool separate_sources = true);
+    bool separate_sources = true, bool allow_spatial_default = false);
 
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.

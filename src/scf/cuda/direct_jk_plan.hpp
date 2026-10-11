@@ -128,6 +128,9 @@ struct CudaDirectJkPlan {
    * These host-only descriptors are immutable before graph capture. */
   std::vector<std::array<std::size_t, 28>> resident_bucket_offsets;
   std::uint32_t resident_bucket_mask{(1U << 28) - 1};
+  /** Published screened bucket extents, frozen before optional ERI allocation.
+   * Empty retains the unscreened RHF layout. No replay downloads row counts. */
+  std::vector<std::array<std::uint64_t, 28>> resident_bucket_counts;
   ~CudaDirectJkPlan();
 };
 

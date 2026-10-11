@@ -32,7 +32,8 @@ retains exact whole-source Direct; numerical and driver failures propagate.
 The existing native RHF frame-response consumer shares this policy. Its
 independent final scalar audit and positive-screening actions never borrow the
 resident source. Ordinary public HF/UHF and screened PBE0/UKS/RSH SCF are not
-changed: this master does not contain the proposed `DirectJkSourceLease` owner.
+changed: the frozen measurement master does not contain the proposed
+`DirectJkSourceLease` owner.
 
 ## Invariants
 
@@ -160,6 +161,23 @@ reconstruction and reproduction commands. Its numerical publication is accepted;
 shared formal/global performance and default promotion remain explicitly not-run.
 The partial controls remain opt-in, and no PBE0/public-HF or larger-case speedup
 is inferred.
+
+## Master compatibility follow-up
+
+After the qualified run, master `833986298298d95331d127ff9b62b82a091f808f`
+introduced the method-neutral phase source and compact screened layouts. Keep
+that ownership refactor: `RhfResidentValues` forwards its frozen experimental
+policy to `DirectJkSourceLease` rather than retaining a second allocation/audit
+owner. The common lease charges packed host metadata and audits the complete
+candidate inventory and exactly the uncached recurrences. Its default remains
+full residency; non-full masks with positive screening refuse before source
+preparation. KS consumers do not read the RHF environment controls.
+
+The frozen reconstruction, binaries and three-pair timing evidence remain
+unchanged. Post-merge checks establish numerical/ownership compatibility, not a
+new comparison against the later master or a broader default promotion.
+The compatibility host suite passes 328 tests, including the shared screened
+lease's unchanged automatic admission and explicit partial-screening refusal.
 
 ## Revisit when
 

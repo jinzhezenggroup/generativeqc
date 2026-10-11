@@ -54,6 +54,91 @@ def test_cub_candidate_requires_complete_endpoint_evidence() -> None:
         _cub_candidate({"candidates": [incomplete]})
 
 
+def test_cub_candidate_reads_prepared_lowering_diagnostics() -> None:
+    incomplete = {
+        "status": "rejected",
+        "plan": {"schedule": {"stream_reductions": True}},
+        "lowering": {"providers": ["nvidia.cccl.cub"]},
+        "reason": "compile failed",
+    }
+    with pytest.raises(RuntimeError, match="did not complete"):
+        _cub_candidate({"candidates": [incomplete]})
+    candidate = {
+        **incomplete,
+        **dict.fromkeys(
+            (
+                "artifact",
+                "gates",
+                "max_absolute_error",
+                "plan_identity",
+                "profiles",
+                "samples",
+                "shared_gates",
+            ),
+            "fixture",
+        ),
+    }
+    assert _cub_candidate({"candidates": [candidate]}) is candidate
+
+
+def test_runner_reaches_qualification_with_prepared_provider_neutral_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc_compiler.tensor import cuda_execute
+    from generativeqc_compiler.tensor.cuda_search import plan_schedule_search
+
+    import benchmarks.tensor_cub_qualification as runner
+
+    monkeypatch.setattr(runner, "raw_output_path", lambda value: type(tmp_path)(value))
+    monkeypatch.setattr(runner, "_verified_source_snapshot", lambda *args: {})
+    monkeypatch.setattr(runner, "environment_metadata", lambda **kwargs: {})
+    monkeypatch.setattr(
+        cuda_execute, "tensor_compiler_identity", lambda *args: "a" * 64
+    )
+
+    def qualify(
+        baseline: object,
+        compiler: object,
+        fixtures: object,
+        cache: object,
+        **options: object,
+    ) -> None:
+        (candidate,) = plan_schedule_search(
+            baseline,
+            options["schedules"],
+            prepare_lowering=options["prepare_lowering"],
+        )
+        assert candidate.status == "ready"
+        assert candidate.plan.schedule == baseline.schedule
+        assert not baseline.lowering_bindings
+        assert candidate.plan.lowering_bindings
+        assert "nvidia.cccl.cub" in candidate.to_payload()["lowering"]["providers"]
+        assert options["screening"] is None
+        raise RuntimeError("reached complete endpoint qualification")
+
+    monkeypatch.setattr(runner, "tune_cuda", qualify)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "tensor_cub_qualification.py",
+            "--nvcc",
+            str(tmp_path / "nvcc"),
+            "--allocation-id",
+            "fixture",
+            "--source-revision",
+            "a" * 40,
+            "--source-archive",
+            str(tmp_path / "source.tar.gz"),
+            "--source-archive-sha256",
+            "b" * 64,
+            "--output",
+            str(tmp_path / "output"),
+        ],
+    )
+    with pytest.raises(RuntimeError, match="reached complete endpoint"):
+        runner.main()
+
+
 def test_source_snapshot_binds_revision_and_execution_tree(tmp_path: Path) -> None:
     root = tmp_path / "source"
     root.mkdir()

@@ -8,6 +8,7 @@
 
 #include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_metadata.hpp"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
 
@@ -44,7 +45,9 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
  * errors are returned without clearing CUDA's last launch error. Optional
  * force_topology must borrow that same batch's immutable class-major view;
  * it enables dd x dp pages instead of a third whole-domain traversal. Without
- * the view, order seven remains on the qualified generic owner. */
+ * the view, order seven remains on the qualified generic owner. Prepared
+ * spd_schedule additionally admits narrow indexed consumers only with a
+ * retained row-prefix lease; other owners retain the incumbent traversal. */
 cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     bool unrestricted, DirectScreeningPurpose purpose, dim3 grid, dim3 block,
     std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch, double screening_tolerance,
@@ -56,7 +59,8 @@ cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources = false,
     detail::BoundedDirectBlockDomain block_domain = {},
-    const GeneratedShellPairStream* force_topology = nullptr);
+    const GeneratedShellPairStream* force_topology = nullptr,
+    DirectSpdForceSchedule spd_schedule = DirectSpdForceSchedule::Incumbent);
 
 /** Range-separated exchange derivative on the same bounded shell scheduler.
  * Full-range Schwarz bounds remain a conservative gate for SR/LR operators. */

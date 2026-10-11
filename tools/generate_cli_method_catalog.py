@@ -23,6 +23,7 @@ from generativeqc_compiler.dft._generated_native_semilocal import (
 from generativeqc_compiler.method._generated_xc_aliases import (
     METHOD_ALIASES,
 )
+from generativeqc_compiler.method.bulk_ks import resolve_bulk_ks
 from generativeqc_compiler.method.ks_execution import (
     compile_ks_execution_plan,
 )
@@ -33,6 +34,8 @@ from generativeqc_compiler.method.spec import (
 from generativeqc_compiler.xc._generated_split_hybrids import (
     SPLIT_HYBRIDS,
 )
+from generativeqc_compiler.xc.libxc_work import LIBXC_WORK_DOMAIN
+from generativeqc_compiler.xc.spec import AUTO_BULK_COMPONENTS
 
 
 @dataclass(frozen=True)
@@ -190,6 +193,31 @@ def rows() -> tuple[Row, ...]:
             if item.name in result:
                 raise ValueError(f"duplicate MethodIR CLI selector {item.name!r}")
             result[item.name] = item
+    # Public automatic selectors are single, indivisible semilocal programs.
+    # Do not route them through curated-family matching or admit mixed graphs.
+    for functional_name in sorted(AUTO_BULK_COMPONENTS):
+        for spin in ("unpolarized", "polarized"):
+            try:
+                resolution = resolve_bulk_ks(functional_name, spin=spin, backend="cpu")
+            except ValueError:
+                continue
+            prefix = "libxc:" if spin == "unpolarized" else "libxc-uks:"
+            name = prefix + functional_name.lower()
+            result[name] = Row(
+                name=name,
+                source=resolution.method.identifier,
+                identity=resolution.method.identity,
+                spin=1 if spin == "unpolarized" else 2,
+                domain=LIBXC_WORK_DOMAIN,
+                components=tuple(
+                    (component, float(coefficient))
+                    for component, coefficient in resolution.plan.semilocal.functional.components
+                ),
+                exchange=(),
+                cpu=True,
+                cuda=False,
+                reason="automatic Libxc semilocal programs require the CPU backend",
+            )
     return tuple(result[name] for name in sorted(result))
 
 
@@ -269,7 +297,9 @@ def render(items: tuple[Row, ...]) -> str:
             "}};",
             "inline constexpr const Method* find_method(std::string_view name) noexcept {",
             "  for (const auto& entry : kMethods)",
-            "    if (entry.name == name) return &entry;",
+            "    if (entry.name == name ||",
+            '        (name.starts_with("libxc-rks:") && entry.name.starts_with("libxc:") &&',
+            "         name.substr(10) == entry.name.substr(6))) return &entry;",
             "  return nullptr;",
             "}",
             "}  // namespace generativeqc::cli::method_generated",
