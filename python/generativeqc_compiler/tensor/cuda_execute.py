@@ -14,8 +14,6 @@ import hashlib
 import json
 import os
 import platform
-import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -45,7 +43,6 @@ from generativeqc_compiler.common.provenance import (
     atomic_json,
     canonical_hash,
     file_hash,
-    toolchain_identity,
 )
 from generativeqc_compiler.common.specialization import (
     CompilationIdentity,
@@ -55,6 +52,7 @@ from generativeqc_compiler.common.specialization import (
     WorkloadSignature,
 )
 
+from .cuda_compiler_identity import compiler_dependency_facts
 from .cuda_dtype import compile_options, scalar_type, symmetry_tolerance
 from .cuda_emit import emit_cuda
 from .cuda_plan import (
@@ -179,6 +177,42 @@ def _read_static_data(artifact: CudaArtifact, expected_bytes: int) -> np.ndarray
     return payload
 
 
+def _tensor_compiler_facts(
+    plan: TensorPlan, compiler: CudaCompilerAdapter
+) -> dict[str, typing.Any]:
+    """Reuse the artifact's actual compiler context before binding or compiling."""
+    if compiler.target != plan.target:
+        raise ValueError("compiler target does not match tensor plan target")
+    options = compile_options(plan)
+    return {
+        "source": tensor_source_identity(),
+        **compiler_dependency_facts(compiler, options),
+        "host": {
+            "system": platform.system(),
+            "machine": platform.machine(),
+            "libc": platform.libc_ver(),
+        },
+        "options": [
+            *options,
+            compiler.target.architecture,
+            "c++17",
+            "O3",
+            "shared",
+            "fPIC",
+            "cublas",
+        ],
+    }
+
+
+def tensor_compiler_identity(plan: TensorPlan, compiler: CudaCompilerAdapter) -> str:
+    """Identify source/toolchain/options for prepare-time recipes without a GPU.
+
+    This excludes the selected recipe and plan identity, avoiding a circular
+    cache key. Callers bind this hash before codegen; compilation rechecks it.
+    """
+    return canonical_hash(_tensor_compiler_facts(plan, compiler))
+
+
 def compile_cuda(
     plan: TensorPlan, compiler: CudaCompilerAdapter, cache: Path
 ) -> CudaArtifact:
@@ -189,47 +223,37 @@ def compile_cuda(
     an unverified executable. This is a local trusted-code cache, not a format
     for downloading arbitrary native libraries from another user.
     """
-    if compiler.target != plan.target:
-        raise ValueError("compiler target does not match tensor plan target")
+    facts = _tensor_compiler_facts(plan, compiler)
+    context = canonical_hash(facts)
+    if any(
+        binding.compilation.compiler_hash != context
+        for _, binding in plan.lowering_bindings
+    ):
+        raise ValueError(
+            "prepared reduction compiler context changed; rebind before compilation"
+        )
+    if (
+        any(
+            binding.selected.execution is not None
+            and binding.selected.execution.algorithm == "cub-block-reduce"
+            for _, binding in plan.lowering_bindings
+        )
+        and facts["dependencies"]["cub"] is None
+    ):
+        raise ValueError("selected CUB provider has no verified dependency closure")
     options = compile_options(plan)
     source = emit_cuda(plan, embed_static_data=False)
     static_data = tensor_static_data(plan)
     static_sha256 = hashlib.sha256(static_data).hexdigest()
-    host_compiler = os.environ.get("NVCC_CCBIN") or shutil.which("gcc")
-    if not host_compiler:
-        raise ValueError("NVCC host compiler cannot be identified")
-    host_version = subprocess.run(
-        [host_compiler, "--version"],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
     identity = {
         "schema": LAYOUT_VERSION,
         "plan": plan.identity,
-        "source": tensor_source_identity(),
+        **facts,
         "generated": canonical_hash(source),
-        "static_data": {"bytes": len(static_data), "sha256": static_sha256},
-        "toolchain": toolchain_identity(compiler.nvcc),
-        "host_compiler": host_version.stdout + host_version.stderr,
-        "compiler_environment": {
-            name: os.environ.get(name, "")
-            for name in (
-                "NVCC_PREPEND_FLAGS",
-                "NVCC_APPEND_FLAGS",
-                "NVCC_CCBIN",
-                "CPATH",
-                "CPLUS_INCLUDE_PATH",
-                "LIBRARY_PATH",
-            )
+        "static_data": {
+            "bytes": len(static_data),
+            "sha256": static_sha256,
         },
-        "host": {
-            "system": platform.system(),
-            "machine": platform.machine(),
-            "libc": platform.libc_ver(),
-        },
-        "options": [*options, "c++17", "O3", "shared", "fPIC", "cublas"],
     }
     key = canonical_hash(identity)
     cache = Path(cache).resolve()

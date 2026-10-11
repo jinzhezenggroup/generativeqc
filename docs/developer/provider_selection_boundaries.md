@@ -38,12 +38,13 @@ to MethodIR owners, CC/HF/DFT/GFN method APIs, or generic schedule search.
 implementation selectors in
 `manifests/maintenance/provider_selection_boundaries.json`.
 
-The initial debt contains three families:
+Tensor CUDA reduction choice lives in shared prepared lowering bindings, not in
+`TensorSchedule` or `TensorScheduleSpace`. Unbound plans preserve generated CUDA.
+The guard rejects provider-valued schedule axes even under a new field name;
+retired Tensor reduction selector exceptions are no longer allowed.
 
-- Tensor CUDA still carries `reduction_provider` in `TensorSchedule` and the
-  schedule-search/artifact identity. This is owned by #1886/#1889: the semantic
-  reduction schedule should remain in the planner, while generated/CUB choice
-  moves to shared lowering candidates and a prepared binding.
+The remaining debt contains two families:
+
 - CC/DF-CCSD(T) still carries `matrix_gemm`, `df_matrix_gemm`,
   the internal expanded-replay ablation/diagnostic `df_replay_matrix_gemm`, and
   `lambda_matrix_gemm` through method/solver surfaces. This is migration debt

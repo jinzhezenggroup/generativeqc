@@ -159,11 +159,38 @@ and `segment_sum` primitives. Packing scatter still assigns unique GEMM
 destinations; TensorIR `scatter_add` instead has explicit repeated-destination
 accumulation semantics.
 
-Eligible streamed reductions may explicitly request
-`TensorSchedule(reduction_provider="cub")`. The shared lowering-provider
-diagnostic advertises both generated cooperative CUDA and CUB BlockReduce for
-the same request, but CUB admission requires typed-true CCCL header capability
-evidence. Generated CUDA remains the production default. The retained H200 FP64
+`TensorSchedule` and `TensorScheduleSpace` contain no named reduction-provider
+axis. Eligible streamed reductions expose generated cooperative CUDA and CUB
+BlockReduce through `reduction_provider_candidates` under the same canonical
+request. The shared `select_lowering_binding` compares complete preparation and
+replay costs, admitted precision, layouts, determinism, capabilities and provider
+versions, retaining a strict requested-arithmetic fallback.
+The `CompilationIdentity.compiler_hash` comes from `tensor_compiler_identity`
+with source, compiler-executable bytes, options, and NVCC's resolved preprocessing
+dependency closure. Finite dependency-only probes refresh header selection,
+including transitive CUB headers and include overrides; executable-bound version
+probes are cached. Unknown runtime dependencies fail closed. Unavailable CUB
+preserves generated execution but cannot compile a selected CUB recipe.
+`compile_cuda` rechecks the context before creating or reusing an artifact;
+changed context requires rebinding.
+`bind_reduction_lowering` installs that recipe in an immutable executable plan;
+it validates canonical offers and reconstructs the shared selection before
+emission. Equations, scientific precision and the semantic schedule do not
+change. Bound implementation/target/version identities are separate executable
+cache inputs; diagnostics retain selection, fallbacks and rejection evidence.
+CUB admission requires typed-true CCCL header capability evidence. Unbound plans
+retain generated CUDA as the production default. Explicit compile/numerical
+fixtures may pin providers only through the qualification helper. It uses synthetic
+ranking costs, and synthetic versions only for device-free emission tests;
+compiled fixtures obtain actual context identities. Fixture ranking is not
+performance or production admission evidence.
+The endpoint tuner accepts a pure `prepare_lowering` callback after semantic
+planning and before executable deduplication/resource screening. It may only
+install precomputed shared bindings; all other plan fields must remain unchanged.
+The CUB qualification runner uses this hook and retains the existing numerical,
+compiled-resource and complete-endpoint gates. Concrete prepared plan identities
+and lowering diagnostics are retained in tuning evidence.
+The retained H200 FP64
 comparison passed numerical and execution gates but did not show a significant
 complete-endpoint improvement, so lower CUB register use did not trigger a
 promotion. See the [reviewed evidence](../../benchmarks/results/issue971-cub-block-reduce-h200/publication.json)
