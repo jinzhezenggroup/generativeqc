@@ -895,9 +895,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
   /** Method-global manifest stays energy-only. Force capability is a
    * property of this immutable prepared physical execution context. Only
-   * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
-   * providers is currently admitted; UKS, CUDA, Direct, corrections and
-   * unrepresented XC graphs remain fail-closed until separately qualified. */
+   * strict-FP64 all-electron CPU Direct or fitted RKS PBE/PBE0/B3LYP with
+   * complete stationary derivative providers is admitted. UKS, CUDA,
+   * corrections and unrepresented XC graphs remain separately gated. */
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
     return options_.preliminary_guess;
@@ -2485,7 +2485,7 @@ class KsPreparedBatch final : public PreparedBatch {
                                        bool compute_forces) override {
     invalidate_result();
     // A native force request is admitted only when *every* prepared item has
-    // the source-complete CPU DF-PBE/PBE0 owner. Mixed or missing contexts must
+    // the source-complete CPU Direct/DF GGA owner. Mixed or missing contexts must
     // not quietly receive an energy-only result with an unfilled force buffer.
     if (compute_forces && !std::all_of(items_.begin(), items_.end(), [](const auto& item) {
           return (item.prepared_properties & GENERATIVEQC_PROPERTY_FORCES) != 0;
