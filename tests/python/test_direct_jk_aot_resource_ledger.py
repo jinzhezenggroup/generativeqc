@@ -60,7 +60,8 @@ def _generated_ninja_fixture(
 ) -> str:
     """Retain CMake's real OBJECT-library compiler/phony/link edge shapes."""
     effective = (
-        f"/usr/bin/cmake;-E;env;CCACHE_BASEDIR={directory.resolve()};{FAKE_CCACHE}"
+        "/usr/bin/cmake;-E;env;"
+        f"CCACHE_BASEDIR={directory.resolve().as_posix()};{FAKE_CCACHE.as_posix()}"
         if cache_name == "ccache"
         else "/verified/sccache"
     )
@@ -72,10 +73,13 @@ def _generated_ninja_fixture(
     command_prefix = "${LAUNCHER}${CODE_CHECK}" if per_edge else prefix + " "
     rules.write_text(
         f"rule {rule}\n"
-        f"  command = {command_prefix}{FAKE_NVCC} -forward-unknown-to-host-compiler $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -x cu -c $in -o $out\n"
+        f"  command = {command_prefix}{FAKE_NVCC.as_posix()} -forward-unknown-to-host-compiler $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -x cu -c $in -o $out\n"
     )
     includes = shlex.join(
-        [f"-I{validator.ROOT / 'src'}", f"-I{directory / 'generated'}"]
+        [
+            f"-I{(validator.ROOT / 'src').resolve().as_posix()}",
+            f"-I{(directory / 'generated').resolve().as_posix()}",
+        ]
     )
     source = (
         directory / "generated/sm_120/generativeqc_generated_shell_sm120_shard_6.cu"
@@ -83,7 +87,7 @@ def _generated_ninja_fixture(
     if relative_source:
         source = source.relative_to(directory)
     (directory / "build.ninja").write_text(
-        f"build {obj}: {rule} {source} || cmake_object_order_depends_target_generativeqc_aot_sm_120\n"
+        f"build {obj}: {rule} {source.as_posix()} || cmake_object_order_depends_target_generativeqc_aot_sm_120\n"
         "  DEFINES = -DGENERATIVEQC_HAS_CUDA=1\n"
         f"  INCLUDES = {includes}\n"
         '  FLAGS = -O3 -DNDEBUG -std=c++20 "--generate-code=arch=compute_120,code=[compute_120,sm_120]" -Xcompiler=-fPIC\n'
@@ -978,7 +982,9 @@ class TestProductionContextBinding:
         effective = _generated_ninja_fixture(tmp_path, per_edge=per_edge)
         rules = tmp_path / "CMakeFiles/rules.ninja"
         rules.write_text(
-            rules.read_text().replace(str(FAKE_NVCC), f"{FAKE_NVCC} {option}")
+            rules.read_text().replace(
+                FAKE_NVCC.as_posix(), f"{FAKE_NVCC.as_posix()} {option}"
+            )
         )
         with pytest.raises(ValueError, match="compile/dependency recipe"):
             validator.validate_generated_cuda_rules(
@@ -1130,7 +1136,9 @@ class TestProductionContextBinding:
         elif mutation == "duplicate_object":
             text += text.split("build generativeqc_aot_sm_120:")[0]
         elif mutation == "missing_separator":
-            text = text.replace(str(FAKE_CCACHE) + " \n", str(FAKE_CCACHE) + "\n")
+            text = text.replace(
+                FAKE_CCACHE.as_posix() + " \n", FAKE_CCACHE.as_posix() + "\n"
+            )
         else:
             text = text.replace(
                 "  LAUNCHER =", "  CODE_CHECK = /other/wrapper\n  LAUNCHER ="
@@ -1429,7 +1437,7 @@ class TestProductionContextBinding:
             "- name: Qualify direct J/K AOT static resources (shard 6)", 1
         )[1].split("- name:", 1)[0]
         assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
-        assert "--record-output" not in step
+        assert "--record-output build/direct-jk-aot/ledger.candidate.json" in step
 
     def test_cmake_records_the_resolved_compiler_cache(self) -> None:
         cmake = (validator.ROOT / "CMakeLists.txt").read_text()

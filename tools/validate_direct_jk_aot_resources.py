@@ -425,10 +425,13 @@ def validate_generated_cuda_rules(
         if definition != "NDEBUG"
     ]:
         raise ValueError("production shard-6 DEFINES differ from the qualified recipe")
-    if edge_tokens("INCLUDES") != [
-        f"-I{ROOT / 'src'}",
-        f"-I{generated_directory.resolve()}",
-    ]:
+    include_tokens = edge_tokens("INCLUDES")
+    if (
+        len(include_tokens) != 2
+        or not all(token.startswith("-I") for token in include_tokens)
+        or [Path(token[2:]).resolve() for token in include_tokens]
+        != [(ROOT / "src").resolve(), generated_directory.resolve()]
+    ):
         raise ValueError("production shard-6 INCLUDES differ from the qualified recipe")
     expected_launcher = effective_launcher.split(";")
     compiler_index = len(expected_launcher)

@@ -294,3 +294,26 @@ already committed ledger: no identity field, kernel inventory entry, or
 REG/STACK/SHARED/LOCAL value changed. Only the execution implementation key and
 its paired object/log receipts changed. Gate mode is restored for final
 exact-head qualification.
+
+## Production Ninja recipe and PIC binding
+
+Independent CMake-shaped controls then showed that cache/config fields alone
+did not prove the object recipe. Production sets
+`POSITION_INDEPENDENT_CODE=ON` on the AOT OBJECT library, so the actual shard
+edge includes `-Xcompiler=-fPIC`; the prior manual recipe omitted that host
+option. Quoted host overrides, late/per-edge launcher changes, global or
+target-local CUDA flags, options-file indirection, changed definitions or
+include order, and ambiguous source/FLAGS edges could also bypass the bounded
+checks while leaving the cache fields unchanged.
+
+The gate now binds the single Release AOT compiler rule and shard-6 object edge:
+its exact source, effective launcher/compiler, supported NVIDIA dependency rule,
+literal Release flags, definitions, and include order. It accepts normal phony
+and order-only dependencies but rejects unknown variables, wrappers, options
+files, extra inputs, and host compiler overrides. Both preprocessing and cached
+compilation include the production PIC host option, and the typed ledger schema
+records it as `host_options`.
+
+The committed non-PIC ledger is retained as an explicit stale negative during
+record mode. A canonical CI record must measure the corrected PIC recipe before
+any ledger update or restoration of gate mode.
