@@ -63,6 +63,7 @@ def _owner(batched: bool, method: int, *, fitted: bool = False) -> SimpleNamespa
         }[method],
         _device_name="cpu",
         _density_fitting_mode=int(fitted),
+        _ks_options=None,
         _capabilities=SimpleNamespace(supported_properties=SUPPORTED),
     )
     # The actual facade guard delegates default selection to this checked-in
