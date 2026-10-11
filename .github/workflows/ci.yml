@@ -5,6 +5,8 @@ on:
   # to publish stable caches and exact-source CPU performance baselines.
   push:
     branches: [master]
+    # Master uploads artifacts only; intentional vX.Y.Z tags trigger Releases.
+    tags: ['v[0-9]*']
   pull_request:
   # Run required CI checks against GitHub's synthetic merge-queue commit.
   merge_group:
@@ -258,6 +260,9 @@ jobs:
         run: ccache --zero-stats
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
+      - name: Test native CLI archive/metadata contracts
+        if: matrix.compiler == 'gcc'
+        run: python3 -m unittest discover -s tests/python -p test_native_cli_package.py
       - name: Configure
         env:
           CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
@@ -1077,7 +1082,7 @@ jobs:
     name: CPU performance (CodSpeed)
     # Publish PR-tier baselines on post-merge master pushes to avoid old fallback
     # comparisons. Scheduled/manual runs retain complete endpoint coverage.
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'push' || github.ref == 'refs/heads/master')
     permissions:
       actions: read
       contents: read
@@ -1325,12 +1330,212 @@ jobs:
           use_oidc: true
           version: v11.3.1
 
+
+  native-cli-artifact:
+    name: Production C++ CUDA CLI (sm_120)
+    # Full release NVCC codegen is kept off ordinary PR/merge-queue CI.
+    # Publishing requires the existing fast CUDA compile gate to pass first.
+    needs: cuda-compile
+    if: >-
+      needs.cuda-compile.result == 'success' &&
+      ((github.event_name == 'push' &&
+        (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))) ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CUDACXX: /usr/local/cuda-12.9/bin/nvcc
+      LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
+      CCACHE_MAXSIZE: 3G
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate semantic version tag before building
+        id: cli_version
+        shell: bash
+        run: |
+          version="$(sed -nE 's/^project\(GenerativeQC VERSION ([0-9]+\.[0-9]+\.[0-9]+) LANGUAGES CXX\)$/\1/p' CMakeLists.txt)"
+          if [[ -z "$version" ]]; then
+            echo "::error::Unable to resolve the CMake project version"
+            exit 1
+          fi
+          release=false
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME must exactly match CMake project version v$version"
+              exit 1
+            fi
+            release=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+      - name: Add NVIDIA CUDA repository
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location --output cuda-keyring.deb \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring.deb
+          sudo apt-get update -o Acquire::Retries=3
+      - name: Install CUDA 12.9 build dependencies
+        shell: bash
+        run: |
+          sudo apt-get install --yes \
+            cuda-nvcc-12-9 cuda-cuobjdump-12-9 cuda-cudart-dev-12-9 \
+            cuda-cccl-12-9 libcublas-dev-12-9 libcusolver-dev-12-9 \
+            libcusparse-12-9 libnvjitlink-12-9 \
+            libopenblas-dev libarchive-dev libssl-dev nlohmann-json3-dev \
+            python3-numpy python3-pytest
+          "$CUDACXX" --version
+      - name: Install ccache 4.14
+        shell: bash
+        run: |
+          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
+          curl --fail --silent --show-error --location \
+            --output "/tmp/${archive}" \
+            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
+          tar -xJf "/tmp/${archive}" -C /tmp
+          sudo install -m 0755 "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
+            /usr/local/bin/ccache
+          ccache --version
+      - name: Test deterministic native CLI packager
+        run: python3 -m unittest discover -s tests/python -p test_native_cli_package.py
+      - name: Restore production CUDA ccache
+        id: cli_ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-native-cli-v1-cuda12.9-sm120-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'manifests/**', 'data/**', 'upstream/**') }}
+          restore-keys: |
+            ccache-native-cli-v1-cuda12.9-sm120-
+            ccache-cuda-v2-12.9-sm120-
+      - name: Build fully optimized precompiled C++ CUDA CLI
+        shell: bash
+        run: |
+          ccache --zero-stats
+          cmake --preset cuda-release-cli-sm120
+          cmake --build --preset cuda-release-cli-sm120 --parallel 3
+      - name: Preserve compiler cache
+        if: ${{ always() && steps.cli_ccache.outputs.cache-primary-key != '' && steps.cli_ccache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.cli_ccache.outputs.cache-primary-key }}
+      - name: Smoke-test release-mode native command
+        shell: bash
+        run: |
+          cli="$PWD/build/cuda-release-cli-sm120/generativeqc"
+          test -x "$cli"
+          "$cli" --version | tee build/native-cli-version.txt
+          grep -F "${{ steps.cli_version.outputs.version }}" build/native-cli-version.txt
+          "$cli" methods --json > build/native-cli-methods.json
+          python3 -m json.tool < build/native-cli-methods.json > /dev/null
+          "$cli" basis list --json > build/native-cli-bases.json
+          python3 -m json.tool < build/native-cli-bases.json > /dev/null
+          if readelf -d "$cli" | grep -E 'NEEDED.*libgenerativeqc\.so'; then
+            echo "::error::Monolithic CLI unexpectedly depends on libgenerativeqc.so"
+            exit 1
+          fi
+          ldd "$cli"
+          ccache --show-stats
+      - name: Install and package native command, AOT plug-ins and notices
+        shell: bash
+        env:
+          CLI_RELEASE: ${{ steps.cli_version.outputs.release }}
+          CLI_VERSION: ${{ steps.cli_version.outputs.version }}
+        run: |
+          cmake --install build/cuda-release-cli-sm120 --prefix "$PWD/build/native-cli-prefix"
+          args=()
+          if [[ "$CLI_RELEASE" == 'true' ]]; then
+            args+=(--release)
+          fi
+          python3 tools/package_native_cli.py \
+            --prefix "$PWD/build/native-cli-prefix" \
+            --output-dir dist \
+            --version "$CLI_VERSION" \
+            --commit "$GITHUB_SHA" \
+            --source-date-epoch "$(git log -1 --format=%ct "$GITHUB_SHA")" \
+            "${args[@]}"
+          (cd dist && sha256sum --check SHA256SUMS)
+          test "$(find dist -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 1
+      - name: Upload latest native CUDA CLI to GitHub Actions Artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: generativeqc-native-cli-cuda12.9-sm120-${{ github.sha }}
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+          overwrite: true
+
+  native-cli-release:
+    name: Publish versioned native CLI to GitHub Releases
+    needs: native-cli-artifact
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.native-cli-artifact.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require version tag on master history
+        shell: bash
+        run: |
+          git fetch --no-tags origin master:refs/remotes/origin/master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::Release tag must point to a commit on master"
+            exit 1
+          }
+      - name: Download verified distribution artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: generativeqc-native-cli-cuda12.9-sm120-${{ github.sha }}
+          path: dist
+      - name: Publish only if this tagged version has no Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check SHA256SUMS)
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; leaving it and its assets unchanged."
+            exit 0
+          fi
+          # A tag may have moved during the build. --verify-tag checks only
+          # existence; require its current peeled commit to match these assets.
+          git fetch --no-tags origin "$GITHUB_REF"
+          current_tag_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          built_commit="$(git rev-parse "$GITHUB_SHA^{commit}")"
+          if [[ "$current_tag_commit" != "$built_commit" ]]; then
+            echo "::error::Release tag moved after this artifact was built"
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --generate-notes \
+            dist/*.tar.gz dist/SHA256SUMS
+
   pass:
     name: Pass CI checks
     timeout-minutes: 5
     needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
     runs-on: ubuntu-slim
-    if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+    if: ${{ !cancelled() && github.event_name != 'push' }}
     steps:
       - name: Accept an orphaned merge-group run
         if: needs.merge_queue_liveness.outputs.active == 'false'
