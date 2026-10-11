@@ -128,8 +128,8 @@
     "generativeqc.experimental.array_api.FRONTEND_VERSION": "generativeqc_compiler/array_api/capabilities.py:FRONTEND_VERSION",
     "generativeqc.experimental.array_api.Index": "generativeqc_compiler/tensor/types.py:Index",
     "generativeqc.experimental.array_api.IndexSpace": "generativeqc_compiler/tensor/types.py:IndexSpace",
+    "generativeqc.experimental.array_api.MolecularModel": "generativeqc/experimental/_array_api_molecular.py:MolecularModel",
     "generativeqc.experimental.array_api.Program": "generativeqc_compiler/tensor/program.py:Program",
-    "generativeqc.experimental.array_api.RHF": "generativeqc/experimental/_array_api_molecular.py:RHF",
     "generativeqc.experimental.array_api.SUPPORTED_FUNCTIONS": "generativeqc_compiler/array_api/capabilities.py:SUPPORTED_FUNCTIONS",
     "generativeqc.experimental.array_api.TensorSpec": "generativeqc_compiler/tensor/types.py:TensorSpec",
     "generativeqc.experimental.array_api.VibeArray": "generativeqc_compiler/array_api/array.py:VibeArray",
@@ -2496,7 +2496,7 @@
         "behavior": "docstring"
       }
     },
-    "generativeqc/experimental/_array_api_molecular.py:RHF": {
+    "generativeqc/experimental/_array_api_molecular.py:MolecularModel": {
       "kind": "class",
       "profile": "execution",
       "facets": {
@@ -2507,7 +2507,7 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
-    "generativeqc/experimental/_array_api_molecular.py:RHF.__call__": {
+    "generativeqc/experimental/_array_api_molecular.py:MolecularModel.__call__": {
       "kind": "function",
       "profile": "execution",
       "facets": {
@@ -2518,7 +2518,7 @@
         "values": "docs/reference/python_contracts.md#python-array-values"
       }
     },
-    "generativeqc/experimental/_array_api_molecular.py:RHF.__init__": {
+    "generativeqc/experimental/_array_api_molecular.py:MolecularModel.__init__": {
       "kind": "function",
       "profile": "transformation",
       "facets": {
