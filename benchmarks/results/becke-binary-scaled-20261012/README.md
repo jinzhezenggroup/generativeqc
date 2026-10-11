@@ -33,8 +33,10 @@ has numerical/routing coverage, not an endpoint speedup claim.
   selection, with its executable tests. The selected 96-atom device equations,
   storage and launches are unchanged. Final routing is verified on a rebuilt
   source-matched artifact; full timing samples are not rerun until lucky.
-- `drivers-and-inputs.tar.xz`: lossless retained drivers and independent
-  reference inputs, with their original root-relative locations.
+- Reproduction drivers and independent inputs remain recoverable from existing
+  Git object `43ad1b336`, at this directory's `drivers-and-inputs.tar.xz` path.
+  The current tree does not duplicate that historical payload or relax the
+  aggregate evidence budget.
 
 The device numerical contracts cover explicit/default selection, small-owner
 fallback, serial/cooperative normalization, implicit/external inputs, 128 atoms,
@@ -52,7 +54,9 @@ For the final narrowed policy also decompress and apply `final-admission.patch.x
 `tests/python/test_becke_scaled_native.py` and, inside finite Slurm,
 `tests/python/test_becke_scaled_native_cuda.py`.
 
-Extract the driver/input archive into an ignored experiment root. The recorded
+Recover the driver/input archive into an ignored experiment root with
+`git show 43ad1b336:benchmarks/results/becke-binary-scaled-20261012/drivers-and-inputs.tar.xz > .artifacts/becke-drivers.tar.xz`.
+Extract it there. The recorded
 recipe names the original source/environment root and must be adapted to the
 reconstructed checkout and installed Python/CUDA dependencies. Retain the same
 scientific inputs, five-pair order, force policies and gates; do not import or
