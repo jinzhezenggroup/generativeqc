@@ -110,8 +110,19 @@ only the iteration budget would not fix an already accepted DIIS proposal;
 never bypass the bounded physical closure or relax its acceptance threshold.
 The full final force campaign is retained separately from this failed diagnostic.
 
+Final force/evidence regression has 42 passing tests; its one failed test read
+the new compiler file during a simultaneous Git rebase that briefly removed it.
+The isolated immutable-checkout rerun passes. All eleven functional receipts
+then revalidate against the final compiler/capability bytes: 66 cold/replay/
+changed-geometry CPU endpoint rows pass, with maximum independent force error
+8.3072e-9 Hartree/Bohr and energy error 4.1880e-9 Hartree. Keep qualification
+checkouts immutable while running source-bound campaigns; do not mistake a
+checkout mutation for a scientific or solver failure.
+
 Ignored local receipts are retained under `.cache/1118-point-cpu-final/`,
 `.cache/1118-point-cuda-final/`, and `.cache/1118-point-force-qualified/`.
+The final force receipts are in `.cache/1118-automatic-force-final/` plus the
+stable LDA_C_VWN_4 rerun in `.cache/1118-vwn-diagnosis/`.
 The pre-correction campaigns and pre-refactor complete CPU products remain in
 separate ignored directories for reproducing the diagnosis. Raw test logs are
 under `/tmp/qc-1118-point-*-tests.log`.
