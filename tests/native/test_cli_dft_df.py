@@ -205,7 +205,19 @@ class NativeDftDfCliTests(unittest.TestCase):
             with self.subTest(fitting=fitting):
                 self.assert_pbe0_force_reconverged_finite_difference(fitting)
 
-    def assert_pbe0_force_reconverged_finite_difference(self, fitting: str) -> None:
+    def test_cpu_uks_analytic_force_reconverged_finite_difference(self) -> None:
+        for method in ("pbe-uks", "pbe0-uks"):
+            for fitting in ("cpu", "none"):
+                if fitting == "none" and not DIRECT_AOT_ENABLED:
+                    continue
+                with self.subTest(method=method, fitting=fitting):
+                    self.assert_pbe0_force_reconverged_finite_difference(
+                        fitting, method
+                    )
+
+    def assert_pbe0_force_reconverged_finite_difference(
+        self, fitting: str, method: str = "pbe0-rks"
+    ) -> None:
         # This is a complete molecular E+F gate, not the fixed-density XC
         # derivative test. Both displaced geometries must reconverge natively.
         flags = (
@@ -220,12 +232,15 @@ class NativeDftDfCliTests(unittest.TestCase):
             "--density-tolerance",
             "1e-10",
         )
-        result = self.call_named("pbe0-rks", *flags, "--forces")
+        if method.endswith("-uks"):
+            flags += ("--charge", "1", "--multiplicity", "2")
+        result = self.call_named(method, *flags, "--forces")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         self.assertTrue(math.isfinite(data["energy_hartree"]))
-        self.assertEqual(data["method"], "pbe0-rks")
-        self.assertEqual(len(data["method_ir_identity"]), 64)
+        self.assertEqual(data["method"], method)
+        if method != "pbe-uks":
+            self.assertEqual(len(data["method_ir_identity"]), 64)
         force = data["forces_hartree_per_bohr"]
         self.assertEqual(len(force), 2)
         self.assertTrue(
@@ -252,7 +267,7 @@ class NativeDftDfCliTests(unittest.TestCase):
                 lines[3] = " ".join(atom)
                 geometry = Path(directory) / f"{label}.xyz"
                 geometry.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                displaced = self.call_xyz(geometry, "pbe0-rks", *flags)
+                displaced = self.call_xyz(geometry, method, *flags)
                 self.assertEqual(displaced.returncode, 0, displaced.stderr)
                 displaced_energies.append(
                     json.loads(displaced.stdout)["energy_hartree"]

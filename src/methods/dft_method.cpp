@@ -895,8 +895,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
   const Capabilities& capabilities() const noexcept override { return capabilities_; }
   /** Method-global manifest stays energy-only. Force capability is a
    * property of this immutable prepared physical execution context. Only
-   * strict-FP64 all-electron CPU fitted RKS PBE/PBE0 with full response
-   * providers is currently admitted; UKS, CUDA, Direct, corrections and
+   * strict-FP64 all-electron CPU fitted PBE/PBE0 with full response
+   * providers is admitted for RKS/UKS; CPU Direct additionally requires the
+   * packaged s/p/d derivative provider. CUDA, corrections and
    * unrepresented XC graphs remain fail-closed until separately qualified. */
   [[nodiscard]] const std::optional<scf::initial_guess::PreliminaryOptions>& initial_guess_policy()
       const noexcept {
@@ -908,10 +909,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
         (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE &&
          options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) ||
         execution_plan_.semilocal_family != dft::SemilocalFamily::Pbe ||
-        execution_plan_.spin_channels != 1 || execution_plan_.automatic_program ||
-        execution_plan_.generated_split_hybrid || execution_plan_.range_exchange ||
-        execution_plan_.nonlocal_correlation || execution_plan_.d4_correction ||
-        !system_.ecp_terms.empty() ||
+        execution_plan_.automatic_program || execution_plan_.generated_split_hybrid ||
+        execution_plan_.range_exchange || execution_plan_.nonlocal_correlation ||
+        execution_plan_.d4_correction || !system_.ecp_terms.empty() ||
         std::any_of(system_.atoms.begin(), system_.atoms.end(),
                     [](const auto& atom) { return atom.ecp_core != 0; }))
       return false;
@@ -921,6 +921,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                      [](const auto& shell) { return shell.angular_momentum > 2; })))
       return false;
     const auto& spec = fock_.strategy().spec;
+    if (execution_plan_.spin_channels != (spec.spin == scf::FockSpin::Restricted ? 1u : 2u))
+      return false;
     const auto approximation = options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                                    ? scf::FockApproximation::Exact
                                    : scf::FockApproximation::DensityFitted;
@@ -932,8 +934,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
         !admitted_term(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
       return false;
     const bool pbe = !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 = spec.exchange.present && spec.exchange.coefficient == -0.125 &&
-                      options_.semilocal_exchange_scale == 0.75;
+    const bool pbe0 =
+        spec.exchange.present &&
+        spec.exchange.coefficient == (execution_plan_.spin_channels == 1 ? -0.125 : -0.25) &&
+        options_.semilocal_exchange_scale == 0.75;
     return (pbe || pbe0) && (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
                              scf::cpu_stationary_direct_force_work_admitted(
                                  system_, pbe0, grid_.point_count(), options_.xc_tile_points));
@@ -1509,13 +1513,16 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "CPU Direct KS stationary integral sources require a qualified PBE/PBE0 owner";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
-    if (density.size() != 1 || weighted_density.size() != 1) {
+    const auto spins = expected.identity.model.spins;
+    if (density.size() != spins || weighted_density.size() != spins || (spins != 1 && spins != 2)) {
       detail = "CPU Direct stationary D/W spin shape mismatch";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    auto candidate = scf::cpu_stationary_integral_gradient(fock_, density[0], weighted_density[0],
-                                                           fock_.strategy().spec.exchange.present,
-                                                           maximum_bytes);
+    const std::span<const double> empty;
+    auto candidate = scf::cpu_stationary_integral_gradient(
+        fock_, density[0], weighted_density[0], fock_.strategy().spec.exchange.present,
+        maximum_bytes, spins == 2 ? std::span<const double>(density[1]) : empty,
+        spins == 2 ? std::span<const double>(weighted_density[1]) : empty);
     work[3] = candidate.numeric_capacity;
     output = std::move(candidate.sources);
     detail.clear();

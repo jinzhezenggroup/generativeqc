@@ -32,13 +32,18 @@ struct CpuStationaryIntegralGradient {
   std::uint64_t shell_quartets{}, primitive_evaluations{};
 };
 
-/** Consume occupation-weighted restricted D/W using the prepared exact provider's
+/** Consume occupation-weighted RKS D/W or separately occupied UKS alpha/beta
+ * D/W using the prepared exact provider's
  * immutable system and compiler-emitted stationary AD weights. The method owner
  * authenticates the PBE/PBE0 composition and live final-state token. This helper
  * validates the exact full-range source and contracts bounded shell-local weights
  * into derivatives; it neither owns an SCF solver nor publishes a final force.
+ * UKS requires both beta blocks, including explicit zero matrices for an empty
+ * beta population. Compact flattening serves the compiler-owned spin layout;
+ * its live capacities are charged, without copying any density equations.
  */
 CpuStationaryIntegralGradient cpu_stationary_integral_gradient(
     const PreparedFockPlan& target, std::span<const double> density,
-    std::span<const double> weighted_density, bool pbe0, std::size_t maximum_numeric_bytes);
+    std::span<const double> weighted_density, bool pbe0, std::size_t maximum_numeric_bytes,
+    std::span<const double> beta_density = {}, std::span<const double> beta_weighted_density = {});
 }  // namespace generativeqc::scf

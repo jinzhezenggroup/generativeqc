@@ -335,7 +335,7 @@ native capability: preparation remains authoritative.
 
 ### Context-qualified native DFT analytic forces
 
-A narrow **CPU, Direct or density-fitted, all-electron RKS PBE/PBE0** force path composes
+A narrow **CPU, Direct or density-fitted, all-electron RKS/UKS PBE/PBE0** force path composes
 the same prepared electronic state as the energy route with the native one-
 and two-electron response providers, generated XC point derivatives, the
 moving molecular grid/Becke partition derivative and nuclear repulsion:
@@ -348,7 +348,7 @@ generativeqc run molecule.xyz --method pbe-rks --basis sto-3g \
 Use `--density-fitting none` for the exact Direct source instead. Its packaged
 derivative and work-envelope prerequisites are documented in the
 [C++ SDK derivative contract](native_cpp.md#density-fitting-and-derivative-boundary).
-The generated **PBE0-RKS** composition can use either route only when its
+The generated **PBE0-RKS/UKS** composition can use either route only when its
 prepared full-range exact-exchange **and** Coulomb terms admit the corresponding
 native derivative provider. Its H2/STO-3G native CLI analytic
 force is independently checked against central differences of fully
@@ -362,7 +362,13 @@ registry remains energy-only because it cannot promise forces for every
 backend, grid, spin or approximation. Use `Calculation::supported_properties()`
 rather than the global method manifest to test this narrow admission.
 
-This is not support for native CUDA DFT forces, UKS,
+For an open-shell cation, use `--method pbe-uks` or `pbe0-uks` with
+`--charge 1 --multiplicity 2`. Separate alpha/beta blocks, including an empty
+beta population, pass the same stationary-state gate. Direct s/p/d and DF
+orbital-through-f/auxiliary-through-g contexts retain their existing basis
+boundaries; see the SDK contract for qualification details.
+
+This is not support for native CUDA DFT forces,
 r²SCAN, ωB97M-V or correction-bearing MethodIR. Unsupported `--forces`
 requests reject before execution and do not return a partial derivative.
 Native **prepared batches** also reuse that CPU Direct/density-fitted PBE/PBE0
@@ -371,7 +377,7 @@ context; unsupported members remain fail-closed. The Python `PreparedBatch` now 
 native force capabilities and reuses this exact batch consumer when every
 context qualifies. Legacy libraries or unqualified native domains retain
 the previously qualified Python force path, with no duplicated PBE method
-whitelist in Python. General native CUDA/UKS and other Direct DFT batch forces
+whitelist in Python. Native CUDA and other Direct DFT batch forces
 remain work under #2151.
 See [C++ SDK usage](native_cpp.md) for the admission boundary and numeric gates.
 

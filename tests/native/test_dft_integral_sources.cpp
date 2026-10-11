@@ -23,8 +23,10 @@ struct Environment {
   generativeqc_context* context{};
   generativeqc_system* system{};
   generativeqc_calculation* calculation{};
+  bool unrestricted{};
 
-  explicit Environment(double displacement = 0.0) {
+  explicit Environment(double displacement = 0.0, bool polarized = false)
+      : unrestricted(polarized) {
     const generativeqc_context_descriptor context_options{sizeof(generativeqc_context_descriptor),
                                                           GENERATIVEQC_ABI_VERSION, 0,
                                                           GENERATIVEQC_BACKEND_CPU_REFERENCE};
@@ -49,8 +51,8 @@ struct Environment {
                                                         2,
                                                         primitives.data(),
                                                         6,
-                                                        0,
-                                                        1,
+                                                        unrestricted ? 1 : 0,
+                                                        unrestricted ? 2u : 1u,
                                                         GENERATIVEQC_BASIS_CARTESIAN};
     require(generativeqc_system_create(context, &system_options, &system) ==
                 GENERATIVEQC_STATUS_SUCCESS,
@@ -71,7 +73,7 @@ struct Environment {
     generativeqc_method_descriptor method{};
     method.struct_size = sizeof(method);
     method.abi_version = GENERATIVEQC_ABI_VERSION;
-    method.method = GENERATIVEQC_METHOD_PBE_RKS;
+    method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
     method.max_iterations = max_iterations;
     method.diis_history = 8;
     method.energy_tolerance = 1.0e-12;
@@ -80,14 +82,14 @@ struct Environment {
     method.density_fitting_mode = fitting;
     method.density_fitting_relative_threshold = 1.0e-10;
     method.precision_mode = GENERATIVEQC_PRECISION_FP64;
-    method.ks_options = pbe0 ? pbe0_options() : nullptr;
+    method.ks_options = pbe0 ? pbe0_options(unrestricted) : nullptr;
     require(generativeqc_calculation_prepare(context, system, &method, &calculation) ==
                 GENERATIVEQC_STATUS_SUCCESS,
             "failed to prepare native PBE integral source owner");
   }
 
   /** Match the native semantic PBE0 contract, not an independent force model. */
-  static const generativeqc_ks_options* pbe0_options() {
+  static const generativeqc_ks_options* pbe0_options(bool unrestricted = false) {
     static const std::array<generativeqc_ks_semilocal_component, 2> components{
         {{"GGA_C_PBE", 1.0}, {"GGA_X_PBE", 0.75}}};
     static const std::array<generativeqc_ks_exchange_term, 1> exchange{
@@ -112,7 +114,15 @@ struct Environment {
       value.exchange_term_count = exchange.size();
       return value;
     }();
-    return &options;
+    static const std::array<generativeqc_ks_exchange_term, 1> uks_exchange{
+        {{GENERATIVEQC_KS_EXCHANGE_FULL_RANGE, 0.25, 0.0, -0.25}}};
+    static const auto uks_options = [&] {
+      auto value = options;
+      value.spin_channels = 2;
+      value.exchange_terms = uks_exchange.data();
+      return value;
+    }();
+    return unrestricted ? &uks_options : &options;
   }
 
   double execute_energy() const {
@@ -130,8 +140,9 @@ constexpr std::size_t kSourceCount = 4 * 3 * 2;
 constexpr std::size_t kWorkCount = 9;
 constexpr std::size_t kBudget = 8u << 20;
 
-void test_single_prepared_stationary_sources(generativeqc_density_fitting_mode fitting, bool pbe0) {
-  Environment environment;
+void test_single_prepared_stationary_sources(generativeqc_density_fitting_mode fitting, bool pbe0,
+                                             bool unrestricted) {
+  Environment environment(0.0, unrestricted);
   environment.prepare(fitting, pbe0);
   std::array<double, kSourceCount> sources;
   std::array<std::uint64_t, kWorkCount> work;
@@ -206,8 +217,8 @@ void test_single_prepared_stationary_sources(generativeqc_density_fitting_mode f
 
 /** Nonconverged SCF is not a stationary force lease, even when its prepared
  * model is supported. Neither full nor partial force outputs may be written. */
-void test_nonconverged_direct_sources() {
-  Environment environment;
+void test_nonconverged_direct_sources(bool unrestricted) {
+  Environment environment(0.0, unrestricted);
   environment.prepare(GENERATIVEQC_DENSITY_FITTING_NONE, true, 1);
   std::array<double, 6> forces;
   forces.fill(1234.0);
@@ -234,8 +245,9 @@ void test_nonconverged_direct_sources() {
           "nonconverged source rejection modified caller buffers");
 }
 
-void test_prepared_cpu_pbe_analytic_forces(generativeqc_density_fitting_mode fitting, bool pbe0) {
-  Environment environment;
+void test_prepared_cpu_pbe_analytic_forces(generativeqc_density_fitting_mode fitting, bool pbe0,
+                                           bool unrestricted) {
+  Environment environment(0.0, unrestricted);
   environment.prepare(fitting, pbe0);
   generativeqc_property_flags available{};
   require(generativeqc_calculation_get_supported_properties_v1(
@@ -263,7 +275,7 @@ void test_prepared_cpu_pbe_analytic_forces(generativeqc_density_fitting_mode fit
   // fixed-density derivative test in test_dft.cpp. Both include nuclear,
   // Pulay, J/K, PBE XC and the same moving Becke grid.
   constexpr double step = 5e-4;
-  Environment positive(step), negative(-step);
+  Environment positive(step, unrestricted), negative(-step, unrestricted);
   positive.prepare(fitting, pbe0);
   negative.prepare(fitting, pbe0);
   const double fd = -(positive.execute_energy() - negative.execute_energy()) / (2.0 * step);
@@ -274,8 +286,9 @@ void test_prepared_cpu_pbe_analytic_forces(generativeqc_density_fitting_mode fit
 
 /** Match the native batch endpoint to the already-qualified single owner;
  * unsupported providers and invalid neighbors must not receive forces. */
-void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fitting, bool pbe0) {
-  Environment baseline;
+void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fitting, bool pbe0,
+                                        bool unrestricted) {
+  Environment baseline(0.0, unrestricted);
   baseline.prepare(fitting, pbe0);
   std::array<double, 6> single_forces{};
   generativeqc_result_descriptor single{};
@@ -291,7 +304,7 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   generativeqc_method_descriptor method{};
   method.struct_size = sizeof(method);
   method.abi_version = GENERATIVEQC_ABI_VERSION;
-  method.method = GENERATIVEQC_METHOD_PBE_RKS;
+  method.method = unrestricted ? GENERATIVEQC_METHOD_PBE_UKS : GENERATIVEQC_METHOD_PBE_RKS;
   method.max_iterations = 200;
   method.diis_history = 8;
   method.energy_tolerance = 1.0e-12;
@@ -300,7 +313,7 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   method.density_fitting_mode = fitting;
   method.density_fitting_relative_threshold = 1.0e-10;
   method.precision_mode = GENERATIVEQC_PRECISION_FP64;
-  method.ks_options = pbe0 ? Environment::pbe0_options() : nullptr;
+  method.ks_options = pbe0 ? Environment::pbe0_options(unrestricted) : nullptr;
 
   const generativeqc_system* systems[]{baseline.system, baseline.system};
   generativeqc_batch* batch = nullptr;
@@ -363,7 +376,7 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   compare_reference(1, single_forces.data(), single.energy);
 
   constexpr double displacement = 0.005;
-  Environment moved(displacement);
+  Environment moved(displacement, unrestricted);
   moved.prepare(fitting, pbe0);
   std::array<double, 6> moved_forces{};
   generativeqc_result_descriptor moved_result{};
@@ -411,7 +424,7 @@ void test_prepared_cpu_pbe_batch_forces(generativeqc_density_fitting_mode fittin
   // Unqualified methods retain the pre-existing
   // fail-closed whole-batch force behavior, without writing caller storage.
   method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
-  method.method = GENERATIVEQC_METHOD_LDA_RKS;
+  method.method = unrestricted ? GENERATIVEQC_METHOD_LDA_UKS : GENERATIVEQC_METHOD_LDA_RKS;
   method.ks_options = nullptr;
   batch = nullptr;
   require(generativeqc_batch_prepare(baseline.context, systems, 2, &method, 0, &batch) ==
@@ -445,12 +458,14 @@ int main() {
         if (fitting == GENERATIVEQC_DENSITY_FITTING_NONE &&
             !generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives())
           continue;
-        test_single_prepared_stationary_sources(fitting, pbe0);
-        test_prepared_cpu_pbe_analytic_forces(fitting, pbe0);
-        test_prepared_cpu_pbe_batch_forces(fitting, pbe0);
+        for (const bool unrestricted : {false, true}) {
+          test_single_prepared_stationary_sources(fitting, pbe0, unrestricted);
+          test_prepared_cpu_pbe_analytic_forces(fitting, pbe0, unrestricted);
+          test_prepared_cpu_pbe_batch_forces(fitting, pbe0, unrestricted);
+        }
       }
     if (generativeqc::integrals::has_packaged_cpu_eri_shell_derivatives())
-      test_nonconverged_direct_sources();
+      for (const bool unrestricted : {false, true}) test_nonconverged_direct_sources(unrestricted);
     std::cout << "Native single-system and batch stationary forces: PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
