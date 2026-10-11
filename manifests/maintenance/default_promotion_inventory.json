@@ -89,7 +89,7 @@
     },
     {
       "id": "scf.incremental-direct-jk",
-      "classification": "needs-qualification",
+      "classification": "negative-evidence",
       "controls": [
         "scf-option:incremental_direct_jk"
       ],
@@ -99,9 +99,13 @@
       "sources": [
         "src/scf/types.hpp"
       ],
-      "rationale": "The exact incremental Direct-J/K implementation is merged via #990/#1579, but automatic selection remains unqualified: bounded-streaming provider-owned accounting, matched complete endpoints, RHF/UHF workload coverage, geometry-change behavior, and composition with precision policy still require a promotion decision under #1598.",
-      "revisit_condition": "Reclassify only after #1598 retains complete cold, warm, and changed-geometry endpoint evidence with numerical parity and a workload/resource guard, or records durable negative evidence and keeps the route opt-in.",
+      "rationale": "The exact incremental Direct-J/K implementation (#990/#1579) remains opt-in. The #1598 promotion matrix on current master measured matched complete 96/192/384/768-AO RHF, UHF-cation and moved nested-water endpoints with independent GPU4PySCF reference gates, A-B-B-A interleaved cold plus warm replays, fixed-topology work censuses and an nvidia-smi resource ledger; the retained records show no complete-endpoint wall-time win in any qualified population, convergence failures of the incremental route at 192 AOs, and the PBE0 cold control independently reproduces the cautionary #1803-style pattern. Bounded-streaming provider-owned work accounting remains unavailable (quartet counters are invalid under bounded streaming), so no fail-closed workload/resource guard can be certified. The route is kept (not retired) because the shared policy still serves the narrower KS/PBE0 owner issue #2053.",
+      "revisit_condition": "Reopen promotion only after provider-owned bounded-streaming admitted/rejected work accounting exists and a candidate guard domain shows matched complete-endpoint wins across cold, warm and moved-geometry RHF/UHF populations with unchanged numerical gates, repeated interleaved timing, exact source/library/device identity, and compile/artifact reuse cost charged to admission; or if a materially different late-SCF work distribution reopens the economics.",
       "evidence": [
+        "benchmarks/results/issue1598-incremental-direct-jk-20261011/README.md",
+        ".agents/notes/implemented/performance/2026-10-11-incremental-direct-jk-negative-closeout.md",
+        "benchmarks/run_issue1598_incremental_qualification.sh",
+        "tools/reduce_issue1598_incremental_qualification.py",
         "issue:#990",
         "pr:#1579",
         "issue:#1598"
