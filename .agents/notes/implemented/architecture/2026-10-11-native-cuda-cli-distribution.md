@@ -25,9 +25,14 @@ uploads immutable per-commit Actions Artifacts, and publishes a GitHub Release
 only when an explicitly pushed `vX.Y.Z` tag matches CMake and is on master.
 Read/check existing releases first and never overwrite their assets.
 
-Keep external CUDA/system DSOs externally provided and ship separately compiled
-stationary AOT plug-ins with the archive. Preserve the build provenance and
-license notices and emit checksums with deterministic archive metadata.
+Keep external CUDA/system DSOs externally provided. The native release preset
+retains core-linked AOT shell kernels and stationary CPU derivative shards but
+disables the standalone stationary CUDA .so targets: those C export-based modules
+are called from the Python-specific force adapter and are not linked into the
+native CLI. Different stationary profiles currently export colliding C names,
+so simply combining the libraries would not preserve method dispatch. Fail
+packaging if any GenerativeQC-owned .so remains in the distribution installation.
+Preserve build provenance, license notices and deterministic archive checksums.
 
 ## Rejected alternatives
 
@@ -35,9 +40,11 @@ license notices and emit checksums with deterministic archive metadata.
   not changed by every merge, and this would create unapproved release churn.
 - Forcing a monolithic shared + static core into ordinary CI/SDK configurations:
   this recompiles expensive generated CUDA units and changes existing API links.
-- Claiming all CUDA + driver DSOs are in one fully static ELF: CUDA driver is a
-  host runtime contract, the cuBLAS/cuSOLVER providers remain dynamic, and
-  separate stationary AOT libraries need their own runtime files.
+- Claiming all CUDA + driver DSOs are in one fully static ELF: the CUDA driver
+  is a host runtime contract and cuBLAS/cuSOLVER providers remain dynamic.
+- Linking multiple Python stationary-force wrappers into the CLI without
+  namespaced symbols and a new native dispatch/identity contract: the wrappers
+  export overlapping C names and the CLI does not call this Python-owned path.
 - Changing normal CUDA PR builds to full release code generation: would hurt
   feedback latency and compiler cache behavior.
 
@@ -48,24 +55,25 @@ license notices and emit checksums with deterministic archive metadata.
 - Never overwrite an existing Release or its assets.
 - PR build gates remain optimized for feedback time.
 - The shared C++ SDK and Python wheel remain the default.
-- Distribution archives must contain no `libgenerativeqc.so` dependency.
+- Distribution archives contain one GenerativeQC executable and no local `.so` files.
 - Source-generated CUDA code retains the pinned scientific identity and AOT
   manifest; user-visible packages must include notices.
 
 ## Evidence
 
 `python3 -m unittest discover -s tests/python -p test_native_cli_package.py`
-validates deterministic tarballs, checksums, license inclusion and AOT manifest
-retention without a GPU. CI release-mode jobs additionally check actual ELF
+validates deterministic tarballs, checksums, license inclusion and rejection
+of separate stationary CUDA `.so` files without a GPU. CI release-mode jobs additionally check actual ELF
 linkage and smoke test native CLI methods and basis catalog. CUDA hardware
 execution/performance qualification still requires an appropriate GPU runner;
 a successful compile-only run is not evidence of device-level speed.
 
 ## Consequences
 
-Master pushes have a separate, potentially expensive release-mode build job.
-Only sm_120 is initially distributed. External runtime provider installation
-and compatible host Linux remain necessary.
+Master pushes have a separate release-mode build job. The CLI avoids compiling
+or shipping Python-only force plug-ins, reducing distribution size and compile
+work without removing native CLI functionality. Only sm_120 is initially
+distributed. External CUDA/host runtime providers remain necessary.
 
 ## Revisit when
 
