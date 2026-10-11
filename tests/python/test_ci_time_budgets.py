@@ -98,10 +98,24 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         .split("\n  python:\n", 1)[1]
         .split("\n  upload-coverage:\n", 1)[0]
     )
-    assert (
-        "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
-        in section
+    shard_matrix = next(
+        line for line in section.splitlines() if line.strip().startswith("shard:")
     )
+    assert "fromJSON(" in shard_matrix
+    assert "github.event_name == 'schedule'" in shard_matrix
+    assert "github.event_name == 'workflow_dispatch'" in shard_matrix
+    for shard in (
+        "core-a",
+        "core-b",
+        "runtime-heavy",
+        "posthf",
+        "compiler-heavy",
+        "ecp-forces",
+    ):
+        # Routine shards exist in both branches of the event-specific matrix.
+        assert shard_matrix.count(f'"{shard}"') == 2
+    for shard in ("nightly-hessian", "nightly-wb97mv"):
+        assert shard_matrix.count(f'"{shard}"') == 1
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
     assert "rebalance_paths=(" in section
