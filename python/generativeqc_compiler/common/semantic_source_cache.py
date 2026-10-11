@@ -113,7 +113,9 @@ def cached_sources(
             ) as temporary:
                 folder = Path(temporary)
                 records = []
-                for index, (source, size) in enumerate(zip(sources, sizes, strict=True)):
+                for index, (source, size) in enumerate(
+                    zip(sources, sizes, strict=True)
+                ):
                     path = folder / f"{index}.cu"
                     cache_source(path, source)
                     records.append({"bytes": size, "sha256": file_hash(path)})
