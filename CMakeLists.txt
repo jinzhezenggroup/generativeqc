@@ -116,6 +116,13 @@ elseif(NOT GENERATIVEQC_COMPILER_CACHE STREQUAL "off"
     endif()
   endif()
 endif()
+set(GENERATIVEQC_RESOLVED_COMPILER_CACHE
+    "${_generativeqc_compiler_cache}" CACHE FILEPATH
+    "Compiler cache executable selected by GenerativeQC" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_COMPILER_CACHE)
+set(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER "" CACHE FILEPATH
+    "CUDA host compiler selected by CMake" FORCE)
+mark_as_advanced(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER)
 if(_generativeqc_compiler_cache)
   get_filename_component(_generativeqc_compiler_cache_name
                          "${_generativeqc_compiler_cache}" NAME)
@@ -132,7 +139,16 @@ if(_generativeqc_compiler_cache)
   endif()
   if(NOT CMAKE_CUDA_COMPILER_LAUNCHER)
     set(CMAKE_CUDA_COMPILER_LAUNCHER "${_generativeqc_compiler_cache_launcher}")
+    set(_generativeqc_cuda_compiler_launcher_managed ON)
+  else()
+    set(_generativeqc_cuda_compiler_launcher_managed OFF)
   endif()
+  set(GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED
+      "${_generativeqc_cuda_compiler_launcher_managed}" CACHE BOOL
+      "Whether GenerativeQC selected the CUDA compiler launcher" FORCE)
+  set(GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER
+      "${CMAKE_CUDA_COMPILER_LAUNCHER}" CACHE STRING
+      "Effective CUDA compiler launcher recorded by GenerativeQC" FORCE)
   message(STATUS "GenerativeQC compiler cache: ${_generativeqc_compiler_cache}")
 endif()
 
@@ -202,6 +218,9 @@ if(GENERATIVEQC_ENABLE_CUDA)
     endif()
     set(CMAKE_CUDA_ARCHITECTURES ${_generativeqc_cuda_requested_architectures})
     enable_language(CUDA)
+    set(GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER
+        "${CMAKE_CUDA_HOST_COMPILER}" CACHE FILEPATH
+        "CUDA host compiler selected by CMake" FORCE)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     # Preserve NVCC's real/virtual suffixes for compilation. A separate
