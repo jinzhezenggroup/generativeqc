@@ -490,7 +490,7 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "ca9b5368a4ab3c06384dd63ec72982486a08639fe433a00a3fb2869261105dd9"
+    "9716c5ab6a7e91e7cd990769132d517d581143f9393fe0b58d696cbd705d8062"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable

@@ -552,7 +552,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "ca9b5368a4ab3c06384dd63ec72982486a08639fe433a00a3fb2869261105dd9"
+            "9716c5ab6a7e91e7cd990769132d517d581143f9393fe0b58d696cbd705d8062"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
