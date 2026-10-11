@@ -22,9 +22,6 @@ energy+force replays, with one retry per failed point.
   (base `98263e06c…`), library `30734a0f…`. RHF 192/384/768 AOs plus the
   attempted KS control records.
 
-Each record carries its comparator schema, gate verdict, timings, iteration
-branches, incremental diagnostics and native-build identity; the `.outcome`
-files carry per-point exit codes and retry dispositions.
 
 ## Key measured results
 
