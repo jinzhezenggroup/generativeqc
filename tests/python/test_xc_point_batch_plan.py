@@ -81,9 +81,10 @@ int main() {
 
 
 def test_point_batches_share_canonical_consumer_and_launch_width() -> None:
-    """Batching does not specialize/prune the canonical scientific consumer."""
+    """Batching shares the canonical consumer and its proven equal-spin slice."""
     source = emit_native_xc_contraction_kernels()
     assert "evaluate_points<feature_terms, false, true>" in source
+    assert "launch_equal_spin_points<feature_terms, threads, true>" in source
     assert "return &launch_point_batches<4, 32>;" in source
     assert "min(tile_points, domain_count - begin)" in source
     assert source.count(emit_point_traversal()) == 1
@@ -92,7 +93,9 @@ def test_point_batches_share_canonical_consumer_and_launch_width() -> None:
         in source
     )
     assert (
-        source.count("return evaluate_semilocal_point(functional, rho, gradient, tau")
+        source.count(
+            "return evaluate_semilocal_point<false>(functional, rho, gradient, tau"
+        )
         == 1
     )
     assert "static_assert(!batched || !response)" in source

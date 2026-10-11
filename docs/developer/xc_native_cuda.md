@@ -53,6 +53,21 @@ the disabled registry returns no automatic entries. Enabling this internal
 build option **does not admit public automatic CUDA KS or force methods**.
 Unsupported products continue to fail explicitly rather than stage CPU science.
 
+For bounded packages, set `GENERATIVEQC_AUTOMATIC_XC_CUDA_FUNCTIONALS` to a
+semicolon-separated list of exact structural registration names, for example
+`"LDA_C_VWN_4;GGA_X_APBE;MGGA_X_LTA"`. Both CUDA and the automatic AOT option
+must be enabled; a selected package cannot use the CPU-only compiler fallback.
+An empty list preserves the full-catalog opt-in behavior, while the AOT option
+remains off by default. Selected entries retain their original codes,
+mathematical/source identities and ordinary/batched providers. Omitted entries
+have no executable dispatch case and return a null static descriptor.
+Unknown/unrepresentable names fail before generation writes outputs; duplicate
+or reordered requests do not change structural shard order. Regeneration
+rewrites all shards, removing omitted dispatch cases from shrinking packages.
+Selection controls installed artifact content, not scientific admission,
+public capability promotion, executable alias reuse or a complete persistent
+binary-cache dependency closure.
+
 The compiler's `xc/automatic_point.py` owns canonical CPU/CUDA point science and
 work policy. `dft/xc_point_cuda.py` owns their common physical-spin traversal and
 coefficient ABI. The static `CudaXcPointProgram` descriptor binds library-owned
@@ -62,6 +77,16 @@ turning it into an installed artifact/cache key or a resource admission claim.
 Automatic entries reuse the existing AO, density-feature and potential kernels
 with strict FP64 and the bounded one-tile fallback. They do not inherit curated
 mixed precision, response, local-AO selection, batching or graph qualification.
+
+The default-on `GENERATIVEQC_CUDA_XC_EQUAL_SPIN` selector also applies to every
+structurally registered automatic provider (`0` restores the old path).
+Its RKS-only sibling shares scalar work after polarized differentiation,
+leaving independent sigma-ab and all work-domain floors/clamps unchanged.
+UKS and the explicitly disabled arm retain the original body; both arms keep the existing 128-thread automatic schedule and
+bounded traversal. The descriptor's exact source identity covers both bodies
+and the selector. This does not add response support, installed variants,
+public backend admission, or resource/performance qualification. See
+[equal-spin qualification](../maintainer/xc_equal_spin_qualification.md).
 
 Build `generativeqc_dft_cuda_tests` with the option enabled. Inside a finite
 Slurm GPU allocation, set `GENERATIVEQC_AUTOMATIC_CUDA_XC_EXECUTABLE` to that

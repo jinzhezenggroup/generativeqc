@@ -31,6 +31,7 @@ def test_fock_counts_require_complete_cuda_ks_work(tmp_path: Path) -> None:
 #include <optional>
 #include <vector>
 #include "generativeqc/generativeqc.h"
+#include "scf/target_fock_work.hpp"
 struct Work { bool complete{}, operator_inventory_complete{}; };
 struct Calculation {
   generativeqc_backend executed_backend;
@@ -38,7 +39,11 @@ struct Calculation {
   std::uint64_t fock_builds{53};
   unsigned iterations{4};
 };
-struct Item { Calculation calculation; bool warm_start_fallback{}; };
+struct Item {
+  Calculation calculation;
+  bool warm_start_fallback{};
+  std::optional<generativeqc::scf::TargetFockWork> target_fock_work;
+};
 struct Batch {
   std::vector<std::optional<int>> ks_diagnostics;
   std::vector<std::uint64_t> last_fock_builds{0};
@@ -69,7 +74,7 @@ int main() {
   };
   for (const auto& test : cases) {
     Batch batch{{test.ks ? std::optional<int>{1} : std::nullopt}};
-    Item item{{test.backend, {test.complete, test.operators}}, test.retry};
+    Item item{{test.backend, {test.complete, test.operators}}, test.retry, std::nullopt};
     publish(&batch, item);
     assert(batch.last_fock_builds[0] == test.expected);
   }
@@ -86,6 +91,8 @@ int main() {
             "-Werror",
             "-I",
             str(ROOT / "include"),
+            "-I",
+            str(ROOT / "src"),
             str(cpp),
             "-o",
             str(binary),

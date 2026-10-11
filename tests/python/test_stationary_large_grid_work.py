@@ -452,7 +452,10 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     # Attribute it independently of the stationary source and paired reserves.
     grid_binding_host_bytes = 32 << 10
     assert grid.host_bytes - cpu_grid.host_bytes == grid_binding_host_bytes
-    host = host_without_binding + grid_binding_host_bytes
+    # Component packing reserves bounded mixed-radix scratch and linear AO
+    # topology even with scalar packing, so later mode changes remain admitted.
+    component_packing_host_bytes = 8 * (48 * 4096 + 7 * aos)
+    host = host_without_binding + grid_binding_host_bytes + component_packing_host_bytes
     assert plan["host"] == host < 256 << 20
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve

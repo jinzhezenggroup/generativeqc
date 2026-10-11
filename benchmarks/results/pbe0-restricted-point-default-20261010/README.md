@@ -31,9 +31,10 @@ allocation. Static registers/stack are not performance evidence.
 
 ## Contents and reproduction
 
-Use the shared publication reader for checksum-bound `samples.json.gz` and
+Use the shared publication reader for checksum-bound `samples.json.xz` and
 `validation.json.gz`. Samples retain both original records, setup/priming calls,
 all 40 measurements, seed-checkpoint identities, and independent E/F references.
+The XZ storage is lossless: decoded sample bytes and source identities are unchanged.
 The verification summary includes successful raw NPZ checks; NPZ seeds and
 binaries remain ignored local evidence, not tracked inputs or external assets.
 

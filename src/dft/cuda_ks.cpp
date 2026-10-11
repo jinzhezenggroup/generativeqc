@@ -367,6 +367,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (const auto& shell : system.shells)
       maximum_angular = std::max(maximum_angular, shell.angular_momentum);
     constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;
+    const auto buckets = direct_jk_resident_bucket_policy(
+        std::getenv("GENERATIVEQC_KS_RESIDENT_BUCKET_MASK"),
+        std::getenv("GENERATIVEQC_KS_RESIDENT_MAX_BYTES"),
+        direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));
+    if (!buckets.valid)
+      throw std::invalid_argument("invalid KS resident bucket mask or value ceiling");
     const auto generic_fock =
         maximum_angular == 3 &&
         scf::cuda_direct_jk_value_census_available(provider.cuda_direct_source(), strategy.spec);
@@ -399,9 +405,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
               options.reference_memory_budget_bytes ? options.reference_memory_budget_bytes
                                                     : std::numeric_limits<std::size_t>::max(),
               selection, "cuda_ks_resident_values_prepare", cold, generic_fock,
-              strategy.screening_tolerance,
-              direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,
-              auto_policy),
+              strategy.screening_tolerance, buckets.ceiling, false, auto_policy, buckets.mask),
           phase_source->reason());
     movement.phase_resident_numeric_peak_bytes = std::max(
         movement.phase_resident_numeric_peak_bytes, sum(required, phase_source->capacity_bytes()));
@@ -2480,14 +2484,23 @@ struct CudaKsPlan::Impl : KsStateStorage {
       multiply(x, false, false, tmp2, true, final_coefficients);
     }
 
-    const bool direct_pbe0 =
-        pbe0_rks_final_validation_composition(
-            is_semilocal_family(functional, SemilocalFamily::Pbe), exchange_coefficient,
-            options.semilocal_exchange_scale, options.semilocal_correlation_scale) &&
-        has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction &&
-        !nonlocal_correlation;
+    // The final-state product proof is shared by every prepared full-range
+    // global hybrid; the semilocal XC family does not change its matrix algebra.
+    const auto& final_spec = provider.strategy().spec;
+    const bool direct_global_hybrid =
+        has_exchange && restricted_global_hybrid_exchange_coefficient(exchange_coefficient) &&
+        !fitted_coulomb && !fitted_exchange && !has_range_correction && !nonlocal_correlation &&
+        !incremental_direct_jk && provider.system().ecp_terms.empty() &&
+        std::none_of(provider.system().atoms.begin(), provider.system().atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; }) &&
+        final_spec.derivative_order == 0 && final_spec.coulomb.present &&
+        final_spec.coulomb.coefficient == 1.0 &&
+        final_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        final_spec.coulomb.op == scf::FockOperator::FullRange && final_spec.exchange.present &&
+        final_spec.exchange.approximation == scf::FockApproximation::Exact &&
+        final_spec.exchange.op == scf::FockOperator::FullRange;
     const bool default_device_validation = device_final_validation_default_eligible(
-        n, spins, direct_pbe0, !precision_schedule.any_lower_precision());
+        n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision());
     const bool device_validation = device_final_validation_requested(
                                        std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),
                                        default_device_validation) &&
@@ -2722,6 +2735,22 @@ scf::ScfResult CudaKsPlan::result(bool export_density) {
         impl_->xc->transfers().evaluations - impl_->initial_xc_evaluations;
   if (export_density) result.density = impl_->download(impl_->density);
   return result;
+}
+std::optional<std::uint64_t> CudaKsPlan::completed_fock_builds() const noexcept {
+  if (!impl_->started || impl_->is_active || impl_->is_pending || impl_->is_failed ||
+      !impl_->complete_precision_inventory_domain())
+    return std::nullopt;
+  const auto& work = impl_->output.precision_work;
+  const auto recorded =
+      std::count_if(work.events.begin(), work.events.end(), [](const auto& event) {
+        return event.kind == scf::PrecisionWorkEventKind::MixedFock ||
+               event.kind == scf::PrecisionWorkEventKind::StrictFock ||
+               event.kind == scf::PrecisionWorkEventKind::PostScfFock;
+      });
+  // A terminal nonconverged attempt has no FinalAudit. Its physical build
+  // ledger must nevertheless cover every build; audit flags stay unchanged.
+  if (static_cast<std::uint64_t>(recorded) != impl_->output.fock_builds) return std::nullopt;
+  return impl_->output.fock_builds;
 }
 scf::ScfResult CudaKsPlan::run(const std::vector<double>* seed, bool reuse_warm,
                                bool export_density, CudaKsSeedOrigin seed_origin) {

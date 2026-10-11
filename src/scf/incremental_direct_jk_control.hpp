@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace generativeqc::dft {
+namespace generativeqc::scf {
 enum class IncrementalDirectJkControl { Disabled, Enabled, Invalid };
 
 // Shared vocabulary only: callers retain their error type and admission policy.
@@ -14,4 +14,4 @@ constexpr IncrementalDirectJkControl classify_incremental_direct_jk_control(cons
   if (setting == "1" || setting == "on") return IncrementalDirectJkControl::Enabled;
   return IncrementalDirectJkControl::Invalid;
 }
-}  // namespace generativeqc::dft
+}  // namespace generativeqc::scf

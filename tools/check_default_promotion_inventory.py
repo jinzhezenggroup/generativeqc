@@ -210,19 +210,19 @@ def _discover_xc_point_batching(root: Path) -> dict[str, str]:
 
 
 def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
-    """Keep default selection separate from explicit experimental admission."""
+    """Audit algebraic full-range hybrid admission and strict opt-out."""
     relative = Path("src/dft/cuda_ks.cpp")
     source = re.sub(r"\s+", " ", _read(root / relative))
     policy = _read(root / "src/dft/cuda_ks_final_validation_policy.hpp")
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in policy
         for fragment in (
-            "fock_exchange_coefficient == -0.125",
-            "semilocal_exchange_scale == 0.75",
-            "semilocal_correlation_scale == 1.0",
+            "std::isfinite(coefficient)",
+            "coefficient < 0.0",
+            "coefficient >= -0.5",
             "if (!setting) return default_eligible;",
             'std::strcmp(setting, "0") == 0) return false;',
             'std::strcmp(setting, "1") == 0) return true;',
@@ -233,13 +233,17 @@ def _discover_ks_final_validation_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in source
         for fragment in (
-            "pbe0_rks_final_validation_composition(",
-            "is_semilocal_family(functional, SemilocalFamily::Pbe)",
-            "options.semilocal_exchange_scale, options.semilocal_correlation_scale",
-            "has_exchange && !fitted_coulomb && !fitted_exchange && !has_range_correction",
-            "!nonlocal_correlation;",
-            "n, spins, direct_pbe0, !precision_schedule.any_lower_precision()",
-            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"), default_device_validation',
+            "restricted_global_hybrid_exchange_coefficient(exchange_coefficient)",
+            "!fitted_coulomb && !fitted_exchange && !has_range_correction",
+            "!nonlocal_correlation &&",
+            "!incremental_direct_jk && provider.system().ecp_terms.empty()",
+            "atom.ecp_core != 0",
+            "final_spec.coulomb.approximation == scf::FockApproximation::Exact",
+            "final_spec.coulomb.op == scf::FockOperator::FullRange",
+            "final_spec.exchange.approximation == scf::FockApproximation::Exact",
+            "final_spec.exchange.op == scf::FockOperator::FullRange",
+            "n, spins, direct_global_hybrid, !precision_schedule.any_lower_precision()",
+            'std::getenv("GENERATIVEQC_CUDA_KS_DEVICE_FINAL_VALIDATION"),',
             "final_validation_partial && matrix_products.library_enabled()",
             "!final_stationary_weights_ready;",
         )
@@ -271,14 +275,14 @@ def _discover_md_j_default(root: Path) -> dict[str, str]:
 
 
 def _discover_spatial_force_default(root: Path) -> dict[str, str]:
-    """Audit method-owned scope without conflating explicit cache requests with auto."""
+    """Audit exact Direct capabilities, not a functional-name whitelist."""
     relative = Path("src/dft/cuda_spd_force_policy.hpp")
     policy = _read(root / relative)
     schedule = re.sub(
         r"\s+", " ", _read(root / "src/scf/cuda/direct_spd_force_schedule.hpp")
     )
     if not re.search(
-        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_pbe0\s*&&\s*full_precision;",
+        r"return\s+aos\s*>=\s*384\s*&&\s*spins\s*==\s*1\s*&&\s*direct_global_hybrid\s*&&\s*full_precision;",
         policy,
     ) or any(
         fragment not in schedule
@@ -295,7 +299,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
     if any(
         fragment not in owner
         for fragment in (
-            "dft::pbe0_rks_final_validation_composition(",
+            "dft::restricted_global_hybrid_exchange_coefficient(spec.exchange.coefficient)",
             "spec.coulomb.approximation == scf::FockApproximation::Exact",
             "spec.exchange.approximation == scf::FockApproximation::Exact",
             "spec.coulomb.op == scf::FockOperator::FullRange",
@@ -304,7 +308,7 @@ def _discover_spatial_force_default(root: Path) -> dict[str, str]:
             "!execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction",
             "options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE",
             "system_.ecp_terms.empty()",
-            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
+            "fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_global_hybrid, options_.precision_mode == GENERATIVEQC_PRECISION_FP64",
         )
     ):
         raise ValueError("Spatial force default method authentication drifted")
@@ -492,12 +496,17 @@ def _discover_cc_options(root: Path) -> dict[str, str]:
 
 
 def _discover_cc_execution(root: Path) -> dict[str, str]:
-    """Audit bounded energy execution defaults without inventing user flags."""
+    """Audit bounded physical execution defaults without inventing user flags."""
     relative = Path("src/cc/df_triples_cuda.cu")
     source = _read(root / relative)
     energy_start = source.find("DFCudaResult evaluate_df_cuda(")
     response_start = source.find("static DFCudaResponseResult pullback_df_cuda_impl(")
-    if energy_start < 0 or response_start <= energy_start:
+    joint_start = source.find("DFCudaCombinedResponseResult pullback_and_fock_df_cuda(")
+    if (
+        energy_start < 0
+        or response_start <= energy_start
+        or joint_start <= response_start
+    ):
         raise ValueError("missing audited DF triples energy/response boundary")
     body = re.sub(
         r"//[^\n]*|/\*.*?\*/", " ", source[energy_start:response_start], flags=re.DOTALL
@@ -511,10 +520,35 @@ def _discover_cc_execution(root: Path) -> dict[str, str]:
         "if(alias_tile)generated_df::energy_distinct_tile(o,v,i,j,k,degeneracy,threshold,in,moments,sources,p.blocks,partials,context.error,context.stream);elsegenerated_df::energy_tile(o,v,i,j,k,degeneracy,threshold,in,moments,p.blocks,partials,context.error,context.stream);",
     )
     if any(body.count(fragment) != 1 for fragment in required) or any(
-        fragment in source[response_start:]
+        fragment in source[response_start:joint_start]
         for fragment in ("MomentSourceMap", "energy_distinct_tile")
     ):
         raise ValueError("DF triples distinct-moment FP64 energy admission drifted")
+    joint = re.sub(r"//[^\n]*|/\*.*?\*/", " ", source[joint_start:], flags=re.DOTALL)
+    joint = re.sub(r"\s+", "", joint)
+    forward_required = (
+        "constbooldistinct_moments=d.w_contraction_storage_bits==64&&d.w_contraction_compute_bits==64&&d.w_contraction_accumulation_bits==64;",
+        "constautosources=distinct_moments?generated_df::occupied_moment_sources(i,j,k):generated_df::MomentSourceMap{};",
+        "constautosource=sources.index[perm];",
+        "if(source!=perm){",
+        "cudaMemcpyAsync(moments+perm*p.v3,moments+source*p.v3,bytes(p.v3),cudaMemcpyDeviceToDevice,context.stream)",
+        "++fock.w_copy_calls;",
+        "fock.w_copy_bytes=checked_add(fock.w_copy_bytes,bytes(p.v3));",
+    )
+    reverse = joint.split("constautorun_pullback=", 1)[-1].split(
+        "constbooldistinct_moments=", 1
+    )[0]
+    if (
+        any(joint.count(fragment) != 1 for fragment in forward_required)
+        or "MomentSourceMap" in reverse
+        or "sources.index" in reverse
+        or "energy_distinct_tile" in joint
+        or "bar_w+perm*p.v3,bar_panel,out,reverse_gemm" not in reverse
+        or "for(std::size_tperm=0;perm<6;++perm)" not in reverse
+    ):
+        raise ValueError(
+            "DF triples distinct-moment FP64 forward-only force admission drifted"
+        )
     traversal = (
         "detail::visit_occupied_tiles(o,distinct_moments&&p.panel_capacity==3,visit_tile);",
         "reduce<<<1,256,0,context.stream>>>(partials,p.blocks,energies+canonical_tile,context.error);",
@@ -663,7 +697,8 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
             "constexpr auto auto_policy = DirectJkSourceAutoPolicy::screened_cold;",
             "direct_jk_source_auto_refusal(",
             'trace("cuda_ks_resident_values_skip", "host_decision")',
-            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular), false,",
+            "direct_jk_source_value_ceiling(requested, auto_policy, maximum_angular));",
+            "buckets.ceiling, false, auto_policy, buckets.mask",
         )
     ):
         raise ValueError("KS phase-value auto default or admission domain drifted")
@@ -686,6 +721,36 @@ def _discover_ks_phase_values(root: Path) -> dict[str, str]:
     return {"ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES": relative.as_posix()}
 
 
+def _discover_partial_phase_values(root: Path) -> dict[str, str]:
+    """Experimental masks must not silently replace the full-resident default."""
+    policy = _read(root / "src/scf/cuda/direct_jk_source_policy.hpp")
+    if any(
+        fragment not in policy
+        for fragment in (
+            "std::uint32_t mask{(1U << 28) - 1}",
+            "policy.ceiling = default_ceiling;",
+            "if (!text) return true;",
+            "policy.mask < (1U << 28)",
+        )
+    ):
+        raise ValueError("experimental partial source default or admission drifted")
+    result = {}
+    for method, relative in (
+        ("RHF", "src/scf/cuda/reference_eri_policy.hpp"),
+        ("KS", "src/dft/cuda_ks.cpp"),
+    ):
+        source = _read(root / relative)
+        if "direct_jk_resident_bucket_policy(" not in source:
+            raise ValueError("experimental partial source parser drifted")
+        prefix = "hf-runtime" if method == "RHF" else "ks-runtime"
+        for suffix in ("BUCKET_MASK", "MAX_BYTES"):
+            control = f"GENERATIVEQC_{method}_RESIDENT_{suffix}"
+            if f'std::getenv("{control}")' not in source:
+                raise ValueError("experimental partial source controls drifted")
+            result[f"{prefix}:{control}"] = relative
+    return result
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -693,6 +758,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_public_precision(root),
         _discover_runtime_controls(root),
         _discover_ks_phase_values(root),
+        _discover_partial_phase_values(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),

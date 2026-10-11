@@ -33,6 +33,7 @@ f_shell_validation
 hybrid_cuda_acceptance
 ccsdt_cpu_bundle_qualification
 pbe0_xc_tile_qualification
+xc_equal_spin_qualification
 stationary_large_domain_qualification
 ```
 
