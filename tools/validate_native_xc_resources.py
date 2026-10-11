@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import shutil
 import subprocess
 import sys
@@ -63,8 +64,26 @@ def _demangle(
     if len(demangled) != len(resources):
         raise RuntimeError("CUDA symbol demangler returned an incomplete resource list")
     return tuple(
-        replace(resource, function=name)
+        replace(resource, function=_canonical_template_literals(name))
         for resource, name in zip(resources, demangled, strict=True)
+    )
+
+
+def _canonical_template_literals(name: str) -> str:
+    """Normalize cu++filt's typed integer literals to GNU demangler spelling.
+
+    CUDA 12.9 may emit ``<(long)4, (bool)0>`` where GNU emits ``<4l, false>``.
+    The region classifier expects literal template arguments, not cast syntax.
+    Only known integer casts are normalized; unknown expressions remain intact
+    and cannot supply a missing active-kernel scope. Values are never changed.
+    """
+    name = re.sub(
+        r"\(bool\)([01])(?!\w)", lambda match: ("false", "true")[int(match[1])], name
+    )
+    return re.sub(
+        r"\((?:unsigned |signed )?(?:long long|long|int)\)(-?\d+)(?!\w)",
+        r"\1",
+        name,
     )
 
 

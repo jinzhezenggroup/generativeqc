@@ -1,0 +1,7 @@
+{
+  "path": "src/integrals/execution_qualifiers.hpp",
+  "reason": "CPU/CUDA execution qualifier macros only; no scientific formulas, allocation, provider selection or scheduling policy.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

@@ -22,6 +22,8 @@ from generativeqc_compiler.integral.weighted_eri_inputs import PRIMITIVE_RANGE_R
 from .basis import BasisSet
 
 CPU_FORCE_HOST_CAP = 256 << 20
+CPU_MIXED_DF_INTEGRAL_TERMS = 512
+CPU_DF_FORCE_PRIMITIVE_CAP = 32_000_000
 CPU_DIRECT_SEMILOCAL_FORCE_METHODS = frozenset(
     ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks")
 )
@@ -100,6 +102,7 @@ def cpu_force_inventory(
     primitive_tile: int = 128,
     integral_terms: int = 32,
     range_exchange_sources: int = 0,
+    native_fitted_integrals: bool = False,
 ) -> dict[str, int]:
     """Conservative simultaneous numeric capacities; no scientific execution.
 
@@ -113,13 +116,13 @@ def cpu_force_inventory(
     n, a, p = basis.nao, basis.natom, basis.nprimitive
     if type(range_exchange_sources) is not int or not 0 <= range_exchange_sources <= 2:
         raise ValueError("CPU force range-exchange source count must be 0, 1, or 2")
-    if range_exchange_sources and any(
-        shell.angular_momentum > 1 for shell in basis.shells
-    ):
+    maximum_angular = 3 if native_fitted_integrals else 2
+    if any(shell.angular_momentum > maximum_angular for shell in basis.shells):
         raise NotImplementedError(
-            "CPU RSH stationary force resources currently cover s/p bases only"
+            f"CPU stationary force resources cover angular momentum <= {maximum_angular}"
         )
-    if n > 16 or a > 8 or p > 128 or ecp_terms > 128:
+    maximum_aos = 64 if native_fitted_integrals and not ecp_terms else 16
+    if n > maximum_aos or a > 8 or p > 128 or ecp_terms > 128:
         raise ValueError("CPU public force dense-export domain exceeded")
     if grid_points > 1_000_000:
         raise ValueError("CPU public force grid point work budget exceeded")
@@ -141,31 +144,36 @@ def cpu_force_inventory(
         8 * (40 * grid_points + n * n + 3 * a) if nonlocal_correlation else 0
     )
 
-    # The generated range-ERI owner caches one PreparedWeightedEri per
-    # (operator, angular-signature, Cartesian component). For s/p AOs the
-    # union of public component labels has cardinality 1+3=4, hence at most
-    # 4**4=256 plans per SR/LR source when both shell classes are present.
-    # Each CPU plan retains one primitive-record staging array, three
-    # 13-double result/publication buffers, and one yielded-record scratch.
-    angular = {shell.angular_momentum for shell in basis.shells}
-    component_labels = sum((l + 1) * (l + 2) // 2 for l in angular)
-    range_plan_count = (
-        range_exchange_sources * component_labels**4 if range_exchange_sources else 0
-    )
-    weighted_output_bytes = 13 * 8
-    weighted_plan_host_bytes = (
-        primitive_tile * PRIMITIVE_RANGE_RECORD.size
-        + 3 * weighted_output_bytes
-        + PRIMITIVE_RANGE_RECORD.size
-    )
+    # One operator-frozen generic owner, independent of component count.
+    # 256 KiB covers six Dual3 Hermite arrays, the order-12 simplex, moment
+    # seeds, geometry and reduction stack. Tuple/orbit staging is below.
+    range_provider_bytes = range_exchange_sources * ((256 << 10) + 8 * (12 + 3 * a))
+    # Keep Direct s/p packaged-AOT plans alongside their generic fallback.
+    # Mixed fitted consumers always use the component-independent owner.
+    if not native_fitted_integrals and all(
+        shell.angular_momentum <= 1 for shell in basis.shells
+    ):
+        angular = {shell.angular_momentum for shell in basis.shells}
+        component_labels = sum((value + 1) * (value + 2) // 2 for value in angular)
+        range_provider_bytes += (
+            range_exchange_sources
+            * component_labels**4
+            * (
+                primitive_tile * PRIMITIVE_RANGE_RECORD.size
+                + 3 * 13 * 8
+                + PRIMITIVE_RANGE_RECORD.size
+            )
+        )
     blocks = {
         "snapshot_and_ao": 8 * 8 * snapshot_values + 1024 * (1 + a + n + p),
         "xc_tiles": 8 * (128 * tile_points * n + 256 * tile_points + 64 * n * n),
-        "integral_staging": 8 * (40 * primitive_tile + 64 * integral_terms + 256 * a),
-        "range_exchange_providers": range_plan_count * weighted_plan_host_bytes,
+        "integral_staging": 8 * (40 * primitive_tile + 128 * integral_terms + 256 * a),
+        "range_exchange_providers": range_provider_bytes,
         # Include construction copies and the retained immutable metadata; the
         # conservative full s/p/d table also covers smaller component domains.
-        "component_dispatch": 3 * 8 * (DISPATCH_ROWS * DISPATCH_WIDTH + 3 * n + 46),
+        "component_dispatch": 0
+        if native_fitted_integrals
+        else 3 * 8 * (DISPATCH_ROWS * DISPATCH_WIDTH + 3 * n + 46),
         "tensor_and_grid_arenas": 32 << 20,
         "ecp_provider": ecp,
         "ecp_export_and_contraction": 8 * (24 * a * n * n + 24 * a * integral_terms),

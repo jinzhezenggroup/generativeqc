@@ -524,7 +524,12 @@ def test_explicit_force_numeric_caps_stay_closed(
     calc = Calculator(method="pbe-rks", basis="def2-svp")
     from generativeqc_compiler import dft
 
-    basis = SimpleNamespace(nao=25, natom=3, nprimitive=22)
+    basis = SimpleNamespace(
+        nao=25,
+        natom=3,
+        nprimitive=22,
+        shells=(SimpleNamespace(angular_momentum=2),),
+    )
 
     class AO:
         def __enter__(self) -> typing.Any:
@@ -544,7 +549,12 @@ def test_explicit_force_numeric_caps_stay_closed(
     for shape in ((17, 3, 22), (2, 9, 6), (2, 2, 129)):
         with pytest.raises(ValueError, match="dense-export domain exceeded"):
             cpu_force_inventory(
-                SimpleNamespace(nao=shape[0], natom=shape[1], nprimitive=shape[2]),
+                SimpleNamespace(
+                    nao=shape[0],
+                    natom=shape[1],
+                    nprimitive=shape[2],
+                    shells=basis.shells,
+                ),
                 grid_points=10,
                 ecp_terms=0,
             )

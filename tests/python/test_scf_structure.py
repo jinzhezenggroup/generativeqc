@@ -14,6 +14,31 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+@pytest.mark.parametrize(
+    "unrelated",
+    ("range_exchange_runtime.hpp", "execution_qualifiers.hpp_impl.hpp", "eri.hpp"),
+)
+def test_cuda_integral_numerics_borrows_only_exact_execution_qualifiers(
+    tmp_path: Path, unrelated: str
+) -> None:
+    """Host lowering permits a qualifier leaf, not a broader integral dependency."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / "integrals").mkdir()
+    (source / "integrals/execution_qualifiers.hpp").write_text("\n")
+    (source / "integrals" / unrelated).write_text("\n")
+    owner = source / "scf/cuda/scalar_math.cuh"
+    owner.write_text('#include "integrals/execution_qualifiers.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    owner.write_text(f'#include "integrals/{unrelated}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert (
+        f"forbidden cuda_integral_numerics dependency on integrals/{unrelated}"
+        in errors[0]
+    )
+
+
 @pytest.mark.parametrize("unrelated", ("cuda_architecture.hpp", "resource_ledger.hpp"))
 def test_hf_driver_can_borrow_only_qualified_device_facts(
     tmp_path: Path, unrelated: str
