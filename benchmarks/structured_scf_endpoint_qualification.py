@@ -12,6 +12,7 @@ import ctypes
 import hashlib
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -24,6 +25,16 @@ sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 GATES = {"energy": 1e-8, "density": 1e-6, "fock": 1e-6, "forces": 3e-5}
 MASKS = (0, 1, 2, 4, 120, 127)
+REFERENCE_GRADIENT_TOLERANCE = 1e-9
+
+
+def coefficient_matrices(
+    values: list, batch: int, spins: int, dimension: int
+) -> np.ndarray:
+    """Decode native column-major orbital frames, not symmetric matrix slots."""
+    return (
+        np.asarray(values).reshape(batch, spins, dimension, dimension).swapaxes(-1, -2)
+    )
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -152,7 +163,7 @@ def reference_state(spec: dict) -> dict:
         mean_field.grids.non0tab = None
         mean_field.small_rho_cutoff = 0.0
     mean_field.conv_tol = 1e-12
-    mean_field.conv_tol_grad = 1e-10
+    mean_field.conv_tol_grad = REFERENCE_GRADIENT_TOLERANCE
     mean_field.max_cycle = 200
     mean_field.direct_scf_tol = 1e-14
     algorithm = "pyscf-diis"
@@ -163,14 +174,14 @@ def reference_state(spec: dict) -> dict:
         initial_failure = str(error)
         mean_field = mean_field.newton()
         mean_field.conv_tol = 1e-12
-        mean_field.conv_tol_grad = 1e-10
+        mean_field.conv_tol_grad = REFERENCE_GRADIENT_TOLERANCE
         energy = float(mean_field.kernel())
         algorithm = "pyscf-newton-after-diis-failure"
     if not mean_field.converged:
         seed = mean_field.make_rdm1()
         mean_field = mean_field.newton()
         mean_field.conv_tol = 1e-12
-        mean_field.conv_tol_grad = 1e-10
+        mean_field.conv_tol_grad = REFERENCE_GRADIENT_TOLERANCE
         energy = float(mean_field.kernel(dm0=seed))
         algorithm = "pyscf-newton-after-nonconvergence"
     dimension = molecule.nao_nr()
@@ -195,6 +206,7 @@ def reference_state(spec: dict) -> dict:
         "libxc": dft.libxc.__version__,
         "convergence_algorithm": algorithm,
         "initial_diis_failure": initial_failure,
+        "orbital_gradient_tolerance": REFERENCE_GRADIENT_TOLERANCE,
         "input_sha256": hashlib.sha256(
             json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
@@ -310,8 +322,8 @@ def hf_probe(spec: dict, folder: Path, driver: Path, mask: int, batch: int) -> l
         orthogonalizer = np.asarray(row["orthogonalizer"]).reshape(
             batch, dimension, dimension
         )
-        coefficients = np.asarray(row["coefficients"]).reshape(
-            batch, spins, dimension, dimension
+        coefficients = coefficient_matrices(
+            row["coefficients"], batch, spins, dimension
         )
         eigenvalues = np.asarray(row["eigenvalues"]).reshape(batch, spins, dimension)
         for index, item in enumerate(row["items"]):
@@ -491,6 +503,8 @@ def main() -> int:
     parser.add_argument("--mask", type=int, choices=MASKS, default=127)
     parser.add_argument("--batch", type=int, choices=(1, 3), default=1)
     parser.add_argument("--graph", action="store_true")
+    parser.add_argument("--repeat", type=int, default=0)
+    parser.add_argument("--instrumented", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     spec = model(args.case, args.method)
@@ -534,6 +548,21 @@ def main() -> int:
             if args.method.endswith("hf")
             else ks_probe(spec, args.output, args.library, args.mask, args.batch)
         )
+        for row in rows:
+            reference = json.loads(
+                (args.reference / f"{int(row['phase'] >= 3)}.json").read_text()
+            )
+            _, _, inputs, _ = basis_and_inputs(
+                model(args.case, args.method, row["phase"] >= 3)
+            )
+            expected_input = hashlib.sha256(
+                json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            if reference.get("input_sha256") != expected_input:
+                raise ValueError(
+                    "reference scientific inputs do not match the endpoint"
+                )
+            row["assessment"] = assess(row, reference)
     except Exception as error:
         write_json(
             args.output / "receipt.json",
@@ -549,19 +578,6 @@ def main() -> int:
             },
         )
         raise
-    for row in rows:
-        reference = json.loads(
-            (args.reference / f"{int(row['phase'] >= 3)}.json").read_text()
-        )
-        _, _, inputs, _ = basis_and_inputs(
-            model(args.case, args.method, row["phase"] >= 3)
-        )
-        expected_input = hashlib.sha256(
-            json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-        if reference.get("input_sha256") != expected_input:
-            raise ValueError("reference scientific inputs do not match the endpoint")
-        row["assessment"] = assess(row, reference)
     receipt = {
         "status": "PASS"
         if all(row["assessment"]["accepted"] for row in rows)
@@ -570,6 +586,22 @@ def main() -> int:
         "rows": rows,
         "mask": args.mask,
         "batch": args.batch,
+        "graph": args.graph,
+        "repeat": args.repeat,
+        "instrumented": args.instrumented
+        or any(
+            os.environ.get(name)
+            for name in ("GENERATIVEQC_DF_TRACE", "GENERATIVEQC_DF_PROGRESS_TRACE")
+        ),
+        "host": platform.node(),
+        "gpu_inventory": subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=uuid,name,driver_version",
+                "--format=csv,noheader",
+            ],
+            text=True,
+        ).strip(),
         "source": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),

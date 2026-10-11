@@ -539,6 +539,15 @@ clean endpoint timing; rejected reference/final states cannot supply profitabili
 evidence. Preserve generated defaults until complete, matched endpoint evidence
 admits each region, not merely its isolated primitive.
 
+`benchmarks/structured_scf_endpoint_report.py --output REPORT RECEIPTS...`
+compares at least three independent process pairs with `--repeat` identifiers.
+Scientific inputs, source/library identity, graph mode and GPU environment must
+match. It counts each batch once, includes KS preparation in cold cost, retains
+SCF iteration work, and rejects instrumented or failed endpoints. Region-specific
+target phases require a 3% median benefit with non-regressing lower quartiles;
+every other phase has a 5% regression guard. This diagnostic report never promotes
+defaults or substitutes prepared candidates for actual traced execution evidence.
+
 KS Direct J/K transform submissions borrow the KS matrix owner's frozen context
 only for the call; the longer-lived integral source stores no borrowed binding.
 The physical Cartesian dimension is explicit, including spherical public bases.

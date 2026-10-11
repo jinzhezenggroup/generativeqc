@@ -36,6 +36,21 @@ steps. Diagnostic copies and intrusive tracing do not supply clean endpoint
 timing. Failed rows survive; unknown profitability remains unknown. Library
 defaults stay closed until scientific and matched profitability evidence passes.
 
+Matched profitability requires three independent process pairs, never three
+members of one batch. Identity includes source, library, scientific inputs,
+Graph mode and GPU environment. Cold KS cost includes preparation. Keep separate
+warm, geometry-refresh and moved-warm gates and retain iteration work counts.
+The report cannot promote defaults and does not equate preparation with execution.
+
+The independent oracle uses a 1e-9 orbital-gradient convergence target and 1e-12
+energy tolerance. On the 96-AO UHF diagnostic, a stricter 1e-10 iterative target
+oscillated at numerical noise and reported nonconvergence even after independent
+Newton retries. Those rejected receipts remain historical failures. The 1e-9
+target converges independently; physical residual and all endpoint acceptance
+thresholds remain unchanged. Native HF orbital downloads are column-major,
+unlike exported symmetric matrices; transpose each orbital frame before applying
+generalized-eigen/metric gates rather than weakening those gates.
+
 ## Rejected alternatives
 
 - Store a KS binding in the integral source: risks dangling views after geometry

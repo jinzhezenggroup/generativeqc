@@ -3,6 +3,7 @@
 import copy
 import typing
 
+import numpy as np
 import pytest
 
 from benchmarks import structured_scf_endpoint_qualification as qualification
@@ -70,3 +71,11 @@ def test_final_state_proof_is_mandatory() -> None:
     actual, reference = sample()
     actual.pop("final_state_gates")
     assert not qualification.assess(actual, reference)["accepted"]
+
+
+def test_native_orbitals_are_column_major_per_system_and_spin() -> None:
+    coefficients = np.arange(24).reshape(2, 3, 2, 2)
+    native = coefficients.swapaxes(-1, -2).reshape(-1).tolist()
+    np.testing.assert_array_equal(
+        qualification.coefficient_matrices(native, 2, 3, 2), coefficients
+    )
