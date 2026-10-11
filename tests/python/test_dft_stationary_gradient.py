@@ -404,11 +404,11 @@ def test_stationary_state_requires_finite_scalar_physical_residual(
 
 def test_noncurated_stationary_identity_requires_explicit_contract() -> None:
     with pytest.raises(ValueError, match="explicit spin provenance"):
-        identity("LIBXC:GGA_X_PBE_SOL")
+        identity("opaque-bulk-semilocal")
 
     generic = replace(
         identity(),
-        method="LIBXC:GGA_X_PBE_SOL",
+        method="opaque-bulk-semilocal",
         model_identity="bulk-model",
         functional_identity="bulk-functional",
     )
@@ -418,6 +418,36 @@ def test_noncurated_stationary_identity_requires_explicit_contract() -> None:
     assert generic.ingredients == ("rho", "sigma")
     assert contract.spin == "unpolarized"
     assert contract.family == "gga"
+
+
+@pytest.mark.parametrize(
+    "prefix,spin",
+    [
+        ("libxc", "unpolarized"),
+        ("libxc-rks", "unpolarized"),
+        ("libxc-uks", "polarized"),
+    ],
+)
+@pytest.mark.parametrize(
+    "name,ingredients",
+    [
+        ("LDA_C_CHACHIYO", ("rho",)),
+        ("GGA_X_APBE", ("rho", "sigma")),
+        ("MGGA_X_LTA", ("rho", "sigma", "tau")),
+    ],
+)
+def test_automatic_stationary_identity_resolves_exact_contract(
+    prefix: str, spin: str, name: str, ingredients: tuple[str, ...]
+) -> None:
+    value = identity(f"{prefix}:{name}")
+    assert value.spin == spin
+    assert value.ingredients == ingredients
+    with pytest.raises(ValueError, match="spin disagrees"):
+        replace(value, spin="polarized" if spin == "unpolarized" else "unpolarized")
+    with pytest.raises(ValueError, match="ingredients disagree"):
+        replace(
+            value, ingredients=("rho", "sigma") if len(ingredients) == 1 else ("rho",)
+        )
 
 
 @pytest.mark.parametrize(
