@@ -114,6 +114,9 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
         "anchor_full_builds": anchor_builds,
         "bypass_full_builds": bypass_builds,
         "post_scf_full_builds": post_scf_builds,
+        # CUDA quartet counters cover SCF anchors/deltas, not bypass or
+        # post-SCF finalization. Keep endpoint build totals separate.
+        "quartet_work_scope": "SCF anchor/delta builds only",
     }
     delta_builds = sum(_count(value["delta_builds"]) for value in typed)
     full_shells = sum(_count(value["full_admitted_shell_quartets"]) for value in typed)
@@ -140,20 +143,20 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
         # A population that converges before the first delta update has no
         # incremental opportunity; quartet counters may legitimately be
         # invalid there, and its timings remain valid matched endpoints.
-        if full_builds == 0:
-            raise ValueError("incremental benchmark lacks measurable full work")
+        if anchor_builds == 0:
+            raise ValueError("incremental benchmark lacks measurable anchor work")
         return {
             "sample_count": len(typed),
             **build_categories,
             "full_builds": full_builds,
             "delta_builds": 0,
             "full_admitted_shell_quartets_per_build": (
-                full_shells / full_builds if full_shells else None
+                full_shells / anchor_builds if full_shells else None
             ),
             "delta_admitted_shell_quartets_per_build": 0.0,
             "shell_quartet_reduction_fraction": 0.0,
             "full_admitted_quartet_tiles_per_build": (
-                full_tiles / full_builds if full_tiles else None
+                full_tiles / anchor_builds if full_tiles else None
             ),
             "delta_admitted_quartet_tiles_per_build": 0.0,
             "quartet_tile_reduction_fraction": 0.0,
@@ -161,11 +164,11 @@ def _incremental_work(record: dict[str, Any], *, phase: str = "warm") -> dict[st
         }
     if any(value.get("quartet_work_counters_valid") is not True for value in typed):
         raise ValueError("incremental quartet work counters are not complete")
-    if full_builds == 0 or full_shells == 0 or full_tiles == 0:
-        raise ValueError("incremental benchmark lacks measurable full work")
-    full_shells_per_build = full_shells / full_builds
+    if anchor_builds == 0 or full_shells == 0 or full_tiles == 0:
+        raise ValueError("incremental benchmark lacks measurable anchor work")
+    full_shells_per_build = full_shells / anchor_builds
     delta_shells_per_build = delta_shells / delta_builds
-    full_tiles_per_build = full_tiles / full_builds
+    full_tiles_per_build = full_tiles / anchor_builds
     delta_tiles_per_build = delta_tiles / delta_builds
     return {
         "sample_count": len(typed),

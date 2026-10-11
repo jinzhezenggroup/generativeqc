@@ -577,3 +577,55 @@ def test_ks_samples_require_matched_identities(
         (root / f"pbe0-48-{mode}-1.outcome").write_text('{"exit_code":0,"attempt":1}')
     with pytest.raises(ValueError, match="identity|build/device"):
         reducer._ks_rows(tmp_path)
+
+
+@pytest.mark.parametrize("phase", ["cold", "warm"])
+@pytest.mark.parametrize("delta_builds", [0, 1])
+@pytest.mark.parametrize("bypass_builds", [0, 1])
+def test_quartet_denominators_exclude_uncounted_finalization(
+    phase: str, delta_builds: int, bypass_builds: int
+) -> None:
+    record = _record(1)
+    convergence = [
+        record["generativeqc"]["cold_convergence"],
+        *[s["convergence"] for s in record["generativeqc"]["warm_samples"]],
+    ]
+    for items in convergence:
+        items[0]["incremental_direct_jk"].update(
+            bypass_full_builds=bypass_builds,
+            delta_builds=delta_builds,
+            quartet_work_counters_valid=True,
+            full_admitted_shell_quartets=100,
+            delta_admitted_shell_quartets=50 * delta_builds,
+            full_admitted_quartet_tiles=20,
+            delta_admitted_quartet_tiles=10 * delta_builds,
+        )
+    work = reducer._incremental_work(record, phase=phase)
+    count = 1 if phase == "cold" else 3
+    assert work["full_builds"] == count * (3 + bypass_builds)
+    assert work["anchor_full_builds"] == count
+    assert work["post_scf_full_builds"] == 2 * count
+    assert work["bypass_full_builds"] == bypass_builds * count
+    assert work["quartet_work_scope"] == "SCF anchor/delta builds only"
+    assert work["full_admitted_shell_quartets_per_build"] == 100
+    assert work["full_admitted_quartet_tiles_per_build"] == 20
+    expected = 0.5 if delta_builds else 0.0
+    assert work["shell_quartet_reduction_fraction"] == expected
+    assert work["quartet_tile_reduction_fraction"] == expected
+
+
+@pytest.mark.parametrize("delta_builds", [0, 1])
+def test_finalization_does_not_substitute_for_missing_anchor_work(
+    delta_builds: int,
+) -> None:
+    record = _record(1)
+    for sample in record["generativeqc"]["warm_samples"]:
+        sample["convergence"][0]["incremental_direct_jk"].update(
+            anchor_full_builds=0,
+            delta_builds=delta_builds,
+            quartet_work_counters_valid=True,
+            full_admitted_shell_quartets=100,
+            full_admitted_quartet_tiles=20,
+        )
+    with pytest.raises(ValueError, match="measurable anchor work"):
+        reducer._incremental_work(record)
