@@ -1,0 +1,77 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All independent E/F/work/checkpoint gates pass; four scoped five-pair assessments separately qualify bounded automatic selection, not broad formal performance/production.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 12219,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "40898add9f432f5b7cfd00dff91b66b3137b9590dc884c9ae9b44470310fda56"
+    },
+    {
+      "bytes": 401876,
+      "path": "raw-receipts.json.xz",
+      "role": "reproduction",
+      "sha256": "6e40ae4bdcfa67d27dbf22f09b1e479902562420f7b7ff8894723d9c21bf2b6d"
+    },
+    {
+      "bytes": 218108,
+      "path": "prototype-receipts.json.xz",
+      "role": "reproduction",
+      "sha256": "15ab5b8c856e6179dcba32cdca99c780e0325b41ce9123d86d8c585a782b4293"
+    },
+    {
+      "bytes": 10460,
+      "path": "production.patch.xz",
+      "role": "source-patch",
+      "sha256": "b3f47237f41656f80bf8a17dbf415835990428c6f5547782e3035c8212c0ad1b"
+    },
+    {
+      "bytes": 23284,
+      "path": "qualification-original.patch.xz",
+      "role": "source-patch",
+      "sha256": "fde48b921f78801f32a4ac858f8cf2956c50da681e37f7f45916188a5e097018"
+    },
+    {
+      "bytes": 27848,
+      "path": "qualification-final.patch.xz",
+      "role": "source-patch",
+      "sha256": "db164a68968b1dc6f1479a5e7a2c0630357caa31a9f2821365372445d2c9c286"
+    },
+    {
+      "bytes": 3408,
+      "path": "storage-compaction.json",
+      "role": "reproduction",
+      "sha256": "986481fd776604477ed9c94b485fd03a637958d04fcb88de099dad4fbb30a941"
+    },
+    {
+      "bytes": 6421,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "c875a09e9cba966ea7c38e4a925c872b87ba4402f71a731a1f9ff6b28d02a092"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--nodelist=node1",
+      "--gres=gpu:5090:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--time=00:20:00",
+      "bash",
+      "run-performance-v3.sh",
+      "48"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "637466c624c4c4c4dd4eb7c511a2c88675744325"
+  }
+}

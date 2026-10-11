@@ -27,7 +27,8 @@ from generativeqc_compiler.integral.direct_recurrence_cuda import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_full_and_lr_all_center_gradients(tmp_path: Path) -> None:
+@pytest.mark.parametrize("spatial_reuse", (False, True))
+def test_full_and_lr_all_center_gradients(tmp_path: Path, spatial_reuse: bool) -> None:
     """Check every center/axis, all pair partitions of orders 4--6 and LR limits."""
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
@@ -39,6 +40,13 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path) -> None:
         **emit_direct_cartesian_contraction_headers(),
         "gradient.cuh": emit_direct_high_order_pair_gradient_header(),
     }
+    if spatial_reuse:
+        gradient = headers["gradient.cuh"].replace(
+            "high_order_coulomb<", "counted_high_order_coulomb<"
+        )
+        marker = "template <unsigned AngularOrder, bool SpatialReuse>"
+        gradient = gradient.replace(marker, COUNTED_COULOMB + marker, 1)
+        headers["gradient.cuh"] = gradient
     for name, source in headers.items():
         (tmp_path / name).write_text(source)
     (tmp_path / "cuda_runtime.h").write_text(
@@ -49,7 +57,23 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path) -> None:
         "inline unsigned __popc(unsigned x) { return __builtin_popcount(x); }\n"
     )
     source = tmp_path / "probe.cpp"
-    source.write_text(PROBE)
+    probe = PROBE
+    if spatial_reuse:
+        probe = probe.replace(
+            "primitive_eri_order456_gradient<A+B,C+D,true>",
+            "primitive_eri_order456_gradient<A+B,C+D,true,true>",
+        )
+        probe = probe.replace(
+            "primitive_eri_order456_gradient<A+B,C+D>",
+            "primitive_eri_order456_gradient<A+B,C+D,false,true>",
+        )
+        probe = probe.replace(
+            "#include <array>", "#include <array>\n#include <cassert>"
+        )
+        probe = probe.replace(
+            "int main() {", SPATIAL_COUNTS + "int main() {\n  check_spatial_counts();"
+        )
+    source.write_text(probe)
     executable = tmp_path / "probe"
     build = subprocess.run(
         [
@@ -79,6 +103,44 @@ def test_full_and_lr_all_center_gradients(tmp_path: Path) -> None:
     assert "all-center finite differences PASS" in result.stdout
     print(result.stdout)
 
+
+COUNTED_COULOMB = r"""
+inline unsigned spatial_evaluations{};
+template <unsigned MaximumOrder>
+__device__ inline double counted_high_order_coulomb(
+    unsigned state, double rho, const HighOrderCoulombWorkspace<MaximumOrder>& workspace,
+    const double* boys) {
+  ++spatial_evaluations;
+  return high_order_coulomb<MaximumOrder>(state, rho, workspace, boys);
+}
+"""
+
+SPATIAL_COUNTS = r"""
+void check_spatial_counts() {
+  const Vec3<double> positions[4]{{0.1,-0.2,-0.8},{0.3,0.1,0.7},
+                                {-0.5,0.6,0.2},{0.8,-0.4,0.3}};
+  for (const bool balanced : {false, true}) {
+    const Angular angular[4]{{2,0,0}, balanced ? Angular{0,1,0} : Angular{1,0,0},
+                            balanced ? Angular{0,0,2} : Angular{2,0,0},
+                            balanced ? Angular{0,1,0} : Angular{1,0,0}};
+    double scalar[4][3], cached[4][3];
+    spatial_evaluations = 0;
+    primitive_eri_order456_gradient<3,3,false,false>(
+        0.8,positions[0],angular[0],0.6,positions[1],angular[1],
+        0.7,positions[2],angular[2],0.9,positions[3],angular[3],scalar);
+    assert(spatial_evaluations == 256U);
+    spatial_evaluations = 0;
+    primitive_eri_order456_gradient<3,3,false,true>(
+        0.8,positions[0],angular[0],0.6,positions[1],angular[1],
+        0.7,positions[2],angular[2],0.9,positions[3],angular[3],cached);
+    assert(spatial_evaluations == (balanced ? 54U : 22U));
+    for (unsigned center = 0; center < 4; ++center)
+      for (unsigned axis = 0; axis < 3; ++axis)
+        assert(scalar[center][axis] == cached[center][axis]);
+  }
+  std::printf("order-six spatial evaluations 256 -> 22/54, identical gradients PASS\n");
+}
+"""
 
 PROBE = r"""
 #include "gradient.cuh"

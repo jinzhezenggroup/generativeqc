@@ -38,7 +38,14 @@ python -m generativeqc resources molecule.xyz --basis def2-svp --method rhf \
   --backend cpu --host-bytes 1073741824 --headroom-fraction 0.1
 ```
 
-XYZ units default to angstrom; `--units bohr` is available. The CLI emits JSON
+The Python source-only administration interface emits the composable
+`ResourcePlan` schema described here. The installed runtime entry point routes
+to the Python-free [native CLI allocation inventory](../user/native_cli.md),
+whose explicit scope is not a `ResourcePlan` checkpoint. Native estimation uses
+the linked library's scalar layout queries, not `GENERATIVEQC_LIBRARY` or
+profile selection.
+
+XYZ units default to angstrom; `--units bohr` is available. Both CLIs emit JSON
 and exits 2 for unsupported or infeasible plans. CUDA estimation uses scalar
 layout queries from the library selected by `GENERATIVEQC_LIBRARY`, loaded without
 profile selection or a device query. It does not choose a GPU by free memory.

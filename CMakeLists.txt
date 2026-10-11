@@ -369,7 +369,29 @@ if(NOT GENERATIVEQC_PYTHON_WHEEL)
 endif()
 
 if(GENERATIVEQC_BUILD_CLI)
-  add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp)
+  find_package(nlohmann_json 3.7 QUIET)
+  if(GENERATIVEQC_PYTHON_WHEEL AND NOT nlohmann_json_FOUND)
+    # PEP 517 owns the pinned headers; manylinux's system JSON may be too old.
+    execute_process(
+      COMMAND "${Python3_EXECUTABLE}" -c
+              "import nlohmann_json; print(nlohmann_json.get_include())"
+      RESULT_VARIABLE _generativeqc_json_status
+      OUTPUT_VARIABLE _generativeqc_json_include
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _generativeqc_json_status EQUAL 0 OR
+       NOT EXISTS "${_generativeqc_json_include}/nlohmann/json.hpp")
+      message(FATAL_ERROR "Wheel native CLI requires the declared nlohmann_json build dependency")
+    endif()
+    add_library(nlohmann_json::nlohmann_json INTERFACE IMPORTED)
+    target_include_directories(nlohmann_json::nlohmann_json SYSTEM INTERFACE
+                               "${_generativeqc_json_include}")
+  elseif(NOT nlohmann_json_FOUND)
+    find_package(nlohmann_json 3.7 REQUIRED)
+  endif()
+  find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+  find_package(LibArchive REQUIRED)
+  add_executable(generativeqc_cli src/cli/main.cpp src/cli/native_basis.cpp
+                 src/cli/json.cpp src/cli/profiles.cpp src/cli/resources.cpp)
   set(GENERATIVEQC_CLI_BASIS_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cli_basis_pack.hpp")
   generativeqc_register_generated_sources(
@@ -392,13 +414,22 @@ if(GENERATIVEQC_BUILD_CLI)
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/ks_execution.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/bulk_ks.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/spec.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_work.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_capabilities.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_bulk_catalog.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_maple.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/libxc_blacklist.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_libxc_methods.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/_generated_xc_aliases.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/_generated_native_semilocal.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/_generated_split_hybrids.py"
     ARGS --output "${GENERATIVEQC_CLI_METHOD_HEADER}"
     COMMENT "Generating MethodIR-owned Python-free native CLI method catalog")
-  target_link_libraries(generativeqc_cli PRIVATE generativeqc)
+  target_link_libraries(generativeqc_cli PRIVATE generativeqc nlohmann_json::nlohmann_json
+                        OpenSSL::Crypto LibArchive::LibArchive ${CMAKE_DL_LIBS})
   target_include_directories(generativeqc_cli PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -418,6 +449,19 @@ endif()
 if(GENERATIVEQC_BUILD_TESTS)
   generativeqc_add_native_tests()
   if(GENERATIVEQC_BUILD_CLI)
+    add_executable(generativeqc_cli_json_probe tests/native/cli_json_probe.cpp src/cli/json.cpp)
+    add_library(generativeqc_cli_profile_probe SHARED tests/native/cli_profile_probe.cpp)
+    target_include_directories(generativeqc_cli_profile_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_features(generativeqc_cli_profile_probe PRIVATE cxx_std_20)
+    target_include_directories(generativeqc_cli_json_probe PRIVATE
+                               "${CMAKE_CURRENT_SOURCE_DIR}/src"
+                               "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_link_libraries(generativeqc_cli_json_probe PRIVATE nlohmann_json::nlohmann_json OpenSSL::Crypto)
+    target_compile_features(generativeqc_cli_json_probe PRIVATE cxx_std_20)
+    add_test(NAME generativeqc_cli_runtime_contract
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_runtime.py"
+                     $<TARGET_FILE:generativeqc_cli> $<TARGET_FILE:generativeqc_cli_json_probe>
+                     $<TARGET_FILE:generativeqc_cli_profile_probe>)
     add_test(NAME generativeqc_cli_methodir_codegen
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/python/test_cli_method_catalog_codegen.py")
@@ -517,6 +561,7 @@ if(GENERATIVEQC_BUILD_CLI)
   install(TARGETS generativeqc_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   # The CLI embeds the BSE-derived Gaussian basis catalog in its binary.
   install(FILES LICENSES/bse-data-BSD-3-Clause.txt
+                LICENSES/nlohmann-json-MIT.txt
           DESTINATION "${CMAKE_INSTALL_DATADIR}/generativeqc/licenses")
 endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

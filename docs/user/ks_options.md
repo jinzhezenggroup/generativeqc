@@ -89,6 +89,28 @@ for paired E+F validation and the limits of the retained configuration evidence.
 
 ## Prepared identity and ABI
 
+### CUDA Direct integral forces
+
+Exact-direct PBE0/RKS owners explicitly requesting FP64 with at least 384 public AOs
+automatically reuse primitive-local spatial Coulomb states in the order-six
+s/p/d force consumer. Eligibility is authenticated by the DFT method after its
+resident final-density token check; generic HF and range-separated consumers
+do not infer PBE0 from an exchange coefficient. Density fitting, ECP, nonlocal
+correlation, D4 and lower-precision execution retain their existing defaults.
+
+`GENERATIVEQC_DIRECT_SPD_FORCE_DOMAINS=0` forces the incumbent schedule.
+Explicit `=1` or `=spatial-reuse` requests reuse outside the automatic method
+scope, without bypassing the resident primitive-pair, prefix, topology or
+derivative-capability guards. Unset or empty selects the automatic policy;
+other values retain the incumbent. Preference is captured when the force
+owner is prepared, so changing the environment needs a new prepared owner.
+The cache is primitive-local, introduces no retained quartet inventory, and
+leaves screening and gradient accumulation order unchanged. Orders seven/eight
+and mixed-f fallback routing retain their existing consumers.
+
+See the [spatial-reuse decision](../../.agents/notes/implemented/performance/2026-10-11-pbe0-spatial-force-reuse.md)
+for the algorithm, qualification scope and retained alternatives.
+
 ### CUDA final-state validation
 
 Native CUDA KS automatically reuses resident final-state matrix products for

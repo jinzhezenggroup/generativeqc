@@ -8,6 +8,7 @@
 #include "scf/cuda/direct_fock_lowering.hpp"
 #include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
+#include "scf/cuda/direct_spd_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/direct_block_schedule.hpp"
@@ -99,6 +100,8 @@ struct GeneratedExchangePlan {
   bool force_capability{}, bounded_value_capability{};
   /** Experimental schedule only; false retains the qualified single traversal. */
   bool angular_force_opt_in{};
+  /** Immutable owner choice; unsupported leases keep the incumbent scheduler. */
+  DirectSpdForceSchedule spd_force_schedule{DirectSpdForceSchedule::Incumbent};
   /** Optional complete psss lease consumed by the shared force scheduler.
    * Storage is charged to this owner; an empty lease retains bounded execution. */
   DirectForceResidentBraSchedule force_resident_bra{};
@@ -153,7 +156,7 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unres
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
-    bool separate_sources = true);
+    bool separate_sources = true, bool allow_spatial_default = false);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell
