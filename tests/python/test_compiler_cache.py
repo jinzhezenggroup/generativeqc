@@ -126,6 +126,28 @@ def test_explicit_launcher_bypasses_automatic_selection(
     assert launched == [[str(launcher.path), "nvcc", "-c", "x.cu"]]
 
 
+def test_probe_timeout_preserves_bounded_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probes: list[str] = []
+    monkeypatch.setattr(
+        compiler_cache.shutil,
+        "which",
+        lambda name, *, path: f"/test/bin/{name}",
+    )
+
+    def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        probes.append(Path(command[0]).name)
+        if Path(command[0]).name == "sccache":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return subprocess.CompletedProcess(command, 0, "ccache version 4.14\n", "")
+
+    monkeypatch.setattr(compiler_cache.subprocess, "run", run)
+    launcher = compiler_cache.resolve_compiler_cache(120)
+    assert launcher.name == "ccache"
+    assert probes == ["sccache", "ccache"]
+
+
 def test_compiler_cache_rejects_uncached_compilation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

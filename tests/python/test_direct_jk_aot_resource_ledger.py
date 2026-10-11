@@ -36,7 +36,10 @@ def _production_cache(**overrides: str) -> str:
         "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
         "GENERATIVEQC_CUDA_ARCHITECTURES": "",
         "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
+        "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED": "ON",
+        "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER": "fixture-launcher",
         "GENERATIVEQC_RESOLVED_COMPILER_CACHE": str(FAKE_CCACHE),
+        "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER": "",
         "CMAKE_CUDA_ARCHITECTURES": "120",
         "GENERATIVEQC_AOT_SHELL_MANIFEST": str(validator.MANIFEST),
     }
@@ -722,6 +725,7 @@ class TestCompileImplementationIdentity:
         assert len(executions) == 3
 
     def test_cache_identity_covers_both_command_builders(self) -> None:
+        assert "CMakeLists.txt" in validator.COMPILE_IMPLEMENTATIONS
         assert (
             "tools/validate_direct_jk_aot_resources.py"
             in validator.COMPILE_IMPLEMENTATIONS
@@ -756,6 +760,12 @@ class TestProductionContextBinding:
             ("GENERATIVEQC_CUDA_FAST_COMPILE", "ON"),
             ("CMAKE_CUDA_COMPILER", str(Path("/other/nvcc").resolve())),
             ("CMAKE_CUDA_HOST_COMPILER", str(Path("/usr/bin/clang++").resolve())),
+            (
+                "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER",
+                str(Path("/usr/bin/clang++").resolve()),
+            ),
+            ("GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED", "OFF"),
+            ("GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER", ""),
         ],
     )
     def test_compile_context_override_fails_before_work(
@@ -771,11 +781,68 @@ class TestProductionContextBinding:
     ) -> None:
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(_production_cache())
-        working_directory, launcher = validator.validate_production_shard_count(
-            cache, FAKE_NVCC
+        working_directory, launcher, effective = (
+            validator.validate_production_shard_count(cache, FAKE_NVCC)
         )
         assert working_directory == tmp_path.resolve()
         assert launcher == FAKE_CCACHE
+        assert effective == "fixture-launcher"
+
+    def test_effective_ccache_wrapper_matches_cmake_context(
+        self, tmp_path: Path
+    ) -> None:
+        launcher = CompilerCacheLauncher(FAKE_CCACHE, "ccache", "ccache 4.14")
+        effective = ";".join(
+            (
+                str(Path("/usr/bin/cmake")),
+                "-E",
+                "env",
+                f"CCACHE_BASEDIR={tmp_path.resolve()}",
+                str(FAKE_CCACHE),
+            )
+        )
+        validator.validate_effective_compiler_launcher(tmp_path, launcher, effective)
+        with pytest.raises(ValueError, match="qualified ccache wrapper"):
+            validator.validate_effective_compiler_launcher(
+                tmp_path,
+                launcher,
+                effective.replace(str(tmp_path.resolve()), str(tmp_path / "other")),
+            )
+
+    @pytest.mark.parametrize("location", ["rules", "shard"])
+    def test_generated_host_override_fails_closed(
+        self, tmp_path: Path, location: str
+    ) -> None:
+        rules = tmp_path / "CMakeFiles/rules.ninja"
+        rules.parent.mkdir()
+        rules.write_text(
+            "rule CUDA_COMPILER\n  command = nvcc "
+            + ("-ccbin=/usr/bin/clang++ " if location == "rules" else "")
+            + "$FLAGS -c $in -o $out\n"
+        )
+        shard = (
+            "generativeqc_generated_shell_sm120_shard_6.cu.o: "
+            "CUDA_COMPILER generated/production_shell_kernels/sm_120/"
+            "generativeqc_generated_shell_sm120_shard_6.cu\n"
+        )
+        flags = "  FLAGS = -O3"
+        if location == "shard":
+            flags += " --compiler-bindir /usr/bin/clang++"
+        (tmp_path / "build.ninja").write_text(f"build {shard}{flags}\n")
+        with pytest.raises(ValueError, match="host override"):
+            validator.validate_generated_cuda_rules(tmp_path)
+
+    def test_generated_default_host_rule_passes(self, tmp_path: Path) -> None:
+        rules = tmp_path / "CMakeFiles/rules.ninja"
+        rules.parent.mkdir()
+        rules.write_text("rule CUDA_COMPILER\n  command = nvcc $FLAGS -c $in -o $out\n")
+        (tmp_path / "build.ninja").write_text(
+            "build object/generativeqc_generated_shell_sm120_shard_6.cu.o: "
+            "CUDA_COMPILER generated/production_shell_kernels/sm_120/"
+            "generativeqc_generated_shell_sm120_shard_6.cu\n"
+            "  FLAGS = -O3\n"
+        )
+        validator.validate_generated_cuda_rules(tmp_path)
 
     @pytest.mark.parametrize("cache_type", ["STRING", "UNINITIALIZED"])
     def test_accepts_configured_qualified_shard_count(
@@ -869,6 +936,8 @@ class TestProductionContextBinding:
             "GENERATIVEQC_AOT_SHELL_MANIFEST",
             "GENERATIVEQC_CUDA_FAST_COMPILE",
             "CMAKE_CUDA_COMPILER",
+            "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED",
+            "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER",
             "GENERATIVEQC_RESOLVED_COMPILER_CACHE",
         ],
     )
@@ -885,6 +954,21 @@ class TestProductionContextBinding:
             contents += line
         else:
             contents = contents.replace(line, f"{field}:STRING=\n")
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(contents)
+        with pytest.raises(ValueError, match=field):
+            validator.validate_production_shard_count(cache, FAKE_NVCC)
+
+    @pytest.mark.parametrize("mode", ["missing", "duplicate"])
+    def test_resolved_default_host_field_must_be_declared_once(
+        self, tmp_path: Path, mode: str
+    ) -> None:
+        field = "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER"
+        contents = _production_cache()
+        line = next(
+            line for line in contents.splitlines(True) if line.startswith(field + ":")
+        )
+        contents = contents.replace(line, "") if mode == "missing" else contents + line
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(contents)
         with pytest.raises(ValueError, match=field):
@@ -1042,8 +1126,14 @@ class TestProductionContextBinding:
             "- name: Qualify direct J/K AOT static resources (shard 6)", 1
         )[1].split("- name:", 1)[0]
         assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
-        assert "--record-output" not in step
+        assert "--record-output build/direct-jk-aot/ledger.candidate.json" in step
 
     def test_cmake_records_the_resolved_compiler_cache(self) -> None:
         cmake = (validator.ROOT / "CMakeLists.txt").read_text()
-        assert "GENERATIVEQC_RESOLVED_COMPILER_CACHE" in cmake
+        for field in (
+            "GENERATIVEQC_RESOLVED_COMPILER_CACHE",
+            "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER",
+            "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED",
+            "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER",
+        ):
+            assert field in cmake

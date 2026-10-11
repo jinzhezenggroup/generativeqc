@@ -268,3 +268,20 @@ cache miss and retained passing before/after statistics. Its candidate preserved
 the preprocessed identity, complete 86-kernel inventory, and every resource row;
 only the typed `host_compiler=nvcc-default` field was added. That candidate is
 installed and gate mode is restored for a final exact-head run.
+
+Exact-head review then exposed two sources that could bypass those recorded
+cache values: a caller-provided `CMAKE_CUDA_COMPILER_LAUNCHER` has precedence
+over the project-selected launcher, and an effective NVCC `-ccbin` option can
+appear in generated Ninja rules even when the ordinary host-compiler cache
+entry is absent. CMake now records whether GenerativeQC owns the CUDA launcher,
+the complete effective launcher list, and the host compiler observed after CUDA
+language enablement. The validator requires project ownership, checks the exact
+ccache wrapper/base/executable, and inspects both `rules.ninja` and the shard-6
+object block in `build.ninja` for hidden host overrides. `CMakeLists.txt` is also
+part of the inner execution-implementation hash.
+
+The shared compiler-cache verifier retains bounded fallback: one capped
+sccache version-probe timeout may fall through to ccache while the common
+deadline has budget, whereas exhausting all probes remains a timeout. These
+execution-context repairs require another canonical record before gate mode is
+restored; no existing resource row is relabeled in advance.

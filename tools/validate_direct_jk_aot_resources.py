@@ -91,6 +91,7 @@ RESOURCE_FIELDS = ("REG", "STACK", "SHARED", "LOCAL")
 # invalidate execution-cache entries independently of the scientific ledger:
 # changing an adapter option must not replay a cubin built with the old command.
 COMPILE_IMPLEMENTATIONS = (
+    "CMakeLists.txt",
     "tools/validate_direct_jk_aot_resources.py",
     "python/generativeqc_compiler/common/compiler_cache.py",
     "python/generativeqc_compiler/common/cuda_adapter.py",
@@ -121,7 +122,9 @@ def generator_abi() -> int:
     return int(payload["architectures"][QUALIFIED_ARCHITECTURE]["generator_abi"])
 
 
-def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> tuple[Path, Path]:
+def validate_production_shard_count(
+    cmake_cache: Path, nvcc: Path
+) -> tuple[Path, Path, str]:
     """Bind the fixed qualification to CMake's actual production generator inputs."""
     configured = cmake_cache.read_text(encoding="utf-8")
     for field, expected in (
@@ -201,18 +204,109 @@ def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> tuple[Path
             "production CMAKE_CUDA_COMPILER must match the measured --nvcc; "
             f"configured {configured_nvcc}, measured {nvcc.resolve()}"
         )
-    host_compiler = configured_value("CMAKE_CUDA_HOST_COMPILER", optional=True)
-    if host_compiler:
+    host_compilers = {
+        "CMAKE_CUDA_HOST_COMPILER": configured_value(
+            "CMAKE_CUDA_HOST_COMPILER", optional=True
+        ),
+        "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER": configured_value(
+            "GENERATIVEQC_RESOLVED_CUDA_HOST_COMPILER"
+        ),
+    }
+    if any(host_compilers.values()):
         raise ValueError(
-            "production qualification requires an empty CMAKE_CUDA_HOST_COMPILER "
-            f"(the {QUALIFIED_HOST_COMPILER} context); found {host_compiler!r}"
+            "production qualification requires the nvcc-default host context; "
+            f"found {host_compilers!r}"
+        )
+    managed_launcher = configured_value(
+        "GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED"
+    ).upper()
+    if managed_launcher not in {"1", "ON", "YES", "TRUE", "Y"}:
+        raise ValueError(
+            "production GENERATIVEQC_CUDA_COMPILER_LAUNCHER_MANAGED must be ON"
+        )
+    effective_launcher = configured_value(
+        "GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER"
+    )
+    if not effective_launcher:
+        raise ValueError(
+            "production GENERATIVEQC_EFFECTIVE_CUDA_COMPILER_LAUNCHER must be non-empty"
         )
     cache_executable = configured_value("GENERATIVEQC_RESOLVED_COMPILER_CACHE")
     if not cache_executable:
         raise ValueError(
             "production GENERATIVEQC_RESOLVED_COMPILER_CACHE must be non-empty"
         )
-    return cmake_cache.resolve().parent, Path(cache_executable).resolve()
+    return (
+        cmake_cache.resolve().parent,
+        Path(cache_executable).resolve(),
+        effective_launcher,
+    )
+
+
+def validate_effective_compiler_launcher(
+    working_directory: Path,
+    launcher: CompilerCacheLauncher,
+    effective: str,
+) -> None:
+    """Require CMake's effective launcher wrapper to match this invocation."""
+    fields = effective.split(";")
+    if launcher.name == "ccache":
+        expected_tail = [
+            "-E",
+            "env",
+            f"CCACHE_BASEDIR={working_directory.resolve()}",
+            str(launcher.path),
+        ]
+        if (
+            len(fields) != 5
+            or Path(fields[0]).name not in {"cmake", "cmake.exe"}
+            or fields[1:] != expected_tail
+        ):
+            raise ValueError(
+                "production CMAKE_CUDA_COMPILER_LAUNCHER does not match the "
+                f"qualified ccache wrapper: {effective!r}"
+            )
+    elif fields != [str(launcher.path)]:
+        raise ValueError(
+            "production CMAKE_CUDA_COMPILER_LAUNCHER does not match the "
+            f"qualified {launcher.name} executable: {effective!r}"
+        )
+
+
+def validate_generated_cuda_rules(working_directory: Path) -> None:
+    """Reject effective Ninja CUDA commands with a hidden host override."""
+    build_file = working_directory.resolve() / "build.ninja"
+    rules_file = working_directory.resolve() / "CMakeFiles" / "rules.ninja"
+    if not build_file.is_file() or not rules_file.is_file():
+        raise ValueError("qualified production context requires generated Ninja rules")
+    host_override = re.compile(r"(?:^|[ \t])(?:-ccbin|--compiler-bindir)(?:=|[ \t])")
+    if host_override.search(rules_file.read_text(encoding="utf-8")):
+        raise ValueError("generated CUDA compiler rule contains a host override")
+    lines = build_file.read_text(encoding="utf-8").splitlines()
+    shard_name = (
+        f"generativeqc_generated_shell_sm{QUALIFIED_ARCHITECTURE[3:]}_"
+        f"shard_{QUALIFIED_SHARD_INDEX}.cu.o"
+    )
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("build ") and shard_name in line
+    ]
+    if len(starts) != 1:
+        raise ValueError(
+            "generated Ninja build must contain exactly one qualified shard-6 object rule"
+        )
+    start = starts[0]
+    stop = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].startswith("build ")
+        ),
+        len(lines),
+    )
+    if host_override.search("\n".join(lines[start:stop])):
+        raise ValueError("qualified shard-6 Ninja rule contains a host override")
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -734,10 +828,14 @@ def run_measurement(
     """
     # Read CMake's configured values, including -D/preset overrides, before
     # generation or compilation. A constant alone cannot guard production drift.
-    working_directory, cache_executable = validate_production_shard_count(
-        cmake_cache, nvcc
+    working_directory, cache_executable, effective_launcher = (
+        validate_production_shard_count(cmake_cache, nvcc)
     )
     launcher = verify_compiler_cache(cache_executable, min(timeout, 30))
+    validate_effective_compiler_launcher(
+        working_directory, launcher, effective_launcher
+    )
+    validate_generated_cuda_rules(working_directory)
     generated = generated_directory.resolve()
     shards = generate_production_shards(generated)
     shard = shards[QUALIFIED_SHARD_INDEX]

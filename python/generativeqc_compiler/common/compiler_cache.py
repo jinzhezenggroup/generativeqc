@@ -75,6 +75,7 @@ def _resolve_compiler_cache(
 
     deadline = time.monotonic() + timeout
     failures: list[str] = []
+    timed_out_probe = False
     for name in ("sccache", "ccache"):
         executable = shutil.which(name, path=path_environment)
         if executable is None:
@@ -85,8 +86,14 @@ def _resolve_compiler_cache(
             raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
         try:
             return verify_compiler_cache(path, min(30, remaining))
-        except subprocess.TimeoutExpired:
-            raise
+        except subprocess.TimeoutExpired as error:
+            timed_out_probe = True
+            failures.append(f"{name}: {error}")
+            if time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(
+                    "compiler-cache discovery", timeout
+                ) from error
+            continue
         except OSError as error:
             failures.append(f"{name}: {error}")
             continue
@@ -94,7 +101,7 @@ def _resolve_compiler_cache(
             failures.append(str(error))
             continue
 
-    if time.monotonic() >= deadline:
+    if timed_out_probe or time.monotonic() >= deadline:
         raise subprocess.TimeoutExpired("compiler-cache discovery", timeout)
     detail = f" ({'; '.join(failures)})" if failures else ""
     raise RuntimeError(
