@@ -248,8 +248,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     // Preserve incoming launch status and stop before any consumer can observe
     // scratch from a failed producer. Peeking neither clears nor synchronizes.
     cuda_check(cudaPeekAtLastError());
-    const bool bound_point =
-        !external && stationary_restricted_point_selected(restricted_point);
+    const bool bound_point = !external && stationary_restricted_point_selected(restricted_point);
     if constexpr (stationary_restricted_point_capable) {
       if (bound_point)
         geometry_point_kernel<true><<<blocks(view.npoint, 128), 128, 0, stream>>>(
