@@ -787,6 +787,14 @@ jobs:
         with:
           path: build/tensor-static-cuda-compile
           key: ${{ steps.tensor_static_cache.outputs.cache-primary-key }}
+      - name: Configure direct J/K AOT release context
+        run: >-
+          cmake --preset cuda-release-sm120
+          -DGENERATIVEQC_BUILD_TESTS=ON
+          -DGENERATIVEQC_CUDA_FAST_COMPILE=OFF
+          -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
+          -DGENERATIVEQC_COMPILER_CACHE=ccache
+          -DCMAKE_CUDA_COMPILER="$CUDACXX"
       - name: Restore direct J/K AOT resource cache
         id: direct_jk_aot_cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -808,6 +816,7 @@ jobs:
           --cmake-cache build/cuda-release-sm120/CMakeCache.txt
           --generated-dir build/cuda-release-sm120/generated/production_shell_kernels
           --compile-timeout 1500
+          --record-output build/direct-jk-aot/ledger.candidate.json
       - name: Save direct J/K AOT resource cache
         if: github.event_name != 'merge_group' && steps.direct_jk_aot_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -821,6 +830,7 @@ jobs:
           name: direct-jk-aot-resources
           path: |
             build/direct-jk-aot/report.json
+            build/direct-jk-aot/ledger.candidate.json
             build/direct-jk-aot-cache/*/cuobjdump.txt
             build/direct-jk-aot-cache/*/compile.json
             build/direct-jk-aot-cache/*/compiler-cache.json

@@ -25,9 +25,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any
@@ -44,6 +46,8 @@ from generativeqc_compiler.common.evidence import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from generativeqc_compiler.common.compiler_cache import CompilerCacheLauncher
 
 MANIFEST = (
@@ -70,6 +74,7 @@ QUALIFIED_SHARD_INDEX = 6
 QUALIFIED_ARCHITECTURE = "sm_120"
 QUALIFIED_UNIT_MODE = "stable-shards"
 QUALIFIED_STANDARD = "c++20"
+QUALIFIED_FAST_COMPILE = False
 # Match the normal CMake release build: split compilation changes resources.
 QUALIFIED_SPLIT_COMPILE_THREADS = 1
 # CMake's NVIDIA Release rule adds NDEBUG alongside the target definition.
@@ -114,7 +119,7 @@ def generator_abi() -> int:
     return int(payload["architectures"][QUALIFIED_ARCHITECTURE]["generator_abi"])
 
 
-def validate_production_shard_count(cmake_cache: Path) -> None:
+def validate_production_shard_count(cmake_cache: Path, nvcc: Path) -> Path:
     """Bind the fixed qualification to CMake's actual production generator inputs."""
     configured = cmake_cache.read_text(encoding="utf-8")
     for field, expected in (
@@ -147,6 +152,16 @@ def validate_production_shard_count(cmake_cache: Path) -> None:
     for field in ("GENERATIVEQC_ENABLE_CUDA", "GENERATIVEQC_ENABLE_AOT_SHELLS"):
         if configured_value(field).upper() not in {"1", "ON", "YES", "TRUE", "Y"}:
             raise ValueError(f"production qualification requires {field}=ON")
+    if configured_value("GENERATIVEQC_CUDA_FAST_COMPILE").upper() not in {
+        "0",
+        "OFF",
+        "NO",
+        "FALSE",
+        "N",
+    }:
+        raise ValueError(
+            "production qualification requires GENERATIVEQC_CUDA_FAST_COMPILE=OFF"
+        )
     for field, allowed in (
         ("GENERATIVEQC_AOT_UNIT_MODE", {QUALIFIED_UNIT_MODE}),
         ("GENERATIVEQC_AOT_PROFILE", {"auto", QUALIFIED_ARCHITECTURE}),
@@ -178,6 +193,13 @@ def validate_production_shard_count(cmake_cache: Path) -> None:
         raise ValueError(
             "production GENERATIVEQC_AOT_SHELL_MANIFEST must match the qualified manifest"
         )
+    configured_nvcc = Path(configured_value("CMAKE_CUDA_COMPILER")).resolve()
+    if configured_nvcc != nvcc.resolve():
+        raise ValueError(
+            "production CMAKE_CUDA_COMPILER must match the measured --nvcc; "
+            f"configured {configured_nvcc}, measured {nvcc.resolve()}"
+        )
+    return cmake_cache.resolve().parent
 
 
 def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
@@ -220,7 +242,27 @@ def generate_production_shards(output_directory: Path) -> tuple[Path, ...]:
     return shards
 
 
-def _preprocess_command(nvcc: Path, shard: Path, generated: Path) -> list[str]:
+def _relative_compile_source(shard: Path, working_directory: Path) -> Path:
+    try:
+        return shard.resolve().relative_to(working_directory.resolve())
+    except ValueError as error:
+        raise ValueError(
+            "qualified shard must be below the production CMake build directory"
+        ) from error
+
+
+def _preprocess_command(
+    nvcc: Path,
+    shard: Path,
+    generated: Path,
+    *,
+    working_directory: Path | None = None,
+) -> list[str]:
+    source = (
+        _relative_compile_source(shard, working_directory)
+        if working_directory is not None
+        else shard
+    )
     return [
         str(nvcc),
         f"-std={QUALIFIED_STANDARD}",
@@ -229,11 +271,13 @@ def _preprocess_command(nvcc: Path, shard: Path, generated: Path) -> list[str]:
         f"-I{ROOT / 'src'}",
         f"-I{generated}",
         "-E",
-        str(shard),
+        str(source),
     ]
 
 
-def preprocessed_identity_sha256(nvcc: Path, shard: Path, generated: Path) -> str:
+def preprocessed_identity_sha256(
+    nvcc: Path, shard: Path, generated: Path, *, working_directory: Path
+) -> str:
     """SHA256 of the preprocessed translation unit, line markers included.
 
     Line markers embed the compilation context whose sensitivity issue #2101
@@ -241,9 +285,12 @@ def preprocessed_identity_sha256(nvcc: Path, shard: Path, generated: Path) -> st
     against the same qualified context.
     """
     result = subprocess.run(
-        _preprocess_command(nvcc, shard, generated),
+        _preprocess_command(
+            nvcc, shard, generated, working_directory=working_directory
+        ),
         check=False,
         capture_output=True,
+        cwd=working_directory,
         timeout=300,
     )
     if result.returncode:
@@ -278,6 +325,7 @@ def qualified_flags() -> dict[str, Any]:
         "architecture": QUALIFIED_ARCHITECTURE,
         "standard": QUALIFIED_STANDARD,
         "optimization": "-O3",
+        "fast_compile": QUALIFIED_FAST_COMPILE,
         "split_compile_threads": QUALIFIED_SPLIT_COMPILE_THREADS,
         "definitions": list(QUALIFIED_DEFINITIONS),
         "ptxas_verbose": True,
@@ -337,6 +385,29 @@ def cache_statistics(launcher: CompilerCacheLauncher) -> dict[str, Any]:
     }
 
 
+@contextmanager
+def _production_compile_context(directory: Path) -> Iterator[None]:
+    """Match CMake's ccache cwd/base contract for one finite compile.
+
+    This validator is a single-process CLI. Keeping the process-scoped cwd and
+    environment change inside this bounded context makes ccache pass the same
+    relative generated source spelling to NVCC as the configured CMake build.
+    """
+    working_directory = directory.resolve()
+    previous_directory = Path.cwd()
+    previous_basedir = os.environ.get("CCACHE_BASEDIR")
+    os.chdir(working_directory)
+    os.environ["CCACHE_BASEDIR"] = str(working_directory)
+    try:
+        yield
+    finally:
+        os.chdir(previous_directory)
+        if previous_basedir is None:
+            os.environ.pop("CCACHE_BASEDIR", None)
+        else:
+            os.environ["CCACHE_BASEDIR"] = previous_basedir
+
+
 def compile_shard(
     *,
     nvcc: Path,
@@ -345,14 +416,26 @@ def compile_shard(
     cache: Path,
     identity: dict[str, Any],
     timeout: float,
+    working_directory: Path,
 ) -> tuple[Path, Path, dict[str, Any]]:
     """Compile one shard through the verified cache launcher with a bounded
     identity-keyed object cache; successful hits require matching metadata."""
     implementation_sha256 = {
         path: file_hash(ROOT / path) for path in COMPILE_IMPLEMENTATIONS
     }
+    working_directory = working_directory.resolve()
+    source_argument = _relative_compile_source(shard, working_directory)
+    compile_context = {
+        "working_directory": str(working_directory),
+        "ccache_basedir": str(working_directory),
+        "source_argument": source_argument.as_posix(),
+    }
     key = canonical_hash(
-        {"identity": identity, "compile_implementation_sha256": implementation_sha256}
+        {
+            "identity": identity,
+            "compile_implementation_sha256": implementation_sha256,
+            "compile_context": compile_context,
+        }
     )
     directory = cache / key
     directory.mkdir(parents=True, exist_ok=True)
@@ -366,6 +449,7 @@ def compile_shard(
             candidate.get("status") == "pass"
             and candidate.get("identity") == identity
             and candidate.get("compile_implementation_sha256") == implementation_sha256
+            and candidate.get("compile_context") == compile_context
             and object_path.is_file()
             and log_path.is_file()
             and candidate.get("object_hash") == file_hash(object_path)
@@ -373,45 +457,49 @@ def compile_shard(
         ):
             metadata = {**candidate, "cache_hit": True}
     if metadata is None:
-        compiler = CudaCompilerAdapter(
-            nvcc, cuda_target_info(QUALIFIED_ARCHITECTURE), compile_timeout=timeout
-        )
-        # Use the same resolution arguments/cache as run_cached_compiler so the
-        # observed executable is the one actually selected by the adapter.
-        launcher = resolve_compiler_cache(timeout)
-        statistics = {
-            "launcher": {
-                "name": launcher.name,
-                "path": str(launcher.path),
-                "version": launcher.version,
-            },
-            "before": cache_statistics(launcher),
-            "after": {"status": "not-recorded"},
-        }
-        statistics_path = directory / "compiler-cache.json"
-        statistics_path.write_text(
-            json.dumps(statistics, indent=2, sort_keys=True) + "\n"
-        )
-        try:
-            compiled = compiler.compile(
-                shard,
-                object_path,
-                includes=(ROOT / "src", generated),
-                options=(
-                    *(
-                        (f"--split-compile={QUALIFIED_SPLIT_COMPILE_THREADS}",)
-                        if QUALIFIED_SPLIT_COMPILE_THREADS != 1
-                        else ()
-                    ),
-                    *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
-                ),
-                standard=QUALIFIED_STANDARD,
+        with _production_compile_context(working_directory):
+            compiler = CudaCompilerAdapter(
+                nvcc,
+                cuda_target_info(QUALIFIED_ARCHITECTURE),
+                compile_timeout=timeout,
             )
-        finally:
-            statistics["after"] = cache_statistics(launcher)
+            # Use the same resolution arguments/cache as run_cached_compiler so the
+            # observed executable is the one actually selected by the adapter.
+            launcher = resolve_compiler_cache(timeout)
+            statistics = {
+                "launcher": {
+                    "name": launcher.name,
+                    "path": str(launcher.path),
+                    "version": launcher.version,
+                },
+                "context": compile_context,
+                "before": cache_statistics(launcher),
+                "after": {"status": "not-recorded"},
+            }
+            statistics_path = directory / "compiler-cache.json"
             statistics_path.write_text(
                 json.dumps(statistics, indent=2, sort_keys=True) + "\n"
             )
+            try:
+                compiled = compiler.compile(
+                    source_argument,
+                    object_path,
+                    includes=(ROOT / "src", generated),
+                    options=(
+                        *(
+                            (f"--split-compile={QUALIFIED_SPLIT_COMPILE_THREADS}",)
+                            if QUALIFIED_SPLIT_COMPILE_THREADS != 1
+                            else ()
+                        ),
+                        *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
+                    ),
+                    standard=QUALIFIED_STANDARD,
+                )
+            finally:
+                statistics["after"] = cache_statistics(launcher)
+                statistics_path.write_text(
+                    json.dumps(statistics, indent=2, sort_keys=True) + "\n"
+                )
         log_path.write_text(compiled.stdout + compiled.stderr)
         metadata = {
             "status": "pass" if compiled.returncode == 0 else "fail",
@@ -422,6 +510,7 @@ def compile_shard(
             else "NVCC compilation failed",
             "identity": identity,
             "compile_implementation_sha256": implementation_sha256,
+            "compile_context": compile_context,
             "cache_key": key,
             "cache_hit": False,
             "seconds": compiled.duration_seconds,
@@ -632,14 +721,16 @@ def run_measurement(
     """
     # Read CMake's configured values, including -D/preset overrides, before
     # generation or compilation. A constant alone cannot guard production drift.
-    validate_production_shard_count(cmake_cache)
+    working_directory = validate_production_shard_count(cmake_cache, nvcc)
     generated = generated_directory.resolve()
     shards = generate_production_shards(generated)
     shard = shards[QUALIFIED_SHARD_INDEX]
     toolchain = toolchain_versions(nvcc)
     identity = compile_identity(
         shard_sha256=file_hash(shard),
-        preprocessed_sha256=preprocessed_identity_sha256(nvcc, shard, generated),
+        preprocessed_sha256=preprocessed_identity_sha256(
+            nvcc, shard, generated, working_directory=working_directory
+        ),
         header_sha256={
             header: file_hash(ROOT / "src" / header) for header in PRELUDE_HEADERS
         },
@@ -654,6 +745,7 @@ def run_measurement(
         cache=cache,
         identity=identity,
         timeout=timeout,
+        working_directory=working_directory,
     )
     kernels = dict(
         sorted(measure_resources(nvcc, object_path, cache_directory).items())

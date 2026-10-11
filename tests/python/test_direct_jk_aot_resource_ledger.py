@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -17,9 +18,12 @@ from generativeqc_compiler.common.compiler_process import CompileResult
 
 from tools import validate_direct_jk_aot_resources as validator
 
+FAKE_NVCC = Path("/fake/nvcc").resolve()
+
 
 def _production_cache(**overrides: str) -> str:
     fields = {
+        "CMAKE_CUDA_COMPILER": str(FAKE_NVCC),
         "GENERATIVEQC_AOT_SHARDS": "8",
         "GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS": "1",
         "GENERATIVEQC_ENABLE_CUDA": "ON",
@@ -29,6 +33,7 @@ def _production_cache(**overrides: str) -> str:
         "GENERATIVEQC_AOT_PROFILES": "",
         "GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES": "120",
         "GENERATIVEQC_CUDA_ARCHITECTURES": "",
+        "GENERATIVEQC_CUDA_FAST_COMPILE": "OFF",
         "CMAKE_CUDA_ARCHITECTURES": "120",
         "GENERATIVEQC_AOT_SHELL_MANIFEST": str(validator.MANIFEST),
     }
@@ -195,6 +200,8 @@ class TestLedgerValidation:
             ("architecture", "sm_90"),
             ("standard", "c++17"),
             ("optimization", "-O0"),
+            ("fast_compile", True),
+            ("fast_compile", 0),
             ("split_compile_threads", 8),
             ("split_compile_threads", True),
             ("split_compile_threads", 1.0),
@@ -397,6 +404,8 @@ class TestProductionCompile:
         launcher = CompilerCacheLauncher(
             Path("/verified/ccache"), "ccache", "ccache 4.14"
         )
+        original_directory = Path.cwd()
+        original_basedir = os.environ.get("CCACHE_BASEDIR")
         selections: list[float] = []
         events: list[str] = []
         arguments = {
@@ -406,6 +415,7 @@ class TestProductionCompile:
             "cache": tmp_path / "cache",
             "identity": _identity(),
             "timeout": 23,
+            "working_directory": tmp_path,
         }
 
         def resolve(path: str, timeout: float) -> CompilerCacheLauncher:
@@ -432,6 +442,9 @@ class TestProductionCompile:
             assert "-arch=sm_120" in command and "-Xptxas=-v" in command
             assert "-DGENERATIVEQC_HAS_CUDA=1" in command
             assert "-DNDEBUG" in command
+            assert command[command.index("-c") + 1] == "shard.cu"
+            assert Path.cwd() == tmp_path.resolve()
+            assert os.environ["CCACHE_BASEDIR"] == str(tmp_path.resolve())
             events.append("compile")
             pending_receipt = json.loads(
                 next((tmp_path / "cache").glob("*/compiler-cache.json")).read_text()
@@ -455,6 +468,8 @@ class TestProductionCompile:
             assert metadata["cache_hit"] is False
         assert events == ["stats", "compile", "stats"]
         assert selections == [23, 23]
+        assert Path.cwd() == original_directory
+        assert os.environ.get("CCACHE_BASEDIR") == original_basedir
         directory = next((tmp_path / "cache").iterdir())
         receipt_path = directory / "compiler-cache.json"
         receipt = json.loads(receipt_path.read_text())
@@ -496,6 +511,28 @@ class TestProductionCompile:
         snapshot = validator.cache_statistics(launcher)
         assert snapshot["status"] == "unavailable"
         assert "private sccache" in snapshot["reason"]
+
+    def test_preprocessing_uses_the_cmake_working_directory(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        generated = tmp_path / "generated"
+        shard = generated / "shard.cu"
+
+        def preprocess(
+            command: list[str], **kwargs: Any
+        ) -> subprocess.CompletedProcess[bytes]:
+            assert command[-1] == str(Path("generated/shard.cu"))
+            assert kwargs["cwd"] == tmp_path
+            return subprocess.CompletedProcess(command, 0, b"preprocessed", b"")
+
+        monkeypatch.setattr(validator.subprocess, "run", preprocess)
+        digest = validator.preprocessed_identity_sha256(
+            FAKE_NVCC,
+            shard,
+            generated,
+            working_directory=tmp_path,
+        )
+        assert digest == validator.hashlib.sha256(b"preprocessed").hexdigest()
 
     @pytest.mark.parametrize(
         "error", [OSError("stats unavailable"), subprocess.TimeoutExpired("ccache", 5)]
@@ -543,6 +580,7 @@ class TestProductionCompile:
                 cache=tmp_path / "cache",
                 identity=_identity(),
                 timeout=23,
+                working_directory=tmp_path,
             )
         receipt = json.loads(
             next((tmp_path / "cache").glob("*/compiler-cache.json")).read_text()
@@ -650,6 +688,7 @@ class TestCompileImplementationIdentity:
             "cache": tmp_path / "cache",
             "identity": identity,
             "timeout": 23,
+            "working_directory": tmp_path,
         }
         first_object, first_directory, first = validator.compile_shard(**arguments)
         _, _, replay = validator.compile_shard(**arguments)
@@ -704,13 +743,28 @@ class TestProductionContextBinding:
         with pytest.raises(validator.LedgerError, match="flags.definitions"):
             validator.validate_ledger(ledger)
 
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("GENERATIVEQC_CUDA_FAST_COMPILE", "ON"),
+            ("CMAKE_CUDA_COMPILER", str(Path("/other/nvcc").resolve())),
+        ],
+    )
+    def test_compile_context_override_fails_before_work(
+        self, tmp_path: Path, field: str, value: str
+    ) -> None:
+        cache = tmp_path / "CMakeCache.txt"
+        cache.write_text(_production_cache(**{field: value}))
+        with pytest.raises(ValueError, match=field):
+            validator.validate_production_shard_count(cache, FAKE_NVCC)
+
     @pytest.mark.parametrize("cache_type", ["STRING", "UNINITIALIZED"])
     def test_accepts_configured_qualified_shard_count(
         self, tmp_path: Path, cache_type: str
     ) -> None:
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(_production_cache().replace(":STRING=", f":{cache_type}="))
-        validator.validate_production_shard_count(cache)
+        validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize("profile", ["auto", "sm_120"])
     @pytest.mark.parametrize("profiles", ["", "sm_120"])
@@ -723,7 +777,7 @@ class TestProductionContextBinding:
                 GENERATIVEQC_AOT_PROFILE=profile, GENERATIVEQC_AOT_PROFILES=profiles
             )
         )
-        validator.validate_production_shard_count(cache)
+        validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize("value", ["ON", "YES", "TRUE", "Y", "1", "true"])
     def test_enabled_cmake_boolean_spellings(self, tmp_path: Path, value: str) -> None:
@@ -733,7 +787,7 @@ class TestProductionContextBinding:
                 GENERATIVEQC_ENABLE_CUDA=value, GENERATIVEQC_ENABLE_AOT_SHELLS=value
             )
         )
-        validator.validate_production_shard_count(cache)
+        validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize("duplicate", [False, True])
     def test_profile_map_must_be_declared_once(
@@ -745,19 +799,21 @@ class TestProductionContextBinding:
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(contents)
         with pytest.raises(ValueError, match="GENERATIVEQC_AOT_PROFILES"):
-            validator.validate_production_shard_count(cache)
+            validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize(
         "field,value",
         [
             ("GENERATIVEQC_ENABLE_CUDA", "OFF"),
             ("GENERATIVEQC_ENABLE_AOT_SHELLS", "OFF"),
+            ("GENERATIVEQC_CUDA_FAST_COMPILE", "ON"),
             ("GENERATIVEQC_AOT_UNIT_MODE", "class"),
             ("GENERATIVEQC_AOT_PROFILE", "portable"),
             ("GENERATIVEQC_AOT_PROFILES", "portable"),
             ("GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES", "90"),
             ("GENERATIVEQC_CUDA_COMPILE_ARCHITECTURES", "120;90"),
             ("GENERATIVEQC_AOT_SHELL_MANIFEST", "/other/production.json"),
+            ("CMAKE_CUDA_COMPILER", str(Path("/other/nvcc").resolve())),
         ],
     )
     def test_generation_context_override_fails_before_work(
@@ -791,6 +847,8 @@ class TestProductionContextBinding:
             "GENERATIVEQC_AOT_UNIT_MODE",
             "GENERATIVEQC_AOT_PROFILE",
             "GENERATIVEQC_AOT_SHELL_MANIFEST",
+            "GENERATIVEQC_CUDA_FAST_COMPILE",
+            "CMAKE_CUDA_COMPILER",
         ],
     )
     def test_incomplete_generation_context_fails_closed(
@@ -809,7 +867,7 @@ class TestProductionContextBinding:
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(contents)
         with pytest.raises(ValueError, match=field):
-            validator.validate_production_shard_count(cache)
+            validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize(
         "field",
@@ -831,11 +889,11 @@ class TestProductionContextBinding:
         targets[field] = "120"
         cache = tmp_path / "CMakeCache.txt"
         cache.write_text(_production_cache(**targets))
-        validator.validate_production_shard_count(cache)
+        validator.validate_production_shard_count(cache, FAKE_NVCC)
         targets[field] = ""
         cache.write_text(_production_cache(**targets))
         with pytest.raises(ValueError, match="explicit CUDA target"):
-            validator.validate_production_shard_count(cache)
+            validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     def test_target_precedence_ignores_unused_lower_priority_values(
         self, tmp_path: Path
@@ -848,7 +906,7 @@ class TestProductionContextBinding:
                 CMAKE_CUDA_ARCHITECTURES="90",
             )
         )
-        validator.validate_production_shard_count(cache)
+        validator.validate_production_shard_count(cache, FAKE_NVCC)
 
     @pytest.mark.parametrize(
         "split_entry",
@@ -924,7 +982,9 @@ class TestProductionContextBinding:
 
     def test_missing_config_is_not_silently_assumed(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
-            validator.validate_production_shard_count(tmp_path / "CMakeCache.txt")
+            validator.validate_production_shard_count(
+                tmp_path / "CMakeCache.txt", FAKE_NVCC
+            )
 
     def test_cli_reports_config_override_failure(self, tmp_path: Path) -> None:
         nvcc = tmp_path / "nvcc"
@@ -953,8 +1013,12 @@ class TestProductionContextBinding:
 
     def test_workflow_binds_the_configured_production_cache(self) -> None:
         workflow = (validator.ROOT / ".github/workflows/ci.yml").read_text()
+        configure = workflow.split(
+            "- name: Configure direct J/K AOT release context", 1
+        )[1].split("- name:", 1)[0]
+        assert "-DGENERATIVEQC_CUDA_FAST_COMPILE=OFF" in configure
         step = workflow.split(
             "- name: Qualify direct J/K AOT static resources (shard 6)", 1
         )[1].split("- name:", 1)[0]
         assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
-        assert "--record-output" not in step
+        assert "--record-output build/direct-jk-aot/ledger.candidate.json" in step

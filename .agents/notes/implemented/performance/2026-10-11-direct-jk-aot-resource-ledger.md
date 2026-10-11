@@ -220,3 +220,30 @@ shard partition, including preset and command-line overrides; missing, ambiguous
 or different counts fail before generation or compilation. Separately, hashes of
 the validator and compiler adapter bind object-cache entries to the implementation
 that constructs the command, without rewriting scientific ledger identity.
+
+## CMake compile-context binding repair
+
+Review of the rebased gate found three additional production-context gaps. The
+`cuda-resources` CMake cache was configured with
+`GENERATIVEQC_CUDA_FAST_COMPILE=ON`, even though the validator intentionally
+compiled the normal `-O3` release recipe; the validator did not bind its
+`--nvcc` executable to `CMAKE_CUDA_COMPILER`; and its ccache invocation used the
+repository root plus an absolute shard path instead of CMake's build-directory
+working directory, relative generated-source path, and
+`CCACHE_BASEDIR=${CMAKE_BINARY_DIR}` contract. The last difference is material
+because issue #2101 established sensitivity to source-location line markers.
+
+The workflow now reconfigures the same `cuda-release-sm120` build directory to
+normal Release compilation (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`) immediately
+before qualification. The validator rejects a fast cache or a configured CUDA
+compiler that differs from `--nvcc`, preprocesses from the CMake build directory,
+and performs the cached compile there with the shard path relative to that
+directory and `CCACHE_BASEDIR` set to the same directory. The bounded inner
+cache records this execution context and will not replay metadata from the old
+cwd/base contract.
+
+This repair changes the qualified preprocessed/compile context, so the existing
+ledger is not relabeled. A canonical CI `--record-output` run must produce the
+candidate ledger and retained compiler-cache/resource receipts; only the
+reviewed candidate may replace the committed ledger before gate mode is
+restored.
