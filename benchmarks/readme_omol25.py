@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from generativeqc.elements import atomic_number
@@ -259,6 +259,17 @@ def reference_xc_backend(engine: Any, *, spin: int = 0) -> dict[str, Any]:
     return record
 
 
+def reference_endpoint_seconds(
+    *,
+    started: float,
+    synchronize: Callable[[], None],
+    clock: Callable[[], float] = perf_counter,
+) -> float:
+    """Stop the GPU endpoint clock only after outstanding device work completes."""
+    synchronize()
+    return clock() - started
+
+
 def force_execution_options(
     *,
     active_ao: bool,
@@ -488,8 +499,10 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         gradient = engine.nuc_grad_method()
                         gradient.grid_response = True
                         forces = cp.asnumpy(-gradient.kernel())
-                        cp.cuda.Stream.null.synchronize()
-                        seconds = perf_counter() - started
+                        seconds = reference_endpoint_seconds(
+                            started=started,
+                            synchronize=cp.cuda.Stream.null.synchronize,
+                        )
                         convergence = gpu_convergence_payload(
                             [engine], [work["tracker"]]
                         )[0]
