@@ -933,13 +933,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
         !admitted_term(spec.exchange) || options_.semilocal_correlation_scale != 1.0)
       return false;
     const bool pbe_family = execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe;
-    const bool pbe = pbe_family && !spec.exchange.present &&
-                     options_.semilocal_exchange_scale == 1.0;
-    const bool pbe0 = pbe_family && spec.exchange.present &&
-                      spec.exchange.coefficient == -0.125 &&
+    const bool pbe =
+        pbe_family && !spec.exchange.present && options_.semilocal_exchange_scale == 1.0;
+    const bool pbe0 = pbe_family && spec.exchange.present && spec.exchange.coefficient == -0.125 &&
                       options_.semilocal_exchange_scale == 0.75;
-    const bool b3lyp = !pbe_family && spec.exchange.present &&
-                       spec.exchange.coefficient == -0.1 &&
+    const bool b3lyp = !pbe_family && spec.exchange.present && spec.exchange.coefficient == -0.1 &&
                        options_.semilocal_exchange_scale == 1.0;
     return (pbe || pbe0 || b3lyp) &&
            (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
@@ -1523,9 +1521,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
     const auto method = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
                             ? scf::CpuStationaryGga::B3lyp
-                        : fock_.strategy().spec.exchange.present
-                            ? scf::CpuStationaryGga::Pbe0
-                            : scf::CpuStationaryGga::Pbe;
+                        : fock_.strategy().spec.exchange.present ? scf::CpuStationaryGga::Pbe0
+                                                                 : scf::CpuStationaryGga::Pbe;
     auto candidate = scf::cpu_stationary_integral_gradient(fock_, density[0], weighted_density[0],
                                                            method, maximum_bytes);
     work[3] = candidate.numeric_capacity;
@@ -2066,12 +2063,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
     runtime::CpuRetainedCapacity retained_integrals(runtime::vector_bytes(integrals));
 
     const auto xc = execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp
-                        ? dft::stationary_b3lyp_xc_derivative(
-                              basis_, grid_, frame.density, options_.xc_tile_points)
-                        : dft::stationary_pbe_xc_derivative(
-                              basis_, grid_, frame.density, options_.xc_tile_points,
-                              options_.semilocal_exchange_scale,
-                              options_.semilocal_correlation_scale);
+                        ? dft::stationary_b3lyp_xc_derivative(basis_, grid_, frame.density,
+                                                              options_.xc_tile_points)
+                        : dft::stationary_pbe_xc_derivative(basis_, grid_, frame.density,
+                                                            options_.xc_tile_points,
+                                                            options_.semilocal_exchange_scale,
+                                                            options_.semilocal_correlation_scale);
     const std::size_t ncoord = 3 * system_.atoms.size();
     if (integrals.size() != 4 * ncoord || xc.gradient.size() != ncoord)
       throw MethodError(GENERATIVEQC_STATUS_INTERNAL_ERROR,
