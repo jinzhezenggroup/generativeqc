@@ -1504,7 +1504,7 @@ class TestProductionContextBinding:
             "- name: Qualify direct J/K AOT static resources (shard 6)", 1
         )[1].split("- name:", 1)[0]
         assert "--cmake-cache build/cuda-release-sm120/CMakeCache.txt" in step
-        assert "--record-output" not in step
+        assert "--record-output build/direct-jk-aot/ledger.candidate.json" in step
 
     def test_cmake_records_the_resolved_compiler_cache(self) -> None:
         cmake = (validator.ROOT / "CMakeLists.txt").read_text()
