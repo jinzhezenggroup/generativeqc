@@ -1263,19 +1263,6 @@ jobs:
             tests/python/test_cc_shared_iteration_driver.py
             tests/python/test_rccsd_codegen_no_numpy.py
           )
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Count WB97M-V in the original core-file parity, then transfer
-            # its complete FD module. Do not reshuffle unrelated core owners.
-            rebalance_paths+=(tests/python/test_wb97mv_complete.py)
-          fi
-          # Keep module-scoped Hessian state on one worker and move the full
-          # nightly oracle suite off the correlated-gradient critical path.
-          nightly_hessian_paths=(
-            tests/python/test_hessian_analytic.py
-            tests/python/test_hessian_directional.py
-            tests/python/test_hessian_reference.py
-            tests/python/test_hessian_hvp.py
-          )
           case "${{ matrix.shard }}" in
             core-a|core-b)
               # Split the broad remainder by file, not by collected test node:
@@ -1345,11 +1332,6 @@ jobs:
                 tests/python/test_df_lambda_matrix.py
                 tests/python/test_df_lambda_reduction.py
               )
-              if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-                # Preserve full module fixtures while distributing the nightly
-                # water Hessian away from the correlated-gradient tail.
-                test_targets+=("${nightly_hessian_paths[@]}")
-              fi
               ;;
             posthf)
               test_targets=(
@@ -1370,21 +1352,6 @@ jobs:
                 tests/python/test_hessian_reference.py
                 tests/python/test_hessian_hvp.py
               )
-              if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-                # Transfer full modules rather than splitting their expensive
-                # fixtures across xdist workers.
-                declare -A nightly_hessian_lookup=()
-                for path in "${nightly_hessian_paths[@]}"; do
-                  nightly_hessian_lookup["${path}"]=1
-                done
-                remaining_targets=()
-                for path in "${test_targets[@]}"; do
-                  if [[ -z "${nightly_hessian_lookup[${path}]:-}" ]]; then
-                    remaining_targets+=("${path}")
-                  fi
-                done
-                test_targets=("${remaining_targets[@]}")
-              fi
               ;;
             ecp-forces)
               # Full d-force qualification exceeded the 20-minute job cap when
@@ -1430,11 +1397,6 @@ jobs:
                 tests/python/test_cc_shared_iteration_driver.py
                 tests/python/test_rccsd_codegen_no_numpy.py
               )
-              if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-                # WB97M-V has independent FD cases and no shared fixtures;
-                # move the complete file out of core on full qualification.
-                test_targets+=(tests/python/test_wb97mv_complete.py)
-              fi
               ;;
             *)
               echo "::error::unknown Python shard: ${{ matrix.shard }}"
@@ -1449,10 +1411,7 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          # Emit completed node IDs and bounded worker stacks for a stalled
-          # test, instead of only dot percentages before the 90-minute limit.
-          .venv/bin/python -m pytest "${test_targets[@]}" -v \
-            -o faulthandler_timeout=900 \
+          .venv/bin/python -m pytest "${test_targets[@]}" -q \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
