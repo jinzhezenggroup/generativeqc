@@ -79,3 +79,12 @@ def test_native_orbitals_are_column_major_per_system_and_spin() -> None:
     np.testing.assert_array_equal(
         qualification.coefficient_matrices(native, 2, 3, 2), coefficients
     )
+
+
+@pytest.mark.parametrize("field", qualification.GATES)
+def test_nonfinite_reference_is_rejected_without_nan_errors(field: str) -> None:
+    actual, reference = sample()
+    reference[field] = float("nan") if field == "energy" else [[[float("nan")]]]
+    result = qualification.assess(actual, reference)
+    assert result["accepted"] is False
+    assert result["errors"][field] is None

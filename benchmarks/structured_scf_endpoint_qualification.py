@@ -249,7 +249,12 @@ def assess(actual: dict, reference: dict) -> dict:
     for field in GATES:
         observed = np.asarray(actual.get(field), dtype=float)
         expected = np.asarray(reference[field], dtype=float)
-        if observed.shape != expected.shape or not np.all(np.isfinite(observed)):
+        if (
+            observed.shape != expected.shape
+            or not observed.size
+            or not np.all(np.isfinite(observed))
+            or not np.all(np.isfinite(expected))
+        ):
             errors[field] = None
         else:
             errors[field] = float(np.max(np.abs(observed - expected)))
@@ -586,7 +591,7 @@ def main() -> int:
         "rows": rows,
         "mask": args.mask,
         "batch": args.batch,
-        "graph": args.graph,
+        "graph": args.graph or args.method.endswith("hf"),
         "repeat": args.repeat,
         "instrumented": args.instrumented
         or any(

@@ -42,9 +42,13 @@ def pairs() -> tuple[list[dict], list[dict]]:
     )
 
 
+def observation(mask: int = 127) -> dict:
+    return {**receipt(mask, 0), "library_operations": [0, 1, 2, 3, 4, 5, 6]}
+
+
 def test_matched_endpoint_pairs_are_profitable_without_promoting_defaults() -> None:
     baseline, candidate = pairs()
-    result = report.compare(baseline, candidate, 127)
+    result = report.compare(baseline, candidate, 127, [observation()])
     assert result["profitable"] is True
     assert result["default_promoted"] is False
     assert result["matched_pairs"] == 3
@@ -83,7 +87,9 @@ def test_cold_preparation_cost_is_not_hidden_by_fast_execution() -> None:
         for row in value["rows"]:
             if row["phase"] == 0:
                 row["cold_total_seconds"] = 5.0
-    assert report.compare(baseline, candidate, 127)["profitable"] is False
+    assert (
+        report.compare(baseline, candidate, 127, [observation()])["profitable"] is False
+    )
 
 
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), 0.0, -1.0])
@@ -111,3 +117,76 @@ def test_hf_signed_gram_is_not_claimed_as_executed() -> None:
         generated["model"]["method"] = offered["model"]["method"] = "rhf"
         offered["mask"] = 2
     assert report.compare(baseline, candidate, 2)["profitable"] is None
+
+
+def test_prepared_candidates_are_not_execution_evidence() -> None:
+    baseline, candidate = pairs()
+    result = report.compare(baseline, candidate, 127)
+    assert result["timing_profitable"] is True
+    assert result["profitable"] is None
+
+
+def test_foreign_trace_cannot_qualify_this_endpoint() -> None:
+    baseline, candidate = pairs()
+    foreign = observation()
+    foreign["source"] = "other"
+    assert report.compare(baseline, candidate, 127, [foreign])["profitable"] is None
+
+
+def trace(execution: str = "stream") -> dict:
+    return {
+        "operation": "structured_gram",
+        "execution": execution,
+        "valid": True,
+        "cuda_error": 0,
+        "counters": {"operation": 0, "provider_cublas": 1, "submitted_states": 3},
+    }
+
+
+def test_stream_library_submissions_are_observed() -> None:
+    measured = receipt(127, 0)
+    measured["instrumented"] = True
+    assert report.execution_observation(measured, [trace()])["library_operations"] == [
+        0
+    ]
+
+
+def test_capture_alone_is_not_executed_work() -> None:
+    measured = receipt(127, 0)
+    measured["instrumented"] = True
+    assert not report.execution_observation(measured, [trace("graph_capture")])[
+        "library_operations"
+    ]
+
+
+def test_hf_captured_density_requires_successful_post_eigen_graph_launches() -> None:
+    measured = receipt(127, 0)
+    measured["instrumented"] = True
+    measured["model"]["method"] = "rhf"
+    assert not report.execution_observation(measured, [trace("graph_capture")])[
+        "library_operations"
+    ]
+    for row in measured["rows"]:
+        row["graph_post_launches"] = 1
+    assert report.execution_observation(measured, [trace("graph_capture")])[
+        "library_operations"
+    ] == [0]
+
+
+def test_invalid_trace_is_not_library_execution_evidence() -> None:
+    measured = receipt(127, 0)
+    measured["instrumented"] = True
+    invalid = trace()
+    invalid["valid"] = False
+    assert not report.execution_observation(measured, [invalid])["library_operations"]
+
+
+def test_extra_phase_cannot_hide_an_unaccepted_row() -> None:
+    baseline, candidate = pairs()
+    extra = copy.deepcopy(candidate[0]["rows"][0])
+    extra["phase"] = 5
+    extra["assessment"]["accepted"] = False
+    candidate[0]["rows"].append(extra)
+    assert (
+        report.compare(baseline, candidate, 127, [observation()])["profitable"] is None
+    )

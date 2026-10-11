@@ -28,6 +28,8 @@ def endpoint_samples(receipt: dict) -> dict:
             "failed or instrumented endpoints cannot qualify profitability"
         )
     batch = receipt["batch"]
+    if len(receipt["rows"]) != batch * len(PHASES):
+        raise ValueError("unexpected endpoint phases or incomplete scientific work")
     samples = {}
     for phase, name in enumerate(PHASES):
         rows = [row for row in receipt["rows"] if row["phase"] == phase]
@@ -49,7 +51,51 @@ def endpoint_samples(receipt: dict) -> dict:
     return samples
 
 
-def compare(baseline: list[dict], candidate: list[dict], mask: int) -> dict:
+def execution_observation(receipt: dict, records: list[dict]) -> dict:
+    """Separate stream work and authenticated HF Graph submissions from construction."""
+    observed = {field: receipt.get(field) for field in IDENTITY_FIELDS}
+    observed["mask"] = receipt["mask"]
+    observed["library_operations"] = []
+    if (
+        receipt.get("status") != "PASS"
+        or not receipt.get("instrumented")
+        or not all(row["assessment"]["accepted"] for row in receipt["rows"])
+        or not records
+        or any(not record["valid"] or record["cuda_error"] for record in records)
+    ):
+        return observed
+    operations = set()
+    for record in records:
+        if record["operation"] not in ("structured_gram", "structured_basis"):
+            continue
+        counters = record["counters"]
+        operation = counters["operation"]
+        executed = record["execution"] == "stream"
+        if record["execution"] == "graph_capture" and receipt["model"][
+            "method"
+        ].endswith("hf"):
+            launch_field = (
+                "graph_post_launches" if operation == 0 else "graph_iteration_launches"
+            )
+            executed = any(row.get(launch_field, 0) > 0 for row in receipt["rows"])
+        if executed and counters["provider_cublas"] and counters["submitted_states"]:
+            operations.add(operation)
+    observed["library_operations"] = sorted(operations)
+    observed["stream_records"] = sum(
+        record["execution"] == "stream" for record in records
+    )
+    observed["capture_records"] = sum(
+        record["execution"] == "graph_capture" for record in records
+    )
+    return observed
+
+
+def compare(
+    baseline: list[dict],
+    candidate: list[dict],
+    mask: int,
+    observations: list[dict] | None = None,
+) -> dict:
     """Require three independent pairs, reported work and no hidden phase regression."""
     result = {"mask": mask, "profitable": None, "default_promoted": False}
     try:
@@ -123,6 +169,26 @@ def compare(baseline: list[dict], candidate: list[dict], mask: int) -> dict:
                 ),
             }
         )
+        result["timing_profitable"] = result["profitable"]
+        operations = sorted(
+            {
+                operation
+                for observed in observations or []
+                if observed["mask"] == mask
+                and all(
+                    observed.get(field) == candidate[0].get(field)
+                    for field in IDENTITY_FIELDS
+                )
+                for operation in observed["library_operations"]
+                if mask & (1 << operation)
+            }
+        )
+        result["executed_library_operations"] = operations
+        if not operations:
+            result["profitable"] = None
+            result["reason"] = (
+                "matched actual library submissions have not been observed"
+            )
         if mask == 2 and candidate[0]["model"]["method"].endswith("hf"):
             result["profitable"] = None
             result["reason"] = (
@@ -133,7 +199,7 @@ def compare(baseline: list[dict], candidate: list[dict], mask: int) -> dict:
     return result
 
 
-def report(receipts: list[dict]) -> dict:
+def report(receipts: list[dict], observations: list[dict] | None = None) -> dict:
     """Keep incompatible environments and failed receipts separate, never cherry-pick."""
     groups = {}
     for receipt in receipts:
@@ -147,7 +213,7 @@ def report(receipts: list[dict]) -> dict:
             {
                 "identity": json.loads(identity),
                 "comparisons": [
-                    compare(masks.get(0, []), values, mask)
+                    compare(masks.get(0, []), values, mask, observations)
                     for mask, values in sorted(masks.items())
                     if mask != 0
                 ],
@@ -161,8 +227,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("receipts", type=Path, nargs="+")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--traces", type=Path, nargs="*", default=[])
     args = parser.parse_args()
-    result = report([json.loads(path.read_text()) for path in args.receipts])
+    observations = [
+        execution_observation(
+            json.loads((path.parent / "receipt.json").read_text()),
+            [json.loads(line) for line in path.read_text().splitlines()],
+        )
+        for path in args.traces
+    ]
+    result = report(
+        [json.loads(path.read_text()) for path in args.receipts], observations
+    )
+    result["execution_observations"] = observations
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
 
 
