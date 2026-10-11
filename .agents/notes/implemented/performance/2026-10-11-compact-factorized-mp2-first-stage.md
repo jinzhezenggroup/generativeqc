@@ -1,6 +1,6 @@
 # Decision: compact the factorized MP2 derivative first stage
 
-Status: implemented, qualification in progress
+Status: implemented, bounded CPU qualification
 Date: 2026-10-11
 
 ## Problem and scope
@@ -66,9 +66,14 @@ storage. Neither substitutes for complete endpoint/device measurement.
 Paired source-matched H2 public E+F builds passed all numerical/physical gates
 and produced identical cold/warm/displaced results. Ordinary C++ payload peak
 remained 18911 bytes, with 48 fewer total requested bytes per call. No complete
-endpoint peak or speedup benefit is claimed. Broader CPU cases and the second
-HPC compiler environment are still running. Raw H2 records, protocol and scoped
-work/allocation receipts are retained in
+endpoint peak or speedup benefit is claimed. Source-matched LiH values also match
+exactly, with all independent scientific gates passing; its ordinary C++ peak
+remains 289735 bytes, with 7680 fewer total requested bytes per call. A fresh
+GCC 11.4 HPC build passed 34 baseline and 50 candidate tests, including all
+molecular cases, and repeated H2 scientific qualification. Later-collected
+cache counters do not recover the earlier build server's hit/miss counts;
+verbose launcher commands establish use, not a claimed hit rate. Raw records,
+completed-pair timing/coverage, protocol and scoped work/allocation receipts are retained in
 `benchmarks/results/mp2-factorized-first-20261011/`. Earlier attempted
 candidate directories contained baseline bytes because git apply skipped paths
 under a parent repository. Those results are invalid as candidate evidence.
