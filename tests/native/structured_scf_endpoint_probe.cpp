@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "molecule/basis.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/mean_field.hpp"
 
@@ -79,8 +80,10 @@ int main(int argc, char** argv) try {
     system.shells.push_back(shell);
   }
   require(bool(input), "malformed qualification fixture");
-  system.electron_count = -system.charge;
-  for (const auto& atom : system.atoms) system.electron_count += atom.atomic_number;
+  std::string normalization_detail;
+  require(generativeqc::molecule::validate_and_normalize(system, normalization_detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          normalization_detail.c_str());
   std::vector<generativeqc::core::System> systems(batch_size, system);
   generativeqc::scf::ScfOptions options;
   options.energy_tolerance = 1e-11;

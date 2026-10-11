@@ -439,6 +439,7 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
                         "phase": phase,
                         "item": index,
                         "status": item.status,
+                        "status_message": item.status_message,
                         "converged": item.converged,
                         "backend": item.executed_backend,
                         "energy": item.energy if np.isfinite(item.energy) else None,

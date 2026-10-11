@@ -552,6 +552,14 @@ actual library operations against each sibling receipt. Without matched executio
 observations the report can describe timing differences but profitability remains
 unknown. Graph construction is not work; captured HF regions additionally require
 successful submissions of the appropriate resident iteration/post-eigen Graph.
+Build both the native probe and the PBE stationary companion manifests before
+KS force qualification: `generativeqc_structured_scf_endpoint_probe`,
+`generativeqc_stationary_pbe_rks_manifest`,
+`generativeqc_stationary_pbe_uks_manifest`,
+`generativeqc_stationary_pbe_rks_spd_manifest` and
+`generativeqc_stationary_pbe_uks_spd_manifest`. Building only `generativeqc` does
+not refresh optional force companions; stale compiler contracts must remain
+rejected rather than rewriting manifest hashes around an old binary.
 
 KS Direct J/K transform submissions borrow the KS matrix owner's frozen context
 only for the call; the longer-lived integral source stores no borrowed binding.
