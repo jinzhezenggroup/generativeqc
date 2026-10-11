@@ -40,6 +40,65 @@ The installed executable uses a relocatable RPATH to find the adjacent
 `libgenerativeqc`, so an ordinary prefix install does not require Python or a
 package-specific `LD_LIBRARY_PATH`.
 
+## Precompiled CUDA CLI distributions
+
+The [CI workflow](https://github.com/jinzhezenggroup/generativeqc/actions/workflows/ci.yml)
+builds a **Python-free, C++/CUDA** Linux x86_64 CLI from each successful
+`master` push, using the `cuda-release-cli-sm120` CMake preset:
+
+- Full `Release` code generation (`GENERATIVEQC_CUDA_FAST_COMPILE=OFF`),
+  AOT shell/stationary kernels, precompiled C++ headers, ccache, and the pinned
+  CUDA 12.9 toolchain.
+- `GENERATIVEQC_MONOLITHIC_CLI=ON`: links the GenerativeQC **core** statically
+  into `bin/generativeqc`, removing its `libgenerativeqc.so` dependency.
+  The normal shared-library C++ SDK and Python wheel are unchanged.
+- A smoke test checks CLI version, methods, basis catalog and ELF dependencies
+  before uploading an archive and `SHA256SUMS` to **GitHub Actions Artifacts**.
+  Download the artifact from the successful CI run for the desired commit.
+- When a `vX.Y.Z` tag is pushed **and exactly matches the CMake project version**
+  on a commit already on `master`, the same production build uploads a
+  previously unpublished version to [GitHub Releases](https://github.com/jinzhezenggroup/generativeqc/releases).
+  Ordinary `master` pushes do **not** create releases or tags. Existing
+  releases and their assets are never automatically overwritten.
+
+After extracting the archive:
+
+```bash
+tar -xzf generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120.tar.gz
+./generativeqc-v0.1.0-linux-x86_64-cuda12.9-sm120/bin/generativeqc --version
+```
+
+The filename is an illustration; master branch artifacts additionally include
+a Git SHA suffix. A binary includes the compiled native core, but this is **not**
+a fully statically linked Linux executable: CUDA runtime/math libraries and the
+NVIDIA driver, plus normal host providers (such as OpenBLAS, OpenSSL and
+libarchive), still need to be installed. On a host with a nonstandard CUDA
+library location, configure the dynamic loader's library path. Separately
+compiled stationary AOT plug-ins and their manifests stay in the archive's
+`lib/` directory; preserve that directory next to `bin/`.
+
+The current distributable specifically targets **sm_120 (Blackwell)**. It does
+not support every CUDA architecture (for example, Ada sm_89) without a separate
+build. The packaging is **no-Python-at-runtime**, not no-Python-at-build-time:
+code generators still use Python on CI.
+
+To reproduce this build from source (with CUDA 12.9 and ccache installed):
+
+```bash
+cmake --preset cuda-release-cli-sm120
+cmake --build --preset cuda-release-cli-sm120 --parallel 3
+cmake --install build/cuda-release-cli-sm120 --prefix "$PWD/build/native-cli-prefix"
+python3 tools/package_native_cli.py \
+  --prefix "$PWD/build/native-cli-prefix" --output-dir dist \
+  --version 0.1.0 --commit "$(git rev-parse HEAD)" \
+  --source-date-epoch "$(git log -1 --format=%ct)"
+```
+
+The explicit project version should match the one in `CMakeLists.txt`.
+Optional external providers and experimental optimizations are **not**
+implicitly enabled merely because this is a distribution build; existing
+production numerical fallbacks are retained.
+
 ## Discover native methods
 
 ```bash
