@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_native_response_symmetry_contract_compiles_and_runs(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-
+def test_native_response_symmetry_contract_compiles_and_runs(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     source = tmp_path / "response_symmetry_contract.cpp"
     executable = tmp_path / "response_symmetry_contract"
     source.write_text(
@@ -72,23 +71,44 @@ int main() {
 }
 """
     )
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I",
             str(ROOT / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        cwd=ROOT,
-        check=True,
+        ),
     )
-    subprocess.run([str(executable)], cwd=ROOT, check=True)
+    subprocess.run([str(executable)], cwd=ROOT, check=True, timeout=30)
+
+
+def test_native_response_plan_binding_and_solver_contracts(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Run identity, batch and physical residual gates without a native library."""
+    executable = tmp_path / "native_response_contract"
+    required_native_cxx.build_executable(
+        [
+            ROOT / "src/response/native_gmres.cpp",
+            ROOT / "src/response/resident_gmres.cpp",
+            ROOT / "tests/native/test_native_gmres.cpp",
+        ],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(ROOT / "src"),
+        ),
+    )
+    subprocess.run([str(executable)], cwd=ROOT, check=True, timeout=30)
 
 
 def test_mp2_response_adapter_declares_symmetric_operator() -> None:

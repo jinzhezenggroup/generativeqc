@@ -187,6 +187,27 @@ and `finite_rotation_jvp` checks the same action against an explicit
 
 ## Solver and multi-RHS strategies
 
+### Native prepared-problem binding
+
+The C++ `response::prepare_response` returns a `ResponsePlan` bound to the
+logical `LinearResponseProblem` that prepared it. `solve_response` and
+`solve_response_batch` reject a different binding before solver allocation or
+operator execution, even when dimensions, symmetry and numeric options match.
+Batch validation also precedes empty-batch completion and workspace refusal.
+Problem and plan copies retain their binding; moving a problem transfers it.
+Reconstructing or replacing a problem requires a newly prepared plan. A raw
+`GmresPlan` cannot substitute for a bound `ResponsePlan` in these entry points;
+numeric resource estimators may still consume the inherited GMRES plan.
+
+The binding token retains neither method callbacks nor borrowed scientific
+storage. Method adapters must still validate terminal-state generations,
+provider/approximation identity and borrowed-state leases when invoking their
+actions. Plan binding is not a convergence certificate or a substitute for
+those method-owned checks. GMRES equations, residual gates, numeric-payload
+budgets and backend selection are unchanged.
+
+### Installed solver policies
+
 `solve` implements restarted GMRES with a true residual at every configured
 checkpoint. It reports the actual residual, iteration count, operator actions,
 orthogonalization/operator/recycling timings, workspace bytes, and a non-success reason.

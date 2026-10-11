@@ -2,14 +2,42 @@
 
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "response/linear_problem.hpp"
 #include "response/native_gmres.hpp"
 
 namespace generativeqc::response {
+
+/** Bind numeric GMRES admission to one logical response problem.
+ *
+ * The inherited plan remains usable by existing numeric resource estimators.
+ * The private binding cannot be rewritten alongside public dimension/budget
+ * fields. It retains only an opaque token, not callbacks or borrowed method
+ * storage, and prevents address reuse from making an old plan look current.
+ */
+class ResponsePlan : public GmresPlan {
+ public:
+  ResponsePlan() = default;
+
+  [[nodiscard]] bool is_bound_to(const LinearResponseProblem& problem) const noexcept {
+    return binding_ && binding_ == problem.binding_;
+  }
+
+ private:
+  friend ResponsePlan prepare_response(const LinearResponseProblem&, const GmresOptions&);
+
+  ResponsePlan(GmresPlan solve_plan, const LinearResponseProblem& problem)
+      : GmresPlan(std::move(solve_plan)), binding_(problem.binding_) {
+    if (!binding_) throw std::invalid_argument("response problem has no live binding");
+  }
+
+  std::shared_ptr<const LinearResponseProblem::Binding> binding_;
+};
 
 struct ResponseSolveRequest {
   std::span<const double> rhs;
@@ -28,7 +56,7 @@ enum class ResponseBatchStatus { complete, workspace_limit };
  * method adapter.
  */
 struct ResponseBatchPlan {
-  GmresPlan solve_plan;
+  ResponsePlan solve_plan;
   std::size_t request_count{};
   std::size_t retained_solution_bytes{};
   std::size_t peak_numeric_bytes{};
@@ -59,20 +87,23 @@ inline std::size_t response_checked_multiply(std::size_t first, std::size_t seco
 }
 }  // namespace detail
 
-inline GmresPlan prepare_response(const LinearResponseProblem& problem,
-                                  const GmresOptions& options) {
-  return prepare_gmres(problem.dimension(), options);
+inline ResponsePlan prepare_response(const LinearResponseProblem& problem,
+                                     const GmresOptions& options) {
+  return {prepare_gmres(problem.dimension(), options), problem};
 }
 
-inline GmresResult solve_response(const GmresPlan& plan, const LinearResponseProblem& problem,
+/** Reject a different problem before allocating or invoking its operator. */
+inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
                                   ResponseSolveRequest request) {
   if (plan.dimension != problem.dimension())
     throw std::invalid_argument("response plan and problem dimensions do not match");
+  if (!plan.is_bound_to(problem))
+    throw std::invalid_argument("response plan belongs to a different problem binding");
   return solve_gmres(plan, problem.apply(), request.rhs, request.initial_guess,
                      request.diagonal_preconditioner);
 }
 
-inline GmresResult solve_response(const GmresPlan& plan, const LinearResponseProblem& problem,
+inline GmresResult solve_response(const ResponsePlan& plan, const LinearResponseProblem& problem,
                                   std::span<const double> rhs,
                                   std::span<const double> initial_guess = {},
                                   std::span<const double> diagonal_preconditioner = {}) {
@@ -103,6 +134,9 @@ inline ResponseBatchPlan prepare_response_batch(const LinearResponseProblem& pro
 inline ResponseBatchResult solve_response_batch(const ResponseBatchPlan& plan,
                                                 const LinearResponseProblem& problem,
                                                 std::span<const ResponseSolveRequest> requests) {
+  // Identity must fail closed even for empty batches and workspace refusals.
+  if (!plan.solve_plan.is_bound_to(problem))
+    throw std::invalid_argument("response batch plan belongs to a different problem binding");
   const auto expected = prepare_response_batch(problem, plan.solve_plan.options, plan.request_count,
                                                plan.max_numeric_bytes);
   if (plan.solve_plan.dimension != expected.solve_plan.dimension ||

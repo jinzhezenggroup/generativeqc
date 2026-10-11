@@ -6,6 +6,7 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -298,12 +299,140 @@ void linear_response_problem_contract() {
 
   rejected = false;
   try {
-    const auto wrong_plan = generativeqc::response::prepare_gmres(1, options);
+    auto wrong_plan = plan;
+    wrong_plan.dimension = 1;
     (void)generativeqc::response::solve_response(wrong_plan, problem, rhs);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
   require(rejected, "response solve accepted a plan from another problem dimension");
+}
+
+void response_plan_binding_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponsePlan;
+  static_assert(!std::is_convertible_v<generativeqc::response::GmresPlan, ResponsePlan>);
+
+  DenseOperator original_matrix{2, {4.0, 1.0, 2.0, 3.0}};
+  DenseOperator unrelated_matrix{2, {2.0, 0.0, 0.0, 3.0}};
+  const std::array<double, 2> rhs{1.0, 2.0};
+  generativeqc::response::LinearResponseProblem original(
+      2, [&](auto input, auto output) { original_matrix(input, output); });
+  generativeqc::response::LinearResponseProblem unrelated(
+      2, [&](auto input, auto output) { unrelated_matrix(input, output); });
+  const auto plan = generativeqc::response::prepare_response(original, {});
+
+  bool rejected = false;
+  try {
+    (void)generativeqc::response::solve_response(plan, unrelated, rhs);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && unrelated_matrix.actions == 0,
+          "response solve accepted a plan from an unrelated same-sized problem");
+
+  auto copied = original;
+  auto moved = std::move(copied);
+  require(plan.is_bound_to(original) && plan.is_bound_to(moved) && !plan.is_bound_to(copied),
+          "response binding did not follow problem copy/move ownership");
+  const auto copied_plan = plan;
+  const auto solved = generativeqc::response::solve_response(copied_plan, moved, rhs);
+  require(solved.converged() && explicit_residual(original_matrix, solved.solution, rhs) < 1e-12,
+          "copied plan/problem changed the physical response solve");
+  const generativeqc::response::GmresPlan numeric_plan = plan;
+  require(numeric_plan.workspace_bytes == plan.workspace_bytes,
+          "bound response plan changed the numeric resource contract");
+  const auto legacy = generativeqc::response::solve_gmres(numeric_plan, moved.apply(), rhs);
+  require(legacy.solution == solved.solution && legacy.status == solved.status &&
+              legacy.residual_norm == solved.residual_norm &&
+              legacy.iterations == solved.iterations &&
+              legacy.operator_actions == solved.operator_actions &&
+              legacy.workspace_bytes == solved.workspace_bytes &&
+              legacy.measured_workspace_peak_bytes == solved.measured_workspace_peak_bytes,
+          "bound response orchestration changed the legacy solve or work/resource diagnostics");
+
+  auto plan_to_move = plan;
+  const auto moved_plan = std::move(plan_to_move);
+  require(moved_plan.is_bound_to(moved) && !plan_to_move.is_bound_to(moved),
+          "response binding did not follow plan move ownership");
+
+  // Rebuilding the same callback is a new binding, not proof of state validity.
+  original = LinearResponseProblem(2, original.apply());
+  rejected = false;
+  const auto actions_before = original_matrix.actions;
+  try {
+    (void)generativeqc::response::solve_response(plan, original, rhs);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected && original_matrix.actions == actions_before,
+          "reconstructed same-sized response problem reused an old plan binding");
+
+  const auto fresh_plan = generativeqc::response::prepare_response(original, {});
+  require(generativeqc::response::solve_response(fresh_plan, original, rhs).converged(),
+          "response problem could not recover by preparing a fresh plan");
+  rejected = false;
+  try {
+    (void)generativeqc::response::prepare_response(copied, {});
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "moved-from response problem acquired a fresh plan");
+
+  std::weak_ptr<const int> captured_owner;
+  const auto detached_plan = [&] {
+    auto owner = std::make_shared<const int>(1);
+    captured_owner = owner;
+    LinearResponseProblem local(2, [owner](auto input, auto output) {
+      for (std::size_t index = 0; index < input.size(); ++index)
+        output[index] = *owner * input[index];
+    });
+    return generativeqc::response::prepare_response(local, {});
+  }();
+  require(captured_owner.expired(), "response plan retained method callback storage");
+  require(!detached_plan.is_bound_to(original),
+          "destroyed response problem's plan acquired an unrelated live binding");
+
+  rejected = false;
+  try {
+    (void)generativeqc::response::solve_response(ResponsePlan{}, original, rhs);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "unprepared response plan reached the solver");
+}
+
+void response_batch_binding_contract() {
+  using generativeqc::response::LinearResponseProblem;
+  using generativeqc::response::ResponseSolveRequest;
+  DenseOperator matrix{2, {2.0, 0.0, 0.0, 3.0}};
+  LinearResponseProblem original(2, [&](auto input, auto output) { matrix(input, output); });
+  LinearResponseProblem unrelated(2, original.apply());
+  const std::array<double, 2> rhs{2.0, 3.0};
+  const std::array<ResponseSolveRequest, 1> request{{{rhs}}};
+  const auto copied = original;
+
+  for (std::size_t count : {std::size_t{0}, std::size_t{1}}) {
+    for (std::size_t budget : {std::size_t{0}, std::numeric_limits<std::size_t>::max()}) {
+      const auto plan = generativeqc::response::prepare_response_batch(original, {}, count, budget);
+      const auto requests = std::span<const ResponseSolveRequest>(request).first(count);
+      const auto actions_before = matrix.actions;
+      bool rejected = false;
+      try {
+        (void)generativeqc::response::solve_response_batch(plan, unrelated, requests);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      require(rejected && matrix.actions == actions_before,
+              "empty/refused/admitted batch accepted an unrelated problem binding");
+      const auto result = generativeqc::response::solve_response_batch(plan, copied, requests);
+      require(result.complete() == plan.admitted &&
+                  result.responses.size() == (plan.admitted ? count : 0),
+              "problem-copy binding changed empty/refused/admitted batch semantics");
+      if (plan.admitted && count)
+        require(result.responses[0].converged(), "bound batch failed its valid physical solve");
+    }
+  }
 }
 
 void zero_rhs_is_transactional() {
@@ -685,6 +814,8 @@ int main() {
     resident_controller_executes_same_gmres();
     exact_solve_and_true_residual();
     linear_response_problem_contract();
+    response_plan_binding_contract();
+    response_batch_binding_contract();
     zero_rhs_is_transactional();
     restarted_and_exhausted_paths();
     breakdown_and_nonfinite_paths();

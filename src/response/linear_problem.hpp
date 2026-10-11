@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -27,6 +28,9 @@ enum class LinearResponseSymmetry { General, Symmetric };
  * inputs so one prepared physical operator can serve multiple perturbations.
  * Symmetry is explicit: a future nonsymmetric CC Jacobian cannot inherit the
  * primal action as its transpose merely because its vector shape matches.
+ * Copies preserve one logical problem binding; construction starts a fresh
+ * binding even for identical dimensions/actions. Method adapters still own
+ * borrowed-state lifetime and scientific/provider-generation validation.
  */
 class LinearResponseProblem {
  public:
@@ -42,6 +46,7 @@ class LinearResponseProblem {
     if (symmetry_ == LinearResponseSymmetry::Symmetric && apply_transpose_)
       throw std::invalid_argument(
           "symmetric response problem cannot provide a distinct transpose operator");
+    binding_ = std::make_shared<const Binding>();
   }
 
   [[nodiscard]] std::size_t dimension() const noexcept { return dimension_; }
@@ -58,10 +63,14 @@ class LinearResponseProblem {
   }
 
  private:
+  friend class ResponsePlan;
+  struct Binding {};
+
   std::size_t dimension_{};
   LinearOperator apply_;
   LinearResponseSymmetry symmetry_{LinearResponseSymmetry::General};
   LinearOperator apply_transpose_;
+  std::shared_ptr<const Binding> binding_;
 };
 
 }  // namespace generativeqc::response
