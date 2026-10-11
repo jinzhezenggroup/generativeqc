@@ -100,38 +100,43 @@ jobs:
           sudo install -m 0755 \
             "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
             /usr/local/bin/ccache
+          ccache --version
       - name: Restore shared CPU ccache
         id: master_cpu_ccache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Install native CLI dependencies
         uses: ./.github/actions/install-native-cli-deps
       - name: Compile GCC, instrumented GCC, and Clang
+        id: cpu_seed
         run: |
           set -euo pipefail
           ccache --zero-stats
           for mode in gcc-plain gcc-coverage clang-plain; do
             compiler=g++
+            build_dir="build-seed-$mode"
             compile_flags=""
             link_flags=""
             if [[ "$mode" == "clang-plain" ]]; then
               compiler=clang++
             elif [[ "$mode" == "gcc-coverage" ]]; then
+              # GCC embeds coverage output paths. Match the PR consumer exactly.
+              build_dir=build
               compile_flags="-fprofile-arcs -ftest-coverage -fprofile-update=atomic"
               link_flags="--coverage"
             fi
-            CXX="$compiler" cmake -S . -B "build-seed-$mode" -G Ninja \
+            CXX="$compiler" cmake -S . -B "$build_dir" -G Ninja \
               -DGENERATIVEQC_ENABLE_CUDA=OFF \
               -DCMAKE_BUILD_TYPE=Release \
               -DGENERATIVEQC_COMPILER_CACHE=ccache \
               -DCMAKE_CXX_FLAGS="$compile_flags" \
               -DCMAKE_EXE_LINKER_FLAGS="$link_flags" \
               -DCMAKE_SHARED_LINKER_FLAGS="$link_flags"
-            cmake --build "build-seed-$mode" --parallel
+            cmake --build "$build_dir" --parallel
           done
       - name: Prepare Python native cache seed
         run: |
@@ -152,6 +157,7 @@ jobs:
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
       - name: Build Python native cache seed
+        id: python_seed
         run: |
           cmake -S . -B build-seed-python -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
@@ -164,6 +170,7 @@ jobs:
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build-seed-python --parallel
           ccache --show-stats
+      # Complete keys are immutable; a failed producer must not claim one.
       - name: Save complete CPU compiler cache
         if: steps.master_cpu_ccache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -171,6 +178,14 @@ jobs:
         with:
           path: ~/.cache/ccache
           key: ${{ steps.master_cpu_ccache.outputs.cache-primary-key }}
+      - name: Preserve partial master CPU compiler work
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.master_cpu_ccache.outputs.cache-primary-key != '' && steps.master_cpu_ccache.outputs.cache-hit != 'true' && steps.cpu_seed.outcome != '' && steps.cpu_seed.outcome != 'skipped' && steps.python_seed.outcome != 'success' }}
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ format('{0}-partial-{1}-{2}', steps.master_cpu_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
 
   cpu:
     needs: merge_queue_liveness
@@ -210,7 +225,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Reset ccache statistics
@@ -439,7 +454,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-cuda-v4-12.9-sm120-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'tests/native/**', 'manifests/**', 'data/**', 'upstream/**') }}
+          key: ccache-linux-cuda-v4-12.9-sm120-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'tests/native/**', 'manifests/**', 'data/**', 'upstream/**') }}
           restore-keys: |
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-cuda-v2-12.9-sm120-
@@ -812,7 +827,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Reset ccache statistics
@@ -1054,7 +1069,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-linux-cpu-v4-ubuntu24-x86_64-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'uv.lock', 'cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
             ccache-linux-cpu-v4-ubuntu24-x86_64-
       - name: Reset CPU benchmark ccache statistics
@@ -1308,7 +1323,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-linux-cuda-v4-12.9-sm120-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'tests/native/**', 'manifests/**', 'data/**', 'upstream/**') }}
+          key: ccache-linux-cuda-v4-12.9-sm120-${{ hashFiles('.github/workflows/ci.yml', '.github/actions/install-native-cli-deps/**', 'CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tools/**', 'tests/native/**', 'manifests/**', 'data/**', 'upstream/**') }}
           restore-keys: |
             ccache-linux-cuda-v4-12.9-sm120-
             ccache-native-cli-v1-cuda12.9-sm120-
@@ -1316,6 +1331,7 @@ jobs:
       # Populate both compiler-flag identities before publishing one cache image.
       # The required fast CI job runs on a separate runner and cannot write here.
       - name: Seed fast CUDA CI objects in the shared cache
+        id: fast_cuda_seed
         shell: bash
         run: |
           ccache --zero-stats
@@ -1333,6 +1349,7 @@ jobs:
           cmake --preset cuda-release-cli-sm120
           cmake --build --preset cuda-release-cli-sm120 --parallel 3
       - name: Smoke-test release-mode native command
+        id: cli_smoke
         shell: bash
         run: |
           cli="$PWD/build/cuda-release-cli-sm120/generativeqc"
@@ -1356,6 +1373,16 @@ jobs:
         with:
           path: ~/.cache/ccache
           key: ${{ steps.cli_ccache.outputs.cache-primary-key }}
+      # ccache retains successful compilations even if a later build/link fails.
+      # Recover that master work without freezing the complete snapshot key.
+      - name: Preserve partial master CUDA compiler work
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.cli_ccache.outputs.cache-primary-key != '' && steps.cli_ccache.outputs.cache-hit != 'true' && steps.fast_cuda_seed.outcome != '' && steps.fast_cuda_seed.outcome != 'skipped' && steps.cli_smoke.outcome != 'success' }}
+        timeout-minutes: 2
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ format('{0}-partial-{1}-{2}', steps.cli_ccache.outputs.cache-primary-key, github.run_id, github.run_attempt) }}
       # An artifact mirrors the single master cache for ephemeral merge-group
       # refs. It does not represent an independently built compiler cache.
       - name: Publish trusted master CUDA ccache snapshot
