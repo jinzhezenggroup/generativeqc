@@ -438,8 +438,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void multiply_matrix(const double* left, bool transpose_left, const double* right,
                        const std::uint8_t* active, double* output) {
     check(launch_matrix_product(matrix_products.view(masked_matrix_output, elements), 1,
-                                static_cast<int>(n), left, transpose_left, right, active, output,
-                                matrix_products.library_enabled(), 1.0),
+                                static_cast<int>(n), left, transpose_left, right, active, output),
           "CUDA KS matrix product failed");
   }
 
@@ -449,7 +448,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     check(launch_spin_matrix_product(matrix_products.view(masked_matrix_output, elements), 1,
                                      static_cast<int>(spin_count), static_cast<int>(n), left,
                                      left_is_spin, transpose_left, right, right_is_spin, active,
-                                     output, matrix_products.library_enabled()),
+                                     output),
           "CUDA KS spin matrix product failed");
   }
 
@@ -1054,7 +1053,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             sizeof(double) +
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
-        sizeof(host_all_spins) + sizeof(host_one);
+        sizeof(host_all_spins) + sizeof(host_one) +
+        tensor::CudaMatrixProductBinding::kPreparationHostBytes;
     if (!host_unfused)
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes, CudaXcLayout::lowering_host_bytes);

@@ -87,7 +87,8 @@ def request_ir(
     angular = (1,) + (0,) * (len(roles) - 1) if angular is None else angular
     signature = ShellSignature(
         shells=tuple(
-            BasisShell(i, i, l, role) for i, (l, role) in enumerate(zip(angular, roles))
+            BasisShell(i, i, l, role)
+            for i, (l, role) in enumerate(zip(angular, roles, strict=True))
         ),
         center_bindings=tuple(CenterBinding(i, atom) for i, atom in enumerate(atoms)),
     )

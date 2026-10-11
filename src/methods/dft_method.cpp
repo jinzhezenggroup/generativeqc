@@ -21,6 +21,7 @@
 #include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
+#include "dft/incremental_direct_jk_control.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
 #include "dft/semilocal_family.hpp"
@@ -219,12 +220,11 @@ std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept
 /** Benchmark-only KS incremental Direct-J/K controls. The generic spelling is
  * capability-based; the legacy PBE0 spelling remains accepted for reproducibility. */
 bool incremental_direct_jk_benchmark_requested(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0)
-    return false;
-  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
-  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                    std::string(name) + " must be 0/off or 1/on");
+  const auto control = dft::classify_incremental_direct_jk_control(std::getenv(name));
+  if (control == dft::IncrementalDirectJkControl::Invalid)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      std::string(name) + " must be 0/off or 1/on");
+  return control == dft::IncrementalDirectJkControl::Enabled;
 }
 
 std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval(const char* name) {

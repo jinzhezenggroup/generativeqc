@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from functools import cache
 
 from .libxc_bulk_capabilities import available_capabilities, functional_capability
@@ -11,6 +13,42 @@ from .spec import AUTO_BULK_COMPONENTS, UnsupportedXC
 AUTOMATIC_FUNCTIONAL_CODE_BASE = 0x30000
 AUTOMATIC_SCF_DOMAIN = LIBXC_WORK_DOMAIN
 _SUPPORTED_INGREDIENTS = frozenset(("rho", "sigma", "tau"))
+
+
+@dataclass(frozen=True)
+class AutomaticRegistryEntry:
+    """One structural registration, independent of backend/product admission."""
+
+    name: str
+    libxc_id: int
+    code: int
+
+    @property
+    def stem(self) -> str:
+        """Return the deterministic native symbol stem, not a science selector."""
+        return re.sub(r"[^a-z0-9]+", "_", self.name.lower()).strip("_")
+
+
+def automatic_registry_entries() -> tuple[AutomaticRegistryEntry, ...]:
+    """Enumerate CPU/CUDA plumbing without a positive functional whitelist.
+
+    Structural representability does not grant endpoint, domain or derivative
+    admission. These retain their separate evidence-backed capability gates.
+    """
+    result = []
+    codes = set()
+    for name in sorted(AUTO_BULK_COMPONENTS):
+        capability = functional_capability(name)
+        if set(capability.required_ingredients) - _SUPPORTED_INGREDIENTS:
+            continue
+        code = automatic_functional_code(name)
+        if code in codes:
+            raise ValueError(f"duplicate automatic Libxc functional code: {code:#x}")
+        codes.add(code)
+        result.append(AutomaticRegistryEntry(name, capability.libxc_id, code))
+    if not result:
+        raise RuntimeError("automatic Libxc semilocal registry is empty")
+    return tuple(result)
 
 
 def automatic_functional_code(name: str) -> int:
@@ -65,6 +103,8 @@ def automatic_functional_ingredients(code: int) -> tuple[str, ...]:
 __all__ = [
     "AUTOMATIC_FUNCTIONAL_CODE_BASE",
     "AUTOMATIC_SCF_DOMAIN",
+    "AutomaticRegistryEntry",
     "automatic_functional_code",
     "automatic_functional_ingredients",
+    "automatic_registry_entries",
 ]

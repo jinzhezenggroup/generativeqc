@@ -4,16 +4,17 @@ GenerativeQC exposes public method selectors through several coordinated sources
 stable native ABI registrations, compiler-discovered DFT selectors, public
 composite methods, and automatically imported Libxc semilocal MethodIR entries.
 
-Use the runtime discovery command for the current public selector set:
+Use the Python-free runtime discovery commands for the native selector set:
 
 ```bash
-python -m generativeqc methods
-python -m generativeqc methods --json
+generativeqc methods
+generativeqc methods --libxc --json
+generativeqc methods --compositions --json
 ```
 
-The documentation view is generated from the same sources in the
-[public method catalog](../public_methods.md). Do not treat a handwritten list in
-another page as a support matrix.
+The [public method catalog](../public_methods.md) presents the broader selector
+inventory generated from its authoritative sources. Do not treat a handwritten
+list in another page as a support matrix.
 
 ## How to interpret a listed method
 
@@ -32,9 +33,11 @@ For the ownership of each capability source and why GenerativeQC does not mainta
 a second handwritten CPU/GPU matrix, see
 [Capability sources and interpretation](../reference/capabilities.md).
 
-A Python-free native SDK install has a separate `generativeqc methods` command.
-It reports the stable C/C++ ABI/provider registry and intentionally does not
-import the Python compiler catalog.
+`generativeqc methods` reports the stable C/C++ ABI/provider registry.
+`--libxc` adds the automatic semilocal inventory, while `--compositions` reports
+the separate build-time-generated MethodIR catalog and backend qualification.
+Neither command imports Python; see the [native CLI guide](native_cli.md) for
+the execution boundary.
 
 ## Conventional CPU UMP2 energy
 

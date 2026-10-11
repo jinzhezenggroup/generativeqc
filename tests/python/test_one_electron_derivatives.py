@@ -61,7 +61,11 @@ def test_all_cartesian_derivatives_match_independent_libcint(
         verbose=0,
     )
     overlap = mol.intor("int1e_ovlp_cart")
-    norms = [gaussian_norm(e, c) for e, cs in zip(exponents, components) for c in cs]
+    norms = [
+        gaussian_norm(e, c)
+        for e, cs in zip(exponents, components, strict=True)
+        for c in cs
+    ]
     scales = np.sqrt(overlap.diagonal() / norms)
     n = len(components[0])
     operator, factor = {
@@ -195,7 +199,7 @@ def test_center_sign_translation_and_arbitrary_fixed_weights(
     actual = sum(
         w
         * np.array(evaluate_one_electron_derivative_primitive(k, exponents, positions))
-        for w, k in zip(weights, programs)
+        for w, k in zip(weights, programs, strict=True)
     )
     np.testing.assert_allclose(actual.sum(axis=0), 0, atol=1e-13)
     for h in (2e-4, 5e-5):
@@ -209,7 +213,7 @@ def test_center_sign_translation_and_arbitrary_fixed_weights(
                     evaluate_one_electron_primitive(k, exponents, plus)
                     - evaluate_one_electron_primitive(k, exponents, minus)
                 )
-                for w, k in zip(weights, programs)
+                for w, k in zip(weights, programs, strict=True)
             ) / (2 * h)
             assert actual[center, axis] == pytest.approx(difference, abs=2e-7, rel=2e-7)
 

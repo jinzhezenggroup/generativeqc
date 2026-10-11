@@ -262,7 +262,9 @@ def _jvp_graph(node: Node, operand_tangents: typing.Any) -> Node | None:
         return _combine(
             _scale(tangent, coefficient)
             for tangent, coefficient in zip(
-                operand_tangents, node.attrs["coefficients"]
+                operand_tangents,
+                node.attrs["coefficients"],
+                strict=True,
             )
             if tangent is not None
         )
@@ -446,7 +448,7 @@ def _vjp_einsum(
             if index != differentiated:
                 equation_labels.append(adjusted[index])
                 operands.append(node.inputs[index])
-        for pair, identity in zip(identity_labels, identity_nodes):
+        for pair, identity in zip(identity_labels, identity_nodes, strict=True):
             equation_labels.append(pair)
             operands.append(identity)
         ones = _constant_ones_for_axes(operand, missing_axes, max_elements=max_elements)
@@ -494,7 +496,9 @@ def _vjp_graph(
     if node.op == "add":
         return [
             _scale(bar, coefficient) if needed else None
-            for coefficient, needed in zip(node.attrs["coefficients"], active)
+            for coefficient, needed in zip(
+                node.attrs["coefficients"], active, strict=True
+            )
         ]
     if node.op == "multiply":
         return [
@@ -1101,7 +1105,7 @@ def transpose_program(
             tuple(operand in relevant for operand in node.inputs),
             max_elements=max_elements,
         )
-        for operand, contribution in zip(node.inputs, contributions):
+        for operand, contribution in zip(node.inputs, contributions, strict=True):
             if contribution is None:
                 continue
             generated_nodes.append(contribution)

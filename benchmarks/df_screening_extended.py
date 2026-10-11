@@ -43,7 +43,7 @@ def main() -> None:
         coordinates[begin : begin + 3] += (args.separation - 1) * coordinates[
             begin
         ].copy()
-    atoms = [(z, tuple(r)) for (z, _), r in zip(case.atoms, coordinates)]
+    atoms = [(z, tuple(r)) for (z, _), r in zip(case.atoms, coordinates, strict=True)]
     mol = gto.M(atom=atoms, basis="def2-svp", unit="Bohr", verbose=0)
     oracle = scf.RHF(mol).density_fit(auxbasis="def2-svp")
     oracle.conv_tol, oracle.conv_tol_grad, oracle.max_cycle = 1e-12, 1e-10, 100

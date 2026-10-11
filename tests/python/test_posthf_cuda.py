@@ -136,7 +136,7 @@ def test_generated_df_source_staging_and_same_hamiltonian(
         )
         begin = source.global_offsets(request)
         tile = source.tile(request)
-        slices = tuple(slice(b, b + n) for b, n in zip(begin, tile.shape))
+        slices = tuple(slice(b, b + n) for b, n in zip(begin, tile.shape, strict=True))
         np.testing.assert_allclose(
             tile, a["raw_three_center"][slices], atol=1e-11, rtol=1e-10
         )

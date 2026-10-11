@@ -37,7 +37,7 @@ def test_value_math_replay_and_geometry(
         coordinates[1, 0] += displacement
         geometries.append(coordinates)
         mol = gto.M(
-            atom=[(z, r) for (z, _), r in zip(atoms, coordinates)],
+            atom=[(z, r) for (z, _), r in zip(atoms, coordinates, strict=True)],
             unit="Bohr",
             basis="def2-svp",
             cart=representation == "cartesian",

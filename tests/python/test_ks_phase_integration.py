@@ -99,6 +99,7 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
     expected = (1 << 20) + 16 * 8 * n * n if backend == "cuda" and n > 16 else 0
     assert row["solver_host"] == expected
     assert row["solver_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
+    assert row["matrix_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
     retained_fields = (
         "metadata",
         "grid",
@@ -108,10 +109,30 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
         "provider",
         "solver_host",
         "solver_binding_host",
+        "matrix_binding_host",
         "xc_schedule_staging",
         "nonlocal_provider",
     )
     assert row["retained"] == sum(row[key] for key in retained_fields)
+
+
+@pytest.mark.parametrize("schedule", ["fused", "host_unfused"])
+@pytest.mark.parametrize("spins", [1, 2])
+@pytest.mark.parametrize("backend,n", [("cpu", 17), ("cuda", 16), ("cuda", 17)])
+def test_matrix_binding_host_envelope_is_independent_of_provider_and_xc(
+    backend: str, n: int, spins: int, schedule: str
+) -> None:
+    model = _model()
+    model.xc_schedule = schedule
+    row = _load("_item_host_inventory")(
+        {**_item(n), "spins": spins},
+        diis_history=8,
+        max_iterations=100,
+        requires_first_ao_derivatives=True,
+        backend=backend,
+        model=model,
+    )
+    assert row["matrix_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
 
 
 def _library(quadrature_status: int = 0) -> SimpleNamespace:
