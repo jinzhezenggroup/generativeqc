@@ -6,16 +6,21 @@ failure propagation, not CUDA numerics or performance.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -35,11 +40,33 @@ void check(int status, const std::string& = {}) {
   if (status != GENERATIVEQC_STATUS_SUCCESS) throw std::runtime_error("status");
 }
 int cudaGetLastError() { return 0; }
+struct MatrixView { double* scratch; std::size_t capacity; };
+const int* expected_provider = nullptr;
+const double* expected_density = nullptr;
+double *expected_j = nullptr, *expected_exchange = nullptr, *expected_scratch = nullptr;
+int* expected_error = nullptr;
+std::size_t expected_matrix = 0, expected_elements = 0;
+struct MatrixProducts {
+  MatrixView view(double* scratch, std::size_t capacity) {
+    assert(scratch == expected_scratch && capacity == expected_elements);
+    event("matrices");
+    return {scratch, capacity};
+  }
+};
 namespace scf {
 template<class... T> generativeqc_status enqueue_prepared_cuda_rsh_values(T&&...) {
   event("fused"); return fused_status;
 }
-template<class... T> generativeqc_status enqueue_prepared_cuda_fock(T&&...) {
+generativeqc_status enqueue_prepared_cuda_fock(
+    const int& provider, const double* alpha, const double* beta, std::size_t matrix,
+    double* coulomb, double* alpha_exchange, double* beta_exchange, int* error,
+    bool mixed, std::string&, std::uint64_t* mixed_work, const MatrixView* matrices) {
+  assert(&provider == expected_provider && alpha == expected_density && !beta);
+  assert(matrix == expected_matrix && coulomb == expected_j);
+  assert(alpha_exchange == expected_exchange && !beta_exchange && error == expected_error);
+  assert(!mixed && !mixed_work);
+  assert(matrices && matrices->scratch == expected_scratch);
+  assert(matrices->capacity == expected_elements);
   event("primary"); return primary_status;
 }
 template<class... T> generativeqc_status enqueue_prepared_cuda_exchange_correction(T&&...) {
@@ -78,7 +105,10 @@ struct Owner {
   Xc xc_owner;
   Xc* xc = &xc_owner;
   double buffer = 0.0, result = 0.0;
-  double *density = &buffer, *j = &buffer, *exchange = &buffer, *range_exchange = &buffer;
+  double density_storage[4]{}, j_storage[4]{}, exchange_storage[4]{}, scratch[4]{};
+  double *density = density_storage, *j = j_storage, *exchange = exchange_storage;
+  double *range_exchange = &buffer, *masked_matrix_output = scratch;
+  MatrixProducts matrix_products;
   double *hcore = &buffer, *fock = &result;
   double exchange_coefficient = -0.5, range_exchange_coefficient = -0.2;
   double *nonlocal_raw_density = &buffer, *nonlocal_raw_gradient = &buffer;
@@ -89,7 +119,7 @@ struct Owner {
   int *nonlocal_domain_error = &error, *nonlocal_pair_error = &error;
   int device = 0;
   void* stream = nullptr;
-  std::size_t matrix = 1, elements = 1, n = 1;
+  std::size_t matrix = 4, elements = 4, n = 2;
   unsigned spins = 1;
   struct { std::size_t npoint = 1; } xc_layout;
   struct { std::size_t workspace_bytes = 8; } nonlocal_layout;
@@ -108,6 +138,14 @@ int main(int argc, char** argv) {
   const std::string route = argv[1];
   fail_phase = argv[3];
   Owner owner;
+  expected_provider = &owner.provider;
+  expected_density = owner.density;
+  expected_j = owner.j;
+  expected_exchange = owner.exchange;
+  expected_error = owner.jk_error;
+  expected_scratch = owner.masked_matrix_output;
+  expected_matrix = owner.matrix;
+  expected_elements = owner.elements;
   owner.device_nonlocal = std::string(argv[2]) == "1";
   owner.has_range_correction = route != "no-range";
   if (route == "fallback" || route == "primary-failure" || route == "correction-failure")
@@ -130,37 +168,32 @@ int main(int argc, char** argv) {
 
 
 @pytest.fixture(scope="module")
-def submission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def submission_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    helper_start = source.index("  generativeqc_status enqueue_fock(")
+    helper_end = source.index("  void multiply_matrix(", helper_start)
+    helper = source[helper_start:helper_end]
     start = source.index("  void enqueue_one(unsigned slot)")
     end = source.index("    const auto blocks =", start)
     body = source[start:end] + "  }\n"
     folder = tmp_path_factory.mktemp("ks-rsh-nonlocal-join")
     unit, binary = folder / "probe.cpp", folder / "probe"
-    unit.write_text(PREFIX + body + DRIVER)
-    result = subprocess.run(
-        [
-            compiler,
+    unit.write_text(PREFIX + helper + body + DRIVER)
+    return native_cxx.build_executable(
+        [unit],
+        binary,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I",
             str(ROOT / "include"),
-            str(unit),
-            "-o",
-            str(binary),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+        ),
+        compile_timeout=45,
     )
-    assert result.returncode == 0, result.stderr
-    return binary
 
 
 def _run(probe: Path, route: str, nonlocal_body: bool, failure: str = "") -> str:
@@ -179,14 +212,14 @@ def _run(probe: Path, route: str, nonlocal_body: bool, failure: str = "") -> str
     ("route", "expected"),
     (
         ("fused", "OK:fused"),
-        ("fallback", "OK:fused:primary:correction"),
+        ("fallback", "OK:fused:matrices:primary:correction"),
         ("no-range", "OK:primary"),
         ("fused-runtime", "FAIL:fused"),
         ("fused-numerical", "FAIL:fused"),
         ("fused-invalid", "FAIL:fused"),
         ("fused-allocation", "FAIL:fused"),
-        ("primary-failure", "FAIL:fused:primary"),
-        ("correction-failure", "FAIL:fused:primary:correction"),
+        ("primary-failure", "FAIL:fused:matrices:primary"),
+        ("correction-failure", "FAIL:fused:matrices:primary:correction"),
         ("overflow", "FAIL"),
     ),
 )
@@ -210,6 +243,20 @@ def test_nonlocal_failure_stops_submission(
     submission_probe: Path, route: str, phase: str
 ) -> None:
     phases = ["features", "grid", "domain", "pairs", "nonlocal", "assemble"]
-    fock = ["fused"] if route == "fused" else ["fused", "primary", "correction"]
+    fock = (
+        ["fused"]
+        if route == "fused"
+        else ["fused", "matrices", "primary", "correction"]
+    )
     expected = ":".join(["FAIL", *fock, *phases[: phases.index(phase) + 1]])
     assert _run(submission_probe, route, True, phase) == expected
+
+
+@pytest.mark.parametrize("nonlocal_body", (False, True))
+@pytest.mark.parametrize("phase", ("matrices", "primary", "correction"))
+def test_fallback_failure_stops_before_xc(
+    submission_probe: Path, phase: str, nonlocal_body: bool
+) -> None:
+    phases = ["fused", "matrices", "primary", "correction"]
+    expected = ":".join(["FAIL", *phases[: phases.index(phase) + 1]])
+    assert _run(submission_probe, "fallback", nonlocal_body, phase) == expected
