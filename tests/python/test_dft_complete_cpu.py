@@ -908,7 +908,10 @@ def independent_global_hybrid_gradient(
     return energy, gradient.kernel()
 
 
-@pytest.mark.parametrize("method,xc", [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0")])
+@pytest.mark.parametrize(
+    "method,xc",
+    [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0"), ("b3lyp-rks", "B3LYP")],
+)
 def test_native_direct_pbe_force_matches_independent_pyscf(
     method: str, xc: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -935,7 +938,10 @@ def test_native_direct_pbe_force_matches_independent_pyscf(
 
 
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
-@pytest.mark.parametrize("method,xc", [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0")])
+@pytest.mark.parametrize(
+    "method,xc",
+    [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0"), ("b3lyp-rks", "B3LYP")],
+)
 def test_native_direct_spd_force_matches_independent_pyscf(
     method: str, xc: str, representation: str
 ) -> None:
