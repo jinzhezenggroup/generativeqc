@@ -57,27 +57,37 @@ Deliver the fail-closed static resource identity qualification slice
 `tools/validate_direct_jk_aot_resources.py`:
 
 1. Generates the production shards with the exact CMake generator command
-   (`--shards 8 --unit-mode stable-shards --target-architecture sm_120`).
+   (`--shards 8 --unit-mode stable-shards --target-architecture sm_120`) into
+   the production CMake source path
+   `build/cuda-release-sm120/generated/production_shell_kernels`, the same
+   directory the real release build compiles from.
 2. Pins the preprocessed shard-6 translation unit, **line markers included**,
-   so the qualified compilation context is part of the identity.
+   so the qualified compilation context (including the production path) is
+   part of the identity.
 3. Compiles shard 6 with the exact production release flags (`-O3`, `sm_120`,
-   `c++20`, `--split-compile=8`, `GENERATIVEQC_HAS_CUDA=1`) through the
-   verified sccache/ccache launcher, with a bounded identity-keyed object
-   cache whose hits require matching metadata and object/log hashes.
+   `c++20`, `GENERATIVEQC_HAS_CUDA=1`) and the **normal release split
+   setting** (`--split-compile` omitted, i.e. the CMake default of 1 thread:
+   split compilation changes optimizer resource choices and the release build
+   keeps 1). The compile goes through the verified sccache/ccache launcher,
+   with a bounded identity-keyed object cache whose hits require matching
+   metadata and object/log hashes. ccache `--show-stats` snapshots before and
+   after the compile are retained in the cache receipt; sccache's private
+   foreground server is never queried for shared statistics.
 4. Dumps the per-kernel cuobjdump REG/STACK/SHARED/LOCAL table and requires
    exact equality with
    `manifests/maintenance/direct_jk_aot_resource_ledger.json`, including the
-   toolchain versions, source/preprocessed/header/manifest identities, flags,
-   and the complete kernel inventory.
+   toolchain versions, source/preprocessed/header/manifest identities, the
+   complete typed flag schema, and the complete kernel inventory.
 
-Any drift fails with per-kernel, per-field attribution. The gate runs in the
-`cuda-resources` CI job (ubuntu-24.04, `cuda-nvcc-12-9`, ccache, no GPU), the
-same environment every merge gate compiles in — required precisely because
-the values are context-sensitive. `--record-output` measures a candidate
-ledger for deliberate re-qualification; it never overwrites the committed
-ledger and is not itself a gate. The committed ledger values were measured in
-that canonical CI context on 2026-10-11 at the PR head that introduced the
-gate.
+Any drift fails with per-kernel, per-field attribution, and a truncated or
+shape-changed ledger is itself rejected before comparison. The gate runs in
+the `cuda-resources` CI job (ubuntu-24.04, `cuda-nvcc-12-9`, ccache, no GPU),
+the same environment every merge gate compiles in — required precisely
+because the values are context-sensitive. `--record-output` measures a
+candidate ledger for deliberate re-qualification; it never overwrites the
+committed ledger and is not itself a gate. The committed ledger values were
+measured in that canonical CI context on 2026-10-11 at the PR head that
+introduced the gate.
 
 No mathematical source, precision, AOT layout, or cache behavior changes;
 the compile always uses the verified compiler-cache launcher and no cache is
@@ -91,6 +101,17 @@ cleared or sloppified.
   are compilation-context sensitive; the node1 context differs from the CI
   context, and the gate must qualify the context it actually runs in. The
   node1 table remains the issue's reference evidence.
+- **Qualifying with `--split-compile=8` (the issue's probe toolchain)**:
+  the repository's release build keeps the CMake default of 1 split-compile
+  thread, and `docs/developer/build.md` records that split compilation
+  changes optimizer resource choices. A ledger compiled with split=8 would
+  qualify a different cubin than production builds. The first measured
+  split=8 ledger was deliberately retired; under the repaired gate it fails
+  closed, which is itself a retained negative control.
+- **Generating/compiling at a private scratch path**: because the qualified
+  identity pins preprocessed line markers, a scratch path would qualify a
+  different compilation context than the production object. The shards are
+  generated and compiled at the CMake production source path instead.
 - **Full eight-shard coverage in one CI job**: a release-flag compile of all
   eight shards exceeds the `cuda-resources` time budget alongside the
   existing validators. Shard 6 is the issue's evidence scope; the tool's
@@ -113,31 +134,24 @@ cleared or sloppified.
 
 ## Evidence
 
-- Host tests: 29 fail-closed unit tests (parser, ledger schema, per-kernel
-  attribution for every drift class, byte-deterministic generation of all
-  eight shards) pass at the PR head.
+- Host tests: 128 fail-closed unit tests (parser, ledger schema, per-kernel
+  attribution for every drift class, complete typed flag schema, truncated
+  ledger rejection, launcher-statistics receipts, production split default,
+  outer-cache transitive header coverage, workflow failure artifacts,
+  byte-deterministic generation of all eight shards) pass at the PR head.
 - CI qualification (PR #2245, canonical `cuda-resources` context,
   ubuntu-24.04, `cuda-nvcc-12-9`, ccache 4.14): the measured ledger covers all
-  86 kernels of shard 6 with nvcc `V12.9.86`, ptxas `V12.9.86`, cuobjdump
-  `V12.9.82`, generator ABI 1, `-O3`/`sm_120`/`c++20`/`--split-compile=8`.
-  The first release compile took 422 s on the CI runner; the gate re-measures
-  the cuobjdump table and re-verifies object/log/identity hashes on every run.
-- Comparison with the issue reference: the ordinary streaming kernels
-  measured in the CI context are dsss `REG=114 STACK=0`, ddss
-  `REG=114 STACK=0`, ddps `REG=158 STACK=112`. The register values match the
-  issue's node1 matching-master table (114/114/158); the ddps STACK differs
-  (112 versus 0). Whether that difference stems from the shard-source
-  evolution between `ed8d21684` and `637466c62` (new work-streaming and
-  rys-task variants share the translation unit) or from context sensitivity
-  is not claimed; it is recorded as an observation. Current master's
-  `rys_task_ddss` streaming kernel measures `REG=255 STACK=232` in the same
-  context; this is likewise an observation of the current baseline, not a
-  claim.
-- Negative results retained: the issue evidence root and rationale file are
-  absent from the checkout; the cluster gateway rejected non-interactive SSH
-  on 2026-10-11 (vlab "connection closed" after banner); no favorable
-  machine-code artifact was selected and no cache was cleared to obtain any
-  number.
+  86 kernels of shard 6 generated and compiled at the production CMake source
+  path with the release split setting. The first release compile timing is
+  retained in the identity-keyed cache receipt together with ccache
+  `--show-stats` snapshots taken before and after the compile.
+- Negative controls retained: the initial split=8 ledger measured at a
+  private scratch path fails closed under the repaired gate (identity and
+  flags drift), which is the intended requalification behavior. The issue
+  evidence root and rationale file are absent from the checkout; the cluster
+  gateway rejected non-interactive SSH on 2026-10-11 (vlab "connection
+  closed" after banner); no favorable machine-code artifact was selected and
+  no cache was cleared to obtain any number.
 
 ## Consequences
 

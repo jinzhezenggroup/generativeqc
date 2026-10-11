@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import json
+import re
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
+from generativeqc_compiler.common import compiler_cache
+from generativeqc_compiler.common.compiler_cache import CompilerCacheLauncher
+from generativeqc_compiler.common.compiler_process import CompileResult
 
 from tools import validate_direct_jk_aot_resources as validator
 
@@ -151,6 +158,42 @@ class TestLedgerValidation:
         with pytest.raises(validator.LedgerError, match="generator_abi"):
             validator.validate_ledger(payload)
 
+    @pytest.mark.parametrize("field", tuple(validator.qualified_flags()))
+    def test_missing_flag_fails_closed(self, field: str) -> None:
+        payload = _ledger()
+        payload["flags"].pop(field)
+        with pytest.raises(validator.LedgerError, match="flags"):
+            validator.validate_ledger(payload)
+
+    def test_unknown_flag_fails_closed(self) -> None:
+        payload = _ledger()
+        payload["flags"]["unknown"] = "option"
+        with pytest.raises(validator.LedgerError, match="flags"):
+            validator.validate_ledger(payload)
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("architecture", "sm_90"),
+            ("standard", "c++17"),
+            ("optimization", "-O0"),
+            ("split_compile_threads", 8),
+            ("split_compile_threads", True),
+            ("split_compile_threads", 1.0),
+            ("definitions", []),
+            ("definitions", tuple(validator.QUALIFIED_DEFINITIONS)),
+            ("ptxas_verbose", False),
+            ("ptxas_verbose", 1),
+        ],
+    )
+    def test_wrong_flag_value_or_type_fails_closed(
+        self, field: str, value: object
+    ) -> None:
+        payload = _ledger()
+        payload["flags"][field] = value
+        with pytest.raises(validator.LedgerError, match=f"flags.{field}"):
+            validator.validate_ledger(payload)
+
     def test_kernel_missing_resource_field_fails_closed(self) -> None:
         payload = _ledger()
         name = next(iter(payload["kernels"]))
@@ -173,6 +216,49 @@ class TestLedgerValidation:
 class TestComparison:
     def test_exact_match_passes(self) -> None:
         assert validator.compare(_ledger(), _measurement()) == []
+
+    def test_truncated_ledger_cannot_bypass_flag_comparison(self) -> None:
+        ledger = _ledger(flags={"architecture": validator.QUALIFIED_ARCHITECTURE})
+        measured = _measurement()
+        measured["identity"]["flags"]["optimization"] = "-O0"
+        with pytest.raises(validator.LedgerError, match="flags"):
+            validator.compare(ledger, measured)
+
+    @pytest.mark.parametrize("field", tuple(validator.qualified_flags()))
+    def test_missing_measured_flag_fails(self, field: str) -> None:
+        measured = _measurement()
+        measured["identity"]["flags"].pop(field)
+        assert any(
+            f"flags.{field}" in failure
+            for failure in validator.compare(_ledger(), measured)
+        )
+
+    @pytest.mark.parametrize("flags", [None, [], "sm_120"])
+    def test_non_object_measured_flags_fail(self, flags: object) -> None:
+        measured = _measurement()
+        measured["identity"]["flags"] = flags
+        assert validator.compare(_ledger(), measured) == [
+            "identity drift (flags): measured flags must be an object"
+        ]
+
+    def test_extra_measured_flag_fails(self) -> None:
+        measured = _measurement()
+        measured["identity"]["flags"]["fast_compile"] = None
+        assert any(
+            "flags.fast_compile" in failure
+            for failure in validator.compare(_ledger(), measured)
+        )
+
+    @pytest.mark.parametrize(
+        "field,value", [("split_compile_threads", True), ("ptxas_verbose", 1)]
+    )
+    def test_measured_flag_type_drift_fails(self, field: str, value: object) -> None:
+        measured = _measurement()
+        measured["identity"]["flags"][field] = value
+        assert any(
+            f"flags.{field}" in failure
+            for failure in validator.compare(_ledger(), measured)
+        )
 
     def test_register_drift_is_attributed_to_the_kernel(self) -> None:
         measured = _measurement()
@@ -232,7 +318,7 @@ class TestComparison:
 
     def test_flags_drift_fails(self) -> None:
         measured = _measurement()
-        measured["identity"]["flags"]["split_compile_threads"] = 1
+        measured["identity"]["flags"]["split_compile_threads"] = 8
         failures = validator.compare(_ledger(), measured)
         assert any("flags.split_compile_threads" in failure for failure in failures)
 
@@ -266,3 +352,242 @@ class TestGenerationDeterminism:
                 assert shell_class in text
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+
+class TestProductionCompile:
+    def test_split_setting_matches_cmake_release_default(self) -> None:
+        cmake = (validator.ROOT / "CMakeLists.txt").read_text()
+        default = re.search(
+            r'set\(GENERATIVEQC_AOT_SPLIT_COMPILE_THREADS "(\d+)" CACHE STRING',
+            cmake,
+        )
+        assert default is not None
+        assert validator.QUALIFIED_SPLIT_COMPILE_THREADS == int(default[1]) == 1
+
+    @pytest.mark.parametrize(
+        "returncode,timed_out", [(0, False), (1, False), (124, True)]
+    )
+    @pytest.mark.parametrize("stats_returncode", [0, 1])
+    def test_actual_ccache_launcher_is_observed_around_compile(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        returncode: int,
+        timed_out: bool,
+        stats_returncode: int,
+    ) -> None:
+        launcher = CompilerCacheLauncher(
+            Path("/verified/ccache"), "ccache", "ccache 4.14"
+        )
+        selections: list[float] = []
+        events: list[str] = []
+        arguments = {
+            "nvcc": Path("/fake/nvcc"),
+            "shard": tmp_path / "shard.cu",
+            "generated": tmp_path / "generated",
+            "cache": tmp_path / "cache",
+            "identity": _identity(),
+            "timeout": 23,
+        }
+
+        def resolve(path: str, timeout: float) -> CompilerCacheLauncher:
+            selections.append(timeout)
+            return launcher
+
+        def stats(
+            command: list[str], **kwargs: Any
+        ) -> subprocess.CompletedProcess[str]:
+            assert command == [str(launcher.path), "--show-stats"]
+            assert kwargs["timeout"] == 5
+            events.append("stats")
+            return subprocess.CompletedProcess(
+                command, stats_returncode, f"stats {len(events)}", ""
+            )
+
+        def compile_run(
+            command: list[str], timeout: float, *, label: str
+        ) -> CompileResult:
+            assert command[:2] == [str(launcher.path), str(arguments["nvcc"])]
+            assert label == "NVCC" and 0 < timeout <= 23
+            assert not any(item.startswith("--split-compile") for item in command)
+            assert "-O3" in command and "-std=c++20" in command
+            assert "-arch=sm_120" in command and "-Xptxas=-v" in command
+            assert "-DGENERATIVEQC_HAS_CUDA=1" in command
+            events.append("compile")
+            pending_receipt = json.loads(
+                next((tmp_path / "cache").glob("*/compiler-cache.json")).read_text()
+            )
+            assert pending_receipt["before"]["stdout"] == "stats 1"
+            assert pending_receipt["after"]["status"] == "not-recorded"
+            if returncode == 0:
+                Path(command[command.index("-o") + 1]).write_bytes(b"compiled object")
+            return CompileResult(
+                returncode, timed_out, 0.1, "compile stdout", "compile stderr"
+            )
+
+        monkeypatch.setattr(compiler_cache, "_resolve_compiler_cache", resolve)
+        monkeypatch.setattr(compiler_cache, "run_compiler", compile_run)
+        monkeypatch.setattr(validator.subprocess, "run", stats)
+        if returncode:
+            with pytest.raises(RuntimeError, match="shard compilation failed"):
+                validator.compile_shard(**arguments)
+        else:
+            _, _, metadata = validator.compile_shard(**arguments)
+            assert metadata["cache_hit"] is False
+        assert events == ["stats", "compile", "stats"]
+        assert selections == [23, 23]
+        directory = next((tmp_path / "cache").iterdir())
+        receipt_path = directory / "compiler-cache.json"
+        receipt = json.loads(receipt_path.read_text())
+        assert receipt["launcher"] == {
+            "name": "ccache",
+            "path": str(launcher.path),
+            "version": "ccache 4.14",
+        }
+        assert receipt["before"]["stdout"] == "stats 1"
+        assert receipt["after"]["stdout"] == "stats 3"
+        assert receipt["after"]["status"] == ("fail" if stats_returncode else "pass")
+        assert "cumulative" in receipt["after"]["scope"]
+        metadata = json.loads((directory / "compile.json").read_text())
+        assert metadata["returncode"] == returncode
+        assert metadata["status"] == ("fail" if returncode else "pass")
+        log = (directory / "nvcc.log").read_text()
+        assert log.startswith("compile stdoutcompile stderr")
+        if timed_out:
+            assert "NVCC compilation timed out after 23 seconds" in log
+            assert metadata["reason"] == "NVCC timeout"
+        if returncode == 0:
+            previous_receipt = receipt_path.read_bytes()
+            _, _, metadata = validator.compile_shard(**arguments)
+            assert metadata["cache_hit"] is True
+            assert selections == [23, 23]
+            assert events == ["stats", "compile", "stats"]
+            assert receipt_path.read_bytes() == previous_receipt
+
+    def test_private_sccache_does_not_query_shared_statistics(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def unexpected_run(*args: Any, **kwargs: Any) -> Any:
+            pytest.fail("must not query or start an unrelated shared sccache server")
+
+        monkeypatch.setattr(validator.subprocess, "run", unexpected_run)
+        launcher = CompilerCacheLauncher(
+            Path("/verified/sccache"), "sccache", "sccache 0.16.0"
+        )
+        snapshot = validator.cache_statistics(launcher)
+        assert snapshot["status"] == "unavailable"
+        assert "private sccache" in snapshot["reason"]
+
+    @pytest.mark.parametrize(
+        "error", [OSError("stats unavailable"), subprocess.TimeoutExpired("ccache", 5)]
+    )
+    def test_statistics_errors_are_diagnostic(
+        self, monkeypatch: pytest.MonkeyPatch, error: Exception
+    ) -> None:
+        def failed_stats(*args: Any, **kwargs: Any) -> Any:
+            raise error
+
+        monkeypatch.setattr(validator.subprocess, "run", failed_stats)
+        launcher = CompilerCacheLauncher(
+            Path("/verified/ccache"), "ccache", "ccache 4.14"
+        )
+        snapshot = validator.cache_statistics(launcher)
+        assert snapshot["status"] == "unavailable"
+        assert snapshot["reason"] == str(error)
+
+    def test_compile_exception_still_retains_statistics(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        launcher = CompilerCacheLauncher(
+            Path("/verified/ccache"), "ccache", "ccache 4.14"
+        )
+        monkeypatch.setattr(
+            validator, "resolve_compiler_cache", lambda timeout: launcher
+        )
+        snapshots: list[int] = []
+
+        def stats(selected: CompilerCacheLauncher) -> dict[str, Any]:
+            assert selected == launcher
+            snapshots.append(len(snapshots))
+            return {"status": "pass", "stdout": str(snapshots[-1])}
+
+        def compile_error(*args: Any, **kwargs: Any) -> Any:
+            raise OSError("could not start compiler")
+
+        monkeypatch.setattr(validator, "cache_statistics", stats)
+        monkeypatch.setattr(validator.CudaCompilerAdapter, "compile", compile_error)
+        with pytest.raises(OSError, match="could not start compiler"):
+            validator.compile_shard(
+                nvcc=Path("/fake/nvcc"),
+                shard=tmp_path / "shard.cu",
+                generated=tmp_path / "generated",
+                cache=tmp_path / "cache",
+                identity=_identity(),
+                timeout=23,
+            )
+        receipt = json.loads(
+            next((tmp_path / "cache").glob("*/compiler-cache.json")).read_text()
+        )
+        assert receipt["before"]["stdout"] == "0"
+        assert receipt["after"]["stdout"] == "1"
+
+
+class TestFailureReports:
+    @pytest.mark.parametrize(
+        "error",
+        [
+            RuntimeError("NVCC timeout"),
+            OSError("compiler missing"),
+            ValueError("bad resource dump"),
+        ],
+    )
+    def test_measurement_failure_writes_report(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: Exception
+    ) -> None:
+        def failed_measurement(**kwargs: Any) -> Any:
+            raise error
+
+        nvcc = tmp_path / "nvcc"
+        nvcc.touch()
+        monkeypatch.setattr(validator, "run_measurement", failed_measurement)
+        output = tmp_path / "report"
+        assert (
+            validator.main(
+                [
+                    "--nvcc",
+                    str(nvcc),
+                    "--cache",
+                    str(tmp_path / "cache"),
+                    "--output",
+                    str(output),
+                ]
+            )
+            == 1
+        )
+        report = json.loads((output / "report.json").read_text())
+        assert report["status"] == "fail"
+        assert report["measurement"] is None
+        assert report["failures"] == [f"measurement failed: {error}"]
+
+
+class TestWorkflowCache:
+    def test_outer_cache_key_covers_transitive_header(self) -> None:
+        workflow = (validator.ROOT / ".github/workflows/ci.yml").read_text()
+        key = next(
+            line for line in workflow.splitlines() if "key: direct-jk-aot-" in line
+        )
+        assert "'src/runtime/compensated_output.hpp'" in key
+
+    def test_failure_artifacts_include_cache_receipts_and_compile_logs(self) -> None:
+        workflow = (validator.ROOT / ".github/workflows/ci.yml").read_text()
+        step = workflow.split(
+            "- name: Preserve direct J/K AOT resource qualification report", 1
+        )[1].split("- name:", 1)[0]
+        assert "if: always()" in step
+        for path in (
+            "build/direct-jk-aot/report.json",
+            "build/direct-jk-aot-cache/*/compiler-cache.json",
+            "build/direct-jk-aot-cache/*/compile.json",
+            "build/direct-jk-aot-cache/*/nvcc.log",
+        ):
+            assert path in step

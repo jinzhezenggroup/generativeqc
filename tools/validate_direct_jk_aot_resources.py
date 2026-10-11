@@ -30,17 +30,21 @@ import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "python"), str(ROOT)]
 
+from generativeqc_compiler.common.compiler_cache import resolve_compiler_cache
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.evidence import (
     canonical_hash,
     file_hash,
 )
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.common.compiler_cache import CompilerCacheLauncher
 
 MANIFEST = (
     ROOT
@@ -66,7 +70,8 @@ QUALIFIED_SHARD_INDEX = 6
 QUALIFIED_ARCHITECTURE = "sm_120"
 QUALIFIED_UNIT_MODE = "stable-shards"
 QUALIFIED_STANDARD = "c++20"
-QUALIFIED_SPLIT_COMPILE_THREADS = 8
+# Match the normal CMake release build: split compilation changes resources.
+QUALIFIED_SPLIT_COMPILE_THREADS = 1
 QUALIFIED_DEFINITIONS = ("GENERATIVEQC_HAS_CUDA=1",)
 # Source-tree headers every production shard prelude includes; the AOT header
 # contract whose perturbation triggered issue #2101.
@@ -227,6 +232,37 @@ def compile_identity(
     }
 
 
+def cache_statistics(launcher: CompilerCacheLauncher) -> dict[str, Any]:
+    """Retain ccache totals; never inspect an unrelated shared sccache server.
+
+    The cache helper owns and destroys sccache's private server inside compile().
+    Its statistics cannot be observed here. ccache uses the same environment for
+    the snapshot and compile, as in the CI job that explicitly installs ccache.
+    """
+    if launcher.name != "ccache":
+        return {
+            "status": "unavailable",
+            "reason": "private sccache statistics require collection inside the cache helper",
+        }
+    try:
+        result = subprocess.run(
+            [str(launcher.path), "--show-stats"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return {"status": "unavailable", "reason": str(error)}
+    return {
+        "status": "pass" if result.returncode == 0 else "fail",
+        "scope": "cumulative ccache totals, not isolated per-invocation counters",
+        "returncode": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }
+
+
 def compile_shard(
     *,
     nvcc: Path,
@@ -260,16 +296,42 @@ def compile_shard(
         compiler = CudaCompilerAdapter(
             nvcc, cuda_target_info(QUALIFIED_ARCHITECTURE), compile_timeout=timeout
         )
-        compiled = compiler.compile(
-            shard,
-            object_path,
-            includes=(ROOT / "src", generated),
-            options=(
-                f"--split-compile={QUALIFIED_SPLIT_COMPILE_THREADS}",
-                *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
-            ),
-            standard=QUALIFIED_STANDARD,
+        # Use the same resolution arguments/cache as run_cached_compiler so the
+        # observed executable is the one actually selected by the adapter.
+        launcher = resolve_compiler_cache(timeout)
+        statistics = {
+            "launcher": {
+                "name": launcher.name,
+                "path": str(launcher.path),
+                "version": launcher.version,
+            },
+            "before": cache_statistics(launcher),
+            "after": {"status": "not-recorded"},
+        }
+        statistics_path = directory / "compiler-cache.json"
+        statistics_path.write_text(
+            json.dumps(statistics, indent=2, sort_keys=True) + "\n"
         )
+        try:
+            compiled = compiler.compile(
+                shard,
+                object_path,
+                includes=(ROOT / "src", generated),
+                options=(
+                    *(
+                        (f"--split-compile={QUALIFIED_SPLIT_COMPILE_THREADS}",)
+                        if QUALIFIED_SPLIT_COMPILE_THREADS != 1
+                        else ()
+                    ),
+                    *(f"-D{definition}" for definition in QUALIFIED_DEFINITIONS),
+                ),
+                standard=QUALIFIED_STANDARD,
+            )
+        finally:
+            statistics["after"] = cache_statistics(launcher)
+            statistics_path.write_text(
+                json.dumps(statistics, indent=2, sort_keys=True) + "\n"
+            )
         log_path.write_text(compiled.stdout + compiled.stderr)
         metadata = {
             "status": "pass" if compiled.returncode == 0 else "fail",
@@ -367,13 +429,12 @@ def validate_ledger(payload: Any) -> None:
     }:
         raise LedgerError("ledger toolchain must record nvcc, ptxas, and cuobjdump")
     flags = payload.get("flags")
-    if (
-        not isinstance(flags, dict)
-        or flags.get("architecture") != QUALIFIED_ARCHITECTURE
-    ):
-        raise LedgerError(
-            "ledger flags must be an object for the qualified architecture"
-        )
+    expected_flags = qualified_flags()
+    if not isinstance(flags, dict) or set(flags) != set(expected_flags):
+        raise LedgerError("ledger flags must record exactly the qualified flag fields")
+    for field, expected in expected_flags.items():
+        if type(flags[field]) is not type(expected) or flags[field] != expected:
+            raise LedgerError(f"ledger flags.{field} must match the qualified value")
     kernels = payload.get("kernels")
     if not isinstance(kernels, dict) or not kernels:
         raise LedgerError("ledger kernels must be a non-empty object")
@@ -394,6 +455,7 @@ def validate_ledger(payload: Any) -> None:
 
 def compare(ledger: dict[str, Any], measurement: dict[str, Any]) -> list[str]:
     """Return attributable failures; an empty list means exact qualification."""
+    validate_ledger(ledger)
     failures: list[str] = []
     toolchain = measurement["toolchain"]
     for component in ("nvcc", "ptxas", "cuobjdump"):
@@ -426,12 +488,23 @@ def compare(ledger: dict[str, Any], measurement: dict[str, Any]) -> list[str]:
                     f"{identity['header_sha256'].get(header)!r} != qualified "
                     f"{ledger['header_sha256'].get(header)!r}; regenerate the ledger deliberately"
                 )
-    for field, value in ledger["flags"].items():
-        if identity["flags"].get(field) != value:
-            failures.append(
-                f"identity drift (flags.{field}): measured {identity['flags'].get(field)!r} "
-                f"!= qualified {value!r}; regenerate the ledger deliberately"
-            )
+    flags = identity.get("flags")
+    if not isinstance(flags, dict):
+        failures.append("identity drift (flags): measured flags must be an object")
+    else:
+        for field in sorted(set(ledger["flags"]) | set(flags)):
+            value = ledger["flags"].get(field)
+            measured = flags.get(field)
+            if (
+                field not in ledger["flags"]
+                or field not in flags
+                or type(measured) is not type(value)
+                or measured != value
+            ):
+                failures.append(
+                    f"identity drift (flags.{field}): measured {measured!r} "
+                    f"!= qualified {value!r}; regenerate the ledger deliberately"
+                )
     qualified_kernels = ledger["kernels"]
     measured_kernels = measurement["kernels"]
     added = sorted(set(measured_kernels) - set(qualified_kernels))
@@ -465,10 +538,17 @@ def run_measurement(
     nvcc: Path,
     cache: Path,
     output: Path,
+    generated_directory: Path,
     timeout: float,
 ) -> dict[str, Any]:
-    """Generate, preprocess, compile, and resource-dump the qualified shard."""
-    generated = output / "generated"
+    """Generate, preprocess, compile, and resource-dump the qualified shard.
+
+    The shard must live at the production CMake source path
+    (``build/cuda-release-sm120/generated/production_shell_kernels``) because
+    the qualified identity deliberately pins the preprocessed line markers of
+    that exact path.
+    """
+    generated = generated_directory.resolve()
     shards = generate_production_shards(generated)
     shard = shards[QUALIFIED_SHARD_INDEX]
     toolchain = toolchain_versions(nvcc)
@@ -510,6 +590,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--nvcc", required=True, type=Path)
     parser.add_argument("--cache", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--generated-dir",
+        type=Path,
+        help=(
+            "production AOT source directory (default: <output>/generated); "
+            "the CI job passes the CMake production_shell_kernels path so the "
+            "pinned preprocessed identity matches the release build"
+        ),
+    )
     parser.add_argument("--compile-timeout", type=float, default=900)
     parser.add_argument(
         "--record-output",
@@ -527,23 +616,31 @@ def main(argv: list[str] | None = None) -> int:
     output.mkdir(parents=True, exist_ok=True)
     cache.mkdir(parents=True, exist_ok=True)
 
-    measurement = run_measurement(
-        nvcc=nvcc, cache=cache, output=output, timeout=args.compile_timeout
-    )
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "schema_version": SCHEMA_VERSION,
         "status": None,
         "failures": [],
-        "measurement": {
-            "identity": measurement["identity"],
-            "toolchain": measurement["toolchain"],
-            "kernels": measurement["kernels"],
-            "object_path": measurement["object_path"],
-            "compile": measurement["compile"],
-        },
+        "measurement": None,
         "ledger": str(LEDGER),
     }
+    try:
+        measurement = run_measurement(
+            nvcc=nvcc,
+            cache=cache,
+            output=output,
+            generated_directory=args.generated_dir or output / "generated",
+            timeout=args.compile_timeout,
+        )
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+        report["status"] = "fail"
+        report["failures"] = [f"measurement failed: {error}"]
+        (output / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n"
+        )
+        print(report["failures"][0], file=sys.stderr)
+        return 1
+    report["measurement"] = measurement
 
     if args.record_output is not None:
         record = args.record_output.resolve()
