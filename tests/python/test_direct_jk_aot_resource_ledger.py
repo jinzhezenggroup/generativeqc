@@ -939,6 +939,14 @@ class TestProductionContextBinding:
                 launcher,
                 effective.replace(str(tmp_path.resolve()), str(tmp_path / "other")),
             )
+        with pytest.raises(ValueError, match="canonical ccache"):
+            validator.validate_effective_compiler_launcher(
+                tmp_path,
+                CompilerCacheLauncher(
+                    Path("/verified/sccache"), "sccache", "sccache 0.16.0"
+                ),
+                "/verified/sccache",
+            )
 
     @pytest.mark.parametrize("location", ["rules", "shard"])
     @pytest.mark.parametrize("per_edge", [False, True])
@@ -969,15 +977,13 @@ class TestProductionContextBinding:
             )
 
     @pytest.mark.parametrize("per_edge", [False, True])
-    @pytest.mark.parametrize("cache_name", ["ccache", "sccache"])
     @pytest.mark.parametrize("relative_source", [False, True])
     def test_generated_default_host_object_and_phony_rules_pass(
-        self, tmp_path: Path, per_edge: bool, cache_name: str, relative_source: bool
+        self, tmp_path: Path, per_edge: bool, relative_source: bool
     ) -> None:
         effective = _generated_ninja_fixture(
             tmp_path,
             per_edge=per_edge,
-            cache_name=cache_name,
             relative_source=relative_source,
         )
         validator.validate_generated_cuda_rules(

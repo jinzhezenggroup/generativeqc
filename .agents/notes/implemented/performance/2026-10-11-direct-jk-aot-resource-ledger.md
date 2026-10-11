@@ -295,6 +295,15 @@ REG/STACK/SHARED/LOCAL value changed. Only the execution implementation key and
 its paired object/log receipts changed. Gate mode is restored for final
 exact-head qualification.
 
+This qualification remains intentionally bounded to the canonical ccache 4.14
+context. CMake's ccache wrapper rewrites the registered absolute generated
+source under the build-directory `CCACHE_BASEDIR`, matching the relative source
+spelling used by the measured invocation. An unwrapped sccache production
+launcher would preserve the absolute spelling and therefore describes a
+different line-marker-sensitive context. The gate rejects sccache rather than
+silently treating the two source spellings as equivalent; the repository's
+general compiler-cache preference remains unchanged for other consumers.
+
 ## Production Ninja recipe and PIC binding
 
 Independent CMake-shaped controls then showed that cache/config fields alone

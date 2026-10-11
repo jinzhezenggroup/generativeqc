@@ -264,27 +264,25 @@ def validate_effective_compiler_launcher(
     effective: str,
 ) -> None:
     """Require CMake's effective launcher wrapper to match this invocation."""
+    if launcher.name != "ccache":
+        raise ValueError(
+            "production AOT resource qualification requires the canonical ccache launcher"
+        )
     fields = effective.split(";")
-    if launcher.name == "ccache":
-        expected_tail = [
-            "-E",
-            "env",
-            f"CCACHE_BASEDIR={working_directory.resolve()}",
-            str(launcher.path),
-        ]
-        if (
-            len(fields) != 5
-            or Path(fields[0]).name not in {"cmake", "cmake.exe"}
-            or fields[1:] != expected_tail
-        ):
-            raise ValueError(
-                "production CMAKE_CUDA_COMPILER_LAUNCHER does not match the "
-                f"qualified ccache wrapper: {effective!r}"
-            )
-    elif fields != [str(launcher.path)]:
+    expected_tail = [
+        "-E",
+        "env",
+        f"CCACHE_BASEDIR={working_directory.resolve()}",
+        str(launcher.path),
+    ]
+    if (
+        len(fields) != 5
+        or Path(fields[0]).name not in {"cmake", "cmake.exe"}
+        or fields[1:] != expected_tail
+    ):
         raise ValueError(
             "production CMAKE_CUDA_COMPILER_LAUNCHER does not match the "
-            f"qualified {launcher.name} executable: {effective!r}"
+            f"qualified ccache wrapper: {effective!r}"
         )
 
 
