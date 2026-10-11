@@ -23,7 +23,6 @@ from generativeqc_compiler.tensor import (
     add,
     constant,
     einsum,
-    execute,
     input_tensor,
     reduce_sum,
     transpose_program,
@@ -612,4 +611,6 @@ class StationaryGradientPlan:
         if not isinstance(components, Mapping):
             raise TypeError("gradient components must be a mapping")
         program = self.reduction_program(atoms=atoms, sources=components.keys())
+        from generativeqc_compiler.tensor import execute
+
         return execute(program, components, max_bytes=max_bytes).outputs["gradient"]
