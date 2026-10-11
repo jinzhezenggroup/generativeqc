@@ -10,7 +10,15 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SHARDS = ("core-a", "core-b", "runtime-heavy", "posthf", "ecp-forces", "compiler-heavy")
+SHARDS = (
+    "core-a",
+    "core-b",
+    "core-c",
+    "runtime-heavy",
+    "posthf",
+    "ecp-forces",
+    "compiler-heavy",
+)
 
 
 def _selection(
@@ -62,7 +70,7 @@ def test_every_python_test_file_has_exactly_one_ci_shard(event: str) -> None:
     "event", ("pull_request", "push", "merge_group", "schedule", "workflow_dispatch")
 )
 @pytest.mark.parametrize("presence", ("absent", "untracked", "tracked", "missing"))
-def test_libxc_force_tail_uses_tracked_ownership_and_preserves_core_parity(
+def test_libxc_force_tail_uses_tracked_ownership_and_preserves_core_buckets(
     event: str, presence: str, tmp_path: Path
 ) -> None:
     # Exercise both the earlier PR tree and a merge tree containing master's
@@ -94,9 +102,9 @@ def test_libxc_force_tail_uses_tracked_ownership_and_preserves_core_parity(
     ]
     assert owners == (["ecp-forces"] if tracked else [])
     assert selections["ecp-forces"][0] == "loadfile"
-    for parity, shard in enumerate(("core-a", "core-b")):
+    for bucket, shard in enumerate(("core-a", "core-b", "core-c")):
         assert selections[shard][1] == [
-            path for path in inventory[parity::2] if path != force
+            path for path in inventory[bucket::3] if path != force
         ]
     for _, _, arguments in selections.values():
         assert not any(force in argument for argument in arguments)
@@ -129,7 +137,7 @@ def test_full_qualification_is_not_deselected(event: str, shard: str) -> None:
     distribution, _, arguments = _selection(event, shard)
     assert "--deselect" not in arguments
     assert distribution == (
-        "worksteal" if shard in {"core-a", "core-b"} else "loadfile"
+        "worksteal" if shard in {"core-a", "core-b", "core-c"} else "loadfile"
     )
 
 
@@ -142,6 +150,7 @@ def test_nightly_heavy_tests_move_without_duplicate_or_missing_owners(
     assert wb97mv in selections["compiler-heavy"]
     assert wb97mv not in selections["core-a"]
     assert wb97mv not in selections["core-b"]
+    assert wb97mv not in selections["core-c"]
     for path in (
         "tests/python/test_hessian_analytic.py",
         "tests/python/test_hessian_directional.py",
@@ -153,7 +162,7 @@ def test_nightly_heavy_tests_move_without_duplicate_or_missing_owners(
 
 
 @pytest.mark.parametrize("event", ("pull_request", "merge_group", "push"))
-def test_routine_shards_keep_expensive_files_and_no_extra_jobs(event: str) -> None:
+def test_routine_shards_keep_expensive_files_with_single_owners(event: str) -> None:
     selections = {shard: _selection(event, shard)[1] for shard in SHARDS}
     wb97mv = "tests/python/test_wb97mv_complete.py"
     assert sum(wb97mv in targets for targets in selections.values()) == 1
@@ -168,7 +177,7 @@ def test_routine_shards_keep_expensive_files_and_no_extra_jobs(event: str) -> No
         assert path not in selections["runtime-heavy"]
 
 
-@pytest.mark.parametrize("shard", ("core-a", "core-b"))
+@pytest.mark.parametrize("shard", ("core-a", "core-b", "core-c"))
 @pytest.mark.parametrize("event", ("schedule", "workflow_dispatch"))
 def test_nightly_rebalance_preserves_unrelated_core_file_parity(
     shard: str, event: str
@@ -177,6 +186,38 @@ def test_nightly_rebalance_preserves_unrelated_core_file_parity(
     _, complete, _ = _selection(event, shard)
     wb97mv = "tests/python/test_wb97mv_complete.py"
     assert complete == [path for path in routine if path != wb97mv]
+
+
+@pytest.mark.parametrize("event", ("pull_request", "merge_group", "schedule"))
+def test_measured_hotspots_have_stable_core_owners(event: str) -> None:
+    selections = {
+        shard: set(_selection(event, shard)[1])
+        for shard in ("core-a", "core-b", "core-c")
+    }
+    expected = {
+        "core-a": ("test_mixed_rsh_df_forces.py",),
+        "core-b": (
+            "test_df_lambda_core_reuse.py",
+            "test_df_lambda_frontier.py",
+            "test_df_triples_distinct_moments.py",
+            "test_df_lambda_matrix_audit.py",
+        ),
+        "core-c": (
+            "test_cc_native_tensor_cpu.py",
+            "test_cpu_hf_high_l.py",
+            "test_cc_canonical_denominators.py",
+            "test_direct_order5_sources.py",
+        ),
+    }
+    for owner, filenames in expected.items():
+        for filename in filenames:
+            path = f"tests/python/{filename}"
+            assert path in selections[owner]
+            assert all(
+                path not in targets
+                for shard, targets in selections.items()
+                if shard != owner
+            )
 
 
 def test_python_ci_preserves_per_test_timings_with_debug_artifacts() -> None:
