@@ -53,6 +53,7 @@ StationaryPointValue stationary_evaluate_point(const double*, const double (*)[3
   return {};
 }
 constexpr bool stationary_pbe0_restricted_point_capable=false;
+constexpr bool stationary_restricted_point_capable=false;
 StationaryPointValue stationary_evaluate_restricted_point(
     const double* rho, const double gradient[2][3], const double* tau) {
   return stationary_evaluate_point(rho,gradient,tau);

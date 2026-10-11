@@ -70,7 +70,7 @@ bounds and frozen-seed identity checks. Submission maximum E/F errors are
 
 ## Storage and reproduction
 
-`publication.json` authenticates the standard `validation.json.gz` envelope,
+`publication.json` authenticates the standard `validation.json.xz` envelope,
 lossless `raw-receipts.json.xz`, both reconstruction patches and this summary.
 Raw receipts include exact UTF-8, SHA256 and byte sizes for selected original
 logs, samples, references, configuration, compiler/cache receipts and recipes.

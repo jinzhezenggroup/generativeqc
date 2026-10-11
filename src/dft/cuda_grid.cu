@@ -1041,8 +1041,11 @@ int grid_cuda_density_jets_v1(void* pointer, std::uint64_t generation, unsigned 
 
 /** Borrow contracted jets and a same-generation restricted feature witness.
  * Bit zero is established only by the owned single-spin device-density split,
- * not by a functional label or equality inferred from external arrays. The
- * caller must retain the ordinary task lease and stream ownership throughout
+ * not by a functional label or equality inferred from external arrays. Copied
+ * contracted panels and identical feature-reduction order prove equality
+ * of every requested paired lane, including tau when its mask bit is enabled.
+ * The immutable feature mask, not this flag, determines which lanes are valid.
+ * The caller must retain the ordinary task lease and stream ownership throughout
  * consumption. No field is added to the existing v1 GridTaskView ABI.
  */
 int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned jets,
@@ -1060,7 +1063,7 @@ int grid_cuda_density_jets_v2(void* pointer, std::uint64_t generation, unsigned 
         (jets == 4 && !(p.feature_mask & 8)))
       throw std::invalid_argument("contracted AO jets are unavailable");
     *output = p.work;
-    if (p.identical_spin_density && (p.feature_mask & 3) == 3) *flags = 1;
+    if (p.identical_spin_density && (p.feature_mask & 1)) *flags = 1;
   });
 }
 

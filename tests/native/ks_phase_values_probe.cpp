@@ -104,54 +104,58 @@ void raw_oracle(const Fixture& fixture) {
   const auto elements = fixture.density.size();
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&matrices), 3 * elements * sizeof(double)));
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&error), sizeof(int)));
-  for (const double preparation_mask : {0.0, 1e-12}) {
-    scf::cuda_execution::DirectJkSourceLease source(stream);
-    require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
-                           3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle",
-                           false, false, preparation_mask, 8ULL << 30,
-                           preparation_mask == 0.0) == GENERATIVEQC_STATUS_SUCCESS &&
-                source.active(),
-            source.reason());
-    require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
-                (source.exchange() != nullptr) == (preparation_mask == 0.0),
-            "borrowed outputs unexpectedly allocated duplicate J/K slots");
-    cuda_check(cudaMemcpyAsync(matrices, fixture.density.data(), elements * sizeof(double),
-                               cudaMemcpyHostToDevice, stream));
-    auto* coulomb = matrices + elements;
-    auto* exchange = coulomb + elements;
-    std::string detail;
-    for (const auto coefficient : {0.25, 0.20}) {
-      const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, coefficient);
-      require(source.enqueue(spec, matrices, coulomb, exchange, error, preparation_mask, detail) ==
+  for (const double preparation_mask : {0.0, 1e-12})
+    for (const std::uint32_t buckets : {(1U << 28) - 1, 0x1555U}) {
+      scf::cuda_execution::DirectJkSourceLease source(stream);
+      require(source.prepare(0, {fixture.system}, 100, molecule::cartesian_ao_count(fixture.system),
+                             3 * elements * sizeof(double), 8ULL << 30, "1", "ks-source-oracle",
+                             false, false, preparation_mask, 8ULL << 30, preparation_mask == 0.0,
+                             scf::cuda_execution::DirectJkSourceAutoPolicy::generic_f,
+                             buckets) == GENERATIVEQC_STATUS_SUCCESS &&
+                  source.active(),
+              source.reason());
+      require((source.coulomb() != nullptr) == (preparation_mask == 0.0) &&
+                  (source.exchange() != nullptr) == (preparation_mask == 0.0),
+              "borrowed outputs unexpectedly allocated duplicate J/K slots");
+      cuda_check(cudaMemcpyAsync(matrices, fixture.density.data(), elements * sizeof(double),
+                                 cudaMemcpyHostToDevice, stream));
+      auto* coulomb = matrices + elements;
+      auto* exchange = coulomb + elements;
+      std::string detail;
+      for (const auto coefficient : {0.25, 0.20}) {
+        const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, coefficient);
+        require(source.enqueue(spec, matrices, coulomb, exchange, error, preparation_mask,
+                               detail) == GENERATIVEQC_STATUS_SUCCESS &&
+                    source.audit() == GENERATIVEQC_STATUS_SUCCESS,
+                "raw phase J/K audit: " + detail);
+        std::vector<double> actual(elements);
+        for (const auto& pair :
+             {std::pair{coulomb, &fixture.coulomb}, std::pair{exchange, &fixture.exchange}}) {
+          cuda_check(cudaMemcpy(actual.data(), pair.first, elements * sizeof(double),
+                                cudaMemcpyDeviceToHost));
+          double maximum_error = 0.0;
+          for (std::size_t index = 0; index < elements; ++index)
+            maximum_error =
+                std::max(maximum_error, std::abs(actual[index] - (*pair.second)[index]));
+          require(maximum_error < 2e-9, "independent PySCF raw J/K parity");
+        }
+      }
+      const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
+      if (preparation_mask > 0.0)
+        require(source.enqueue(spec, matrices, coulomb, exchange, error, 0.0, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "screened source accepted a lower replay threshold");
+      require(source.enqueue(spec, matrices, coulomb, exchange, error, 1e12, detail) ==
                       GENERATIVEQC_STATUS_SUCCESS &&
                   source.audit() == GENERATIVEQC_STATUS_SUCCESS,
-              "raw phase J/K audit: " + detail);
-      std::vector<double> actual(elements);
-      for (const auto& pair :
-           {std::pair{coulomb, &fixture.coulomb}, std::pair{exchange, &fixture.exchange}}) {
-        cuda_check(cudaMemcpy(actual.data(), pair.first, elements * sizeof(double),
-                              cudaMemcpyDeviceToHost));
-        double maximum_error = 0.0;
-        for (std::size_t index = 0; index < elements; ++index)
-          maximum_error = std::max(maximum_error, std::abs(actual[index] - (*pair.second)[index]));
-        require(maximum_error < 2e-9, "independent PySCF raw J/K parity");
-      }
+              "screened phase J/K audit");
+      std::vector<double> screened(2 * elements);
+      cuda_check(cudaMemcpy(screened.data(), coulomb, screened.size() * sizeof(double),
+                            cudaMemcpyDeviceToHost));
+      require(
+          std::all_of(screened.begin(), screened.end(), [](double value) { return value == 0; }),
+          "resident replay bypassed the Direct Schwarz predicate");
     }
-    const auto spec = scf::make_global_hybrid_fock_spec(scf::FockSpin::Restricted, 0.25);
-    if (preparation_mask > 0.0)
-      require(source.enqueue(spec, matrices, coulomb, exchange, error, 0.0, detail) ==
-                  GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-              "screened source accepted a lower replay threshold");
-    require(source.enqueue(spec, matrices, coulomb, exchange, error, 1e12, detail) ==
-                    GENERATIVEQC_STATUS_SUCCESS &&
-                source.audit() == GENERATIVEQC_STATUS_SUCCESS,
-            "screened phase J/K audit");
-    std::vector<double> screened(2 * elements);
-    cuda_check(cudaMemcpy(screened.data(), coulomb, screened.size() * sizeof(double),
-                          cudaMemcpyDeviceToHost));
-    require(std::all_of(screened.begin(), screened.end(), [](double value) { return value == 0; }),
-            "resident replay bypassed the Direct Schwarz predicate");
-  }
   cuda_check(cudaFree(error));
   cuda_check(cudaFree(matrices));
   cuda_check(cudaStreamDestroy(stream));

@@ -16,6 +16,7 @@
 #include "runtime/execution_context.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/precision_work.hpp"
+#include "scf/target_fock_work.hpp"
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
 
@@ -113,6 +114,9 @@ struct BatchItemResult {
   std::size_t bucket_id{};
   bool warm_start_used{};
   bool warm_start_fallback{};
+  /** Present only for an owner that inventories all physical target attempts.
+   * An unavailable total must not fall back to the returned attempt's count. */
+  std::optional<scf::TargetFockWork> target_fock_work;
 };
 
 struct DirectShellClassProfileEntry {

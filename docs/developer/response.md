@@ -68,6 +68,12 @@ lease. Preparation time, retained values, replay reads and uncached integral
 evaluations are distinct diagnostics. The 64-AO gate is a conservative large-frame
 selection, not a claim of a universally optimal crossover. Changing the default
 policy requires renewed complete-endpoint qualification.
+Experimental packed partial residency shares the
+[RHF bucket-mask policy](scf_module_boundaries.md#optional-phase-local-exact-rhf-values).
+Cached and uncached angular buckets form a disjoint complete source partition;
+positive-screening and independent final scalar audits still recompute their
+whole requested source. The additional packed host descriptors are charged
+before admitting optional values.
 The [resident-source decision](../../.agents/notes/implemented/performance/2026-10-05-exact-response-resident-source.md)
 retains the rationale, measured evidence and conditions for revisiting it.
 

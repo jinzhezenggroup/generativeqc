@@ -317,18 +317,39 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
 # Producer-bound restricted points add optional ABI binding and execution counters;
 # they borrow admitted phased scratch without changing any allocation equation.
 # Keep whole-owner fingerprints so these controls and metric deltas fail closed.
+# Component packing also binds its ragged scratch/descriptor helpers. The
+# generic restricted-point request still borrows the same admitted geometry
+# scratch; refreshing these owners does not relax any promotion evidence gate.
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "3e2606940d4767bb7be476e884888a9cd8ed1f65f168ddad24539ecbfacf616f"
+    "eaf32908ef2042bd8d3efef84e730dabff7a2dd57712d8bbbebf07be43576a5b"
 )
 # Explicit strict pairing retains the fixed native counter-array arities.
 STATIONARY_PAGE_METRICS_CONTRACT_SHA256 = (
-    "b6fd50bdaee3f2b7d51884e4672a705ec91726152c150d89bb5c957cbddc1e3d"
+    "135d534e3b9c2205a13dcb21268f1a83c5281eeabc14ec3595cef56cea817a57"
 )
 STATIONARY_METRIC_DELTA_CONTRACT_SHA256 = (
     "0055be549a014cb7a993ab4fb1cecc935241a4f3543fc660bd5f52243d8bf5dc"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
-    "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
+    "f49aa6e298b8149d4d359f0cf7cf5c7c734e0c2ad93fecd4e30454df74003a8e"
+)
+STATIONARY_KIND_TABLE_CONTRACT_SHA256 = (
+    "eeec6bd71f566741e4d0978df5b354095c875be183b0cf3138df3a1e8fd47a6a"
+)
+STATIONARY_COMPONENT_ARRAYS_CONTRACT_SHA256 = (
+    "08ea283e18c790a26edcdcac01479def6a7188d9c1a96b8831b4f2b71c8d6045"
+)
+STATIONARY_COMPONENT_PAGE_CONTRACT_SHA256 = (
+    "09be8b78cfee217fef2e37ed5bb26b7a5231f63bd5303dcccacdb6fd1ccb4d9b"
+)
+STATIONARY_DESCRIPTOR_PACKER_CONTRACT_SHA256 = (
+    "92af808cc0d0551072b0a00c29631b86f9c4b65e95bacd68701c4cfbdab926e0"
+)
+STATIONARY_RESTRICTED_POINT_POLICY_CONTRACT_SHA256 = (
+    "14eb08de9be6003c466bff8f9449c95749a38e3bcbb9cf13bcad3d4420ccca51"
+)
+STATIONARY_DENSITY_JET_POLICY_CONTRACT_SHA256 = (
+    "2a117b6ec5c566b996f75795650288182faa93a83b263689431f62d6c8e3a529"
 )
 STATIONARY_PAGE_SCALAR_CONTRACT_SHA256 = (
     "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
@@ -383,7 +404,7 @@ STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
     "59bdbe506d3868c2299acda5142e9f6a61eaf0657d8d033aa15a08167a495fdc"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "cdb9e3a76942842c5737bd5338d8f11ca2181b9b01cfee6d6f5a94052c06355e"
+    "adc1e1e94d794eae3586b71581326cf51d5761f8921ecd7d07882dbccbbe5911"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
@@ -472,7 +493,7 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 # Its additional producer launch changes neither retained capacity nor pair
 # visits; bind the scratch admission and launch/publication gates explicitly.
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "eed988a14393b00ad587a23d086597dbccb3aa7feca50c6d4cd33544a3749b0c"
+    "9716c5ab6a7e91e7cd990769132d517d581143f9393fe0b58d696cbd705d8062"
 )
 # Ordered cooperative normalization reuses the existing phased reservation and
 # exact work counts. Audit allocation, actual-device/kernel admission, immutable
@@ -521,7 +542,7 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
 # native CSR and exact-bitmask caches; packaged selection remains unchanged.
 # Closed/running checks precede admission without changing AOT selection.
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "3ce267b3df21df7e551dac4c64ff679d9516b2aa3f63eba140db612fcbb636a2"
+    "5c0a8537b0236b67efd678e09338347ddae68f1e89a0150aae0f41a3ca357047"
 )
 # The restricted-point request joins schedule identity without changing AO reserves.
 PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
@@ -578,12 +599,12 @@ SOURCE_RESOURCES_DEFINITION = (
 )
 SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
-    "grid_plan.host_bytes + 8 * (34 * primitive_tile + "
+    "grid_plan.host_bytes + 8 * (82 * primitive_tile + "
     "4 * plan.spin_blocks * n * n + 120 * na + "
     "12 * (len(source_names) - len(_SOURCE_NAMES)) * na + "
     "26 * integral_terms + len(COMPONENT_LABELS) ** 4 + "
     "3 * len(COMPONENT_LABELS) ** 2 + 3 * tile_points + 2 * basis.nprimitive + "
-    "4 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
+    "11 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
 )
 AVAILABLE_DEVICE_BYTES_DEFINITION = (
     "max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes"
@@ -1121,6 +1142,14 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ):
         raise RuntimeError("stationary CUDA Becke primitive policy contract changed")
     zero_seed_helpers = {
+        "density_jet_policy_sha256": (
+            "_stationary_density_jet_count",
+            STATIONARY_DENSITY_JET_POLICY_CONTRACT_SHA256,
+        ),
+        "restricted_point_policy_sha256": (
+            "_resolve_restricted_point_policy",
+            STATIONARY_RESTRICTED_POINT_POLICY_CONTRACT_SHA256,
+        ),
         "becke_zero_seed_policy_sha256": (
             "_resolve_becke_zero_seed_policy",
             BECKE_ZERO_SEED_POLICY_CONTRACT_SHA256,
@@ -1165,6 +1194,26 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ):
         raise RuntimeError("stationary CUDA tile layout contract changed")
     page_methods = {
+        "kind_table": (
+            "_CudaSources",
+            "_kind_table",
+            STATIONARY_KIND_TABLE_CONTRACT_SHA256,
+        ),
+        "component_arrays": (
+            "_CudaSources",
+            "_component_arrays",
+            STATIONARY_COMPONENT_ARRAYS_CONTRACT_SHA256,
+        ),
+        "component_page": (
+            "_CudaSources",
+            "_component_integral_page",
+            STATIONARY_COMPONENT_PAGE_CONTRACT_SHA256,
+        ),
+        "descriptor_packer": (
+            "_CudaSources",
+            "_pack_integral_descriptors",
+            STATIONARY_DESCRIPTOR_PACKER_CONTRACT_SHA256,
+        ),
         "initializer": (
             "_CudaSources",
             "__init__",
@@ -2058,7 +2107,7 @@ def _method_resources(
     source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes
     host_bound = grid_plan.host_bytes + 8 * (
-        34 * primitive_tile
+        82 * primitive_tile
         + 4 * plan.spin_blocks * basis.nao * basis.nao
         + 120 * atom_count
         + 12 * (len(source_names) - len(STATIONARY_RUNTIME_SOURCE_NAMES)) * atom_count
@@ -2067,7 +2116,7 @@ def _method_resources(
         + 3 * len(QUALIFIED_SPD_COMPONENTS) ** 2
         + 3 * tile_points
         + 2 * basis.nprimitive
-        + 4 * basis.nao
+        + 11 * basis.nao
         + 80
     )
     return (

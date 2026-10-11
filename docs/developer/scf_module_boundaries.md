@@ -102,8 +102,50 @@ matrices and diagnostics. Optional values have an 8-GiB ceiling and must also
 fit available device memory with a 256-MiB runtime reserve. Resource/capability
 refusals retain the already admitted exact evaluator; driver/numerical failures
 propagate instead of masquerading as pressure. Preparation finite-audits values
-before publication. A completed action must report zero recurrence evaluations
-and a canonical census matching the source inventory before reference export.
+before publication. A completed action must report a canonical census matching
+the entire source inventory before reference export. Complete residency reports
+zero recurrence evaluations; partial residency reports exactly the uncached
+inventory at the frozen predicate, never a second whole-source Direct pass.
+A stricter consumer predicate can reduce uncached evaluations, but cannot omit
+canonical row visits or exceed that inventory.
+
+Two experimental controls can apply an externally measured partial plan without
+changing the automatic eligibility or default full-cache behavior:
+
+- `GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK` selects among the 28 canonical AO-pair
+  angular-sum buckets. For `0 <= second <= first < 7`, the bit index is
+  `first * (first + 1) / 2 + second`. Unset means all 28 bits; zero retains Direct.
+- `GENERATIVEQC_RHF_RESIDENT_MAX_BYTES` caps the optional FP64 value storage
+  after complete mandatory admission. Unset retains the 8-GiB ceiling; zero
+  disables optional storage. It cannot enlarge the complete reference budget.
+
+Both accept unsigned decimal or lowercase `0x` hexadecimal, with no whitespace,
+sign or trailing characters. Out-of-range masks and malformed values are rejected
+by an eligible owner. The policy is frozen once per phase owner. The common
+provider packs only selected values and dispatches every remaining bucket through
+the same compensated canonical Direct consumer. A published selection cannot
+change, and moved geometry rebuilds values rather than borrowing stale integrals.
+Packed layout metadata is included in complete numeric admission. Allocation or
+capacity refusal preserves whole-source exact Direct fallback.
+
+The analogous `GENERATIVEQC_KS_RESIDENT_BUCKET_MASK` and
+`GENERATIVEQC_KS_RESIDENT_MAX_BYTES` controls apply to eligible restricted,
+full-range FP64 global hybrids, including PBE0. Their unset mask retains complete
+residency; the unset ceiling retains KS's existing method/domain policy. These
+do not bypass the complete resource planner, enable UKS/RSH/DF, or widen cold
+automatic eligibility. Screened partial sources freeze and share the incumbent
+Schwarz row layout and compact bucket extents before choosing storage. They do
+not cache density-dependent masks or regenerate a full source per action.
+RHF and KS forward their separate controls to the common `DirectJkSourceLease`.
+The native RHF frame-response owner uses
+the same partial policy; its independently recomputed scalar audits remain
+uncached. The profiler and bounded additive selector in
+`benchmarks/selective_eri_cache.py` supply candidate masks, not universal
+profitability predictions. Complete E+F comparison uses
+`benchmarks/selective_eri_rhf_endpoint.py` and the independent oracle/paired
+acceptance gates in `benchmarks/selective_eri_rhf_acceptance.py`. Reference export
+itself does not return forces; this endpoint composes the existing native
+`rhf_frame_response_cuda` electronic gradient with nuclear repulsion.
 
 The RHF adapter borrows the stream and owns separate iteration graphs; its
 method-neutral `DirectJkSourceLease` owns values and compensation only. Every
@@ -148,7 +190,12 @@ geometry-only Schwarz row tails and stores only their compact canonical values.
 Construction and replay use identical bucket offsets and bounded work extents;
 a replay threshold below the frozen preparation mask is rejected. This does
 not introduce a different screening approximation or density-dependent cache.
-No ERI recurrence is evaluated during replay, and no derivative ERIs are cached.
+Retained buckets evaluate no new ERI recurrence during replay. With an explicit
+partial mask, every other bucket uses the same compensated Direct traversal once;
+the frozen-predicate census requires exactly its uncached inventory. No derivative
+ERIs are cached. `benchmarks/selective_eri_pbe0.py` observes the unchanged official
+PBE0 Cold/Warm/Moved E+F protocol, independent gates and emitted source receipts;
+it does not supply an oracle density or replace the force consumer.
 The source-only Direct factory skips unrelated generated/MD/range leases and
 releases sort staging after the row-construction fence. KS supplies its existing
 raw J/K outputs; only compensation and audits need additional source scratch.
@@ -221,6 +268,23 @@ topology/options admission, cached state and retry behavior; the driver retains
 the coupled numerical launch sequence. The separately built angular-force
 kernel has its own device-link constraints: do not change standalone versus
 relocatable compilation without checking the real NVCC build graph and endpoint.
+
+The opt-in `GENERATIVEQC_DIRECT_SHELL_DERIVATIVE_FALLBACK=1` lets a retained
+first-derivative s/p/d Direct owner prepare its existing bounded shell program
+even when streaming value kernels do not cover the complete shell domain.
+An unset variable or `0` retains the incumbent preparation; other values are
+rejected when the derivative-owner candidate is requested. The policy is read
+at preparation, not execution. Value-only, borrowed resident-source, and
+through-f plans keep their existing ownership rules.
+
+This candidate does not select bounded SCF values: their independent capability
+and qualification opt-in gates remain unchanged. It uses the original optional
+provider allowance and charges retained buffers to the existing diagnostic.
+Insufficient budget or unavailable preparation retains the complete bounded
+force fallback. No functional-name gate, precision change, integral formula,
+public ABI, or new default is introduced. Complete endpoint, work-count and
+independent force qualification remain required before promoting this candidate.
+See the [ownership decision](../../.agents/notes/implemented/performance/2026-10-11-orthogonal-direct-derivative-ownership.md).
 
 Full-range nuclear derivatives can partition a mixed f basis by the borrowed
 class-major topology: the 21 s/p/d quartet classes use separate low-order,

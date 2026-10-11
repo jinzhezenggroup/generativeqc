@@ -1071,10 +1071,9 @@ RccsdNativeState run_rccsd_native_state(
   solver_options.derived_denominators = derived_denominators;
   solver_options.packed_diis = packed_diis;
   solver_options.df_mixed_precision = df_mixed_precision;
-  // A changed nonlinear trajectory is qualified for CUDA DF energies only;
-  // force/Lambda owners and conventional/CPU callers retain trial-state DIIS.
-  solver_options.diis_input_residual =
-      execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
+  // Retaining DF response inputs changes source lifetime, not the CC equations.
+  // Every observed state and the independent final physical replay stay fresh.
+  solver_options.diis_input_residual = execution.cuda_requested() && correlation_auxiliary;
   solver_options.df_replay_auxiliary_batch =
       execution.cuda_requested() && correlation_auxiliary && !retain_df_response;
   auto reference = reference_options(descriptor, phase_budget);

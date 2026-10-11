@@ -47,6 +47,32 @@
   },
   "entries": [
     {
+      "id": "scf.partial-phase-local-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_BUCKET_MASK",
+        "hf-runtime:GENERATIVEQC_RHF_RESIDENT_MAX_BYTES",
+        "ks-runtime:GENERATIVEQC_KS_RESIDENT_BUCKET_MASK",
+        "ks-runtime:GENERATIVEQC_KS_RESIDENT_MAX_BYTES"
+      ],
+      "owner_issues": [1598],
+      "sources": [
+        "src/scf/cuda/direct_jk_source_policy.hpp",
+        "src/scf/cuda/reference_eri_policy.hpp",
+        "src/scf/cuda/direct_jk_source_lease.cpp",
+        "src/dft/cuda_ks.cpp"
+      ],
+      "rationale": "Explicit experimental masks pack selected FP64 canonical buckets and retain the same exact compensated Direct consumer for every remaining bucket. Screened sources share the incumbent frozen Schwarz rows and compact counts. Unset controls preserve complete residency, method-specific ceilings and existing cold eligibility. Resource, scientific capability and lifetime refusals remain bounded; the public KS planner still reserves no optional quartic storage. The existing resource-constrained RHF evidence is not PBE0 or global-default evidence.",
+      "revisit_condition": "Qualify a resource- and reuse-conditioned selector against natural master defaults with independent complete Cold/Warm/Moved E+F gates, repeated endpoint/work counts, full-cache crossovers and allocation cliffs. Do not hard-code a molecule or replace profitable full residency with a partial mask merely because a constrained RHF subset improved.",
+      "evidence": [
+        "docs/developer/scf_module_boundaries.md",
+        "tests/python/test_rhf_resident_retry.py",
+        "tests/python/test_ks_phase_source_auto_policy.py",
+        "tests/native/ks_phase_values_probe.cpp",
+        "benchmarks/selective_eri_pbe0.py"
+      ]
+    },
+    {
       "id": "scf.phase-local-global-hybrid-values",
       "classification": "already-default",
       "controls": ["ks-runtime:GENERATIVEQC_KS_RESIDENT_VALUES"],
@@ -886,13 +912,16 @@
         "src/methods/rccsd_method.cpp",
         "src/methods/df_ccsdt_force.cu"
       ],
-      "rationale": "The internal option defaults to false, while the native production owner automatically enables incoming-residual weighted Anderson mixing only for CUDA DF energies without retained DF response. History pairs outgoing damped Jacobi maps with incoming physical residuals using fixed validated shifted denominators. This changes the nonlinear trajectory and avoids separate trial equation evaluations; every observed state and the independent expanded physical replay remain fresh. CPU, conventional, force/Lambda/response and no-DIIS contracts remain unchanged. Independent algebraic gates and scoped complete molecular endpoints qualify this consumer, without a universal convergence, speedup, force or process-RSS claim.",
+      "rationale": "The internal option defaults to false, while native CUDA DF amplitude owners automatically enable incoming-residual weighted Anderson mixing for energies and the forward solve of complete analytic-force calls. History pairs outgoing damped Jacobi maps with incoming physical residuals using fixed validated shifted denominators. This changes the nonlinear trajectory and avoids separate trial equation evaluations; every observed state and independent expanded physical replay remain fresh. CPU, conventional, supplied-problem, Lambda/response equations and no-DIIS contracts remain unchanged. Independent complete-force gates and fresh scoped force ABBA endpoints extend the original energy qualification, without a universal convergence, statistical/global speedup or process-RSS claim.",
       "revisit_condition": "Broaden the automatic consumer domain only after independent molecular and response gates plus complete endpoint evidence; revisit the fixed weighted-error rationale if preconditioning or damping changes within a solve, or if a qualified case shows unacceptable convergence behavior.",
       "evidence": [
         "pr:#2211",
         "docs/developer/rccsd_gpu.md",
         ".agents/notes/implemented/numerics/2026-10-10-df-cc-input-residual-mixing.md",
         "benchmarks/results/df-cc-input-residual-20261010/publication.json",
+        ".agents/notes/implemented/numerics/2026-10-11-df-cc-force-input-residual.md",
+        "benchmarks/results/df-cc-force-input-residual-20261011/publication.json",
+        "tests/python/test_df_cc_force_input_residual_evidence.py",
         "tests/python/test_df_cc_native_solver.py"
       ]
     },
