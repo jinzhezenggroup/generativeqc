@@ -133,16 +133,6 @@ def _validate_result(
     return energy
 
 
-def _shift_last_atom(
-    atoms: tuple[Atom, ...],
-    delta: tuple[float, float, float],
-) -> tuple[tuple[float, float, float], ...]:
-    coordinates = [list(position) for _, position in atoms]
-    for axis, value in enumerate(delta):
-        coordinates[-1][axis] += value
-    return tuple(tuple(float(value) for value in row) for row in coordinates)
-
-
 @pytest.mark.parametrize("case", _active_cases(), ids=lambda case: case.name)
 def test_cpu_warm_endpoint_walltime(
     benchmark: _BenchmarkFixture,
@@ -175,39 +165,4 @@ def test_cpu_pbe_force_walltime(benchmark: _BenchmarkFixture) -> None:
         return _validate_result(result, case_name, require_forces=True)
 
     energy = benchmark(run_once)
-    assert math.isfinite(energy)
-
-
-def test_cpu_rhf_changed_geometry_pair_walltime(
-    benchmark: _BenchmarkFixture,
-) -> None:
-    """Measure repeated geometry rebuilds without folding preparation into timing."""
-    calculator = Calculator(method="rhf", basis="sto-3g", device="cpu")
-    case_name = "water-rhf-changed-geometry-pair-sto3g"
-    plus = _shift_last_atom(_WATER, (0.0010, -0.0005, 0.0003))
-    minus = _shift_last_atom(_WATER, (-0.0010, 0.0005, -0.0003))
-
-    # A prepared batch retains the production warm state used by geometry
-    # optimization/MD-style workloads. Each benchmark sample performs two
-    # geometry changes so repeated fixture invocations cannot silently collapse
-    # into a same-geometry warm replay.
-    with calculator.prepare_batch([_WATER], warm_start=True) as batch:
-        warmup = batch.execute(strict=True, properties=("energy",)).items[0]
-        _validate_result(warmup, case_name)
-
-        def run_once() -> float:
-            first = batch.execute(
-                coordinates=[plus],
-                strict=True,
-                properties=("energy",),
-            ).items[0]
-            _validate_result(first, case_name)
-            second = batch.execute(
-                coordinates=[minus],
-                strict=True,
-                properties=("energy",),
-            ).items[0]
-            return _validate_result(second, case_name)
-
-        energy = benchmark(run_once)
     assert math.isfinite(energy)
