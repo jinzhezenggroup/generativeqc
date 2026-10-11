@@ -89,7 +89,7 @@ support depend on their qualified native provider and execution context.
 
 The public native `Calculation::supported_properties()` reports
 **context-qualified** DFT analytic forces for a narrow, all-electron,
-strict-FP64 **CPU density-fitted PBE/PBE0 RKS** execution domain. The
+strict-FP64 **CPU Direct or density-fitted PBE/PBE0 RKS** execution domain. The
 method-global registry remains energy-only: exact source coefficients,
 spin, backend, fitting provider, basis/ECP and correction terms determine
 admission for the prepared calculation. Request
@@ -100,10 +100,25 @@ The same native, token-verified stationary-force consumer is used by
 `generativeqc_batch_execute` when **every member** of the prepared batch
 qualifies and a force output buffer is supplied. Mixed/unsupported native
 DFT force contexts fail before execution; a malformed or nonconverged item
-does not publish partial forces for that item. CPU Direct, CUDA, UKS,
+does not publish partial forces for that item. CUDA, UKS,
 range-separated, ECP, nonlocal and correction-bearing contexts remain
 unqualified for native DFT forces, even when Python has a separately
 supported DFT-force path.
+
+The Direct owner requires the packaged CPU first-derivative inventory
+(`GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=ON`, the default), all-electron
+s/p/d shells, exact full-range J and the canonical PBE/PBE0 exchange composition.
+It contracts compiler-generated stationary AD weights with shell-local
+derivatives, sharing each primitive evaluation between J and K. It does not
+materialize a molecular coordinate-by-AO-rank-four derivative tensor, compile
+at runtime, or substitute density fitting. Disabling that inventory removes
+the prepared native Direct force capability rather than invoking a compiler.
+The existing public Direct work ceilings remain in force: two million
+conservative primitive records (including independent J/K pass charges), one
+million grid points and one hundred million Becke pair visits. Oversized
+contexts do not advertise native forces. Source/weight storage has a separate
+finite capacity gate; its observed numeric capacities exclude recurrence
+scratch, allocator overhead and opaque libraries, not a complete RSS bound.
 
 For Python `PreparedBatch.execute(properties=("energy", "forces"))`,
 the frontend now first queries each member's private native prepared-property
@@ -116,7 +131,7 @@ than explicit `NOT_IMPLEMENTED` is an error, not permission to fall back.
 Capability is evaluated after the existing Python model/warm-state identity
 checks and does not bypass resource budgets.
 
-The CPU PBE0 force qualification must still satisfy the independent
-reconverged finite-difference acceptance in #2151/#2222. A native
+The CPU PBE/PBE0 force qualification includes independent reconverged
+finite-difference and PySCF moving-grid analytic comparisons. A native
 force-capability flag is not evidence of an independently validated
 method/size/backend beyond its explicitly admitted context.

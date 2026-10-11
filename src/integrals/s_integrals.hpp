@@ -131,6 +131,27 @@ std::array<double, 12> contract_weighted_eri_shell_derivative(
     const core::System& system, const std::array<std::size_t, 4>& shell_indices,
     std::span<const double> weights);
 
+enum class WeightedEriDerivativeExecution { Reference, PackagedCpu };
+
+/** Build-time capability only. Packaged execution is restricted to s/p/d and
+ * never initiates JIT or falls back silently to the reference recurrence. */
+bool has_packaged_cpu_eri_shell_derivatives() noexcept;
+
+/** Contract several independent weights through one shell primitive traversal.
+ * Results retain input-channel and independent shell-slot ordering. Reuses the
+ * default reference recurrence's single-channel accumulation order without molecular AO-rank-four
+ * or coordinate derivative storage. Empty channels are rejected. All-zero AO
+ * tuples skip recurrence work. The optional actual primitive evaluation count
+ * is published only on success, including zero for all-zero channels. Explicit
+ * packaged execution uses the shared generated primitive kernels, with restored
+ * shell/axis slots and the same public-AO normalization and channel order.
+ */
+std::vector<std::array<double, 12>> contract_weighted_eri_shell_derivatives(
+    const core::System& system, const std::array<std::size_t, 4>& shell_indices,
+    std::span<const std::span<const double>> weights,
+    std::uint64_t* primitive_evaluations = nullptr,
+    WeightedEriDerivativeExecution execution = WeightedEriDerivativeExecution::Reference);
+
 /** Directly contract arbitrary public-AO overlap and hcore weights.
  *
  * The coordinate-sized result contains positive energy derivatives. When

@@ -17,6 +17,18 @@ provider selections before an explicit force replay. Failed requests or replays
 do not replace its previously accepted plan. Other contexts, including ECP,
 retain their existing defaults and conservative capacity reservations.
 
+Qualified CPU Direct PBE/PBE0 requests use the source-complete prepared C++
+owner described in the [native SDK derivative contract](../user/native_cpp.md#density-fitting-and-derivative-boundary),
+not this Python scientific scheduler. `StationaryGradientPlan` still owns the
+integral adjoint weights: `generate_stationary_integral_weights.py` specializes
+that same TensorIR AD into portable scalar bindings. The native streamed
+shell contraction consumes compiler-owned center/axis dispatch metadata for
+the existing packaged first-derivative kernels; it shares J/K primitive work
+and retains the independent reference recurrence for oracle/legacy consumers.
+The diagnostic below remains an explicit reference and the compatibility
+production route for separately qualified, not-yet-native contexts. It is
+not retired while those domains still need it.
+
 The separate [CUDA diagnostic](stationary_cuda_diagnostic.md) consumes a live
 native CUDA snapshot and executes all seven sources on device with explicit
 host export/orchestration. The CPU selectors and their boundaries below remain

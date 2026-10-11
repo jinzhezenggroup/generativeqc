@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <iostream>
@@ -186,14 +187,24 @@ void check_measures(bool uks, bool pbe) {
               GENERATIVEQC_STATUS_ABI_MISMATCH,
           "undersized diagnostic accepted");
   diagnostic = {sizeof(diagnostic), GENERATIVEQC_ABI_VERSION, -7, -11};
-  // A valid execution request that fails in the backend must discard the
-  // preceding run's values, for both availability probes and copy-out.
+  // Unsupported force execution discards the preceding run's values. A
+  // qualified but nonconverged replay retains only its new SCF diagnostics.
   std::array<double, 9> forces{};
   result.forces = forces.data();
   result.force_count = forces.size();
-  require(generativeqc_calculation_execute(handles.calculation, &result) ==
-              GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "unsupported force execution did not fail");
+  const auto force_status = generativeqc_calculation_execute(handles.calculation, &result);
+  require(force_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED ||
+              (pbe && !uks && force_status == GENERATIVEQC_STATUS_NOT_CONVERGED),
+          "force request did not respect prepared admission/convergence");
+  if (force_status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
+    require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "qualified nonconverged force request lost its new SCF diagnostic");
+    require(!result.converged && std::all_of(forces.begin(), forces.end(),
+                                             [](double value) { return value == 0.0; }),
+            "nonconverged force request published a partial force");
+    return;
+  }
   require(generativeqc_calculation_get_scf_diagnostic(handles.calculation, nullptr) ==
                   GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
               generativeqc_calculation_get_scf_diagnostic(handles.calculation, &diagnostic) ==

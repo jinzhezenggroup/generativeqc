@@ -908,6 +908,73 @@ def independent_global_hybrid_gradient(
     return energy, gradient.kernel()
 
 
+@pytest.mark.parametrize("method,xc", [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0")])
+def test_native_direct_pbe_force_matches_independent_pyscf(
+    method: str, xc: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public native owner, not the Python diagnostic, supplies total forces."""
+    pytest.importorskip("pyscf", reason="independent native Direct force reference")
+    calc = calculator(method, max_iterations=200)
+    with calc.prepare_batch([ATOMS]) as batch, NativeAO(ATOMS) as basis:
+        assert batch._native_dft_force_eligible()
+
+        def forbidden_python_force(*_args: typing.Any, **_kwargs: typing.Any) -> None:
+            pytest.fail(
+                "qualified native Direct forces invoked Python scientific orchestration"
+            )
+
+        monkeypatch.setattr(batch, "_public_dft_cpu_force", forbidden_python_force)
+        result = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        state = StationaryKsState.from_native(batch, basis)
+        reference_energy, reference = independent_global_hybrid_gradient(
+            basis, state, method, xc=xc
+        )
+        assert result.energy == pytest.approx(reference_energy, abs=2e-9)
+        np.testing.assert_allclose(result.forces, -reference, atol=1e-7, rtol=0)
+        np.testing.assert_allclose(result.forces.sum(axis=0), 0, atol=3e-10, rtol=0)
+
+
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize("method,xc", [("pbe-rks", "PBE"), ("pbe0-rks", "PBE0")])
+def test_native_direct_spd_force_matches_independent_pyscf(
+    method: str, xc: str, representation: str
+) -> None:
+    """Public s/p/d AO ordering and all shell/axis permutations survive cutover."""
+    pytest.importorskip("pyscf", reason="independent native angular force reference")
+    from generativeqc.profiles import canonical_hash
+
+    payload = (
+        (0, ("1.2",), (("1",),)),
+        (1, ("0.9",), (("1",),)),
+        (2, ("0.6",), (("1",),)),
+    )
+    basis_set = BasisSet(
+        "native-direct-spd",
+        (ElementBasis(1, tuple(BasisShell(*shell) for shell in payload)),),
+        BasisProvenance(
+            "inline native Direct s/p/d fixture",
+            "1",
+            "CC0-1.0",
+            canonical_hash(payload),
+        ),
+        representation=representation,
+    )
+    atoms = [("H", (0.13, -0.17, -0.71)), ("H", (-0.09, 0.11, 0.79))]
+    calc = calculator(method, basis=basis_set, max_iterations=200)
+    with (
+        calc.prepare_batch([atoms]) as batch,
+        NativeAO(atoms, basis=basis_set) as basis,
+    ):
+        assert batch._native_dft_force_eligible()
+        result = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        state = StationaryKsState.from_native(batch, basis)
+        reference_energy, reference = independent_global_hybrid_gradient(
+            basis, state, method, xc=xc
+        )
+        assert result.energy == pytest.approx(reference_energy, abs=2e-9)
+        np.testing.assert_allclose(result.forces, -reference, atol=1e-7, rtol=0)
+
+
 @pytest.mark.parametrize("execution", ["reference", "native"])
 @pytest.mark.parametrize(
     "method,charge,multiplicity,coefficients,xc",

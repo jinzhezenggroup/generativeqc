@@ -149,7 +149,7 @@ def _split_compile_options(
 
 
 def _weight_expression(
-    plan: StationaryGradientPlan, source: str
+    plan: StationaryGradientPlan, source: str, *, dimension: str = "n"
 ) -> tuple[InlineCudaOutput, int]:
     """Specialize one generated weight through the shared inline-consumer path."""
     program = plan.integral_block(source, terms=1).weights
@@ -165,7 +165,7 @@ def _weight_expression(
         locations["density_right"] = ("density", 1, 3)
     bindings = {
         name: tuple(
-            f"{pointer}[{spin} * n * n + size_t(ao[{left}]) * n + size_t(ao[{right}])]"
+            f"{pointer}[{spin} * {dimension} * {dimension} + size_t(ao[{left}]) * {dimension} + size_t(ao[{right}])]"
             for spin in range(plan.spin_blocks)
         )
         for name, (pointer, left, right) in locations.items()

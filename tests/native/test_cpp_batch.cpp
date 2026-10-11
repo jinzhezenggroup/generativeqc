@@ -241,14 +241,25 @@ int main() {
             "Python-free C++ PBE0 energy differs from qualified native reference");
     require(pbe0_energy.physical_residual_rms.has_value(),
             "C++ PBE0 SCF lost physical commutator diagnostic");
-    try {
-      (void)prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
-      throw std::runtime_error("C++ SDK incorrectly advertised DFT forces");
-    } catch (const generativeqc::Error& error) {
-      require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "C++ DFT force request did not fail closed");
+    if (prepared.supported_properties() & GENERATIVEQC_PROPERTY_FORCES) {
+      const auto direct =
+          prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+      require(direct.forces && direct.forces->size() == 6 &&
+                  std::abs(direct.energy - pbe0_energy.energy) < 1e-8,
+              "C++ Direct PBE0 failed complete native E+F publication");
+      for (std::size_t axis = 0; axis < 3; ++axis)
+        require(std::abs((*direct.forces)[axis] + (*direct.forces)[3 + axis]) < 2e-5,
+                "C++ Direct PBE0 force violates translation invariance");
+    } else {
+      try {
+        (void)prepared.execute(GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES);
+        throw std::runtime_error("C++ SDK admitted disabled Direct derivative inventory");
+      } catch (const generativeqc::Error& error) {
+        require(error.status() == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                "C++ DFT force request did not fail closed");
+      }
     }
-    // Only a prepared CPU DF-RKS PBE0 context can advertise these forces.
+    // A prepared CPU DF-RKS PBE0 context does not require the Direct AOT inventory.
     // This tests SDK parity with the compiler MethodIR CLI selector, which
     // exercises complete reconverged-displacement force differences in CTest.
     pbe0_descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
