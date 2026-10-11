@@ -1,0 +1,157 @@
+{
+  "schema": "generativeqc.response-contract-qualification.v1",
+  "date": "2026-10-11",
+  "scope": "source-matched upstream integration replay; not completion of issue #932",
+  "source": {
+    "commit": "ff000b4ad2edbfe21d73890ce37811c3cd412dc4",
+    "tree": "349dcb5c17726d32c82a722fe787983743783b94",
+    "integrated_remote_commit": "4a8715f357dad436f9fe60f435309d1e14ff5f2c",
+    "archive": "ignored build/issue932-response-contract/source-integrated.tar.gz",
+    "source_archive_sha256": "54e2bbec4ee6c124ccb63b537b16b92d1de5f3ce3960d5bc191c02e74ce6a604",
+    "provenance": "Frozen merge source tree before execution; later changes add retained integration evidence only. Preserve both parents and the upstream transactional problem-assignment regression."
+  },
+  "build": {
+    "cuda_architecture": "sm_120",
+    "cuda_version": "12.9.86",
+    "local_launcher": "ccache 4.5.1",
+    "remote_jit_launcher": "sccache 0.16.0",
+    "aot_shells": false,
+    "stationary_cpu_force_aot": false,
+    "stationary_cuda_force_profiles": [
+      "lda_rks",
+      "lda_uks",
+      "pbe_rks",
+      "pbe_uks"
+    ],
+    "qualification_boundary": "Reduced library configuration plus exact-source s/p stationary profiles; not full shipping/AOT-domain qualification."
+  },
+  "libraries": {
+    "cpu_sha256": "921c83e94073822bf72c7dd885cec0c4440846e9bead3528023a3bc3266d9e4d",
+    "cuda_sha256": "79806835d435c6becb8164b696f532b3b4710d90754fd2dccebce437e5a8582e",
+    "stationary_cuda_aot": {
+      "lda_rks": "8818fefe3c551f63027b310c1bb907acee907d4b1338b7f1d2f01f9e03706fee",
+      "lda_uks": "d9ce335a728ecaca05669b8b3bfb7180c7c4d9064f03037adc644894c7b86642",
+      "pbe_rks": "c11f118f3ac91985d2779906c32eed6555c67f7996cfce54569e72de022e879b",
+      "pbe_uks": "b4ad85d77b5eca5d4ea0e21a3689029a075efc8053aedb4fb763800b8caef4f6"
+    }
+  },
+  "validation": {
+    "focused_unit_and_ledger_pytest": {
+      "passed": 153,
+      "failed": 0
+    },
+    "native_cpu_ctest": {
+      "passed": 3,
+      "failed": 0
+    },
+    "native_asan_ubsan_leak_detection": "passed",
+    "local_cpu_attempt": {
+      "passed": 28,
+      "skipped": 15,
+      "deselected": 1,
+      "missing_dependency": "PySCF absent from the local interpreter; 14 independent-reference cases skipped.",
+      "resolution": "Replay the explicit suite list in the private PySCF 2.14.0 environment under Slurm job 7547."
+    },
+    "independent_cpu_oracles": {
+      "node": "node1",
+      "slurm_job_id": 7547,
+      "time_limit_seconds": 600,
+      "pyscf_version": "2.14.0",
+      "passed": 42,
+      "failed": 0,
+      "skipped": 1,
+      "skip_reason": "One semilocal method is sufficient for multi-RHS orchestration.",
+      "deselected": 1,
+      "deselected_case": "test_rks_hvp_admits_resource_bounded_domain_above_12_aos",
+      "suites": [
+        "tests/python/test_response_native_rks.py",
+        "tests/python/test_response_native_uks.py",
+        "tests/python/test_hessian_rks_directional.py"
+      ],
+      "evidence_boundary": "The explicitly listed three-suite replay; not the larger 52-test pre-integration union. The previously failed 13-AO cold-JIT gate remains unqualified."
+    },
+    "final_gpu_attempt": {
+      "node": "node1",
+      "partition": "main",
+      "gres": "gpu:5090:1",
+      "slurm_job_id": 7552,
+      "time_limit_seconds": 1800,
+      "cuda_visible_devices": "0",
+      "passed": 91,
+      "failed": 0,
+      "skipped": 0,
+      "suites": [
+        "tests/python/test_response_native_cuda.py",
+        "tests/python/test_response_block_resident_cuda.py",
+        "tests/python/test_rhf_frame_response_cuda.py"
+      ],
+      "native_lambda": {
+        "state": "passed",
+        "oracle": "independent noninteracting Lambda solution",
+        "max_solution_error": 5.20417e-18,
+        "preconditioned_iterations": 1,
+        "preconditioned_operator_actions": 2,
+        "unpreconditioned_iterations": 24,
+        "unpreconditioned_operator_actions": 48,
+        "preserved_gates": [
+          "independent physical residual",
+          "exact admitted numeric capacity",
+          "unsafe/pair-inconsistent diagonal fallback"
+        ]
+      },
+      "evidence_boundary": "Device execution and scoped scientific/lifetime/transfer assertions, not resident production cutover or matched baseline performance evidence."
+    },
+    "sphinx_warnings_as_errors": "passed",
+    "pre_commit": "passed"
+  },
+  "post_review_replay": {
+    "source_commit": "6fe3b911d52656d384fcf5f6b96d5580da42daca",
+    "source_tree": "fd2d2cc07b9e2c0496b3334f4a2e5cb69abe8c3d",
+    "source_archive": "ignored build/issue932-response-contract/source-post-review.tar.gz",
+    "source_archive_sha256": "c7caa7390c92a772ebeaa1e77c7e18619984fd1f57dfef8f8242a27dfb958107",
+    "change": "Preserve upstream callback-borrowing and source-fingerprint fixes without discarding either earlier qualification stage.",
+    "cpu_library_sha256": "80d2e32430602d063337cd9b621e293df639a24a85d385e732b96c2b31890113",
+    "cuda_library_sha256": "893918a1b41f6dd5bdd02e7c2b6da7e8c4dbccf493d7015a8937203d01307c1b",
+    "stationary_aot_artifacts": "Unchanged exact-source profile binaries/manifests; no primitive/generator change in the reviewed commit.",
+    "focused_pytest_passed": 153,
+    "native_cpu_ctest_passed": 3,
+    "native_asan_ubsan_leak_detection": "passed",
+    "cpu_oracles": {
+      "node": "node1",
+      "slurm_job_id": 7562,
+      "time_limit_seconds": 600,
+      "suites": "Same explicit three-suite list as validation.independent_cpu_oracles.",
+      "passed": 42,
+      "failed": 0,
+      "skipped": 1,
+      "deselected": 1,
+      "deselected_case": "test_rks_hvp_admits_resource_bounded_domain_above_12_aos"
+    },
+    "gpu": {
+      "node": "node1",
+      "partition": "main",
+      "gres": "gpu:5090:1",
+      "slurm_job_id": 7563,
+      "time_limit_seconds": 1800,
+      "cuda_visible_devices": "3",
+      "suites": "Same explicit three-suite list as validation.final_gpu_attempt.",
+      "passed": 91,
+      "failed": 0,
+      "skipped": 0,
+      "native_lambda": "Independent oracle, unsafe/pair-inconsistent fallback and exact admitted numeric-capacity gates passed.",
+      "max_solution_error": 5.20417e-18,
+      "preconditioned_iterations": 1,
+      "preconditioned_operator_actions": 2,
+      "unpreconditioned_iterations": 24,
+      "unpreconditioned_operator_actions": 48
+    }
+  },
+  "unfulfilled": [
+    "Production dimension-sized resident execution and right preconditioning for native response consumers.",
+    "Installed resident CPHF/UKS ownership and resident native CPKS orbital/Krylov/reconstruction.",
+    "Matched complete endpoint A/B and full cold/warm/changed, failure-isolation and two-budget qualification with actual work/transfers/fences/peak memory.",
+    "13-AO cold second-integral JIT qualification within its finite compile contract; deselection is not a passed gate."
+  ],
+  "capability_boundary": "Complete CUDA RKS molecular HVP remains unsupported under #1905; this infrastructure work does not supply or promote its missing scientific sources.",
+  "prior_attempts": "qualification.json preserves the pre-integration qualification, including failed cold-JIT attempts and the initially missing stationary CUDA AOT artifacts."
+}
