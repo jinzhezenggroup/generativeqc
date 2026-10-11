@@ -113,7 +113,7 @@ def cached_sources(
             ) as temporary:
                 folder = Path(temporary)
                 records = []
-                for index, (source, size) in enumerate(zip(sources, sizes)):
+                for index, (source, size) in enumerate(zip(sources, sizes, strict=True)):
                     path = folder / f"{index}.cu"
                     cache_source(path, source)
                     records.append({"bytes": size, "sha256": file_hash(path)})
@@ -127,13 +127,13 @@ def cached_sources(
                 )
                 try:
                     os.rename(folder, destination)
-                except OSError:
+                except OSError as error:
                     if not destination.is_dir():
                         raise
                     if load(destination) != sources:
                         raise ValueError(
                             "semantic source cache nondeterministic producer"
-                        )
+                        ) from error
         publication_seconds = perf_counter() - publication_started
     return sources, {
         "key": key,

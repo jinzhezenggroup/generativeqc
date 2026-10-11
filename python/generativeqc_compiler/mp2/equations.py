@@ -32,7 +32,10 @@ def energy_program(
     axes = tuple(
         Index(name, IndexSpace(name + "_tile", kind, n))
         for name, kind, n in zip(
-            "ijab", ("occupied", "occupied", "virtual", "virtual"), shape
+            "ijab",
+            ("occupied", "occupied", "virtual", "virtual"),
+            shape,
+            strict=True,
         )
     )
 
@@ -48,7 +51,7 @@ def energy_program(
         )
 
     g, x = tensor("g", axes), tensor("x", axes)
-    eps = [tensor("e" + name, (axis,)) for name, axis in zip("ijab", axes)]
+    eps = [tensor("e" + name, (axis,)) for name, axis in zip("ijab", axes, strict=True)]
     d = add(
         *(broadcast(e, axes, (k,)) for k, e in enumerate(eps)),
         coefficients=(1, 1, -1, -1),
@@ -107,6 +110,7 @@ def unrestricted_energy_program(
             ("occupied", "occupied", "virtual", "virtual"),
             shape,
             axis_spins,
+            strict=True,
         )
     )
 
@@ -122,7 +126,7 @@ def unrestricted_energy_program(
         )
 
     g = tensor("g", axes)
-    eps = [tensor("e" + name, (axis,)) for name, axis in zip("ijab", axes)]
+    eps = [tensor("e" + name, (axis,)) for name, axis in zip("ijab", axes, strict=True)]
     denominator = add(
         *(broadcast(e, axes, (k,)) for k, e in enumerate(eps)),
         coefficients=(1, 1, -1, -1),

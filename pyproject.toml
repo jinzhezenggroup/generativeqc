@@ -164,19 +164,16 @@ extend-select = [
   "RUF103",
   "RUF104",
   "A005",
-  # Do not silently truncate TensorIR index axes, obscure exception causes, or
-  # leave mixed boolean precedence implicit in production control flow.
+  # Keep exception translation and mixed boolean precedence explicit.
   "B904",
-  "B905",
   "RUF021",
   # Require explicit None, boolean, and type comparison semantics.
   "E711",
   "E712",
   "E721",
 ]
-# Ruff's blanket B905 fix inserts strict=False. Keep these semantic changes
-# review-only so equal-length index contracts use strict=True where appropriate.
-unfixable = ["B905", "E711", "E712", "E721"]
+# Comparison rewrites can alter overloaded numerical equality semantics.
+unfixable = ["E711", "E712", "E721"]
 # Assertions are pervasive internal/test invariants; subprocess invocation is a core compiler/tooling boundary.
 # Keep the narrower shell-injection checks active while avoiding blanket S603/S607 noise.
 ignore = ["ANN401", "S101", "S603", "S607"]
