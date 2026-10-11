@@ -123,10 +123,11 @@ void stationary_b3lyp_xc_nuclear_finite_difference() {
       const generativeqc::dft::AoBasis displaced_basis(system);
       const generativeqc::dft::MolecularGrid displaced_grid(system, grid_spec);
       if (blocks.size() == 1)
-        return generativeqc::dft::integrate_b3lyp_rks(displaced_basis, displaced_grid, blocks[0], 13)
+        return generativeqc::dft::integrate_b3lyp_rks(displaced_basis, displaced_grid, blocks[0],
+                                                      13)
             .energy;
-      return generativeqc::dft::integrate_b3lyp_uks(
-                 displaced_basis, displaced_grid, blocks[0], blocks[1], 13)
+      return generativeqc::dft::integrate_b3lyp_uks(displaced_basis, displaced_grid, blocks[0],
+                                                    blocks[1], 13)
           .energy;
     };
     require(std::abs(response.energy - energy(reference)) < 1e-9,
