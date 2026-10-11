@@ -160,6 +160,8 @@ def compare(baseline: list[dict], candidate: list[dict], oracle: dict) -> dict:
             reference = oracle["samples"][
                 "moved" if phase.startswith("moved") else "base"
             ]
+            if not math.isfinite(reference["energy"]):
+                raise ValueError("nonfinite independent oracle energy")
             errors = []
             for sample in [old_sample, new_sample]:
                 if not math.isfinite(sample["energy"]):

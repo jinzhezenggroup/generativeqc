@@ -128,6 +128,21 @@ def test_independent_oracle_rejects_common_bias() -> None:
     assert any("independent E+F" in failure for failure in report["failures"])
 
 
+@pytest.mark.parametrize("geometry", ["base", "moved"])
+@pytest.mark.parametrize("energy", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_independent_energy_cannot_hide_common_bias(
+    geometry: str, energy: float
+) -> None:
+    baseline, candidate, oracle = fixture()
+    oracle["samples"][geometry]["energy"] = energy
+    for receipt in [*baseline, *candidate]:
+        for sample in receipt["samples"]:
+            if sample["phase"].startswith("moved") == (geometry == "moved"):
+                sample["energy"] += 0.01
+    with pytest.raises(ValueError, match="nonfinite independent oracle energy"):
+        compare(baseline, candidate, oracle)
+
+
 @pytest.mark.parametrize(
     "bad", ["incomplete", "ablation", "same-provider", "two-pairs"]
 )
