@@ -1,0 +1,65 @@
+{
+  "schema": "generativeqc.lossless-json-storage-compaction.v1",
+  "original_git_revision": "637466c624c4c4c4dd4eb7c511a2c88675744325",
+  "scope": "storage encoding only; no measurement, status, tolerance or array order changes",
+  "original_byte_recovery": "git show ORIGINAL_GIT_REVISION:PATH; original hashes are verified before encoding",
+  "files": [
+    {
+      "path": "benchmarks/results/issue308-768ao-response/default-768ao.json",
+      "original_sha256": "0a7ab932cdf48f3b6e5d6929ac767a2be5950b792cbbe459fa49e223564951af",
+      "original_bytes": 214024,
+      "stored_sha256": "298c7f32588ec51b89f6fdd157608ced8cb168788b0a521b23b7e4b13ddd78ce",
+      "stored_bytes": 107784,
+      "canonical_sha256": "40e1cb34c72bd3715181b5ee1c98f1cd9feb60916780f0d84de2197a5211df69"
+    },
+    {
+      "path": "benchmarks/results/issue308-768ao-response/previous-768ao.json",
+      "original_sha256": "513e1cdcae226283a51d7722f1d672b335e8a2995757bc20a06ca233472f9842",
+      "original_bytes": 213986,
+      "stored_sha256": "8b3d9e4d45338c722ade1b8f5a52701ba4baf5983ffa3c9d290d07c4130bd634",
+      "stored_bytes": 107746,
+      "canonical_sha256": "17e209bf4405276123973ecc94c81c40b414b598aea0ab81cd672ab68f8b844e"
+    },
+    {
+      "path": "benchmarks/results/issue308-768ao-response/preparation-only-768ao.json",
+      "original_sha256": "63603bfcfd8c6de348daf290ee578bf4c53ad961fba213f755fed7d7cae0bc73",
+      "original_bytes": 213974,
+      "stored_sha256": "04591ac0ff730d2e0eb7425e5d6a8c2b5235e55855cc2a067f27e6278da18a74",
+      "stored_bytes": 107734,
+      "canonical_sha256": "4f047376fd0c169dca211673590c8c0e9d7c65b670135e991eb8b5ee8e721023"
+    },
+    {
+      "path": "benchmarks/results/scf-direct-native-rtx5090/integration.json",
+      "original_sha256": "3785fd439d8422889297b8b4d0d6fd9ab347aa79ace1af4187e120904d0b24a1",
+      "original_bytes": 212557,
+      "stored_sha256": "efee836fdcc1c429b87ccde0bc3b09dfa6740e707d71ac8149f865f80a57e8c2",
+      "stored_bytes": 107975,
+      "canonical_sha256": "c6ac7f43d2a5db2dec9b5e3f0fca9bbc45063eff036c4eb126e234e02bd2ee58"
+    },
+    {
+      "path": "benchmarks/results/scf-direct-native-rtx5090/validation.json",
+      "original_sha256": "af85685a1e73345ce5baa046faf84a86f1be88c473eb07cbb4d6b9b4d2fcdffd",
+      "original_bytes": 167238,
+      "stored_sha256": "b8b5c770d0ad1faa9a97b20eb0478a4107ca2da38fccd2e613f408c34a9363db",
+      "stored_bytes": 78057,
+      "canonical_sha256": "a08e2f76e59a199a40d0453b3b2de8abcc729d545395564223ed27988e5e2105"
+    },
+    {
+      "path": "benchmarks/results/issue206-stable-response/warm-summary.json",
+      "original_sha256": "aa10acfff00e4f6f44bce0b569bd6e90b05996f581d0b88657453f15872acfc5",
+      "original_bytes": 202268,
+      "stored_sha256": "19ec338077bb3b5c5cbfdb040fde4b3a394db890db89a7885f109a098474eca6",
+      "stored_bytes": 116966,
+      "canonical_sha256": "05dd3edd6dc31ebb509ea118ec99e186dc58e681137595b87c6ee00bf45cd8dc"
+    },
+    {
+      "path": "benchmarks/results/issue377-379-df/source-validation.json",
+      "original_sha256": "4d17816ba58e37f9498471a10de40a6a87558e981d2403c1664cadfbf4705483",
+      "original_bytes": 220035,
+      "stored_sha256": "08d58675e88ed5e291cb2b9feb0e929066f7aec52002a97d5699a724a884c569",
+      "stored_bytes": 149040,
+      "canonical_sha256": "f6ae2b1bd8df0a4f51554b9898ac3c11e15d154f20f195b2508d029329b9e67d"
+    }
+  ],
+  "saved_bytes": 668780
+}

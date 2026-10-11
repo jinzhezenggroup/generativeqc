@@ -23,7 +23,7 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
     definitions = "\n".join(
         _definition(
             class_source
-            if marker == "cudaError_t launch_direct_force_class_domains("
+            if marker.startswith("cudaError_t launch_direct_force_")
             else cooperative_source
             if marker == "cudaError_t launch_direct_order_seven_force("
             else source,
@@ -34,11 +34,12 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
             "bool cooperative_pair_derivative_available(",
             "cudaError_t launch_direct_order_seven_force(",
             "cudaError_t launch_direct_force_class_domains(",
+            "cudaError_t launch_direct_force_spatial_spd_low(",
             "cudaError_t launch_bounded_direct_shell_quartet_kernel_scaled(",
         )
     )
     production, launches = re.subn(r"<<<([^<>]+)>>>\s*\(", r"(\1, ", definitions)
-    assert launches == 6
+    assert launches == 7
     probe = tmp_path / "split.cpp"
     probe.write_text(PREFIX + production + DRIVER)
     executable = native_cxx.build_executable(
@@ -53,6 +54,7 @@ def test_materialized_split_preserves_ownership_forwarding_and_errors(
 PREFIX = r"""
 #include <algorithm>
 #include <cassert>
+#include "scf/cuda/direct_spd_force_schedule.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <tuple>
@@ -61,7 +63,7 @@ PREFIX = r"""
 #define __device__
 #include "scf/cuda/direct_force_class_pages.cuh"
 using namespace generativeqc::scf::cuda_execution;
-enum cudaError_t { cudaSuccess, cudaErrorUnknown };
+enum cudaError_t { cudaSuccess, cudaErrorUnknown, cudaErrorInvalidValue };
 using cudaStream_t = unsigned;
 struct dim3 {
   unsigned x{}, y{1}, z{1};
@@ -89,6 +91,7 @@ struct CooperativeDirectPairDerivativeRecurrence { unsigned char bytes[1537]; };
 namespace detail {
 struct BoundedDirectBlockDomain {
   unsigned identity{};
+  const std::uint64_t* prefix{};
   bool operator==(const BoundedDirectBlockDomain&) const = default;
 };
 }
@@ -102,6 +105,7 @@ struct Event {
   unsigned width{};
   std::size_t bytes{};
   bool cooperative{};
+  bool spatial_reuse{};
   bool operator==(const Event&) const = default;
 };
 std::vector<Event> events;
@@ -122,7 +126,8 @@ std::uint8_t active;
 constexpr double tolerance = 1e-13, coulomb = 1.7, exchange = -0.23;
 constexpr std::uint64_t mask = 919;
 constexpr cudaStream_t stream_id = 17;
-constexpr detail::BoundedDirectBlockDomain domain{37};
+constexpr std::uint64_t prefix_storage[1]{};
+detail::BoundedDirectBlockDomain domain{37, prefix_storage};
 
 cudaError_t record(Event event) {
   events.push_back(event);
@@ -187,6 +192,29 @@ void direct_force_class_domain_kernel(
   last_error = record({Launch,order,materialized,materialized,width,bytes,cooperative});
   cursor = 999;
 }
+template<bool Unrestricted, DirectForceOutputMode Mode>
+void direct_force_spatial_spd_low_kernel(
+    dim3 grid, dim3 block, std::size_t bytes, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell, const ShellPairDensityBounds* shell_density,
+    const std::uint32_t* pairs, const double* blocks, const double* systems,
+    const std::uint64_t* enabled_pointer, std::uint64_t enabled_mask,
+    const std::uint32_t* state, const double* schwarz_pointer, const double* density_pointer,
+    const std::uint8_t* active_pointer, double* output_pointer,
+    unsigned long long* cursor_pointer, DeviceShellClassProfileEntry* profile_pointer,
+    double j_coefficient, double k_coefficient, detail::BoundedDirectBlockDomain block_domain) {
+  assert(Unrestricted == expected_spin && expected_purpose == DirectScreeningPurpose::Force);
+  assert((Mode == DirectForceOutputMode::Separate) == expected_separate);
+  assert(batch == expected_batch && grid == dim3{7} && block == dim3{128} && stream == stream_id);
+  assert(batch.direct_maximum_shell_angular == 2 && block_domain.prefix && block_domain == domain);
+  assert(screening == tolerance && shell == &shell_bounds && shell_density == &density_bounds);
+  assert(pairs == &pair_order && blocks == &block_bounds && systems == &system_bounds);
+  assert(enabled_pointer == &mask_pointer && enabled_mask == mask && state == &class_state);
+  assert(schwarz_pointer == &schwarz && density_pointer == &density && active_pointer == &active);
+  assert(output_pointer == &output && cursor_pointer == &cursor && profile_pointer == &profile);
+  assert(j_coefficient == coulomb && k_coefficient == exchange && cursor == 0);
+  last_error = record({Launch,-5,false,false,128,bytes,false,true});
+  cursor = 999;
+}
 template<bool Unrestricted, DirectScreeningPurpose Purpose, bool Force,
          int AngularOrder = -1, int Radial = -1, bool PairDerivatives = false,
          bool CooperativeDerivatives = false, bool PureMaterializedDerivatives = false>
@@ -232,7 +260,10 @@ int main() {
         for (unsigned maximum : {0U, 1U, 2U, 3U, 255U})
           for (unsigned state_bits = 0; state_bits < 128; ++state_bits)
             for (dim3 block : {dim3{256}, dim3{128}, dim3{64}, dim3{256,2}, dim3{256,1,2}})
-              for (std::size_t requested_bytes : {0U, 1024U, 4096U}) {
+              for (std::size_t requested_bytes : {0U, 1024U, 4096U})
+                for (auto schedule : {DirectSpdForceSchedule::Incumbent, DirectSpdForceSchedule::SpatialReuse})
+                  for (bool have_prefix : {false, true}) {
+                domain.prefix = have_prefix ? prefix_storage : nullptr;
                 expected_spin = spin;
                 expected_separate = separate;
                 expected_purpose = purpose;
@@ -245,6 +276,7 @@ int main() {
                     !expected_batch.direct_coulomb_reachable && !expected_batch.direct_hermite_convolution;
                 const bool split = pair && purpose == DirectScreeningPurpose::Force && maximum == 2 && block == dim3{256};
                 const bool cooperative = split && expected_batch.direct_pair_cooperative_derivatives && expected_topology;
+                const bool spatial = cooperative && have_prefix && schedule == DirectSpdForceSchedule::SpatialReuse;
                 const bool class_domains = pair && purpose == DirectScreeningPurpose::Force && maximum == 3 &&
                     expected_batch.direct_pair_cooperative_derivatives && expected_topology && block == dim3{256};
                 const auto workspace = pair ? std::max(requested_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence)) : requested_bytes;
@@ -257,6 +289,10 @@ int main() {
                               {Reset},{Launch,5,false,false,128,requested_bytes},{Peek},
                               {Reset},{Launch,6,false,false,256,cooperative_workspace,true},{Peek},
                               {Reset},{Launch,8,true,true,256,workspace},{Peek}};
+                else if (spatial)
+                  expected = {{Launch,-5,false,false,128,requested_bytes,false,true},{Peek},{Reset},
+                              {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
+                              {Launch,8,true,true,256,workspace},{Peek}};
                 else if (cooperative)
                   expected = {{Launch,-3,false,false,128,requested_bytes},{Peek},{Reset},
                               {Launch,7,false,false,256,cooperative_workspace,true},{Peek},{Reset},
@@ -273,7 +309,7 @@ int main() {
                       spin,purpose,7,block,requested_bytes,stream_id,expected_batch,tolerance,
                       &shell_bounds,&density_bounds,&pair_order,&block_bounds,&system_bounds,
                       &mask_pointer,mask,&class_state,&schwarz,&density,&active,&output,
-                      &cursor,&profile,coulomb,exchange,separate,domain,expected_topology);
+                      &cursor,&profile,coulomb,exchange,separate,domain,expected_topology,schedule);
                   assert(error == (failed < 0 ? cudaSuccess : cudaErrorUnknown));
                   std::size_t completed = expected.size();
                   if (failed >= 0) {

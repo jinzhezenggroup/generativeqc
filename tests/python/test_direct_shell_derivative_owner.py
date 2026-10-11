@@ -36,8 +36,12 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         assert token in header
         assert token in source
     assert "launch_bounded_shell_energy_derivative(" in source
-    assert "separate_sources, shared.topology);" in source
-    assert "separate_sources, block_domain, force_topology);" in consumer
+    assert "separate_sources, shared.topology," in source
+    assert (
+        "resolve_direct_spd_force_schedule(p.spd_force_schedule, allow_spatial_default)"
+        in source
+    )
+    assert "separate_sources, block_domain, force_topology, spd_schedule);" in consumer
     assert "launch_bounded_shell_rsh_derivatives(" in source
     rsh_begin = source.index("cudaError_t execute_generated_rsh_energy_derivatives(")
     rsh_end = source.index("cudaError_t enqueue_generated_coulomb(", rsh_begin)
