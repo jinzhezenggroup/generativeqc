@@ -1160,7 +1160,7 @@
       "python_sites": [
         {
           "path": "tests/native/test_cli_dft_df.py",
-          "symbol": "NativeDftDfCliTests.test_cpu_df_pbe0_analytic_force_reconverged_finite_difference",
+          "symbol": "NativeDftDfCliTests.test_cpu_pbe0_analytic_force_reconverged_finite_difference",
           "classification": "reference-oracle"
         }
       ],
