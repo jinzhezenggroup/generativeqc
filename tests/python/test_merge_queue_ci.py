@@ -145,6 +145,8 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
         "cmake/GenerativeQCCudaImplib.cmake",
         "cmake/3rdparty/implib/**",
         "pyproject.toml",
+        "src/cli/wheel_launcher.cpp",
+        "python/generativeqc/tune_cli.py",
         "python/ci/prepare-wheel-build.sh",
         "python/ci/repair-wheel.sh",
         "src/runtime/nvidia_host_api/**",

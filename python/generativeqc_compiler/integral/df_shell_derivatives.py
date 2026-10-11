@@ -110,7 +110,7 @@ def shell_work_model(angular: typing.Any) -> typing.Any:
 
     loops = []
     for components in product(*(powers(degree) for degree in angular)):
-        degrees = tuple(sum(axis) for axis in zip(*components))
+        degrees = tuple(sum(axis) for axis in zip(*components, strict=True))
         loops.append(
             sum(
                 (degrees[axis] + 2)

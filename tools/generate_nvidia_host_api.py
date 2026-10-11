@@ -13,16 +13,13 @@ import json
 import re
 import subprocess
 import sys
+from bisect import bisect_left
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ROOT / "src/runtime/nvidia_host_api/generativeqc_nvidia_host_functions.h"
-API = re.compile(
-    r"\b(cublas(?!Lt)[A-Z]\w*|cusolver(?:Dn|Get)[A-Z]\w*)"
-    r"(?:\s|/\*.*?\*/|//[^\n]*)*\(",
-    re.DOTALL,
-)
+API = re.compile(r"\b(cublas(?!Lt)[A-Z]\w*|cusolver(?:Dn|Get)[A-Z]\w*)\b")
 # Generated declarations must be live source, not examples or disabled comments.
 NON_CODE = re.compile(
     r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|/\*.*?\*/|//[^\n]*',
@@ -37,6 +34,45 @@ ALIAS = re.compile(
     re.MULTILINE,
 )
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cu", ".cuh", ".h", ".hpp", ".py"}
+
+
+def called_apis(source: str) -> set[str]:
+    """Find every call candidate with bounded, memoized comment traversal."""
+    # Candidates remain independent: an API-looking name inside comment text
+    # must not consume a later real call. Index delimiter ends so overlapping
+    # candidate suffixes cannot repeatedly search an unterminated comment.
+    newlines = [match.start() for match in re.finditer("\n", source)]
+    block_ends = [match.start() for match in re.finditer(r"\*/", source)]
+    suffix_ends: dict[int, int] = {}
+
+    def skip_trivia(position: int) -> int:
+        visited: list[int] = []
+        while position not in suffix_ends:
+            visited.append(position)
+            if position >= len(source):
+                break
+            if source[position].isspace():
+                position += 1
+            elif source.startswith("//", position):
+                index = bisect_left(newlines, position + 2)
+                position = newlines[index] + 1 if index < len(newlines) else len(source)
+            elif source.startswith("/*", position):
+                index = bisect_left(block_ends, position + 2)
+                position = (
+                    block_ends[index] + 2 if index < len(block_ends) else len(source)
+                )
+            else:
+                break
+        end = suffix_ends.get(position, position)
+        for start in visited:
+            suffix_ends[start] = end
+        return end
+
+    return {
+        match.group(1)
+        for match in API.finditer(source)
+        if source.startswith("(", skip_trivia(match.end()))
+    }
 
 
 def project_uses(root: Path) -> set[str]:
@@ -55,7 +91,7 @@ def project_uses(root: Path) -> set[str]:
             rel = path.relative_to(root).as_posix()
             if rel.startswith(("src/xtb/", "src/runtime/nvidia_host_api/")):
                 continue
-            used.update(API.findall(path.read_text(encoding="utf-8", errors="replace")))
+            used.update(called_apis(path.read_text(encoding="utf-8", errors="replace")))
     return used
 
 

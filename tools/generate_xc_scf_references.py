@@ -84,7 +84,7 @@ def energy(pbe: typing.Any, inputs: typing.Any) -> typing.Any:
             return cutoff ** (mp.mpf(2) / 3) * (14 * t - 7 * t**2 + 2 * t**3) / 9
 
         phi = (spin_power(up) + spin_power(down)) / 2
-        sigma = sum((x + y) ** 2 for x, y in zip(ga, gb))
+        sigma = sum((x + y) ** 2 for x, y in zip(ga, gb, strict=True))
         t2 = sigma * n ** (-mp.mpf(8) / 3) / (16 * 2 ** (mp.mpf(2) / 3) * phi**2 * rs)
         aa = beta / (gamma * mp.expm1(-eps / (gamma * phi**3)))
         f1 = t2 + aa * t2**2

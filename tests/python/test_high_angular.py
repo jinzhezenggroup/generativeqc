@@ -147,7 +147,9 @@ def test_g_contracted_raw_blocks_and_spherical_order(
             ((0, n - 1, 0, n - 1), (2, 1, 2, 1)),
             ((0, 0, 0, 0), (2, 2, 2, 2)),
         ]:
-            expected = eri[tuple(slice(b, b + s) for b, s in zip(begin, shape))]
+            expected = eri[
+                tuple(slice(b, b + s) for b, s in zip(begin, shape, strict=True))
+            ]
             np.testing.assert_allclose(
                 source._read("four_center_eri", begin, shape), expected, atol=3e-11
             )
@@ -614,10 +616,10 @@ def _libcint_raw_gsss(
     angular = (4, 0, 0, 0)
     labels = [f"H{i}" for i in range(4)]
     mol = gto.M(
-        atom=list(zip(labels, centers)),
+        atom=list(zip(labels, centers, strict=True)),
         basis={
             label: [[value, [exponent, 1.0]]]
-            for label, value, exponent in zip(labels, angular, exponents)
+            for label, value, exponent in zip(labels, angular, exponents, strict=True)
         },
         unit="Bohr",
         cart=True,
@@ -626,7 +628,7 @@ def _libcint_raw_gsss(
     from generativeqc_compiler.integral.shell_spec import cartesian_components
 
     normalization = []
-    for slot, (value, exponent) in enumerate(zip(angular, exponents)):
+    for slot, (value, exponent) in enumerate(zip(angular, exponents, strict=True)):
         raw_overlap = []
         for component in cartesian_components(value):
             powers = tuple(component.count(axis) for axis in "xyz")

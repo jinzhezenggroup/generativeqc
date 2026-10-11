@@ -136,7 +136,7 @@ def test_ecp_complete_cuda_gradient_analytic_fd_and_live_owner(
             for sign in (1, -1):
                 moved = [
                     (a, np.asarray(r) + sign * step * d)
-                    for (a, r), d in zip(atoms, direction)
+                    for (a, r), d in zip(atoms, direction, strict=True)
                 ]
                 energies.append(
                     calc.singlepoint(

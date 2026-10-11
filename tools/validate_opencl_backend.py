@@ -103,7 +103,10 @@ def integral_fixture() -> typing.Any:
                 "inverse_two_p": 0.5 / a,
                 "inverse_two_q": 0.5 / b,
                 "rho": rho,
-                **{f"difference_{axis}": x for axis, x in zip("xyz", difference)},
+                **{
+                    f"difference_{axis}": x
+                    for axis, x in zip("xyz", difference, strict=True)
+                },
                 **{
                     f"boys_{n}": x
                     for n, x in enumerate(

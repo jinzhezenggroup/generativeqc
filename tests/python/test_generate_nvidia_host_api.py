@@ -164,3 +164,57 @@ def test_sdk_rejects_unrepresentable_function_abi(
     monkeypatch.setattr(codegen, "run_clang", lambda *args, **kwargs: json.dumps(node))
     with pytest.raises(ValueError, match=message):
         codegen.sdk_functions("clang++", [], "cublas_v2.h")
+
+
+@pytest.mark.parametrize("kind", ["line", "block", "closed_blocks", "api_candidates"])
+def test_comment_scanning_does_not_backtrack(kind: str) -> None:
+    """Keep pathological comment runs bounded even when no call follows."""
+    import subprocess
+    import sys
+
+    # Isolate the regression so a return to the old exponential expression
+    # cannot hang a whole CI worker. It exceeded two seconds at 20 repeats.
+    code = r"""
+import sys
+from tools.generate_nvidia_host_api import called_apis
+kind = sys.argv[1]
+comments = {
+    "line": "//" * 20000 + "\n;",
+    "block": "/*" + "*//*" * 20000 + ";",
+    "closed_blocks": "/**/" * 20000 + ";",
+    "api_candidates": "cublasNoise /* " * 20000,
+}[kind]
+assert called_apis("cublasMissing " + comments) == set()
+assert called_apis("cublasPresent " + "/**/" * 20000 + "()") == {"cublasPresent"}
+assert called_apis("cublasFirst/**/(); cusolverDnSecond // why\n (); cublasLast();") == {
+    "cublasFirst", "cusolverDnSecond", "cublasLast"
+}
+"""
+    subprocess.run(
+        [sys.executable, "-c", code, kind],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "// cublasDgemm /* example separator\n",
+        "/* cublasDgemm // example separator */ ",
+        'const char* example = "cublasDgemm /*";\n',
+    ],
+)
+def test_comment_examples_cannot_hide_later_calls(tmp_path: Path, prefix: str) -> None:
+    consumer = tmp_path / "src/consumer.cu"
+    consumer.parent.mkdir()
+    consumer.write_text(prefix + "void f() { cublasNewThing(); }\n")
+    header = tmp_path / "functions.h"
+    header.write_text("")
+    with pytest.raises(ValueError, match="cublasNewThing"):
+        codegen.check_usage(tmp_path, header)
+    header.write_text("cublasStatus_t cublasNewThing(void);")
+    codegen.check_usage(tmp_path, header)

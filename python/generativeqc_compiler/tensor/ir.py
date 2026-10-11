@@ -201,10 +201,10 @@ def _einsum_domains(
     if len(labels) != len(inputs):
         raise ValueError("einsum requires one label list per operand")
     domains = {}
-    for node, names in zip(inputs, labels):
+    for node, names in zip(inputs, labels, strict=True):
         if len(names) != len(node.spec.indices):
             raise ValueError("einsum label rank does not match operand")
-        for name, index in zip(names, node.spec.indices):
+        for name, index in zip(names, node.spec.indices, strict=True):
             if type(name) is not int or name < 0:
                 raise ValueError("einsum labels must be canonical nonnegative integers")
             if name in domains and domains[name].domain != index.domain:
@@ -461,7 +461,7 @@ def _infer(
         if len(a["ranges"]) != len(base.indices):
             raise ValueError("slice requires one half-open range per axis")
         indices = []
-        for index, bounds in zip(base.indices, a["ranges"]):
+        for index, bounds in zip(base.indices, a["ranges"], strict=True):
             if (
                 len(bounds) != 2
                 or any(type(i) is not int for i in bounds)
@@ -538,7 +538,7 @@ def _infer(
         axes = _axes(a["axes"], len(declared.indices))
         if len(axes) != len(base.indices):
             raise ValueError("broadcast maps every input axis to one output axis")
-        for source, axis in zip(base.indices, axes):
+        for source, axis in zip(base.indices, axes, strict=True):
             target = declared.indices[axis]
             if source.domain != target.domain:
                 raise ValueError(

@@ -18,6 +18,10 @@ on:
       - "cmake/GenerativeQCCudaImplib.cmake"
       - "cmake/3rdparty/implib/**"
       - "pyproject.toml"
+      # Wheel-specific native launcher and explicit tuner packaging changes.
+      # Avoid triggering the expensive CUDA wheel for every CLI/CMake edit.
+      - "src/cli/wheel_launcher.cpp"
+      - "python/generativeqc/tune_cli.py"
       - "python/ci/prepare-wheel-build.sh"
       - "python/ci/repair-wheel.sh"
       - "src/runtime/nvidia_host_api/**"
@@ -140,6 +144,15 @@ jobs:
                   for name in names
                   if "generativeqc" in name and name.endswith((".so", ".dll", ".dylib"))
               )
+              # The wheel installs a native PATH command, not a Python
+              # console-script shim; the full executable stays by the DSO.
+              scripts = sorted(
+                  name for name in names
+                  if name.endswith(".data/scripts/generativeqc")
+              )
+              assert len(scripts) == 1, scripts
+              assert archive.read(scripts[0]).startswith(b"\x7fELF"), scripts
+              assert archive.read("generativeqc/bin/generativeqc").startswith(b"\x7fELF")
               for header in ("generativeqc.h", "generated_method_ids.h"):
                   source = pathlib.Path("include/generativeqc") / header
                   installed = f"generativeqc_compiler/assets/include/generativeqc/{header}"
@@ -182,7 +195,7 @@ jobs:
     name: Pass building wheels
     timeout-minutes: 5
     needs: [build_wheels]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     if: always()
     steps:
       - name: Decide whether the wheel build succeeded or failed

@@ -1323,7 +1323,7 @@ jobs:
     name: Pass CI checks
     timeout-minutes: 5
     needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}
     steps:
       - name: Accept an orphaned merge-group run
