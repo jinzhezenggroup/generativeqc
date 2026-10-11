@@ -5,6 +5,9 @@ These are source/selection tests, not real CUDA or endpoint profitability claims
 
 from __future__ import annotations
 
+from hashlib import sha256
+from typing import TYPE_CHECKING
+
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.specialization import (
@@ -26,11 +29,16 @@ from generativeqc_compiler.tensor.structured_routes import (
     structured_cuda_routes,
 )
 
-SOURCE = "test-candidate-only-source-identity"
+if TYPE_CHECKING:
+    from generativeqc_compiler.tensor.cuda_plan import TensorPlan
+    from generativeqc_compiler.tensor.ir import Node
+    from generativeqc_compiler.tensor.structured_routes import StructuredRoute
+
+SOURCE = sha256(b"test-candidate-only-source-identity").hexdigest()
 
 
 def _program(expression: str, sizes: dict[str, int]) -> Program:
-    left, right = expression.split("->")
+    left, _right = expression.split("->")
     spaces = {label: IndexSpace(label, "batch", size) for label, size in sizes.items()}
     operands = [
         input_tensor(
@@ -48,7 +56,7 @@ def _program(expression: str, sizes: dict[str, int]) -> Program:
     return Program({"result": einsum(expression, *operands)})
 
 
-def _routes(program: Program):
+def _routes(program: Program) -> tuple[TensorPlan, tuple[StructuredRoute, ...]]:
     plan = plan_cuda(
         program,
         cuda_target_info("sm_80"),
@@ -106,13 +114,39 @@ def test_shared_coefficient_gram_is_recognized_without_rewriting_science() -> No
     assert any(route.family == "gram" for route in routes)
 
 
+@pytest.mark.parametrize(
+    ("equation", "rank", "family"),
+    [
+        ("ij,jk->ik", 2, "gemm"),
+        ("ki,kj->ij", 2, "gram"),
+        ("bik,bjk->bij", 3, "gram"),
+        ("ikb,bjk->bij", 3, "gemm"),
+        ("ijk,lmk->ijlm", 3, "gram"),
+        ("ijk,mlk->ijlm", 3, "gemm"),
+    ],
+)
+def test_shared_operand_requires_matching_gram_axes(
+    equation: str, rank: int, family: str
+) -> None:
+    space = IndexSpace("shared", "ao", 3)
+    value = input_tensor(
+        "value",
+        TensorSpec(
+            tuple(Index(f"axis_{axis}", space) for axis in range(rank)), role="input"
+        ),
+    )
+    program = Program({"out": einsum(equation, value, value)})
+    _, routes = _routes(program)
+    assert [route.family for route in routes] == [family]
+
+
 def test_matrix_chain_keeps_both_ordered_binary_operations() -> None:
     spaces = {
         label: IndexSpace(label, "batch", size)
         for label, size in {"i": 3, "j": 5, "k": 4, "l": 2}.items()
     }
 
-    def matrix(name: str, labels: str):
+    def matrix(name: str, labels: str) -> Node:
         return input_tensor(
             name,
             TensorSpec(

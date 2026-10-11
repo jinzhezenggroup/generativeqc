@@ -14,7 +14,6 @@ rounding, intermediate storage or publication/failure semantics.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -43,6 +42,8 @@ from .symmetric_rank_k import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .cuda_plan import TensorPlan
     from .ir import Node
 
@@ -75,8 +76,16 @@ def _family(node: Node, contract: GemmContract) -> str:
         and contract.n_labels
         and contract.k_labels
         and contract.m == contract.n
+        and len(contract.m_labels) == len(contract.n_labels)
     ):
-        return "gram"
+        # Equal dimensions and one shared node do not prove a Gram: A @ A
+        # is generally nonsymmetric. Every reduction/batch axis must occupy
+        # the same input position, with corresponding free axes relabeled.
+        renamed = dict(zip(contract.m_labels, contract.n_labels, strict=True))
+        if tuple(renamed.get(label, label) for label in contract.a_labels) == (
+            contract.b_labels
+        ):
+            return "gram"
     if contract.m_labels and contract.n_labels:
         return "gemm"
     if contract.m_labels or contract.n_labels:
