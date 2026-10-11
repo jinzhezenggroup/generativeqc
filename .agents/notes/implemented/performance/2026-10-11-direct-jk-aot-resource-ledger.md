@@ -262,5 +262,9 @@ that path and passes the resulting launcher object through the CUDA adapter,
 instead of independently applying the normal sccache-first selection policy.
 The launcher remains execution provenance and does not become scientific source
 identity, while its implementation hash and retained receipt prevent an old
-execution path from replaying silently. This typed-context change requires a
-second canonical record run before gate mode can be restored again.
+execution path from replaying silently. Canonical record run 38145917924 at
+`bc272ba4d` used the CMake-recorded `/usr/local/bin/ccache` 4.14 launcher on a
+cache miss and retained passing before/after statistics. Its candidate preserved
+the preprocessed identity, complete 86-kernel inventory, and every resource row;
+only the typed `host_compiler=nvcc-default` field was added. That candidate is
+installed and gate mode is restored for a final exact-head run.

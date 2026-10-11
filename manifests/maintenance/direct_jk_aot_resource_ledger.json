@@ -8,6 +8,7 @@
       "GENERATIVEQC_HAS_CUDA=1"
     ],
     "fast_compile": false,
+    "host_compiler": "nvcc-default",
     "optimization": "-O3",
     "ptxas_verbose": true,
     "split_compile_threads": 1,
