@@ -169,6 +169,27 @@ def test_optional_matrix_refusal_keeps_original_fp64_actions(probe: typing.Any) 
         np.testing.assert_array_equal(candidate, expected)
 
 
+@pytest.mark.parametrize("requested", [False, True])
+def test_unused_warmup_controls_preserve_fp64_admission(
+    probe: typing.Any, requested: bool
+) -> None:
+    """Strict callers ignore unused mixed controls; opt-in callers validate them."""
+    _, _, arrays = case(2, 3, q=5)
+    status, actual, values, _, error = run(
+        probe,
+        arrays,
+        mixed_precision=requested,
+        invalid_mixed_controls=True,
+        primal_matrix=True,
+    )
+    if requested:
+        assert status != 0 and "invalid RCCSD Lambda tolerance/budget" in error
+        assert all(np.isnan(result).all() for result in actual)
+    else:
+        assert status == 0, error
+        assert max(values[1:]) < 1e-9
+
+
 def test_nonfinite_mixed_action_cannot_publish_or_retry_strict(
     probe: typing.Any,
 ) -> None:

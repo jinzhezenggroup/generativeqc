@@ -933,6 +933,7 @@
       "evidence": [
         "docs/developer/df_ccsdt.md",
         ".agents/notes/implemented/performance/2026-10-11-df-lambda-mixed-warmup.md",
+        "benchmarks/results/df-lambda-mixed-warmup-20261011/publication.json",
         "tests/python/test_df_lambda_mixed_precision.py",
         "tests/python/test_df_triples_mixed_endpoint.py"
       ]

@@ -207,6 +207,7 @@ def run(
     overflow_audit: bool = False,
     mixed_precision: bool = False,
     mixed_limit_two: bool = False,
+    invalid_mixed_controls: bool = False,
     budget: int = 1 << 30,
     device_budget: int = np.iinfo(np.uintp).max,
 ) -> tuple:
@@ -253,7 +254,8 @@ def run(
         + 1024 * int(primal_matrix)
         + 2048 * int(native_defaults)
         + 4096 * int(mixed_precision)
-        + 8192 * int(mixed_limit_two),
+        + 8192 * int(mixed_limit_two)
+        + 16384 * int(invalid_mixed_controls),
         budget,
         device_budget,
         ptrs,

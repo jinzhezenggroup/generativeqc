@@ -66,6 +66,24 @@ exhaustion, exact optional-storage refusal and nonfinite nonpublication.
 Matched endpoint measurements and final-source sanitizer receipts belong in
 `benchmarks/results/`, not profiler timings.
 
+The clean frozen candidate `04cdb116bcd377788ace975e65fd08f02becf4c0` receives
+64 passing targeted tests, 167 CPU passes/27 expected skips and zero water
+memcheck errors/leaked bytes in Slurm job 7560. One complete cold triplet observes
+E+F 293.210665477 → 289.226577167 seconds and Lambda 78.710987019 → 74.766767397
+seconds versus the prior CCSD-only mixed PR. FP64 Q16 alone takes
+305.645875821/91.193064252 seconds for E+F/Lambda, respectively. Both Q16
+consumers own 6,212,893,888 Lambda device bytes versus Q32's 10,324,999,872;
+the storage reduction is tiling, not FP32 arithmetic itself. Whole-endpoint
+sampled peak remains 27,547 MiB. Total Lambda actions increase 22 → 25.
+
+This is exploratory timing, not a repeated/significant performance certificate.
+The campaign stops after one triplet to preserve remote master integration;
+the user then requests no repeated validation. Later integration and the
+mixed-only option admission guard are not requalified by earlier receipts.
+Keep that version boundary explicit and leave the experiment default-off.
+Full values, oracle errors and source identities are retained in
+[the numerical publication](../../../../benchmarks/results/df-lambda-mixed-warmup-20261011/README.md).
+
 ## Consequences and revisit conditions
 
 Warmup can add iterations, conversions and another exact initial action; faster
