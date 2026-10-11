@@ -27,9 +27,13 @@ def _dynamic_dependencies(executable: Path) -> list[str]:
     return sorted(set(re.findall(r"Shared library: \[([^\]]+)\]", dynamic)))
 
 
-def _copy_runtime_tree(prefix: Path, staging: Path) -> None:
+def _copy_runtime_tree(prefix: Path, staging: Path) -> list[str]:
     executable = prefix / "bin" / "generativeqc"
-    if not executable.is_file() or executable.open("rb").read(4) != b"\x7fELF":
+    if not executable.is_file():
+        raise ValueError(f"Expected an installed Linux ELF CLI at {executable}")
+    with executable.open("rb") as binary:
+        elf_magic = binary.read(4)
+    if elf_magic != b"\x7fELF":
         raise ValueError(f"Expected an installed Linux ELF CLI at {executable}")
     dependencies = _dynamic_dependencies(executable)
     if any(name.startswith("libgenerativeqc.so") for name in dependencies):
@@ -47,6 +51,8 @@ def _copy_runtime_tree(prefix: Path, staging: Path) -> None:
                 continue
             if ".so" not in source.name and source.suffix != ".json":
                 continue
+            if source.name.startswith("libgenerativeqc.so"):
+                raise ValueError("Static-core distribution must not ship libgenerativeqc.so")
             rel = source.relative_to(prefix)
             target = staging / rel
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +76,9 @@ def _archive_tree(source: Path, destination: Path, epoch: int) -> None:
             with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT) as archive:
                 entries = [source, *sorted(source.rglob("*"))]
                 for path in entries:
-                    info = archive.gettarinfo(str(path), arcname=str(path.relative_to(source.parent)))
+                    info = archive.gettarinfo(
+                        str(path), arcname=str(path.relative_to(source.parent))
+                    )
                     info.uid = info.gid = 0
                     info.uname = info.gname = ""
                     info.mtime = epoch
@@ -147,7 +155,11 @@ def package_native_cli(
 
     archive_path = output_dir / f"{basename}.tar.gz"
     _archive_tree(staging, archive_path, source_date_epoch)
-    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    checksum = hashlib.sha256()
+    with archive_path.open("rb") as archive_stream:
+        for chunk in iter(lambda: archive_stream.read(1024 * 1024), b""):
+            checksum.update(chunk)
+    digest = checksum.hexdigest()
     (output_dir / "SHA256SUMS").write_text(
         f"{digest}  {archive_path.name}\n", encoding="utf-8"
     )
