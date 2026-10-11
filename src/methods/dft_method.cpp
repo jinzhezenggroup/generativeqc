@@ -17,6 +17,8 @@
 
 #include "api/handles.hpp"
 #include "dft/ao_grid.hpp"
+#include "dft/cuda_ks_final_validation_policy.hpp"
+#include "dft/cuda_spd_force_policy.hpp"
 #include "dft/dispersion/d4_runtime.hpp"
 #include "dft/grid.hpp"
 #include "dft/mixed_rsh_df_sources.hpp"
@@ -1489,6 +1491,33 @@ class KsPreparedCalculation final : public PreparedCalculation {
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
+  /** Only this method owner can authenticate the full PBE0 composition.
+   * Generic/HF/RSH derivative consumers do not infer it from a K coefficient. */
+  bool qualified_spatial_force_default() const {
+    const auto& strategy = fock_.strategy();
+    const auto& spec = strategy.spec;
+    const bool direct_pbe0 =
+        dft::pbe0_rks_final_validation_composition(
+            execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe,
+            spec.exchange.coefficient, options_.semilocal_exchange_scale,
+            options_.semilocal_correlation_scale) &&
+        strategy.backend == scf::FockBackend::Cuda && spec.derivative_order == 0 &&
+        spec.coulomb.present && spec.coulomb.coefficient == 1.0 &&
+        spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        spec.coulomb.op == scf::FockOperator::FullRange && spec.exchange.present &&
+        spec.exchange.approximation == scf::FockApproximation::Exact &&
+        spec.exchange.op == scf::FockOperator::FullRange &&
+        options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE &&
+        !execution_plan_.range_exchange && !range_strategy_ &&
+        !execution_plan_.nonlocal_correlation && !execution_plan_.d4_correction &&
+        system_.ecp_terms.empty() &&
+        std::none_of(system_.atoms.begin(), system_.atoms.end(),
+                     [](const auto& atom) { return atom.ecp_core != 0; });
+    return dft::spatial_spd_force_default_eligible(
+        fock_.diagnostic().nbf, execution_plan_.spin_channels, direct_pbe0,
+        options_.precision_mode == GENERATIVEQC_PRECISION_FP64);
+  }
+
   generativeqc_status cuda_full_range_integral_derivatives(
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::string& detail) {
@@ -1514,7 +1543,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
     status = scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
         fock_, resident_density.alpha, resident_density.beta, resident_density.matrix_elements,
-        output, detail);
+        output, detail, true, qualified_spatial_force_default());
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       output.clear();
       return status;
@@ -1865,7 +1894,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                          resident_density.matrix_elements, value, detail)
                    : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
                          fock_, resident_density.alpha, resident_density.beta,
-                         resident_density.matrix_elements, value, detail, !combined_two_electron);
+                         resident_density.matrix_elements, value, detail, !combined_two_electron,
+                         qualified_spatial_force_default());
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       candidate.insert(candidate.end(), value.begin(), value.end());
     }

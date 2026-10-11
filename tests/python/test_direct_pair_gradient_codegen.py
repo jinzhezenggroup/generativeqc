@@ -22,7 +22,11 @@ def test_high_order_pair_gradient_header_is_compiler_owned() -> None:
     assert "__device__ inline void primitive_eri_order456_gradient(" in source
     assert "HighOrderCoulombWorkspace" in source
     assert "axis_wick_multiplicity" in source
-    assert "high_order_coulomb<CoulombOrder>" in source
+    assert "high_order_coulomb<AngularOrder + 1U>" in source
+    assert "GradientSpatialCoulombValues<AngularOrder, SpatialReuse>" in source
+    assert (
+        "spatial_values.value(derivative_state, rho, coulomb_workspace, boys)" in source
+    )
     assert "direct_native_high_order_coulomb.cuh" not in source
     assert "gradient[3][coordinate] =" in source
 

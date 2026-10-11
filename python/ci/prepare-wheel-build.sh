@@ -5,6 +5,9 @@ project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 export CCACHE_DIR="${CCACHE_DIR:-$project_dir/build/ccache}"
 bash "$project_dir/python/ci/install-ccache.sh"
 
+# ZIP validation/hashing is native runtime work; wheel repair retains its DSOs.
+dnf install -y openssl-devel libarchive-devel
+
 # Keep the reviewed LP64 provider alive beyond PEP 517's temporary build
 # environment. auditwheel must resolve the shim's DT_NEEDED edge during repair.
 provider_env="$project_dir/build/wheel-openblas-provider"
