@@ -179,7 +179,7 @@ jobs:
     name: Pass building wheels
     timeout-minutes: 5
     needs: [build_wheels]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     if: always()
     steps:
       - name: Decide whether the wheel build succeeded or failed
