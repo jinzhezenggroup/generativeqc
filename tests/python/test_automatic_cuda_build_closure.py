@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -56,6 +57,97 @@ def test_grid_closure_guard_rejects_each_missing_cosx_dependency(removed: str) -
     block = _target_block(source, "generativeqc_cosx_cuda_tests")
     with pytest.raises(AssertionError):
         _assert_grid_registry_closure(source.replace(block, block.replace(removed, "")))
+
+
+@pytest.mark.parametrize("wheel", (False, True), ids=("native", "wheel"))
+@pytest.mark.parametrize("enabled", (False, True), ids=("off", "on"))
+def test_registry_object_keeps_wheel_headers_separate_from_provider_linkage(
+    tmp_path: Path, wheel: bool, enabled: bool
+) -> None:
+    """Configure the actual object wiring without a CUDA toolkit or GPU build."""
+    cmake = shutil.which("cmake")
+    launcher = shutil.which("sccache") or shutil.which("ccache")
+    if cmake is None or launcher is None:
+        pytest.skip("object configuration probe requires CMake and a compiler cache")
+    subprocess.run([launcher, "--version"], check=True, capture_output=True, timeout=10)
+    source = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text()
+    start = source.index("  # Reuse the exact AOT objects")
+    end = source.index("  generativeqc_register_generated_sources(", start)
+    wiring = source[start:end]
+    registry = tmp_path / "registry"
+    registry.mkdir()
+    toolkit = tmp_path / "toolkit-headers"
+    toolkit.mkdir()
+    (toolkit / "cuda_runtime_api.h").write_text("using cudaStream_t = void*;\n")
+    (registry / "registry.cpp").write_text("#include <cuda_runtime_api.h>\n")
+    sources = [registry / "registry.cpp"]
+    if enabled:
+        for index in range(32):
+            shard = registry / f"shard_{index}.cu"
+            shard.write_text("// inert configuration probe\n")
+            sources.append(shard)
+    (tmp_path / "dummy.cpp").write_text("int fixture;\n")
+    source_list = " ".join(f'"{path}"' for path in sources)
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(AutomaticCudaObject LANGUAGES CXX)\n"
+        "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n"
+        f'set(PROJECT_SOURCE_DIR "{ROOT}")\n'
+        f"set(GENERATIVEQC_PYTHON_WHEEL {'ON' if wheel else 'OFF'})\n"
+        f'set(GENERATIVEQC_CUDA_TOOLKIT_INCLUDE_DIRS "{toolkit}")\n'
+        f'set(GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_DIRECTORY "{registry}")\n'
+        f"set(GENERATIVEQC_LIBXC_SEMILOCAL_CUDA_SOURCES {source_list})\n"
+        # CUDA shards only exercise target wiring here; never invoke NVCC.
+        f"set_source_files_properties({source_list} PROPERTIES LANGUAGE CXX)\n"
+        "set(_generativeqc_cuda_compile_architectures 120)\n"
+        "set(target generativeqc)\n"
+        "add_library(generativeqc STATIC dummy.cpp)\n"
+        "add_custom_target(generativeqc_libxc_semilocal_cuda_codegen)\n"
+        "if(GENERATIVEQC_PYTHON_WHEEL)\n"
+        "  set(CMAKE_CUDA_RUNTIME_LIBRARY None)\n"
+        "endif()\n"
+        "if(NOT GENERATIVEQC_PYTHON_WHEEL)\n"
+        "  add_library(CUDA::cudart INTERFACE IMPORTED)\n"
+        "  set_target_properties(CUDA::cudart PROPERTIES\n"
+        f'    INTERFACE_INCLUDE_DIRECTORIES "{toolkit}")\n'
+        "endif()\n"
+        f'include("{ROOT / "cmake/GenerativeQCCuda.cmake"}")\n'
+        f'include("{ROOT / "cmake/GenerativeQCCudaImplib.cmake"}")\n'
+        + wiring
+        + "get_target_property(links generativeqc_libxc_semilocal_cuda LINK_LIBRARIES)\n"
+        'file(WRITE "${CMAKE_BINARY_DIR}/links.txt" "${links}")\n'
+        "get_target_property(runtime generativeqc_libxc_semilocal_cuda CUDA_RUNTIME_LIBRARY)\n"
+        'file(WRITE "${CMAKE_BINARY_DIR}/runtime.txt" "${runtime}")\n'
+    )
+    build = tmp_path / "build"
+    result = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(tmp_path),
+            "-B",
+            str(build),
+            f"-DCMAKE_CXX_COMPILER_LAUNCHER={launcher}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    links = (build / "links.txt").read_text()
+    assert ("CUDA::cudart" in links) is not wheel
+    assert ("generativeqc_cuda_wheel_imports" in links) is wheel
+    assert (build / "runtime.txt").read_text() == (
+        "None" if wheel else "runtime-NOTFOUND"
+    )
+    commands = json.loads((build / "compile_commands.json").read_text())
+    registry_commands = [row for row in commands if row["file"] == str(sources[0])]
+    assert len(registry_commands) == 1
+    assert str(toolkit) in registry_commands[0]["command"]
+    shim = str(ROOT / "src/runtime/nvidia_host_api")
+    assert (shim in registry_commands[0]["command"]) is wheel
+    assert len(commands) == (34 if enabled else 2)
 
 
 _SCIENCE_INPUTS = (
