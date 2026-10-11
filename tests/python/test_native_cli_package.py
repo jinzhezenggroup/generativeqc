@@ -46,12 +46,7 @@ class NativeCliPackageTests(unittest.TestCase):
     def test_package_contains_one_cli_not_static_archives(self) -> None:
         libs = self.prefix / "lib"
         libs.mkdir()
-        (libs / "libgenerativeqc.a").write_text("do not ship")
-        (libs / "libgenerativeqc_stationary_sm_120_spd.so").write_text("AOT plugin")
-        (libs / "generativeqc_stationary_sm_120_spd.json").write_text("{}")
-        link = libs / "libgenerativeqc_stationary_sm_120.so"
-        link.symlink_to("libgenerativeqc_stationary_sm_120_spd.so")
-
+        (libs / "libgenerativeqc.a").write_text("static archive should not ship")
         archive = self.build("dist", release=True)
         with tarfile.open(archive, "r:gz") as bundle:
             names = set(bundle.getnames())
@@ -59,24 +54,29 @@ class NativeCliPackageTests(unittest.TestCase):
             self.assertIn(f"{root}/bin/generativeqc", names)
             self.assertIn(f"{root}/LICENSE", names)
             self.assertIn(f"{root}/LICENSES/dependency.txt", names)
-            self.assertIn(f"{root}/lib/libgenerativeqc_stationary_sm_120_spd.so", names)
-            self.assertIn(f"{root}/lib/generativeqc_stationary_sm_120_spd.json", names)
-            self.assertIn(f"{root}/lib/libgenerativeqc_stationary_sm_120.so", names)
             self.assertNotIn(f"{root}/lib/libgenerativeqc.a", names)
-            self.assertTrue(
-                bundle.getmember(
-                    f"{root}/lib/libgenerativeqc_stationary_sm_120.so"
-                ).issym()
+            self.assertFalse(any(".so" in name for name in names))
+            self.assertEqual(
+                [name for name in names if name.endswith("/bin/generativeqc")],
+                [f"{root}/bin/generativeqc"],
             )
             metadata = json.load(bundle.extractfile(f"{root}/build-metadata.json"))
             self.assertEqual(metadata["core_linkage"], "static")
             self.assertFalse(metadata["generativeqc_shared_core_required"])
+            self.assertFalse(metadata["separately_packaged_aot_plugins"])
 
-        name = archive.name
         checksum = (archive.parent / "SHA256SUMS").read_text()
         self.assertEqual(
-            checksum, f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {name}\n"
+            checksum,
+            f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n",
         )
+
+    def test_rejects_unexpected_shared_aot_plugin(self) -> None:
+        libs = self.prefix / "lib"
+        libs.mkdir()
+        (libs / "libgenerativeqc_stationary_pbe_rks.so").write_bytes(b"ELF fixture")
+        with self.assertRaisesRegex(ValueError, "unexpected shared object"):
+            self.build("unexpected")
 
     def test_same_inputs_generate_identical_archive(self) -> None:
         first = self.build("dist1")
