@@ -16,18 +16,15 @@ per size the order is A-B-B-A (baseline / incremental / incremental /
 baseline), each with one cold execution plus three fixed-density warm
 energy+force replays, with one retry per failed point.
 
-- `old/` — primary campaign on master `637466c624c4c4c4dd4eb7c511a2c88675744325`,
-  library SHA256
-  `2998014a18547b813149521c51193cd8913602b5d7e4551e326a4d5c91053a77`.
-  RHF nested-water 96/192/384/768 AOs (def2-SVP spherical, batch 1).
-- `new/` — post-#2236/#2241 re-verification on rebased master
-  `143df078c…` (base `98263e06c…`), library SHA256
-  `30734a0fc741da60389fb817b7429acd4a5164c840728308822fe215eae90a63`.
-  RHF nested-water 192/384/768 AOs plus the attempted KS/PBE0 control records.
+- `old/` — primary campaign on master `637466c62…`, library
+  `2998014a…`. RHF nested-water 96/192/384/768 AOs.
+- `new/` — post-#2236/#2241 re-verification on rebased master `143df078c…`
+  (base `98263e06c…`), library `30734a0f…`. RHF 192/384/768 AOs plus the
+  attempted KS control records.
 
-Each record carries its comparator schema, gate verdict, cold and warm timings,
-iteration branches, incremental diagnostics and the native-build identity; the
-`.outcome` files carry per-point exit codes and retry dispositions.
+Each record carries its comparator schema, gate verdict, timings, iteration
+branches, incremental diagnostics and native-build identity; the `.outcome`
+files carry per-point exit codes and retry dispositions.
 
 ## Key measured results
 
