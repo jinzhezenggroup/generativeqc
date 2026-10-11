@@ -108,10 +108,10 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         path.parents[2] / ".github/scripts/ci_select_python_shard.sh"
     ).read_text(encoding="utf-8")
     assert (
-        "shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
+        "shard: [core-a, core-b, core-c, runtime-heavy, posthf, compiler-heavy, ecp-forces]"
         in section
     )
-    # No extra job/matrix or YAML aliases: GitHub parses the original shape.
+    # Keep one additional bounded core worker, not another Python workflow/job.
     assert "python-nightly:" not in section
     assert "env: &python_ci_env" not in section
     assert "steps: &python_ci_steps" not in section
@@ -122,6 +122,9 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     assert "dist_mode=loadfile" in section
     assert "rebalance_paths=(" in section
     assert "rebalance_lookup" in section
+    assert "pinned_core_owner" in section
+    assert "current_index % 3" in section
+    assert "coverage-report-python-core-c" in section
     assert "name: python (${{ matrix.shard }})" in section
     assert "coverage-report-python-${{ matrix.shard }}" in section
     assert "benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}" in section
