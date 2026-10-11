@@ -1,6 +1,7 @@
 """Fail-closed scientific/shape gates without loading CUDA or PySCF."""
 
 import copy
+import json
 import typing
 from pathlib import Path
 from types import SimpleNamespace
@@ -131,8 +132,20 @@ def test_large_spd_fixture_does_not_silently_change_the_f_fixture() -> None:
     assert spd["coordinates"] == original["coordinates"]
 
 
-def test_transport_is_detached_from_the_prepared_owner_not_batch_item(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    "forces, expected",
+    [
+        (None, None),
+        (np.array([[0.0, 1.0, -2.0]]), [[0.0, 1.0, -2.0]]),
+        (np.array([[0.0, np.nan, np.inf]]), [[0.0, None, None]]),
+        (np.array([[-np.inf, 1.0, -2.0]]), [[None, 1.0, -2.0]]),
+    ],
+)
+def test_failed_rows_preserve_transport_and_json_safe_forces(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    forces: typing.Any,
+    expected: typing.Any,
 ) -> None:
     import generativeqc
 
@@ -148,7 +161,7 @@ def test_transport_is_detached_from_the_prepared_owner_not_batch_item(
         converged=False,
         executed_backend="cuda",
         energy=-1.0,
-        forces=None,
+        forces=forces,
         iterations=1,
         ks_diagnostic=None,
     )
@@ -182,3 +195,9 @@ def test_transport_is_detached_from_the_prepared_owner_not_batch_item(
     )
     assert len(rows) == 5
     assert all(row["transport_diagnostic"] == {"iterations": 1} for row in rows)
+    assert all(row["forces"] == expected for row in rows)
+    assert json.loads((tmp_path / "partial.json").read_text())["rows"] == rows
+    actual, reference = sample()
+    actual["forces"] = rows[0]["forces"]
+    if expected is None or any(value is None for row in expected for value in row):
+        assert qualification.assess(actual, reference)["accepted"] is False

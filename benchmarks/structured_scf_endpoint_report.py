@@ -8,6 +8,11 @@ from pathlib import Path
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 PHASES = ("cold", "warm_first", "warm", "geometry_refresh", "moved_warm")
 IDENTITY_FIELDS = (
     "model",
@@ -253,7 +258,7 @@ def report(receipts: list[dict], observations: list[dict] | None = None) -> dict
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("receipts", type=Path, nargs="+")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--traces", type=Path, nargs="*", default=[])
     args = parser.parse_args()
     observations = [
@@ -267,7 +272,9 @@ def main() -> None:
         [json.loads(path.read_text()) for path in args.receipts], observations
     )
     result["execution_observations"] = observations
-    args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
+    raw_output_path(args.output).write_text(
+        json.dumps(result, indent=2, allow_nan=False) + "\n"
+    )
 
 
 if __name__ == "__main__":

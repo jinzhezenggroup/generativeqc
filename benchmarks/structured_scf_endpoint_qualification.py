@@ -20,6 +20,11 @@ from pathlib import Path
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
@@ -39,7 +44,9 @@ def coefficient_matrices(
 
 def write_json(path: Path, value: dict) -> None:
     """Never serialize nonfinite values as permissive JSON NaN tokens."""
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    raw_output_path(path).write_text(
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    )
 
 
 def artifact_hashes(library: Path, driver: Path | None, method: str) -> dict:
@@ -467,7 +474,11 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
                         "converged": item.converged,
                         "backend": item.executed_backend,
                         "energy": item.energy if np.isfinite(item.energy) else None,
-                        "forces": None if item.forces is None else item.forces.tolist(),
+                        "forces": None
+                        if item.forces is None
+                        else np.where(
+                            np.isfinite(item.forces), item.forces, None
+                        ).tolist(),
                         "iterations": item.iterations,
                         "transport_diagnostic": None
                         if transport[index] is None
@@ -517,7 +528,7 @@ def ks_probe(spec: dict, folder: Path, library: Path, mask: int, batch: int) -> 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("oracle", "device"))
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument(
         "--case",
         choices=(
