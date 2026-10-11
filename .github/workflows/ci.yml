@@ -807,7 +807,6 @@ jobs:
           --output build/direct-jk-aot
           --generated-dir build/cuda-release-sm120/generated/production_shell_kernels
           --compile-timeout 1500
-          --record-output build/direct-jk-aot/measured-ledger.json
       - name: Save direct J/K AOT resource cache
         if: github.event_name != 'merge_group' && steps.direct_jk_aot_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -821,7 +820,6 @@ jobs:
           name: direct-jk-aot-resources
           path: |
             build/direct-jk-aot/report.json
-            build/direct-jk-aot/measured-ledger.json
             build/direct-jk-aot-cache/*/cuobjdump.txt
             build/direct-jk-aot-cache/*/compile.json
             build/direct-jk-aot-cache/*/compiler-cache.json
