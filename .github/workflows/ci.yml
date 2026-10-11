@@ -231,6 +231,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Audit generated CUDA ABI call coverage
+        run: python3 tools/generate_nvidia_host_api.py --check-usage
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"

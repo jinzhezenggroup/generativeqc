@@ -42,6 +42,7 @@ stationary_large_domain_qualification
 :caption: Runtime and work evidence
 
 cuda_ownership
+generated_cuda_host_api
 vendor_boundaries
 cpu_autotuning
 source_work_audit

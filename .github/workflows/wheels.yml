@@ -27,6 +27,7 @@ on:
       - "src/runtime/nvidia_host_api/**"
       - "tools/generate_cuda_implib.py"
       - "tools/link_cuda_implib.py"
+      - "tools/generate_nvidia_host_api.py"
   workflow_dispatch:
 
 permissions:
@@ -53,6 +54,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Audit generated CUDA ABI call coverage
+        run: python3 tools/generate_nvidia_host_api.py --check-usage
 
       - name: Restore ccache
         id: wheel_ccache

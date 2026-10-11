@@ -152,6 +152,7 @@ def test_wheels_preserve_scoped_pr_and_periodic_qualification() -> None:
         "src/runtime/nvidia_host_api/**",
         "tools/generate_cuda_implib.py",
         "tools/link_cuda_implib.py",
+        "tools/generate_nvidia_host_api.py",
     }
 
 
