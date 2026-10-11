@@ -144,6 +144,37 @@ def test_array_api_rhf_rejects_retained_output_before_work(
     assert not (tmp_path / ".artifacts").exists()
 
 
+def test_prepared_lifecycle_cli_rejects_retained_output_before_qualification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lifecycle runner must reject retained output before numerical work."""
+    from benchmarks import _retention, prepared_lifecycle
+
+    monkeypatch.setattr(_retention, "_REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(
+        prepared_lifecycle,
+        "qualify",
+        lambda *arguments: pytest.fail("qualification started before output admission"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prepared_lifecycle.py",
+            "--device",
+            "cpu",
+            "--method",
+            "rhf",
+            "--output",
+            str(tmp_path / "benchmarks/results/receipt.json"),
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        prepared_lifecycle.main()
+    assert error.value.code == 2
+    assert not (tmp_path / "benchmarks").exists()
+
+
 def test_all_active_runner_outputs_are_guarded_during_argument_parsing() -> None:
     seen = []
     for path, node, options in active_runner_output_arguments():

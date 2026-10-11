@@ -64,7 +64,10 @@ class RccsdtPrepared final : public PreparedCalculation {
  public:
   RccsdtPrepared(Capabilities capabilities, runtime::ExecutionContext execution,
                  core::System system, const generativeqc_method_descriptor& descriptor)
-      : capabilities_(capabilities), execution_(std::move(execution)), system_(std::move(system)) {
+      : PreparedCalculation(execution.backend(), execution.device_id()),
+        capabilities_(capabilities),
+        execution_(std::move(execution)),
+        system_(std::move(system)) {
     descriptor_ = descriptor;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.ks_options = nullptr;
@@ -93,7 +96,7 @@ class RccsdtPrepared final : public PreparedCalculation {
     last_performance_.reset();
   }
 
-  Result execute(bool compute_forces) override {
+  Result execute_impl(bool compute_forces) override {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
@@ -346,7 +349,8 @@ class RccsdtPreparedBatch final : public PreparedBatch {
   RccsdtPreparedBatch(Capabilities capabilities, core::ContextState& context,
                       std::vector<core::System> systems,
                       const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
-      : capabilities_(capabilities),
+      : PreparedBatch(context.requested_backend, context.device_id),
+        capabilities_(capabilities),
         execution_(context),
         context_(&context),
         systems_(std::move(systems)),
@@ -369,9 +373,8 @@ class RccsdtPreparedBatch final : public PreparedBatch {
     for (auto& owner : owners_) owner->invalidate_result();
   }
 
-  std::vector<BatchItemResult> execute(const Coordinates& coordinates,
-                                       bool compute_forces) override {
-    invalidate_result();
+  std::vector<BatchItemResult> execute_impl(const Coordinates& coordinates,
+                                            bool compute_forces) override {
     if (!coordinates.empty() && coordinates.size() != size())
       throw std::invalid_argument("RCCSD(T) batch coordinates do not match system count");
 

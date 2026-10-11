@@ -655,7 +655,7 @@ def test_generic_stationary_cuda_reuses_complete_prepared_integral_sources() -> 
     stationary = _source("python/generativeqc/_stationary_cuda.py")
 
     begin = methods.index("generativeqc_status cuda_integral_gradient(")
-    end = methods.index("Result execute(bool compute_forces)", begin)
+    end = methods.index("Result execute_impl(bool compute_forces)", begin)
     body = methods[begin:end]
     assert "const bool range_exchange = execution_plan_.range_exchange;" in body
     _assert_stationary_integral_layout(body, api, snapshot)

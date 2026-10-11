@@ -1,0 +1,54 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Independent complete-force gates pass; fresh isolated ABBA observes a small endpoint benefit. No statistical/global or latest-master timing claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2158,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "c402d93290b2ee9fb8ed2a66c968c00a1ec71a7c8bfb47ad633734b55cd12c71"
+    },
+    {
+      "bytes": 488,
+      "path": "production-source.patch.gz",
+      "role": "source-patch",
+      "sha256": "0eadbae862178f76500c3d451a039fd9ca831d6dd7af2a8084570475fe2d551e"
+    },
+    {
+      "bytes": 56228,
+      "path": "raw-receipts.json.xz",
+      "role": "samples",
+      "sha256": "c5ae146f6fc047161292d1b60b42cf830ded41f22f0945d5383c2eba081767e7"
+    },
+    {
+      "bytes": 7700,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "1a1616917d5d37e781371e775b084171e4e427005084b0fcd123737d81137be9"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "srun",
+      "--partition=main",
+      "--gres=gpu:pro6000:1",
+      "--nodes=1",
+      "--ntasks=1",
+      "--cpus-per-task=2",
+      "--time=00:30:00",
+      "bash",
+      "qualify-feature.sh",
+      "batch-replay",
+      "candidate-batch-replay"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "34dd51ed3ebc5b03b17f095de2cd7b39903923c8"
+  }
+}

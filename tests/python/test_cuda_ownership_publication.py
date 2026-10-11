@@ -131,11 +131,7 @@ def test_published_checksums_and_decision(bundle: typing.Any) -> None:
     evidence = decode_json(files[evidence_name], path=evidence_name)
     assert evidence["performance"]["status"] == "not-run"
     assert evidence["stages"]["production"]["status"] == "not-run"
-    samples_name = next(
-        e["path"]
-        for e in manifest["files"]
-        if e["path"] in {"samples.json", "samples.json.gz"}
-    )
+    samples_name = next(e["path"] for e in manifest["files"] if e["role"] == "samples")
     files[samples_name] += b" "
     with pytest.raises(ValueError, match="checksum/size mismatch"):
         validate_publication(manifest, files)

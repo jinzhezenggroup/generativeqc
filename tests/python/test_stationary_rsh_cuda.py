@@ -20,7 +20,7 @@ def test_native_cuda_rsh_integral_bridge_is_method_neutral() -> None:
         Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
     ).read_text(encoding="utf-8")
     begin = source.index("generativeqc_status cuda_integral_gradient(")
-    end = source.index("Result execute(bool compute_forces)", begin)
+    end = source.index("Result execute_impl(bool compute_forces)", begin)
     bridge = source[begin:end]
     assert "execution_plan_.range_exchange" in bridge
     assert "range_strategy_" in bridge

@@ -306,7 +306,9 @@ enter the liveness arena. `SolverOptions::df_auxiliary_batch_limit` caps the
 tile (default eight); admission halves larger candidates until the complete
 owner budget and provider dimension limits fit. A limit of one retains the
 matrix one-Q schedule. Allocation rejection retries one-Q before the existing
-scalar fallback. Independent expanded replay remains one-Q.
+scalar fallback. Independent expanded replay remains fresh; its optional
+[physical batching](rccsd_gpu.md#bounded-batches-for-independent-physical-replay)
+uses only admitted scratch and preserves every original Q addition.
 
 The complete `run_df_ccsdt_native` endpoint uses `ccsd_batch_limit=0` to request
 its endpoint-specific default: a cap of 32 for energy and analytic-force calls.
@@ -411,8 +413,15 @@ For each `i>=j>=k`, the energy owner builds only distinct physical occupied
 `(I,J,K)` W seeds when actual W storage, compute and accumulation are all FP64.
 The compiler maps each occupied permutation to its first identical tuple;
 each distinct seed retains the original two GEMMs. All-distinct tiles use the
-original energy kernel. Non-FP64 execution and force/response owners retain full
-six-seed materialization. V elements are computed inside the epilogue.
+original energy kernel. Non-FP64 execution retains original six-seed computation.
+The joint force/Fock page owner uses the same strict-FP64 physical-tuple map,
+but copies duplicate forward values into every original canonical W slot rather
+than remapping scalar loads. All six independent W/V cotangents and their
+pullbacks remain unchanged; equal primal values never authorize dropping a
+derivative contribution. Standalone response owners retain their original
+computation. Copies use the existing owned stream and add no numeric scratch;
+`DFCudaFockResult::w_copy_calls` and `w_copy_bytes` report exact logical copy
+work, not measured DRAM traffic. V elements are computed inside the epilogue.
 All six projected occupied energy contributions remain, including repeats
 divided by the occupied 6/2/1 multiplicity. Even all-equal tiles retain every
 finite check: algebraic cancellation does not permit skipping a failing tile.
@@ -468,7 +477,11 @@ inventory audits the FP64/three-panel guard and canonical reduction binding.
 loads with poisoned duplicate slots and the independent original energy. This
 execution-only default adds no public option, numeric scratch or production
 CPU/reference work. Equal primal W seeds do not authorize response cotangent
-aliasing. The default-promotion inventory audits the FP64 energy admission as
+aliasing. Independent joint-force tests also cover copy counts, one/two-panel
+and partial-page fallbacks, mixed-precision exclusion and all-equal unsafe
+arithmetic failures. Private C++ result-layout changes require rebuilding every
+native consumer against its matching header; the public C/Python ABI is unchanged.
+The default-promotion inventory audits the strict-FP64 admission as
 `cc-execution:df-triples-distinct-moments`, separately from SolverOptions.
 
 #1764 now has an explicit compiler-owned first precision candidate:

@@ -22,7 +22,7 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
         Path(__file__).resolve().parents[2] / "src/methods/dft_method.cpp"
     ).read_text(encoding="utf-8")
     begin = source.index("generativeqc_status cuda_integral_gradient(")
-    end = source.index("Result execute(bool compute_forces)", begin)
+    end = source.index("Result execute_impl(bool compute_forces)", begin)
     bridge = source[begin:end]
     assert "resident_final_stationary_weights" in bridge
     assert "resident_weights.density" in bridge
