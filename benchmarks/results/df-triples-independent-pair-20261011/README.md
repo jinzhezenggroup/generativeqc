@@ -50,7 +50,7 @@ Host gates execute the exact native grouping loop over 256 strict/fallback/
 admission/refusal domains, nocc 1..32, and inject eight typed allocation cases
 at the exact preparation boundary. No unrelated ordinary GPU matrix is rerun.
 
-Candidate library SHA-256:
+Pre-repair measured candidate library SHA-256:
 `b48c6b1a49884b6877692cae95546a754a5ae767935de0f3dfa92781a110eb0e`.
 The exact #2235 baseline is
 `8072bb71d8ce1cd3e9d5285e4007914b0dd8db6c6aca4f25cd97be6f3a7f3d88`.
@@ -89,6 +89,25 @@ checkout history or on another GPU execution.
 The independent submission starts at the merged #2235 master commit
 `637466c624c4c4c4dd4eb7c511a2c88675744325`. Its three production patch-base
 sources are byte-identical to the retained historical base, and the submitted
-candidate preserves all three measured source hashes. Shared maintenance changes
-are integrated without repeating unrelated GPU tests or endpoints; the frozen
-whole-library qualification scope above remains unchanged.
+candidate initially preserved all three measured source hashes. Shared maintenance
+changes are integrated without repeating unrelated GPU tests or endpoints; the
+frozen whole-library qualification scope above remains unchanged.
+
+## Post-qualification allocation-error repair
+
+The retained GPU observations and candidate library hash above qualify the
+pre-repair measured owner. A later host regression found that a handled CUDA
+allocation failure could remain in the thread-local last-error slot and reach a
+subsequent launch check. The current owner clears only this expected allocation
+error before the existing optional-arena retry; unexpected CUDA errors propagate.
+No arithmetic, paired execution, descriptors, work, numerical gates or successful
+allocation path changes, and no new GPU execution or timing is claimed.
+
+`post-qualification-allocation-repair.patch` and its JSON metadata bind the exact
+two-file owner/host-test repair to the retained measured source and reviewed test
+bytes. The offline gate verifies the patch hash, measured hashes, repaired hashes
+and byte-exact equality with the current tree. The original three-file production
+patch and all three measured compressed artifacts remain unchanged. The updated
+host-only error-recovery regression covers ten cases, including stale allocation
+last-error cleanup and propagation of unexpected CUDA errors; the retained eight
+allocation cases still describe the original pre-repair host run.

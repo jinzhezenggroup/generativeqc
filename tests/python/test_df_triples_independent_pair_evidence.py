@@ -42,8 +42,67 @@ def retained() -> tuple[dict, dict[str, bytes]]:
     return load_publication_record(BUNDLE), restored
 
 
+@pytest.fixture(scope="module")
+def repaired_source_hashes(
+    retained: tuple, tmp_path_factory: pytest.TempPathFactory
+) -> dict[str, str]:
+    """Bind only the exact host-validated allocation repair to measured bytes."""
+    executable = shutil.which("git")
+    if not executable:
+        pytest.skip("Git patch application is required for source reconstruction")
+    evidence, restored = retained
+    metadata = json.loads(
+        (BUNDLE / "post-qualification-allocation-repair.json").read_text()
+    )
+    assert metadata["schema"] == "generativeqc.post-qualification-source-repair.v1"
+    assert metadata["pre_repair_submission_commit"] == "be4a7ab285cddccb237e4f663bac424f5205ec0b"
+    assert metadata["validation"]["new_gpu_run"] is False
+    patch = BUNDLE / metadata["patch"]["path"]
+    assert patch.name == "post-qualification-allocation-repair.patch"
+    assert len(patch.read_bytes()) == metadata["patch"]["bytes"]
+    assert hashlib.sha256(patch.read_bytes()).hexdigest() == metadata["patch"]["sha256"]
+    assert (
+        metadata["patch"]["sha256"]
+        == "7ed684d76765230bc46024c2dd1b1c819adaf4e878aec1342799ff7c15fce59f"
+    )
+    expected_receipts = {
+        "src/cc/df_triples_cuda.cu": "remote/source/src/cc/df_triples_cuda.cu",
+        "tests/python/test_df_triples_independent_pair.py": "reviewed-tests/tests/python/test_df_triples_independent_pair.py",
+    }
+    assert set(metadata["files"]) == set(expected_receipts)
+    source = tmp_path_factory.mktemp("allocation-repair")
+    for relative, receipt in expected_receipts.items():
+        row = metadata["files"][relative]
+        assert row["receipt"] == receipt
+        measured = restored[receipt]
+        assert hashlib.sha256(measured).hexdigest() == row["measured_sha256"]
+        assert (
+            row["measured_sha256"]
+            == evidence["qualification"]["host"]["source_sha256"][relative]
+        )
+        destination = source / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(measured)
+    for options in (["--check"], []):
+        subprocess.run(
+            [executable, "apply", *options, "--whitespace=error-all", str(patch)],
+            cwd=source,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    result = {}
+    for relative, row in metadata["files"].items():
+        repaired = (source / relative).read_bytes()
+        assert hashlib.sha256(repaired).hexdigest() == row["repaired_sha256"]
+        assert repaired == (ROOT / relative).read_bytes()
+        result[relative] = row["repaired_sha256"]
+    return result
+
+
 def test_canonical_publication_binds_current_sources_not_prototype_timing(
     retained: tuple,
+    repaired_source_hashes: dict[str, str],
 ) -> None:
     evidence, restored = retained
     assert (
@@ -83,11 +142,10 @@ def test_canonical_publication_binds_current_sources_not_prototype_timing(
     assert not build["latest_master_full_reference_qualified"]
     for name, expected in build["source_sha256"].items():
         assert hashlib.sha256(restored["remote/" + name]).hexdigest() == expected
-        assert (
-            hashlib.sha256(
-                (ROOT / name.removeprefix("source/")).read_bytes()
-            ).hexdigest()
-            == expected
+        assert hashlib.sha256(
+            (ROOT / name.removeprefix("source/")).read_bytes()
+        ).hexdigest() == repaired_source_hashes.get(
+            name.removeprefix("source/"), expected
         )
     for name, row in build["generated_sha256"].items():
         assert (
@@ -116,7 +174,9 @@ def test_canonical_publication_binds_current_sources_not_prototype_timing(
     for name, expected in evidence["source_reconstruction"][
         "current_compiled_sources_exact"
     ].items():
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected
+        assert hashlib.sha256(
+            (ROOT / name).read_bytes()
+        ).hexdigest() == repaired_source_hashes.get(name, expected)
 
     host = evidence["qualification"]["host"]
     assert host["test_cases"] == 11 and host["exit_code"] == 0
@@ -127,7 +187,9 @@ def test_canonical_publication_binds_current_sources_not_prototype_timing(
         == host["output_sha256"]
     )
     for name, expected in host["source_sha256"].items():
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected
+        assert hashlib.sha256(
+            (ROOT / name).read_bytes()
+        ).hexdigest() == repaired_source_hashes.get(name, expected)
 
 
 def test_all_api_owner_sanitizer_and_failure_observations_are_retained(

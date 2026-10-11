@@ -240,9 +240,12 @@ def test_actual_owner_optional_allocation_retry_is_preexecution_and_typed(
         """#include <cstddef>
 #include <optional>
 #include <stdexcept>
-static int attempts{},live{},failure{};
+static int attempts{},live{},failure{},last_error{},clears{};
+static constexpr int cudaSuccess=0,cudaErrorMemoryAllocation=2,cudaErrorUnknown=999;
+int cudaGetLastError() { const int result=last_error; last_error=cudaSuccess; ++clears; return result; }
 namespace generativeqc_tensor {
 struct DeviceAllocationError:std::runtime_error { using std::runtime_error::runtime_error; };
+void cuda_check(int error) { if(error!=cudaSuccess) throw std::runtime_error("unexpected CUDA error"); }
 struct Context {
   std::size_t arena{};
   Context() { ++live; }
@@ -250,12 +253,15 @@ struct Context {
   void prepare(int,int,int,std::size_t bytes,std::size_t,std::size_t,int,int,bool) {
     ++attempts; arena=bytes;
     if(failure==3) throw std::runtime_error("nonallocation preparation error");
-    if(failure==2 || (failure==1 && attempts==1)) throw DeviceAllocationError("injected OOM");
+    if(failure==2 || ((failure==1 || failure==4) && attempts==1)) {
+      last_error=failure==4 ? cudaErrorUnknown : cudaErrorMemoryAllocation;
+      throw DeviceAllocationError("injected OOM");
+    }
   }
 };
 }
 static bool run(bool optional,int injected) {
-  attempts=live=0; failure=injected;
+  attempts=live=last_error=clears=0; failure=injected;
   struct Layout { std::size_t arena{},error{},library{},paired_pointer_bytes{}; };
   const Layout unpaired_layout{100,0,0,0};
   Layout p=optional ? Layout{356,0,0,48} : unpaired_layout;
@@ -267,6 +273,7 @@ static bool run(bool optional,int injected) {
         + """
     if(context.arena!=(optional && !injected ? 356 : 100) || live!=1)
       throw std::logic_error("retry retained wrong context");
+    if(last_error!=cudaSuccess) throw std::runtime_error("handled OOM escaped into execution");
   } catch(const std::runtime_error&) {
     if(live) throw std::logic_error("failed preparation leaked context");
     return false;
@@ -276,11 +283,12 @@ static bool run(bool optional,int injected) {
 }
 int main() {
   for(bool optional:{false,true})
-    for(int injected:{0,1,2,3}) {
+    for(int injected:{0,1,2,3,4}) {
       const bool expected=injected==0 || (optional && injected==1);
       if(run(optional,injected)!=expected) return 1;
       const int expected_attempts=optional && (injected==1 || injected==2) ? 2 : 1;
       if(attempts!=expected_attempts) return 2;
+      if(clears!=(optional && (injected==1 || injected==2 || injected==4) ? 1 : 0)) return 3;
     }
 }
 """

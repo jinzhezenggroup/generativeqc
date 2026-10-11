@@ -476,6 +476,12 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
       prepare_context(p);
     } catch (const generativeqc_tensor::DeviceAllocationError&) {
       if (!p.paired_pointer_bytes) throw;
+      // A handled runtime OOM remains in this host thread's last-error slot.
+      // Clear only that expected failure before retrying the smaller arena;
+      // otherwise a later launch check can mistake it for execution failure.
+      const auto allocation_error = cudaGetLastError();
+      if (allocation_error != cudaSuccess && allocation_error != cudaErrorMemoryAllocation)
+        generativeqc_tensor::cuda_check(allocation_error);
       context_owner.reset();
       p = unpaired_layout;
       prepare_context(p);
