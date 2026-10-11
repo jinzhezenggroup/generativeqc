@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from hashlib import sha256
 from heapq import nlargest, nsmallest
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from generativeqc_compiler.cc.uccsd_equations import build_program
@@ -27,7 +27,6 @@ from generativeqc_compiler.common.evidence import canonical_hash
 from generativeqc_compiler.common.resources import checked_bytes
 from generativeqc_compiler.tensor.cpu import emit_cpu
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
-from typing_extensions import Self
 
 from tools.generativeqc_posthf.conventions import SpinMOBlock
 from tools.generativeqc_posthf.providers import ConventionalProvider
@@ -36,6 +35,9 @@ from tools.generativeqc_response.uhf import UHFReferenceSnapshot
 from .native_tensor_cpu import NativeCCTensorExecutor
 from .native_tensor_cuda import CudaCCTensorExecutor
 from .solver import _DIIS, SolverOptions
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 _COULOMB_PERMUTATIONS = (
     (0, 1, 2, 3),
