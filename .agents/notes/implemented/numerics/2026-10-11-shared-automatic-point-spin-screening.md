@@ -136,6 +136,33 @@ catalog before promoting or closing the remaining #1118 lanes. The TPSS point
 probe's 254 registers also require explicit schedule/resource consideration;
 passing a numerical point test is not sufficient evidence of a useful endpoint.
 
+## Split-hybrid source-matching follow-up
+
+PR #2255's CUDA and CuMetal builds exposed an interaction with the existing
+M06-2X Stoll cancellation repair. The bulk importer now canonicalizes physical
+spin densities before differentiation, but the repair reconstructed its source
+terms with the old inverse-rs/zeta coordinates. Its exact reachability guard
+therefore correctly rejected those terms even though the pinned PW source and
+parameters had not changed. This reproduces as three failing split-hybrid
+generation/work-policy tests and the same `perpendicular PW terms changed`
+exception in the CUDA release-resource job.
+
+The importer and source-term matcher now share one physical-spin-coordinate
+canonicalizer. Restricted embedding preserves the importer's literal zero zeta
+when both spins are the same Graph node; it must not introduce a new subtractive
+round trip. The pinned-parameter, reachability, shared-PW and structural guards
+remain intact, including a regression rejecting a deliberately absent source
+term. The complete automatic CPU mathematical-byte baseline is not relaxed, and
+catalog membership and Graph node counts remain unchanged.
+
+The original measurements above refer to the pre-follow-up compiler closure.
+The shared canonicalizer changes source-bound identities even though its
+automatic executable mathematics is unchanged. Final-source point and force
+receipts must therefore be regenerated, not relabeled or silently promoted from
+those earlier measurements. The independent split-hybrid boundary oracle remains
+the authenticated Libxc 7.0.0 source archive, including the existing 113-bit PW
+cancellation check; successful code generation alone is not numerical evidence.
+
 ## References
 
 - Issues #1118, #1119, #1121, #1122, #1123, and #1124.

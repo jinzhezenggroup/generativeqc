@@ -1,8 +1,37 @@
 """Empty-spin Maple screening uses physical coordinates before differentiation."""
 
+import math
+
 import pytest
+from generativeqc_compiler.integral.expr import Graph
 from generativeqc_compiler.xc.bulk_runtime import build_bulk_runtime_program
+from generativeqc_compiler.xc.libxc_bulk import canonicalize_spin_density_coordinates
 from generativeqc_compiler.xc.libxc_work import automatic_work_policy
+
+
+@pytest.mark.parametrize("restricted", (False, True))
+def test_physical_density_normal_form_is_idempotent(restricted: bool) -> None:
+    graph = Graph()
+    rho_a, rho_b = (
+        (graph.variable("rho") / 2,) * 2
+        if restricted
+        else (graph.variable("rho_a"), graph.variable("rho_b"))
+    )
+    density = rho_a + rho_b
+    zeta = graph.constant(0) if restricted else (rho_a - rho_b) / density
+    rs_factor = graph.approximate_constant((3 / (4 * math.pi)) ** (1 / 3))
+    rs = rs_factor * density.pow(-1 / 3)
+    reconstructed = (rs_factor / rs).pow(3)
+    source = ((1 + zeta) * reconstructed / 2, (1 - zeta) * reconstructed / 2)
+    physical = canonicalize_spin_density_coordinates(graph, source, rho_a, rho_b)
+    assert tuple(root.identifier for root in physical) == (
+        rho_a.identifier,
+        rho_b.identifier,
+    )
+    repeated = canonicalize_spin_density_coordinates(graph, physical, rho_a, rho_b)
+    assert tuple(root.identifier for root in repeated) == tuple(
+        root.identifier for root in physical
+    )
 
 
 @pytest.mark.parametrize(

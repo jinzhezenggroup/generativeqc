@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.integral.expr import Expr
+from generativeqc_compiler.xc.libxc_bulk import canonicalize_spin_density_coordinates
 from generativeqc_compiler.xc.libxc_maple import MapleImportError
 
 if TYPE_CHECKING:
@@ -164,6 +165,9 @@ def stabilize_m06_2x_stoll(
         module.call(graph, "m05_fperp", rs, zeta, xs_a, xs_b, ts_a, ts_b),
         module.call(graph, "vsxc_fperp", rs, zeta, xs_a, xs_b, ts_a, ts_b),
     )
+    # Source matching must use the importer's physical-density normal form.
+    # Keep the pinned-parameter, reachability and shared-PW guards below intact.
+    terms = canonicalize_spin_density_coordinates(graph, terms, rho_a, rho_b)
     reachable = set(graph.topological_order((program.energy,)))
     if any(term.identifier not in reachable for term in terms):
         raise MapleImportError("M06-2X perpendicular PW terms changed")

@@ -37,6 +37,37 @@ _SUPPORT = (
 )
 
 
+def canonicalize_spin_density_coordinates(
+    graph: Graph,
+    roots: tuple[Expr, ...],
+    rho_a: Expr,
+    rho_b: Expr,
+) -> tuple[Expr, ...]:
+    """Express exact inverse-rs/zeta densities in physical input coordinates.
+
+    Apply this before differentiation and when reconstructing source subgraphs
+    for matching. Both consumers must see the same inclusive spin-screen nodes;
+    a floating-point inverse-coordinate round trip is not a physical density.
+    """
+    density = rho_a + rho_b
+    # Restricted imports use an exact zero, not a floating-point cancellation.
+    zeta = (
+        graph.constant(0)
+        if rho_a.identifier == rho_b.identifier
+        else (rho_a - rho_b) / density
+    )
+    rs_factor = graph.approximate_constant((3.0 / (4.0 * math.pi)) ** (1.0 / 3.0))
+    rs = rs_factor * density.pow(-1.0 / 3.0)
+    reconstructed_density = (rs_factor / rs).pow(3.0)
+    return graph.replace_subexpressions(
+        roots,
+        {
+            (1 + zeta) * reconstructed_density / 2: rho_a,
+            (1 - zeta) * reconstructed_density / 2: rho_b,
+        },
+    )
+
+
 def read_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
     """Read the generated catalog and reject incompatible importer semantics."""
     catalog = json.loads(path.read_text(encoding="utf-8"))
@@ -258,18 +289,7 @@ def build_record(
     # FP64 round trip can land on either side of screen_dens at its threshold,
     # activating a nominally empty-spin exchange/kinetic branch. Substitute the
     # physical coordinates before differentiation, not a post-hoc vxc clamp.
-    reconstructed_density = (
-        graph.approximate_constant((3.0 / (4.0 * math.pi)) ** (1.0 / 3.0)) / rs
-    ).pow(3.0)
-    reconstructed_alpha = (1 + zeta) * reconstructed_density / 2
-    reconstructed_beta = (1 - zeta) * reconstructed_density / 2
-    (energy,) = graph.replace_subexpressions(
-        (energy,),
-        {
-            reconstructed_alpha: rho_a,
-            reconstructed_beta: rho_b,
-        },
-    )
+    (energy,) = canonicalize_spin_density_coordinates(graph, (energy,), rho_a, rho_b)
     identity = canonical_hash(
         {
             "bulk_semantics": BULK_SEMANTICS,
