@@ -1411,7 +1411,8 @@ jobs:
               --native-diagnostics-library="$RUNNER_TEMP/libnative-fault-record.so"
             )
           fi
-          .venv/bin/python -m pytest "${test_targets[@]}" -q \
+          .venv/bin/python -m pytest "${test_targets[@]}" -v \
+            -o faulthandler_timeout=900 \
             -n 4 --dist="$dist_mode" --durations=25 \
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
