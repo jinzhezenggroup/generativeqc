@@ -377,13 +377,20 @@ def test_compiled_evidence_cannot_be_relabelled_to_another_shape() -> None:
 
 
 @pytest.mark.parametrize("suffix", ["", "l", "ll"])
+@pytest.mark.parametrize("explicit_generic_family", [False, True])
 @pytest.mark.parametrize(
     ("functional", "feature_terms", "registers", "spill_bytes"),
     [("LDA_XC_PW", 1, 72, 0), ("PBE", 4, 192, 96)],
 )
 def test_point_specialization_tracks_feature_width_not_functional_code(
-    suffix: str, functional: str, feature_terms: int, registers: int, spill_bytes: int
+    suffix: str,
+    explicit_generic_family: bool,
+    functional: str,
+    feature_terms: int,
+    registers: int,
+    spill_bytes: int,
 ) -> None:
+    family = f", -1{suffix}" if explicit_generic_family else ""
     shape = GridXcCompiledResourceShape(
         ao_radial_reuse=True,
         npoint=4096,
@@ -395,9 +402,11 @@ def test_point_specialization_tracks_feature_width_not_functional_code(
     rows = (
         *(row for row in pbe_resources() if "evaluate_points" not in row.function),
         resource("ao_kernel(double*)", registers=52),
-        resource(f"evaluate_points<1{suffix}, false, false>(double*)", registers=32),
         resource(
-            f"evaluate_points<4{suffix}, false, false>(double*)",
+            f"evaluate_points<1{suffix}, false, false{family}>(double*)", registers=32
+        ),
+        resource(
+            f"evaluate_points<4{suffix}, false, false{family}>(double*)",
             registers=192,
             spill_store_bytes=64,
             spill_load_bytes=32,
@@ -416,10 +425,60 @@ def test_point_specialization_tracks_feature_width_not_functional_code(
         source_identity="native-feature-width",
     )
     assert tuple(row.function for row in dict(evidence.scopes)["xc_points"]) == (
-        f"evaluate_points<{feature_terms}{suffix}, false, false>(double*)",
+        f"evaluate_points<{feature_terms}{suffix}, false, false{family}>(double*)",
     )
     assert evidence.profitability.compiled_registers_per_thread == registers
     assert evidence.profitability.spill_bytes == spill_bytes
+
+
+@pytest.mark.parametrize("suffix", ["", "l", "ll"])
+@pytest.mark.parametrize("missing_generic", [None, "false", "true"])
+def test_point_family_entries_preserve_generic_resource_requirements(
+    suffix: str, missing_generic: str | None
+) -> None:
+    """Compiled opt-in entries cannot hide either reachable generic schedule."""
+    rows = tuple(
+        row for row in pbe_resources() if "evaluate_points" not in row.function
+    )
+    generic = tuple(
+        resource(
+            f"evaluate_points<4{suffix}, false, {batched}, -1{suffix}>(double*)",
+            registers=96 if batched == "true" else 80,
+        )
+        for batched in ("false", "true")
+        if batched != missing_generic
+    )
+    specialized = tuple(
+        resource(
+            f"evaluate_points<4{suffix}, false, {batched}, 1{suffix}>(double*)",
+            registers=8,
+        )
+        for batched in ("false", "true")
+    )
+    options = {
+        "shape": GridXcCompiledResourceShape(
+            ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+        ),
+        "functional": "PBE",
+        "target": TARGET,
+        "source_identity": "generic-family-resource-fixture",
+    }
+    if missing_generic is not None:
+        label = (
+            "batched XC point kernel"
+            if missing_generic == "true"
+            else "XC point kernel"
+        )
+        with pytest.raises(ValueError, match=label):
+            native_grid_xc_compiled_region_evidence(
+                (*rows, *generic, *specialized), **options
+            )
+        return
+    evidence = native_grid_xc_compiled_region_evidence(
+        (*rows, *generic, *specialized), **options
+    )
+    assert dict(evidence.scopes)["xc_points"] == generic
+    assert evidence.profitability.compiled_registers_per_thread == 96
 
 
 @pytest.mark.parametrize(

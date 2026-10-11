@@ -195,7 +195,13 @@ def _active_scopes(
     )
     # Automatic batching can fall back on resource rejection. Account both
     # reachable point specializations, never allowing either to replace the other.
-    point_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,false>"
+    # Current symbols expose the generic static-family sentinel; historical
+    # three-argument symbols omit it. Opt-in PBE entries cannot stand in for
+    # the generic default's pressure or satisfy its missing-resource gate.
+    generic_family = r"(?:,-1[lL]{0,2})?"
+    point_pattern = (
+        rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,false{generic_family}>"
+    )
 
     validation = _matching(
         resources,
@@ -251,7 +257,9 @@ def _active_scopes(
         "functional-specific XC point kernel",
     )
     if shape.point_batching and shape.npoint > shape.tile_points:
-        batch_pattern = rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,true>"
+        batch_pattern = (
+            rf"evaluate_points<{feature_terms}[lL]{{0,2}},false,true{generic_family}>"
+        )
         points += _matching(
             resources,
             lambda name: re.fullmatch(batch_pattern, name) is not None,
