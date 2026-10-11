@@ -87,6 +87,14 @@ JSON and input/library hashes are retained under the H100 run's
 
 ## Revisit when
 
+The point-family evidence verifier distinguishes an executed negative timing
+result from default promotion. It independently recomputes the full paired
+timing assessment and all numerical/work gates; default evidence auditing can
+retain a within-noise or slower result, while `require_improvement=True` still
+requires significant improvement in both replay phases. The older scheduling
+publication verifier retains its improvement requirement. Synthetic fixtures
+exercise negative, invalid and positive cases and are not device measurements.
+
 A source-matched CUDA build shows selected entry identity, generated and device
 footprint, registers/stack and dynamic local traffic, plus generic versus
 specialized point GPU time, full XC time, and cold/warm/moved complete E+F with

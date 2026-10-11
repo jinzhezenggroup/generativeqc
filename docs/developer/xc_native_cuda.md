@@ -127,6 +127,12 @@ batch admission, AO maps, precision, or the independent exact-exchange J/K
 provider. It is not a performance default pending source-matched device and
 complete-endpoint qualification.
 
+`verify_point_family_pairs` audits independent E/F vectors and fixed work even
+when the measured specialization has no significant endpoint improvement. Its
+successful evidence audit does not qualify a performance default. Promotion
+requires the additional `require_improvement=True` gate for both warm and moved
+replays, along with the remaining source-matched device and cold endpoint gates.
+
 ### Bounded independent point submissions
 
 Ordinary native KS defaults to bounded batching of independent XC point domains:

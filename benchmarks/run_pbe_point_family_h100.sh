@@ -131,10 +131,13 @@ from tools.generativeqc_validation.pbe0_xc_tiles import verify_point_family_pair
 
 run = Path(sys.argv[1])
 atoms = int(sys.argv[2])
+record = json.loads((run / f"pairs-{atoms}.json").read_text())
 verify_point_family_pairs(
-    json.loads((run / f"pairs-{atoms}.json").read_text()),
+    record,
     json.loads((run / f"reference-{atoms}.json").read_text()),
 )
-print(f"{atoms}-atom fixed-work PBE0 point-family pairs: PASS")
+print(f"{atoms}-atom fixed-work PBE0 point-family evidence: PASS")
+for phase, assessment in record["assessments"].items():
+    print(f"{phase} performance: {assessment['status']}; {assessment.get('reason')}")
 PY
 done

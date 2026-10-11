@@ -13,7 +13,10 @@ import pytest
 from generativeqc_compiler.common.performance import assess_comparison
 
 from benchmarks import pbe0_xc_tile_pairs as benchmark
-from tools.generativeqc_validation.pbe0_xc_tiles import verify_pairs
+from tools.generativeqc_validation.pbe0_xc_tiles import (
+    verify_pairs,
+    verify_point_family_pairs,
+)
 from tools.generativeqc_validation.publication import validate_publication
 from tools.generativeqc_validation.record import load_json, load_publication_record
 
@@ -369,3 +372,76 @@ def test_edited_measured_vectors_and_work_are_rejected(mutation: str) -> None:
         ]["becke_reverse_pair_visits"] += 1
     with pytest.raises(AssertionError):
         verify_pairs(record, reference)
+
+
+def synthetic_point_family_evidence(candidate_seconds: float) -> tuple[dict, dict]:
+    """Use retained baseline vectors as fixtures, not measured specialization data."""
+    record = deepcopy(
+        load_publication_record(BUNDLE, role="samples", name="pairs-96.json")
+    )
+    reference = load_publication_record(BUNDLE, role="input", name="reference-96.json")
+    record.update(
+        schema="generativeqc.pbe0-xc-point-family-pairs.v1",
+        point_specialization=True,
+        point_consumer={"baseline": "generic", "candidate": "pbe-specialized"},
+        scf_tiles={"baseline": 256, "candidate": 256},
+        point_batch_request=None,
+    )
+    for group in ("setup", "priming", "samples"):
+        for row in record[group]:
+            geometry = row.get("geometry", int(row.get("phase") == "moved-warm"))
+            baseline = next(
+                item
+                for item in record[group]
+                if item["selection"] == "baseline"
+                and item.get("geometry", int(item.get("phase") == "moved-warm"))
+                == geometry
+            )
+            row["diagnostics"] = deepcopy(baseline["diagnostics"])
+            row["seconds"] = (
+                10.0 if row["selection"] == "baseline" else candidate_seconds
+            )
+    for phase in ("warm", "moved-warm"):
+        record["assessments"][phase] = assess_comparison(
+            [row for row in record["samples"] if row["phase"] == phase]
+        )
+    return record, reference
+
+
+@pytest.mark.parametrize("candidate_seconds", [9.9, 10.0, 11.0])
+def test_point_family_negative_results_are_valid_but_cannot_promote(
+    candidate_seconds: float,
+) -> None:
+    """Noisy, unchanged and slower endpoints remain auditable negative evidence."""
+    record, reference = synthetic_point_family_evidence(candidate_seconds)
+    verify_point_family_pairs(record, reference)
+    assert all(row["status"] == "not-run" for row in record["assessments"].values())
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)
+
+
+@pytest.mark.parametrize("mutation", ["forces", "scf-work", "timing"])
+def test_negative_point_family_results_still_reject_invalid_evidence(
+    mutation: str,
+) -> None:
+    record, reference = synthetic_point_family_evidence(11.0)
+    sample = record["samples"][0]
+    if mutation == "forces":
+        sample["diagnostics"]["forces"][0][0] += 1e-3
+    elif mutation == "scf-work":
+        sample["diagnostics"]["native_scf_ao_work"]["xc_evaluations"] = 0
+    else:
+        sample["seconds"] = -1.0
+        record["assessments"]["warm"] = assess_comparison(
+            [row for row in record["samples"] if row["phase"] == "warm"]
+        )
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference)
+
+
+def test_point_family_improvement_requires_valid_complete_evidence() -> None:
+    record, reference = synthetic_point_family_evidence(9.0)
+    verify_point_family_pairs(record, reference, require_improvement=True)
+    record["samples"][0]["diagnostics"]["iterations"] = 2
+    with pytest.raises(AssertionError):
+        verify_point_family_pairs(record, reference, require_improvement=True)

@@ -19,14 +19,30 @@ def verify_pairs(record: dict[str, Any], reference: dict[str, Any]) -> None:
 
 
 def verify_point_family_pairs(
-    record: dict[str, Any], reference: dict[str, Any]
+    record: dict[str, Any],
+    reference: dict[str, Any],
+    *,
+    require_improvement: bool = False,
 ) -> None:
-    """Audit fixed-work generic/PBE-specialized complete E+F comparisons."""
-    _verify_pairs(record, reference, point_family=True)
+    """Audit fixed-work E+F evidence, retaining valid negative timing results.
+
+    Promotion additionally requires ``require_improvement=True``. A valid
+    numerical/work receipt alone does not authorize changing the default.
+    """
+    _verify_pairs(
+        record,
+        reference,
+        point_family=True,
+        require_improvement=require_improvement,
+    )
 
 
 def _verify_pairs(
-    record: dict[str, Any], reference: dict[str, Any], *, point_family: bool
+    record: dict[str, Any],
+    reference: dict[str, Any],
+    *,
+    point_family: bool,
+    require_improvement: bool = True,
 ) -> None:
     assert record["schema"] == (
         "generativeqc.pbe0-xc-point-family-pairs.v1"
@@ -103,7 +119,13 @@ def _verify_pairs(
         samples = [row for row in record["samples"] if row["phase"] == phase]
         assessment = assess_comparison(samples)
         assert assessment == record["assessments"][phase]
-        assert assessment["status"] == "pass"
+        if require_improvement:
+            assert assessment["status"] == "pass"
+        else:
+            # Full sample counts and recomputed timing summaries distinguish
+            # an executed negative result from missing or invalid measurements.
+            assert assessment["status"] in ("pass", "not-run")
+            assert assessment.get("workloads")
         expected_inputs = canonical_hash(
             {
                 "protocol": record["protocol"],
