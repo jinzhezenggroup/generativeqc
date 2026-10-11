@@ -213,6 +213,49 @@ def test_transform_validation_and_no_implicit_dtype_promotion(tmp_path: Path) ->
         xp.compile(lambda values: values, compile_timeout=float("inf"))
 
 
+def test_recompiling_preserves_requested_backend_budget_and_independent_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from generativeqc_compiler.common import cpp_adapter
+
+    def forbidden(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("over-budget recompiled function reached toolchain")
+
+    monkeypatch.setattr(cpp_adapter, "CppCompilerAdapter", forbidden)
+    ao = xp.IndexSpace("ao", "ao", 2)
+    spec = xp.TensorSpec((xp.Index("p", ao),), role="input")
+    original = xp.compile(
+        lambda values: xp.sum(values * values),
+        backend="reference",
+        specs={"values": spec},
+    )
+    recompiled = xp.compile(original, backend="cpu", max_bytes=1, cache=tmp_path)
+    assert recompiled.compilation_info()["backend"] == "cpu"
+    assert recompiled._options["max_bytes"] == 1
+    assert recompiled._execution is not original._execution
+    assert recompiled._specs == original._specs
+    with pytest.raises(ValueError, match="byte/work budget"):
+        recompiled(np.ones(2))
+    recompiled.close()
+    assert float(original(np.ones(2))) == 2
+    original.close()
+
+
+def test_callable_metadata_cannot_replace_compilation_state(tmp_path: Path) -> None:
+    def energy(values: Any) -> Any:
+        return xp.sum(values * values)
+
+    energy.__dict__.update(
+        _backend="reference", _execution=object(), _options={"max_bytes": 1 << 40}
+    )
+    compiled = xp.compile(energy, backend="cpu", max_bytes=1, cache=tmp_path)
+    assert compiled.compilation_info()["backend"] == "cpu"
+    assert compiled._options["max_bytes"] == 1
+    with pytest.raises(ValueError, match="byte/work budget"):
+        compiled(np.ones(2))
+    compiled.close()
+
+
 def test_inactive_inputs_and_derivative_seeds_are_still_finite(tmp_path: Path) -> None:
     def zero(values: Any) -> Any:
         return xp.sum(values * 0)

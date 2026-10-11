@@ -1021,6 +1021,10 @@ class CompiledFunction:
         """Bind a function, semantic input types, backend and finite resource limits."""
         if not callable(function):
             raise TypeError("compile requires a callable")
+        if isinstance(function, CompiledFunction):
+            if specs is None:
+                specs = function._specs
+            function = function._function
         if backend not in ("cpu", "cuda", "reference"):
             raise ValueError("backend must be 'cpu', 'cuda' or 'reference'")
         symbolic = _symbolic_functions.get(getattr(function, "__name__", ""))
@@ -1070,7 +1074,8 @@ class CompiledFunction:
         self._execution = _Executor(backend, options)
         self._options = self._execution.options
         self._programs: dict[tuple[tuple[str, tuple[int, ...], str], ...], Program] = {}
-        functools.update_wrapper(self, function)
+        # Callable metadata must never replace backend, budget or owner state.
+        functools.update_wrapper(self, function, updated=())
 
     def _prepare(
         self, *args: object, **kwargs: object

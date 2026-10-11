@@ -26,6 +26,22 @@ GPU eager namespace. Pullbacks snapshot forward inputs and expose owner cleanup.
 - Generic shape convenience cannot erase explicit scientific index domains.
 - Eager admission never authorizes unsupported native/derivative operations.
 
+## Declared arguments and execution ownership
+
+Capture retains declared input nodes even when the output equation does not use
+them. Canonical AD groups those declarations so a disconnected differentiated
+argument has a correctly typed zero derivative. Dead definitions remain outside
+the live equation hash and native source. Gradient specialization keys additionally
+include selected input TensorSpecs: the same live equation can have disconnected
+arguments with different shapes, including empty shapes. Seed and primal finite
+validation still applies to unused arguments.
+
+Callable metadata is copied without its instance dictionary. Otherwise wrapping
+an existing compiled function could overwrite a newly requested backend, resource
+limits and execution owner. Recompilation uses the original callable, preserves
+scientific specs unless replaced, and creates an independent owner with the
+requested configuration. Gradient wrappers apply the same metadata isolation.
+
 ## Evidence and limits
 
 Native tests disable reference execution/AD, compare RHF energies and density

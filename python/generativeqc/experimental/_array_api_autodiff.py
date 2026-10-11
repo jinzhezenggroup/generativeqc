@@ -104,8 +104,8 @@ class _GradientFunction:
         self.names, self.single = _arguments(base, argnums)
         self.function = base._variant(self.names)
         self.with_value = with_value
-        self.programs: dict[str, Any] = {}
-        functools.update_wrapper(self, base._function)
+        self.programs: dict[tuple[Any, ...], Any] = {}
+        functools.update_wrapper(self, base._function, updated=())
 
     def _prepare(self, *args: Any, **kwargs: Any) -> Any:
         primal, feeds = self.function._prepare(*args, **kwargs)
@@ -113,7 +113,13 @@ class _GradientFunction:
             raise ValueError(
                 "grad/value_and_grad require one scalar array output; use vjp"
             )
-        cached = self.programs.get(primal.logical_hash)
+        # Equation hashes omit disconnected arguments, but their gradients still
+        # have the declared shape/dtype/scientific type for this specialization.
+        input_specs = {
+            node.attrs["name"]: node.spec for node in primal.nodes if node.op == "input"
+        }
+        key = (primal.logical_hash, *(input_specs[name] for name in self.names))
+        cached = self.programs.get(key)
         if cached is None:
             reverse = transpose_program(primal, ("output",), inputs=self.names)
             program = (
@@ -126,7 +132,7 @@ class _GradientFunction:
                 for generated, original in reverse.output_map.items()
             }
             cached = program, mapping, reverse.input_map
-            self.programs[primal.logical_hash] = cached
+            self.programs[key] = cached
         program, mapping, seeds = cached
         for generated, original in seeds.items():
             feeds[generated] = np.ones((), dtype=primal.outputs[original].spec.dtype)
