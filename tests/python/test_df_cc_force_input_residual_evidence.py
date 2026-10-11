@@ -105,6 +105,10 @@ def test_force_input_residual_historical_source_reconstruction(tmp_path: Path) -
     source.parent.mkdir(parents=True)
     source.write_bytes(raw["baseline/rccsd_method.cpp"]["data"].encode())
     patch = gzip.decompress((BUNDLE / "production-source.patch.gz").read_bytes())
+    # Do not let an in-checkout pytest temp directory discover the parent repo.
+    subprocess.run(
+        ["git", "init", "--quiet"], cwd=tmp_path, check=True, capture_output=True
+    )
     subprocess.run(
         ["git", "apply", "-"],
         cwd=tmp_path,
