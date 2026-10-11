@@ -87,7 +87,7 @@ class RHF:
         if type(charge) is not int or not -(2**31) <= charge < 2**31:
             raise ValueError("RHF charge must be an int32")
         electrons = sum(numbers) - charge
-        if electrons <= 0 or electrons % 2:
+        if electrons <= 0 or (electrons % 2 and type(self) is RHF):
             raise ValueError("RHF requires a positive even electron count")
         if not isinstance(basis, str) or not basis.strip():
             raise ValueError("RHF basis must be a nonempty all-electron basis name")
@@ -118,6 +118,7 @@ class RHF:
         object.__setattr__(self, "_numbers", numbers)
         object.__setattr__(self, "_basis", basis)
         object.__setattr__(self, "_charge", charge)
+        object.__setattr__(self, "_multiplicity", 1)
         object.__setattr__(self, "_backend", backend)
         object.__setattr__(self, "_device", device)
         object.__setattr__(
@@ -237,11 +238,122 @@ class RHF:
         calculator = self._calculator()
         try:
             result = calculator.singlepoint(
-                self._atoms(coordinates), charge=self._charge, properties=("energy",)
+                self._atoms(coordinates),
+                charge=self._charge,
+                multiplicity=self._multiplicity,
+                properties=("energy",)
             )
             return eager.wrap(self._result_values(result, coordinates, False)[0])
         finally:
             calculator.clear_cache()
+
+
+
+@dataclass(frozen=True, init=False)
+class MolecularModel(RHF):
+    """Method-neutral native molecular source using the existing Calculator.
+
+    Native method resolution, electronic structure, SCF, and complete analytic
+    nuclear derivatives remain owned by Calculator. TensorIR only differentiates
+    algebra around this first-order source. An unsupported force endpoint raises
+    via the native method-capability gate; no finite-difference or CPU fallback
+    is substituted. This operator intentionally does not promise that any new
+    user-defined electronic method can be compiled from its equations.
+    """
+
+    _method: str
+    _density_fitting: str
+    _auxiliary_basis: str | None
+
+    def __init__(
+        self,
+        elements: tuple[str | int, ...],
+        *,
+        method: str,
+        basis: str = "sto-3g",
+        charge: int = 0,
+        multiplicity: int = 1,
+        backend: str = "cpu",
+        device: int = 0,
+        density_fitting: str = "none",
+        auxiliary_basis: str | None = None,
+        max_iterations: int = 100,
+        diis_history: int = 8,
+        energy_tolerance: float = 1e-12,
+        density_tolerance: float = 1e-10,
+        screening_tolerance: float = 1e-14,
+        resource_budget: Any = None,
+    ) -> None:
+        if not isinstance(method, str) or not method.strip():
+            raise ValueError("molecular method must be a nonempty native selector")
+        if not isinstance(density_fitting, str) or density_fitting.lower() not in (
+            "none", "auto", "cpu", "cpu_reference", "cuda"
+        ):
+            raise ValueError("unsupported molecular density_fitting mode")
+        density_fitting = density_fitting.lower()
+        if auxiliary_basis is not None and (
+            not isinstance(auxiliary_basis, str)
+            or not auxiliary_basis.strip()
+            or density_fitting == "none"
+        ):
+            raise ValueError("auxiliary_basis requires enabled density fitting")
+        super().__init__(
+            elements,
+            basis=basis,
+            charge=charge,
+            backend=backend,
+            device=device,
+            max_iterations=max_iterations,
+            diis_history=diis_history,
+            energy_tolerance=energy_tolerance,
+            density_tolerance=density_tolerance,
+            screening_tolerance=screening_tolerance,
+            resource_budget=resource_budget,
+        )
+        method = method.strip().lower()
+        electrons = sum(self._numbers) - charge
+        if (
+            type(multiplicity) is not int
+            or multiplicity < 1
+            or multiplicity > electrons + 1
+            or (electrons - multiplicity + 1) % 2
+        ):
+            raise ValueError("molecular spin multiplicity is incompatible with electrons")
+        if method == "rhf" and multiplicity != 1:
+            raise ValueError("RHF requires singlet multiplicity")
+        object.__setattr__(self, "_method", method)
+        object.__setattr__(self, "_multiplicity", multiplicity)
+        object.__setattr__(self, "_density_fitting", density_fitting)
+        object.__setattr__(self, "_auxiliary_basis", auxiliary_basis)
+
+    def _payload(self) -> dict[str, Any]:
+        return {
+            **super()._payload(),
+            "schema": "generativeqc.array-api.molecular-source/v1",
+            "native_method": self._method,
+            "multiplicity": self._multiplicity,
+            "density_fitting": self._density_fitting,
+            "auxiliary_basis": self._auxiliary_basis,
+            "approximation": "native-calculator-selected",
+        }
+
+    def _calculator(self) -> Any:
+        from generativeqc import Calculator
+
+        # Do not preflight a fabricated zero geometry: native method resolution,
+        # basis/ECP/KS-grid admission, and force support belong to Calculator.
+        return Calculator(
+            method=self._method,
+            basis=self._basis,
+            device=self._backend,
+            device_id=self._device,
+            precision="fp64",
+            density_fitting=self._density_fitting,
+            auxiliary_basis=self._auxiliary_basis,
+            initial_guess=None,
+            resource_budget=self._resource_budget,
+            **dict(self._controls),
+        )
 
 
 @dataclass(frozen=True)
@@ -419,6 +531,7 @@ class _MolecularRuntime:
             result = calculator.singlepoint(
                 source.operator._atoms(geometry),
                 charge=source.operator._charge,
+                multiplicity=source.operator._multiplicity,
                 properties=("energy", "forces") if derivative else ("energy",),
             )
             energy, gradient = source.operator._result_values(
