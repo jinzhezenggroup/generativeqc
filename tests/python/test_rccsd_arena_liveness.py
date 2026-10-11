@@ -36,7 +36,10 @@ def programs() -> Programs:
     return cpu, cuda
 
 
-def test_cuda_uses_the_same_plan_as_host_admission(programs: Programs) -> None:
+@pytest.mark.parametrize("cross_size", [False, True])
+def test_cuda_uses_the_same_plan_as_host_admission(
+    programs: Programs, cross_size: bool
+) -> None:
     """CUDA owners reserve through the CPU header: both plans must agree."""
     cpu, cuda = programs
     assert {
@@ -54,11 +57,16 @@ def test_cuda_uses_the_same_plan_as_host_admission(programs: Programs) -> None:
     for name, program in cuda.items():
         cpu_name = "iteration" if name == "iteration_prepared" else name
         assert program.logical_hash == cpu[cpu_name].logical_hash, name
-        assert codegen._arena_plan(program) == codegen._arena_plan(cpu[cpu_name]), name
+        with codegen.cross_size_arena_candidate(cross_size):
+            assert codegen._arena_plan(program) == codegen._arena_plan(cpu[cpu_name]), (
+                name
+            )
 
 
+@pytest.mark.parametrize("cross_size", [False, True])
 def test_every_slot_excludes_live_inputs_and_retains_all_outputs(
     programs: Programs,
+    cross_size: bool,
 ) -> None:
     """Check pairwise intervals, independently of the allocator's free lists."""
     cpu, _ = programs
@@ -70,14 +78,16 @@ def test_every_slot_excludes_live_inputs_and_retains_all_outputs(
         for index, node in enumerate(nodes):
             for source in node.inputs:
                 consumers[id(source)].append(index)
-        plan = codegen._arena_plan(program)
+        with codegen.cross_size_arena_candidate(cross_size):
+            plan = codegen._arena_plan(program)
         assert isinstance(plan, SymbolicArenaPlan)
         owners = defaultdict(list)
         for number, slot in plan.node_slots.items():
             node = nodes[number]
             assert node.op != "input"
-            assert plan.slots[slot] == tuple(
-                sorted(codegen._dim(index) for index in node.spec.indices)
+            assert (
+                tuple(sorted(codegen._dim(index) for index in node.spec.indices))
+                in plan.slots[slot]
             )
             end = len(nodes) if id(node) in outputs else max(consumers[id(node)])
             for previous_start, previous_end in owners[slot]:
@@ -116,5 +126,11 @@ def test_arena_capacity_reduces_without_shape_specialization(
             for node in program.live_nodes
             if node.op != "input"
         )
-        new = sum(elements(shape) for shape in plan.slots)
+        new = sum(max(elements(shape) for shape in capacity) for capacity in plan.slots)
         assert 0 < new < old, (name, o, v, q, old, new)
+        with codegen.cross_size_arena_candidate():
+            candidate = codegen._arena_plan(program)
+        merged = sum(
+            max(elements(shape) for shape in capacity) for capacity in candidate.slots
+        )
+        assert 0 < merged <= new, (name, o, v, q, new, merged)

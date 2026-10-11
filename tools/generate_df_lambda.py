@@ -37,6 +37,9 @@ from tools.generate_rccsd_native import (
     _packed_matrix_gemm,
     _required_function,
     _size,
+    add_cross_size_arena_argument,
+    cross_size_arena_candidate,
+    cross_size_arena_selected,
     ordered_batch_accumulation,
 )
 
@@ -234,7 +237,16 @@ def header() -> str:
         dimensions = sorted({dim for g in gemms for dim in g[2:]})
         lines += [
             f"inline constexpr std::size_t {name}_matrix_operations={sum(n.op != 'input' for n in packed.live_nodes)};",
-            _required_function(packed, name + "_matrix_arena_elements", batch_dim=True),
+            _required_function(
+                packed,
+                name
+                + (
+                    "_matrix_unretained_arena_elements"
+                    if name == "staged_core" and cross_size_arena_selected()
+                    else "_matrix_arena_elements"
+                ),
+                batch_dim=True,
+            ),
             contraction_query(
                 packed, name + "_matrix_contraction_terms", batch_dim=True
             ),
@@ -286,6 +298,14 @@ def header() -> str:
             storage_slice=slice(len(frontier), None),
         ),
     ]
+    if cross_size_arena_selected():
+        # A smaller uncached layout must not refuse the useful immutable frontier.
+        # Both requirements are bounded by the original full matrix-core arena.
+        lines.append(
+            "inline std::size_t staged_core_matrix_arena_elements(std::size_t o,std::size_t v,std::size_t q){"
+            "return std::max(staged_core_matrix_unretained_arena_elements(o,v,q),"
+            "staged_core_reuse_scratch_arena_elements(o,v));}"
+        )
     for phase, nodes in (
         ("prepare", reuse.invariant_nodes),
         ("dynamic", reuse.dynamic_nodes),
@@ -516,14 +536,16 @@ def cuda_source() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    add_cross_size_arena_argument(parser)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for suffix, emit in (
-        (".hpp", header),
-        ("_cuda.cuh", cuda_header),
-        ("_cuda.cu", cuda_source),
-    ):
-        (args.output_dir / ("generated_df_lambda" + suffix)).write_text(emit())
+    with cross_size_arena_candidate(args.cross_size_arena):
+        for suffix, emit in (
+            (".hpp", header),
+            ("_cuda.cuh", cuda_header),
+            ("_cuda.cu", cuda_source),
+        ):
+            (args.output_dir / ("generated_df_lambda" + suffix)).write_text(emit())
 
 
 if __name__ == "__main__":

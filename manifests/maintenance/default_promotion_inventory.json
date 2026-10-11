@@ -119,7 +119,7 @@
     },
     {
       "id": "scf.incremental-direct-jk",
-      "classification": "needs-qualification",
+      "classification": "negative-evidence",
       "controls": [
         "scf-option:incremental_direct_jk"
       ],
@@ -129,9 +129,13 @@
       "sources": [
         "src/scf/types.hpp"
       ],
-      "rationale": "The exact incremental Direct-J/K implementation is merged via #990/#1579, but automatic selection remains unqualified: bounded-streaming provider-owned accounting, matched complete endpoints, RHF/UHF workload coverage, geometry-change behavior, and composition with precision policy still require a promotion decision under #1598.",
-      "revisit_condition": "Reclassify only after #1598 retains complete cold, warm, and changed-geometry endpoint evidence with numerical parity and a workload/resource guard, or records durable negative evidence and keeps the route opt-in.",
+      "rationale": "The exact incremental Direct-J/K implementation (#990/#1579) remains opt-in. The reduced #1598 historical capsule retains one matched 384-AO RHF baseline/incremental round: incremental prepared-plan cold execution (setup excluded, cold arrays absent) is about 41% slower and warm E/F is 103% slower; all three retained warm independent-reference and matched-arm numerical pairs pass. Seven additional final outcomes record unsuccessful retried 192/768-AO points, but missing per-attempt diagnostics do not establish their failure cause or baseline success. Other successful campaign records are not retained here; the earlier reported 96-AO cold gain rules out a blanket claim that every endpoint loses. UHF/moved populations were incomplete and KS acceptance was not established. Invalid retained quartet work counters cannot certify a bounded-resource guard. This is scoped historical negative evidence, not a complete default-promotion qualification. The route remains available to the narrower KS/PBE0 owner #2053.",
+      "revisit_condition": "Reopen promotion only after provider-owned bounded-streaming admitted/rejected work accounting exists and a candidate guard domain shows matched complete-endpoint wins across cold, warm and moved-geometry RHF/UHF populations with unchanged numerical gates, repeated interleaved timing, exact source/library/device identity, and compile/artifact reuse cost charged to admission; or if a materially different late-SCF work distribution reopens the economics.",
       "evidence": [
+        "benchmarks/results/issue1598-incremental-direct-jk-20261011/README.md",
+        ".agents/notes/implemented/performance/2026-10-11-incremental-direct-jk-negative-closeout.md",
+        "benchmarks/run_issue1598_incremental_qualification.sh",
+        "tools/reduce_issue1598_incremental_qualification.py",
         "issue:#990",
         "pr:#1579",
         "issue:#1598"

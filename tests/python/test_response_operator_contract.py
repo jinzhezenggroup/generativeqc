@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_native_response_symmetry_contract_compiles_and_runs(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-
+def test_native_response_symmetry_contract_compiles_and_runs(
+    tmp_path: Path, native_cxx: NativeCxx
+) -> None:
     source = tmp_path / "response_symmetry_contract.cpp"
     executable = tmp_path / "response_symmetry_contract"
     source.write_text(
@@ -72,23 +71,44 @@ int main() {
 }
 """
     )
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I",
             str(ROOT / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        cwd=ROOT,
-        check=True,
+        ),
     )
-    subprocess.run([str(executable)], cwd=ROOT, check=True)
+    subprocess.run([str(executable)], cwd=ROOT, check=True, timeout=30)
+
+
+def test_native_response_plan_binding_and_solver_contracts(
+    tmp_path: Path, required_native_cxx: NativeCxx
+) -> None:
+    """Run identity, batch and physical residual gates without a native library."""
+    executable = tmp_path / "native_response_contract"
+    required_native_cxx.build_executable(
+        [
+            ROOT / "src/response/native_gmres.cpp",
+            ROOT / "src/response/resident_gmres.cpp",
+            ROOT / "tests/native/test_native_gmres.cpp",
+        ],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(ROOT / "src"),
+        ),
+    )
+    subprocess.run([str(executable)], cwd=ROOT, check=True, timeout=30)
 
 
 def test_mp2_response_adapter_declares_symmetric_operator() -> None:
@@ -114,3 +134,31 @@ def test_rccsd_lambda_cpu_cuda_use_shared_general_response_problem() -> None:
         assert "response::prepare_response(" in source
         assert "response::solve_response(" in source
         assert "response::solve_gmres(" not in source
+
+
+def test_rhf_frame_response_uses_bound_provisional_and_physical_problems() -> None:
+    """The exact retry cannot reuse a screened operator's prepared binding."""
+    source = (ROOT / "src/hf/rhf_frame_response.cu").read_text()
+    assert "response::solve_gmres(" not in source
+    for name in ("provisional", "physical"):
+        assert f"response::prepare_response({name}_problem, zplan.options)" in source
+        assert f"response::solve_response({name}_plan, {name}_problem" in source
+    assert "inverse->apply(x, y)" in source
+    assert "owner.apply(z.solution, residual, true, 0.0)" in source
+
+
+def test_rccsdt_z_uses_shared_problem_after_symmetry_and_curvature_gates() -> None:
+    """CC retains ownership of the generated action and independent dense oracle."""
+    source = (ROOT / "src/cc/rccsdt_force.cpp").read_text()
+    assert "response::solve_gmres(" not in source
+    certify = source.index("if (asymmetry > 1e-10)")
+    stable = source.index(
+        "if (!(minimum_curvature > kMinimumOrbitalCurvature))", certify
+    )
+    bind = source.index(
+        "const response::LinearResponseProblem response_problem(", stable
+    )
+    solve = source.index("response::solve_response(z_plan, response_problem", bind)
+    assert certify < stable < bind < solve
+    assert "response::LinearResponseSymmetry::Symmetric" in source[bind:solve]
+    assert "independent[row] -= correlation.orbital_rhs[row]" in source[solve:]

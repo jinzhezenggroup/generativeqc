@@ -1,0 +1,118 @@
+{
+  "build": {
+    "aot_shells": false,
+    "cuda_architecture": "sm_120",
+    "cuda_version": "12.9.86",
+    "local_launcher": "ccache 4.5.1",
+    "qualification_boundary": "Reduced library configuration plus exact-source s/p stationary profiles; not full shipping/AOT-domain qualification.",
+    "remote_jit_launcher": "sccache 0.16.0",
+    "stationary_cpu_force_aot": false,
+    "stationary_cuda_force_profiles": [
+      "lda_rks",
+      "lda_uks",
+      "pbe_rks",
+      "pbe_uks"
+    ]
+  },
+  "date": "2026-10-11",
+  "libraries": {
+    "cpu_sha256": "cdb83df7136e268c8a487de626d5f900077c1c79774ef94560efc1c9fa452e7f",
+    "cuda_sha256": "f5949e3027fe06a133984ac9c991f9fca0439900119a2977f913c89744d06ba9",
+    "stationary_cuda_aot": {
+      "lda_rks": "8818fefe3c551f63027b310c1bb907acee907d4b1338b7f1d2f01f9e03706fee",
+      "lda_uks": "d9ce335a728ecaca05669b8b3bfb7180c7c4d9064f03037adc644894c7b86642",
+      "pbe_rks": "c11f118f3ac91985d2779906c32eed6555c67f7996cfce54569e72de022e879b",
+      "pbe_uks": "b4ad85d77b5eca5d4ea0e21a3689029a075efc8053aedb4fb763800b8caef4f6"
+    }
+  },
+  "schema": "generativeqc.response-contract-qualification.v1",
+  "scope": "shared-contract and existing-consumer qualification; not completion of issue #932",
+  "source": {
+    "archive": "ignored build/issue932-response-contract/source-qualified.tar.gz",
+    "base_master_commit": "4889e74ce",
+    "parent_commit": "4970321a62e3cc56596b7533b4e1190edf0333ef",
+    "provenance": "Frozen code/test snapshot before execution; later changes add retained evidence and ledger anchors only.",
+    "source_archive_sha256": "e0c506f11d899fa9dd3d3917c1d2878cb89ff06c67f7d4717a0f49bb957a7630"
+  },
+  "unfulfilled": [
+    "Native MP2/CC Lambda/HF frame production dimension-sized resident execution and resident preconditioning.",
+    "Installed resident CPHF/UKS production ownership and resident native CPKS orbital/Krylov/reconstruction.",
+    "Complete CUDA RKS molecular HVP sources and public qualification (#1905).",
+    "Matched complete endpoint A/B, full cold/warm/changed matrix, semantic work and simultaneously-live memory qualification.",
+    "13-AO cold second-integral JIT qualification within its unchanged finite compile timeout."
+  ],
+  "validation": {
+    "final_gpu_attempt": {
+      "cuda_visible_devices": "0",
+      "evidence_boundary": "Device execution and scoped scientific/lifetime/transfer assertions, not resident production cutover or matched baseline performance evidence.",
+      "failed": 0,
+      "gres": "gpu:5090:1",
+      "native_lambda": {
+        "max_solution_error": 5.20417e-18,
+        "oracle": "independent noninteracting Lambda solution",
+        "preconditioned_iterations": 1,
+        "preconditioned_operator_actions": 2,
+        "preserved_gates": [
+          "independent physical residual",
+          "exact admitted numeric capacity",
+          "unsafe/pair-inconsistent diagonal fallback"
+        ],
+        "state": "passed",
+        "unpreconditioned_iterations": 24,
+        "unpreconditioned_operator_actions": 48
+      },
+      "node": "node1",
+      "partition": "main",
+      "passed": 91,
+      "references": [
+        "PySCF 2.14.0 libcint/Libxc independently reconverged states",
+        "committed independent AO fixtures",
+        "independent RHF molecular derivative directions"
+      ],
+      "skipped": 0,
+      "slurm_job_id": 7530,
+      "suites": [
+        "tests/python/test_response_native_cuda.py",
+        "tests/python/test_response_block_resident_cuda.py",
+        "tests/python/test_rhf_frame_response_cuda.py"
+      ],
+      "time_limit_seconds": 1800
+    },
+    "focused_unit_and_ledger_pytest": {
+      "failed": 0,
+      "passed": 155
+    },
+    "independent_cpu_oracles": {
+      "deselected": 1,
+      "deselected_case": "test_rks_hvp_admits_resource_bounded_domain_above_12_aos",
+      "failed": 0,
+      "node": "node4",
+      "passed": 52,
+      "skip_reason": "One semilocal method is sufficient for multi-RHS orchestration.",
+      "skipped": 1
+    },
+    "initial_gpu_attempt": {
+      "errors": 8,
+      "failed": 4,
+      "failure": "Stationary CUDA force AOT profiles disabled in the reduced initial build; fixtures fail before CPKS admission.",
+      "node": "node1",
+      "passed": 79,
+      "resolution": "Build and install the four exact-source profile libraries/manifests without changing tests or tolerances.",
+      "slurm_job_id": 7521
+    },
+    "large_ao_cpu_attempt": {
+      "case": "test_rks_hvp_admits_resource_bounded_domain_above_12_aos",
+      "failure": "Second-integral native C++ runtime compilation timed out after 300 seconds on both local and node4 attempts.",
+      "nao": 13,
+      "numerical_acceptance": "not reached; remains unqualified by this receipt",
+      "state": "failed"
+    },
+    "native_asan_ubsan_leak_detection": "passed",
+    "native_cpu_ctest": {
+      "failed": 0,
+      "passed": 3
+    },
+    "pre_commit": "passed",
+    "sphinx_warnings_as_errors": "passed"
+  }
+}

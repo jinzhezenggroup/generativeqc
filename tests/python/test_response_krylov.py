@@ -62,6 +62,106 @@ def _synthetic_operator(size: typing.Any = 12, seed: typing.Any = 179) -> typing
     return _MatrixOperator(matrix, size)
 
 
+@pytest.mark.parametrize("strategy", ("sequential", "blocked", "recycled"))
+@pytest.mark.parametrize("dimension", (0, 4))
+def test_empty_multi_rhs_is_dimension_preserving_and_zero_work(
+    strategy: str, dimension: int, monkeypatch: typing.Any
+) -> None:
+    operator = _MatrixOperator(np.eye(dimension), dimension)
+    validations = []
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        raise AssertionError("empty request allocated or executed Krylov work")
+
+    class Engine:
+        resident = False
+        solver_workspace = forbidden
+
+    operator._krylov_engine = Engine()
+    operator.validate_current = lambda: validations.append(True)
+    monkeypatch.setattr(np.linalg, "matrix_rank", forbidden)
+    monkeypatch.setattr(operator, "apply", forbidden)
+    result = solve_many(
+        operator,
+        np.empty((dimension, 0)),
+        strategy=strategy,
+        options=GMRESOptions(max_workspace_bytes=1),
+        raise_on_failure=True,
+        solution_consumers=(),
+    )
+    assert result.converged
+    assert result.results == ()
+    assert result.solution.shape == (dimension, 0)
+    assert result.solution.dtype == np.float64
+    assert (
+        result.operator_actions == result.peak_workspace_bytes == result.rhs_rank == 0
+    )
+    assert not result.rank_deficient_rhs
+    assert validations == [True, True]
+
+
+@pytest.mark.parametrize("strategy", ("sequential", "blocked", "recycled"))
+def test_empty_multi_rhs_still_checks_lifetime_recycle_and_callbacks(
+    strategy: str,
+) -> None:
+    operator = _synthetic_operator(size=4)
+    empty = np.empty((4, 0))
+    other = _synthetic_operator(size=4)
+    other.problem.compatibility_identity = "stale"
+    space = KrylovRecycleSpace(other.problem)
+    with pytest.raises(ResponseCompatibilityError, match="stale"):
+        solve_many(operator, empty, strategy=strategy, recycle=space)
+    with pytest.raises(ValueError, match="solution_consumers"):
+        solve_many(
+            operator, empty, strategy=strategy, solution_consumers=(lambda *_: None,)
+        )
+    with pytest.raises(TypeError, match="options"):
+        solve_many(operator, empty, strategy=strategy, options=object())
+    with pytest.raises((TypeError, ValueError), match="preconditioner"):
+        solve_many(operator, empty, strategy=strategy, preconditioner=object())
+
+    def stale() -> None:
+        raise ResponseCompatibilityError("stale provider generation")
+
+    operator.validate_current = stale
+    with pytest.raises(ResponseCompatibilityError, match="generation"):
+        solve_many(operator, empty, strategy=strategy)
+    assert operator.statistics["actions"] == 0
+
+
+@pytest.mark.parametrize("imaginary", (0.0, 0.25))
+def test_diagonal_preconditioner_rejects_complex_before_conversion(
+    imaginary: float,
+) -> None:
+    with pytest.raises(ValueError, match="real"):
+        DiagonalPreconditioner(np.ones(3, dtype=complex) + imaginary * 1j)
+    preconditioner = DiagonalPreconditioner(np.ones(3))
+    with pytest.raises(ValueError, match="real"):
+        preconditioner.apply(np.ones(3, dtype=complex) + imaginary * 1j)
+
+
+@pytest.mark.parametrize("action", ("operator", "preconditioner"))
+@pytest.mark.parametrize(
+    "output", (np.ones(4, dtype=complex), np.ones((4, 1)), np.ones(4, dtype=str))
+)
+def test_solver_rejects_wrong_callback_shape_and_dtype_before_narrowing(
+    action: str,
+    output: np.ndarray,
+) -> None:
+    operator = _synthetic_operator(size=4)
+    preconditioner = None
+    if action == "operator":
+        operator.apply = lambda values: output
+    else:
+        preconditioner = type(
+            "InvalidPreconditioner", (), {"apply": lambda self, values: output}
+        )()
+    with pytest.raises(ValueError, match=f"{action} must return a real vector"):
+        solve(operator, np.ones(4), preconditioner=preconditioner)
+    if action == "preconditioner":
+        assert operator.statistics["actions"] == 0
+
+
 def test_gmres_true_residual_and_dot_identity() -> None:
     operator = _synthetic_operator()
     rhs = np.linspace(-1.0, 1.0, operator.dimension)

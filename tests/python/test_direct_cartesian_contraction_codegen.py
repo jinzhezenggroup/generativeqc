@@ -26,6 +26,21 @@ def test_direct_cartesian_contraction_is_compiler_owned() -> None:
     assert "contracted_eri_order(" in contraction
 
 
+def test_generic_high_order_jets_reuse_scalar_spatial_states() -> None:
+    """Keep the lowered representation independent of native launch geometry."""
+    source = emit_direct_cartesian_contraction_headers()[
+        "generated_direct_cartesian.cuh"
+    ]
+    assert "MaximumAngular >= 7U && std::is_same_v<Scalar, Dual3>" in source
+    assert "CoulombAuxiliary<double, MaximumAngular + 1U> auxiliary;" in source
+    assert "CartesianCoulombSpatialResponse<MaximumAngular> response" in source
+    assert "domain.first_response = true;" in source
+    assert "contract_prepared_cartesian_coulomb<MaximumAngular, Scalar>" in source
+    assert "difference.y.derivative_x * raised_y" in source
+    assert "difference.z.derivative_y * raised_z" in source
+    assert "difference.x.derivative_z * raised_x" in source
+
+
 def test_range_derivative_keeps_dual_scalars_and_rejects_mixed_float() -> None:
     contraction = emit_direct_cartesian_contraction_headers()[
         "generated_direct_contraction.cuh"

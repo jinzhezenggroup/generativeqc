@@ -1,6 +1,8 @@
 """Incoming evidence budgets cannot be hidden by deletions or unstaged edits."""
 
+import gzip
 import json
+import lzma
 import subprocess
 import typing
 
@@ -119,11 +121,19 @@ def test_invalid_exception_flag_is_rejected_even_without_new_evidence() -> None:
 
 
 @pytest.mark.parametrize("field", ["launch_records", "traceEvents"])
+@pytest.mark.parametrize("compression", ["plain", "gzip", "xz"])
 def test_raw_profiler_json_needs_reason_even_when_renamed(
     field: typing.Any,
+    compression: str,
 ) -> None:
     path = ROOT + "misleading-summary.json"
     data = json.dumps({"nested": [{field: [{"duration": 1}]}]}).encode()
+    if compression == "gzip":
+        path += ".gz"
+        data = gzip.compress(data, mtime=0)
+    elif compression == "xz":
+        path += ".xz"
+        data = lzma.compress(data)
     assert raw_json_markers(path, data) == [field]
     assert review_changes({}, {path: data}, policy(4096))["errors"]
     assert (

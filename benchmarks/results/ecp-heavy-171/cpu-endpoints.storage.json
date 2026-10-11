@@ -1,0 +1,12 @@
+{
+  "schema": "generativeqc.lossless-evidence-storage.v1",
+  "original_path": "benchmarks/results/ecp-heavy-171/cpu-endpoints.json",
+  "original_bytes": 12047,
+  "original_sha256": "f489eeb8f7fc3da6f3f612da639df9ea24d07cc06c739cc34e33459059455893",
+  "original_git_blob": "cce846a8b983a3806b56774d495c7faed03eff22",
+  "stored_path": "benchmarks/results/ecp-heavy-171/cpu-endpoints.json.gz",
+  "stored_bytes": 3367,
+  "stored_sha256": "02a69abdf89b648f235a9215117850b5c18a09c95088ebfea348dd6c1a99d8c1",
+  "compression": "gzip level 9, mtime 0",
+  "scope": "Storage only; decoded scientific values, timings and provenance are byte-identical. The historical raw-evidence manifest continues to describe the original bytes."
+}

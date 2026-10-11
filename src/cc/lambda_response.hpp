@@ -65,6 +65,11 @@ struct LambdaOptions {
   // Re-evaluate the original virtual residual graph, never accepted residuals
   // or solver cuts. Optional shared-audit arena admission retains scalar replay.
   bool df_primal_matrix_gemm{true};
+  /** Default-off storage candidate; promote only after complete-endpoint A/B gates.
+   * Reuses stage-local scratch on the action owner's one stream, not persistent
+   * cuts, solver state, outputs or the optional invariant frontier.
+   */
+  bool serial_scratch_reuse{false};
 };
 
 struct LambdaDiagnostic {

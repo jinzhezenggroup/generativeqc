@@ -18,7 +18,7 @@ from generativeqc import _native
 from generativeqc.profiles import canonical_hash
 
 from .direct_cuda import CudaDirectJKBackend
-from .problem import ResponseProblem
+from .problem import ResponseCompatibilityError, ResponseProblem
 
 _DOUBLE = ct.POINTER(ct.c_double)
 
@@ -267,6 +267,14 @@ class CudaResidentRHFResponse:
                 raise RuntimeError(
                     (message or b"resident RHF response failure").decode()
                 )
+
+    def validate_problem(self, problem: ResponseProblem) -> None:
+        """Check the borrowed owner/binding without allocating or transferring."""
+        if self._closed or not self._handle:
+            raise RuntimeError("resident RHF response owner is closed")
+        self._backend._ensure_open()
+        if self.problem.compatibility_identity != problem.compatibility_identity:
+            raise ResponseCompatibilityError("resident response owner/problem mismatch")
 
     @property
     def diagnostics(self) -> typing.Any:

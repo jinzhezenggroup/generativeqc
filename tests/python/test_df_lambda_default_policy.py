@@ -48,7 +48,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "request_triples_gap_cotangents,descriptor.energy_tolerance,"
         "descriptor.density_tolerance,fused_triples_scalar_response,admitted_triples_w,"
         "lambda_true_residual_interval,lambda_core_reuse,lambda_audit_matrix,lambda_primal_matrix,"
-        "reference_experiment}; }\n"
+        "reference_experiment,lambda_serial_scratch_reuse}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -70,9 +70,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
         "const auto result ="
-        + endpoint.split("const auto result =", 1)[1].split(
-            "    std::ofstream output", 1
-        )[0]
+        + endpoint.split("const auto result =", 1)[1].split(");", 1)[0]
+        + ");"
     )
     reference_benchmark = (ROOT / "benchmarks/df_hf_preconvergence.cpp").read_text()
     # The reference probe moves its guess out of the result. Extract the actual
@@ -114,6 +113,7 @@ struct DFCCSDTResult {
   bool audit_matrix;
   bool replay_matrix;
   DFCCSDTReferenceExperiment* reference_experiment;
+  bool serial_scratch_reuse;
 };
 """
         + declaration
@@ -442,7 +442,30 @@ int main() {
     if(select(28,selected).replay_matrix != (replay[0]=='1') ||
        !select(27,selected).replay_matrix || !ordinary.replay_matrix) return 47;
   }
-  for(int argc : {0,1,2,3,29}) {
+  for(const char* sharing : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1",sharing};
+    if(select(29,selected).serial_scratch_reuse != (sharing[0]=='1') ||
+       select(28,selected).serial_scratch_reuse || ordinary.serial_scratch_reuse) return 48;
+  }
+  for(const char* sharing : {"", "2", "true", "1x"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1",sharing};
+    try { (void)select(29,selected);return 49; } catch(const std::invalid_argument&) {}
+  }
+  for(const char* lifecycle : {"0", "1", "x"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0","auto","0","0","30","1","1","1","1",lifecycle};
+    try {
+      if(!select(30,selected).serial_scratch_reuse || lifecycle[0]=='x') return 50;
+    } catch(const std::invalid_argument&) {
+      if(lifecycle[0]!='x') return 51;
+    }
+  }
+  for(int argc : {0,1,2,3,31}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }
