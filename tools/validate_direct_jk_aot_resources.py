@@ -283,18 +283,22 @@ def validate_generated_cuda_rules(working_directory: Path) -> None:
     if host_override.search(rules_file.read_text(encoding="utf-8")):
         raise ValueError("generated CUDA compiler rule contains a host override")
     lines = build_file.read_text(encoding="utf-8").splitlines()
-    shard_name = (
+    shard_source = (
         f"generativeqc_generated_shell_sm{QUALIFIED_ARCHITECTURE[3:]}_"
-        f"shard_{QUALIFIED_SHARD_INDEX}.cu.o"
+        f"shard_{QUALIFIED_SHARD_INDEX}.cu"
     )
     starts = [
         index
         for index, line in enumerate(lines)
-        if line.startswith("build ") and shard_name in line
+        if line.startswith("build ")
+        and shard_source in line
+        and "CUDA_COMPILER" in line
     ]
     if len(starts) != 1:
+        candidates = [line for line in lines if shard_source in line]
         raise ValueError(
-            "generated Ninja build must contain exactly one qualified shard-6 object rule"
+            "generated Ninja build must contain exactly one qualified shard-6 "
+            f"CUDA object rule; candidates={candidates!r}"
         )
     start = starts[0]
     stop = next(
