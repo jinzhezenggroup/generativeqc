@@ -111,6 +111,9 @@ def native_probe(
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/generated_shell_task.hpp"
 using namespace generativeqc;
+namespace generativeqc::dft::generated {
+const CudaXcPointProgram* automatic_cuda_point_entry(std::uint32_t) { return nullptr; }
+}
 namespace generativeqc::scf::cuda_execution {
 using ShellPairDensityBounds = detail::GeneratedShellPairDensityBounds;
 using GeneratedShellPairStream = detail::GeneratedShellPairStream;

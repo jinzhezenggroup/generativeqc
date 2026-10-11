@@ -7,6 +7,7 @@ from generativeqc_compiler.dft.ao_cuda import emit_native_xc_contraction_kernels
 from generativeqc_compiler.dft.xc_point_batch_cuda import (
     emit_native_xc_point_batch_plan,
 )
+from generativeqc_compiler.dft.xc_point_cuda import emit_point_traversal
 
 
 def test_emitted_point_batch_resource_admission(
@@ -88,8 +89,15 @@ def test_point_batches_share_canonical_consumer_and_launch_width() -> None:
     assert "PBE point batch launcher identity mismatch" in source
     assert "min(tile_points, domain_count - begin)" in source
     assert "point::evaluate(true, rho, gradient, exchange_scale," in source
+    assert source.count(emit_point_traversal()) == 1
     assert (
-        "xc = evaluate_semilocal_point<static_family>(functional, rho, gradient, tau,"
+        "evaluate_point_tiles<feature_terms, response, batched, CuratedPointEvaluator<static_family>>"
         in source
+    )
+    assert (
+        source.count(
+            "return evaluate_semilocal_point<static_family>(functional, rho, gradient, tau"
+        )
+        == 1
     )
     assert "static_assert(!batched || !response)" in source

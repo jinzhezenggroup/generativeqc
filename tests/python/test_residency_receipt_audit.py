@@ -190,7 +190,7 @@ def test_identity_role_owner_and_event_stream_tampering_is_incomplete() -> None:
         variants.append(candidate)
     for sequence in ((0, 0), (1, 0), (0, 2)):
         candidate = copy.deepcopy(base)
-        for row, number in zip(candidate["events"], sequence):
+        for row, number in zip(candidate["events"], sequence, strict=True):
             row["seq"] = number
         variants.append(candidate)
     unknown = copy.deepcopy(base)

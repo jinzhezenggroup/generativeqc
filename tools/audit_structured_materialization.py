@@ -115,7 +115,9 @@ def _expand(
         if len(parameters) != len(node.args):
             raise Unsupported("helper arity mismatch")
         values = [_expand(arg, helpers, bindings, depth + 1) for arg in node.args]
-        return _expand(body, helpers, dict(zip(parameters, values)), depth + 1)
+        return _expand(
+            body, helpers, dict(zip(parameters, values, strict=True)), depth + 1
+        )
     raise Unsupported("unknown arithmetic helper or noninteger expression")
 
 

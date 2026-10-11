@@ -274,6 +274,10 @@ rebalance_paths=(
   # 38113859405. Count this file in core parity before transferring
   # it, so no unrelated file changes owners as the long tail moves.
   tests/python/test_libxc_automatic_forces.py
+  # The complete mixed-RSH force module added ~916-1016 worker-seconds
+  # in runs 38121450095/38121385355. Keep its core parity slot while
+  # moving the whole matrix to the existing force workers.
+  tests/python/test_mixed_rsh_df_forces.py
 )
 if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
   # Preserve every other core file's parity while moving WB97M-V.
@@ -391,11 +395,18 @@ case "${GENERATIVEQC_CI_SHARD}" in
     # This complete force matrix arrived on master after this router's
     # branch point. Route it whenever the checked-out Git tree owns it;
     # do not add a nonexistent target on the earlier branch itself.
-    # Its 17 tests start on an initial loadfile worker alongside the
-    # three larger routine ECP modules, rather than late in broad core.
+    # Keep its 17 tests together under loadfile instead of late in core.
     # Preserve every functional, spin, lifecycle and finite difference.
     if git ls-files --error-unmatch -- tests/python/test_libxc_automatic_forces.py >/dev/null 2>&1; then
       test_targets+=(tests/python/test_libxc_automatic_forces.py)
+    fi
+    # This later master addition has 46 cases and ~17 minutes of serial
+    # worker cost. Loadfile starts it on an initial worker; the 17-case
+    # Libxc file follows the ~240 s public-ECP file. Measured file costs
+    # estimate a ~20 minute force-shard tail, not a hosted timing claim.
+    # Preserve all CPU/CUDA cases, oracles and cold/warm/rebound checks.
+    if git ls-files --error-unmatch -- tests/python/test_mixed_rsh_df_forces.py >/dev/null 2>&1; then
+      test_targets+=(tests/python/test_mixed_rsh_df_forces.py)
     fi
     ;;
   compiler-heavy)

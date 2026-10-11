@@ -337,7 +337,12 @@ def select_specialization(
     evaluations = tuple(evaluate(p) for p in profiles)
     fallback_evaluation = evaluate(fallback) if fallback is not None else None
     selected = next(
-        (p for p, e in zip(profiles, evaluations) if e.eligible and e.promoted), None
+        (
+            p
+            for p, e in zip(profiles, evaluations, strict=True)
+            if e.eligible and e.promoted
+        ),
+        None,
     )
     if (
         selected is None

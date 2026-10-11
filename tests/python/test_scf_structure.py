@@ -243,6 +243,25 @@ def test_rhf_phase_values_borrow_public_provider_without_private_state(
     assert "forbidden cuda_rhf_resident_values dependency" in errors[0]
 
 
+@pytest.mark.parametrize(
+    "forbidden_header",
+    ["scf/cuda/rhf_graph.hpp", "scf/cuda/direct_jk_plan.hpp", "dft/cuda_ks.hpp"],
+)
+def test_common_phase_source_cannot_acquire_method_or_provider_state(
+    tmp_path: Path, forbidden_header: str
+) -> None:
+    """Shared source admission/lifetime cannot import method equations or graphs."""
+    source = tmp_path / "src"
+    (source / "scf/cuda").mkdir(parents=True)
+    (source / forbidden_header).parent.mkdir(parents=True, exist_ok=True)
+    (source / forbidden_header).write_text("// Private or method-owned state\n")
+    owner = source / "scf/cuda/direct_jk_source_lease.hpp"
+    owner.write_text(f'#include "{forbidden_header}"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_direct_jk_source_lease dependency" in errors[0]
+
+
 def test_one_electron_mapping_uses_explicit_cuda_provider_capability() -> None:
     root = Path(__file__).resolve().parents[2]
     policy = (root / "src/scf/cuda/rhf_policy.cpp").read_text(encoding="utf-8")

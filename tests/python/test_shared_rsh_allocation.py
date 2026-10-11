@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     admission = cpp_if_block(
-        source, "plan->canonical_cartesian && plan->canonical_pairs"
+        source,
+        "!resident_source_only && plan->canonical_cartesian && plan->canonical_pairs",
     )
     definitions = [
         cpp_function_definition(source, "direct_jk_check"),
@@ -67,7 +68,7 @@ bool direct_jk_generated_full_range_value_available(const CudaDirectJkPlan& p) {
   return p.complete_owner;
 }
 std::size_t direct_jk_product(std::size_t a, std::size_t b) { return a * b; }
-void prepare(CudaDirectJkPlan* plan, bool through_f, std::size_t budget,
+void prepare(CudaDirectJkPlan* plan, bool through_f, bool resident_source_only, std::size_t budget,
              std::size_t batch, int fault_kind, bool after_allocation,
              std::string& detail) {
   std::vector<int> systems(batch);
@@ -87,7 +88,7 @@ int main(int argc, char** argv) {
     for (int owner_kind : {0, 1, 2})
       for (std::size_t dimension : {1U, 10U})
         for (std::size_t batch : {1U, 2U})
-          for (int eligibility : {0, 1, 2, 3, 4})
+          for (int eligibility : {0, 1, 2, 3, 4, 5})
             for (int margin : {-100, -1, 0, 1}) {
               assert(live.empty());
               sticky = synchronization_error = cudaSuccess;
@@ -113,7 +114,8 @@ int main(int argc, char** argv) {
               bool propagated = false;
               std::string detail;
               try {
-                prepare(&plan, through_f, budget, batch, fault_kind, after_allocation, detail);
+                prepare(&plan, through_f, eligibility == 5, budget, batch,
+                        fault_kind, after_allocation, detail);
               } catch (...) { propagated = true; }
               assert(propagated == (admitted && fault_kind >= 3));
               assert(*retained == 37.0 && owner.device_bytes == 1234);

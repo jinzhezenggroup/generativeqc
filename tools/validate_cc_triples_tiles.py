@@ -115,7 +115,7 @@ def load_endpoint(name: typing.Any) -> typing.Any:
 
 def arrays_dict(feeds: typing.Any) -> typing.Any:
     names = ("ovvv", "ovoo", "ovov", "fov", "t1", "t2", "eps_o", "eps_v")
-    return dict(zip(names, feeds[2:]))
+    return dict(zip(names, feeds[2:], strict=True))
 
 
 def run(args: typing.Any) -> None:
@@ -270,7 +270,8 @@ def run(args: typing.Any) -> None:
                     )
 
                     per_tile_diffs = [
-                        abs(g - c) for g, c in zip(result.per_tile, cpu_per_tile)
+                        abs(g - c)
+                        for g, c in zip(result.per_tile, cpu_per_tile, strict=True)
                     ]
                     max_tile_diff = max(per_tile_diffs) if per_tile_diffs else 0
                     de_total = abs(result.et - cpu_et)

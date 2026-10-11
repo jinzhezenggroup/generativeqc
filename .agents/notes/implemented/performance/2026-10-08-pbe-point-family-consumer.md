@@ -101,6 +101,24 @@ specialized point GPU time, full XC time, and cold/warm/moved complete E+F with
 the required independent numerical gates. A static reduction alone is
 insufficient.
 
+## Integration with the shared automatic CUDA point traversal
+
+The merged #2261 bridge owns a single bounded `evaluate_point_tiles` traversal
+for curated and automatic point providers. Curated specialization carries
+`static_family` in `CuratedPointEvaluator<static_family>`: both `physical_point`
+and `response_point` forward it into the existing canonical algebra, while the
+global `evaluate_points` entry retains its fourth family parameter. Physical
+batches bind the same prepared family identity. Automatic providers retain
+their separate evaluator and their existing closed batch/response admission.
+
+Keeping a second private traversal would duplicate tile/spin layout ownership;
+dropping the family at the shared adapter would lose specialization for both
+physical and response consumers. The composition test executes the emitted
+adapter/traversal with host stubs over both spin layouts and ragged batches.
+That test verifies template/layout composition only. Its compilation requires
+the native compiler/cache fixture, and it supplies no GPU numerical, dynamic
+traffic or complete-endpoint evidence.
+
 ## References
 
 - Issue #2072; scheduling-only sibling #2073; historical #1113 and #1125.

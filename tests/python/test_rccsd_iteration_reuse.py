@@ -33,7 +33,7 @@ def test_shared_plan_retained_slots_exclude_every_dynamic_write() -> None:
     assert plans[0].identity == plans[1].identity
     assert len(plans[0].invariant_nodes) > 0
     arenas = []
-    for program, plan in zip((cpu, cuda), plans):
+    for program, plan in zip((cpu, cuda), plans, strict=True):
         nodes = codegen._execution_nodes(program)
         numbers = {node: number for number, node in enumerate(nodes)}
         arena = codegen._arena_plan(program, retained_nodes=plan.invariant_nodes)

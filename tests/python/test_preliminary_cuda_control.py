@@ -50,6 +50,10 @@ HARNESS = r"""
 #include "scf/initial_guess/preliminary_types.hpp"
 namespace scf = generativeqc::scf;
 namespace initial_guess = scf::initial_guess;
+namespace dft {
+// CUDA_SEED_ORIGIN
+}
+using dft::CudaKsSeedOrigin;
 struct MethodError : generativeqc::Error { using Error::Error; };
 namespace generativeqc::scf {
 struct ScfResult {
@@ -67,7 +71,9 @@ void check_seed_eigen_info(int info) {
 }
 std::string scenario;
 std::weak_ptr<int> discarded_history;
-struct Call { unsigned seed; bool reuse, warm, updates, export_density; };
+struct Call { unsigned seed; bool reuse, warm, updates, export_density;
+  CudaKsSeedOrigin origin;
+};
 struct CudaKsPlan {
   struct Impl {
     bool is_active{}, is_failed{}, warm_ready{}, warm_updates{true};
@@ -85,14 +91,16 @@ struct CudaKsPlan {
   void set_warm_start_updates(bool) noexcept;
   void clear_warm_start() noexcept;
   void invalidate_final_state() noexcept;
-  scf::ScfResult run(const std::vector<double>*, bool, bool);
+  scf::ScfResult run(const std::vector<double>*, bool, bool,
+                    CudaKsSeedOrigin = CudaKsSeedOrigin::External);
   bool active() const { return impl_->is_active; }
-  void begin(const std::vector<double>* seed, bool reuse) {
+  void begin(const std::vector<double>* seed, bool reuse, CudaKsSeedOrigin origin) {
     stale_state_at_begin |= impl_->final_state_ready;
     invalidate_final_state();
     if (!calls.empty()) history_retained_at_retry |= !discarded_history.expired();
     calls.push_back({seed ? static_cast<unsigned>(seed->at(0)) : 0U,
-                     reuse, !seed && reuse && impl_->warm_ready, impl_->warm_updates, false});
+                     reuse, !seed && reuse && impl_->warm_ready, impl_->warm_updates, false,
+                     origin});
     impl_->is_failed = true;
     impl_->is_active = false;
     const bool second = scenario.starts_with("second-");
@@ -220,7 +228,8 @@ int main(int argc, char** argv) {
     if (i) std::cout << ",";
     std::cout << "{\"seed\":" << call.seed << ",\"reuse\":" << call.reuse
               << ",\"warm\":" << call.warm << ",\"updates\":" << call.updates
-              << ",\"export\":" << call.export_density << "}";
+              << ",\"export\":" << call.export_density
+              << ",\"native_cold\":" << (call.origin == CudaKsSeedOrigin::NativeColdGuess) << "}";
   }
   std::cout << "]}";
 }
@@ -232,6 +241,7 @@ def cuda_control_probe(
     tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
 ) -> Path:
     cuda = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    header = (ROOT / "src/dft/cuda_ks.hpp").read_text()
     methods = "\n".join(
         [
             between(
@@ -251,8 +261,13 @@ def cuda_control_probe(
             ),
         ]
     )
-    source = HARNESS.replace("// CUDA_METHODS", methods).replace(
-        "// OWNER_RUN", cuda_control_source()
+    source = (
+        HARNESS.replace("// CUDA_METHODS", methods)
+        .replace("// OWNER_RUN", cuda_control_source())
+        .replace(
+            "// CUDA_SEED_ORIGIN",
+            between(header, "enum class CudaKsSeedOrigin", ";") + ";",
+        )
     )
     source = source.replace(
         "// CUDA_STATUS_CHECK",
@@ -300,7 +315,7 @@ def test_public_execute_arguments_prepare_minao_for_a_fresh_cuda_owner(
     result = probe(cuda_control_probe)
     assert result["calls"] == result["preparations"] == 1
     assert result["trace"] == [
-        {"seed": 2, "reuse": 0, "warm": 0, "updates": 1, "export": 0}
+        {"seed": 2, "reuse": 0, "warm": 0, "updates": 1, "export": 0, "native_cold": 1}
     ]
     assert result["status"] == "returned" and result["converged"]
     assert (result["kind"], result["outcome"], result["attempts"]) == (3, 2, 1)
@@ -317,6 +332,7 @@ def test_explicit_and_available_warm_seeds_precede_preliminary_policy(
     result = probe(cuda_control_probe, route)
     assert result["calls"] == 1 and result["preparations"] == 0
     assert result["trace"][0]["seed"] == seed and result["trace"][0]["warm"] == warm
+    assert not result["trace"][0]["native_cold"]
     assert (result["kind"], result["outcome"], result["attempts"]) == (3, 1, 1)
 
 
@@ -337,8 +353,8 @@ def test_prepared_cuda_failure_gets_one_fresh_hcore_attempt(
     result = probe(cuda_control_probe, scenario=scenario)
     assert result["calls"] == 2 and result["preparations"] == 1
     assert result["trace"] == [
-        {"seed": 2, "reuse": 0, "warm": 0, "updates": 1, "export": 0},
-        {"seed": 0, "reuse": 0, "warm": 0, "updates": 1, "export": 0},
+        {"seed": 2, "reuse": 0, "warm": 0, "updates": 1, "export": 0, "native_cold": 1},
+        {"seed": 0, "reuse": 0, "warm": 0, "updates": 1, "export": 0, "native_cold": 0},
     ]
     assert result["status"] == "returned" and result["converged"]
     assert (result["kind"], result["outcome"], result["attempts"]) == (3, 5, 2)

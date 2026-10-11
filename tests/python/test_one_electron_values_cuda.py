@@ -104,11 +104,11 @@ def test_generated_schedules_preserve_scf_and_geometry(
     reference = run_case(monkeypatch, "thread", **kwargs)
     for mapping in ("shell_warp", None):
         actual = run_case(monkeypatch, mapping, **kwargs)
-        for expected, found in zip(reference, actual):
+        for expected, found in zip(reference, actual, strict=True):
             np.testing.assert_allclose(
                 found.energies, expected.energies, atol=3e-10, rtol=0
             )
-            for a, b in zip(found.items, expected.items):
+            for a, b in zip(found.items, expected.items, strict=True):
                 assert a.executed_backend == "cuda"
                 np.testing.assert_allclose(a.forces, b.forces, atol=3e-9, rtol=0)
         np.testing.assert_allclose(
